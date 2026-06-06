@@ -830,10 +830,25 @@ impl TaskGraph {
         &self,
         catalog: &[ToolDefinition],
     ) -> Result<(), TaskGraphError> {
-        let known: HashSet<&str> = catalog.iter().map(|t| t.name.as_str()).collect();
+        // Build two lookup sets: one for exact qualified names, one for bare
+        // names (stripping any "{server-id}:" or "builtin:" prefix).  This
+        // lets the Director emit bare names like "browser_navigate" in
+        // tool_allowlist entries while the catalog contains qualified names
+        // like "2:browser_navigate".
+        let known_exact: HashSet<&str> = catalog.iter().map(|t| t.name.as_str()).collect();
+        let known_bare: HashSet<&str> = catalog
+            .iter()
+            .map(|t| {
+                t.name
+                    .find(':')
+                    .map(|pos| &t.name[pos + 1..])
+                    .unwrap_or(&t.name)
+                    .as_ref()
+            })
+            .collect();
         for (id, node) in &self.nodes {
             for tool in &node.tool_allowlist {
-                if !known.contains(tool.as_str()) {
+                if !known_exact.contains(tool.as_str()) && !known_bare.contains(tool.as_str()) {
                     return Err(TaskGraphError::UnknownTool {
                         node: id.0.clone(),
                         tool: tool.clone(),

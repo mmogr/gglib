@@ -356,8 +356,25 @@ pub async fn execute(
         // The call is intentionally placed here rather than at each call site
         // so that all entry points (CLI, Axum, Tauri) benefit automatically.
         let live_tools: Vec<ToolDefinition> = tool_executor.list_tools().await;
+        // Strip server-id prefixes (e.g. "2:browser_navigate" → "browser_navigate")
+        // before the Director sees the catalog.  The Director and its few-shot
+        // examples use bare names; showing qualified names would confuse the model
+        // into emitting prefixed allowlist entries that don't match across runs.
+        // FilteredToolExecutor and validate_tool_allowlist both accept bare names,
+        // so workers function correctly when the plan uses them.
+        let live_tools_bare: Vec<ToolDefinition> = live_tools
+            .iter()
+            .map(|t| {
+                let bare = t
+                    .name
+                    .find(':')
+                    .map(|pos| t.name[pos + 1..].to_owned())
+                    .unwrap_or_else(|| t.name.clone());
+                ToolDefinition { name: bare, ..t.clone() }
+            })
+            .collect();
         let effective_tools = if tools.is_empty() {
-            &live_tools[..]
+            &live_tools_bare[..]
         } else {
             tools
         };
