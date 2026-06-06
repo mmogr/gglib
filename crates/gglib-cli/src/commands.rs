@@ -30,6 +30,10 @@ pub enum CouncilCmd {
         /// Maximum replan attempts after the first
         #[arg(long, default_value = "2")]
         max_replans: u32,
+        /// Maximum tool-calling iterations per worker node.
+        /// [default: persisted setting, or 25 if unset]
+        #[arg(long = "max-iterations")]
+        max_iterations: Option<usize>,
         /// Enable human-in-the-loop approval gates (none, plan, node, tools)
         ///
         /// Pauses at the specified boundaries and prompts
@@ -81,6 +85,10 @@ pub enum CouncilCmd {
         /// Maximum replan attempts after the first
         #[arg(long, default_value = "2")]
         max_replans: u32,
+        /// Maximum tool-calling iterations per worker node.
+        /// [default: persisted setting, or 25 if unset]
+        #[arg(long = "max-iterations")]
+        max_iterations: Option<usize>,
         /// Enable human-in-the-loop approval gates (none, plan, node, tools)
         #[arg(long, value_name = "MODE", default_value = "none")]
         hitl: Option<String>,

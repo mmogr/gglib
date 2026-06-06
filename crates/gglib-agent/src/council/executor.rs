@@ -147,6 +147,25 @@ pub struct CouncilConfig {
     ///
     /// `None` disables rewind behaviour (backward-compatible).
     pub rewind_to_wave: Option<u32>,
+
+    /// [`AgentConfig`] applied to every worker node's agent loop.
+    ///
+    /// This is the single source of truth for all per-worker loop tuning:
+    /// `max_iterations`, `tool_timeout_ms`, `max_parallel_tools`,
+    /// `observation_tools`, `max_observation_steps`, and context-pruning
+    /// parameters.  Defaults to [`AgentConfig::default()`], which matches
+    /// the historical behaviour of workers receiving untuned defaults.
+    ///
+    /// Callers (CLI, Axum) should construct this via
+    /// [`AgentConfig::from_user_params`] so that user-configured settings
+    /// (e.g. `max_tool_iterations` from persistent settings) are respected.
+    ///
+    /// **Why a full `AgentConfig` rather than individual fields?**
+    /// Embedding the whole struct avoids a proliferating set of forwarding
+    /// fields on `CouncilConfig` that must be kept in sync with `AgentConfig`
+    /// as new knobs are added.  Adding a new `AgentConfig` field automatically
+    /// becomes available to workers without any change to `CouncilConfig`.
+    pub worker_agent_config: AgentConfig,
 }
 
 impl Default for CouncilConfig {
@@ -163,6 +182,7 @@ impl Default for CouncilConfig {
             node_budget: NodeBudget::default(),
             note_queue: None,
             rewind_to_wave: None,
+            worker_agent_config: AgentConfig::default(),
         }
     }
 }
@@ -817,6 +837,7 @@ async fn run_wave_loop(
             let llm_clone = Arc::clone(&llm);
             let tool_executor_clone = Arc::clone(&tool_executor);
             let tx_clone = tx.clone();
+            let config_clone = config.clone();
 
             // Debate nodes don't use SpawnSink — create an inert one.
             let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
@@ -835,6 +856,7 @@ async fn run_wave_loop(
                     llm_clone,
                     tool_executor_clone,
                     &tx_clone,
+                    &config_clone,
                 )
                 .await;
 
@@ -860,6 +882,7 @@ async fn run_wave_loop(
             let llm_clone = Arc::clone(&llm);
             let tool_executor_clone = Arc::clone(&tool_executor);
             let tx_clone = tx.clone();
+            let config_clone = config.clone();
 
             // Each leaf gets its own SpawnSink so a worker can request a sub-team.
             let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
@@ -884,6 +907,7 @@ async fn run_wave_loop(
                     llm_clone,
                     capturing_executor,
                     &tx_clone,
+                    &config_clone,
                 )
                 .await;
 
@@ -1083,6 +1107,7 @@ async fn run_worker(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     tx: &mpsc::Sender<CouncilEvent>,
+    council_config: &CouncilConfig,
 ) -> Result<(String, String), ExecuteError> {
     let id_str = node_id.0.clone();
 
@@ -1180,7 +1205,7 @@ async fn run_worker(
     let (agent_tx, mut agent_rx) =
         tokio::sync::mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
-    let config = AgentConfig::default();
+    let config = council_config.worker_agent_config.clone();
 
     let handle = {
         let agent = Arc::clone(&agent);
@@ -1384,6 +1409,7 @@ async fn run_debate_worker(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     tx: &mpsc::Sender<CouncilEvent>,
+    council_config: &CouncilConfig,
 ) -> Result<(String, String), ExecuteError> {
     let id_str = node_id.0.clone();
 
@@ -1396,7 +1422,7 @@ async fn run_debate_worker(
 
     // Fresh cancellation token — debate internal checks use this between turns.
     let cancel = CancellationToken::new();
-    let agent_config = AgentConfig::default();
+    let agent_config = council_config.worker_agent_config.clone();
 
     let synthesis_text = match debate::run_debate_node(
         &id_str,
