@@ -17,6 +17,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+use crate::server_config::{ServerConfigOptions, build_server_config};
+
 /// Currently running model state for SingleSwap strategy.
 #[derive(Debug, Clone)]
 pub struct CurrentModelState {
@@ -269,14 +271,17 @@ impl ProcessManager {
             "Starting model"
         );
 
-        let config = ServerConfig::new(
+        let config = build_server_config(
             launch_spec.id as i64,
             launch_spec.name.clone(),
             model_path.to_path_buf(),
             0, // base_port unused — GuiProcessCore resolves port internally
-        )
-        .with_context_size(effective_ctx)
-        .with_jinja(); // Enable jinja by default for proxy
+            &launch_spec.tags,
+            ServerConfigOptions {
+                context_size: Some(effective_ctx),
+                ..Default::default()
+            },
+        );
 
         let port = {
             let mut core = self.core.write().await;
