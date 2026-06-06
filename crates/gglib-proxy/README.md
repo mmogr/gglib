@@ -153,6 +153,24 @@ Pass `num_ctx` at the request root to override default context size:
 }
 ```
 
+### Model Capability Auto-Detection
+
+When the proxy auto-starts a llama-server for an incoming request, it reads the
+model's capability tags and automatically enables the appropriate llama-server
+flags — no extra configuration required:
+
+| Tag | Effect |
+|-----|--------|
+| `"mtp"` | Enables MTP speculative decoding (`--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75`) |
+| `"reasoning"` | Enables reasoning format extraction (`--reasoning-format deepseek` or equivalent) |
+| `"agent"` | Enables Jinja template support (`--jinja`) |
+
+Tags are detected automatically at model import time from GGUF metadata and
+stored in the model catalog. This parity is architecturally enforced: the proxy,
+GUI, and CLI all route through `build_server_config` in `gglib-runtime`, so any
+model that works correctly when started from the GUI or CLI will behave
+identically when auto-started by the proxy.
+
 ## Usage
 
 This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` along with port trait implementations:

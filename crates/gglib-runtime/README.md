@@ -109,6 +109,50 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Health Monitoring** — Polls server health endpoints for readiness
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
+- **MTP Speculative Decoding** — Auto-enabled for models with the `"mtp"` tag via the canonical `build_server_config` builder
+
+## ServerConfig Builder
+
+All launch surfaces (proxy auto-start, GUI/HTTP start-server, CLI agent chat)
+must use `build_server_config` to construct a `ServerConfig`. This is the
+canonical entry point that calls all capability resolvers in one place and
+guarantees identical llama-server arguments across every surface.
+
+```rust,ignore
+use gglib_runtime::{build_server_config, ServerConfigOptions};
+
+// Fully tag-driven — capabilities auto-detected from model metadata:
+let config = build_server_config(
+    model_id,
+    model_name,
+    model_path,
+    base_port,
+    &model.tags,
+    ServerConfigOptions::default(),
+);
+
+// With caller overrides (e.g. explicit context size from a GUI request):
+let config = build_server_config(
+    model_id,
+    model_name,
+    model_path,
+    base_port,
+    &model.tags,
+    ServerConfigOptions {
+        context_size: Some(8192),
+        mtp_draft_n_max: Some(0), // explicitly disable MTP
+        ..Default::default()
+    },
+);
+```
+
+### Capability detection precedence
+
+| Feature | Explicit override wins over… | Tag-based default |
+|---------|------------------------------|-------------------|
+| Jinja templates | `opts.jinja = Some(true/false)` | `"agent"` tag → enabled |
+| Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
+| MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → `n=2, p_min=0.75` |
 
 ## Usage
 
