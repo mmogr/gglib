@@ -27,8 +27,7 @@ use super::TOOL_NOT_AVAILABLE_MSG;
 pub(super) fn bare_name(qualified: &str) -> &str {
     qualified
         .find(':')
-        .map(|pos| &qualified[pos + 1..])
-        .unwrap_or(qualified)
+        .map_or(qualified, |pos| &qualified[pos + 1..])
 }
 
 /// Return `true` if `allowed` contains `qualified_name` **or** its bare form.

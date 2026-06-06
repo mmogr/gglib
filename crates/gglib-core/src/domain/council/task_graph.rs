@@ -841,9 +841,7 @@ impl TaskGraph {
             .map(|t| {
                 t.name
                     .find(':')
-                    .map(|pos| &t.name[pos + 1..])
-                    .unwrap_or(&t.name)
-                    .as_ref()
+                    .map_or(t.name.as_str(), |pos| &t.name[pos + 1..])
             })
             .collect();
         for (id, node) in &self.nodes {
