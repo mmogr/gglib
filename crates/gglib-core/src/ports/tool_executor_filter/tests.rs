@@ -147,6 +147,75 @@ async fn execute_allowed_tool_propagates_inner_error() {
 }
 
 // ------------------------------------------------------------------
+// Bare-name (prefix-stripped) matching
+// ------------------------------------------------------------------
+
+/// `list_tools` must include a qualified tool when its bare name (after
+/// stripping the `"{server-id}:"` prefix) is in the allowlist.
+#[tokio::test]
+async fn list_tools_bare_name_matches_qualified_tool() {
+    // Inner executor has the qualified name "2:browser_snapshot".
+    // Allowlist contains the bare name "browser_snapshot".
+    let allowed: HashSet<String> = ["browser_snapshot".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&[
+            "2:browser_snapshot",
+            "2:browser_navigate",
+        ])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let tools = f.list_tools().await;
+    assert_eq!(tools.len(), 1, "only browser_snapshot should match");
+    assert_eq!(tools[0].name, "2:browser_snapshot");
+}
+
+/// `execute` must permit a call using the full qualified name when only the
+/// bare name appears in the allowlist.
+#[tokio::test]
+async fn execute_bare_name_in_allowlist_permits_qualified_call() {
+    let allowed: HashSet<String> = ["browser_snapshot".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&["2:browser_snapshot"])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    // LLM calls the tool using its qualified name (as returned by list_tools).
+    let result = f.execute(&make_call("2:browser_snapshot")).await.unwrap();
+    assert!(result.success);
+}
+
+/// `execute` must still reject a disallowed tool even when other bare names
+/// are allowed — no prefix-stripping bypass.
+#[tokio::test]
+async fn execute_bare_name_does_not_bypass_for_other_tools() {
+    let allowed: HashSet<String> = ["browser_snapshot".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&[
+            "2:browser_snapshot",
+            "2:browser_navigate",
+        ])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let err = f
+        .execute(&make_call("2:browser_navigate"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
+}
+
+/// Bare name matching also works for the `"builtin:"` prefix.
+#[tokio::test]
+async fn list_tools_bare_name_matches_builtin_prefix() {
+    let allowed: HashSet<String> = ["get_current_time".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&["builtin:get_current_time"])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let tools = f.list_tools().await;
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0].name, "builtin:get_current_time");
+}
+
+// ------------------------------------------------------------------
 // EmptyToolExecutor
 // ------------------------------------------------------------------
 

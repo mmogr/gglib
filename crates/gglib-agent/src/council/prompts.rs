@@ -93,12 +93,50 @@ NODE KINDS:
     rounds: integer 1–3 (2 is typical)
     judge: true to enable an early-stop judge (recommended when rounds > 1)
 
+WIDE SEARCH / MAP-REDUCE PATTERN:
+Use this pattern when a goal requires **independently searching multiple sources,
+sites, repositories, databases, or file sets** — any task where the search space
+is too wide for a single agent to cover completely in one turn.
+
+Pattern:
+  1. Emit one root leaf node per source/slice (depends_on: []).
+     Each Map node's goal MUST:
+     - Explicitly instruct the worker to output its findings as a **dense,
+       structured list** — never prose paragraphs.  One item per line,
+       dash prefix, bold item name, key details inline.
+     - Tell the worker to include every relevant result and not summarise
+       or omit any items.
+     - **If the Map workers will use stateful, shared-session tools (such as\n\
+       a headless browser), explicitly instruct each Map node in its goal to\n\
+       isolate its state before starting work** (e.g. \\\"Open a new browser tab\n\
+       before navigating\\\" or \\\"Create a new working directory\\\") so that\n\
+       parallel workers do not clobber each other's session state.
+  2. Emit one Reduce leaf node that depends_on ALL the Map nodes.
+     The Reduce node's goal MUST:
+     - Tell the worker to treat its predecessor context as a collection of
+       structured lists and merge them.
+     - Explicitly instruct the worker to deduplicate and preserve every
+       entry verbatim — no summarisation, no omissions.
+
+Use wide search / map-reduce when:
+- The goal names multiple distinct sources (e.g. multiple websites, APIs,
+  databases, code repositories, or file sets)
+- The search space is too wide for a single agent to cover fully in one turn
+- You need comprehensive coverage, not a representative sample
+- The sources are independent (no ordering constraint between them)
+
+Do NOT use wide search when:
+- One source is sufficient
+- The task is analytical, generative, or sequential (use a chain of leaf nodes)
+- The task requires iterative refinement (use a chain)
+
 DECOMPOSITION RULES:
 - Prefer parallel subtasks at the same depth when they are independent
 - Each node goal must be specific and achievable in a single agent turn
 - Root nodes (depends_on: []) run first, concurrently; later nodes consume their outputs
 - Synthesis or review nodes should depend on the nodes they integrate
 - Default to leaf for all nodes unless debate is explicitly warranted
+- For wide search goals, always prefer the map-reduce pattern over a single leaf node
 
 EXAMPLES:
 
@@ -213,6 +251,37 @@ Response:
         \"rounds\": 2,
         \"judge\": true
       }
+    }
+  ]
+}
+
+# Example 5 — Wide search across multiple independent sources (map-reduce)
+Goal: \"Find all open issues labelled 'bug' across the frontend and backend \
+GitHub repositories\"
+Response:
+{
+  \"goal\": \"Find all open issues labelled 'bug' across the frontend and backend GitHub repositories\",
+  \"nodes\": [
+    {
+      \"id\": \"scan-frontend-repo\",
+      \"goal\": \"Search the frontend GitHub repository for all open issues labelled 'bug'. Open a new browser tab before navigating so this worker does not interfere with other parallel workers sharing the same browser session. Output your findings as a structured list — one item per line using a dash prefix: bold issue title, issue number, author, date opened. Include every result; do not summarise or omit any issues.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\", \"browser_tabs\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"scan-backend-repo\",
+      \"goal\": \"Search the backend GitHub repository for all open issues labelled 'bug'. Open a new browser tab before navigating so this worker does not interfere with other parallel workers sharing the same browser session. Output your findings as a structured list — one item per line using a dash prefix: bold issue title, issue number, author, date opened. Include every result; do not summarise or omit any issues.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\", \"browser_tabs\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"merge-issues\",
+      \"goal\": \"You will receive structured issue lists from two parallel search workers. Merge all items into a single deduplicated list grouped by repository. Preserve the structured format exactly — do not summarise, paraphrase, or drop any entries.\",
+      \"depends_on\": [\"scan-frontend-repo\", \"scan-backend-repo\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
   ]
 }";
@@ -351,6 +420,12 @@ pub fn director_plan_schema() -> serde_json::Value {
 /// The compaction agent receives the full worker output and produces a
 /// compact summary (≤ 250 words) preserving facts, results, and conclusions
 /// that downstream nodes may need as context.
+///
+/// **Structured list exception:** when the worker output is already a dense
+/// structured Markdown list (e.g. job listings, search results, enumerated
+/// findings), the compaction prompt instructs the agent to preserve the list
+/// verbatim rather than prose-summarising it, so that the Reduce node receives
+/// the full set of items and can perform accurate deduplication and merging.
 pub const WORKER_COMPACTION_PROMPT: &str = "\
 You are a precise summarizer. A worker agent was given the following goal:
 
@@ -362,13 +437,18 @@ The worker produced the following output:
 {output}
 ---
 
-Produce a concise summary (at most 250 words) that:
+If the output is primarily a structured Markdown list (e.g. job listings, search \
+results, enumerated items), preserve the list VERBATIM — do not summarise, \
+paraphrase, or omit any items. A downstream node depends on receiving the \
+complete list for deduplication and merging.
+
+Otherwise, produce a concise summary (at most 250 words) that:
 - Preserves all key facts, results, conclusions, and any actionable data.
 - Is written in third-person past tense (e.g. \"The agent found...\").
 - Omits conversational filler, tool call traces, and internal reasoning.
 - Retains specific values (numbers, names, paths, URLs) that downstream agents need.
 
-Output ONLY the summary text. No preamble, no title, no markdown fences.";
+Output ONLY the summary or list. No preamble, no title, no markdown fences.";
 
 // =============================================================================
 // Orchestrator synthesis prompt

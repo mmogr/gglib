@@ -599,3 +599,65 @@ async fn test_mixed_batch_uses_standard_threshold() {
         "AgentEvent::Error must be emitted before stream closes"
     );
 }
+
+/// **Navigate tool uses elevated threshold via default pattern**: the default
+/// `observation_tools` list includes `"navigate"`, which suffix-matches
+/// `browser_navigate`.  Repeated navigation calls (e.g. a worker recovering
+/// from a redirect and retrying the same URL) must not fire `LoopDetected`
+/// within the elevated `max_observation_steps` window.
+///
+/// Validates the fix for the SmartJobs-style redirect-recovery pattern where
+/// any MCP server's navigate/click tools were being incorrectly flagged as
+/// stuck loops.
+#[tokio::test]
+async fn test_navigate_tool_uses_elevated_threshold_by_default() {
+    // 10 identical browser_navigate calls — "navigate" suffix matches the
+    // default observation_tools, so max_observation_steps (default 15) applies
+    // and no LoopDetected should fire within 10 iterations.
+    let llm = Arc::new(MockLlmPort::new().push_many((0..10).map(|i| {
+        MockLlmResponse::tool_call(
+            format!("nav{i}"),
+            "browser_navigate",
+            json!({ "url": "https://example.com" }),
+        )
+    })));
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("browser_navigate"),
+        MockToolBehavior::Immediate {
+            content: "navigated".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(256);
+
+    // Use AgentConfig::default() — no manual observation_tools override needed.
+    // The default list includes "navigate" which suffix-matches "browser_navigate".
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "browse".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 10;
+                c.max_stagnation_steps = None;
+                // Use the defaults for observation_tools and max_observation_steps.
+            }),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // 10 iterations < max_observation_steps(15 default) — must NOT trigger LoopDetected.
+    assert!(
+        !matches!(result, Err(AgentError::LoopDetected { .. })),
+        "browser_navigate must use elevated threshold via default 'navigate' pattern; \
+         got: {result:?}"
+    );
+    assert!(
+        !has_final_answer(&events),
+        "no FinalAnswer expected — loop hit max_iterations"
+    );
+}

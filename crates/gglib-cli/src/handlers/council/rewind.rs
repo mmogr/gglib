@@ -31,7 +31,7 @@ use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
-use super::render::render_event;
+use super::render::{RenderState, render_event};
 use super::{approve, init_session, stop_server};
 
 /// Rewind run `run_id` to `wave` and re-execute from that point.
@@ -117,7 +117,7 @@ pub async fn execute(
         .map(|n| vec![n.trim().to_owned()])
         .unwrap_or_default();
     let note_queue: NoteQueue = Arc::new(tokio::sync::Mutex::new(initial_notes));
-    let mut input_rx = spawn_input_router(Arc::clone(&note_queue));
+    let (mut input_rx, input_task) = spawn_input_router(Arc::clone(&note_queue));
 
     // ── 7. Re-execute ────────────────────────────────────────────────────────
     eprintln!(
@@ -133,7 +133,7 @@ pub async fn execute(
     let hitl_mode = run.hitl_mode.clone();
     let approve_opts = approve::ApproveOpts::default();
 
-    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size, None).await?;
 
     let config = CouncilConfig {
         hitl_mode,
@@ -159,20 +159,22 @@ pub async fn execute(
         })
     };
 
-    let mut last_graph = None;
-    let mut thinking_nodes = HashSet::new();
+    let mut state = RenderState::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
             &approval_registry,
-            &mut last_graph,
+            &mut state,
             &approve_opts,
             false, // json_mode not supported for rewind in this phase
             &mut input_rx,
-            &mut thinking_nodes,
         )
         .await;
     }
+
+    // Abort the background stdin-router task so it does not block the
+    // tokio runtime from shutting down.
+    input_task.abort();
 
     stop_server(ctx, &handle).await;
 

@@ -1,19 +1,21 @@
 //! `gglib council run "<goal>"` — plan and execute a task graph.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
 use gglib_agent::council::{CouncilConfig, NoteQueue, execute as engine_execute};
+use gglib_core::domain::agent::AgentConfig;
 use gglib_core::domain::council::events::COUNCIL_EVENT_CHANNEL_CAPACITY;
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 
 use crate::bootstrap::CliContext;
+use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::presentation::input::spawn_input_router;
+use crate::shared_args::SamplingArgs;
 
-use super::render::render_event;
+use super::render::{RenderState, render_event};
 use super::{approve, init_session, parse_hitl_mode, stop_server};
 
 /// Plan and execute a task graph for `goal`.
@@ -25,6 +27,8 @@ pub async fn execute(
     model: Option<String>,
     ctx_size: Option<String>,
     max_replans: u32,
+    max_iterations: Option<usize>,
+    sampling: SamplingArgs,
     hitl: Option<&str>,
     approval_timeout: Option<u64>,
     approval_timeout_action: &str,
@@ -40,14 +44,34 @@ pub async fn execute(
         timeout_action,
     };
 
-    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size, {
+        let cfg = sampling.into_inference_config();
+        if cfg == Default::default() {
+            None
+        } else {
+            Some(cfg)
+        }
+    })
+    .await?;
+
+    let settings = ctx
+        .app
+        .settings()
+        .get()
+        .await
+        .map_err(|e| anyhow!("failed to load settings: {e}"))?;
+    let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
+    let worker_agent_config =
+        AgentConfig::from_user_params(Some(resolved_max_iterations), None, None, None, None)
+            .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     let note_queue: NoteQueue = Arc::new(tokio::sync::Mutex::new(vec![]));
-    let mut input_rx = spawn_input_router(Arc::clone(&note_queue));
+    let (mut input_rx, input_task) = spawn_input_router(Arc::clone(&note_queue));
 
     let config = CouncilConfig {
         max_replans,
         hitl_mode,
+        worker_agent_config,
         approval_registry: Some(
             Arc::clone(&ctx.approval_registry) as Arc<dyn CouncilApprovalRegistryPort>
         ),
@@ -67,20 +91,23 @@ pub async fn execute(
         })
     };
 
-    let mut last_graph = None;
-    let mut thinking_nodes = HashSet::new();
+    let mut state = RenderState::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
             &approval_registry,
-            &mut last_graph,
+            &mut state,
             &approve_opts,
             json_mode,
             &mut input_rx,
-            &mut thinking_nodes,
         )
         .await;
     }
+
+    // Abort the background stdin-router task so it does not block the
+    // tokio runtime from shutting down (the task blocks on TTY stdin
+    // which never reaches EOF in a terminal session).
+    input_task.abort();
 
     stop_server(ctx, &handle).await;
 

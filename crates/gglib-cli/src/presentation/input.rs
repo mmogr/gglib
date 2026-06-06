@@ -20,16 +20,21 @@ use tokio::sync::mpsc;
 
 use gglib_agent::council::NoteQueue;
 
-/// Spawn the background stdin router and return the approval-input receiver.
+/// Spawn the background stdin router and return the approval-input receiver
+/// alongside a [`tokio::task::JoinHandle`] for the router task.
 ///
 /// Lines starting with `/note ` are stripped and pushed to `note_queue`.
 /// All other lines are sent to the returned [`mpsc::UnboundedReceiver`].
 ///
-/// The task runs until stdin is closed (EOF).  Dropping the returned
-/// receiver causes subsequent non-note lines to be silently discarded.
-pub(crate) fn spawn_input_router(note_queue: NoteQueue) -> mpsc::UnboundedReceiver<String> {
+/// The task runs until stdin is closed (EOF) **or until the handle is
+/// aborted**.  Callers must call `handle.abort()` when the council run
+/// finishes so that the task does not keep the tokio runtime alive
+/// indefinitely while blocking on a TTY stdin.
+pub(crate) fn spawn_input_router(
+    note_queue: NoteQueue,
+) -> (mpsc::UnboundedReceiver<String>, tokio::task::JoinHandle<()>) {
     let (tx, rx) = mpsc::unbounded_channel::<String>();
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         let stdin = tokio::io::stdin();
         let mut lines = BufReader::new(stdin).lines();
         while let Ok(Some(line)) = lines.next_line().await {
@@ -44,5 +49,5 @@ pub(crate) fn spawn_input_router(note_queue: NoteQueue) -> mpsc::UnboundedReceiv
             }
         }
     });
-    rx
+    (rx, handle)
 }

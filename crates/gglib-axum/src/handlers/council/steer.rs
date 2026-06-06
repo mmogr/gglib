@@ -65,6 +65,7 @@ pub async fn steer(
         tags,
         state.mcp.clone(),
         None,
+        None,
     );
 
     let diff = steering_call(&req.graph, &req.instruction, &Arc::clone(&ports.llm))

@@ -117,10 +117,10 @@ pub async fn resume_run(
         tags,
         state.mcp.clone(),
         None,
+        None,
     );
 
     let config = CouncilConfig {
-        hitl_mode: run.hitl_mode.clone(),
         approval_registry: Some(
             Arc::clone(&state.approval_registry) as Arc<dyn CouncilApprovalRegistryPort>
         ),

@@ -147,6 +147,25 @@ pub struct CouncilConfig {
     ///
     /// `None` disables rewind behaviour (backward-compatible).
     pub rewind_to_wave: Option<u32>,
+
+    /// [`AgentConfig`] applied to every worker node's agent loop.
+    ///
+    /// This is the single source of truth for all per-worker loop tuning:
+    /// `max_iterations`, `tool_timeout_ms`, `max_parallel_tools`,
+    /// `observation_tools`, `max_observation_steps`, and context-pruning
+    /// parameters.  Defaults to [`AgentConfig::default()`], which matches
+    /// the historical behaviour of workers receiving untuned defaults.
+    ///
+    /// Callers (CLI, Axum) should construct this via
+    /// [`AgentConfig::from_user_params`] so that user-configured settings
+    /// (e.g. `max_tool_iterations` from persistent settings) are respected.
+    ///
+    /// **Why a full `AgentConfig` rather than individual fields?**
+    /// Embedding the whole struct avoids a proliferating set of forwarding
+    /// fields on `CouncilConfig` that must be kept in sync with `AgentConfig`
+    /// as new knobs are added.  Adding a new `AgentConfig` field automatically
+    /// becomes available to workers without any change to `CouncilConfig`.
+    pub worker_agent_config: AgentConfig,
 }
 
 impl Default for CouncilConfig {
@@ -163,6 +182,7 @@ impl Default for CouncilConfig {
             node_budget: NodeBudget::default(),
             note_queue: None,
             rewind_to_wave: None,
+            worker_agent_config: AgentConfig::default(),
         }
     }
 }
@@ -334,9 +354,56 @@ pub async fn execute(
         let _ = tx.send(CouncilEvent::PlanApproved).await;
         override_graph
     } else {
+        // ── Warm lazy MCP servers + build live tool catalog ───────────────────
+        //
+        // `tool_executor.list_tools()` does two jobs in one call:
+        //
+        // 1. **Warm-up**: calling `list_tools()` on the `CombinedToolExecutor`
+        //    triggers the `McpService` to start any registered lazy servers that
+        //    are not yet running.  Without this, lazy servers report 0 tools at
+        //    planning time, so the Director never learns about `browser_*` tools
+        //    and cannot include them in worker `tool_allowlist` entries.  The
+        //    workers then start with an empty tool set, the LLM reasons at length
+        //    about why it cannot browse, and the run burns tokens and context
+        //    without making progress.
+        //
+        // 2. **Live catalog**: the returned `Vec<ToolDefinition>` replaces the
+        //    `tools` slice that was passed in (which callers conventionally pass
+        //    as `&[]`).  The Director's `{tool_catalog}` prompt placeholder is
+        //    populated from this list, so every tool the executor exposes is
+        //    visible to the Director at planning time.
+        //
+        // The call is intentionally placed here rather than at each call site
+        // so that all entry points (CLI, Axum, Tauri) benefit automatically.
+        let live_tools: Vec<ToolDefinition> = tool_executor.list_tools().await;
+        // Strip server-id prefixes (e.g. "2:browser_navigate" → "browser_navigate")
+        // before the Director sees the catalog.  The Director and its few-shot
+        // examples use bare names; showing qualified names would confuse the model
+        // into emitting prefixed allowlist entries that don't match across runs.
+        // FilteredToolExecutor and validate_tool_allowlist both accept bare names,
+        // so workers function correctly when the plan uses them.
+        let live_tools_bare: Vec<ToolDefinition> = live_tools
+            .iter()
+            .map(|t| {
+                let bare = t
+                    .name
+                    .find(':')
+                    .map_or_else(|| t.name.clone(), |pos| t.name[pos + 1..].to_owned());
+                ToolDefinition {
+                    name: bare,
+                    ..t.clone()
+                }
+            })
+            .collect();
+        let effective_tools = if tools.is_empty() {
+            &live_tools_bare[..]
+        } else {
+            tools
+        };
+
         let g = plan(
             goal,
-            tools,
+            effective_tools,
             Arc::clone(&llm),
             config.hitl_mode.clone(),
             config.max_replans,
@@ -770,6 +837,7 @@ async fn run_wave_loop(
             let llm_clone = Arc::clone(&llm);
             let tool_executor_clone = Arc::clone(&tool_executor);
             let tx_clone = tx.clone();
+            let config_clone = config.clone();
 
             // Debate nodes don't use SpawnSink — create an inert one.
             let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
@@ -788,6 +856,7 @@ async fn run_wave_loop(
                     llm_clone,
                     tool_executor_clone,
                     &tx_clone,
+                    &config_clone,
                 )
                 .await;
 
@@ -813,6 +882,7 @@ async fn run_wave_loop(
             let llm_clone = Arc::clone(&llm);
             let tool_executor_clone = Arc::clone(&tool_executor);
             let tx_clone = tx.clone();
+            let config_clone = config.clone();
 
             // Each leaf gets its own SpawnSink so a worker can request a sub-team.
             let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
@@ -837,6 +907,7 @@ async fn run_wave_loop(
                     llm_clone,
                     capturing_executor,
                     &tx_clone,
+                    &config_clone,
                 )
                 .await;
 
@@ -1027,7 +1098,7 @@ async fn run_wave_loop(
 ///
 /// Emits [`NodeStarted`], then bridges the agent's event stream, and finishes
 /// with [`NodeCompacting`] → [`NodeComplete`] or [`NodeFailed`].
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 async fn run_worker(
     node_id: &NodeId,
     node_goal: &str,
@@ -1036,6 +1107,7 @@ async fn run_worker(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     tx: &mpsc::Sender<CouncilEvent>,
+    council_config: &CouncilConfig,
 ) -> Result<(String, String), ExecuteError> {
     let id_str = node_id.0.clone();
 
@@ -1063,13 +1135,77 @@ async fn run_worker(
         },
     ];
 
+    // -------------------------------------------------------------------------
+    // Strict tool allowlist validation
+    //
+    // Verify that every tool name in the allowlist is actually registered in
+    // the executor before handing off to the LLM.  Without this check, the
+    // model discovers missing tools mid-turn and enters an extended reasoning
+    // loop about why it can't perform the task — generating thousands of
+    // tokens of confusion before finally failing.  This check short-circuits
+    // that path cleanly and surfaces a legible error immediately.
+    //
+    // The check is done against the *unfiltered* executor (before
+    // AgentLoop::build wraps it) so we compare the full registered tool set
+    // against the requested allowlist.
+    if let Some(ref filter) = tool_filter {
+        if !filter.is_empty() {
+            let live = tool_executor.list_tools().await;
+            // Accept both exact qualified names ("2:browser_navigate") and bare
+            // names ("browser_navigate") so the Director can emit either form.
+            let available_exact: std::collections::HashSet<&str> =
+                live.iter().map(|t| t.name.as_str()).collect();
+            let available_bare: std::collections::HashSet<&str> = live
+                .iter()
+                .map(|t| {
+                    t.name
+                        .find(':')
+                        .map_or(t.name.as_str(), |pos| &t.name[pos + 1..])
+                })
+                .collect();
+            let missing: Vec<String> = filter
+                .iter()
+                .filter(|name| {
+                    !available_exact.contains(name.as_str())
+                        && !available_bare.contains(name.as_str())
+                })
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                let mut sorted = missing.clone();
+                sorted.sort_unstable();
+                let missing_list = sorted.join(", ");
+                let mut av: Vec<&str> = available_exact.iter().copied().collect();
+                av.sort_unstable();
+                let error_msg = format!(
+                    "tool allowlist contains {count} unregistered tool(s): [{missing_list}]. \
+                     Check that the required MCP server is running and the tool names are correct. \
+                     Available tools: [{available_list}]",
+                    count = sorted.len(),
+                    available_list = av.join(", "),
+                );
+                let _ = tx
+                    .send(CouncilEvent::NodeFailed {
+                        node_id: id_str.clone(),
+                        error: error_msg.clone(),
+                    })
+                    .await;
+                return Err(ExecuteError::WorkerFailed {
+                    node_id: id_str,
+                    reason: error_msg,
+                });
+            }
+        }
+    }
+    // -------------------------------------------------------------------------
+
     let agent: Arc<dyn AgentLoopPort> =
         AgentLoop::build(Arc::clone(&llm), Arc::clone(&tool_executor), tool_filter);
 
     let (agent_tx, mut agent_rx) =
         tokio::sync::mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
-    let config = AgentConfig::default();
+    let config = council_config.worker_agent_config.clone();
 
     let handle = {
         let agent = Arc::clone(&agent);
@@ -1273,6 +1409,7 @@ async fn run_debate_worker(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     tx: &mpsc::Sender<CouncilEvent>,
+    council_config: &CouncilConfig,
 ) -> Result<(String, String), ExecuteError> {
     let id_str = node_id.0.clone();
 
@@ -1285,7 +1422,7 @@ async fn run_debate_worker(
 
     // Fresh cancellation token — debate internal checks use this between turns.
     let cancel = CancellationToken::new();
-    let agent_config = AgentConfig::default();
+    let agent_config = council_config.worker_agent_config.clone();
 
     let synthesis_text = match debate::run_debate_node(
         &id_str,

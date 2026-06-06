@@ -421,3 +421,206 @@ async fn synthesis_events_emitted() {
         "SynthesisStart before SynthesisComplete"
     );
 }
+
+// =============================================================================
+// Strict tool allowlist validation test
+// =============================================================================
+
+/// A `ToolExecutorPort` that lists a fixed set of tools and always errors on
+/// `execute` (not expected to be called in these tests).
+struct StubToolExecutor {
+    tools: Vec<ToolDefinition>,
+}
+
+impl StubToolExecutor {
+    fn with_tool(name: &str) -> Self {
+        Self {
+            tools: vec![ToolDefinition::new(name)],
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl gglib_core::ports::ToolExecutorPort for StubToolExecutor {
+    async fn list_tools(&self) -> Vec<ToolDefinition> {
+        self.tools.clone()
+    }
+
+    async fn execute(
+        &self,
+        _call: &gglib_core::ToolCall,
+    ) -> Result<gglib_core::ToolResult, anyhow::Error> {
+        Err(anyhow!(
+            "StubToolExecutor: execute not expected in this test"
+        ))
+    }
+}
+
+/// **Strict tool validation**: when a node's `tool_allowlist` references a
+/// tool that is not registered in the executor, the run must fail cleanly
+/// without letting the LLM attempt to reason about missing tools.
+///
+/// Before the warm-up fix: workers received an empty tool set, the LLM
+/// entered a reasoning loop about missing browsing capability, and the run
+/// consumed thousands of tokens before failing.
+///
+/// After the warm-up fix: `execute()` calls `list_tools()` before the
+/// planning pass, feeding the live catalog to the Director.  The Director
+/// validates `tool_allowlist` entries against this catalog and rejects the
+/// plan with a `ReplanAttempt` event if any tool is unknown.  After
+/// `max_replans` exhausted attempts the run returns `ExecuteError`.
+///
+/// Expects:
+/// - At least one `ReplanAttempt` event mentioning the missing tool.
+/// - `execute()` returns `Err`.
+/// - No `CouncilComplete` event (run aborted).
+#[tokio::test]
+async fn worker_fails_immediately_on_missing_tool() {
+    // Plan with one node that requests `browser_snapshot` — a tool that is
+    // NOT in the StubToolExecutor (which only exposes `read_file`).
+    let plan_json = serde_json::json!({
+        "goal": "Browse a website",
+        "nodes": [
+            {
+                "id": "browse",
+                "goal": "Navigate to a URL and extract data.",
+                "depends_on": [],
+                "tool_allowlist": ["browser_snapshot"]
+            }
+        ]
+    })
+    .to_string();
+
+    // Director always returns the bad plan; CoS also provided.
+    // Provide enough copies for up to `max_replans + 1` Director attempts.
+    let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
+        StubLlm::text_then_done(&plan_json),
+        StubLlm::text_then_done(&plan_json),
+        StubLlm::text_then_done(&plan_json),
+        StubLlm::text_then_done(&plan_json),
+        StubLlm::text_then_done(&plan_json),
+    ]);
+
+    // Executor exposes `read_file` but NOT `browser_snapshot`.
+    let tool_executor: Arc<dyn gglib_core::ports::ToolExecutorPort> =
+        Arc::new(StubToolExecutor::with_tool("read_file"));
+
+    let (tx, rx) = mpsc::channel(1024);
+
+    let result = execute(
+        "Browse a website",
+        &[],
+        Arc::new(llm),
+        tool_executor,
+        CouncilConfig::default(),
+        tx,
+    )
+    .await;
+
+    let events = collect_events(rx).await;
+
+    // At least one ReplanAttempt must be emitted mentioning the missing tool.
+    let replan = events.iter().find(|e| {
+        matches!(
+            e,
+            CouncilEvent::ReplanAttempt { reason, .. }
+                if reason.contains("browser_snapshot")
+        )
+    });
+    assert!(
+        replan.is_some(),
+        "ReplanAttempt mentioning 'browser_snapshot' expected; got: {events:?}"
+    );
+
+    // execute() must return Err.
+    assert!(
+        result.is_err(),
+        "execute() must return Err; got: {result:?}"
+    );
+
+    // CouncilComplete must NOT be emitted.
+    let has_complete = events
+        .iter()
+        .any(|e| matches!(e, CouncilEvent::CouncilComplete { .. }));
+    assert!(
+        !has_complete,
+        "CouncilComplete must not be emitted on tool-not-found failure"
+    );
+}
+
+/// **Live tool catalog warm-up**: when `execute()` is called with `tools = &[]`
+/// (the conventional empty slice from CLI/Axum callers), the executor must call
+/// `tool_executor.list_tools()` before the planning pass and use the returned
+/// catalog so the Director can see available tools.
+///
+/// This is the fix for the "lazy MCP server masking" bug: before the fix,
+/// lazy servers reported 0 tools at planning time, so the Director produced
+/// nodes with empty `tool_allowlist` entries — workers then ran with no tools
+/// and the LLM entered a reasoning loop about missing browsing capability.
+///
+/// Verifies that a node whose `tool_allowlist` references a tool known to the
+/// executor (exposed via `list_tools()`) passes validation and executes
+/// normally — i.e. does NOT trigger the `NodeFailed / ToolNotFound` fast-path.
+#[tokio::test]
+async fn empty_tools_slice_is_replaced_by_live_catalog() {
+    // Plan where the worker requests `browser_snapshot` — a tool that IS
+    // exposed by the StubToolExecutor below.
+    let plan_with_tool = serde_json::json!({
+        "goal": "Browse a website",
+        "nodes": [
+            {
+                "id": "browse",
+                "goal": "Navigate to a URL and extract job listings.",
+                "depends_on": [],
+                "tool_allowlist": ["browser_snapshot"]
+            }
+        ]
+    })
+    .to_string();
+
+    // LLM responses: CoS → Director plan → Worker answer → Compaction →
+    // Synthesizer worker → Synthesizer compaction → Final synthesis.
+    let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
+        StubLlm::text_then_done(&plan_with_tool),
+        StubLlm::text_then_done("Found 3 job listings."),
+        StubLlm::text_then_done("Worker found 3 listings."),
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
+        StubLlm::text_then_done("Here are the 3 roles."),
+    ]);
+
+    // Executor exposes `browser_snapshot` — the tool the plan requests.
+    let tool_executor: Arc<dyn gglib_core::ports::ToolExecutorPort> =
+        Arc::new(StubToolExecutor::with_tool("browser_snapshot"));
+
+    let (tx, rx) = mpsc::channel(1024);
+
+    let result = execute(
+        "Browse a website",
+        &[], // <-- empty slice: the fix must populate from list_tools()
+        Arc::new(llm),
+        tool_executor,
+        CouncilConfig::default(),
+        tx,
+    )
+    .await;
+
+    let events = collect_events(rx).await;
+
+    // NodeFailed must NOT be emitted — the tool exists, so validation passes.
+    let node_failed = events
+        .iter()
+        .find(|e| matches!(e, CouncilEvent::NodeFailed { node_id, .. } if node_id == "browse"));
+    assert!(
+        node_failed.is_none(),
+        "NodeFailed must not fire when the tool is available; got: {events:?}"
+    );
+
+    // execute() must succeed.
+    assert!(
+        result.is_ok(),
+        "execute() must succeed when requested tools are available; got: {result:?}"
+    );
+}
