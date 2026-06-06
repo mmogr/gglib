@@ -93,12 +93,43 @@ NODE KINDS:
     rounds: integer 1–3 (2 is typical)
     judge: true to enable an early-stop judge (recommended when rounds > 1)
 
+WIDE SEARCH / MAP-REDUCE PATTERN:
+Use this pattern when a goal requires **independently searching multiple sources,
+sites, categories, or domains** — any task where the search space is too wide
+for a single agent to cover completely.
+
+Pattern:
+  1. Emit one root leaf node per source/domain/slice (depends_on: []).
+     Each Map node's goal MUST explicitly instruct the worker to output its
+     findings as a **dense, structured Markdown list** — never prose paragraphs.
+     Tell the worker to emit one item per line using a dash prefix and bold Title,
+     to include every relevant result, and to not summarise or omit items.
+  2. Emit one Reduce leaf node that depends_on ALL the Map nodes.
+     The Reduce node's goal MUST explicitly instruct the worker to:
+     - Treat its predecessor context as a collection of structured lists.
+     - Merge and deduplicate the items across all lists.
+     - Output the unified list without omitting or further summarising items.
+     Tell the Reduce worker to merge all input lists, deduplicate entries,
+     preserve the structured format exactly, and retain every item.
+
+Use wide search / map-reduce when:
+- The goal names multiple distinct sources (e.g. two job boards, several API docs)
+- The search space is too wide for a single agent to cover fully in one turn
+- You need comprehensive coverage, not a representative sample
+- The sources are independent (no ordering constraint between them)
+
+Do NOT use wide search when:
+- One source is sufficient
+- The task is analytical, generative, or sequential (use a chain of leaf nodes)
+- The task requires iterative refinement (use a chain)
+
 DECOMPOSITION RULES:
 - Prefer parallel subtasks at the same depth when they are independent
 - Each node goal must be specific and achievable in a single agent turn
 - Root nodes (depends_on: []) run first, concurrently; later nodes consume their outputs
 - Synthesis or review nodes should depend on the nodes they integrate
 - Default to leaf for all nodes unless debate is explicitly warranted
+- For wide search goals, always prefer the map-reduce pattern over a single leaf node
 
 EXAMPLES:
 
@@ -213,6 +244,37 @@ Response:
         \"rounds\": 2,
         \"judge\": true
       }
+    }
+  ]
+}
+
+# Example 5 — Wide search across multiple independent sources (map-reduce)
+Goal: \"Find all open roles on APSJobs and SmartJobs QLD suitable for a data \
+analyst with Python skills\"
+Response:
+{
+  \"goal\": \"Find all open roles on APSJobs and SmartJobs QLD suitable for a data analyst with Python skills\",
+  \"nodes\": [
+    {
+      \"id\": \"search-apsjobs\",
+      \"goal\": \"Search APSJobs (apsjobs.gov.au) for data analyst roles requiring Python. Navigate search result pages with the browser. Output your findings as a structured Markdown list — one item per role using a dash prefix: bold Title, bold Agency, brief description, closing date. Include every relevant result; do not summarise or omit any roles.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"search-smartjobs\",
+      \"goal\": \"Search SmartJobs Queensland (smartjobs.qld.gov.au) for data analyst roles requiring Python. Navigate search result pages with the browser. Output your findings as a structured Markdown list — one item per role using a dash prefix: bold Title, bold Agency, brief description, closing date. Include every relevant result; do not summarise or omit any roles.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"merge-results\",
+      \"goal\": \"You will receive structured Markdown job listing lists from two parallel search workers (APSJobs and SmartJobs QLD). Merge all items into a single deduplicated list grouped by source. Preserve the structured format exactly — do not summarise, paraphrase, or drop any entries. Then add a brief relevance note for each role.\",
+      \"depends_on\": [\"search-apsjobs\", \"search-smartjobs\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
   ]
 }";
@@ -351,6 +413,12 @@ pub fn director_plan_schema() -> serde_json::Value {
 /// The compaction agent receives the full worker output and produces a
 /// compact summary (≤ 250 words) preserving facts, results, and conclusions
 /// that downstream nodes may need as context.
+///
+/// **Structured list exception:** when the worker output is already a dense
+/// structured Markdown list (e.g. job listings, search results, enumerated
+/// findings), the compaction prompt instructs the agent to preserve the list
+/// verbatim rather than prose-summarising it, so that the Reduce node receives
+/// the full set of items and can perform accurate deduplication and merging.
 pub const WORKER_COMPACTION_PROMPT: &str = "\
 You are a precise summarizer. A worker agent was given the following goal:
 
@@ -362,13 +430,18 @@ The worker produced the following output:
 {output}
 ---
 
-Produce a concise summary (at most 250 words) that:
+If the output is primarily a structured Markdown list (e.g. job listings, search \
+results, enumerated items), preserve the list VERBATIM — do not summarise, \
+paraphrase, or omit any items. A downstream node depends on receiving the \
+complete list for deduplication and merging.
+
+Otherwise, produce a concise summary (at most 250 words) that:
 - Preserves all key facts, results, conclusions, and any actionable data.
 - Is written in third-person past tense (e.g. \"The agent found...\").
 - Omits conversational filler, tool call traces, and internal reasoning.
 - Retains specific values (numbers, names, paths, URLs) that downstream agents need.
 
-Output ONLY the summary text. No preamble, no title, no markdown fences.";
+Output ONLY the summary or list. No preamble, no title, no markdown fences.";
 
 // =============================================================================
 // Orchestrator synthesis prompt
