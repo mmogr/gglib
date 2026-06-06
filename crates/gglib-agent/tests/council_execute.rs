@@ -534,7 +534,10 @@ async fn worker_fails_immediately_on_missing_tool() {
     );
 
     // execute() must return Err.
-    assert!(result.is_err(), "execute() must return Err; got: {result:?}");
+    assert!(
+        result.is_err(),
+        "execute() must return Err; got: {result:?}"
+    );
 
     // CouncilComplete must NOT be emitted.
     let has_complete = events
@@ -607,9 +610,9 @@ async fn empty_tools_slice_is_replaced_by_live_catalog() {
     let events = collect_events(rx).await;
 
     // NodeFailed must NOT be emitted — the tool exists, so validation passes.
-    let node_failed = events.iter().find(|e| {
-        matches!(e, CouncilEvent::NodeFailed { node_id, .. } if node_id == "browse")
-    });
+    let node_failed = events
+        .iter()
+        .find(|e| matches!(e, CouncilEvent::NodeFailed { node_id, .. } if node_id == "browse"));
     assert!(
         node_failed.is_none(),
         "NodeFailed must not fire when the tool is available; got: {events:?}"
