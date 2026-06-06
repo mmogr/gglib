@@ -3,7 +3,7 @@
 //! Exported to sibling modules (`run`, `resume`) via `pub(crate)`.
 //! Approval prompts live in [`super::approve`].
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use gglib_app_services::CouncilApprovalRegistry;
@@ -15,11 +15,71 @@ use crate::presentation::{dag, style};
 
 use super::approve::{self, ApproveOpts};
 
+// =============================================================================
+// Per-node line buffer
+// =============================================================================
+
+/// Append `delta` to the per-node line buffer and flush every complete line
+/// (terminated by `\n`) to stderr, prefixed with `[node_id] `.
+///
+/// This prevents interleaved output when multiple worker nodes stream tokens
+/// concurrently: characters from different nodes are kept separate until a
+/// full line is available, then each line is written atomically.
+///
+/// `dim` controls whether the flushed lines are rendered in dim style
+/// (used for reasoning/thinking deltas).
+fn buffer_delta(
+    line_buf: &mut HashMap<String, String>,
+    node_id: &str,
+    node_color: &str,
+    delta: &str,
+    dim: bool,
+) {
+    let buf = line_buf.entry(node_id.to_owned()).or_default();
+    buf.push_str(delta);
+    // Flush every complete newline-terminated segment.
+    while let Some(newline_pos) = buf.find('\n') {
+        let line: String = buf.drain(..=newline_pos).collect();
+        let trimmed = line.trim_end_matches('\n');
+        if !trimmed.is_empty() {
+            if dim {
+                eprintln!(
+                    "{node_color}[{node_id}]{} {}{trimmed}{}",
+                    style::RESET,
+                    style::DIM,
+                    style::RESET,
+                );
+            } else {
+                eprintln!("{node_color}[{node_id}]{} {trimmed}", style::RESET);
+            }
+        } else {
+            // Blank line — preserve vertical rhythm.
+            eprintln!();
+        }
+    }
+}
+
+/// Flush any buffered partial line for `node_id`, even if it has no trailing
+/// newline. Called when a node completes, fails, or is compacted.
+fn flush_node_buf(line_buf: &mut HashMap<String, String>, node_id: &str, node_color: &str) {
+    if let Some(remaining) = line_buf.remove(node_id) {
+        let trimmed = remaining.trim_end();
+        if !trimmed.is_empty() {
+            eprintln!("{node_color}[{node_id}]{} {trimmed}", style::RESET);
+        }
+    }
+}
+
 /// Render a single [`CouncilEvent`] to the terminal (or as JSONL when
 /// `json_mode` is `true`).
 ///
 /// `last_graph` is updated whenever a `PlanProposed` event arrives so that
 /// `AwaitingApproval` handlers can offer the `[e]dit` option.
+///
+/// `line_buf` is a per-node line buffer used to prevent interleaved output
+/// when multiple worker nodes stream tokens concurrently.  Pass in a
+/// `HashMap::new()` at the start of each council run and reuse it for every
+/// event in the same run.
 ///
 /// In `json_mode` the event is serialised as a JSON line to **stdout** and
 /// the function returns immediately — no ASCII art, colors, or interactive
@@ -33,6 +93,7 @@ pub(crate) async fn render_event(
     json_mode: bool,
     input_rx: &mut mpsc::UnboundedReceiver<String>,
     thinking_nodes: &mut HashSet<String>,
+    line_buf: &mut HashMap<String, String>,
 ) {
     if json_mode {
         match serde_json::to_string(event) {
@@ -108,7 +169,13 @@ pub(crate) async fn render_event(
             if thinking_nodes.remove(node_id.as_str()) {
                 eprintln!();
             }
-            eprint!("{delta}");
+            buffer_delta(
+                line_buf,
+                node_id,
+                dag::node_color(node_id),
+                delta,
+                false,
+            );
         }
         CouncilEvent::NodeReasoningDelta { node_id, delta } => {
             if thinking_nodes.insert(node_id.clone()) {
@@ -120,7 +187,13 @@ pub(crate) async fn render_event(
                     style::RESET
                 );
             }
-            eprint!("{}{delta}{}", style::DIM, style::RESET);
+            buffer_delta(
+                line_buf,
+                node_id,
+                dag::node_color(node_id),
+                delta,
+                true,
+            );
         }
         CouncilEvent::NodeToolCallStart {
             node_id,
@@ -167,6 +240,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::NodeCompacting { node_id } => {
+            flush_node_buf(line_buf, node_id, dag::node_color(node_id));
             eprintln!(
                 "\n{}[{node_id}]{} {}compacting output…{}",
                 dag::node_color(node_id),
@@ -176,6 +250,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::NodeComplete { node_id, .. } => {
+            flush_node_buf(line_buf, node_id, dag::node_color(node_id));
             eprintln!(
                 "{}[{node_id}]{} {}✓ complete{}",
                 dag::node_color(node_id),
@@ -185,6 +260,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::NodeFailed { node_id, error } => {
+            flush_node_buf(line_buf, node_id, dag::node_color(node_id));
             eprintln!(
                 "{}[{node_id}]{} {}✗ failed: {error}{}",
                 dag::node_color(node_id),
