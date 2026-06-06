@@ -15,8 +15,7 @@ use tracing::{debug, warn};
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
-    AppEventEmitter, ProcessHandle, ProcessRunner, ServerHealthStatus,
-    ToolSupportDetectorPort,
+    AppEventEmitter, ProcessHandle, ProcessRunner, ServerHealthStatus, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};

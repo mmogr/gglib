@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
-use gglib_core::ProcessHandle;
 use gglib_runtime::compose_agent_loop_with_sampling;
 use gglib_runtime::llama::{ContextInput, resolve_context_size};
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
