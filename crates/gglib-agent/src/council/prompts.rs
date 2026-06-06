@@ -95,25 +95,32 @@ NODE KINDS:
 
 WIDE SEARCH / MAP-REDUCE PATTERN:
 Use this pattern when a goal requires **independently searching multiple sources,
-sites, categories, or domains** — any task where the search space is too wide
-for a single agent to cover completely.
+sites, repositories, databases, or file sets** — any task where the search space
+is too wide for a single agent to cover completely in one turn.
 
 Pattern:
-  1. Emit one root leaf node per source/domain/slice (depends_on: []).
-     Each Map node's goal MUST explicitly instruct the worker to output its
-     findings as a **dense, structured Markdown list** — never prose paragraphs.
-     Tell the worker to emit one item per line using a dash prefix and bold Title,
-     to include every relevant result, and to not summarise or omit items.
+  1. Emit one root leaf node per source/slice (depends_on: []).
+     Each Map node's goal MUST:
+     - Explicitly instruct the worker to output its findings as a **dense,
+       structured list** — never prose paragraphs.  One item per line,
+       dash prefix, bold item name, key details inline.
+     - Tell the worker to include every relevant result and not summarise
+       or omit any items.
+     - **If the Map workers will use stateful, shared-session tools (such as\n\
+       a headless browser), explicitly instruct each Map node in its goal to\n\
+       isolate its state before starting work** (e.g. \\\"Open a new browser tab\n\
+       before navigating\\\" or \\\"Create a new working directory\\\") so that\n\
+       parallel workers do not clobber each other's session state.
   2. Emit one Reduce leaf node that depends_on ALL the Map nodes.
-     The Reduce node's goal MUST explicitly instruct the worker to:
-     - Treat its predecessor context as a collection of structured lists.
-     - Merge and deduplicate the items across all lists.
-     - Output the unified list without omitting or further summarising items.
-     Tell the Reduce worker to merge all input lists, deduplicate entries,
-     preserve the structured format exactly, and retain every item.
+     The Reduce node's goal MUST:
+     - Tell the worker to treat its predecessor context as a collection of
+       structured lists and merge them.
+     - Explicitly instruct the worker to deduplicate and preserve every
+       entry verbatim — no summarisation, no omissions.
 
 Use wide search / map-reduce when:
-- The goal names multiple distinct sources (e.g. two job boards, several API docs)
+- The goal names multiple distinct sources (e.g. multiple websites, APIs,
+  databases, code repositories, or file sets)
 - The search space is too wide for a single agent to cover fully in one turn
 - You need comprehensive coverage, not a representative sample
 - The sources are independent (no ordering constraint between them)
@@ -249,30 +256,30 @@ Response:
 }
 
 # Example 5 — Wide search across multiple independent sources (map-reduce)
-Goal: \"Find all open roles on APSJobs and SmartJobs QLD suitable for a data \
-analyst with Python skills\"
+Goal: \"Find all open issues labelled 'bug' across the frontend and backend \
+GitHub repositories\"
 Response:
 {
-  \"goal\": \"Find all open roles on APSJobs and SmartJobs QLD suitable for a data analyst with Python skills\",
+  \"goal\": \"Find all open issues labelled 'bug' across the frontend and backend GitHub repositories\",
   \"nodes\": [
     {
-      \"id\": \"search-apsjobs\",
-      \"goal\": \"Search APSJobs (apsjobs.gov.au) for data analyst roles requiring Python. Navigate search result pages with the browser. Output your findings as a structured Markdown list — one item per role using a dash prefix: bold Title, bold Agency, brief description, closing date. Include every relevant result; do not summarise or omit any roles.\",
+      \"id\": \"scan-frontend-repo\",
+      \"goal\": \"Search the frontend GitHub repository for all open issues labelled 'bug'. Open a new browser tab before navigating so this worker does not interfere with other parallel workers sharing the same browser session. Output your findings as a structured list — one item per line using a dash prefix: bold issue title, issue number, author, date opened. Include every result; do not summarise or omit any issues.\",
       \"depends_on\": [],
-      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\"],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\", \"browser_tabs\"],
       \"kind\": \"leaf\"
     },
     {
-      \"id\": \"search-smartjobs\",
-      \"goal\": \"Search SmartJobs Queensland (smartjobs.qld.gov.au) for data analyst roles requiring Python. Navigate search result pages with the browser. Output your findings as a structured Markdown list — one item per role using a dash prefix: bold Title, bold Agency, brief description, closing date. Include every relevant result; do not summarise or omit any roles.\",
+      \"id\": \"scan-backend-repo\",
+      \"goal\": \"Search the backend GitHub repository for all open issues labelled 'bug'. Open a new browser tab before navigating so this worker does not interfere with other parallel workers sharing the same browser session. Output your findings as a structured list — one item per line using a dash prefix: bold issue title, issue number, author, date opened. Include every result; do not summarise or omit any issues.\",
       \"depends_on\": [],
-      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\"],
+      \"tool_allowlist\": [\"browser_navigate\", \"browser_snapshot\", \"browser_click\", \"browser_tabs\"],
       \"kind\": \"leaf\"
     },
     {
-      \"id\": \"merge-results\",
-      \"goal\": \"You will receive structured Markdown job listing lists from two parallel search workers (APSJobs and SmartJobs QLD). Merge all items into a single deduplicated list grouped by source. Preserve the structured format exactly — do not summarise, paraphrase, or drop any entries. Then add a brief relevance note for each role.\",
-      \"depends_on\": [\"search-apsjobs\", \"search-smartjobs\"],
+      \"id\": \"merge-issues\",
+      \"goal\": \"You will receive structured issue lists from two parallel search workers. Merge all items into a single deduplicated list grouped by repository. Preserve the structured format exactly — do not summarise, paraphrase, or drop any entries.\",
+      \"depends_on\": [\"scan-frontend-repo\", \"scan-backend-repo\"],
       \"tool_allowlist\": [],
       \"kind\": \"leaf\"
     }
