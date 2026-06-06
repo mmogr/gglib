@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(tracker.active_count(), 1);
 
         // GC with large TTL - should not remove
-        let removed = tracker.gc_expired(Duration::from_secs(3600));
+        let removed = tracker.gc_expired(Duration::from_hours(1));
         assert_eq!(removed, 0);
         assert_eq!(tracker.active_count(), 1);
 

@@ -415,7 +415,12 @@ impl Guards {
         }
         if !tool_calls.is_empty() {
             if let Some(max_steps) = config.max_repeated_batch_steps {
-                if let Err(e) = self.loop_detector.check(tool_calls, max_steps) {
+                if let Err(e) = self.loop_detector.check(
+                    tool_calls,
+                    max_steps,
+                    &config.observation_tools,
+                    config.max_observation_steps,
+                ) {
                     emit_error_event(tx, &e.to_string()).await;
                     return Err(e);
                 }

@@ -7,10 +7,35 @@
 //! 2. Sort the individual signatures and join them with `"|"` to form a
 //!    **batch signature** that is independent of tool-call ordering.
 //! 3. A [`LoopDetector`] counts how many times each batch signature has been
-//!    seen.  When the count exceeds `max_repeated_batch_steps` the loop is
-//!    considered stuck and [`AgentError::LoopDetected`] is returned.
+//!    seen.  The threshold applied depends on whether the batch is classified
+//!    as "observation-only" (see below).
 //!
-//! ## Hash algorithm
+//! # Dual-threshold detection
+//!
+//! Observation-only tools (e.g. browser snapshots, page screenshots) take no
+//! meaningful arguments, so every call hashes to the same signature regardless
+//! of the page content returned.  With a strict threshold this causes false
+//! positives on legitimate `ReAct` *observe → act → observe* cycles.
+//!
+//! The detector therefore applies **two thresholds**:
+//!
+//! | Batch type | Threshold used |
+//! |------------|---------------|
+//! | Every call matches an observation pattern | `max_observation_steps` |
+//! | At least one call does **not** match | `max_repeated_batch_steps` |
+//!
+//! A batch is observation-only when [`is_observation_batch`] returns `true`:
+//! every call's lowercased name satisfies
+//! `name.ends_with(pattern) || name.contains(pattern)` for at least one
+//! pattern in the configured list.  Substring/suffix matching is used
+//! intentionally so that namespaced MCP tool names such as
+//! `playwright_mcp_browser_snapshot` are matched by the short pattern
+//! `"snapshot"` without requiring users to enumerate every vendor variant.
+//!
+//! **Mixed batches** (≥ 1 non-observation call) always fall back to the
+//! stricter `max_repeated_batch_steps` — the conservative choice.
+//!
+//! # Hash algorithm
 //!
 //! FNV-1a 64-bit with:
 //! - Offset basis: `14_695_981_039_346_656_037`
@@ -125,6 +150,35 @@ fn batch_signature(calls: &[ToolCall]) -> String {
 }
 
 // =============================================================================
+// Observation-batch classifier
+// =============================================================================
+
+/// Return `true` if **every** call in `calls` is an observation-only tool.
+///
+/// A tool call is classified as observation-only when its lowercased name
+/// satisfies `name.ends_with(pattern) || name.contains(pattern)` for at
+/// least one pattern in `patterns`.  Matching is case-insensitive (both
+/// sides are lowercased before comparison).
+///
+/// An empty `patterns` list means no tools are ever classified as
+/// observation-only, so the function always returns `false`.
+///
+/// An empty `calls` slice returns `true` (vacuous truth), but the caller
+/// ([`LoopDetector::check`]) is never invoked with an empty batch — the
+/// agent loop skips loop detection when there are no tool calls.
+pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
+    if patterns.is_empty() {
+        return false;
+    }
+    calls.iter().all(|call| {
+        let name = call.name.to_lowercase();
+        patterns
+            .iter()
+            .any(|pat| name.ends_with(pat.as_str()) || name.contains(pat.as_str()))
+    })
+}
+
+// =============================================================================
 // LoopDetector
 // =============================================================================
 
@@ -140,23 +194,35 @@ pub struct LoopDetector {
 impl LoopDetector {
     /// Record the current batch of tool calls and error if a loop is detected.
     ///
-    /// A loop is declared when the same batch signature has been seen more
-    /// than `max_strikes` times.  The count is incremented **before** the
-    /// comparison so that `max_strikes = 2` allows two identical batches
-    /// before erroring on the third.
+    /// Selects the effective threshold based on batch classification:
     ///
-    /// `max_strikes = 0` rejects the very first occurrence (zero tolerance).
-    /// `max_strikes = 1` rejects on the second occurrence (one repeat allowed).
+    /// - If every call in `calls` matches an observation pattern in
+    ///   `observation_tools` (via [`is_observation_batch`]), `max_observation_steps`
+    ///   is used as the threshold (falling back to `max_strikes` when `None`).
+    /// - Otherwise, `max_strikes` (`max_repeated_batch_steps`) is used.
+    ///
+    /// The count is incremented **before** the comparison so that
+    /// `effective_max = 2` allows two identical batches before erroring on
+    /// the third.
+    ///
+    /// `effective_max = 0` rejects the very first occurrence (zero tolerance).
     pub(crate) fn check(
         &mut self,
         calls: &[ToolCall],
         max_strikes: usize,
+        observation_tools: &[String],
+        max_observation_steps: Option<usize>,
     ) -> Result<(), AgentError> {
+        let effective_max = if is_observation_batch(calls, observation_tools) {
+            max_observation_steps.unwrap_or(max_strikes)
+        } else {
+            max_strikes
+        };
         let sig = batch_signature(calls);
         let entry = self.hits.entry(sig.clone()).or_insert(0);
         *entry += 1;
         let count = *entry;
-        if count > max_strikes {
+        if count > effective_max {
             return Err(AgentError::LoopDetected { signature: sig });
         }
         Ok(())

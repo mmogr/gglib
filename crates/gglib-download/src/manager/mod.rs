@@ -1170,7 +1170,7 @@ impl DownloadManagerImpl {
 
         let completed_at_ms = Self::get_current_timestamp_ms();
         let mut items = Self::build_completion_details(run.completions);
-        items.sort_by(|a, b| b.last_completed_at_ms.cmp(&a.last_completed_at_ms));
+        items.sort_by_key(|b| std::cmp::Reverse(b.last_completed_at_ms));
 
         let (total_attempts_downloaded, total_attempts_failed, total_attempts_cancelled) =
             Self::calculate_total_attempts(&items);

@@ -14,6 +14,14 @@ use gglib_core::domain::agent::{AgentConfig, AgentMessage};
 ///
 /// All numeric fields are clamped server-side to the ceiling constants defined
 /// in [`gglib_core::domain::agent::config`] to prevent resource exhaustion.
+///
+/// # Observation-tool fields
+///
+/// `observation_tools` and `max_observation_steps` are intentionally exposed
+/// to callers because gglib is a BYO-MCP platform: users may connect arbitrary
+/// MCP servers whose tool names are unknown at compile time.  Callers that want
+/// to classify a custom tool as observation-only (and therefore subject to the
+/// higher repetition threshold) should pass its name fragment here.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct AgentRequestConfig {
@@ -28,6 +36,25 @@ pub struct AgentRequestConfig {
     /// Per-tool execution timeout in milliseconds.
     /// Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`] server-side.
     pub tool_timeout_ms: Option<u64>,
+
+    /// Substring/suffix patterns that classify a tool as observation-only.
+    ///
+    /// When **every** call in a batch matches a pattern, the higher
+    /// `max_observation_steps` threshold is applied instead of the standard
+    /// loop-detection threshold.  Matching is case-insensitive and uses
+    /// `ends_with` OR `contains` semantics.
+    ///
+    /// `Some([])` disables observation classification entirely.
+    /// `None` (field absent) keeps the built-in defaults
+    /// (`["snapshot", "screenshot", "read_page"]`).
+    pub observation_tools: Option<Vec<String>>,
+
+    /// Maximum repetitions of an observation-only batch before loop detection
+    /// fires.
+    ///
+    /// Clamped to `MAX_OBSERVATION_STEPS_CEILING` (100) server-side.
+    /// `None` (field absent) keeps the built-in default of `10`.
+    pub max_observation_steps: Option<usize>,
 }
 
 impl From<AgentRequestConfig> for AgentConfig {
@@ -36,6 +63,8 @@ impl From<AgentRequestConfig> for AgentConfig {
             req.max_iterations,
             req.max_parallel_tools,
             req.tool_timeout_ms,
+            req.observation_tools,
+            req.max_observation_steps,
         )
         .expect("clamped AgentConfig must pass validation")
     }

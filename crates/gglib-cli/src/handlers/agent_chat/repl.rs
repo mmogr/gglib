@@ -89,6 +89,9 @@ pub async fn run_repl_with_prior(
         ),
         args.max_parallel,
         args.tool_timeout_ms,
+        // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
+        Some(args.observation_tools.clone()).filter(|v| !v.is_empty()),
+        args.max_observation_steps,
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 

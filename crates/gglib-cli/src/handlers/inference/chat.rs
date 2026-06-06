@@ -27,6 +27,11 @@ pub struct ChatArgs {
     pub model: Option<String>,
     /// Resume a previous conversation by ID.
     pub continue_id: Option<i64>,
+    /// Observation-tool name patterns for the dual-threshold loop guard.
+    /// An empty vec means "use defaults" (see `AgentConfig::observation_tools`).
+    pub observation_tools: Vec<String>,
+    /// Elevated repetition limit for observation-only tool batches.
+    pub max_observation_steps: Option<usize>,
 }
 
 /// Execute the chat command — always routes to the agentic REPL.

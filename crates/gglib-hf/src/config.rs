@@ -132,13 +132,13 @@ mod tests {
         let config = HfClientConfig::new()
             .with_base_url("https://custom.api/")
             .with_user_agent("test-agent")
-            .with_timeout(Duration::from_secs(60))
+            .with_timeout(Duration::from_mins(1))
             .with_token("secret")
             .with_max_retries(5);
 
         assert_eq!(config.base_url, "https://custom.api/");
         assert_eq!(config.user_agent, "test-agent");
-        assert_eq!(config.timeout, Duration::from_secs(60));
+        assert_eq!(config.timeout, Duration::from_mins(1));
         assert_eq!(config.token, Some("secret".to_string()));
         assert_eq!(config.max_retries, 5);
     }

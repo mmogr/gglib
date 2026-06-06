@@ -42,6 +42,8 @@ pub async fn execute(
     tools: Vec<String>,
     tool_timeout_ms: Option<u64>,
     max_parallel: Option<usize>,
+    observation_tools: Vec<String>,
+    max_observation_steps: Option<usize>,
     verbose: bool,
     quiet: bool,
     sampling: SamplingArgs,
@@ -110,9 +112,15 @@ pub async fn execute(
 
     let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
 
-    let config =
-        AgentConfig::from_user_params(Some(resolved_max_iterations), max_parallel, tool_timeout_ms)
-            .map_err(|e| anyhow!("invalid agent config: {e}"))?;
+    let config = AgentConfig::from_user_params(
+        Some(resolved_max_iterations),
+        max_parallel,
+        tool_timeout_ms,
+        // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
+        Some(observation_tools).filter(|v| !v.is_empty()),
+        max_observation_steps,
+    )
+    .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages
     let mut messages = vec![AgentMessage::System {

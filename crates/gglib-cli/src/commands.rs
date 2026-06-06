@@ -214,6 +214,17 @@ pub enum Commands {
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
         #[arg(long = "continue", alias = "c")]
         continue_id: Option<i64>,
+        /// Observation-only tool name patterns for the dual-threshold loop guard.
+        /// A tool whose name ends with or contains any pattern is classified as
+        /// observation-only and subject to the higher --max-observation-steps limit.
+        /// Omit to use the built-in defaults (snapshot, screenshot, read_page).
+        /// Pass an empty string to disable observation classification entirely.
+        #[arg(long = "observation-tool", value_delimiter = ',')]
+        observation_tools: Vec<String>,
+        /// Maximum times an observation-only batch may repeat before loop detection
+        /// fires. Clamped to 100. Defaults to 10.
+        #[arg(long = "max-observation-steps")]
+        max_observation_steps: Option<usize>,
         /// Subcommand (e.g. `history`)
         #[command(subcommand)]
         command: Option<ChatCommand>,
@@ -263,6 +274,16 @@ pub enum Commands {
         /// Maximum number of tools executed in parallel per iteration
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
+        /// Observation-only tool name patterns for the dual-threshold loop guard.
+        /// A tool whose name ends with or contains any pattern is classified as
+        /// observation-only and subject to the higher --max-observation-steps limit.
+        /// Omit to use the built-in defaults (snapshot, screenshot, read_page).
+        #[arg(long = "observation-tool", value_delimiter = ',')]
+        observation_tools: Vec<String>,
+        /// Maximum times an observation-only batch may repeat before loop detection
+        /// fires. Clamped to 100. Defaults to 10.
+        #[arg(long = "max-observation-steps")]
+        max_observation_steps: Option<usize>,
     },
 
     /// Decompose a goal into a validated task graph (planning only, no execution)

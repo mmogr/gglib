@@ -61,6 +61,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             max_parallel,
             model,
             continue_id,
+            observation_tools,
+            max_observation_steps,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib chat history`)
@@ -85,6 +87,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     verbose, // global flag forwarded here
                     model,
                     continue_id,
+                    observation_tools,
+                    max_observation_steps,
                 };
                 handlers::inference::chat::execute(ctx, args).await?;
             }
@@ -104,6 +108,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             tools,
             tool_timeout_ms,
             max_parallel,
+            observation_tools,
+            max_observation_steps,
         } => {
             // When --no-tools is set, override tools to an empty allowlist
             // so the agent loop exposes zero tools to the model.
@@ -123,6 +129,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 effective_tools,
                 tool_timeout_ms,
                 max_parallel,
+                observation_tools,
+                max_observation_steps,
                 verbose,
                 quiet,
                 sampling,

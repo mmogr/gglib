@@ -8,11 +8,14 @@
 //!
 //! | Test | Guard exercised |
 //! |------|----------------|
-//! | [`test_max_iterations_reached`]         | [`AgentConfig::max_iterations`] limit |
-//! | [`test_loop_detection`]                 | Repeated tool-call batch → [`AgentError::LoopDetected`] |
-//! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::StagnationDetected`] |
-//! | [`test_stagnation_fires_before_finalize`] | Stagnation catches repeated final answer |
-//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → soft-recovery via synthetic tool error + [`AgentEvent::SystemWarning`] |
+//! | [`test_max_iterations_reached`]                  | [`AgentConfig::max_iterations`] limit |
+//! | [`test_loop_detection`]                          | Repeated tool-call batch → [`AgentError::LoopDetected`] |
+//! | [`test_stagnation_detected_integration`]         | Repeated text response → [`AgentError::StagnationDetected`] |
+//! | [`test_stagnation_fires_before_finalize`]        | Stagnation catches repeated final answer |
+//! | [`test_too_many_tool_calls_integration`]         | Oversized tool-call batch → soft-recovery via synthetic tool error + [`AgentEvent::SystemWarning`] |
+//! | [`test_observation_tool_uses_higher_threshold`]  | Observation-only batch stays safe up to `max_observation_steps` |
+//! | [`test_observation_tool_fires_at_higher_threshold`] | Observation batch fires after `max_observation_steps` |
+//! | [`test_mixed_batch_uses_standard_threshold`]     | Mixed batch (obs + action) uses `max_repeated_batch_steps` |
 
 mod common;
 
@@ -404,5 +407,195 @@ async fn test_stagnation_fires_before_finalize() {
     assert!(
         !has_final_answer(&events),
         "FinalAnswer must not be emitted when stagnation aborts a text-only iteration"
+    );
+}
+
+// =============================================================================
+// Dual-threshold observation guard
+// =============================================================================
+
+/// **Observation threshold — safe under limit**: an observation-only batch
+/// (every call's name matches an observation pattern) must be allowed to
+/// repeat up to `max_observation_steps` times without firing.
+///
+/// Uses `max_repeated_batch_steps=2` (the production default) with
+/// `max_observation_steps=10`.  The batch repeats 10 times — each must
+/// succeed.  The 11th repetition is handled by the next test.
+#[tokio::test]
+async fn test_observation_tool_uses_higher_threshold() {
+    // 12 identical observation-only calls — we'll check the first 10 pass.
+    let llm = Arc::new(MockLlmPort::new().push_many((0..12).map(|i| {
+        MockLlmResponse::tool_call(
+            format!("obs{i}"),
+            "playwright_mcp_browser_snapshot",
+            json!({}),
+        )
+    })));
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("playwright_mcp_browser_snapshot"),
+        MockToolBehavior::Immediate {
+            content: "page html...".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(256);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "browse".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 10;
+                c.max_repeated_batch_steps = Some(2);
+                c.max_observation_steps = Some(10);
+                c.observation_tools = vec!["snapshot".into()];
+                c.max_stagnation_steps = None;
+            }),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // With max_observation_steps=10 the loop hits max_iterations (10) before
+    // the observation guard fires — it must NOT return LoopDetected.
+    assert!(
+        !matches!(result, Err(AgentError::LoopDetected { .. })),
+        "observation-only batch must not trigger LoopDetected within max_observation_steps; \
+         got: {result:?}"
+    );
+    assert!(
+        !has_final_answer(&events),
+        "no FinalAnswer expected — loop hit max_iterations"
+    );
+}
+
+/// **Observation threshold — fires at limit**: the same observation-only batch
+/// must eventually fire `LoopDetected` once the count exceeds
+/// `max_observation_steps`.
+///
+/// Uses `max_observation_steps=5` and repeats the batch 6 times.
+#[tokio::test]
+async fn test_observation_tool_fires_at_higher_threshold() {
+    let llm = Arc::new(MockLlmPort::new().push_many((0..10).map(|i| {
+        MockLlmResponse::tool_call(
+            format!("obs{i}"),
+            "playwright_mcp_browser_snapshot",
+            json!({}),
+        )
+    })));
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("playwright_mcp_browser_snapshot"),
+        MockToolBehavior::Immediate {
+            content: "page html...".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(256);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "browse".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 20;
+                c.max_repeated_batch_steps = Some(2);
+                c.max_observation_steps = Some(5);
+                c.observation_tools = vec!["snapshot".into()];
+                c.max_stagnation_steps = None;
+            }),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // max_observation_steps=5 → fires on 6th occurrence (count 6 > 5).
+    assert!(
+        matches!(result, Err(AgentError::LoopDetected { .. })),
+        "observation batch must fire LoopDetected after max_observation_steps; got: {result:?}"
+    );
+    assert!(
+        has_error_event(&events),
+        "AgentEvent::Error must be emitted before stream closes"
+    );
+}
+
+/// **Mixed batch — standard threshold applies**: a batch containing both an
+/// observation tool and a non-observation tool must use `max_repeated_batch_steps`
+/// (not the elevated observation threshold), and fire on the 3rd repetition.
+#[tokio::test]
+async fn test_mixed_batch_uses_standard_threshold() {
+    // Each LLM response emits two tool calls: one observation, one action.
+    let llm = Arc::new(
+        MockLlmPort::new().push_many((0..10).map(|i| MockLlmResponse {
+            reasoning: None,
+            content: None,
+            tool_calls: vec![
+                ToolCall {
+                    id: format!("snap{i}"),
+                    name: "browser_snapshot".into(),
+                    arguments: json!({}),
+                },
+                ToolCall {
+                    id: format!("act{i}"),
+                    name: "do_thing".into(),
+                    arguments: json!({}),
+                },
+            ],
+            finish_reason: "tool_calls".into(),
+        })),
+    );
+
+    let executor = MockToolExecutorPort::new()
+        .with_tool(
+            ToolDefinition::new("browser_snapshot"),
+            MockToolBehavior::Immediate {
+                content: "page".into(),
+            },
+        )
+        .with_tool(
+            ToolDefinition::new("do_thing"),
+            MockToolBehavior::Immediate {
+                content: "done".into(),
+            },
+        );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(256);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "go".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 20;
+                c.max_repeated_batch_steps = Some(2);
+                c.max_observation_steps = Some(10); // elevated — must NOT apply
+                c.observation_tools = vec!["snapshot".into()];
+                c.max_stagnation_steps = None;
+            }),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // Mixed batch → standard threshold (max_repeated_batch_steps=2) applies.
+    // Fires on 3rd occurrence (count 3 > 2), not on the 11th.
+    assert!(
+        matches!(result, Err(AgentError::LoopDetected { .. })),
+        "mixed batch must fire LoopDetected at standard threshold; got: {result:?}"
+    );
+    assert!(
+        has_error_event(&events),
+        "AgentEvent::Error must be emitted before stream closes"
     );
 }
