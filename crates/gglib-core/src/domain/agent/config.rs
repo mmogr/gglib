@@ -199,7 +199,7 @@ pub struct AgentConfig {
     /// querying or traversing a stateful source — page snapshots, navigation,
     /// clicks, file reads, directory listings, API pagination calls, etc.
     /// Their repeated invocation with identical arguments is a legitimate
-    /// ReAct pattern, not a stuck loop.
+    /// `ReAct` pattern, not a stuck loop.
     ///
     /// A tool call whose **lowercased** name satisfies
     /// `name.ends_with(pattern) || name.contains(pattern)` for any pattern in
