@@ -158,8 +158,10 @@ async fn list_tools_bare_name_matches_qualified_tool() {
     // Allowlist contains the bare name "browser_snapshot".
     let allowed: HashSet<String> = ["browser_snapshot".to_owned()].into();
     let f = FilteredToolExecutor::new(
-        Arc::new(StubExecutor::new(&["2:browser_snapshot", "2:browser_navigate"]))
-            as Arc<dyn ToolExecutorPort>,
+        Arc::new(StubExecutor::new(&[
+            "2:browser_snapshot",
+            "2:browser_navigate",
+        ])) as Arc<dyn ToolExecutorPort>,
         allowed,
     );
     let tools = f.list_tools().await;
@@ -187,11 +189,16 @@ async fn execute_bare_name_in_allowlist_permits_qualified_call() {
 async fn execute_bare_name_does_not_bypass_for_other_tools() {
     let allowed: HashSet<String> = ["browser_snapshot".to_owned()].into();
     let f = FilteredToolExecutor::new(
-        Arc::new(StubExecutor::new(&["2:browser_snapshot", "2:browser_navigate"]))
-            as Arc<dyn ToolExecutorPort>,
+        Arc::new(StubExecutor::new(&[
+            "2:browser_snapshot",
+            "2:browser_navigate",
+        ])) as Arc<dyn ToolExecutorPort>,
         allowed,
     );
-    let err = f.execute(&make_call("2:browser_navigate")).await.unwrap_err();
+    let err = f
+        .execute(&make_call("2:browser_navigate"))
+        .await
+        .unwrap_err();
     assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
 }
 

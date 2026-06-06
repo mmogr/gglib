@@ -370,7 +370,10 @@ pub async fn execute(
                     .find(':')
                     .map(|pos| t.name[pos + 1..].to_owned())
                     .unwrap_or_else(|| t.name.clone());
-                ToolDefinition { name: bare, ..t.clone() }
+                ToolDefinition {
+                    name: bare,
+                    ..t.clone()
+                }
             })
             .collect();
         let effective_tools = if tools.is_empty() {
