@@ -267,7 +267,7 @@ pub fn infer_from_chat_template(
 /// This is the **single source of truth** for architecture-level behavioural
 /// constraints that apply to the **request** side (message preprocessing).
 /// It is consulted during model registration alongside
-/// [`infer_from_chat_template`] — the two results are ORed together so that
+/// [`infer_from_chat_template`] — the two results are `OR`-ed together so that
 /// either signal is sufficient.
 ///
 /// # Scope: request preprocessing only
