@@ -205,15 +205,14 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
     };
 
     // Deserialise only the fields `transform_messages_for_capabilities` needs.
-    let messages: Vec<ChatMessage> = match serde_json::from_value(
-        serde_json::Value::Array(messages_raw.clone()),
-    ) {
-        Ok(m) => m,
-        Err(e) => {
-            warn!(error = %e, "coalesce: failed to parse messages array; forwarding original");
-            return body;
-        }
-    };
+    let messages: Vec<ChatMessage> =
+        match serde_json::from_value(serde_json::Value::Array(messages_raw.clone())) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!(error = %e, "coalesce: failed to parse messages array; forwarding original");
+                return body;
+            }
+        };
 
     let transformed = transform_messages_for_capabilities(messages, capabilities);
 

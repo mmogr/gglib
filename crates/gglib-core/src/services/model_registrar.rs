@@ -164,9 +164,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             template.map(String::as_str),
             name.map(String::as_str),
         );
-        let from_arch = crate::domain::capabilities_from_architecture(
-            arch.map(String::as_str),
-        );
+        let from_arch = crate::domain::capabilities_from_architecture(arch.map(String::as_str));
         model.capabilities = from_template | from_arch;
 
         let registered = self.model_repo.insert(&model).await?;

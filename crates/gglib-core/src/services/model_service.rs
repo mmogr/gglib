@@ -169,9 +169,8 @@ impl ModelService {
             template.map(String::as_str),
             name.map(String::as_str),
         );
-        let from_arch = crate::domain::capabilities_from_architecture(
-            gguf_metadata.architecture.as_deref(),
-        );
+        let from_arch =
+            crate::domain::capabilities_from_architecture(gguf_metadata.architecture.as_deref());
         let model_capabilities = from_template | from_arch;
 
         // 5. Construct fully-populated NewModel
@@ -402,9 +401,7 @@ impl ModelService {
                     template.map(String::as_str),
                     name.map(String::as_str),
                 );
-                let from_arch = capabilities_from_architecture(
-                    arch.map(String::as_str),
-                );
+                let from_arch = capabilities_from_architecture(arch.map(String::as_str));
                 model.capabilities = from_template | from_arch;
                 self.repo.update(&model).await.map_err(CoreError::from)?;
             }

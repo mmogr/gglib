@@ -9,7 +9,9 @@ use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
 
 use crate::error::GuiError;
-use crate::types::{AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest};
+use crate::types::{
+    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
+};
 
 /// Dependencies for model operations.
 pub struct ModelDeps {

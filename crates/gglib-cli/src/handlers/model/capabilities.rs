@@ -8,8 +8,8 @@
 //! [`ModelCapabilities`]: gglib_core::ModelCapabilities
 
 use anyhow::{Result, anyhow};
-use gglib_app_services::{ModelDeps, ModelOps};
 use gglib_app_services::types::SetCapabilitiesRequest;
+use gglib_app_services::{ModelDeps, ModelOps};
 use gglib_core::ModelCapabilities;
 
 use crate::bootstrap::CliContext;
@@ -19,7 +19,12 @@ use crate::bootstrap::CliContext;
 /// Without `--set` or `--unset` flags the command is read-only and prints the
 /// current capability state.  With flags it applies the requested overrides
 /// via [`ModelOps::set_capabilities`] and prints the updated state.
-pub async fn execute(ctx: &CliContext, id: u32, set: Vec<String>, unset: Vec<String>) -> Result<()> {
+pub async fn execute(
+    ctx: &CliContext,
+    id: u32,
+    set: Vec<String>,
+    unset: Vec<String>,
+) -> Result<()> {
     // Build-once — ModelOps is cheap and constructed the same way as in Axum/Tauri.
     let ops = ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
@@ -46,7 +51,10 @@ pub async fn execute(ctx: &CliContext, id: u32, set: Vec<String>, unset: Vec<Str
 
     let gui_model = ops.set_capabilities(id as i64, req).await?;
 
-    println!("Updated capabilities for model {} ({}):", id, gui_model.name);
+    println!(
+        "Updated capabilities for model {} ({}):",
+        id, gui_model.name
+    );
     print_capabilities(id, &gui_model.name, gui_model.capabilities);
 
     Ok(())
@@ -64,7 +72,7 @@ fn apply_flag(req: &mut SetCapabilitiesRequest, flag: &str, value: bool) -> Resu
                 "Unknown capability flag '{other}'.\n\
                  Valid flags: supports-system-role, requires-strict-turns, \
                  supports-tool-calls, supports-reasoning"
-            ))
+            ));
         }
     }
     Ok(())
