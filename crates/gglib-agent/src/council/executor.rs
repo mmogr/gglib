@@ -367,7 +367,8 @@ pub async fn execute(
             .map(|t| {
                 let bare = t
                     .name
-                    .find(':').map_or_else(|| t.name.clone(), |pos| t.name[pos + 1..].to_owned());
+                    .find(':')
+                    .map_or_else(|| t.name.clone(), |pos| t.name[pos + 1..].to_owned());
                 ToolDefinition {
                     name: bare,
                     ..t.clone()
