@@ -12,7 +12,7 @@ use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 
-use super::render::{render_event, RenderState};
+use super::render::{RenderState, render_event};
 use super::{approve, init_session, parse_hitl_mode, stop_server};
 
 /// Plan and execute a task graph for `goal`.

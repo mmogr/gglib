@@ -31,7 +31,7 @@ use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
-use super::render::{render_event, RenderState};
+use super::render::{RenderState, render_event};
 use super::{approve, init_session, stop_server};
 
 /// Rewind run `run_id` to `wave` and re-execute from that point.
