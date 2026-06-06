@@ -70,16 +70,37 @@ fn flush_node_buf(line_buf: &mut HashMap<String, String>, node_id: &str, node_co
     }
 }
 
+/// Mutable rendering state threaded through every [`render_event`] call
+/// for a single council run.
+///
+/// Grouping these into a struct keeps [`render_event`]'s argument count
+/// within the clippy `too_many_arguments` limit (≤ 7) while allowing new
+/// state to be added without touching every call site.
+pub(crate) struct RenderState {
+    /// The most-recently seen task graph, used by the HITL approval prompt.
+    pub last_graph: Option<TaskGraph>,
+    /// Nodes currently emitting reasoning/thinking tokens.
+    pub thinking_nodes: HashSet<String>,
+    /// Per-node line buffers for interleave-free parallel output.
+    pub line_buf: HashMap<String, String>,
+}
+
+impl RenderState {
+    pub(crate) fn new() -> Self {
+        Self {
+            last_graph: None,
+            thinking_nodes: HashSet::new(),
+            line_buf: HashMap::new(),
+        }
+    }
+}
+
 /// Render a single [`CouncilEvent`] to the terminal (or as JSONL when
 /// `json_mode` is `true`).
 ///
-/// `last_graph` is updated whenever a `PlanProposed` event arrives so that
-/// `AwaitingApproval` handlers can offer the `[e]dit` option.
-///
-/// `line_buf` is a per-node line buffer used to prevent interleaved output
-/// when multiple worker nodes stream tokens concurrently.  Pass in a
-/// `HashMap::new()` at the start of each council run and reuse it for every
-/// event in the same run.
+/// `state` holds all mutable rendering state for the current run (last
+/// graph snapshot, thinking-node set, per-node line buffers).  Create once
+/// with [`RenderState::new`] and pass `&mut state` on every call.
 ///
 /// In `json_mode` the event is serialised as a JSON line to **stdout** and
 /// the function returns immediately — no ASCII art, colors, or interactive
@@ -88,12 +109,10 @@ fn flush_node_buf(line_buf: &mut HashMap<String, String>, node_id: &str, node_co
 pub(crate) async fn render_event(
     event: &CouncilEvent,
     approval_registry: &Arc<CouncilApprovalRegistry>,
-    last_graph: &mut Option<TaskGraph>,
+    state: &mut RenderState,
     opts: &ApproveOpts,
     json_mode: bool,
     input_rx: &mut mpsc::UnboundedReceiver<String>,
-    thinking_nodes: &mut HashSet<String>,
-    line_buf: &mut HashMap<String, String>,
 ) {
     if json_mode {
         match serde_json::to_string(event) {
@@ -102,6 +121,11 @@ pub(crate) async fn render_event(
         }
         return;
     }
+    let RenderState {
+        last_graph,
+        thinking_nodes,
+        line_buf,
+    } = state;
     match event {
         CouncilEvent::PlanProposed { graph } => {
             *last_graph = Some(graph.clone());

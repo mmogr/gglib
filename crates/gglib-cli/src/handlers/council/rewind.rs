@@ -31,7 +31,7 @@ use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
-use super::render::render_event;
+use super::render::{render_event, RenderState};
 use super::{approve, init_session, stop_server};
 
 /// Rewind run `run_id` to `wave` and re-execute from that point.
@@ -159,19 +159,15 @@ pub async fn execute(
         })
     };
 
-    let mut last_graph = None;
-    let mut thinking_nodes = HashSet::new();
-    let mut line_buf = std::collections::HashMap::new();
+    let mut state = RenderState::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
             &approval_registry,
-            &mut last_graph,
+            &mut state,
             &approve_opts,
             false, // json_mode not supported for rewind in this phase
             &mut input_rx,
-            &mut thinking_nodes,
-            &mut line_buf,
         )
         .await;
     }

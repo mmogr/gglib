@@ -1,6 +1,5 @@
 //! `gglib council run "<goal>"` — plan and execute a task graph.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -13,7 +12,7 @@ use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 
-use super::render::render_event;
+use super::render::{render_event, RenderState};
 use super::{approve, init_session, parse_hitl_mode, stop_server};
 
 /// Plan and execute a task graph for `goal`.
@@ -67,19 +66,15 @@ pub async fn execute(
         })
     };
 
-    let mut last_graph = None;
-    let mut thinking_nodes = HashSet::new();
-    let mut line_buf = std::collections::HashMap::new();
+    let mut state = RenderState::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
             &approval_registry,
-            &mut last_graph,
+            &mut state,
             &approve_opts,
             json_mode,
             &mut input_rx,
-            &mut thinking_nodes,
-            &mut line_buf,
         )
         .await;
     }
