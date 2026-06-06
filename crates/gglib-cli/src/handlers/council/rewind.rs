@@ -117,7 +117,7 @@ pub async fn execute(
         .map(|n| vec![n.trim().to_owned()])
         .unwrap_or_default();
     let note_queue: NoteQueue = Arc::new(tokio::sync::Mutex::new(initial_notes));
-    let mut input_rx = spawn_input_router(Arc::clone(&note_queue));
+    let (mut input_rx, input_task) = spawn_input_router(Arc::clone(&note_queue));
 
     // ── 7. Re-execute ────────────────────────────────────────────────────────
     eprintln!(
@@ -171,6 +171,10 @@ pub async fn execute(
         )
         .await;
     }
+
+    // Abort the background stdin-router task so it does not block the
+    // tokio runtime from shutting down.
+    input_task.abort();
 
     stop_server(ctx, &handle).await;
 

@@ -91,7 +91,7 @@ pub async fn execute(
             .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     let note_queue: NoteQueue = Arc::new(tokio::sync::Mutex::new(vec![]));
-    let mut input_rx = spawn_input_router(Arc::clone(&note_queue));
+    let (mut input_rx, input_task) = spawn_input_router(Arc::clone(&note_queue));
 
     let config = CouncilConfig {
         max_replans,
@@ -131,6 +131,10 @@ pub async fn execute(
         )
         .await;
     }
+
+    // Abort the background stdin-router task so it does not block the
+    // tokio runtime from shutting down.
+    input_task.abort();
 
     stop_server(ctx, &handle).await;
 
