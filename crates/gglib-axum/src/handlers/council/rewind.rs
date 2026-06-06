@@ -165,9 +165,8 @@ pub async fn rewind_run(
         tags,
         state.mcp.clone(),
         None,
+        None,
     );
-
-    // Build a note queue if a steering note was provided.
     let note_queue: Option<NoteQueue> = req.steering_note.map(|note| {
         let q: NoteQueue = Arc::new(tokio::sync::Mutex::new(vec![note]));
         q

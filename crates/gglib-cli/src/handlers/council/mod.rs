@@ -103,6 +103,7 @@ pub(crate) async fn init_session(
     port: Option<u16>,
     model: Option<String>,
     ctx_size: Option<String>,
+    sampling: Option<gglib_core::domain::InferenceConfig>,
 ) -> Result<(CouncilPorts, Option<ProcessHandle>)> {
     let (resolved_port, handle) = resolve_port(ctx, port, &model, ctx_size).await?;
 
@@ -125,6 +126,7 @@ pub(crate) async fn init_session(
         tags,
         Arc::clone(&ctx.mcp),
         cwd,
+        sampling,
     );
     Ok((ports, handle))
 }

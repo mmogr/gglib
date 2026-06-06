@@ -108,6 +108,7 @@ pub async fn run_sse(
         tags,
         state.mcp.clone(),
         None,
+        None,
     );
 
     let config = CouncilConfig {

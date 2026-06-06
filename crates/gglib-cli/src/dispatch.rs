@@ -163,6 +163,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     approval_timeout,
                     approval_timeout_action,
                     json,
+                    sampling,
                     context,
                 } => {
                     handlers::council::run::execute(
@@ -173,6 +174,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         context.ctx_size,
                         max_replans,
                         max_iterations,
+                        sampling,
                         hitl.as_deref(),
                         approval_timeout,
                         &approval_timeout_action,
@@ -196,6 +198,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     approval_timeout,
                     approval_timeout_action,
                     json,
+                    sampling,
                     context,
                 } => {
                     handlers::council::resume::execute(
@@ -206,6 +209,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         context.ctx_size,
                         max_replans,
                         max_iterations,
+                        sampling,
                         hitl.as_deref(),
                         approval_timeout,
                         &approval_timeout_action,

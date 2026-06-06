@@ -120,6 +120,10 @@ pub struct CouncilPorts {
 /// [`gglib_agent::council::run_council`] creates per-agent `AgentLoop`
 /// instances internally (each with its own tool filter).
 ///
+/// `sampling` applies to every LLM call made during the council run (planning,
+/// worker turns, synthesis, compaction).  Pass `None` to use llama-server
+/// defaults.
+///
 /// When `sandbox_root` is `Some`, filesystem tools (`read_file`,
 /// `list_directory`, `grep_search`) are enabled and scoped to that path.
 pub fn compose_council_ports(
@@ -129,9 +133,13 @@ pub fn compose_council_ports(
     tags: Vec<String>,
     mcp: Arc<McpService>,
     sandbox_root: Option<PathBuf>,
+    sampling: Option<InferenceConfig>,
 ) -> CouncilPorts {
-    let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(base_url, http_client, model).with_tags(tags));
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
+        LlmCompletionAdapter::with_client(base_url, http_client, model)
+            .with_sampling(sampling)
+            .with_tags(tags),
+    );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
         None => Arc::new(CombinedToolExecutor::new(mcp)),

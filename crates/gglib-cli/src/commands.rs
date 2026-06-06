@@ -53,6 +53,8 @@ pub enum CouncilCmd {
         #[arg(long)]
         json: bool,
         #[command(flatten)]
+        sampling: SamplingArgs,
+        #[command(flatten)]
         context: ContextArgs,
     },
 
@@ -103,6 +105,8 @@ pub enum CouncilCmd {
         /// Requires --hitl none. Incompatible with interactive approval prompts.
         #[arg(long)]
         json: bool,
+        #[command(flatten)]
+        sampling: SamplingArgs,
         #[command(flatten)]
         context: ContextArgs,
     },

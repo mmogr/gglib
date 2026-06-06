@@ -133,7 +133,7 @@ pub async fn execute(
     let hitl_mode = run.hitl_mode.clone();
     let approve_opts = approve::ApproveOpts::default();
 
-    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size, None).await?;
 
     let config = CouncilConfig {
         hitl_mode,

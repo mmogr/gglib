@@ -14,6 +14,7 @@ use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::shared::resolve_max_iterations;
+use crate::shared_args::SamplingArgs;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
@@ -30,6 +31,7 @@ pub async fn execute(
     ctx_size: Option<String>,
     max_replans: u32,
     max_iterations: Option<usize>,
+    sampling: SamplingArgs,
     hitl: Option<&str>,
     approval_timeout: Option<u64>,
     approval_timeout_action: &str,
@@ -67,7 +69,10 @@ pub async fn execute(
         }
     }
 
-    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size, {
+        let cfg = sampling.into_inference_config();
+        if cfg == Default::default() { None } else { Some(cfg) }
+    }).await?;
 
     let settings = ctx
         .app
