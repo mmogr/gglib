@@ -334,9 +334,37 @@ pub async fn execute(
         let _ = tx.send(CouncilEvent::PlanApproved).await;
         override_graph
     } else {
+        // ── Warm lazy MCP servers + build live tool catalog ───────────────────
+        //
+        // `tool_executor.list_tools()` does two jobs in one call:
+        //
+        // 1. **Warm-up**: calling `list_tools()` on the `CombinedToolExecutor`
+        //    triggers the `McpService` to start any registered lazy servers that
+        //    are not yet running.  Without this, lazy servers report 0 tools at
+        //    planning time, so the Director never learns about `browser_*` tools
+        //    and cannot include them in worker `tool_allowlist` entries.  The
+        //    workers then start with an empty tool set, the LLM reasons at length
+        //    about why it cannot browse, and the run burns tokens and context
+        //    without making progress.
+        //
+        // 2. **Live catalog**: the returned `Vec<ToolDefinition>` replaces the
+        //    `tools` slice that was passed in (which callers conventionally pass
+        //    as `&[]`).  The Director's `{tool_catalog}` prompt placeholder is
+        //    populated from this list, so every tool the executor exposes is
+        //    visible to the Director at planning time.
+        //
+        // The call is intentionally placed here rather than at each call site
+        // so that all entry points (CLI, Axum, Tauri) benefit automatically.
+        let live_tools: Vec<ToolDefinition> = tool_executor.list_tools().await;
+        let effective_tools = if tools.is_empty() {
+            &live_tools[..]
+        } else {
+            tools
+        };
+
         let g = plan(
             goal,
-            tools,
+            effective_tools,
             Arc::clone(&llm),
             config.hitl_mode.clone(),
             config.max_replans,
