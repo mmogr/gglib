@@ -21,10 +21,11 @@ pub use domain::{
     LlmStreamEvent, MAX_DEPTH, MAX_ITERATIONS_CEILING, MAX_NODES, MAX_PARALLEL_TOOLS_CEILING,
     MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
     McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
-    NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus, RangeValues,
-    TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
-    capabilities_from_architecture, infer_from_chat_template, transform_messages_for_capabilities,
+    McpToolResult, Message, MessageContent, MessageRole, Model, ModelCapabilities,
+    ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus,
+    RangeValues, TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult,
+    UpdateMcpServer, capabilities_from_architecture, infer_from_chat_template,
+    transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,

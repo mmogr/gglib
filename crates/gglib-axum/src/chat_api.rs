@@ -494,7 +494,7 @@ pub async fn proxy_chat(
         .into_iter()
         .map(|m| gglib_core::ChatMessage {
             role: m.role,
-            content: m.content,
+            content: m.content.map(gglib_core::MessageContent::Text),
             tool_calls: m.tool_calls.map(serde_json::Value::Array),
         })
         .collect();
@@ -506,7 +506,7 @@ pub async fn proxy_chat(
         .into_iter()
         .map(|m| ChatMessage {
             role: m.role,
-            content: m.content,
+            content: m.content.map(|c| c.into_string()),
             tool_calls: m.tool_calls.and_then(|v| {
                 if let serde_json::Value::Array(arr) = v {
                     Some(arr)

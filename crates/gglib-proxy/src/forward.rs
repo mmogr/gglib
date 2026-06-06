@@ -196,37 +196,64 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
         return body;
     }
 
+    debug!(
+        requires_strict_turns = capabilities.requires_strict_turns(),
+        supports_system_role = capabilities.supports_system_role(),
+        "coalesce: entering message transformation"
+    );
+
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        warn!("coalesce: failed to parse request body as JSON; forwarding original");
         return body;
     };
 
     let Some(messages_raw) = value.get("messages").and_then(|v| v.as_array()) else {
+        debug!("coalesce: no messages array found in request body");
         return body;
     };
 
+    let before_count = messages_raw.len();
+
     // Deserialise only the fields `transform_messages_for_capabilities` needs.
+    // `ChatMessage.content` accepts both a plain JSON string and a JSON array of
+    // content-part objects (e.g. VSCode LLM Gateway sends array-form content per
+    // the OpenAI spec).  Using `MessageContent` ensures we can always round-trip.
     let messages: Vec<ChatMessage> =
         match serde_json::from_value(serde_json::Value::Array(messages_raw.clone())) {
             Ok(m) => m,
             Err(e) => {
-                warn!(error = %e, "coalesce: failed to parse messages array; forwarding original");
+                warn!(
+                    error = %e,
+                    before = before_count,
+                    "coalesce: failed to deserialise messages as Vec<ChatMessage>; \
+                     forwarding original body unchanged. \
+                     This usually means a message field has an unexpected type."
+                );
                 return body;
             }
         };
 
+    debug!(
+        before = before_count,
+        roles = ?messages.iter().map(|m| m.role.as_str()).collect::<Vec<_>>(),
+        "coalesce: parsed messages for transformation"
+    );
+
     let transformed = transform_messages_for_capabilities(messages, capabilities);
+    let after_count = transformed.len();
+
+    debug!(
+        before = before_count,
+        after = after_count,
+        merged = before_count.saturating_sub(after_count),
+        "coalesce: transformation complete"
+    );
 
     match serde_json::to_value(&transformed) {
         Ok(new_messages) => {
             value["messages"] = new_messages;
             match serde_json::to_vec(&value) {
-                Ok(v) => {
-                    debug!(
-                        requires_strict_turns = capabilities.requires_strict_turns(),
-                        "coalesced messages for model capabilities"
-                    );
-                    Bytes::from(v)
-                }
+                Ok(v) => Bytes::from(v),
                 Err(e) => {
                     warn!(error = %e, "coalesce: failed to re-serialize; forwarding original");
                     body

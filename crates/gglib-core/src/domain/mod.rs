@@ -59,8 +59,8 @@ pub use agent::{
 
 // Re-export capability types at the domain level for convenience
 pub use capabilities::{
-    ChatMessage, ModelCapabilities, capabilities_from_architecture, infer_from_chat_template,
-    transform_messages_for_capabilities,
+    ChatMessage, MessageContent, ModelCapabilities, capabilities_from_architecture,
+    infer_from_chat_template, transform_messages_for_capabilities,
 };
 
 // Re-export orchestrator types at the domain level for convenience

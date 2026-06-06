@@ -486,14 +486,152 @@ mod tests {
 // Message Transformation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// The content of a chat message.
+///
+/// The OpenAI API allows `content` to be either a plain string or a structured
+/// array of typed content parts (text blocks, image URLs, tool results, etc.).
+/// Both forms are preserved faithfully through serialize/deserialize
+/// round-trips so the proxy never re-shapes data it did not need to touch.
+///
+/// # Serde behaviour
+///
+/// Uses `#[serde(untagged)]`, so the wire representation is unchanged:
+/// - `Text("hello")` → `"hello"` (JSON string)
+/// - `Parts([…])` → `[{"type":"text","text":"…"},…]` (JSON array)
+///
+/// A JSON `null` or missing `content` field is handled by the surrounding
+/// `Option<MessageContent>` with `#[serde(default)]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MessageContent {
+    /// Plain UTF-8 text.
+    Text(String),
+    /// Structured content parts (text, image_url, tool_result, …).
+    ///
+    /// Individual part shapes are defined by the OpenAI API spec and
+    /// validated by the model, not here.
+    Parts(Vec<serde_json::Value>),
+}
+
+impl MessageContent {
+    /// Borrow the inner string slice when this is plain-text content.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Text(s) => Some(s),
+            Self::Parts(_) => None,
+        }
+    }
+
+    /// Consume into a single flat `String`.
+    ///
+    /// For [`Text`] the string is returned as-is.  For [`Parts`] all
+    /// `{"type":"text","text":"…"}` entries are concatenated; other part
+    /// types (images, etc.) are omitted — callers should only use this when
+    /// a plain-text representation is required (e.g. the `[System]: ` prefix
+    /// during system-message conversion).
+    ///
+    /// [`Text`]: Self::Text
+    /// [`Parts`]: Self::Parts
+    pub fn into_string(self) -> String {
+        match self {
+            Self::Text(s) => s,
+            Self::Parts(parts) => parts
+                .iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join(""),
+        }
+    }
+
+    /// Merge `other` into `self`, producing a single combined [`MessageContent`].
+    ///
+    /// | `self`  | `other` | result |
+    /// |---------|---------|--------|
+    /// | Text    | Text    | Text joined with `"\n\n"` |
+    /// | Parts   | Parts   | Parts arrays concatenated |
+    /// | Text    | Parts   | Parts with a leading text block |
+    /// | Parts   | Text    | Parts with a trailing text block |
+    ///
+    /// Empty strings are handled gracefully (no `"\n\n"` separator when
+    /// either side is empty).
+    fn merge_with(self, other: MessageContent) -> MessageContent {
+        match (self, other) {
+            (Self::Text(mut a), Self::Text(b)) => {
+                if a.is_empty() {
+                    return Self::Text(b);
+                }
+                if b.is_empty() {
+                    return Self::Text(a);
+                }
+                a.push_str("\n\n");
+                a.push_str(&b);
+                Self::Text(a)
+            }
+            (Self::Parts(mut a), Self::Parts(b)) => {
+                a.extend(b);
+                Self::Parts(a)
+            }
+            (Self::Text(a), Self::Parts(b)) => {
+                let mut parts = vec![serde_json::json!({"type": "text", "text": a})];
+                parts.extend(b);
+                Self::Parts(parts)
+            }
+            (Self::Parts(mut a), Self::Text(b)) => {
+                a.push(serde_json::json!({"type": "text", "text": b}));
+                Self::Parts(a)
+            }
+        }
+    }
+}
+
+impl From<String> for MessageContent {
+    fn from(s: String) -> Self {
+        Self::Text(s)
+    }
+}
+
+impl From<&str> for MessageContent {
+    fn from(s: &str) -> Self {
+        Self::Text(s.to_string())
+    }
+}
+
 /// A chat message for transformation.
+///
+/// `content` uses [`MessageContent`] which accepts both a plain JSON string
+/// and a JSON array of content-part objects during deserialization, preserving
+/// the original form during serialization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<MessageContent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<serde_json::Value>,
+}
+
+impl ChatMessage {
+    /// Merge `other` into `self` in-place.
+    ///
+    /// Used during strict-turn coalescing to combine consecutive same-role
+    /// messages.  Content is merged via [`MessageContent::merge_with`]; tool
+    /// calls are concatenated as JSON arrays.
+    fn merge_into(&mut self, other: ChatMessage) {
+        self.content = match (self.content.take(), other.content) {
+            (None, b) => b,
+            (a, None) => a,
+            (Some(a), Some(b)) => Some(a.merge_with(b)),
+        };
+        match (self.tool_calls.as_mut(), other.tool_calls) {
+            (_, None) => {}
+            (None, tc) => self.tool_calls = tc,
+            (Some(last_tc), Some(msg_tc)) => {
+                if let (Some(la), Some(ma)) = (last_tc.as_array_mut(), msg_tc.as_array()) {
+                    la.extend_from_slice(ma);
+                }
+            }
+        }
+    }
 }
 
 /// Merge consecutive system messages into a single message.
@@ -518,25 +656,19 @@ fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMess
     let mut result: Vec<ChatMessage> = Vec::with_capacity(messages.len());
 
     for msg in messages {
-        if let Some(last) = result.last_mut()
-            && last.role == "system"
-            && msg.role == "system"
-        {
-            // Merge: append content with separator
-            let last_content = last.content.take().unwrap_or_default();
-            let new_content = msg.content.unwrap_or_default();
-
-            last.content = Some(if last_content.is_empty() {
-                new_content
-            } else if new_content.is_empty() {
-                last_content
-            } else {
-                format!("{last_content}\n\n{new_content}")
-            });
-
-            continue; // Don't push, we merged into last
+        let is_system_merge = result
+            .last()
+            .map_or(false, |last| last.role == "system" && msg.role == "system");
+        if is_system_merge {
+            let last = result.last_mut().unwrap();
+            last.content = match (last.content.take(), msg.content) {
+                (None, b) => b,
+                (a, None) => a,
+                (Some(a), Some(b)) => Some(a.merge_with(b)),
+            };
+        } else {
+            result.push(msg);
         }
-        result.push(msg);
     }
 
     result
@@ -585,8 +717,10 @@ pub fn transform_messages_for_capabilities(
         for msg in &mut messages {
             if msg.role == "system" {
                 msg.role = "user".to_string();
-                if let Some(content) = &mut msg.content {
-                    *content = format!("[System]: {content}");
+                if let Some(content) = msg.content.take() {
+                    msg.content = Some(MessageContent::Text(
+                        format!("[System]: {}", content.into_string()),
+                    ));
                 }
             }
         }
@@ -594,56 +728,17 @@ pub fn transform_messages_for_capabilities(
 
     // STEP 2: Merge consecutive same-role messages if strict turns are required
     if capabilities.contains(ModelCapabilities::REQUIRES_STRICT_TURNS) {
-        let mut merged_messages = Vec::new();
+        let mut merged: Vec<ChatMessage> = Vec::new();
         for msg in messages {
-            if let Some(last) = merged_messages.last_mut() {
-                let last_msg: &mut ChatMessage = last;
-                // Only merge user/assistant messages (avoid merging tool/system messages)
-                let is_mergeable_role = msg.role == "user" || msg.role == "assistant";
-
-                // Merge if same role and mergeable (user or assistant)
-                if last_msg.role == msg.role && is_mergeable_role {
-                    // Merge content if both have content
-                    match (&mut last_msg.content, &msg.content) {
-                        (Some(last_content), Some(msg_content)) => {
-                            // Both have content - merge with separator
-                            last_content.push_str("\n\n");
-                            last_content.push_str(msg_content);
-                        }
-                        (None, Some(msg_content)) => {
-                            // Only new message has content - use it
-                            last_msg.content = Some(msg_content.clone());
-                        }
-                        // If last has content and msg doesn't, keep last's content
-                        // If neither have content, keep None
-                        _ => {}
-                    }
-
-                    // Merge tool_calls if present
-                    match (&mut last_msg.tool_calls, &msg.tool_calls) {
-                        (Some(last_calls), Some(msg_calls)) => {
-                            // Both have tool_calls - concatenate arrays
-                            if let (Some(last_arr), Some(msg_arr)) =
-                                (last_calls.as_array_mut(), msg_calls.as_array())
-                            {
-                                last_arr.extend_from_slice(msg_arr);
-                            }
-                        }
-                        (None, Some(msg_calls)) => {
-                            // Only new message has tool_calls - use it
-                            last_msg.tool_calls = Some(msg_calls.clone());
-                        }
-                        // If last has tool_calls and msg doesn't, keep last's tool_calls
-                        // If neither have tool_calls, keep None
-                        _ => {}
-                    }
-
-                    continue; // Skip adding this message separately
-                }
+            let is_mergeable = msg.role == "user" || msg.role == "assistant";
+            let same_role_as_last = merged.last().map_or(false, |last| last.role == msg.role);
+            if is_mergeable && same_role_as_last {
+                merged.last_mut().unwrap().merge_into(msg);
+            } else {
+                merged.push(msg);
             }
-            merged_messages.push(msg);
         }
-        return merged_messages;
+        return merged;
     }
 
     messages
@@ -659,12 +754,12 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Hello".to_string()),
+                content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Hi there".to_string()),
+                content: Some(MessageContent::Text("Hi there".to_string())),
                 tool_calls: None,
             },
         ];
@@ -679,17 +774,17 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("You are a helpful assistant.".to_string()),
+                content: Some(MessageContent::Text("You are a helpful assistant.".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("WORKING_MEMORY:\n- task1 (ok): done".to_string()),
+                content: Some(MessageContent::Text("WORKING_MEMORY:\n- task1 (ok): done".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Hello".to_string()),
+                content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
             },
         ];
@@ -698,7 +793,7 @@ mod transform_tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].role, "system");
         assert_eq!(
-            result[0].content.as_deref(),
+            result[0].content.as_ref().and_then(|c| c.as_str()),
             Some("You are a helpful assistant.\n\nWORKING_MEMORY:\n- task1 (ok): done")
         );
         assert_eq!(result[1].role, "user");
@@ -709,17 +804,17 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("First.".to_string()),
+                content: Some(MessageContent::Text("First.".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("Second.".to_string()),
+                content: Some(MessageContent::Text("Second.".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("Third.".to_string()),
+                content: Some(MessageContent::Text("Third.".to_string())),
                 tool_calls: None,
             },
         ];
@@ -727,7 +822,7 @@ mod transform_tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(
-            result[0].content.as_deref(),
+            result[0].content.as_ref().and_then(|c| c.as_str()),
             Some("First.\n\nSecond.\n\nThird.")
         );
     }
@@ -737,19 +832,22 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some(String::new()),
+                content: Some(MessageContent::Text(String::new())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("Actual content".to_string()),
+                content: Some(MessageContent::Text("Actual content".to_string())),
                 tool_calls: None,
             },
         ];
         let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].content.as_deref(), Some("Actual content"));
+        assert_eq!(
+            result[0].content.as_ref().and_then(|c| c.as_str()),
+            Some("Actual content")
+        );
     }
 
     #[test]
@@ -757,12 +855,12 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("You are helpful".to_string()),
+                content: Some(MessageContent::Text("You are helpful".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Hello".to_string()),
+                content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
             },
         ];
@@ -772,27 +870,25 @@ mod transform_tests {
         // System becomes user, both messages remain separate (user + user but different content)
         assert_eq!(result.len(), 1); // They get merged because both are now "user"
         assert_eq!(result[0].role, "user");
-        assert!(
-            result[0]
-                .content
-                .as_ref()
-                .unwrap()
-                .contains("[System]: You are helpful")
-        );
-        assert!(result[0].content.as_ref().unwrap().contains("Hello"));
+        let content_str = result[0].content.as_ref().and_then(|c| c.as_str()).unwrap();
+        assert!(content_str.contains("[System]: You are helpful"));
+        assert!(content_str.contains("Hello"));
     }
 
     #[test]
     fn test_transform_preserves_system_when_supported() {
         let messages = vec![ChatMessage {
             role: "system".to_string(),
-            content: Some("You are helpful".to_string()),
+            content: Some(MessageContent::Text("You are helpful".to_string())),
             tool_calls: None,
         }];
         let caps = ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
         let result = transform_messages_for_capabilities(messages, caps);
         assert_eq!(result[0].role, "system");
-        assert_eq!(result[0].content, Some("You are helpful".to_string()));
+        assert_eq!(
+            result[0].content,
+            Some(MessageContent::Text("You are helpful".to_string()))
+        );
     }
 
     #[test]
@@ -800,19 +896,22 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("First".to_string()),
+                content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Second".to_string()),
+                content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
         let result = transform_messages_for_capabilities(messages, caps);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].content, Some("First\n\nSecond".to_string()));
+        assert_eq!(
+            result[0].content,
+            Some(MessageContent::Text("First\n\nSecond".to_string()))
+        );
     }
 
     #[test]
@@ -820,12 +919,12 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "tool".to_string(),
-                content: Some("Result 1".to_string()),
+                content: Some(MessageContent::Text("Result 1".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "tool".to_string(),
-                content: Some("Result 2".to_string()),
+                content: Some(MessageContent::Text("Result 2".to_string())),
                 tool_calls: None,
             },
         ];
@@ -839,17 +938,17 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("Be helpful".to_string()),
+                content: Some(MessageContent::Text("Be helpful".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("First".to_string()),
+                content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Second".to_string()),
+                content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
             },
         ];
@@ -857,15 +956,10 @@ mod transform_tests {
         let result = transform_messages_for_capabilities(messages, caps);
         assert_eq!(result.len(), 1); // System→user + merge
         assert_eq!(result[0].role, "user");
-        assert!(
-            result[0]
-                .content
-                .as_ref()
-                .unwrap()
-                .contains("[System]: Be helpful")
-        );
-        assert!(result[0].content.as_ref().unwrap().contains("First"));
-        assert!(result[0].content.as_ref().unwrap().contains("Second"));
+        let content_str = result[0].content.as_ref().and_then(|c| c.as_str()).unwrap();
+        assert!(content_str.contains("[System]: Be helpful"));
+        assert!(content_str.contains("First"));
+        assert!(content_str.contains("Second"));
     }
 
     #[test]
@@ -896,17 +990,17 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("What's the weather?".to_string()),
+                content: Some(MessageContent::Text("What's the weather?".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Let me check...".to_string()),
+                content: Some(MessageContent::Text("Let me check...".to_string())),
                 tool_calls: Some(tool_call_1),
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("And the time...".to_string()),
+                content: Some(MessageContent::Text("And the time...".to_string())),
                 tool_calls: Some(tool_call_2),
             },
         ];
@@ -922,7 +1016,7 @@ mod transform_tests {
         // Content should be merged
         assert_eq!(
             result[1].content,
-            Some("Let me check...\n\nAnd the time...".to_string())
+            Some(MessageContent::Text("Let me check...\n\nAnd the time...".to_string()))
         );
 
         // Tool calls should be concatenated
@@ -950,7 +1044,7 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Let me check...".to_string()),
+                content: Some(MessageContent::Text("Let me check...".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
@@ -964,7 +1058,10 @@ mod transform_tests {
         let result = transform_messages_for_capabilities(messages, caps);
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].content, Some("Let me check...".to_string()));
+        assert_eq!(
+            result[0].content,
+            Some(MessageContent::Text("Let me check...".to_string()))
+        );
         assert!(result[0].tool_calls.is_some());
     }
 
@@ -990,7 +1087,7 @@ mod transform_tests {
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Result received".to_string()),
+                content: Some(MessageContent::Text("Result received".to_string())),
                 tool_calls: None,
             },
         ];
@@ -999,7 +1096,10 @@ mod transform_tests {
         let result = transform_messages_for_capabilities(messages, caps);
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].content, Some("Result received".to_string()));
+        assert_eq!(
+            result[0].content,
+            Some(MessageContent::Text("Result received".to_string()))
+        );
         assert!(result[0].tool_calls.is_some());
     }
 
@@ -1051,12 +1151,12 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("First".to_string()),
+                content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Second".to_string()),
+                content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
             },
         ];
@@ -1082,17 +1182,17 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Question".to_string()),
+                content: Some(MessageContent::Text("Question".to_string())),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
-                content: Some("Answer".to_string()),
+                content: Some(MessageContent::Text("Answer".to_string())),
                 tool_calls: Some(tool_call),
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: Some("Follow-up".to_string()),
+                content: Some(MessageContent::Text("Follow-up".to_string())),
                 tool_calls: None,
             },
         ];
@@ -1105,5 +1205,83 @@ mod transform_tests {
         assert_eq!(result[0].role, "user");
         assert_eq!(result[1].role, "assistant");
         assert_eq!(result[2].role, "user");
+    }
+
+    /// Verify that array-form `content` (OpenAI multipart spec) deserializes
+    /// correctly into `MessageContent::Parts` and is preserved on serialization.
+    #[test]
+    fn test_array_content_deserializes_to_parts() {
+        let json = serde_json::json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is in this image?"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
+            ]
+        });
+        let msg: ChatMessage = serde_json::from_value(json).unwrap();
+        assert!(matches!(msg.content, Some(MessageContent::Parts(_))));
+        // Round-trip: serialises back to array form
+        let re_serialised = serde_json::to_value(&msg).unwrap();
+        assert!(re_serialised["content"].is_array());
+    }
+
+    /// Verify that two user messages where one has array content and one has
+    /// text content are merged correctly into a Parts result.
+    #[test]
+    fn test_merge_array_content_with_text_content() {
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some(MessageContent::Parts(vec![
+                    serde_json::json!({"type": "text", "text": "Look at this:"}),
+                    serde_json::json!({"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}),
+                ])),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some(MessageContent::Text("What do you see?".to_string())),
+                tool_calls: None,
+            },
+        ];
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        assert_eq!(result.len(), 1);
+        // Parts + Text → Parts with a trailing text block
+        assert!(matches!(&result[0].content, Some(MessageContent::Parts(p)) if p.len() == 3));
+    }
+
+    /// Verify that tool-result messages with array content survive the
+    /// coalescing path unchanged (they are not mergeable roles).
+    #[test]
+    fn test_tool_message_with_array_content_passes_through() {
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some(MessageContent::Text("Run the tool".to_string())),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some(MessageContent::Parts(vec![
+                    serde_json::json!({"type": "text", "text": "tool result here"}),
+                ])),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some(MessageContent::Text("Thanks".to_string())),
+                tool_calls: None,
+            },
+        ];
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        // tool message is not merged; user messages are consecutive after tool
+        // so the two user messages are separated by the tool message
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[1].role, "tool");
+        assert!(matches!(&result[1].content, Some(MessageContent::Parts(_))));
     }
 }
