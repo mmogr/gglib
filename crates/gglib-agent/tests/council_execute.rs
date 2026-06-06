@@ -421,3 +421,115 @@ async fn synthesis_events_emitted() {
         "SynthesisStart before SynthesisComplete"
     );
 }
+
+// =============================================================================
+// Strict tool allowlist validation test
+// =============================================================================
+
+/// A `ToolExecutorPort` that lists a fixed set of tools and always errors on
+/// `execute` (not expected to be called in these tests).
+struct StubToolExecutor {
+    tools: Vec<ToolDefinition>,
+}
+
+impl StubToolExecutor {
+    fn with_tool(name: &str) -> Self {
+        Self {
+            tools: vec![ToolDefinition::new(name)],
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl gglib_core::ports::ToolExecutorPort for StubToolExecutor {
+    async fn list_tools(&self) -> Vec<ToolDefinition> {
+        self.tools.clone()
+    }
+
+    async fn execute(
+        &self,
+        _call: &gglib_core::ToolCall,
+    ) -> Result<gglib_core::ToolResult, anyhow::Error> {
+        Err(anyhow!("StubToolExecutor: execute not expected in this test"))
+    }
+}
+
+/// **Strict tool validation**: when a node's `tool_allowlist` references a
+/// tool that is not registered in the executor, the worker must fail
+/// immediately with a descriptive error instead of letting the LLM reason
+/// about the missing tool for thousands of tokens.
+///
+/// Expects:
+/// - `NodeFailed` event emitted for the offending node.
+/// - `execute()` returns `Err(ExecuteError::WorkerFailed)` whose reason
+///   mentions the missing tool name.
+/// - No `CouncilComplete` event (run aborted).
+#[tokio::test]
+async fn worker_fails_immediately_on_missing_tool() {
+    // Plan with one node that requests `browser_snapshot` — a tool that is
+    // NOT in the StubToolExecutor (which only exposes `read_file`).
+    let plan_json = serde_json::json!({
+        "goal": "Browse a website",
+        "nodes": [
+            {
+                "id": "browse",
+                "goal": "Navigate to a URL and extract data.",
+                "depends_on": [],
+                "tool_allowlist": ["browser_snapshot"]
+            }
+        ]
+    })
+    .to_string();
+
+    // Director response + CoS response.  No worker response needed — the
+    // worker should fail before making any LLM call.
+    let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
+        StubLlm::text_then_done(&plan_json),
+        // No further responses — if the LLM were called it would error,
+        // but the strict validation should prevent that.
+    ]);
+
+    // Executor exposes `read_file` but NOT `browser_snapshot`.
+    let tool_executor: Arc<dyn gglib_core::ports::ToolExecutorPort> =
+        Arc::new(StubToolExecutor::with_tool("read_file"));
+
+    let (tx, rx) = mpsc::channel(1024);
+
+    let result = execute(
+        "Browse a website",
+        &[],
+        Arc::new(llm),
+        tool_executor,
+        CouncilConfig::default(),
+        tx,
+    )
+    .await;
+
+    let events = collect_events(rx).await;
+
+    // NodeFailed must be emitted for the `browse` node.
+    let node_failed = events.iter().find(|e| {
+        matches!(
+            e,
+            CouncilEvent::NodeFailed { node_id, error }
+                if node_id == "browse" && error.contains("browser_snapshot")
+        )
+    });
+    assert!(
+        node_failed.is_some(),
+        "NodeFailed(browse) with missing tool name expected; got: {events:?}"
+    );
+
+    // execute() must return Err.
+    assert!(result.is_err(), "execute() must return Err; got: {result:?}");
+
+    // CouncilComplete must NOT be emitted.
+    let has_complete = events
+        .iter()
+        .any(|e| matches!(e, CouncilEvent::CouncilComplete { .. }));
+    assert!(
+        !has_complete,
+        "CouncilComplete must not be emitted on tool-not-found failure"
+    );
+}

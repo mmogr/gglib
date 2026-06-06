@@ -1063,6 +1063,62 @@ async fn run_worker(
         },
     ];
 
+    // -------------------------------------------------------------------------
+    // Strict tool allowlist validation
+    //
+    // Verify that every tool name in the allowlist is actually registered in
+    // the executor before handing off to the LLM.  Without this check, the
+    // model discovers missing tools mid-turn and enters an extended reasoning
+    // loop about why it can't perform the task — generating thousands of
+    // tokens of confusion before finally failing.  This check short-circuits
+    // that path cleanly and surfaces a legible error immediately.
+    //
+    // The check is done against the *unfiltered* executor (before
+    // AgentLoop::build wraps it) so we compare the full registered tool set
+    // against the requested allowlist.
+    if let Some(ref filter) = tool_filter {
+        if !filter.is_empty() {
+            let available: std::collections::HashSet<String> = tool_executor
+                .list_tools()
+                .await
+                .into_iter()
+                .map(|t| t.name)
+                .collect();
+            let missing: Vec<String> = filter
+                .iter()
+                .filter(|name| !available.contains(*name))
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                let mut sorted = missing.clone();
+                sorted.sort_unstable();
+                let missing_list = sorted.join(", ");
+                let error_msg = format!(
+                    "tool allowlist contains {count} unregistered tool(s): [{missing_list}]. \
+                     Check that the required MCP server is running and the tool names are correct. \
+                     Available tools: [{available_list}]",
+                    count = sorted.len(),
+                    available_list = {
+                        let mut av: Vec<&String> = available.iter().collect();
+                        av.sort_unstable();
+                        av.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    }
+                );
+                let _ = tx
+                    .send(CouncilEvent::NodeFailed {
+                        node_id: id_str.clone(),
+                        error: error_msg.clone(),
+                    })
+                    .await;
+                return Err(ExecuteError::WorkerFailed {
+                    node_id: id_str,
+                    reason: error_msg,
+                });
+            }
+        }
+    }
+    // -------------------------------------------------------------------------
+
     let agent: Arc<dyn AgentLoopPort> =
         AgentLoop::build(Arc::clone(&llm), Arc::clone(&tool_executor), tool_filter);
 
