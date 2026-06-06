@@ -446,14 +446,20 @@ impl McpClient {
 
     /// Disconnect from the MCP server.
     pub fn disconnect(&mut self) {
-        // Drop stdin to signal EOF
+        // Drop stdin to signal EOF to the child process.
         self.stdin = None;
         self.stdout_reader = None;
 
-        // Kill the process if still running
+        // Kill the process if still running, but do NOT block waiting for it
+        // to exit.  `process.wait()` in a synchronous Drop blocks the calling
+        // thread, which inside a tokio runtime can stall the whole runtime
+        // (observable as the CLI appearing to hang after a council run
+        // completes).  `try_wait` is non-blocking: if the process has already
+        // exited we reap it; otherwise we send SIGKILL and let the OS clean up
+        // the zombie when this process exits.
         if let Some(mut process) = self.process.take() {
             let _ = process.kill();
-            let _ = process.wait();
+            let _ = process.try_wait();
         }
 
         self.server_info = None;
