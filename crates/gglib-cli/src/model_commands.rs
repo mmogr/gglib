@@ -213,4 +213,39 @@ pub enum ModelCommand {
         #[arg(long)]
         size: Option<String>,
     },
+
+    /// View or override a model's capability flags.
+    ///
+    /// Capabilities control how gglib preprocesses requests before they reach
+    /// the model (strict-turn coalescing, system-role conversion, etc.).  They
+    /// are detected automatically at import time from the GGUF's chat template
+    /// and `general.architecture` field.  Use this command when auto-detection
+    /// produces the wrong result for a specific build.
+    ///
+    /// Without any flag arguments the command prints the current capabilities.
+    ///
+    /// # Example
+    ///
+    /// Force strict-turn coalescing on for a model whose GGUF was stripped:
+    ///
+    ///   gglib model capabilities 3 --set requires-strict-turns
+    ///
+    /// Disable reasoning output processing:
+    ///
+    ///   gglib model capabilities 3 --unset supports-reasoning
+    Capabilities {
+        /// ID of the model to inspect or modify
+        id: u32,
+        /// Set a capability flag (can be repeated).
+        ///
+        /// Accepted values: `supports-system-role`, `requires-strict-turns`,
+        /// `supports-tool-calls`, `supports-reasoning`.
+        #[arg(long = "set", value_name = "FLAG", action = clap::ArgAction::Append)]
+        set: Vec<String>,
+        /// Clear a capability flag (can be repeated).
+        ///
+        /// Accepted values: same as `--set`.
+        #[arg(long = "unset", value_name = "FLAG", action = clap::ArgAction::Append)]
+        unset: Vec<String>,
+    },
 }

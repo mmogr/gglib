@@ -4,6 +4,7 @@
 //! CRUD, verification, download, and HuggingFace discovery.
 
 pub mod add;
+pub mod capabilities;
 pub mod download;
 pub mod list;
 pub mod remove;
@@ -125,6 +126,9 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             size,
         } => {
             download::browse(category, limit, size).await?;
+        }
+        ModelCommand::Capabilities { id, set, unset } => {
+            capabilities::execute(ctx, id, set, unset).await?;
         }
     }
     Ok(())

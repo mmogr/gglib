@@ -179,6 +179,7 @@ impl TaggedCatalog {
             id: 1,
             name: self.name.clone(),
             tags: self.tags.clone(),
+            capabilities: gglib_core::domain::ModelCapabilities::empty(),
             param_count: "7B".into(),
             quantization: None,
             architecture: None,

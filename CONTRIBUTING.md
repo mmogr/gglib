@@ -9,14 +9,15 @@ This document is the definitive engineering guide for contributors. Read it befo
 1. [Core Philosophy](#core-philosophy)
 2. [Architecture Overview](#architecture-overview)
 3. [GUI Parity Principle](#gui-parity-principle)
-4. [Concurrency Model](#concurrency-model)
-5. [Subprocess Invocation](#subprocess-invocation)
-6. [Crate Boundaries](#crate-boundaries)
-7. [Documentation Standards](#documentation-standards)
-6. [Badges Pipeline](#badges-pipeline)
-7. [Development Workflow](#development-workflow)
-8. [CI Pipeline](#ci-pipeline)
-9. [Pull Request Checklist](#pull-request-checklist)
+4. [Model Architecture Registry](#model-architecture-registry)
+5. [Concurrency Model](#concurrency-model)
+6. [Subprocess Invocation](#subprocess-invocation)
+7. [Crate Boundaries](#crate-boundaries)
+8. [Documentation Standards](#documentation-standards)
+9. [Badges Pipeline](#badges-pipeline)
+10. [Development Workflow](#development-workflow)
+11. [CI Pipeline](#ci-pipeline)
+12. [Pull Request Checklist](#pull-request-checklist)
 
 ---
 
@@ -90,6 +91,69 @@ When adding a new long-running operation:
 **Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
 **Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. The transport abstraction layer handles that distinction.
+
+---
+
+## Model Architecture Registry
+
+The proxy uses a two-layer system to decide how to preprocess requests before they reach llama-server:
+
+| Layer | Location | When |
+|---|---|---|
+| Chat template analysis | `gglib-core::domain::capabilities::infer_from_chat_template` | At model import — reads `tokenizer.chat_template` from the GGUF |
+| Architecture registry | `gglib-core::domain::capabilities::capabilities_from_architecture` | At model import — reads `general.architecture` as a backstop |
+
+The result of both layers is **OR-combined** and stored in the database as `Model.capabilities`.  The proxy reads this value once per request — there is no second inference pass at forward time.
+
+### Adding a new architecture (request side)
+
+1. **Add an arm** to `capabilities_from_architecture()` in `crates/gglib-core/src/domain/capabilities.rs`:
+
+   ```rust
+   "myarch" => ModelCapabilities::REQUIRES_STRICT_TURNS,
+   ```
+
+2. **Add a unit test** in the same file:
+
+   ```rust
+   #[test]
+   fn myarch_requires_strict_turns() {
+       let caps = capabilities_from_architecture(Some("myarch"));
+       assert!(caps.contains(ModelCapabilities::REQUIRES_STRICT_TURNS));
+   }
+   ```
+
+3. **Re-run bootstrap** on any existing models to pick up the new flag:
+
+   ```bash
+   gglib model retag --all --full
+   ```
+
+   Or override a single model's flags without re-importing:
+
+   ```bash
+   gglib model capabilities <id> --set requires-strict-turns
+   ```
+
+### Adding a new architecture (response side)
+
+If the architecture needs **response normalization** (e.g., XML-wrapped tool calls):
+
+1. Add a `format:myarch-xml` constant to `crates/gglib-proxy/src/normalize/tags.rs`.
+2. Add a parser module under `crates/gglib-proxy/src/normalize/parsers/`.
+3. Add an arm to `get_parser()` in `crates/gglib-proxy/src/normalize/registry.rs`.
+4. Ensure models with this architecture receive the `format:myarch-xml` tag (add to `retag` logic if needed).
+
+No other files need to change.  The proxy's `normalize` pipeline picks up new parsers automatically via `get_parser()`.
+
+### Capability overrides
+
+Users can view and override capability flags at any time via:
+
+- **CLI**: `gglib model capabilities <id> [--set FLAG] [--unset FLAG]`
+- **API**: `PATCH /api/models/{id}/capabilities` with JSON body `{ "requiresStrictTurns": true }`
+
+Both surfaces call the same `ModelOps::set_capabilities()` method in `gglib-app-services` — no business logic lives in the surface crates.
 
 ---
 

@@ -1,12 +1,53 @@
-//! Model capability detection and inference.
+//! Model capability detection, inference, and request transformation.
 //!
-//! Capabilities describe model constraints derived from chat templates.
-//! Absence of a capability MUST NOT trigger behavior changes.
+//! This module owns two orthogonal pipelines that operate on different phases
+//! of a model request:
 //!
-//! # Invariant
+//! ## 1. Request-side capability pipeline
 //!
-//! Message rewriting is only permitted when model capabilities explicitly
-//! forbid the current message structure. Default behavior is pass-through.
+//! Before a chat-completion request is forwarded to llama-server the proxy
+//! consults the stored [`ModelCapabilities`] flags to decide whether to rewrite
+//! the message list.  Flags are inferred at import time and stored in the
+//! database; they can also be overridden at any time via the API or CLI.
+//!
+//! | Layer | Function | When it fires |
+//! |---|---|---|
+//! | Template analysis | [`infer_from_chat_template`] | At model import — reads `tokenizer.chat_template` from the GGUF |
+//! | Architecture registry | [`capabilities_from_architecture`] | At model import — reads `general.architecture` as a backstop when the GGUF ships without a chat template |
+//! | Request rewriting | [`transform_messages_for_capabilities`] | At proxy time — merges consecutive same-role messages for models that require strict turn alternation |
+//!
+//! The result of Layer 1 and Layer 2 is **OR-combined** and stored in
+//! `Model.capabilities`.  The proxy reads this value once per request via a
+//! single catalog lookup.
+//!
+//! ## 2. Response-side normalization pipeline
+//!
+//! Separate from request rewriting, some models (e.g., Qwen) embed tool-call
+//! JSON inside XML tags in the response text.  This is handled by the
+//! `format:*` tag pipeline in `gglib-proxy::normalize`, which is entirely
+//! independent from `ModelCapabilities`.
+//!
+//! ## Architecture registry
+//!
+//! [`capabilities_from_architecture`] maps GGUF `general.architecture` strings
+//! to [`ModelCapabilities`] flags.  This is the **backstop** for models whose
+//! quantized builds strip the `tokenizer.chat_template` section, making
+//! `infer_from_chat_template` return `empty()`.
+//!
+//! **To add a new architecture:**
+//!
+//! 1. Add a match arm in [`capabilities_from_architecture`] mapping the
+//!    architecture string to the appropriate flags.
+//! 2. Add a unit test in the `#[cfg(test)]` block at the bottom of this file.
+//! 3. If the architecture also needs **response-side** normalization (XML tool
+//!    calls, custom reasoning tags, etc.), follow the steps in `CONTRIBUTING.md`
+//!    under "Adding a new model architecture" to add a `format:*` parser as well.
+//! 4. No other files need touching — all call sites already use these functions.
+//!
+//! **Note on Qwen:** Qwen is intentionally absent from the registry.  Qwen's
+//! quantized builds always ship a full chat template, so
+//! [`infer_from_chat_template`] handles the request side.  Its response-side
+//! `<tool_call>` XML is handled by the `format:qwen-xml` tag pipeline.
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -221,6 +262,75 @@ pub fn infer_from_chat_template(
     caps
 }
 
+/// Map a GGUF `general.architecture` value to its inherent [`ModelCapabilities`].
+///
+/// This is the **single source of truth** for architecture-level behavioural
+/// constraints that apply to the **request** side (message preprocessing).
+/// It is consulted during model registration alongside
+/// [`infer_from_chat_template`] — the two results are ORed together so that
+/// either signal is sufficient.
+///
+/// # Scope: request preprocessing only
+///
+/// This registry governs `ModelCapabilities` flags (strict-turn coalescing,
+/// system-role conversion, etc.).  It does **not** handle response-stream
+/// dialect normalization — that is a separate concern handled by the
+/// `GgufCapabilities.extensions` → `format:*` tag → `get_parser()` pipeline
+/// in `gglib-core::normalize::registry`.
+///
+/// For example:
+/// - **Qwen** tool-call XML normalization already flows through
+///   `detect_tool_support()` → `extensions.insert("format:qwen-xml")` →
+///   `to_tags()` → `get_parser()` → `QwenXmlParser`.  Qwen's chat template
+///   always contains `<tool_call>` patterns, so `infer_from_chat_template`
+///   (Layer 1) sets `SUPPORTS_TOOL_CALLS` reliably.  No architecture entry
+///   is needed here for Qwen.
+/// - **Mistral** does need an entry: its templates enforce strict alternation,
+///   but many quantised builds ship with the tokenizer section stripped, so
+///   the template layer produces no signal.  `general.architecture = "mistral"`
+///   is always present and provides the necessary backstop.
+///
+/// # Rationale
+///
+/// Some models ship without a parseable `tokenizer.chat_template` in the GGUF
+/// (stripped quantisation builds, partial uploads).  The chat-template layer
+/// then returns `ModelCapabilities::empty()`, silently leaving constraints
+/// unapplied.  Reading `general.architecture` from the GGUF gives us a
+/// ground-truth signal that is always present and never varies by quantisation.
+///
+/// # Adding a new architecture
+///
+/// 1. Add a new `"arch_name" => { … }` arm below.
+/// 2. Add a corresponding unit test in the `#[cfg(test)]` block.
+/// 3. No other file needs touching — all call sites use this function.
+///
+/// # Arguments
+///
+/// * `arch` — value of the `general.architecture` GGUF key
+///   (e.g. `"mistral"`, `"llama"`, `"qwen2"`).  `None` means the key was
+///   absent; returns `empty()` so the model gets pass-through treatment.
+#[must_use]
+pub fn capabilities_from_architecture(arch: Option<&str>) -> ModelCapabilities {
+    let Some(arch) = arch else {
+        return ModelCapabilities::empty();
+    };
+
+    match arch {
+        // Mistral-family templates enforce strict user/assistant alternation
+        // via Jinja modulo checks (`ns.index % 2`) and raise an exception on
+        // consecutive same-role messages.  They also reject the `system` role.
+        // Many quantised Mistral/Devstral builds strip the tokenizer section,
+        // leaving the template layer blind — this entry is the backstop.
+        "mistral" => ModelCapabilities::REQUIRES_STRICT_TURNS,
+
+        // All other architectures: no request-side constraints inferred from
+        // architecture alone.  Chat-template analysis may still set flags,
+        // and response-stream normalization is handled by the format:* tag
+        // pipeline independently.
+        _ => ModelCapabilities::empty(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,6 +445,41 @@ mod tests {
         assert!(caps.supports_tool_calls());
         assert!(caps.supports_reasoning());
     }
+
+    // ─── capabilities_from_architecture ─────────────────────────────────────
+
+    #[test]
+    fn test_arch_none_returns_empty() {
+        assert!(capabilities_from_architecture(None).is_empty());
+    }
+
+    #[test]
+    fn test_arch_mistral_requires_strict_turns() {
+        let caps = capabilities_from_architecture(Some("mistral"));
+        assert!(caps.requires_strict_turns());
+    }
+
+    #[test]
+    fn test_arch_llama_returns_empty() {
+        assert!(capabilities_from_architecture(Some("llama")).is_empty());
+    }
+
+    #[test]
+    fn test_arch_unknown_returns_empty() {
+        assert!(capabilities_from_architecture(Some("future-arch-xyz")).is_empty());
+    }
+
+    #[test]
+    fn test_arch_or_template_additive() {
+        // Template detects tool calls; architecture adds strict turns.
+        // The two are ORed so both flags appear in the result.
+        let template = "<tool_call>{{ tool }}</tool_call>";
+        let from_template = infer_from_chat_template(Some(template), None);
+        let from_arch = capabilities_from_architecture(Some("mistral"));
+        let combined = from_template | from_arch;
+        assert!(combined.supports_tool_calls(), "tool calls from template");
+        assert!(combined.requires_strict_turns(), "strict turns from arch");
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,10 +487,12 @@ mod tests {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A chat message for transformation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<serde_json::Value>,
 }
 

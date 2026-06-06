@@ -149,6 +149,13 @@ pub struct GuiModel {
     pub port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Capability flags stored for this model.
+    ///
+    /// Serialized as a `u32` bit-field.  The frontend receives this value
+    /// and may display individual flags; the `PATCH /api/models/{id}/capabilities`
+    /// endpoint lets the user override them.
+    #[serde(default)]
+    pub capabilities: gglib_core::ModelCapabilities,
 }
 
 impl GuiModel {
@@ -168,6 +175,7 @@ impl GuiModel {
             is_serving,
             port,
             inference_defaults: model.inference_defaults,
+            capabilities: model.capabilities,
         }
     }
 
@@ -268,6 +276,33 @@ pub struct UpdateModelRequest {
     pub quantization: Option<String>,
     pub file_path: Option<String>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+}
+
+/// Request body for overriding a model's capability flags.
+///
+/// Each field independently sets (`true`) or clears (`false`) one flag.
+/// `None` means "leave this flag unchanged".  This lets callers toggle a
+/// single flag without knowing the current state of every other flag.
+///
+/// # Example
+///
+/// Force strict-turn coalescing on for a model whose GGUF shipped without
+/// a chat template:
+///
+/// ```json
+/// { "requiresStrictTurns": true }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SetCapabilitiesRequest {
+    /// Override whether the model supports a `system` role in the chat template.
+    pub supports_system_role: Option<bool>,
+    /// Override whether the model requires strict user/assistant turn alternation.
+    pub requires_strict_turns: Option<bool>,
+    /// Override whether the model supports tool/function calling.
+    pub supports_tool_calls: Option<bool>,
+    /// Override whether the model produces reasoning/thinking output.
+    pub supports_reasoning: Option<bool>,
 }
 
 // ============================================================================

@@ -9,6 +9,8 @@ use std::fmt;
 use std::path::PathBuf;
 use thiserror::Error;
 
+use crate::domain::ModelCapabilities;
+
 /// Domain model summary for catalog operations (listing).
 ///
 /// This is a domain type (not an `OpenAI` API type). The proxy layer
@@ -24,6 +26,13 @@ pub struct ModelSummary {
     pub name: String,
     /// Tags/labels associated with the model.
     pub tags: Vec<String>,
+    /// Detected and persisted capability flags for this model.
+    ///
+    /// This is the single source of truth for model behaviour constraints
+    /// (strict-turn alternation, system-role support, tool calls, reasoning).
+    /// The proxy uses these directly rather than inferring from tags at
+    /// request time, eliminating the split-brain between tags and capabilities.
+    pub capabilities: ModelCapabilities,
     /// Parameter count as string (e.g., "7B", "13B", "70B").
     pub param_count: String,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").

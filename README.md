@@ -77,6 +77,29 @@ Works with any command that produces text. If you can `cat` it, you can ask a lo
 
 Cargo workspace with compile-time enforced boundaries. Adapters → infrastructure → core — never the reverse.
 
+### Model capability detection
+
+When you add a GGUF model, gglib reads its `tokenizer.chat_template` and `general.architecture` fields to automatically detect capability flags: whether the model requires strict user/assistant turn alternation, supports a system role, can handle tool calls, and so on. These flags are stored in the database and used by the OpenAI-compatible proxy to preprocess requests before they reach llama-server.
+
+For models whose quantized builds ship without a chat template, the architecture name (`general.architecture`) acts as a backstop — for example, `"mistral"` architecture always implies `REQUIRES_STRICT_TURNS`.
+
+You can inspect or override any model's flags at any time:
+
+```bash
+# Show current capabilities
+gglib model capabilities 3
+
+# Force strict-turn coalescing on
+gglib model capabilities 3 --set requires-strict-turns
+
+# Or via the REST API
+curl -X PATCH http://localhost:9887/api/models/3/capabilities \
+     -H 'Content-Type: application/json' \
+     -d '{"requiresStrictTurns": true}'
+```
+
+For details on how to add support for a new architecture, see [`CONTRIBUTING.md`](CONTRIBUTING.md#model-architecture-registry).
+
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
 ![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json)

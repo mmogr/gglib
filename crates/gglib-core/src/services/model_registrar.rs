@@ -154,13 +154,20 @@ impl ModelRegistrarPort for ModelRegistrar {
         // Merge GGUF-derived tags with filtered HF tags (deduplicated)
         model.tags = Self::merge_tags(gguf_tags, &download.hf_tags);
 
-        // Infer model capabilities from chat template
+        // Infer capabilities from chat template OR architecture — OR'd so
+        // either signal is sufficient.  Architecture is the backstop for models
+        // whose GGUF ships without a tokenizer section.
         let template = model.metadata.get("tokenizer.chat_template");
         let name = model.metadata.get("general.name");
-        model.capabilities = crate::domain::infer_from_chat_template(
+        let arch = model.metadata.get("general.architecture");
+        let from_template = crate::domain::infer_from_chat_template(
             template.map(String::as_str),
             name.map(String::as_str),
         );
+        let from_arch = crate::domain::capabilities_from_architecture(
+            arch.map(String::as_str),
+        );
+        model.capabilities = from_template | from_arch;
 
         let registered = self.model_repo.insert(&model).await?;
 

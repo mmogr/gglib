@@ -24,7 +24,7 @@ pub use domain::{
     McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
     NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus, RangeValues,
     TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
-    infer_from_chat_template, transform_messages_for_capabilities,
+    capabilities_from_architecture, infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,

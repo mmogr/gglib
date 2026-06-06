@@ -152,6 +152,13 @@ fn model_routes() -> Router<AppState> {
                 .put(handlers::model::models::update)
                 .delete(handlers::model::models::remove),
         )
+        // Capability override: PATCH /api/models/{id}/capabilities
+        // Independently set/clear individual ModelCapabilities flags without
+        // touching any other model metadata.
+        .route(
+            "/{id}/capabilities",
+            axum::routing::patch(handlers::model::models::set_capabilities),
+        )
         // Tags
         .route(
             "/{id}/tags",

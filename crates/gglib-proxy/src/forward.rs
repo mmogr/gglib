@@ -1,7 +1,26 @@
 //! Request forwarding to llama-server with parse → normalize → re-encode
 //! pipeline for streaming responses.
 //!
-//! For streaming requests this module owns the universal-consistency moat:
+//! ## Request pipeline
+//!
+//! Before the upstream call the proxy applies two stateless transforms to the
+//! request body, in order:
+//!
+//! 1. [`strip_prior_reasoning`] — scrubs `<think>` / `reasoning_content`
+//!    artefacts from prior assistant turns so reasoning models don't
+//!    pattern-match their own past traces.
+//! 2. [`coalesce_for_capabilities`] — when a model's stored
+//!    [`ModelCapabilities`] includes [`REQUIRES_STRICT_TURNS`], merges
+//!    consecutive same-role user/assistant messages before they reach the
+//!    Jinja template.  Mistral-family models raise a hard 500 exception
+//!    without this.
+//!
+//! Capabilities are resolved with a **single** catalog lookup per request
+//! (via [`resolve_model_context`]) that yields both the `ModelCapabilities`
+//! bitfield (used for request preprocessing) and the `format:*` tags (used
+//! for response-stream parser selection).  No second lookup is made.
+//!
+//! ## Response pipeline
 //!
 //! ```text
 //!  upstream bytes
@@ -19,17 +38,14 @@
 //!  client
 //! ```
 //!
-//! Tags consulted by `get_parser` are looked up via [`resolve_tags`] from
-//! the [`ModelCatalogPort`] before the upstream call begins.  An empty tag
-//! list selects the identity-passthrough parser, so models that already
-//! emit strict OpenAI events are unaffected by the wrap.
-//!
 //! `NormalizationError` events surfaced by the parsers are logged via
 //! `tracing::warn` and never forwarded to the wire.
 //!
 //! Non-streaming responses are forwarded verbatim for now — the dialects
 //! we currently rewrite (Qwen XML tool calls, bare `<think>` tags) only
 //! manifest in streaming clients today.
+//!
+//! [`REQUIRES_STRICT_TURNS`]: gglib_core::ModelCapabilities
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -45,6 +61,8 @@ use reqwest::Client;
 use tracing::{debug, error, warn};
 
 use gglib_core::LlmStreamEvent;
+use gglib_core::ModelCapabilities;
+use gglib_core::domain::{ChatMessage, transform_messages_for_capabilities};
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{SseEncoder, SseStreamDecoder};
@@ -73,20 +91,43 @@ fn should_forward_header(name: &str) -> bool {
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
 
-/// Look up the `format:*` tags for a model so the proxy can pick a
-/// dialect-specific parser via [`gglib_core::normalize::get_parser`].
+/// Resolved per-request model context: capabilities for request preprocessing
+/// and tags for response-stream parser selection.
 ///
-/// Returns an empty `Vec` when the catalog cannot resolve the model or the
-/// model has no tags — both cases select the identity-passthrough parser,
-/// which is the right fallback for any model that already speaks strict
-/// `OpenAI` tool-calling.
-pub async fn resolve_tags(catalog: &dyn ModelCatalogPort, model_name: &str) -> Vec<String> {
+/// Both values come from a **single** catalog lookup, eliminating the
+/// previous split-brain where `resolve_tags` and capability lookups were
+/// separate concerns served by different code paths.
+struct ModelContext {
+    /// Stored capability bitfield — drives request-side transforms.
+    capabilities: ModelCapabilities,
+    /// `format:*` tags — drives response-stream parser selection.
+    tags: Vec<String>,
+}
+
+/// Resolve the [`ModelContext`] for a model in a single catalog round-trip.
+///
+/// On any failure (catalog unavailable, model unknown) returns a zeroed
+/// context: empty capabilities → all transforms are no-ops, empty tags →
+/// identity-passthrough parser.  This is the safe, conservative fallback.
+async fn resolve_model_context(catalog: &dyn ModelCatalogPort, model_name: &str) -> ModelContext {
     match catalog.resolve_model(model_name).await {
-        Ok(Some(summary)) => summary.tags,
-        Ok(None) => Vec::new(),
+        Ok(Some(summary)) => ModelContext {
+            capabilities: summary.capabilities,
+            tags: summary.tags,
+        },
+        Ok(None) => {
+            debug!(model = %model_name, "model not found in catalog; using pass-through context");
+            ModelContext {
+                capabilities: ModelCapabilities::empty(),
+                tags: Vec::new(),
+            }
+        }
         Err(e) => {
-            warn!(model = %model_name, error = %e, "failed to resolve model tags; using identity parser");
-            Vec::new()
+            warn!(model = %model_name, error = %e, "failed to resolve model context; using pass-through context");
+            ModelContext {
+                capabilities: ModelCapabilities::empty(),
+                tags: Vec::new(),
+            }
         }
     }
 }
@@ -128,6 +169,78 @@ fn strip_prior_reasoning(body: Bytes) -> Bytes {
     }
 }
 
+/// Coalesce consecutive same-role messages when the model requires strict
+/// turn alternation.
+///
+/// Mistral-family models (and any architecture with
+/// [`ModelCapabilities::REQUIRES_STRICT_TURNS`]) enforce user/assistant
+/// alternation inside their Jinja chat templates and raise a hard 500
+/// exception when consecutive same-role messages are present.  IDEs and
+/// gateway extensions (e.g. the VSCode LLM Gateway) routinely send
+/// multi-turn context that violates this — coalescing here is the correct
+/// fix rather than constraining callers.
+///
+/// Uses [`transform_messages_for_capabilities`] from `gglib-core` as the
+/// single source of truth for the merging rules, exactly as the internal
+/// `chat_api` path does.  When capabilities are empty (unknown model) this
+/// function is a zero-cost no-op.
+///
+/// On parse failure the original bytes are returned unchanged.
+fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> Bytes {
+    // Fast path: no preprocessing needed for this model.
+    if !capabilities.requires_strict_turns() && capabilities.supports_system_role() {
+        return body;
+    }
+    // Also fast path when capabilities are completely unknown.
+    if capabilities.is_empty() {
+        return body;
+    }
+
+    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return body;
+    };
+
+    let Some(messages_raw) = value.get("messages").and_then(|v| v.as_array()) else {
+        return body;
+    };
+
+    // Deserialise only the fields `transform_messages_for_capabilities` needs.
+    let messages: Vec<ChatMessage> = match serde_json::from_value(
+        serde_json::Value::Array(messages_raw.clone()),
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(error = %e, "coalesce: failed to parse messages array; forwarding original");
+            return body;
+        }
+    };
+
+    let transformed = transform_messages_for_capabilities(messages, capabilities);
+
+    match serde_json::to_value(&transformed) {
+        Ok(new_messages) => {
+            value["messages"] = new_messages;
+            match serde_json::to_vec(&value) {
+                Ok(v) => {
+                    debug!(
+                        requires_strict_turns = capabilities.requires_strict_turns(),
+                        "coalesced messages for model capabilities"
+                    );
+                    Bytes::from(v)
+                }
+                Err(e) => {
+                    warn!(error = %e, "coalesce: failed to re-serialize; forwarding original");
+                    body
+                }
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "coalesce: failed to serialise transformed messages; forwarding original");
+            body
+        }
+    }
+}
+
 /// Forward a chat completion request to the upstream llama-server.
 ///
 /// # Arguments
@@ -138,7 +251,7 @@ fn strip_prior_reasoning(body: Bytes) -> Bytes {
 /// * `body` - Request body bytes
 /// * `is_streaming` - Whether this is a streaming request (affects response handling)
 /// * `model_name` - Model name to advertise to the client (used in SSE envelope)
-/// * `catalog` - Catalog port used to resolve `format:*` tags for the model
+/// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 ///
 /// # Returns
 ///
@@ -155,11 +268,20 @@ pub async fn forward_chat_completion(
 ) -> Response {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
-    // Drop reasoning artifacts from prior assistant turns before the model
-    // sees them. Mirrors OpenAI's native handling of reasoning tokens and
-    // prevents small reasoning models from pattern-matching their own past
-    // `<think>` traces into an unbounded thinking loop on follow-up turns.
+    // Single catalog lookup — yields both capabilities (request preprocessing)
+    // and tags (response-stream parser).  Failures return a zero context so
+    // all transforms become no-ops rather than blocking the request.
+    let context = resolve_model_context(catalog.as_ref(), model_name).await;
+
+    // ── Request transforms (applied in order) ──────────────────────────────
+    //
+    // 1. Strip reasoning artefacts from prior assistant turns so reasoning
+    //    models don't pattern-match their own past <think> traces.
     let body = strip_prior_reasoning(body);
+
+    // 2. Coalesce consecutive same-role messages for strict-turn models
+    //    (e.g. Mistral/Devstral).  No-op when capabilities are empty/unknown.
+    let body = coalesce_for_capabilities(body, context.capabilities);
 
     // Build the request to upstream
     let mut req_builder = client
@@ -201,8 +323,8 @@ pub async fn forward_chat_completion(
     }
 
     if is_streaming {
-        let tags = resolve_tags(catalog.as_ref(), model_name).await;
-        forward_streaming_response(response, model_name.to_owned(), tags).await
+        // Tags resolved above — no second catalog lookup needed.
+        forward_streaming_response(response, model_name.to_owned(), context.tags).await
     } else {
         // Non-streaming: read full response. Dialect normalization for
         // non-streaming responses is intentionally deferred — the wire

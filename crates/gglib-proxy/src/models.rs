@@ -372,6 +372,7 @@ impl From<ModelRuntimeError> for ErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::ModelCapabilities;
 
     // =========================================================================
     // ErrorResponse construction tests
@@ -515,6 +516,7 @@ mod tests {
                 id: 1,
                 name: "llama-3-8b-q4".into(),
                 tags: vec!["chat".into()],
+                capabilities: ModelCapabilities::empty(),
                 param_count: "8B".into(),
                 quantization: Some("Q4_K_M".into()),
                 architecture: Some("llama".into()),
@@ -525,6 +527,7 @@ mod tests {
                 id: 2,
                 name: "mistral-7b-q8".into(),
                 tags: vec![],
+                capabilities: ModelCapabilities::empty(),
                 param_count: "7B".into(),
                 quantization: Some("Q8_0".into()),
                 architecture: Some("mistral".into()),
@@ -548,6 +551,7 @@ mod tests {
             id: 1,
             name: "test-model".into(),
             tags: vec![],
+            capabilities: ModelCapabilities::empty(),
             param_count: "7B".into(),
             quantization: None,
             architecture: None,
@@ -572,6 +576,7 @@ mod tests {
             id: 1,
             name: "test".into(),
             tags: vec![],
+            capabilities: ModelCapabilities::empty(),
             param_count: "13B".into(),
             quantization: Some("Q5_K_S".into()),
             architecture: Some("llama".into()),
@@ -591,6 +596,7 @@ mod tests {
             id: 1,
             name: "bare-model".into(),
             tags: vec![],
+            capabilities: ModelCapabilities::empty(),
             param_count: "1B".into(),
             quantization: None,
             architecture: None,
