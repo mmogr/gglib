@@ -488,7 +488,7 @@ mod tests {
 
 /// The content of a chat message.
 ///
-/// The OpenAI API allows `content` to be either a plain string or a structured
+/// The `OpenAI` API allows `content` to be either a plain string or a structured
 /// array of typed content parts (text blocks, image URLs, tool results, etc.).
 /// Both forms are preserved faithfully through serialize/deserialize
 /// round-trips so the proxy never re-shapes data it did not need to touch.
@@ -506,9 +506,9 @@ mod tests {
 pub enum MessageContent {
     /// Plain UTF-8 text.
     Text(String),
-    /// Structured content parts (text, image_url, tool_result, …).
+    /// Structured content parts (text, `image_url`, `tool_result`, …).
     ///
-    /// Individual part shapes are defined by the OpenAI API spec and
+    /// Individual part shapes are defined by the `OpenAI` API spec and
     /// validated by the model, not here.
     Parts(Vec<serde_json::Value>),
 }
@@ -554,7 +554,7 @@ impl MessageContent {
     ///
     /// Empty strings are handled gracefully (no `"\n\n"` separator when
     /// either side is empty).
-    fn merge_with(self, other: MessageContent) -> MessageContent {
+    fn merge_with(self, other: Self) -> Self {
         match (self, other) {
             (Self::Text(mut a), Self::Text(b)) => {
                 if a.is_empty() {
@@ -616,7 +616,7 @@ impl ChatMessage {
     /// Used during strict-turn coalescing to combine consecutive same-role
     /// messages.  Content is merged via [`MessageContent::merge_with`]; tool
     /// calls are concatenated as JSON arrays.
-    fn merge_into(&mut self, other: ChatMessage) {
+    fn merge_into(&mut self, other: Self) {
         self.content = match (self.content.take(), other.content) {
             (None, b) => b,
             (a, None) => a,
@@ -658,7 +658,7 @@ fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMess
     for msg in messages {
         let is_system_merge = result
             .last()
-            .map_or(false, |last| last.role == "system" && msg.role == "system");
+            .is_some_and(|last| last.role == "system" && msg.role == "system");
         if is_system_merge {
             let last = result.last_mut().unwrap();
             last.content = match (last.content.take(), msg.content) {
@@ -732,7 +732,7 @@ pub fn transform_messages_for_capabilities(
         let mut merged: Vec<ChatMessage> = Vec::new();
         for msg in messages {
             let is_mergeable = msg.role == "user" || msg.role == "assistant";
-            let same_role_as_last = merged.last().map_or(false, |last| last.role == msg.role);
+            let same_role_as_last = merged.last().is_some_and(|last| last.role == msg.role);
             if is_mergeable && same_role_as_last {
                 merged.last_mut().unwrap().merge_into(msg);
             } else {
@@ -1214,7 +1214,7 @@ mod transform_tests {
         assert_eq!(result[2].role, "user");
     }
 
-    /// Verify that array-form `content` (OpenAI multipart spec) deserializes
+    /// Verify that array-form `content` (`OpenAI` multipart spec) deserializes
     /// correctly into `MessageContent::Parts` and is preserved on serialization.
     #[test]
     fn test_array_content_deserializes_to_parts() {
