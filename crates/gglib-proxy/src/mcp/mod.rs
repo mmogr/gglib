@@ -7,12 +7,14 @@
 //!
 //! # Module layout
 //!
-//! | Module     | Responsibility                                    |
-//! |------------|---------------------------------------------------|
-//! | `types`    | JSON-RPC 2.0 and MCP wire types (serde structs)   |
-//! | `session`  | `Mcp-Session-Id` tracking and validation          |
-//! | `handlers` | Axum route handlers for POST/GET/DELETE `/mcp`    |
+//! | Module       | Responsibility                                      |
+//! |--------------|-----------------------------------------------------|
+//! | `types`      | JSON-RPC 2.0 and MCP wire types (serde structs)     |
+//! | `session`    | `Mcp-Session-Id` tracking and validation            |
+//! | `meta_tools` | Progressive-disclosure index + 3 meta-tool specs    |
+//! | `handlers`   | Axum route handlers for POST/GET/DELETE `/mcp`      |
 
 pub mod handlers;
+pub(crate) mod meta_tools;
 pub mod session;
 pub mod types;
