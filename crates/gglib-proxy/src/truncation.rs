@@ -121,7 +121,7 @@ impl TruncationReport {
 ///   is returned without re-serialisation.
 /// * `Err(response)` — an HTTP 400 `context_length_exceeded` response when
 ///   the payload exceeds [`TOTAL_PAYLOAD_LIMIT_CHARS`] even after truncation.
-pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Response> {
+pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Response>> {
     let payload_chars_before = body.len();
 
     // ── Pre-parse fast path ───────────────────────────────────────────────────
@@ -165,24 +165,24 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Respon
     // ── Mutate ────────────────────────────────────────────────────────────────
     let mut messages_truncated = 0usize;
 
-    for i in 0..total {
+    for (i, msg) in messages.iter_mut().enumerate() {
         // Tail-protected messages and non-candidate roles (system, user) are
         // skipped entirely.
-        if is_tail_protected(i, total) || !is_truncation_candidate(&messages[i]) {
+        if is_tail_protected(i, total) || !is_truncation_candidate(msg) {
             continue;
         }
 
         // Only string-form content is replaced.  Array-form content
         // (multi-part messages) is left untouched.  `tool_calls` is never
         // modified regardless of role.
-        let should_truncate = messages[i]
+        let should_truncate = msg
             .get("content")
             .and_then(|c| c.as_str())
             .map(|s| s.len() > TOOL_CONTENT_THRESHOLD_CHARS)
             .unwrap_or(false);
 
         if should_truncate {
-            messages[i]["content"] = serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
+            msg["content"] = serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
             messages_truncated += 1;
         }
     }
@@ -201,12 +201,9 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Respon
     // ── Budget check ──────────────────────────────────────────────────────────
     // Hard abort if still over budget (e.g. a huge protected system prompt).
     if payload_chars_after > TOTAL_PAYLOAD_LIMIT_CHARS {
-        let response = (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::context_length_exceeded()),
-        )
+        let response = (StatusCode::BAD_REQUEST, Json(ErrorResponse::context_length_exceeded()))
             .into_response();
-        return Err(response);
+        return Err(Box::new(response));
     }
 
     Ok((

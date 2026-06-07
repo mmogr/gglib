@@ -314,6 +314,7 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 ///
 /// The response from llama-server, with the streaming SSE body re-emitted
 /// through the universal normalization pipeline when `is_streaming` is true.
+#[allow(clippy::too_many_arguments)]
 pub async fn forward_chat_completion(
     client: &Client,
     upstream_url: &str,
@@ -380,7 +381,7 @@ pub async fn forward_chat_completion(
                     .unwrap_or_default()
                     .as_secs(),
             });
-            return response;
+            return *response;
         }
     };
 
