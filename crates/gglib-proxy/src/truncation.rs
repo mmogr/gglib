@@ -201,7 +201,10 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Re
     // ── Budget check ──────────────────────────────────────────────────────────
     // Hard abort if still over budget (e.g. a huge protected system prompt).
     if payload_chars_after > TOTAL_PAYLOAD_LIMIT_CHARS {
-        let response = (StatusCode::BAD_REQUEST, Json(ErrorResponse::context_length_exceeded()))
+        let response = (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::context_length_exceeded()),
+        )
             .into_response();
         return Err(Box::new(response));
     }
