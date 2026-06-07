@@ -25,6 +25,7 @@ use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, vi
 use crate::forward::forward_chat_completion;
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
+use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 
 /// Shared application state for the proxy server.
@@ -44,6 +45,9 @@ pub(crate) struct AppState {
     default_ctx: u64,
     /// Orchestrator services for virtual model routing.
     council: CouncilDeps,
+    /// Ring-buffer store of per-request context metrics, exposed via
+    /// `GET /v1/proxy/status`.
+    pub(crate) metrics: Arc<ContextMetricsStore>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -86,12 +90,14 @@ pub async fn serve(
         sessions: SessionManager::new(),
         default_ctx,
         council,
+        metrics: Arc::new(ContextMetricsStore::new()),
     };
 
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .with_state(state);
 
@@ -150,6 +156,20 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                 .into_response()
         }
     }
+}
+
+/// Return a snapshot of recent proxy request metrics.
+///
+/// Responds with the last 20 request snapshots and the total request count
+/// since the proxy started.  This is the shared data contract for the CLI
+/// TUI and web dashboard.
+async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse {
+    let snapshots = state.metrics.recent(20);
+    let total_requests = state.metrics.total_requests();
+    Json(serde_json::json!({
+        "snapshots": snapshots,
+        "total_requests": total_requests,
+    }))
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
@@ -223,6 +243,7 @@ async fn chat_completions(
         is_streaming,
         &model_name,
         state.catalog_port.clone(),
+        state.metrics.clone(),
     )
     .await
 }

@@ -17,7 +17,6 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::SystemTime;
 
 // =============================================================================
 // Constants
@@ -32,7 +31,7 @@ const MAX_SNAPSHOTS: usize = 50;
 // =============================================================================
 
 /// A single per-request observation recorded after the truncation pass.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ContextSnapshot {
     /// Name of the model that was targeted by the request.
     pub model_name: String,
@@ -47,8 +46,8 @@ pub struct ContextSnapshot {
     /// `true` when the hard-abort budget check triggered and an HTTP 400 was
     /// returned to the client instead of forwarding the request.
     pub was_clamped: bool,
-    /// Wall-clock time at which this snapshot was recorded.
-    pub recorded_at: SystemTime,
+    /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
+    pub recorded_at_secs: u64,
 }
 
 // =============================================================================
@@ -142,7 +141,7 @@ mod tests {
             payload_chars_after: 800,
             messages_truncated: 1,
             was_clamped: false,
-            recorded_at: SystemTime::now(),
+            recorded_at_secs: 0,
         }
     }
 

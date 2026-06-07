@@ -58,7 +58,7 @@ use axum::{
 use bytes::Bytes;
 use futures_util::StreamExt as _;
 use reqwest::Client;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
 use gglib_core::ModelCapabilities;
@@ -67,7 +67,9 @@ use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{SseEncoder, SseStreamDecoder};
 
+use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
+use crate::truncation::truncate_history;
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
 const HOP_BY_HOP_HEADERS: &[&str] = &[
@@ -298,6 +300,7 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// * `is_streaming` - Whether this is a streaming request (affects response handling)
 /// * `model_name` - Model name to advertise to the client (used in SSE envelope)
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
+/// * `metrics` - Metrics store for recording per-request context snapshots
 ///
 /// # Returns
 ///
@@ -311,6 +314,7 @@ pub async fn forward_chat_completion(
     is_streaming: bool,
     model_name: &str,
     catalog: Arc<dyn ModelCatalogPort>,
+    metrics: Arc<ContextMetricsStore>,
 ) -> Response {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -328,6 +332,49 @@ pub async fn forward_chat_completion(
     // 2. Coalesce consecutive same-role messages for strict-turn models
     //    (e.g. Mistral/Devstral).  No-op when capabilities are empty/unknown.
     let body = coalesce_for_capabilities(body, context.capabilities);
+
+    // 3. Truncate stale tool/large-assistant history to prevent local model
+    //    context-window overflow caused by broken client-side compaction.
+    let body = match truncate_history(body) {
+        Ok((b, report)) => {
+            if report.messages_truncated > 0 {
+                info!(
+                    messages_truncated = report.messages_truncated,
+                    payload_chars_before = report.payload_chars_before,
+                    payload_chars_after = report.payload_chars_after,
+                    "history truncated: reduced payload before upstream forwarding"
+                );
+            }
+            metrics.record(ContextSnapshot {
+                model_name: model_name.to_owned(),
+                payload_chars_before: report.payload_chars_before,
+                payload_chars_after: report.payload_chars_after,
+                messages_truncated: report.messages_truncated,
+                was_clamped: false,
+                recorded_at_secs: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            });
+            b
+        }
+        Err(response) => {
+            // Hard abort: payload still exceeds budget after truncation.
+            // Record a clamped snapshot before returning the error response.
+            metrics.record(ContextSnapshot {
+                model_name: model_name.to_owned(),
+                payload_chars_before: 0,
+                payload_chars_after: 0,
+                messages_truncated: 0,
+                was_clamped: true,
+                recorded_at_secs: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            });
+            return response;
+        }
+    };
 
     debug!(
         body_bytes = body.len(),
