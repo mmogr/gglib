@@ -60,10 +60,7 @@ pub(super) async fn build_tool_index(mcp: &McpService) -> ToolIndex {
 ///
 /// Returns `None` when the ID is malformed (missing `__`), the server name
 /// is not found, or the server is not currently running.
-pub(super) async fn resolve_tool_name(
-    mcp: &McpService,
-    qualified: &str,
-) -> Option<(i64, String)> {
+pub(super) async fn resolve_tool_name(mcp: &McpService, qualified: &str) -> Option<(i64, String)> {
     let (server_name, bare_name) = qualified.split_once("__")?;
     let server = mcp.get_server_by_name(server_name).await.ok()?;
     Some((server.id, bare_name.to_string()))
@@ -158,9 +155,7 @@ pub(super) fn meta_tools_list(_index: &ToolIndex) -> Vec<McpToolSpec> {
 /// remaining internal callers.  It performs two `McpService` calls which read
 /// from in-memory state and are not expected to fail; failures produce empty
 /// collections rather than propagating an error.
-async fn build_flat_tool_list(
-    mcp: &McpService,
-) -> (Vec<(i64, McpTool)>, HashMap<i64, String>) {
+async fn build_flat_tool_list(mcp: &McpService) -> (Vec<(i64, McpTool)>, HashMap<i64, String>) {
     let servers = mcp.list_servers().await.unwrap_or_default();
     let server_names: HashMap<i64, String> =
         servers.iter().map(|s| (s.id, s.name.clone())).collect();

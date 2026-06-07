@@ -369,10 +369,7 @@ async fn full_happy_path_initialize_list_delete() {
     // many MCP servers are running.
     let tools = body["result"]["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 3);
-    let tool_names: Vec<&str> = tools
-        .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
+    let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(tool_names.contains(&"search_tools"));
     assert!(tool_names.contains(&"get_tool_schema"));
     assert!(tool_names.contains(&"invoke_tool"));

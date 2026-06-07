@@ -172,7 +172,11 @@ async fn handle_meta_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Respo
     let index = super::meta_tools::build_tool_index(mcp).await;
     let specs = super::meta_tools::meta_tools_list(&index);
     let result = ToolsListResult { tools: specs };
-    Json(JsonRpcResponse::success(id, serde_json::to_value(result).unwrap())).into_response()
+    Json(JsonRpcResponse::success(
+        id,
+        serde_json::to_value(result).unwrap(),
+    ))
+    .into_response()
 }
 
 /// Handle `tools/call` — dispatch to one of the three meta-tools.
@@ -250,7 +254,9 @@ async fn handle_meta_tools_call(
                     id,
                     JsonRpcError::new(
                         INVALID_PARAMS,
-                        format!("Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."),
+                        format!(
+                            "Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."
+                        ),
                     ),
                 ),
             }
@@ -269,33 +275,35 @@ async fn handle_meta_tools_call(
                 }
             };
 
-            let (server_id, bare_name) =
-                match super::meta_tools::resolve_tool_name(mcp, &tool_id).await {
-                    Some(pair) => pair,
-                    None => {
-                        return json_rpc_error_response(
-                            StatusCode::OK,
-                            id,
-                            JsonRpcError::new(
-                                INVALID_PARAMS,
-                                format!("Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."),
+            let (server_id, bare_name) = match super::meta_tools::resolve_tool_name(mcp, &tool_id)
+                .await
+            {
+                Some(pair) => pair,
+                None => {
+                    return json_rpc_error_response(
+                        StatusCode::OK,
+                        id,
+                        JsonRpcError::new(
+                            INVALID_PARAMS,
+                            format!(
+                                "Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."
                             ),
-                        );
-                    }
-                };
+                        ),
+                    );
+                }
+            };
 
-            let tool_args: HashMap<String, Value> =
-                match meta_args.get("arguments").cloned() {
-                    Some(Value::Object(map)) => map.into_iter().collect(),
-                    Some(_) => {
-                        return json_rpc_error_response(
-                            StatusCode::OK,
-                            id,
-                            JsonRpcError::new(INVALID_PARAMS, "'arguments' must be a JSON object"),
-                        );
-                    }
-                    None => HashMap::new(),
-                };
+            let tool_args: HashMap<String, Value> = match meta_args.get("arguments").cloned() {
+                Some(Value::Object(map)) => map.into_iter().collect(),
+                Some(_) => {
+                    return json_rpc_error_response(
+                        StatusCode::OK,
+                        id,
+                        JsonRpcError::new(INVALID_PARAMS, "'arguments' must be a JSON object"),
+                    );
+                }
+                None => HashMap::new(),
+            };
 
             match mcp.call_tool(server_id, &bare_name, tool_args).await {
                 Ok(tool_result) => {
