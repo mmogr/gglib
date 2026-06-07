@@ -34,7 +34,7 @@ pub use inference::InferenceConfig;
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{
     McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, NewMcpServer, UpdateMcpServer,
+    McpToolResult, NewMcpServer, SEARCH_RESULTS_CAP, ToolIndex, ToolSummary, UpdateMcpServer,
 };
 
 // Re-export chat types at the domain level for convenience
