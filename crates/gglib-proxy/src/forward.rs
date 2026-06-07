@@ -214,6 +214,14 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 
     let before_count = messages_raw.len();
 
+    // Log size of non-message top-level fields to identify what's inflating the body.
+    for (key, val) in value.as_object().into_iter().flatten() {
+        if key != "messages" {
+            let approx_bytes = serde_json::to_vec(val).map(|v| v.len()).unwrap_or(0);
+            debug!(key, approx_bytes, "coalesce: top-level field size");
+        }
+    }
+
     // Deserialise only the fields `transform_messages_for_capabilities` needs.
     // `ChatMessage.content` accepts both a plain JSON string and a JSON array of
     // content-part objects (e.g. VSCode LLM Gateway sends array-form content per
@@ -238,6 +246,10 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
         roles = ?messages.iter().map(|m| m.role.as_str()).collect::<Vec<_>>(),
         "coalesce: parsed messages for transformation"
     );
+    for (i, m) in messages.iter().enumerate() {
+        let content_bytes = m.content.as_ref().map(|c| c.as_str().map(|s| s.len()).unwrap_or_else(|| format!("{:?}", c).len())).unwrap_or(0);
+        debug!(i, role = %m.role, content_bytes, "coalesce: message sizes");
+    }
 
     let transformed = transform_messages_for_capabilities(messages, capabilities);
     let after_count = transformed.len();
