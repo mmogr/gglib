@@ -48,6 +48,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 2. **Routes to llama-server** instances managed by gglib-runtime
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
+5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
+6. **Exposes proxy telemetry** at `GET /v1/proxy/status` for CLI and web dashboards
 
 ## Internal Structure
 
@@ -106,15 +108,19 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
+| [`truncation.rs`](src/truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-coverage.json) |
+| [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
 | [`mcp/`](src/mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-coverage.json) |
 <!-- module-table:end -->
 
 </details>
 
 **Module Descriptions:**
-- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions` handler
-- **`models.rs`** — `/v1/models` endpoint, model listing and resolution
-- **`forward.rs`** — HTTP forwarding to llama-server with streaming support
+- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions` and `/v1/proxy/status` handlers
+- **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
+- **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
+- **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
+- **`metrics.rs`** — `ContextMetricsStore` ring buffer powering `/v1/proxy/status`
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
@@ -251,4 +257,92 @@ curl -X POST http://localhost:8080/mcp \
 | 503 | Model is loading (retry after) |
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
+| 400 | Context window budget exceeded after truncation |
 | 500 | Internal error |
+
+## History Truncation
+
+### Problem
+
+Client-side context compaction can be broken for custom OpenAI-compatible
+endpoints. When a local model calls tools, each tool response is permanently
+embedded in the chat history by the client. After several tool-heavy turns the
+prompt balloons past the local model's context window, causing it to fall into
+repetition or logic loops.
+
+### Defence
+
+On every `/v1/chat/completions` request, the proxy applies a stateless
+truncation pass **before** forwarding to llama-server:
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `TOOL_CONTENT_THRESHOLD_CHARS` | **2,000** chars | Per-message content length that triggers replacement |
+| `TOTAL_PAYLOAD_LIMIT_CHARS` | **240,000** chars | Total request body budget (≈ 60,000 tokens) |
+| `PROTECTED_TAIL_COUNT` | **4** messages | Most-recent messages always preserved |
+
+**Algorithm:**
+
+1. Any unprotected `role: "tool"` or `role: "assistant"` message whose
+   `content` string exceeds 2,000 characters has its content replaced with:
+
+   > `[Raw tool output truncated by proxy to maintain context window. Rely on your previous observations.]`
+
+2. `role: "system"` messages and the last 4 messages are never modified.
+3. Array-form content (multi-part messages) and `tool_calls` fields are
+   never touched.
+4. If the total payload still exceeds 240,000 characters after step 1, the
+   request is **rejected** with HTTP 400:
+   ```json
+   {
+     "error": {
+       "type": "context_length_exceeded",
+       "code": "context_length_exceeded",
+       "message": "Context window limit reached. Please start a new conversation."
+     }
+   }
+   ```
+
+**Zero blast radius:** On JSON parse failure the original body is forwarded
+unchanged; the upstream llama-server produces its own diagnostic.
+
+## Proxy Status Endpoint
+
+```
+GET /v1/proxy/status
+```
+
+Returns a JSON snapshot of the last 20 requests processed by the truncation
+pipeline. This is the shared data contract for the CLI TUI (future) and web
+dashboard (future).
+
+### Response shape
+
+```json
+{
+  "total_requests": 42,
+  "snapshots": [
+    {
+      "model_name": "qwen-3b",
+      "payload_chars_before": 52000,
+      "payload_chars_after": 8400,
+      "messages_truncated": 3,
+      "was_clamped": false,
+      "recorded_at_secs": 1749283200
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_requests` | `u64` | All requests since proxy start, including evicted ones |
+| `snapshots` | array | Last ≤ 20 requests, oldest-first |
+| `payload_chars_before` | `usize` | Body size before truncation |
+| `payload_chars_after` | `usize` | Body size after truncation |
+| `messages_truncated` | `usize` | Number of messages whose content was replaced |
+| `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
+| `recorded_at_secs` | `u64` | Unix timestamp of the observation |
+
+The ring buffer retains at most 50 entries. `total_requests` grows
+monotonically regardless of evictions.

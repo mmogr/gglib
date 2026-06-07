@@ -100,6 +100,34 @@ curl -X PATCH http://localhost:9887/api/models/3/capabilities \
 
 For details on how to add support for a new architecture, see [`CONTRIBUTING.md`](CONTRIBUTING.md#model-architecture-registry).
 
+### History Truncation & Proxy Status
+
+When gglib acts as an OpenAI-compatible proxy (e.g. `gglib web --api-only`), it
+defends against a problem with some AI clients: client-side context compaction
+can be broken for custom endpoints, causing tool call responses to be permanently
+embedded in chat history. After several tool-heavy turns the prompt balloons past
+the local model's context window and the model falls into logic loops.
+
+**The proxy intercepts and compacts history automatically.** Before every request
+is forwarded to llama-server, a stateless truncation pass runs:
+
+- Any unprotected `role: "tool"` or `role: "assistant"` message whose content
+  exceeds **2,000 characters** has its content replaced with a short placeholder.
+- The last **4 messages** and all `role: "system"` messages are always preserved.
+- If the total payload still exceeds **240,000 characters** (≈ 60,000 tokens)
+  after truncation, the request is rejected with HTTP 400
+  (`context_length_exceeded`) rather than forwarding a prompt that would cause
+  the model to fail.
+
+**Proxy telemetry** is available at `GET /v1/proxy/status`, which returns a JSON
+snapshot of the last 20 requests including before/after payload sizes and
+truncation counts. This endpoint is the shared data contract for future CLI TUI
+and web dashboard integrations.
+
+```bash
+curl http://localhost:9887/v1/proxy/status | jq .
+```
+
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
 ![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json)
