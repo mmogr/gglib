@@ -14,9 +14,12 @@
 //! - `McpEnvEntry` - Environment variable entry
 //! - `McpTool` - Tool exposed by an MCP server
 //! - `McpToolResult` - Result of a tool invocation
+//! - `ToolIndex` / `ToolSummary` - Progressive-disclosure tool registry index
 
+mod tool_index;
 mod types;
 
+pub use tool_index::{SEARCH_RESULTS_CAP, ToolIndex, ToolSummary};
 pub use types::{
     McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, NewMcpServer, UpdateMcpServer,
