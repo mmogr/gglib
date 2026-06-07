@@ -2,15 +2,22 @@
 //!
 //! Implements the single-endpoint design from MCP spec 2025-03-26:
 //!
-//! | Method   | Path   | Behaviour                                      |
+//! | Method   | Path   | Behaviour                                       |
 //! |----------|--------|-------------------------------------------------|
 //! | `POST`   | `/mcp` | JSON-RPC dispatch (initialize, tools/*, ping)   |
 //! | `GET`    | `/mcp` | 405 Method Not Allowed (no server-push yet)     |
 //! | `DELETE` | `/mcp` | Session termination via `Mcp-Session-Id` header |
 //!
-//! `tools/call` returns `text/event-stream` (SSE). All other methods
-//! return `application/json`. Both are valid per spec — clients MUST
-//! support either content type.
+//! # Progressive Disclosure
+//!
+//! `tools/list` no longer exposes raw tool schemas. Instead it returns
+//! exactly **three meta-tools** (`search_tools`, `get_tool_schema`,
+//! `invoke_tool`). External clients discover capabilities incrementally
+//! rather than receiving every schema up-front, reducing context-window
+//! consumption by 90%+. See [`super::meta_tools`] for details.
+//!
+//! `tools/call` results are returned as `text/event-stream` (SSE).
+//! All other methods return `application/json`. Both are valid per spec.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -80,8 +87,8 @@ pub(crate) async fn post_mcp(
     match request.method.as_str() {
         "initialize" => handle_initialize(&state.sessions, id).await,
         "ping" => handle_ping(id),
-        "tools/list" => handle_tools_list(&state.mcp, id).await,
-        "tools/call" => handle_tools_call(&state.mcp, id, request.params).await,
+        "tools/list" => handle_meta_tools_list(&state.mcp, id).await,
+        "tools/call" => handle_meta_tools_call(&state.mcp, id, request.params).await,
         _ => json_rpc_error_response(
             StatusCode::OK,
             id,
@@ -156,54 +163,31 @@ fn handle_ping(id: Value) -> Response {
     Json(JsonRpcResponse::success(id, serde_json::json!({}))).into_response()
 }
 
-/// Handle `tools/list` — enumerate all tools from all running MCP servers.
-async fn handle_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {
-    let (tools, server_names) = build_tool_list(mcp).await;
-
-    // Build McpToolSpec list with qualified names
-    let specs: Vec<McpToolSpec> = tools
-        .into_iter()
-        .map(|(server_id, tool)| {
-            let server_name = server_names
-                .get(&server_id)
-                .map(String::as_str)
-                .unwrap_or("unknown");
-            McpToolSpec {
-                name: format!("{server_name}__{}", tool.name),
-                description: tool.description,
-                input_schema: tool.input_schema,
-                title: tool.title,
-            }
-        })
-        .collect();
-
+/// Handle `tools/list` — return the three progressive-disclosure meta-tools.
+///
+/// External clients (VS Code Copilot, OpenWebUI, etc.) receive exactly three
+/// stable tool specs rather than the full registry. This keeps the baseline
+/// context cost constant regardless of how many MCP servers are running.
+async fn handle_meta_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {
+    let index = super::meta_tools::build_tool_index(mcp).await;
+    let specs = super::meta_tools::meta_tools_list(&index);
     let result = ToolsListResult { tools: specs };
-    Json(JsonRpcResponse::success(
-        id,
-        serde_json::to_value(result).unwrap(),
-    ))
-    .into_response()
+    Json(JsonRpcResponse::success(id, serde_json::to_value(result).unwrap())).into_response()
 }
 
-/// Handle `tools/call` — resolve the qualified name, invoke the tool,
-/// and return the result as an SSE stream.
-async fn handle_tools_call(
+/// Handle `tools/call` — dispatch to one of the three meta-tools.
+///
+/// Routing is strict: only `search_tools`, `get_tool_schema`, and
+/// `invoke_tool` are accepted. Any other name — including direct calls to
+/// raw `"server__tool"` identifiers — returns `METHOD_NOT_FOUND`. There is
+/// no legacy passthrough.
+async fn handle_meta_tools_call(
     mcp: &gglib_mcp::McpService,
     id: Value,
     params: Option<Value>,
 ) -> Response {
-    // Parse params
-    let call_params: ToolsCallParams = match params {
-        Some(v) => match serde_json::from_value(v) {
-            Ok(p) => p,
-            Err(e) => {
-                return json_rpc_error_response(
-                    StatusCode::OK,
-                    id,
-                    JsonRpcError::new(INVALID_PARAMS, format!("Invalid params: {e}")),
-                );
-            }
-        },
+    let params_val = match params {
+        Some(v) => v,
         None => {
             return json_rpc_error_response(
                 StatusCode::OK,
@@ -213,80 +197,131 @@ async fn handle_tools_call(
         }
     };
 
-    // Resolve qualified name → (server_id, bare_name)
-    let (server_id, bare_name) = match resolve_tool_name(mcp, &call_params.name).await {
-        Some(pair) => pair,
+    let name = match params_val.get("name").and_then(|v| v.as_str()) {
+        Some(n) => n.to_string(),
         None => {
             return json_rpc_error_response(
                 StatusCode::OK,
                 id,
-                JsonRpcError::new(
-                    INVALID_PARAMS,
-                    format!("Unknown tool: {}", call_params.name),
+                JsonRpcError::new(INVALID_PARAMS, "Missing 'name' field"),
+            );
+        }
+    };
+
+    // Shorthand: the "arguments" object sent by the MCP client for this call.
+    let meta_args = params_val
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Object(serde_json::Map::new()));
+
+    match name.as_str() {
+        // ── search_tools ──────────────────────────────────────────────────
+        "search_tools" => {
+            let query = meta_args
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let index = super::meta_tools::build_tool_index(mcp).await;
+            let summaries = index.search(query);
+            let text = serde_json::to_string(&summaries).unwrap_or_default();
+            sse_tool_result(id, text, false)
+        }
+
+        // ── get_tool_schema ───────────────────────────────────────────────
+        "get_tool_schema" => {
+            let tool_id = match meta_args.get("tool_id").and_then(|v| v.as_str()) {
+                Some(t) => t.to_string(),
+                None => {
+                    return json_rpc_error_response(
+                        StatusCode::OK,
+                        id,
+                        JsonRpcError::new(INVALID_PARAMS, "Missing 'tool_id' argument"),
+                    );
+                }
+            };
+            let index = super::meta_tools::build_tool_index(mcp).await;
+            match index.get_schema(&tool_id) {
+                Some(schema) => {
+                    let text = serde_json::to_string(schema).unwrap_or_default();
+                    sse_tool_result(id, text, false)
+                }
+                None => json_rpc_error_response(
+                    StatusCode::OK,
+                    id,
+                    JsonRpcError::new(
+                        INVALID_PARAMS,
+                        format!("Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."),
+                    ),
                 ),
-            );
+            }
         }
-    };
 
-    // Convert arguments from Value to HashMap<String, Value>
-    let arguments: HashMap<String, Value> = match call_params.arguments {
-        Some(Value::Object(map)) => map.into_iter().collect(),
-        Some(_) => {
-            return json_rpc_error_response(
-                StatusCode::OK,
-                id,
-                JsonRpcError::new(INVALID_PARAMS, "arguments must be an object"),
-            );
-        }
-        None => HashMap::new(),
-    };
-
-    // Invoke the tool
-    let result = mcp.call_tool(server_id, &bare_name, arguments).await;
-
-    // Build JSON-RPC response
-    let rpc_response = match result {
-        Ok(tool_result) => {
-            let text = if let Some(data) = tool_result.data {
-                serde_json::to_string_pretty(&data).unwrap_or_default()
-            } else {
-                String::new()
+        // ── invoke_tool ───────────────────────────────────────────────────
+        "invoke_tool" => {
+            let tool_id = match meta_args.get("tool_id").and_then(|v| v.as_str()) {
+                Some(t) => t.to_string(),
+                None => {
+                    return json_rpc_error_response(
+                        StatusCode::OK,
+                        id,
+                        JsonRpcError::new(INVALID_PARAMS, "Missing 'tool_id' argument"),
+                    );
+                }
             };
-            let call_result = CallToolResult {
-                content: vec![ToolContent {
-                    content_type: "text".to_string(),
-                    text,
-                }],
-                is_error: if tool_result.success {
-                    None
-                } else {
-                    Some(true)
-                },
-            };
-            JsonRpcResponse::success(id, serde_json::to_value(call_result).unwrap())
-        }
-        Err(e) => {
-            error!("MCP tools/call error: {e}");
-            let call_result = CallToolResult {
-                content: vec![ToolContent {
-                    content_type: "text".to_string(),
-                    text: e.to_string(),
-                }],
-                is_error: Some(true),
-            };
-            JsonRpcResponse::success(id, serde_json::to_value(call_result).unwrap())
-        }
-    };
 
-    // Return as SSE stream (spec: server may return text/event-stream)
-    let payload = serde_json::to_string(&rpc_response).unwrap();
-    let event_stream = stream::once(async move {
-        Ok::<_, Infallible>(Event::default().event("message").data(payload))
-    });
+            let (server_id, bare_name) =
+                match super::meta_tools::resolve_tool_name(mcp, &tool_id).await {
+                    Some(pair) => pair,
+                    None => {
+                        return json_rpc_error_response(
+                            StatusCode::OK,
+                            id,
+                            JsonRpcError::new(
+                                INVALID_PARAMS,
+                                format!("Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."),
+                            ),
+                        );
+                    }
+                };
 
-    Sse::new(event_stream)
-        .keep_alive(KeepAlive::default())
-        .into_response()
+            let tool_args: HashMap<String, Value> =
+                match meta_args.get("arguments").cloned() {
+                    Some(Value::Object(map)) => map.into_iter().collect(),
+                    Some(_) => {
+                        return json_rpc_error_response(
+                            StatusCode::OK,
+                            id,
+                            JsonRpcError::new(INVALID_PARAMS, "'arguments' must be a JSON object"),
+                        );
+                    }
+                    None => HashMap::new(),
+                };
+
+            match mcp.call_tool(server_id, &bare_name, tool_args).await {
+                Ok(tool_result) => {
+                    let text = tool_result
+                        .data
+                        .map(|d| serde_json::to_string_pretty(&d).unwrap_or_default())
+                        .unwrap_or_default();
+                    sse_tool_result(id, text, !tool_result.success)
+                }
+                Err(e) => {
+                    error!("MCP invoke_tool error for '{tool_id}': {e}");
+                    sse_tool_result(id, e.to_string(), true)
+                }
+            }
+        }
+
+        // ── Hard break — no legacy passthrough ────────────────────────────
+        _ => json_rpc_error_response(
+            StatusCode::OK,
+            id,
+            JsonRpcError::new(
+                METHOD_NOT_FOUND,
+                format!("Unknown tool: '{name}'. Use search_tools to discover available tools."),
+            ),
+        ),
+    }
 }
 
 // ─── Notification handling ─────────────────────────────────────────────────
@@ -360,30 +395,28 @@ async fn require_session(
     }
 }
 
-/// Build a flattened tool list and server-id-to-name mapping.
-async fn build_tool_list(
-    mcp: &gglib_mcp::McpService,
-) -> (Vec<(i64, gglib_core::McpTool)>, HashMap<i64, String>) {
-    let servers = mcp.list_servers().await.unwrap_or_default();
-    let server_names: HashMap<i64, String> =
-        servers.iter().map(|s| (s.id, s.name.clone())).collect();
-
-    let all_tools = mcp.list_all_tools().await;
-    let flat: Vec<(i64, gglib_core::McpTool)> = all_tools
-        .into_iter()
-        .flat_map(|(sid, tools)| tools.into_iter().map(move |t| (sid, t)))
-        .collect();
-
-    (flat, server_names)
-}
-
-/// Resolve a qualified tool name ("server__tool") to (server_id, bare_name).
-async fn resolve_tool_name(mcp: &gglib_mcp::McpService, qualified: &str) -> Option<(i64, String)> {
-    let (server_names, bare_name) = qualified.split_once("__")?;
-
-    let server = mcp.get_server_by_name(server_names).await.ok()?;
-
-    Some((server.id, bare_name.to_string()))
+/// Wrap `text` in a standard MCP `CallToolResult` and return it as a
+/// single-event SSE stream.
+///
+/// `is_error` maps to `CallToolResult::is_error`; pass `true` when the
+/// upstream tool reported a failure so that the MCP client can distinguish
+/// application-level errors from successful (but empty) results.
+fn sse_tool_result(id: Value, text: String, is_error: bool) -> Response {
+    let call_result = CallToolResult {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text,
+        }],
+        is_error: if is_error { Some(true) } else { None },
+    };
+    let rpc_response = JsonRpcResponse::success(id, serde_json::to_value(call_result).unwrap());
+    let payload = serde_json::to_string(&rpc_response).unwrap();
+    let event_stream = stream::once(async move {
+        Ok::<_, Infallible>(Event::default().event("message").data(payload))
+    });
+    Sse::new(event_stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 /// Build a JSON-RPC error as an HTTP response.

@@ -365,9 +365,17 @@ async fn full_happy_path_initialize_list_delete() {
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body["jsonrpc"], "2.0");
     assert_eq!(body["id"], 2);
-    // Empty repo → empty tools list
+    // Progressive disclosure: always exactly 3 meta-tools regardless of how
+    // many MCP servers are running.
     let tools = body["result"]["tools"].as_array().unwrap();
-    assert!(tools.is_empty());
+    assert_eq!(tools.len(), 3);
+    let tool_names: Vec<&str> = tools
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert!(tool_names.contains(&"search_tools"));
+    assert!(tool_names.contains(&"get_tool_schema"));
+    assert!(tool_names.contains(&"invoke_tool"));
 
     // ── Step 4: ping ──
     let resp = post_mcp(
