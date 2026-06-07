@@ -3,7 +3,7 @@
 //!
 //! ## Request pipeline
 //!
-//! Before the upstream call the proxy applies two stateless transforms to the
+//! Before the upstream call the proxy applies three stateless transforms to the
 //! request body, in order:
 //!
 //! 1. [`strip_prior_reasoning`] — scrubs `<think>` / `reasoning_content`
@@ -14,6 +14,14 @@
 //!    consecutive same-role user/assistant messages before they reach the
 //!    Jinja template.  Mistral-family models raise a hard 500 exception
 //!    without this.
+//! 3. [`truncate_history`] — defends against client-side context compaction
+//!    failures.  Any unprotected `role: "tool"` or `role: "assistant"` message
+//!    whose string `content` exceeds **2,000 characters** is replaced with a
+//!    short placeholder.  If the total payload still exceeds **240,000
+//!    characters** (≈ 60,000 tokens) after this pass, the request is rejected
+//!    with HTTP 400 / `context_length_exceeded` rather than forwarding a
+//!    prompt that would cause the model to fail.  The last four messages and
+//!    all `role: "system"` messages are always preserved.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`resolve_model_context`]) that yields both the `ModelCapabilities`
