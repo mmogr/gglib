@@ -247,7 +247,15 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
         "coalesce: parsed messages for transformation"
     );
     for (i, m) in messages.iter().enumerate() {
-        let content_bytes = m.content.as_ref().map(|c| c.as_str().map(|s| s.len()).unwrap_or_else(|| format!("{:?}", c).len())).unwrap_or(0);
+        let content_bytes = m
+            .content
+            .as_ref()
+            .map(|c| {
+                c.as_str()
+                    .map(|s| s.len())
+                    .unwrap_or_else(|| format!("{:?}", c).len())
+            })
+            .unwrap_or(0);
         debug!(i, role = %m.role, content_bytes, "coalesce: message sizes");
     }
 
