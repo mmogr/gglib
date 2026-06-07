@@ -64,8 +64,7 @@ pub const TOTAL_PAYLOAD_LIMIT_CHARS: usize = 240_000;
 pub const PROTECTED_TAIL_COUNT: usize = 4;
 
 /// Replacement string inserted in place of truncated message content.
-pub const TRUNCATION_PLACEHOLDER: &str =
-    "[Raw tool output truncated by proxy to maintain context window. \
+pub const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
      Rely on your previous observations.]";
 
 // =============================================================================
@@ -183,8 +182,7 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Respon
             .unwrap_or(false);
 
         if should_truncate {
-            messages[i]["content"] =
-                serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
+            messages[i]["content"] = serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
             messages_truncated += 1;
         }
     }
@@ -290,7 +288,11 @@ mod tests {
         let body = make_body(vec![msg("user", "hello"), msg("assistant", "world")]);
         let original_len = body.len();
         let (out, report) = truncate_history(body).unwrap();
-        assert_eq!(out.len(), original_len, "bytes must be identical on fast path");
+        assert_eq!(
+            out.len(),
+            original_len,
+            "bytes must be identical on fast path"
+        );
         assert_eq!(report.messages_truncated, 0);
         assert_eq!(report.payload_chars_before, report.payload_chars_after);
         assert!(!report.was_clamped);
@@ -330,8 +332,7 @@ mod tests {
         assert_eq!(report.messages_truncated, 1);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
-            parsed["messages"][1]["content"],
-            TRUNCATION_PLACEHOLDER,
+            parsed["messages"][1]["content"], TRUNCATION_PLACEHOLDER,
             "oversized tool content must be replaced"
         );
         assert_eq!(
@@ -369,7 +370,10 @@ mod tests {
         let (out, report) = truncate_history(body).unwrap();
         assert_eq!(report.messages_truncated, 0);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
-        assert_eq!(parsed["messages"][0]["content"].as_str().unwrap().len(), under.len());
+        assert_eq!(
+            parsed["messages"][0]["content"].as_str().unwrap().len(),
+            under.len()
+        );
     }
 
     // ── Protection ────────────────────────────────────────────────────────────
@@ -421,16 +425,19 @@ mod tests {
         // Index 0 tool: NOT in tail → truncated.
         // Index 3 tool: in tail → preserved.
         let body = make_body(vec![
-            msg("tool", &oversized),   // index 0 — truncated
+            msg("tool", &oversized), // index 0 — truncated
             msg("user", "mid"),
             msg("user", "mid2"),
-            msg("tool", &oversized),   // index 3 — tail-protected
+            msg("tool", &oversized), // index 3 — tail-protected
             msg("user", "a"),
             msg("user", "b"),
             msg("user", "c"),
         ]);
         let (out, report) = truncate_history(body).unwrap();
-        assert_eq!(report.messages_truncated, 1, "only the non-tail tool must be truncated");
+        assert_eq!(
+            report.messages_truncated, 1,
+            "only the non-tail tool must be truncated"
+        );
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
         assert_eq!(
@@ -484,7 +491,10 @@ mod tests {
             .unwrap(),
         );
         let (out, report) = truncate_history(body).unwrap();
-        assert_eq!(report.messages_truncated, 1, "only the string-form tool should be counted");
+        assert_eq!(
+            report.messages_truncated, 1,
+            "only the string-form tool should be counted"
+        );
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert!(
             parsed["messages"][1]["content"].is_array(),
