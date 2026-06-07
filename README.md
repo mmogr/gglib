@@ -548,6 +548,54 @@ Auto-generated from source and updated with every release.
 ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Hub-yellow?style=flat-square)
 ![Llama.cpp](https://img.shields.io/badge/Llama.cpp-Inference-lightgrey?style=flat-square)
 
+## LLM Optimization / Progressive Disclosure
+
+When gglib is connected to an external MCP client (VS Code Copilot, OpenWebUI,
+etc.), the proxy exposes a **Progressive Disclosure** interface instead of
+dumping every tool schema up-front. This reduces context-window consumption by
+90 %+ and eliminates timeout failures caused by 100 k-token schema payloads.
+
+### How it works
+
+`tools/list` always returns exactly **three meta-tools** regardless of how many
+internal MCP servers are running:
+
+| Meta-tool         | Purpose                                                        |
+|-------------------|----------------------------------------------------------------|
+| `search_tools`    | Keyword search over tool IDs and descriptions (≤ 30 results)  |
+| `get_tool_schema` | Lazily fetch the full JSON input schema for one specific tool  |
+| `invoke_tool`     | Execute a tool by its qualified ID with the given arguments    |
+
+### Typical client flow
+
+```
+1. tools/list         → receives 3 meta-tool specs (~300 tokens)
+2. search_tools       → discovers relevant tool IDs by keyword
+3. get_tool_schema    → fetches only the schema it actually needs
+4. invoke_tool        → executes with known arguments
+```
+
+### Qualified tool IDs
+
+Internal tools are addressed with a double-underscore namespaced format:
+`"<server_name>__<tool_name>"` (e.g. `"filesystem__read_file"`). This ID is
+returned by `search_tools` and accepted by both `get_tool_schema` and
+`invoke_tool`.
+
+### Hard break — no legacy passthrough
+
+Direct calls to raw tool names via `tools/call` return `METHOD_NOT_FOUND`.
+All tool invocations must go through `invoke_tool`. There is no compatibility
+shim for the pre-disclosure interface.
+
+### Implementation
+
+| Location | Role |
+|---|---|
+| [`gglib-core/src/domain/mcp/tool_index.rs`](crates/gglib-core/src/domain/mcp/tool_index.rs) | `ToolIndex` + `ToolSummary` pure-data types; `SEARCH_RESULTS_CAP = 30` |
+| [`gglib-proxy/src/mcp/meta_tools.rs`](crates/gglib-proxy/src/mcp/meta_tools.rs) | Index construction from `McpService`; 3 static `McpToolSpec` definitions |
+| [`gglib-proxy/src/mcp/handlers.rs`](crates/gglib-proxy/src/mcp/handlers.rs) | `handle_meta_tools_list` + `handle_meta_tools_call` dispatch |
+
 ## License
 
 GGLib is open source under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
