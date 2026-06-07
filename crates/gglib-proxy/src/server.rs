@@ -145,10 +145,7 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             error!("Failed to list models: {e}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse::new(
-                    format!("Failed to list models: {e}"),
-                    "internal_error",
-                )),
+                Json(ErrorResponse::internal_error(&format!("Failed to list models: {e}"))),
             )
                 .into_response()
         }
@@ -174,10 +171,7 @@ async fn chat_completions(
             error!("Failed to parse request: {e}");
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ErrorResponse::new(
-                    format!("Invalid request body: {e}"),
-                    "invalid_request",
-                )),
+                Json(ErrorResponse::invalid_request(&format!("Invalid request body: {e}"))),
             )
                 .into_response();
         }
