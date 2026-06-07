@@ -309,6 +309,11 @@ pub async fn forward_chat_completion(
     //    (e.g. Mistral/Devstral).  No-op when capabilities are empty/unknown.
     let body = coalesce_for_capabilities(body, context.capabilities);
 
+    debug!(
+        body_bytes = body.len(),
+        "sending request to upstream (post-transform)"
+    );
+
     // Build the request to upstream
     let mut req_builder = client
         .post(upstream_url)
@@ -341,12 +346,20 @@ pub async fn forward_chat_completion(
     // For errors, return the error body directly
     if !status.is_success() {
         let error_bytes = response.bytes().await.unwrap_or_default();
+        let error_body = String::from_utf8_lossy(&error_bytes);
+        warn!(
+            status = status.as_u16(),
+            body = %error_body,
+            "upstream llama-server returned error"
+        );
         return Response::builder()
             .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
             .header("content-type", "application/json")
             .body(Body::from(error_bytes))
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
+
+    debug!(status = status.as_u16(), "upstream llama-server accepted request");
 
     if is_streaming {
         // Tags resolved above — no second catalog lookup needed.
@@ -386,6 +399,7 @@ async fn forward_streaming_response(
             let chunk = match chunk_result {
                 Ok(c) => c,
                 Err(e) => {
+                    warn!("upstream SSE byte-stream error: {e}");
                     yield Err(anyhow::anyhow!("upstream SSE byte-stream error: {e}"));
                     return;
                 }

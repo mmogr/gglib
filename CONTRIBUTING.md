@@ -105,6 +105,27 @@ The proxy uses a two-layer system to decide how to preprocess requests before th
 
 The result of both layers is **OR-combined** and stored in the database as `Model.capabilities`.  The proxy reads this value once per request — there is no second inference pass at forward time.
 
+### Template analysis — positive vs. negative system-role signals
+
+`infer_from_chat_template` uses two priority tiers for the `SUPPORTS_SYSTEM_ROLE` flag:
+
+| Priority | Pattern | Meaning |
+|---|---|---|
+| **1 — positive** | `[SYSTEM_PROMPT]` in template | Mistral v7: system role handled natively |
+| **1 — positive** | `[AVAILABLE_TOOLS]` in template | Mistral v3/v3-tekken: system prepended inline |
+| **2 — negative** | `"Only user, assistant and tool roles…"` | Old Mistral v1/v2: system role rejected |
+| **2 — negative** | `"got system"` / `"Raise exception for unsupported roles"` | Other strict models |
+| **default** | No signal | System role assumed supported |
+
+Positive evidence wins: if a template contains `[SYSTEM_PROMPT]` **and** a generic error-raise, the positive signal takes precedence and `SUPPORTS_SYSTEM_ROLE` is set.
+
+### Known architecture registry
+
+| `general.architecture` | Models | Flags |
+|---|---|---|
+| `"mistral"` | Mistral v1/v2 | `REQUIRES_STRICT_TURNS` |
+| `"mistral3"` | Devstral, Ministral, Mistral Small 3 | `REQUIRES_STRICT_TURNS \| SUPPORTS_SYSTEM_ROLE` |
+
 ### Adding a new architecture (request side)
 
 1. **Add an arm** to `capabilities_from_architecture()` in `crates/gglib-core/src/domain/capabilities.rs`:
@@ -123,13 +144,7 @@ The result of both layers is **OR-combined** and stored in the database as `Mode
    }
    ```
 
-3. **Re-run bootstrap** on any existing models to pick up the new flag:
-
-   ```bash
-   gglib model retag --all --full
-   ```
-
-   Or override a single model's flags without re-importing:
+3. **Fix any already-imported models** by overriding their flags directly:
 
    ```bash
    gglib model capabilities <id> --set requires-strict-turns

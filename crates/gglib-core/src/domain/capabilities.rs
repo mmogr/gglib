@@ -27,12 +27,35 @@
 //! `format:*` tag pipeline in `gglib-proxy::normalize`, which is entirely
 //! independent from `ModelCapabilities`.
 //!
+//! ## Template analysis — positive vs. negative signals
+//!
+//! [`infer_from_chat_template`] uses two kinds of signals for system-role
+//! detection, evaluated in priority order:
+//!
+//! | Priority | Signal | Example pattern | Conclusion |
+//! |---|---|---|---|
+//! | **1 (positive)** | `[SYSTEM_PROMPT]` in template | Mistral v7 | `SUPPORTS_SYSTEM_ROLE` set |
+//! | **1 (positive)** | `[AVAILABLE_TOOLS]` in template | Mistral v3/v3-tekken | `SUPPORTS_SYSTEM_ROLE` set |
+//! | **2 (negative)** | `"Only user, assistant and tool roles…"` | Old Mistral v1/v2 | `SUPPORTS_SYSTEM_ROLE` not set |
+//! | **2 (negative)** | `"got system"` / `"Raise exception"` | Other strict models | `SUPPORTS_SYSTEM_ROLE` not set |
+//! | **default** | No signal found | Generic template | `SUPPORTS_SYSTEM_ROLE` set |
+//!
+//! Positive evidence takes precedence: if `[SYSTEM_PROMPT]` or `[AVAILABLE_TOOLS]`
+//! appears, the negative patterns are ignored for system-role purposes.  This
+//! matters because some Jinja templates contain both an error-raise branch for
+//! unknown roles AND a valid system branch guarded by `[SYSTEM_PROMPT]`.
+//!
 //! ## Architecture registry
 //!
 //! [`capabilities_from_architecture`] maps GGUF `general.architecture` strings
 //! to [`ModelCapabilities`] flags.  This is the **backstop** for models whose
 //! quantized builds strip the `tokenizer.chat_template` section, making
 //! `infer_from_chat_template` return `empty()`.
+//!
+//! | Architecture string | Models | Flags |
+//! |---|---|---|
+//! | `"mistral"` | Mistral v1/v2 (old) | `REQUIRES_STRICT_TURNS` |
+//! | `"mistral3"` | Devstral, Ministral, Mistral Small 3 | `REQUIRES_STRICT_TURNS \| SUPPORTS_SYSTEM_ROLE` |
 //!
 //! **To add a new architecture:**
 //!
@@ -150,11 +173,14 @@ impl ModelCapabilities {
 ///
 /// # Capabilities Detected
 ///
-/// - System role: Looks for explicit rejection messages in template
-/// - Strict turns: Looks for alternation enforcement logic
-/// - Tool calling: Checks for `<tool_call>`, `if tools`, `function_call` patterns (metadata);
+/// - **System role**: Positive signals (`[SYSTEM_PROMPT]`, `[AVAILABLE_TOOLS]`) take precedence over
+///   negative signals (explicit rejection messages).  Generic templates with neither signal default
+///   to `SUPPORTS_SYSTEM_ROLE` set.
+/// - **Strict turns**: Looks for alternation enforcement logic (`ns.index % 2`,
+///   `conversation roles must alternate`, etc.)
+/// - **Tool calling**: Checks for `<tool_call>`, `if tools`, `function_call` patterns (metadata);
 ///   falls back to model name patterns like "hermes", "functionary" (heuristic)
-/// - Reasoning: Checks for `<think>`, `<reasoning>`, `enable_thinking` (metadata);
+/// - **Reasoning**: Checks for `<think>`, `<reasoning>`, `enable_thinking` (metadata);
 ///   falls back to model name patterns like "deepseek-r1", "qwq", "o1" (heuristic)
 ///
 /// # Fallback Behavior
@@ -174,15 +200,26 @@ pub fn infer_from_chat_template(
     let mut reasoning_detected_from_metadata = false;
 
     if let Some(template) = template {
-        // Check for system role restrictions
-        // Mistral-style templates explicitly reject system role in error messages
-        let forbids_system = template.contains("Only user, assistant and tool roles are supported")
-            || template.contains("got system")
-            || template.contains("Raise exception for unsupported roles");
+        // ── System role detection ───────────────────────────────────────────
+        //
+        // Positive evidence (Mistral v7 / v3-tekken) takes precedence over any
+        // negative error-raise patterns.  Some templates contain both a
+        // `[SYSTEM_PROMPT]` branch AND a generic "unsupported role" catch-all,
+        // so we must check positive signals first.
+        //
+        // Sources:
+        //   llama.cpp/src/llama-chat.cpp — `tmpl_contains("[SYSTEM_PROMPT]")` →
+        //     LLM_CHAT_TEMPLATE_MISTRAL_V7; system role handled natively.
+        //   `[AVAILABLE_TOOLS]` → LLM_CHAT_TEMPLATE_MISTRAL_V3; system prepended inline.
+        let supports_system_positive = template.contains("[SYSTEM_PROMPT]")
+            || template.contains("[AVAILABLE_TOOLS]");
 
-        if forbids_system {
-            // Absence of SUPPORTS_SYSTEM_ROLE means transformation required
-        } else {
+        let forbids_system = !supports_system_positive
+            && (template.contains("Only user, assistant and tool roles are supported")
+                || template.contains("got system")
+                || template.contains("Raise exception for unsupported roles"));
+
+        if !forbids_system {
             caps |= ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
         }
 
@@ -316,12 +353,19 @@ pub fn capabilities_from_architecture(arch: Option<&str>) -> ModelCapabilities {
     };
 
     match arch {
-        // Mistral-family templates enforce strict user/assistant alternation
-        // via Jinja modulo checks (`ns.index % 2`) and raise an exception on
-        // consecutive same-role messages.  They also reject the `system` role.
-        // Many quantised Mistral/Devstral builds strip the tokenizer section,
-        // leaving the template layer blind — this entry is the backstop.
+        // Old Mistral v1/v2 — strict alternation, no system role.
+        // Many quantised builds strip the tokenizer section, so the template
+        // layer is blind; this entry is the request-side backstop.
         "mistral" => ModelCapabilities::REQUIRES_STRICT_TURNS,
+
+        // Newer Mistral-family models (Devstral, Ministral, Mistral Small 3).
+        // Architecture string changed from `"mistral"` to `"mistral3"` when
+        // Mistral adopted mistral-common / Tekken tokeniser.  These models
+        // support system role via `[SYSTEM_PROMPT]…[/SYSTEM_PROMPT]` tokens
+        // (Mistral v7 chat template) but still require strict alternation.
+        "mistral3" => {
+            ModelCapabilities::REQUIRES_STRICT_TURNS | ModelCapabilities::SUPPORTS_SYSTEM_ROLE
+        }
 
         // All other architectures: no request-side constraints inferred from
         // architecture alone.  Chat-template analysis may still set flags,
@@ -467,6 +511,61 @@ mod tests {
     #[test]
     fn test_arch_unknown_returns_empty() {
         assert!(capabilities_from_architecture(Some("future-arch-xyz")).is_empty());
+    }
+
+    #[test]
+    fn test_arch_mistral3_strict_turns_and_system_role() {
+        let caps = capabilities_from_architecture(Some("mistral3"));
+        assert!(caps.requires_strict_turns(), "mistral3 must enforce strict turns");
+        assert!(caps.supports_system_role(), "mistral3 supports system via [SYSTEM_PROMPT]");
+    }
+
+    #[test]
+    fn test_infer_mistral_v7_supports_system() {
+        // Mistral v7 Jinja template: contains [SYSTEM_PROMPT] token.
+        // This is positive evidence — system role IS supported natively.
+        let template = r"
+            {% if messages[0].role == 'system' %}
+                [SYSTEM_PROMPT]{{ messages[0].content }}[/SYSTEM_PROMPT]
+            {% endif %}
+            {% for message in messages %}
+                {% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}
+                    {{ raise_exception('conversation roles must alternate') }}
+                {% endif %}
+            {% endfor %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_system_role(), "[SYSTEM_PROMPT] is positive evidence");
+        assert!(caps.requires_strict_turns(), "still enforces alternation");
+    }
+
+    #[test]
+    fn test_infer_mistral_v3_supports_system() {
+        // Mistral v3 / v3-tekken template: contains [AVAILABLE_TOOLS] token.
+        // llama.cpp prepends system content to the first user turn for these.
+        let template = r"
+            {% if tools is defined %}[AVAILABLE_TOOLS]{{ tools | tojson }}[/AVAILABLE_TOOLS]{% endif %}
+            {% for message in messages %}
+                {% if message.role == 'user' %}[INST]{{ message.content }}[/INST]
+                {% elif message.role == 'assistant' %}{{ message.content }}</s>
+                {% endif %}
+            {% endfor %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_system_role(), "[AVAILABLE_TOOLS] is positive evidence");
+    }
+
+    #[test]
+    fn test_infer_mistral_v1_forbids_system() {
+        // Old Mistral v1/v2 template: no positive tokens, explicit rejection.
+        // Must NOT set SUPPORTS_SYSTEM_ROLE.
+        let template = r"
+            {% if message.role == 'system' %}
+                {{ raise_exception('Only user, assistant and tool roles are supported, got system.') }}
+            {% endif %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(!caps.supports_system_role(), "v1/v2 genuinely rejects system role");
     }
 
     #[test]
