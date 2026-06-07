@@ -4,6 +4,7 @@
 pub mod council_proxy;
 pub mod forward;
 pub mod mcp;
+pub mod metrics;
 pub mod models;
 pub mod server;
 pub mod truncation;
