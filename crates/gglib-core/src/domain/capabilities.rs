@@ -211,8 +211,8 @@ pub fn infer_from_chat_template(
         //   llama.cpp/src/llama-chat.cpp — `tmpl_contains("[SYSTEM_PROMPT]")` →
         //     LLM_CHAT_TEMPLATE_MISTRAL_V7; system role handled natively.
         //   `[AVAILABLE_TOOLS]` → LLM_CHAT_TEMPLATE_MISTRAL_V3; system prepended inline.
-        let supports_system_positive = template.contains("[SYSTEM_PROMPT]")
-            || template.contains("[AVAILABLE_TOOLS]");
+        let supports_system_positive =
+            template.contains("[SYSTEM_PROMPT]") || template.contains("[AVAILABLE_TOOLS]");
 
         let forbids_system = !supports_system_positive
             && (template.contains("Only user, assistant and tool roles are supported")
@@ -516,8 +516,14 @@ mod tests {
     #[test]
     fn test_arch_mistral3_strict_turns_and_system_role() {
         let caps = capabilities_from_architecture(Some("mistral3"));
-        assert!(caps.requires_strict_turns(), "mistral3 must enforce strict turns");
-        assert!(caps.supports_system_role(), "mistral3 supports system via [SYSTEM_PROMPT]");
+        assert!(
+            caps.requires_strict_turns(),
+            "mistral3 must enforce strict turns"
+        );
+        assert!(
+            caps.supports_system_role(),
+            "mistral3 supports system via [SYSTEM_PROMPT]"
+        );
     }
 
     #[test]
@@ -535,7 +541,10 @@ mod tests {
             {% endfor %}
         ";
         let caps = infer_from_chat_template(Some(template), None);
-        assert!(caps.supports_system_role(), "[SYSTEM_PROMPT] is positive evidence");
+        assert!(
+            caps.supports_system_role(),
+            "[SYSTEM_PROMPT] is positive evidence"
+        );
         assert!(caps.requires_strict_turns(), "still enforces alternation");
     }
 
@@ -552,7 +561,10 @@ mod tests {
             {% endfor %}
         ";
         let caps = infer_from_chat_template(Some(template), None);
-        assert!(caps.supports_system_role(), "[AVAILABLE_TOOLS] is positive evidence");
+        assert!(
+            caps.supports_system_role(),
+            "[AVAILABLE_TOOLS] is positive evidence"
+        );
     }
 
     #[test]
@@ -565,7 +577,10 @@ mod tests {
             {% endif %}
         ";
         let caps = infer_from_chat_template(Some(template), None);
-        assert!(!caps.supports_system_role(), "v1/v2 genuinely rejects system role");
+        assert!(
+            !caps.supports_system_role(),
+            "v1/v2 genuinely rejects system role"
+        );
     }
 
     #[test]

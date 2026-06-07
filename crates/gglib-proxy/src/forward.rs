@@ -359,7 +359,10 @@ pub async fn forward_chat_completion(
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
 
-    debug!(status = status.as_u16(), "upstream llama-server accepted request");
+    debug!(
+        status = status.as_u16(),
+        "upstream llama-server accepted request"
+    );
 
     if is_streaming {
         // Tags resolved above — no second catalog lookup needed.
