@@ -9,7 +9,9 @@ use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
 
 use crate::error::GuiError;
-use crate::types::{AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest};
+use crate::types::{
+    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
+};
 
 /// Dependencies for model operations.
 pub struct ModelDeps {
@@ -232,6 +234,52 @@ impl ModelOps {
             .get_filter_options()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to get filter options: {e}")))
+    }
+
+    /// Override one or more capability flags on a model.
+    ///
+    /// Each field in [`SetCapabilitiesRequest`] independently sets or clears
+    /// one [`ModelCapabilities`] bit.  `None` fields are left unchanged.
+    /// The result is persisted to the database and returned as an updated
+    /// [`GuiModel`].
+    ///
+    /// This is the **single shared implementation** called by the CLI, the
+    /// Axum WebUI, and the Tauri app.  No business logic lives in the surface
+    /// crates.
+    pub async fn set_capabilities(
+        &self,
+        id: i64,
+        request: SetCapabilitiesRequest,
+    ) -> Result<GuiModel, GuiError> {
+        use gglib_core::ModelCapabilities;
+
+        let mut model = self.resolve_model(id).await?;
+
+        let mut caps = model.capabilities;
+
+        if let Some(v) = request.supports_system_role {
+            caps.set(ModelCapabilities::SUPPORTS_SYSTEM_ROLE, v);
+        }
+        if let Some(v) = request.requires_strict_turns {
+            caps.set(ModelCapabilities::REQUIRES_STRICT_TURNS, v);
+        }
+        if let Some(v) = request.supports_tool_calls {
+            caps.set(ModelCapabilities::SUPPORTS_TOOL_CALLS, v);
+        }
+        if let Some(v) = request.supports_reasoning {
+            caps.set(ModelCapabilities::SUPPORTS_REASONING, v);
+        }
+
+        model.capabilities = caps;
+
+        self.deps
+            .core
+            .models()
+            .update(&model)
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to update model capabilities: {e}")))?;
+
+        Ok(GuiModel::from_domain(model))
     }
 }
 

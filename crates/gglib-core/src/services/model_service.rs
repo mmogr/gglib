@@ -159,13 +159,19 @@ impl ModelService {
         let gguf_capabilities = gguf_parser.detect_capabilities(&gguf_metadata);
         let auto_tags = gguf_capabilities.to_tags();
 
-        // 4. Infer additional capabilities from chat template
+        // 4. Infer capabilities from chat template OR architecture, whichever
+        //    provides signal.  Architecture-based inference is the backstop for
+        //    models whose GGUF ships without a tokenizer section (common in
+        //    stripped quantisation builds, e.g. many Mistral/Devstral releases).
         let template = gguf_metadata.metadata.get("tokenizer.chat_template");
         let name = gguf_metadata.metadata.get("general.name");
-        let model_capabilities = crate::domain::infer_from_chat_template(
+        let from_template = crate::domain::infer_from_chat_template(
             template.map(String::as_str),
             name.map(String::as_str),
         );
+        let from_arch =
+            crate::domain::capabilities_from_architecture(gguf_metadata.architecture.as_deref());
+        let model_capabilities = from_template | from_arch;
 
         // 5. Construct fully-populated NewModel
         let new_model = NewModel {
@@ -381,7 +387,7 @@ impl ModelService {
     ///
     /// Never overwrite explicitly-set capabilities. Only infer when unknown.
     pub async fn bootstrap_capabilities(&self) -> Result<(), CoreError> {
-        use crate::domain::infer_from_chat_template;
+        use crate::domain::{capabilities_from_architecture, infer_from_chat_template};
 
         let models = self.repo.list().await.map_err(CoreError::from)?;
 
@@ -390,12 +396,13 @@ impl ModelService {
             if model.capabilities.is_empty() {
                 let template = model.metadata.get("tokenizer.chat_template");
                 let name = model.metadata.get("general.name");
-                let inferred = infer_from_chat_template(
+                let arch = model.metadata.get("general.architecture");
+                let from_template = infer_from_chat_template(
                     template.map(String::as_str),
                     name.map(String::as_str),
                 );
-
-                model.capabilities = inferred;
+                let from_arch = capabilities_from_architecture(arch.map(String::as_str));
+                model.capabilities = from_template | from_arch;
                 self.repo.update(&model).await.map_err(CoreError::from)?;
             }
         }

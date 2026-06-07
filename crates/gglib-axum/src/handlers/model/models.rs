@@ -6,7 +6,7 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest,
+    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
 };
 use gglib_core::ModelFilterOptions;
 
@@ -109,4 +109,12 @@ pub async fn filter_options(
     State(state): State<AppState>,
 ) -> Result<Json<ModelFilterOptions>, HttpError> {
     Ok(Json(state.models.get_filter_options().await?))
+}
+
+pub async fn set_capabilities(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(req): Json<SetCapabilitiesRequest>,
+) -> Result<Json<GuiModel>, HttpError> {
+    Ok(Json(state.models.set_capabilities(id, req).await?))
 }

@@ -30,6 +30,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         id: m.id as u32,
         name: m.name.clone(),
         tags: m.tags.clone(),
+        capabilities: m.capabilities,
         param_count: format_param_count(m.param_count_b),
         quantization: m.quantization.clone(),
         architecture: m.architecture.clone(),
