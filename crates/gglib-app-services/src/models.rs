@@ -93,6 +93,18 @@ impl ModelOps {
         Ok(GuiModel::from_model(model, is_serving, port))
     }
 
+    /// Get full details for a model by ID, for the inspect view.
+    ///
+    /// Returns a [`ModelDetailDto`] — a superset of [`GuiModel`] that
+    /// includes raw GGUF metadata, MoE topology, and full HuggingFace
+    /// provenance.  This is the shared data source for the CLI
+    /// `model inspect` command and the `GET /api/models/:id/detail` route.
+    pub async fn get_detail(&self, id: i64) -> Result<crate::types::ModelDetailDto, GuiError> {
+        let model = self.resolve_model(id).await?;
+        let (is_serving, port) = self.get_server_status(id).await;
+        Ok(crate::types::ModelDetailDto::from_model(model, is_serving, port))
+    }
+
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
 
