@@ -152,6 +152,8 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         {renderNumberInput('topK', 'Top K', 1, 200, 1, '40')}
         {renderNumberInput('maxTokens', 'Max Tokens', 1, 8192, 1, '2048')}
         {renderSlider('repeatPenalty', 'Repeat Penalty', 0, 2, 0.05, '1.0')}
+        {renderSlider('presencePenalty', 'Presence Penalty', 0, 2, 0.05, '0.0')}
+        {renderSlider('minP', 'Min P', 0, 1, 0.01, '0.0')}
       </div>
     </div>
   );

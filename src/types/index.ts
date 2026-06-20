@@ -23,6 +23,12 @@ export interface InferenceConfig {
   maxTokens?: number;
   /** Repetition penalty (> 0.0, typically 1.0 - 1.3). */
   repeatPenalty?: number;
+  /** Presence penalty (0.0 - 2.0). Discourages token repetition across the output.
+   *  0.0 = disabled. 1.5 = recommended for reasoning/thinking models. */
+  presencePenalty?: number;
+  /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
+   *  0.0 = disabled (recommended by Qwen3.6). */
+  minP?: number;
 }
 
 // ============================================================================
