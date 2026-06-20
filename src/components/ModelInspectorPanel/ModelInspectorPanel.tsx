@@ -2,7 +2,7 @@ import { FC, useCallback, useState, useEffect } from 'react';
 import { Shield, CloudSync } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
-import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
+import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import { useSettings } from '../../hooks/useSettings';
@@ -13,7 +13,7 @@ import { LlamaServerNotInstalledMetadata } from '../../services/transport/errors
 import { VerificationModal } from '../VerificationModal';
 import {
   useEditMode,
-  useModelTags,
+  useModelDetail,
   useServeModal,
   useDeleteModal,
   useServerActions,
@@ -48,7 +48,7 @@ interface ModelInspectorPanelProps {
   }) => Promise<void>;
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
-  getModelTags: (modelId: number) => Promise<string[]>;
+  getModelDetail: (modelId: number) => Promise<ModelDetail | null>;
   onRefresh?: () => Promise<void>;
   queueStatus?: DownloadQueueStatus | null;
   onRegisterServeModalOpener?: (opener: () => void) => void;
@@ -65,7 +65,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onUpdateModel,
   onAddTag,
   onRemoveTag,
-  getModelTags,
+  getModelDetail,
   onRefresh,
   queueStatus,
   onRegisterServeModalOpener,
@@ -89,9 +89,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
   // Hooks for state management
   const editMode = useEditMode(model);
-  const tags = useModelTags({
+  const detail = useModelDetail({
     modelId: model?.id,
-    getModelTags,
+    getModelDetail,
     onAddTag,
     onRemoveTag,
     onRefresh,
@@ -106,10 +106,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     }
   }, [onRegisterServeModalOpener, model, serveModal.openServeModal]);
 
-  // Compute derived state
-  const combinedTags = tags.modelTags.length > 0 ? tags.modelTags : (model?.tags || []);
-  const hasAgentTag = combinedTags.some(tag => tag.toLowerCase() === 'agent');
-  const hasMtpTag = combinedTags.some(tag => tag.toLowerCase() === 'mtp');
+  // Compute derived state — tags are authoritative from the detail response
+  const hasAgentTag = detail.tags.some(tag => tag.toLowerCase() === 'agent');
+  const hasMtpTag = detail.tags.some(tag => tag.toLowerCase() === 'mtp');
 
   // Server actions hook
   const serverActions = useServerActions({
@@ -253,7 +252,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               onInferenceDefaultsChange={editMode.setEditedInferenceDefaults}
             />
           ) : (
-            <ModelMetadataGrid model={model} />
+            <ModelMetadataGrid model={model} detail={detail.modelDetail ?? undefined} />
           )}
 
           {/* Tags Section */}
@@ -261,13 +260,13 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Tags</h3>
             <div className="flex flex-col gap-base">
               <TagChips 
-                tags={tags.modelTags} 
-                onRemoveTag={tags.handleRemoveTag} 
+                tags={detail.tags} 
+                onRemoveTag={detail.removeTag} 
               />
               <TagAddInput
-                value={tags.newTag}
-                onChange={tags.setNewTag}
-                onAdd={tags.handleAddTag}
+                value={detail.newTagInput}
+                onChange={detail.setNewTagInput}
+                onAdd={detail.addTag}
               />
             </div>
           </section>

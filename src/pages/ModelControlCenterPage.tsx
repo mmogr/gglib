@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
+import { getModelDetail } from '../services/clients/models';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
@@ -49,7 +50,7 @@ export default function ModelControlCenterPage({
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
-  const { tags, loadTags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  const { tags, loadTags, addTagToModel, removeTagFromModel } = useTags();
   const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
@@ -285,7 +286,7 @@ export default function ModelControlCenterPage({
               onUpdateModel={updateModel}
               onAddTag={addTagToModel}
               onRemoveTag={removeTagFromModel}
-              getModelTags={getModelTags}
+              getModelDetail={getModelDetail}
               onRefresh={handleRefreshAll}
               queueStatus={queueStatus}
               onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
