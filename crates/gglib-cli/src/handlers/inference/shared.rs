@@ -94,6 +94,12 @@ pub fn log_inference_info(config: &InferenceConfig) {
     if let Some(repeat_penalty) = config.repeat_penalty {
         eprintln!("    Repeat penalty: {}", repeat_penalty);
     }
+    if let Some(presence_penalty) = config.presence_penalty {
+        eprintln!("    Presence penalty: {}", presence_penalty);
+    }
+    if let Some(min_p) = config.min_p {
+        eprintln!("    Min-p: {}", min_p);
+    }
 }
 
 /// Log command execution at debug level.
