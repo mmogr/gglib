@@ -320,8 +320,8 @@ presence_penalty=1.5  min_p=0.0  repeat_penalty=1.0
 These are baked into the database at download time and are fully user-overridable:
 
 ```bash
-# Inspect the auto-applied defaults
-gglib model list <id>
+# Inspect all stored details for a model (arch, quant, capabilities, inference defaults)
+gglib model inspect <id>
 
 # Override individual params
 gglib model update <id> --presence-penalty 0.8 --max-tokens 32768

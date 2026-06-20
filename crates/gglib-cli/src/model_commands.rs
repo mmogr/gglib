@@ -254,4 +254,27 @@ pub enum ModelCommand {
         #[arg(long = "unset", value_name = "FLAG", action = clap::ArgAction::Append)]
         unset: Vec<String>,
     },
+
+    /// Display full details for a single model.
+    ///
+    /// Shows every piece of stored information: architecture, quantization,
+    /// context length, MoE topology, HuggingFace provenance, capability flags,
+    /// inference defaults, and timestamps.
+    ///
+    /// # Examples
+    ///
+    ///   gglib model inspect 3
+    ///   gglib model inspect "Llama-3-8B"
+    ///   gglib model inspect 3 --metadata   # include raw GGUF key-value pairs
+    ///   gglib model inspect 3 --json       # machine-readable JSON output
+    Inspect {
+        /// Name or ID of the model to inspect
+        identifier: String,
+        /// Include raw GGUF key-value metadata in the output
+        #[arg(long)]
+        metadata: bool,
+        /// Output as JSON instead of human-readable format
+        #[arg(long)]
+        json: bool,
+    },
 }

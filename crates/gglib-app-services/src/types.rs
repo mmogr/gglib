@@ -192,6 +192,133 @@ impl From<Model> for GuiModel {
 }
 
 // ============================================================================
+// Model Inspect DTO
+// ============================================================================
+
+/// Complete model details for the inspect view.
+///
+/// This is a superset of [`GuiModel`] that includes all fields from the domain
+/// [`Model`], including raw GGUF metadata, MoE topology, and full HuggingFace
+/// provenance.  It is the single shared contract consumed by:
+///
+/// - CLI: `gglib model inspect` (human-readable or `--json`)
+/// - Axum: `GET /api/models/:id/detail`
+/// - GUI frontend: model detail panel
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDetailDto {
+    // ── Core identity ─────────────────────────────────────────────────────────
+    /// Database ID of the model.
+    pub id: i64,
+    /// Human-readable name.
+    pub name: String,
+    /// Absolute path to the GGUF file on disk.
+    pub file_path: String,
+    /// Parameter count in billions.
+    pub param_count_b: f64,
+    /// Model architecture (e.g. `"llama"`, `"mistral"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<String>,
+    /// Quantization type (e.g. `"Q4_K_M"`, `"F16"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantization: Option<String>,
+    /// Maximum context length in tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<u64>,
+    // ── MoE topology (omitted for non-MoE models) ─────────────────────────────
+    /// Total number of experts (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_count: Option<u32>,
+    /// Experts activated per token (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_used_count: Option<u32>,
+    /// Shared experts that are always active (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_shared_count: Option<u32>,
+    // ── HuggingFace provenance ────────────────────────────────────────────────
+    /// HuggingFace repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hf_repo_id: Option<String>,
+    /// Original filename on HuggingFace Hub.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hf_filename: Option<String>,
+    /// Git commit SHA from HuggingFace Hub.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hf_commit_sha: Option<String>,
+    /// When the model was downloaded from HuggingFace (`"%Y-%m-%d %H:%M:%S"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_date: Option<String>,
+    /// Last time an update check was performed (`"%Y-%m-%d %H:%M:%S"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_update_check: Option<String>,
+    // ── Organisation ──────────────────────────────────────────────────────────
+    /// User-defined and auto-generated tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Capability flags serialized as a `u32` bit-field.
+    #[serde(default)]
+    pub capabilities: gglib_core::ModelCapabilities,
+    // ── Inference defaults ────────────────────────────────────────────────────
+    /// Per-model inference parameter overrides.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    // ── Timestamps ────────────────────────────────────────────────────────────
+    /// When the model was first added to the database (`"%Y-%m-%d %H:%M:%S"`).
+    pub added_at: String,
+    // ── Serving status ────────────────────────────────────────────────────────
+    /// Whether the model is currently being served.
+    #[serde(default)]
+    pub is_serving: bool,
+    /// Port the model is served on, if currently serving.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    // ── Raw GGUF key-value pairs ──────────────────────────────────────────────
+    /// All raw key-value pairs stored from the GGUF file.
+    ///
+    /// Presentation layers decide whether to surface this.  The CLI gates it
+    /// behind `--metadata`; the GUI may show it in a collapsible panel.
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+impl ModelDetailDto {
+    /// Convert a domain [`Model`] to [`ModelDetailDto`].
+    ///
+    /// `is_serving` and `port` are injected by the service layer, which has
+    /// access to the running-process list.  Pass `false` / `None` from
+    /// contexts where serving state is not relevant (e.g. the CLI).
+    pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
+        Self {
+            id: model.id,
+            name: model.name,
+            file_path: model.file_path.to_string_lossy().to_string(),
+            param_count_b: model.param_count_b,
+            architecture: model.architecture,
+            quantization: model.quantization,
+            context_length: model.context_length,
+            expert_count: model.expert_count,
+            expert_used_count: model.expert_used_count,
+            expert_shared_count: model.expert_shared_count,
+            hf_repo_id: model.hf_repo_id,
+            hf_filename: model.hf_filename,
+            hf_commit_sha: model.hf_commit_sha,
+            download_date: model
+                .download_date
+                .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),
+            last_update_check: model
+                .last_update_check
+                .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()),
+            tags: model.tags,
+            capabilities: model.capabilities,
+            inference_defaults: model.inference_defaults,
+            added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+            is_serving,
+            port,
+            metadata: model.metadata,
+        }
+    }
+}
+
+// ============================================================================
 // Server Types
 // ============================================================================
 

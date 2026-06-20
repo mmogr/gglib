@@ -6,7 +6,8 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
+    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
+    UpdateModelRequest,
 };
 use gglib_core::ModelFilterOptions;
 
@@ -117,4 +118,17 @@ pub async fn set_capabilities(
     Json(req): Json<SetCapabilitiesRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
     Ok(Json(state.models.set_capabilities(id, req).await?))
+}
+
+/// Get full details for a model by ID (inspect view).
+///
+/// Returns a [`ModelDetailDto`] containing every stored field — a superset of
+/// the [`GuiModel`] returned by `GET /api/models/{id}`.  Includes raw GGUF
+/// metadata, MoE topology, full HuggingFace provenance, capability flags,
+/// inference defaults, and timestamps.
+pub async fn detail(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<ModelDetailDto>, HttpError> {
+    Ok(Json(state.models.get_detail(id).await?))
 }
