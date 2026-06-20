@@ -6,6 +6,7 @@
 pub mod add;
 pub mod capabilities;
 pub mod download;
+pub mod inspect;
 pub mod list;
 pub mod remove;
 pub mod retag;
@@ -133,6 +134,13 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         }
         ModelCommand::Capabilities { id, set, unset } => {
             capabilities::execute(ctx, id, set, unset).await?;
+        }
+        ModelCommand::Inspect {
+            identifier,
+            metadata,
+            json,
+        } => {
+            inspect::execute(ctx, &identifier, metadata, json).await?;
         }
     }
     Ok(())
