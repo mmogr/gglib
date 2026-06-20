@@ -350,6 +350,29 @@ impl ErrorResponse {
             "upstream_error",
         )
     }
+
+    /// Create an error response for context length exceeded.
+    ///
+    /// Returned as HTTP 400 when the proxy cannot reduce the history payload
+    /// to within the safe budget after aggressive truncation.  The client
+    /// should start a new conversation to clear history.
+    pub fn context_length_exceeded() -> Self {
+        Self::with_code(
+            "Context window limit reached. Please start a new conversation.",
+            "context_length_exceeded",
+            "context_length_exceeded",
+        )
+    }
+
+    /// Create an error response for a malformed or invalid request.
+    pub fn invalid_request(msg: &str) -> Self {
+        Self::with_code(msg, "invalid_request_error", "invalid_request")
+    }
+
+    /// Create an error response for an internal server error.
+    pub fn internal_error(msg: &str) -> Self {
+        Self::with_code(msg, "server_error", "internal_error")
+    }
 }
 
 impl From<ModelRuntimeError> for ErrorResponse {

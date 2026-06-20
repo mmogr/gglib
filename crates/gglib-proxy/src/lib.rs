@@ -4,8 +4,10 @@
 pub mod council_proxy;
 pub mod forward;
 pub mod mcp;
+pub mod metrics;
 pub mod models;
 pub mod server;
+pub mod truncation;
 
 pub use council_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 pub use server::serve;
