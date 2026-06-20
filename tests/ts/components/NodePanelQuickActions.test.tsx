@@ -4,8 +4,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import NodePanel from '../../../src/pages/Orchestrator/components/NodePanel';
-import type { TaskGraph } from '../../../src/types/orchestrator';
+import NodePanel from '../../../src/pages/Council/components/NodePanel';
+import type { TaskGraph } from '../../../src/types/council';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ describe('NodePanel quick actions', () => {
 
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/orchestrator/steer',
+        '/api/council/steer',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -158,7 +158,7 @@ describe('NodePanel quick actions', () => {
 
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/orchestrator/runs/run-abc/note',
+        '/api/council/runs/run-abc/note',
         expect.objectContaining({ method: 'POST' }),
       );
     });
