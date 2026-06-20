@@ -4,8 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import CastingSheet, { collectLeafNodes } from '../../../src/pages/Orchestrator/components/CastingSheet';
-import type { TaskGraph } from '../../../src/types/orchestrator';
+import CastingSheet, { collectLeafNodes } from '../../../src/pages/Council/components/CastingSheet';
+import type { TaskGraph } from '../../../src/types/council';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

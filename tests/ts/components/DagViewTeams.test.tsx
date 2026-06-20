@@ -4,8 +4,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import DagView from '../../../src/pages/Orchestrator/components/DagView';
-import type { TaskGraph } from '../../../src/types/orchestrator';
+import DagView from '../../../src/pages/Council/components/DagView';
+import type { TaskGraph } from '../../../src/types/council';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
