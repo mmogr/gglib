@@ -163,8 +163,7 @@ impl ModelRegistrarPort for ModelRegistrar {
                 .iter()
                 .any(|t| t.eq_ignore_ascii_case("reasoning"))
         {
-            model.inference_defaults =
-                Some(crate::domain::InferenceConfig::reasoning_profile());
+            model.inference_defaults = Some(crate::domain::InferenceConfig::reasoning_profile());
         }
 
         // Infer capabilities from chat template OR architecture — OR'd so
