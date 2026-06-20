@@ -21,18 +21,16 @@ export default defineConfig(async ({ mode }) => {
   build: {
     outDir: 'web_ui',
     emptyOutDir: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          'chat-runtime': [
-            '@assistant-ui/react',
-          ],
-          markdown: [
-            'react-markdown',
-            'remark-gfm',
-            'rehype-highlight',
-            'highlight.js',
-          ],
+        manualChunks(id) {
+          if (id.includes('@assistant-ui/react')) return 'chat-runtime';
+          if (
+            id.includes('react-markdown') ||
+            id.includes('remark-gfm') ||
+            id.includes('rehype-highlight') ||
+            id.includes('highlight.js')
+          ) return 'markdown';
         },
       },
     },
