@@ -159,6 +159,13 @@ fn model_routes() -> Router<AppState> {
             "/{id}/capabilities",
             axum::routing::patch(handlers::model::models::set_capabilities),
         )
+        // Full inspect view: GET /api/models/{id}/detail
+        // Returns ModelDetailDto — superset of GuiModel with raw GGUF metadata,
+        // MoE topology, HuggingFace provenance, inference defaults, and timestamps.
+        .route(
+            "/{id}/detail",
+            get(handlers::model::models::detail),
+        )
         // Tags
         .route(
             "/{id}/tags",
