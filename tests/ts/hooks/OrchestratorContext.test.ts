@@ -5,10 +5,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   orchestratorReducer,
-  type OrchestratorSession,
+  type CouncilSession,
   type OrchestratorAction,
-} from '../../../src/contexts/OrchestratorContext';
-import type { TaskGraph, ApprovalKind } from '../../../src/types/orchestrator';
+} from '../../../src/contexts/CouncilContext';
+import type { TaskGraph, ApprovalKind } from '../../../src/types/council';
 
 const EMPTY_GRAPH: TaskGraph = {
   goal: 'test goal',
@@ -19,12 +19,12 @@ const EMPTY_GRAPH: TaskGraph = {
   },
 };
 
-function emptySession(): OrchestratorSession {
+function emptySession(): CouncilSession {
   return makeSession();
 }
 
 // Build an initial idle session via RESET from a fabricated state
-function makeSession(overrides: Partial<OrchestratorSession> = {}): OrchestratorSession {
+function makeSession(overrides: Partial<CouncilSession> = {}): CouncilSession {
   return {
     phase: 'idle',
     graph: null,
@@ -32,6 +32,8 @@ function makeSession(overrides: Partial<OrchestratorSession> = {}): Orchestrator
     synthesisText: '',
     finalAnswer: null,
     pendingApproval: null,
+    costEstimate: null,
+    pendingDiff: null,
     error: null,
     runs: [],
     runsLoading: false,
