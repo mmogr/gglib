@@ -12,6 +12,7 @@
 
 pub mod dag;
 pub mod input;
+pub mod inspect_display;
 pub mod model_display;
 pub mod style;
 pub mod tables;
