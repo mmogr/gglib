@@ -34,10 +34,7 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
         println!("  Context Length : {ctx} tokens");
     }
     if dto.is_serving {
-        let port_str = dto
-            .port
-            .map(|p| format!(" (port {p})"))
-            .unwrap_or_default();
+        let port_str = dto.port.map(|p| format!(" (port {p})")).unwrap_or_default();
         println!("  Serving        : yes{port_str}");
     }
 

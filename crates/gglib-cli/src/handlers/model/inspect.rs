@@ -53,5 +53,3 @@ pub async fn execute(
     inspect_display::print_model_detail(&dto, show_metadata);
     Ok(())
 }
-
-
