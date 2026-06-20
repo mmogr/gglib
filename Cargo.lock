@@ -1851,7 +1851,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1874,7 +1874,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -1962,7 +1962,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1981,14 +1981,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2066,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2104,7 +2104,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2121,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2138,7 +2138,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2164,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "anyhow",
  "gglib-app-services",
