@@ -308,7 +308,7 @@ unchanged; the upstream llama-server produces its own diagnostic.
 
 ## Proxy Status Endpoint
 
-```
+```text
 GET /v1/proxy/status
 ```
 
