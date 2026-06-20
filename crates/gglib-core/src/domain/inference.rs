@@ -89,7 +89,7 @@ pub struct InferenceConfig {
     /// the model to cover new ground. Effective at preventing repetitive
     /// reasoning loops in thinking models.
     /// - 0.0: No penalty (default; disabled)
-    /// - 1.5: Recommended for reasoning/thinking models (e.g. Qwen3.6, DeepSeek R1)
+    /// - 1.5: Recommended for reasoning/thinking models (e.g. `Qwen3.6`, `DeepSeek-R1`)
     /// - > 2.0: Avoid; may degrade coherence
     pub presence_penalty: Option<f32>,
 
@@ -234,7 +234,7 @@ impl InferenceConfig {
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.
     ///
     /// Applied automatically at import time when the `"reasoning"` capability tag is
-    /// detected (e.g. Qwen3.6, DeepSeek R1, QwQ). Values follow the Qwen3.6 upstream
+    /// detected (e.g. Qwen3.6, `DeepSeek-R1`, `QwQ`). Values follow the Qwen3.6 upstream
     /// guidance for **thinking mode — general tasks** and are conservative enough to
     /// work well across all thinking-capable models.
     ///
@@ -243,7 +243,7 @@ impl InferenceConfig {
     /// | `temperature` | 1.0 | Recommended thinking-mode baseline |
     /// | `top_p` | 0.95 | Broad nucleus; standard for reasoning |
     /// | `top_k` | 20 | Tighter than the 40 fallback; suppresses low-quality tokens |
-    /// | `max_tokens` | 8 192 | Safe out-of-the-box ceiling; increase for complex tasks |
+    /// | `max_tokens` | 8192 | Safe out-of-the-box ceiling; increase for complex tasks |
     /// | `repeat_penalty` | 1.0 | No penalty; `presence_penalty` handles anti-repetition |
     /// | `presence_penalty` | 1.5 | Prevents repetitive reasoning loops |
     /// | `min_p` | 0.0 | Explicitly disabled per Qwen3.6 spec |
