@@ -73,6 +73,12 @@ pub enum ModelCommand {
         /// Set default repeat-penalty for this model
         #[arg(long = "repeat-penalty")]
         repeat_penalty: Option<f32>,
+        /// Set default presence-penalty for this model (0.0 = disabled, 1.5 = recommended for reasoning models)
+        #[arg(long = "presence-penalty")]
+        presence_penalty: Option<f32>,
+        /// Set default min-p sampling threshold for this model (0.0 = disabled)
+        #[arg(long = "min-p")]
+        min_p: Option<f32>,
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,

@@ -27,6 +27,8 @@ pub struct UpdateArgs {
     pub top_k: Option<i32>,
     pub max_tokens: Option<u32>,
     pub repeat_penalty: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub min_p: Option<f32>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -189,7 +191,9 @@ pub fn create_updated_model(
             || args.top_p.is_some()
             || args.top_k.is_some()
             || args.max_tokens.is_some()
-            || args.repeat_penalty.is_some();
+            || args.repeat_penalty.is_some()
+            || args.presence_penalty.is_some()
+            || args.min_p.is_some();
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -210,6 +214,12 @@ pub fn create_updated_model(
             }
             if let Some(repeat_penalty) = args.repeat_penalty {
                 inference_config.repeat_penalty = Some(repeat_penalty);
+            }
+            if let Some(presence_penalty) = args.presence_penalty {
+                inference_config.presence_penalty = Some(presence_penalty);
+            }
+            if let Some(min_p) = args.min_p {
+                inference_config.min_p = Some(min_p);
             }
 
             updated.inference_defaults = Some(inference_config);
@@ -270,6 +280,8 @@ fn show_inference_defaults_changes(
                 || old.top_k != new.top_k
                 || old.max_tokens != new.max_tokens
                 || old.repeat_penalty != new.repeat_penalty
+                || old.presence_penalty != new.presence_penalty
+                || old.min_p != new.min_p
         }
     };
 
@@ -299,6 +311,12 @@ fn show_inference_defaults_changes(
             }
             if let Some(repeat_penalty) = new.repeat_penalty {
                 println!("      Repeat penalty: {}", repeat_penalty);
+            }
+            if let Some(pp) = new.presence_penalty {
+                println!("      Presence penalty: {}", pp);
+            }
+            if let Some(mp) = new.min_p {
+                println!("      Min-P: {}", mp);
             }
         }
         (Some(old), Some(new)) => {
@@ -335,6 +353,20 @@ fn show_inference_defaults_changes(
                     "    Repeat penalty: {} → {}",
                     format_option_f32(&old.repeat_penalty),
                     format_option_f32(&new.repeat_penalty)
+                );
+            }
+            if old.presence_penalty != new.presence_penalty {
+                println!(
+                    "    Presence penalty: {} → {}",
+                    format_option_f32(&old.presence_penalty),
+                    format_option_f32(&new.presence_penalty)
+                );
+            }
+            if old.min_p != new.min_p {
+                println!(
+                    "    Min-P: {} → {}",
+                    format_option_f32(&old.min_p),
+                    format_option_f32(&new.min_p)
                 );
             }
         }
@@ -507,6 +539,8 @@ mod tests {
             top_k: None,
             max_tokens: None,
             repeat_penalty: None,
+            presence_penalty: None,
+            min_p: None,
             clear_inference_defaults: false,
         };
 
