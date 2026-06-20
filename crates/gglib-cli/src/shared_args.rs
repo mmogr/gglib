@@ -27,6 +27,13 @@ pub struct SamplingArgs {
     /// Repeat penalty (overrides model/global defaults)
     #[arg(long = "repeat-penalty")]
     pub repeat_penalty: Option<f32>,
+    /// Presence penalty — 0.0 = disabled, 1.5 = recommended for reasoning models
+    /// (overrides model/global defaults)
+    #[arg(long = "presence-penalty")]
+    pub presence_penalty: Option<f32>,
+    /// Min-P sampling threshold — 0.0 = disabled (overrides model/global defaults)
+    #[arg(long = "min-p")]
+    pub min_p: Option<f32>,
 }
 
 /// Context-size and memory-lock flags common to all inference commands.
@@ -50,6 +57,8 @@ impl SamplingArgs {
             top_k: self.top_k,
             max_tokens: self.max_tokens,
             repeat_penalty: self.repeat_penalty,
+            presence_penalty: self.presence_penalty,
+            min_p: self.min_p,
         }
     }
 }

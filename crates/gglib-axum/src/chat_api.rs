@@ -79,6 +79,10 @@ pub struct ChatProxyRequest {
     pub top_k: Option<i32>,
     /// Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
     pub repeat_penalty: Option<f32>,
+    /// Optional presence_penalty (inference parameter - will be resolved via hierarchy).
+    pub presence_penalty: Option<f32>,
+    /// Optional min_p sampling threshold (inference parameter - will be resolved via hierarchy).
+    pub min_p: Option<f32>,
     /// Optional tools for function calling.
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
@@ -440,6 +444,8 @@ pub async fn proxy_chat(
         top_k: request.top_k,
         max_tokens: request.max_tokens,
         repeat_penalty: request.repeat_penalty,
+        presence_penalty: request.presence_penalty,
+        min_p: request.min_p,
     };
 
     // Apply model defaults (if missing)
@@ -462,6 +468,8 @@ pub async fn proxy_chat(
         resolved_top_k = resolved.top_k,
         resolved_max_tokens = resolved.max_tokens,
         resolved_repeat_penalty = resolved.repeat_penalty,
+        resolved_presence_penalty = resolved.presence_penalty,
+        resolved_min_p = resolved.min_p,
         "Resolved inference parameters via hierarchy"
     );
 
@@ -531,6 +539,8 @@ pub async fn proxy_chat(
         "top_p": resolved.top_p,
         "top_k": resolved.top_k,
         "repeat_penalty": resolved.repeat_penalty,
+        "presence_penalty": resolved.presence_penalty,
+        "min_p": resolved.min_p,
     });
 
     // Inject tools only when the model supports them.

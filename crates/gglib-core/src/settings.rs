@@ -278,6 +278,22 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         ));
     }
 
+    // Validate presence_penalty (0.0 - 2.0)
+    if let Some(pp) = config.presence_penalty
+        && !(0.0..=2.0).contains(&pp)
+    {
+        return Err(format!(
+            "Presence penalty must be between 0.0 and 2.0, got {pp}"
+        ));
+    }
+
+    // Validate min_p (0.0 - 1.0)
+    if let Some(mp) = config.min_p
+        && !(0.0..=1.0).contains(&mp)
+    {
+        return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
+    }
+
     Ok(())
 }
 
@@ -358,6 +374,8 @@ mod tests {
             top_k: Some(40),
             max_tokens: Some(2048),
             repeat_penalty: Some(1.1),
+            presence_penalty: Some(0.0),
+            min_p: Some(0.0),
         };
         assert!(validate_inference_config(&config).is_ok());
     }
