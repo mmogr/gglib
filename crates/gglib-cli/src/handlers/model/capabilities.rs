@@ -13,6 +13,7 @@ use gglib_app_services::{ModelDeps, ModelOps};
 use gglib_core::ModelCapabilities;
 
 use crate::bootstrap::CliContext;
+use super::resolver;
 
 /// Execute `gglib model capabilities <id> [--set FLAG]... [--unset FLAG]...`.
 ///
@@ -21,10 +22,12 @@ use crate::bootstrap::CliContext;
 /// via [`ModelOps::set_capabilities`] and prints the updated state.
 pub async fn execute(
     ctx: &CliContext,
-    id: u32,
+    identifier: &str,
     set: Vec<String>,
     unset: Vec<String>,
 ) -> Result<()> {
+    let core_model = resolver::resolve_model_identifier(ctx, identifier).await?;
+
     // Build-once — ModelOps is cheap and constructed the same way as in Axum/Tauri.
     let ops = ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
@@ -34,8 +37,8 @@ pub async fn execute(
 
     // Read-only: no flags provided.
     if set.is_empty() && unset.is_empty() {
-        let model = ops.get(id as i64).await?;
-        print_capabilities(id, &model.name, model.capabilities);
+        let model = ops.get(core_model.id).await?;
+        print_capabilities(core_model.id, &model.name, model.capabilities);
         return Ok(());
     }
 
@@ -49,13 +52,13 @@ pub async fn execute(
         apply_flag(&mut req, flag, false)?;
     }
 
-    let gui_model = ops.set_capabilities(id as i64, req).await?;
+    let gui_model = ops.set_capabilities(core_model.id, req).await?;
 
     println!(
         "Updated capabilities for model {} ({}):",
-        id, gui_model.name
+        core_model.id, gui_model.name
     );
-    print_capabilities(id, &gui_model.name, gui_model.capabilities);
+    print_capabilities(core_model.id, &gui_model.name, gui_model.capabilities);
 
     Ok(())
 }
@@ -79,7 +82,7 @@ fn apply_flag(req: &mut SetCapabilitiesRequest, flag: &str, value: bool) -> Resu
 }
 
 /// Pretty-print the capability state for a model.
-fn print_capabilities(id: u32, name: &str, caps: ModelCapabilities) {
+fn print_capabilities(id: i64, name: &str, caps: ModelCapabilities) {
     println!("Capabilities for model {id} ({name}):");
     println!(
         "  supports-system-role  : {}",

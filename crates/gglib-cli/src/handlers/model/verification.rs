@@ -7,34 +7,30 @@ use anyhow::Result;
 use std::time::Instant;
 
 use crate::bootstrap::CliContext;
+use super::resolver;
 
 /// Execute the verify command.
 ///
 /// Verifies model integrity by computing SHA256 hashes and comparing against
 /// stored OIDs from HuggingFace.
-pub async fn execute_verify(ctx: &CliContext, model_id: i64, verbose: bool) -> Result<()> {
+pub async fn execute_verify(ctx: &CliContext, identifier: &str, verbose: bool) -> Result<()> {
     // Get verification service
     let verification = ctx
         .app
         .verification()
         .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
 
-    // Get model info for display
-    let model = ctx
-        .app
-        .models()
-        .get_by_id(model_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", model_id))?;
+    // Resolve name-or-id to a model record.
+    let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    println!("🔍 Verifying model: {}", model.name);
+    println!("\u{1f50d} Verifying model: {}", model.name);
     println!();
 
     let start = Instant::now();
 
     // Start verification
     let (mut progress_rx, handle) = verification
-        .verify_model_integrity(model_id)
+        .verify_model_integrity(model.id)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to start verification: {}", e))?;
 
@@ -139,7 +135,7 @@ pub async fn execute_verify(ctx: &CliContext, model_id: i64, verbose: bool) -> R
         println!();
         println!(
             "⚠️  Model has integrity issues. Run 'gglib model repair {}' to fix.",
-            model_id
+            model.name
         );
         std::process::exit(1);
     }
@@ -152,7 +148,7 @@ pub async fn execute_verify(ctx: &CliContext, model_id: i64, verbose: bool) -> R
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
 pub async fn execute_repair(
     ctx: &CliContext,
-    model_id: i64,
+    identifier: &str,
     shards: Option<String>,
     force: bool,
 ) -> Result<()> {
@@ -162,15 +158,10 @@ pub async fn execute_repair(
         .verification()
         .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
 
-    // Get model info for display
-    let model = ctx
-        .app
-        .models()
-        .get_by_id(model_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", model_id))?;
+    // Resolve name-or-id to a model record.
+    let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    println!("🔧 Repairing model: {}", model.name);
+    println!("\u{1f527} Repairing model: {}", model.name);
 
     // Parse shard indices if provided
     let shard_indices = if let Some(shard_str) = shards {
@@ -209,7 +200,7 @@ pub async fn execute_repair(
 
     // Execute repair
     verification
-        .repair_model(model_id, shard_indices)
+        .repair_model(model.id, shard_indices)
         .await
         .map_err(|e| anyhow::anyhow!("Repair failed: {}", e))?;
 
@@ -218,7 +209,7 @@ pub async fn execute_repair(
     println!("Note: The model files have been queued for re-download.");
     println!(
         "      Use 'gglib model verify {}' to check status after download completes.",
-        model_id
+        model.name
     );
 
     Ok(())

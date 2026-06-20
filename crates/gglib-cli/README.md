@@ -124,8 +124,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `council show <id>` | Show run details + event timeline |
 | `council resume <id>` | Continue an interrupted run |
 | `council rewind <id> --wave N` | Roll back to a previous wave and re-execute |
-| `verify <id>` | Verify model integrity via SHA256 hash comparison |
-| `repair <id>` | Re-download corrupt shards for a model |
+| `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
+| `repair <id\|name>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |
 
 ### Shell Completions
