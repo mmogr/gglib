@@ -2,8 +2,8 @@
 export { useEditMode } from './useEditMode';
 export type { EditModeState } from './useEditMode';
 
-export { useModelTags } from './useModelTags';
-export type { ModelTagsState } from './useModelTags';
+export { useModelDetail } from './useModelDetail';
+export type { ModelDetailState } from './useModelDetail';
 
 export { useServeModal } from './useServeModal';
 export type { ServeModalState } from './useServeModal';

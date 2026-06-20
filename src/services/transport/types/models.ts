@@ -6,6 +6,7 @@
 import type { ModelId, HfModelId } from './ids';
 import type {
   GgufModel,
+  ModelDetail,
   ServeConfig,
   ModelsDirectoryInfo,
   SystemMemoryInfo,
@@ -24,6 +25,7 @@ import type {
 // Re-export existing types that clients already use
 export type {
   GgufModel,
+  ModelDetail,
   ServeConfig,
   ModelsDirectoryInfo,
   SystemMemoryInfo,
@@ -76,6 +78,7 @@ export interface ModelsTransport {
   // Local model CRUD
   listModels(): Promise<GgufModel[]>;
   getModel(id: ModelId): Promise<GgufModel | null>;
+  getModelDetail(id: ModelId): Promise<ModelDetail | null>;
   addModel(params: AddModelParams): Promise<GgufModel>;
   removeModel(id: ModelId): Promise<void>;
   updateModel(params: UpdateModelParams): Promise<GgufModel>;
