@@ -288,6 +288,51 @@ gglib serve <id> --mtp-draft-n-max 4 --mtp-draft-p-min 0.8
 
 These tags are **auto-detected at import time** by `gglib-gguf::capabilities::detect_all` and persisted by `ModelService::import_from_file`. They are protected as system tags: `gglib model remove-tag` will reject any attempt to remove a `format:*` tag (use the `_force` service path for admin operations).
 
+#### Inference parameter defaults
+
+Sampling parameters are resolved through a **4-level merge hierarchy** on every request. Each level fills in only the fields left unset by the previous level:
+
+```
+Request override  →  Per-model defaults  →  Global settings  →  Hardcoded fallback
+```
+
+The full set of configurable parameters:
+
+| Parameter | CLI flag | Range | Hardcoded fallback | Notes |
+|-----------|----------|-------|--------------------|-------|
+| `temperature` | `--temperature` | 0.0 – 2.0 | 0.7 | |
+| `top_p` | `--top-p` | 0.0 – 1.0 | 0.95 | |
+| `top_k` | `--top-k` | int | 40 | |
+| `max_tokens` | `--max-tokens` | int | 2048 | |
+| `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
+| `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0 (disabled) | Recommended 1.5 for reasoning models |
+| `min_p` | `--min-p` | 0.0 – 1.0 | 0.0 (disabled) | 0.05 is llama.cpp built-in default when omitted |
+
+**Reasoning model auto-defaults.** Models tagged `reasoning` at import time (Qwen3.6,
+DeepSeek R1, QwQ, etc.) automatically receive a pre-tuned `InferenceConfig` profile as
+their per-model defaults:
+
+```
+temperature=1.0  top_p=0.95  top_k=20  max_tokens=8192
+presence_penalty=1.5  min_p=0.0  repeat_penalty=1.0
+```
+
+These are baked into the database at download time and are fully user-overridable:
+
+```bash
+# Inspect the auto-applied defaults
+gglib model list <id>
+
+# Override individual params
+gglib model update <id> --presence-penalty 0.8 --max-tokens 32768
+
+# Clear all inference defaults (revert to global/hardcoded chain)
+gglib model update <id> --clear-inference-defaults
+```
+
+All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
+per-invocation overrides that sit at the top of the hierarchy.
+
 #### Backfilling tags on existing catalogs
 
 Models imported before format-tag detection landed can be retagged in place from their persisted GGUF metadata — no re-download required:

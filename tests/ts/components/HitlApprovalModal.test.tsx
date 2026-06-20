@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import HitlApprovalModal from '../../../src/pages/Orchestrator/components/HitlApprovalModal';
-import type { RunCostEstimate } from '../../../src/contexts/OrchestratorContext';
+import HitlApprovalModal from '../../../src/pages/Council/components/HitlApprovalModal';
+import type { RunCostEstimate } from '../../../src/contexts/CouncilContext';
 
 const baseProps = {
   open: true,

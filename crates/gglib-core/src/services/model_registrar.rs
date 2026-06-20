@@ -154,6 +154,18 @@ impl ModelRegistrarPort for ModelRegistrar {
         // Merge GGUF-derived tags with filtered HF tags (deduplicated)
         model.tags = Self::merge_tags(gguf_tags, &download.hf_tags);
 
+        // Apply tag-based inference defaults for reasoning models.
+        // Only set when the model has no explicit defaults already — ensures
+        // that user-curated defaults are never clobbered by re-registration.
+        if model.inference_defaults.is_none()
+            && model
+                .tags
+                .iter()
+                .any(|t| t.eq_ignore_ascii_case("reasoning"))
+        {
+            model.inference_defaults = Some(crate::domain::InferenceConfig::reasoning_profile());
+        }
+
         // Infer capabilities from chat template OR architecture — OR'd so
         // either signal is sufficient.  Architecture is the backstop for models
         // whose GGUF ships without a tokenizer section.
