@@ -1,7 +1,8 @@
 //! Inference configuration types.
 //!
 //! Defines shared types for configuring LLM inference parameters
-//! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`).
+//! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`,
+//! `presence_penalty`, `min_p`).
 //!
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
@@ -35,6 +36,8 @@ use serde::{Deserialize, Serialize};
 ///     top_k: Some(40),
 ///     max_tokens: Some(2048),
 ///     repeat_penalty: Some(1.1),
+///     presence_penalty: None,
+///     min_p: None,
 /// };
 ///
 /// // Creative writing settings
@@ -79,6 +82,23 @@ pub struct InferenceConfig {
     /// - 1.1-1.3: Moderate penalty
     /// - > 1.3: Strong penalty (may hurt coherence)
     pub repeat_penalty: Option<f32>,
+
+    /// Presence penalty (0.0 - 2.0).
+    ///
+    /// Penalizes tokens that have already appeared in the output, encouraging
+    /// the model to cover new ground. Effective at preventing repetitive
+    /// reasoning loops in thinking models.
+    /// - 0.0: No penalty (default; disabled)
+    /// - 1.5: Recommended for reasoning/thinking models (e.g. Qwen3.6, DeepSeek R1)
+    /// - > 2.0: Avoid; may degrade coherence
+    pub presence_penalty: Option<f32>,
+
+    /// Minimum-probability sampling threshold (0.0 - 1.0).
+    ///
+    /// Removes tokens whose probability is below `min_p × P(top token)`.
+    /// - 0.0: Disabled (explicit off; recommended by Qwen3.6)
+    /// - 0.05: llama.cpp built-in default when the flag is omitted
+    pub min_p: Option<f32>,
 }
 
 impl InferenceConfig {
@@ -123,6 +143,12 @@ impl InferenceConfig {
         if self.repeat_penalty.is_none() {
             self.repeat_penalty = other.repeat_penalty;
         }
+        if self.presence_penalty.is_none() {
+            self.presence_penalty = other.presence_penalty;
+        }
+        if self.min_p.is_none() {
+            self.min_p = other.min_p;
+        }
     }
 
     /// Create a new config with all fields set to sensible defaults.
@@ -137,6 +163,8 @@ impl InferenceConfig {
             top_k: Some(40),
             max_tokens: Some(2048),
             repeat_penalty: Some(1.0),
+            presence_penalty: Some(0.0),
+            min_p: Some(0.0),
         }
     }
 
@@ -160,6 +188,8 @@ impl InferenceConfig {
     ///     top_k: None,
     ///     max_tokens: Some(1024),
     ///     repeat_penalty: None,
+    ///     presence_penalty: None,
+    ///     min_p: None,
     /// };
     ///
     /// let args = config.to_cli_args();
@@ -189,8 +219,48 @@ impl InferenceConfig {
             args.push("--repeat-penalty".to_string());
             args.push(repeat_penalty.to_string());
         }
+        if let Some(presence_penalty) = self.presence_penalty {
+            args.push("--presence-penalty".to_string());
+            args.push(presence_penalty.to_string());
+        }
+        if let Some(min_p) = self.min_p {
+            args.push("--min-p".to_string());
+            args.push(min_p.to_string());
+        }
 
         args
+    }
+
+    /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.
+    ///
+    /// Applied automatically at import time when the `"reasoning"` capability tag is
+    /// detected (e.g. Qwen3.6, DeepSeek R1, QwQ). Values follow the Qwen3.6 upstream
+    /// guidance for **thinking mode — general tasks** and are conservative enough to
+    /// work well across all thinking-capable models.
+    ///
+    /// | Parameter | Value | Rationale |
+    /// |-----------|-------|-----------|
+    /// | `temperature` | 1.0 | Recommended thinking-mode baseline |
+    /// | `top_p` | 0.95 | Broad nucleus; standard for reasoning |
+    /// | `top_k` | 20 | Tighter than the 40 fallback; suppresses low-quality tokens |
+    /// | `max_tokens` | 8 192 | Safe out-of-the-box ceiling; increase for complex tasks |
+    /// | `repeat_penalty` | 1.0 | No penalty; `presence_penalty` handles anti-repetition |
+    /// | `presence_penalty` | 1.5 | Prevents repetitive reasoning loops |
+    /// | `min_p` | 0.0 | Explicitly disabled per Qwen3.6 spec |
+    ///
+    /// Users can override any parameter with `gglib model update <id> --<flag>` or
+    /// the equivalent UI control.
+    #[must_use]
+    pub const fn reasoning_profile() -> Self {
+        Self {
+            temperature: Some(1.0),
+            top_p: Some(0.95),
+            top_k: Some(20),
+            max_tokens: Some(8192),
+            repeat_penalty: Some(1.0),
+            presence_penalty: Some(1.5),
+            min_p: Some(0.0),
+        }
     }
 }
 
@@ -206,6 +276,8 @@ mod tests {
         assert!(config.top_k.is_none());
         assert!(config.max_tokens.is_none());
         assert!(config.repeat_penalty.is_none());
+        assert!(config.presence_penalty.is_none());
+        assert!(config.min_p.is_none());
     }
 
     #[test]
@@ -239,6 +311,20 @@ mod tests {
         assert_eq!(config.top_k, Some(40));
         assert_eq!(config.max_tokens, Some(2048));
         assert_eq!(config.repeat_penalty, Some(1.0));
+        assert_eq!(config.presence_penalty, Some(0.0));
+        assert_eq!(config.min_p, Some(0.0));
+    }
+
+    #[test]
+    fn test_reasoning_profile() {
+        let profile = InferenceConfig::reasoning_profile();
+        assert_eq!(profile.temperature, Some(1.0));
+        assert_eq!(profile.top_p, Some(0.95));
+        assert_eq!(profile.top_k, Some(20));
+        assert_eq!(profile.max_tokens, Some(8192));
+        assert_eq!(profile.repeat_penalty, Some(1.0));
+        assert_eq!(profile.presence_penalty, Some(1.5));
+        assert_eq!(profile.min_p, Some(0.0));
     }
 
     #[test]
@@ -249,6 +335,8 @@ mod tests {
             top_k: None,
             max_tokens: Some(1024),
             repeat_penalty: None,
+            presence_penalty: None,
+            min_p: None,
         };
 
         let json = serde_json::to_string(&config).unwrap();
