@@ -82,7 +82,10 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         } => {
             retag::execute(ctx, identifier, all, full).await?;
         }
-        ModelCommand::Verify { identifier, verbose } => {
+        ModelCommand::Verify {
+            identifier,
+            verbose,
+        } => {
             verification::execute_verify(ctx, &identifier, verbose).await?;
         }
         ModelCommand::Repair {
@@ -133,7 +136,11 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         } => {
             download::browse(category, limit, size).await?;
         }
-        ModelCommand::Capabilities { identifier, set, unset } => {
+        ModelCommand::Capabilities {
+            identifier,
+            set,
+            unset,
+        } => {
             capabilities::execute(ctx, &identifier, set, unset).await?;
         }
         ModelCommand::Inspect {

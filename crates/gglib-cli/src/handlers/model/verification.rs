@@ -6,8 +6,8 @@
 use anyhow::Result;
 use std::time::Instant;
 
-use crate::bootstrap::CliContext;
 use super::resolver;
+use crate::bootstrap::CliContext;
 
 /// Execute the verify command.
 ///

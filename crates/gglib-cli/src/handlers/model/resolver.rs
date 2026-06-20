@@ -18,14 +18,10 @@ use crate::bootstrap::CliContext;
 /// returns an error with a helpful message rather than `Ok(None)`, ensuring
 /// consistent non-zero exit codes across all callers.
 pub async fn resolve_model_identifier(ctx: &CliContext, identifier: &str) -> Result<Model> {
-    ctx.app
-        .models()
-        .get(identifier)
-        .await?
-        .ok_or_else(|| {
-            anyhow!(
-                "No model found matching: '{identifier}'\n\
+    ctx.app.models().get(identifier).await?.ok_or_else(|| {
+        anyhow!(
+            "No model found matching: '{identifier}'\n\
                  Use 'gglib model list' to see available models."
-            )
-        })
+        )
+    })
 }

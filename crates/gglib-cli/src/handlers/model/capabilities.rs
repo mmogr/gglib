@@ -12,8 +12,8 @@ use gglib_app_services::types::SetCapabilitiesRequest;
 use gglib_app_services::{ModelDeps, ModelOps};
 use gglib_core::ModelCapabilities;
 
-use crate::bootstrap::CliContext;
 use super::resolver;
+use crate::bootstrap::CliContext;
 
 /// Execute `gglib model capabilities <id> [--set FLAG]... [--unset FLAG]...`.
 ///
