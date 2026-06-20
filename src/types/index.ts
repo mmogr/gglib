@@ -56,6 +56,24 @@ export interface GgufModel {
   inferenceDefaults?: InferenceConfig;
 }
 
+/**
+ * Full detail for a single model — superset of GgufModel.
+ * Returned by `GET /api/models/:id/detail` and mirrors the backend `ModelDetailDto`.
+ * Adds HuggingFace provenance, download timestamps, and raw GGUF metadata.
+ */
+export interface ModelDetail extends GgufModel {
+  /** Original filename on HuggingFace (e.g. "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"). */
+  hfFilename?: string;
+  /** Git commit SHA of the HF repo snapshot at download time. */
+  hfCommitSha?: string;
+  /** ISO-8601 timestamp of when the model was first downloaded. */
+  downloadDate?: string;
+  /** ISO-8601 timestamp of the last update-check for this model. */
+  lastUpdateCheck?: string;
+  /** Raw GGUF key-value metadata pairs (may be large). */
+  metadata: Record<string, string>;
+}
+
 export interface DownloadConfig {
   repo_id: string;
   quantization?: string;

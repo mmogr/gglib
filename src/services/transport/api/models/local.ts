@@ -8,6 +8,7 @@ import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
 import type {
   GgufModel,
+  ModelDetail,
   AddModelParams,
   UpdateModelParams,
   SearchModelsParams,
@@ -30,6 +31,22 @@ export async function listModels(): Promise<GgufModel[]> {
 export async function getModel(id: ModelId): Promise<GgufModel | null> {
   try {
     return await get<GgufModel>(`/api/models/${id}`);
+  } catch (error) {
+    if (TransportError.hasCode(error, 'NOT_FOUND')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get full detail for a specific model by ID.
+ * Returns a superset of GgufModel with HuggingFace provenance, timestamps, and raw GGUF metadata.
+ * Returns null if not found (instead of throwing).
+ */
+export async function getModelDetail(id: ModelId): Promise<ModelDetail | null> {
+  try {
+    return await get<ModelDetail>(`/api/models/${id}/detail`);
   } catch (error) {
     if (TransportError.hasCode(error, 'NOT_FOUND')) {
       return null;

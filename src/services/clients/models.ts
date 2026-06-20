@@ -11,6 +11,7 @@ import { getTransport } from '../transport';
 import type { ModelId } from '../transport/types/ids';
 import type {
   GgufModel,
+  ModelDetail,
   ModelFilterOptions,
 } from '../../types';
 import type {
@@ -32,6 +33,15 @@ export async function listModels(): Promise<GgufModel[]> {
  */
 export async function getModel(id: ModelId): Promise<GgufModel | null> {
   return getTransport().getModel(id);
+}
+
+/**
+ * Get full detail for a model by ID.
+ * Returns a superset of GgufModel including HF provenance, timestamps, and raw GGUF metadata.
+ * Returns null if model not found.
+ */
+export async function getModelDetail(id: ModelId): Promise<ModelDetail | null> {
+  return getTransport().getModelDetail(id);
 }
 
 /**
