@@ -7,7 +7,7 @@
 //! This handler is intentionally thin:
 //! - Flexible identifier resolution via `AppCore::models().get()` (name **or** ID)
 //! - Serving-status-aware DTO via `ModelOps::get_detail()` (same path as the Axum route)
-//! - `--json` → serialize [`ModelDetailDto`] to stdout
+//! - `--json` → serialize `ModelDetailDto` to stdout
 //! - human mode → delegate to [`inspect_display::print_model_detail`]
 //!
 //! All terminal rendering lives in `presentation/inspect_display.rs`.

@@ -106,6 +106,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 |---------|-------------|
 | `add <path>` | Add a GGUF model to the library |
 | `list` | List all models with metadata |
+| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
 | `remove <id>` | Remove a model from the library |
 | `serve <id>` | Start llama-server for a model |
 | `chat <id>` | Start interactive llama-cli chat |

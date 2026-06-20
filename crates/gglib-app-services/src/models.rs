@@ -3,14 +3,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gglib_core::ModelFilterOptions;
+use gglib_core::{ModelCapabilities, ModelFilterOptions};
 use gglib_core::domain::Model;
 use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
 
 use crate::error::GuiError;
 use crate::types::{
-    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
+    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
+    UpdateModelRequest,
 };
 
 /// Dependencies for model operations.
@@ -99,10 +100,10 @@ impl ModelOps {
     /// includes raw GGUF metadata, MoE topology, and full HuggingFace
     /// provenance.  This is the shared data source for the CLI
     /// `model inspect` command and the `GET /api/models/:id/detail` route.
-    pub async fn get_detail(&self, id: i64) -> Result<crate::types::ModelDetailDto, GuiError> {
+    pub async fn get_detail(&self, id: i64) -> Result<ModelDetailDto, GuiError> {
         let model = self.resolve_model(id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
-        Ok(crate::types::ModelDetailDto::from_model(model, is_serving, port))
+        Ok(ModelDetailDto::from_model(model, is_serving, port))
     }
 
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
@@ -263,8 +264,6 @@ impl ModelOps {
         id: i64,
         request: SetCapabilitiesRequest,
     ) -> Result<GuiModel, GuiError> {
-        use gglib_core::ModelCapabilities;
-
         let mut model = self.resolve_model(id).await?;
 
         let mut caps = model.capabilities;
