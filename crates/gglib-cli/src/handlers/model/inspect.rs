@@ -5,14 +5,15 @@
 //! inference defaults, and timestamps.
 //!
 //! This handler is intentionally thin:
-//! - Model lookup via `AppCore::models().get()` (handles name **or** ID)
+//! - Flexible identifier resolution via `AppCore::models().get()` (name **or** ID)
+//! - Serving-status-aware DTO via `ModelOps::get_detail()` (same path as the Axum route)
 //! - `--json` → serialize [`ModelDetailDto`] to stdout
 //! - human mode → delegate to [`inspect_display::print_model_detail`]
 //!
 //! All terminal rendering lives in `presentation/inspect_display.rs`.
 
 use anyhow::Result;
-use gglib_app_services::types::ModelDetailDto;
+use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::presentation::inspect_display;
@@ -24,6 +25,7 @@ pub async fn execute(
     show_metadata: bool,
     json: bool,
 ) -> Result<()> {
+    // Step 1: resolve name-or-id via the flexible core service.
     let model = match ctx.app.models().get(identifier).await? {
         Some(m) => m,
         None => {
@@ -33,7 +35,15 @@ pub async fn execute(
         }
     };
 
-    let dto = ModelDetailDto::from_model(model, false, None);
+    // Step 2: fetch the full DTO via ModelOps so serving status is included.
+    // This mirrors exactly what the Axum detail route does, ensuring CLI and
+    // REST API output are consistent for a model that is currently being served.
+    let ops = ModelOps::new(ModelDeps {
+        core: ctx.app.clone(),
+        runner: ctx.runner.clone(),
+        gguf_parser: ctx.gguf_parser.clone(),
+    });
+    let dto = ops.get_detail(model.id).await?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&dto)?);
@@ -43,4 +53,5 @@ pub async fn execute(
     inspect_display::print_model_detail(&dto, show_metadata);
     Ok(())
 }
+
 
