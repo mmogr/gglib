@@ -337,7 +337,11 @@ impl InferenceConfig {
     ///
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     #[must_use]
-    pub const fn resolve_with_defaults(mut self, model: Option<&Self>, global: Option<&Self>) -> Self {
+    pub const fn resolve_with_defaults(
+        mut self,
+        model: Option<&Self>,
+        global: Option<&Self>,
+    ) -> Self {
         if let Some(m) = model {
             self.merge_with(m);
         }

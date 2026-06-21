@@ -11,12 +11,12 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
     SettingsRepository,
 };
-use gglib_core::Settings;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
     ModelSummary, RunningTarget,

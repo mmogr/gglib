@@ -23,18 +23,18 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
-use gglib_core::ports::{RepositoryError, SettingsRepository};
-use gglib_core::Settings;
 use gglib_core::ports::{
     ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
     ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
     RunningTarget,
 };
+use gglib_core::ports::{RepositoryError, SettingsRepository};
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
 use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
