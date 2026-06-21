@@ -72,6 +72,7 @@ pub(crate) struct AppState {
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn serve(
     listener: TcpListener,
     default_ctx: u64,

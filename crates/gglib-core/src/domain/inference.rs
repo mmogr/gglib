@@ -107,10 +107,10 @@ pub struct InferenceConfig {
     pub min_p: Option<f32>,
 }
 
-/// Convert a camelCase string to snake_case.
+/// Convert a camelCase string to `snake_case`.
 ///
 /// Used internally to rename `InferenceConfig`'s serde camelCase output to the
-/// OpenAI wire format (`topP` → `top_p`, `maxTokens` → `max_tokens`, etc.).
+/// `OpenAI` wire format (`topP` → `top_p`, `maxTokens` → `max_tokens`, etc.).
 fn camel_to_snake(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
     for ch in s.chars() {
@@ -124,7 +124,7 @@ fn camel_to_snake(s: &str) -> String {
     out
 }
 
-/// Convert a snake_case string to camelCase.
+/// Convert a `snake_case` string to camelCase.
 ///
 /// Inverse of [`camel_to_snake`]; used to normalise OpenAI-format body keys
 /// (`top_p`, `max_tokens`, etc.) into the camelCase form expected by
@@ -337,7 +337,7 @@ impl InferenceConfig {
     ///
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     #[must_use]
-    pub fn resolve_with_defaults(mut self, model: Option<&Self>, global: Option<&Self>) -> Self {
+    pub const fn resolve_with_defaults(mut self, model: Option<&Self>, global: Option<&Self>) -> Self {
         if let Some(m) = model {
             self.merge_with(m);
         }
@@ -348,9 +348,9 @@ impl InferenceConfig {
         self
     }
 
-    /// Parse inference parameters from an OpenAI-format JSON body (snake_case keys).
+    /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
     ///
-    /// Converts wire-format snake_case field names (`top_p`, `max_tokens`,
+    /// Converts wire-format `snake_case` field names (`top_p`, `max_tokens`,
     /// `repeat_penalty`, etc.) to the internal camelCase representation via
     /// [`snake_to_camel`], then deserialises using the existing `serde` impl.
     /// Unknown or missing fields default to `None`.
@@ -370,10 +370,10 @@ impl InferenceConfig {
         serde_json::from_value(serde_json::Value::Object(camel)).unwrap_or_default()
     }
 
-    /// Serialise as an OpenAI-format JSON patch (snake_case keys, `Some` fields only).
+    /// Serialise as an OpenAI-format JSON patch (`snake_case` keys, `Some` fields only).
     ///
     /// Uses `serde` to produce the camelCase form, then renames each key to
-    /// snake_case via [`camel_to_snake`]. Only `Some` fields are emitted — `None`
+    /// `snake_case` via [`camel_to_snake`]. Only `Some` fields are emitted — `None`
     /// values are filtered out. The returned map can be merged directly into an
     /// OpenAI-compatible request body with `body_obj.insert(k, v)`.
     ///

@@ -28,10 +28,12 @@ use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunSt
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
+use gglib_core::ports::{RepositoryError, SettingsRepository};
+use gglib_core::Settings;
 use gglib_core::ports::{
     ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
     ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
-    RepositoryError, RunningTarget,
+    RunningTarget,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
@@ -40,6 +42,17 @@ use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 // =============================================================================
 // Minimal mock ports (runtime / catalog / MCP)
 // =============================================================================
+
+struct MockSettingsRepo;
+#[async_trait]
+impl SettingsRepository for MockSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        Ok(Settings::with_defaults())
+    }
+    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+}
 
 /// Runtime that always returns an error — virtual model requests never reach it.
 #[derive(Debug)]
@@ -222,6 +235,7 @@ async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, Cancel
             mcp,
             orchestrator,
             cancel_clone,
+            Arc::new(MockSettingsRepo),
         )
         .await
         .ok();

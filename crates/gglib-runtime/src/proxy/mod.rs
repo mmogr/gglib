@@ -215,6 +215,7 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
 /// * `default_context` - Default context size for models
 /// * `mcp` - MCP service for tool gateway
 /// * `settings_repo` - Settings repository for global inference defaults
+#[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
     port: u16,
