@@ -182,7 +182,7 @@ identically when auto-started by the proxy.
 On every `POST /v1/chat/completions` request the proxy resolves sampling
 parameters through the same 4-level hierarchy used by every other surface:
 
-```
+```text
 request params  →  model defaults  →  global settings  →  hardcoded fallback
 ```
 
