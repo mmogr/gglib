@@ -30,7 +30,7 @@ use crate::process::ProcessManager;
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
-    ModelRepository, RepositoryError,
+    ModelRepository, RepositoryError, SettingsRepository,
 };
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
@@ -214,6 +214,7 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
 /// * `model_repo` - Model repository for catalog access
 /// * `default_context` - Default context size for models
 /// * `mcp` - MCP service for tool gateway
+/// * `settings_repo` - Settings repository for global inference defaults
 pub async fn start_proxy_standalone(
     host: String,
     port: u16,
@@ -222,6 +223,7 @@ pub async fn start_proxy_standalone(
     model_repo: Arc<dyn ModelRepository>,
     default_context: u64,
     mcp: Arc<McpService>,
+    settings_repo: Arc<dyn SettingsRepository>,
 ) -> Result<()> {
     // Create catalog port from model repository
     let catalog_port: Arc<dyn ModelCatalogPort> =
@@ -309,7 +311,7 @@ pub async fn start_proxy_standalone(
     println!();
 
     let addr = supervisor
-        .start(config, runtime_port, catalog_port, mcp, orchestrator_deps)
+        .start(config, runtime_port, catalog_port, mcp, orchestrator_deps, settings_repo)
         .await
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");

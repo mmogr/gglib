@@ -22,7 +22,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
@@ -161,6 +161,7 @@ impl ProxySupervisor {
     /// * `catalog_port` - Port for listing and resolving models
     /// * `mcp` - MCP service for tool gateway
     /// * `orchestrator` - Orchestrator services for virtual model routing
+    /// * `settings_repo` - Settings repository for global inference defaults
     ///
     /// # Errors
     ///
@@ -172,6 +173,7 @@ impl ProxySupervisor {
         catalog_port: Arc<dyn ModelCatalogPort>,
         mcp: Arc<McpService>,
         orchestrator: CouncilDeps,
+        settings_repo: Arc<dyn SettingsRepository>,
     ) -> Result<SocketAddr, SupervisorError> {
         let mut guard = self.handle.lock().await;
 
@@ -231,6 +233,7 @@ impl ProxySupervisor {
                 mcp,
                 orchestrator,
                 cancel_clone,
+                settings_repo,
             )
             .await;
 
@@ -370,6 +373,7 @@ mod tests {
     use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::ports::{
         ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
+        SettingsRepository,
     };
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
@@ -545,6 +549,22 @@ mod tests {
         ))
     }
 
+    struct MockSettingsRepo;
+
+    #[async_trait]
+    impl SettingsRepository for MockSettingsRepo {
+        async fn load(&self) -> Result<gglib_core::Settings, RepositoryError> {
+            Ok(gglib_core::Settings::with_defaults())
+        }
+        async fn save(&self, _settings: &gglib_core::Settings) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    fn make_settings_repo() -> Arc<dyn SettingsRepository> {
+        Arc::new(MockSettingsRepo)
+    }
+
     #[tokio::test]
     async fn test_supervisor_lifecycle() {
         let supervisor = ProxySupervisor::new();
@@ -567,6 +587,7 @@ mod tests {
                 catalog.clone(),
                 mcp,
                 make_orchestrator(),
+                make_settings_repo(),
             )
             .await
             .unwrap();
@@ -582,7 +603,7 @@ mod tests {
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
             supervisor
-                .start(config, runtime2, catalog2, make_mcp(), make_orchestrator())
+                .start(config, runtime2, catalog2, make_mcp(), make_orchestrator(), make_settings_repo())
                 .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
@@ -619,6 +640,7 @@ mod tests {
                 catalog,
                 make_mcp(),
                 make_orchestrator(),
+                make_settings_repo(),
             )
             .await
             .unwrap();
@@ -629,7 +651,7 @@ mod tests {
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
         let addr2 = supervisor
-            .start(config, runtime2, catalog2, make_mcp(), make_orchestrator())
+            .start(config, runtime2, catalog2, make_mcp(), make_orchestrator(), make_settings_repo())
             .await
             .unwrap();
 

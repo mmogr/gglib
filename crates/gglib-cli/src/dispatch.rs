@@ -274,6 +274,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx.model_repo.clone(),
                 effective_context,
                 ctx.mcp.clone(),
+                ctx.app.settings().repo(),
             )
             .await?;
         }
