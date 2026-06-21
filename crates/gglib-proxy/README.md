@@ -177,6 +177,29 @@ GUI, and CLI all route through `build_server_config` in `gglib-runtime`, so any
 model that works correctly when started from the GUI or CLI will behave
 identically when auto-started by the proxy.
 
+### Inference Defaults Auto-Injection
+
+On every `POST /v1/chat/completions` request the proxy resolves sampling
+parameters through the same 4-level hierarchy used by every other surface:
+
+```
+request params  →  model defaults  →  global settings  →  hardcoded fallback
+```
+
+1. **Request params** — whatever `temperature`, `top_p`, `top_k`, `max_tokens`,
+   `repeat_penalty`, `presence_penalty`, and `min_p` the client sent.
+2. **Model defaults** — per-model `inference_defaults` stored in the model
+   catalog (`ModelSummary::inference_defaults`).
+3. **Global settings** — `Settings::inference_defaults` loaded from the
+   settings repository on every request.
+4. **Hardcoded fallback** — `temperature=0.7`, `top_p=0.95`, `top_k=40`,
+   `max_tokens=2048`, `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.0`.
+
+The resolved values are aggressively written into the forwarded request body
+(via `body_obj.insert`) so llama-server always receives fully-specified
+parameters rather than relying on its own defaults.  Client-supplied values
+are always preserved because they form the base of the resolution hierarchy.
+
 ## Usage
 
 This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` along with port trait implementations:
