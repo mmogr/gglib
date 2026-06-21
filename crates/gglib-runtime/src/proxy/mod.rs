@@ -28,10 +28,12 @@ use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
+use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, RepositoryError, SettingsRepository,
 };
+use gglib_core::settings::Settings;
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
 
@@ -200,6 +202,33 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
 // start_proxy_standalone
 // =============================================================================
 
+/// Wraps a `SettingsRepository` and overlays a CLI-supplied `InferenceConfig`
+/// on top of whatever the persisted settings contain.
+///
+/// Fields present in `override_config` win; any field that is `None` there
+/// falls back to the persisted global defaults.
+struct CliOverrideSettingsRepo {
+    inner: Arc<dyn SettingsRepository>,
+    override_config: InferenceConfig,
+}
+
+#[async_trait]
+impl SettingsRepository for CliOverrideSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        let mut settings = self.inner.load().await?;
+        let merged = self
+            .override_config
+            .clone()
+            .resolve_with_defaults(None, settings.inference_defaults.as_ref());
+        settings.inference_defaults = Some(merged);
+        Ok(settings)
+    }
+
+    async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
+        self.inner.save(settings).await
+    }
+}
+
 /// Start the OpenAI-compatible proxy as a standalone server (CLI usage).
 ///
 /// This is the main entry point for CLI usage. It creates all required
@@ -215,6 +244,8 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
 /// * `default_context` - Default context size for models
 /// * `mcp` - MCP service for tool gateway
 /// * `settings_repo` - Settings repository for global inference defaults
+/// * `inference_override` - Optional once-off inference parameter overrides
+///   (applied on top of persisted global defaults; not saved to disk)
 #[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
@@ -225,6 +256,7 @@ pub async fn start_proxy_standalone(
     default_context: u64,
     mcp: Arc<McpService>,
     settings_repo: Arc<dyn SettingsRepository>,
+    inference_override: Option<InferenceConfig>,
 ) -> Result<()> {
     // Create catalog port from model repository
     let catalog_port: Arc<dyn ModelCatalogPort> =
@@ -264,6 +296,17 @@ pub async fn start_proxy_standalone(
     // Create supervisor
     let supervisor = ProxySupervisor::new();
 
+    // Wrap settings_repo with CLI override if any inference flags were supplied
+    let effective_settings_repo: Arc<dyn SettingsRepository> =
+        if let Some(override_config) = inference_override.clone() {
+            Arc::new(CliOverrideSettingsRepo {
+                inner: settings_repo,
+                override_config,
+            })
+        } else {
+            settings_repo
+        };
+
     // Start proxy
     let config = ProxyConfig {
         host: host.clone(),
@@ -301,6 +344,17 @@ pub async fn start_proxy_standalone(
     println!("  Port:            {}", port);
     println!("  Llama base port: {}", llama_base_port);
     println!("  Default context: {}", default_context);
+    if let Some(ref ic) = inference_override {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(v) = ic.temperature    { parts.push(format!("temperature={v}")); }
+        if let Some(v) = ic.top_p          { parts.push(format!("top_p={v}")); }
+        if let Some(v) = ic.top_k          { parts.push(format!("top_k={v}")); }
+        if let Some(v) = ic.max_tokens     { parts.push(format!("max_tokens={v}")); }
+        if let Some(v) = ic.repeat_penalty { parts.push(format!("repeat_penalty={v}")); }
+        if let Some(v) = ic.presence_penalty { parts.push(format!("presence_penalty={v}")); }
+        if let Some(v) = ic.min_p          { parts.push(format!("min_p={v}")); }
+        println!("  Inference override: {}", parts.join(", "));
+    }
     println!(
         "  MCP servers:     {} (eager: {}, lazy: {}, manual: {})",
         servers.len(),
@@ -318,7 +372,7 @@ pub async fn start_proxy_standalone(
             catalog_port,
             mcp,
             orchestrator_deps,
-            settings_repo,
+            effective_settings_repo,
         )
         .await
         .map_err(|e| anyhow!("{e}"))?;
