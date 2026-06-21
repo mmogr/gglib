@@ -161,7 +161,14 @@ impl ProxyOps {
 
         // Start the proxy
         self.supervisor
-            .start(config, runtime, catalog, self.mcp.clone(), orchestrator, self.core.settings().repo())
+            .start(
+                config,
+                runtime,
+                catalog,
+                self.mcp.clone(),
+                orchestrator,
+                self.core.settings().repo(),
+            )
             .await
             .map_err(|e| match e {
                 SupervisorError::AlreadyRunning(addr) => {

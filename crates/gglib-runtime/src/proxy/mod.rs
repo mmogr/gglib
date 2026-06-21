@@ -311,7 +311,14 @@ pub async fn start_proxy_standalone(
     println!();
 
     let addr = supervisor
-        .start(config, runtime_port, catalog_port, mcp, orchestrator_deps, settings_repo)
+        .start(
+            config,
+            runtime_port,
+            catalog_port,
+            mcp,
+            orchestrator_deps,
+            settings_repo,
+        )
         .await
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");

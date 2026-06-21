@@ -338,8 +338,12 @@ impl InferenceConfig {
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     #[must_use]
     pub fn resolve_with_defaults(mut self, model: Option<&Self>, global: Option<&Self>) -> Self {
-        if let Some(m) = model  { self.merge_with(m); }
-        if let Some(g) = global { self.merge_with(g); }
+        if let Some(m) = model {
+            self.merge_with(m);
+        }
+        if let Some(g) = global {
+            self.merge_with(g);
+        }
         self.merge_with(&Self::with_hardcoded_defaults());
         self
     }
@@ -356,9 +360,13 @@ impl InferenceConfig {
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
     #[must_use]
     pub fn from_openai_json(value: &serde_json::Value) -> Self {
-        let Some(obj) = value.as_object() else { return Self::default(); };
-        let camel: serde_json::Map<String, serde_json::Value> =
-            obj.iter().map(|(k, v)| (snake_to_camel(k), v.clone())).collect();
+        let Some(obj) = value.as_object() else {
+            return Self::default();
+        };
+        let camel: serde_json::Map<String, serde_json::Value> = obj
+            .iter()
+            .map(|(k, v)| (snake_to_camel(k), v.clone()))
+            .collect();
         serde_json::from_value(serde_json::Value::Object(camel)).unwrap_or_default()
     }
 
@@ -490,16 +498,26 @@ mod tests {
 
     #[test]
     fn test_resolve_with_defaults_hierarchy() {
-        let request = InferenceConfig { temperature: Some(0.9), ..Default::default() };
-        let model   = InferenceConfig { temperature: Some(0.5), top_p: Some(0.8), ..Default::default() };
-        let global  = InferenceConfig { top_k: Some(10), ..Default::default() };
+        let request = InferenceConfig {
+            temperature: Some(0.9),
+            ..Default::default()
+        };
+        let model = InferenceConfig {
+            temperature: Some(0.5),
+            top_p: Some(0.8),
+            ..Default::default()
+        };
+        let global = InferenceConfig {
+            top_k: Some(10),
+            ..Default::default()
+        };
 
         let resolved = request.resolve_with_defaults(Some(&model), Some(&global));
 
-        assert_eq!(resolved.temperature, Some(0.9));  // request wins
-        assert_eq!(resolved.top_p,       Some(0.8));  // model fills in
-        assert_eq!(resolved.top_k,       Some(10));   // global fills in
-        assert_eq!(resolved.max_tokens,  Some(2048)); // hardcoded fallback
+        assert_eq!(resolved.temperature, Some(0.9)); // request wins
+        assert_eq!(resolved.top_p, Some(0.8)); // model fills in
+        assert_eq!(resolved.top_k, Some(10)); // global fills in
+        assert_eq!(resolved.max_tokens, Some(2048)); // hardcoded fallback
         assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
     }
 
@@ -532,8 +550,8 @@ mod tests {
         // Roundtrip via from_openai_json
         let val = serde_json::Value::Object(patch);
         let back = InferenceConfig::from_openai_json(&val);
-        assert_eq!(back.temperature,    Some(0.7));
-        assert_eq!(back.top_p,          Some(0.9));
+        assert_eq!(back.temperature, Some(0.7));
+        assert_eq!(back.top_p, Some(0.9));
         assert_eq!(back.repeat_penalty, Some(1.1));
         assert!(back.top_k.is_none());
     }

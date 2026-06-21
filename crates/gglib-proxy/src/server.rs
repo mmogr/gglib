@@ -18,7 +18,9 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository};
+use gglib_core::ports::{
+    ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
+};
 use gglib_mcp::McpService;
 
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};

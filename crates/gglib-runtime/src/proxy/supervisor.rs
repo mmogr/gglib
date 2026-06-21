@@ -603,7 +603,14 @@ mod tests {
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
             supervisor
-                .start(config, runtime2, catalog2, make_mcp(), make_orchestrator(), make_settings_repo())
+                .start(
+                    config,
+                    runtime2,
+                    catalog2,
+                    make_mcp(),
+                    make_orchestrator(),
+                    make_settings_repo()
+                )
                 .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
@@ -651,7 +658,14 @@ mod tests {
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
         let addr2 = supervisor
-            .start(config, runtime2, catalog2, make_mcp(), make_orchestrator(), make_settings_repo())
+            .start(
+                config,
+                runtime2,
+                catalog2,
+                make_mcp(),
+                make_orchestrator(),
+                make_settings_repo(),
+            )
             .await
             .unwrap();
 

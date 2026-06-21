@@ -414,7 +414,9 @@ pub async fn forward_chat_completion(
                 body_obj.insert(k, v);
             }
         }
-        serde_json::to_vec(&body_value).map(Bytes::from).unwrap_or(body)
+        serde_json::to_vec(&body_value)
+            .map(Bytes::from)
+            .unwrap_or(body)
     } else {
         body
     };
