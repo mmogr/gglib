@@ -5,11 +5,12 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
+use crate::handlers::model::resolver;
 
 /// Execute the check-updates command.
 ///
 /// Checks if locally downloaded models have updates available on HuggingFace.
-pub async fn execute(ctx: &CliContext, model_id: Option<u32>, all: bool) -> Result<()> {
+pub async fn execute(ctx: &CliContext, identifier: Option<&str>, all: bool) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
         let models = ctx.app.models().list().await?;
@@ -29,24 +30,18 @@ pub async fn execute(ctx: &CliContext, model_id: Option<u32>, all: bool) -> Resu
                 );
             }
         }
-    } else if let Some(id) = model_id {
-        match ctx.app.models().get_by_id(id as i64).await? {
-            Some(model) => {
-                if let Some(hf_repo) = &model.hf_repo_id {
-                    check_model_update(&model, hf_repo).await?;
-                } else {
-                    println!(
-                        "Model '{}' is not from HuggingFace, cannot check for updates.",
-                        model.name
-                    );
-                }
-            }
-            None => {
-                println!("Model with ID {} not found.", id);
-            }
+    } else if let Some(ident) = identifier {
+        let model = resolver::resolve_model_identifier(ctx, ident).await?;
+        if let Some(hf_repo) = &model.hf_repo_id {
+            check_model_update(&model, hf_repo).await?;
+        } else {
+            println!(
+                "Model '{}' is not from HuggingFace, cannot check for updates.",
+                model.name
+            );
         }
     } else {
-        println!("Please specify --model-id <ID> or --all to check for updates.");
+        println!("Please specify --identifier <id|name> or --all to check for updates.");
     }
 
     Ok(())

@@ -32,8 +32,8 @@ pub enum ModelCommand {
 
     /// Update model metadata in the database
     Update {
-        /// ID of the model to update
-        id: u32,
+        /// Name or ID of the model to update
+        identifier: String,
         /// New name for the model
         #[arg(short, long)]
         name: Option<String>,
@@ -116,8 +116,8 @@ pub enum ModelCommand {
 
     /// Verify model integrity by computing SHA256 hashes
     Verify {
-        /// ID of the model to verify
-        model_id: i64,
+        /// Name or ID of the model to verify
+        identifier: String,
         /// Show detailed progress for each shard
         #[arg(short, long)]
         verbose: bool,
@@ -125,8 +125,8 @@ pub enum ModelCommand {
 
     /// Repair a corrupt model by re-downloading failed shards
     Repair {
-        /// ID of the model to repair
-        model_id: i64,
+        /// Name or ID of the model to repair
+        identifier: String,
         /// Specific shard indices to repair (comma-separated, e.g., "0,2,5")
         #[arg(short, long)]
         shards: Option<String>,
@@ -175,9 +175,9 @@ pub enum ModelCommand {
 
     /// Check for updates to downloaded models
     CheckUpdates {
-        /// Check specific model by ID
-        #[arg(short, long)]
-        model_id: Option<u32>,
+        /// Check a specific model by name or ID
+        #[arg(long)]
+        identifier: Option<String>,
         /// Check all models
         #[arg(long)]
         all: bool,
@@ -185,8 +185,8 @@ pub enum ModelCommand {
 
     /// Upgrade a model to the latest version
     Upgrade {
-        /// ID of the model to upgrade
-        model_id: u32,
+        /// Name or ID of the model to upgrade
+        identifier: String,
         /// Skip confirmation prompt
         #[arg(short, long)]
         force: bool,
@@ -240,8 +240,8 @@ pub enum ModelCommand {
     ///
     ///   gglib model capabilities 3 --unset supports-reasoning
     Capabilities {
-        /// ID of the model to inspect or modify
-        id: u32,
+        /// Name or ID of the model to inspect or modify
+        identifier: String,
         /// Set a capability flag (can be repeated).
         ///
         /// Accepted values: `supports-system-role`, `requires-strict-turns`,

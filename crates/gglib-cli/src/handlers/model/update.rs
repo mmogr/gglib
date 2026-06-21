@@ -13,7 +13,7 @@ use crate::bootstrap::CliContext;
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
 pub struct UpdateArgs {
-    pub id: u32,
+    pub identifier: String,
     pub name: Option<String>,
     pub param_count: Option<f64>,
     pub architecture: Option<String>,
@@ -48,13 +48,13 @@ pub struct UpdateArgs {
 ///
 /// Returns `Result<()>` indicating the success or failure of the operation.
 pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
-    // Get the existing model by ID
+    // Get the existing model by name or ID
     let existing_model = ctx
         .app
         .models()
-        .get_by_id(args.id as i64)
+        .get(&args.identifier)
         .await?
-        .ok_or_else(|| anyhow!("Model with ID {} not found", args.id))?;
+        .ok_or_else(|| anyhow!("No model found matching: '{}'", args.identifier))?;
 
     // Verify the file still exists
     if !existing_model.file_path.exists() && !args.force {
@@ -523,7 +523,7 @@ mod tests {
     fn test_create_updated_model() {
         let existing = create_test_model();
         let args = UpdateArgs {
-            id: 1,
+            identifier: "1".to_string(),
             name: Some("Updated Name".to_string()),
             param_count: Some(13.0),
             architecture: Some("mistral".to_string()),

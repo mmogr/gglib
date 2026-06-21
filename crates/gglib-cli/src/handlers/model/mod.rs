@@ -9,6 +9,7 @@ pub mod download;
 pub mod inspect;
 pub mod list;
 pub mod remove;
+pub mod resolver;
 pub mod retag;
 pub mod update;
 pub mod verification;
@@ -31,7 +32,7 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             remove::execute(ctx, &identifier, force).await?;
         }
         ModelCommand::Update {
-            id,
+            identifier,
             name,
             param_count,
             architecture,
@@ -52,7 +53,7 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             force,
         } => {
             let args = update::UpdateArgs {
-                id,
+                identifier,
                 name,
                 param_count,
                 architecture,
@@ -81,15 +82,18 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         } => {
             retag::execute(ctx, identifier, all, full).await?;
         }
-        ModelCommand::Verify { model_id, verbose } => {
-            verification::execute_verify(ctx, model_id, verbose).await?;
+        ModelCommand::Verify {
+            identifier,
+            verbose,
+        } => {
+            verification::execute_verify(ctx, &identifier, verbose).await?;
         }
         ModelCommand::Repair {
-            model_id,
+            identifier,
             shards,
             force,
         } => {
-            verification::execute_repair(ctx, model_id, shards, force).await?;
+            verification::execute_repair(ctx, &identifier, shards, force).await?;
         }
         ModelCommand::Download {
             model_id,
@@ -108,14 +112,14 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             };
             download::download(ctx, args).await?;
         }
-        ModelCommand::CheckUpdates { model_id, all } => {
-            download::check_updates(ctx, model_id, all).await?;
+        ModelCommand::CheckUpdates { identifier, all } => {
+            download::check_updates(ctx, identifier.as_deref(), all).await?;
         }
         ModelCommand::Upgrade {
-            model_id,
+            identifier,
             force: _force,
         } => {
-            download::update_model(ctx, model_id).await?;
+            download::update_model(ctx, &identifier).await?;
         }
         ModelCommand::Search {
             query,
@@ -132,8 +136,12 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         } => {
             download::browse(category, limit, size).await?;
         }
-        ModelCommand::Capabilities { id, set, unset } => {
-            capabilities::execute(ctx, id, set, unset).await?;
+        ModelCommand::Capabilities {
+            identifier,
+            set,
+            unset,
+        } => {
+            capabilities::execute(ctx, &identifier, set, unset).await?;
         }
         ModelCommand::Inspect {
             identifier,

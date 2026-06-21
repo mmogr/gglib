@@ -7,21 +7,17 @@ use chrono::Utc;
 use gglib_download::cli_exec::{self, CliUpdateRequest};
 
 use crate::bootstrap::CliContext;
+use crate::handlers::model::resolver;
 use gglib_core::paths::resolve_models_dir;
 
 /// Execute the update-model command.
 ///
 /// Updates a model to the latest version from HuggingFace.
-pub async fn execute(ctx: &CliContext, model_id: u32) -> Result<()> {
+pub async fn execute(ctx: &CliContext, identifier: &str) -> Result<()> {
     let models_dir = resolve_models_dir(None)?.path;
 
     // Get model from database
-    let mut model = ctx
-        .app
-        .models()
-        .get_by_id(model_id as i64)
-        .await?
-        .ok_or_else(|| anyhow!("Model with ID {} not found", model_id))?;
+    let mut model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     let hf_repo = model
         .hf_repo_id
@@ -35,7 +31,7 @@ pub async fn execute(ctx: &CliContext, model_id: u32) -> Result<()> {
         .ok_or_else(|| anyhow!("Model has no quantization info stored"))?
         .clone();
 
-    println!("Updating model {} (ID: {})...", model.name, model_id);
+    println!("Updating model {} (ID: {})...", model.name, model.id);
     println!("  Repository: {}", hf_repo);
     println!("  Quantization: {}", quantization);
 
