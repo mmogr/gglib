@@ -19,7 +19,7 @@ use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
-use crate::handlers::inference::shared::log_context_info;
+use crate::handlers::inference::shared::{log_context_info, resolve_inference_config};
 use crate::presentation::style;
 
 // =============================================================================
@@ -101,7 +101,24 @@ pub async fn compose(
     // 1. Resolve the LLM port — reuse or auto-start.
     let (port, maybe_handle) = resolve_port(ctx, params, banner).await?;
 
-    // 2. Initialise MCP servers (CLI bootstrap intentionally skips this).
+    // 2. Resolve inference parameters via the 4-level hierarchy.
+    //    Look up the model so model-level defaults can be applied.  When the
+    //    identifier is unknown (external port reuse with no catalog entry) the
+    //    sampling is forwarded as-is.
+    let resolved_sampling = match ctx
+        .app
+        .models()
+        .find_by_identifier(&params.model_identifier)
+        .await
+        .ok()
+    {
+        Some(model) => {
+            Some(resolve_inference_config(ctx, sampling.unwrap_or_default(), &model).await?)
+        }
+        None => sampling,
+    };
+
+    // 3. Initialise MCP servers (CLI bootstrap intentionally skips this).
     //    A failure is logged as a warning rather than aborting the session:
     //    the agent can still run without tools.
     if let Err(e) = ctx.mcp.initialize().await {
@@ -110,7 +127,7 @@ pub async fn compose(
     // Pre-warm lazy servers so they are ready before the first agent iteration.
     ctx.mcp.prewarm_lazy().await;
 
-    // 3. Compose the agent loop.  When tools are specified the loop is
+    // 4. Compose the agent loop.  When tools are specified the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
     let tool_filter = if params.tools.is_empty() {
         None
@@ -127,7 +144,7 @@ pub async fn compose(
         Arc::clone(&ctx.mcp),
         tool_filter,
         sandbox_root,
-        sampling,
+        resolved_sampling,
     );
 
     Ok((agent, maybe_handle))

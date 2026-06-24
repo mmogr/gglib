@@ -9,6 +9,7 @@ use std::fmt;
 use std::path::PathBuf;
 use thiserror::Error;
 
+use crate::domain::InferenceConfig;
 use crate::domain::ModelCapabilities;
 
 /// Domain model summary for catalog operations (listing).
@@ -43,6 +44,14 @@ pub struct ModelSummary {
     pub created_at: i64,
     /// File size in bytes.
     pub file_size: u64,
+    /// Per-model inference parameter defaults.
+    ///
+    /// When `Some`, these are resolved per-request via
+    /// [`InferenceConfig::resolve_with_defaults`] before forwarding to llama-server.
+    /// Used by `gglib proxy` to inject resolved defaults into OpenAI-format
+    /// request bodies, and by the agentic loop (`gglib chat`, `gglib q`) to
+    /// apply model-specific sampling parameters.
+    pub inference_defaults: Option<InferenceConfig>,
 }
 
 /// Launch specification for running a model.

@@ -436,9 +436,9 @@ pub async fn proxy_chat(
         .ok()
         .and_then(|s| s.inference_defaults);
 
-    // Resolve inference parameters using hierarchy:
+    // Resolve inference parameters using the 4-level hierarchy:
     // Request → Model → Global → Hardcoded defaults
-    let mut resolved = gglib_core::domain::InferenceConfig {
+    let resolved = gglib_core::domain::InferenceConfig {
         temperature: request.temperature,
         top_p: request.top_p,
         top_k: request.top_k,
@@ -446,20 +446,8 @@ pub async fn proxy_chat(
         repeat_penalty: request.repeat_penalty,
         presence_penalty: request.presence_penalty,
         min_p: request.min_p,
-    };
-
-    // Apply model defaults (if missing)
-    if let Some(model_defaults) = model_defaults {
-        resolved.merge_with(&model_defaults);
     }
-
-    // Apply global settings defaults (if missing)
-    if let Some(global_defaults) = global_defaults {
-        resolved.merge_with(&global_defaults);
-    }
-
-    // Apply hardcoded defaults for any still-missing values
-    resolved.merge_with(&gglib_core::domain::InferenceConfig::with_hardcoded_defaults());
+    .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref());
 
     tracing::debug!(
         port = request.port,

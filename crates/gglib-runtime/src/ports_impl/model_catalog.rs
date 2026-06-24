@@ -36,6 +36,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         architecture: m.architecture.clone(),
         created_at: m.added_at.timestamp(),
         file_size,
+        inference_defaults: m.inference_defaults.clone(),
     }
 }
 

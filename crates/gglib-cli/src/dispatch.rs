@@ -10,6 +10,7 @@
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
 use anyhow::Result;
+use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::llama::{ContextInput, resolve_context_size};
 
@@ -255,6 +256,13 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             port,
             llama_port,
             default_context,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
+            presence_penalty,
+            min_p,
         } => {
             let settings = ctx.app.settings().get().await?;
             let context_resolution = resolve_context_size(ContextInput {
@@ -266,6 +274,26 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 .value
                 .map(u64::from)
                 .unwrap_or(DEFAULT_CONTEXT_SIZE);
+            let inference_override = if temperature.is_some()
+                || top_p.is_some()
+                || top_k.is_some()
+                || max_tokens.is_some()
+                || repeat_penalty.is_some()
+                || presence_penalty.is_some()
+                || min_p.is_some()
+            {
+                Some(InferenceConfig {
+                    temperature,
+                    top_p,
+                    top_k,
+                    max_tokens,
+                    repeat_penalty,
+                    presence_penalty,
+                    min_p,
+                })
+            } else {
+                None
+            };
             gglib_runtime::proxy::start_proxy_standalone(
                 host,
                 port,
@@ -274,6 +302,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx.model_repo.clone(),
                 effective_context,
                 ctx.mcp.clone(),
+                ctx.app.settings().repo(),
+                inference_override,
             )
             .await?;
         }

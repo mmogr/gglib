@@ -15,6 +15,11 @@ impl SettingsService {
         Self { repo }
     }
 
+    /// Return the underlying settings repository.
+    pub fn repo(&self) -> Arc<dyn SettingsRepository> {
+        Arc::clone(&self.repo)
+    }
+
     /// Get current settings.
     pub async fn get(&self) -> Result<Settings, CoreError> {
         self.repo.load().await.map_err(CoreError::from)
