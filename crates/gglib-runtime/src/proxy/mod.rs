@@ -346,13 +346,27 @@ pub async fn start_proxy_standalone(
     println!("  Default context: {}", default_context);
     if let Some(ref ic) = inference_override {
         let mut parts: Vec<String> = Vec::new();
-        if let Some(v) = ic.temperature    { parts.push(format!("temperature={v}")); }
-        if let Some(v) = ic.top_p          { parts.push(format!("top_p={v}")); }
-        if let Some(v) = ic.top_k          { parts.push(format!("top_k={v}")); }
-        if let Some(v) = ic.max_tokens     { parts.push(format!("max_tokens={v}")); }
-        if let Some(v) = ic.repeat_penalty { parts.push(format!("repeat_penalty={v}")); }
-        if let Some(v) = ic.presence_penalty { parts.push(format!("presence_penalty={v}")); }
-        if let Some(v) = ic.min_p          { parts.push(format!("min_p={v}")); }
+        if let Some(v) = ic.temperature {
+            parts.push(format!("temperature={v}"));
+        }
+        if let Some(v) = ic.top_p {
+            parts.push(format!("top_p={v}"));
+        }
+        if let Some(v) = ic.top_k {
+            parts.push(format!("top_k={v}"));
+        }
+        if let Some(v) = ic.max_tokens {
+            parts.push(format!("max_tokens={v}"));
+        }
+        if let Some(v) = ic.repeat_penalty {
+            parts.push(format!("repeat_penalty={v}"));
+        }
+        if let Some(v) = ic.presence_penalty {
+            parts.push(format!("presence_penalty={v}"));
+        }
+        if let Some(v) = ic.min_p {
+            parts.push(format!("min_p={v}"));
+        }
         println!("  Inference override: {}", parts.join(", "));
     }
     println!(

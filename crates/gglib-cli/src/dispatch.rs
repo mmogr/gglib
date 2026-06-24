@@ -274,23 +274,26 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 .value
                 .map(u64::from)
                 .unwrap_or(DEFAULT_CONTEXT_SIZE);
-            let inference_override =
-                if temperature.is_some() || top_p.is_some() || top_k.is_some()
-                    || max_tokens.is_some() || repeat_penalty.is_some()
-                    || presence_penalty.is_some() || min_p.is_some()
-                {
-                    Some(InferenceConfig {
-                        temperature,
-                        top_p,
-                        top_k,
-                        max_tokens,
-                        repeat_penalty,
-                        presence_penalty,
-                        min_p,
-                    })
-                } else {
-                    None
-                };
+            let inference_override = if temperature.is_some()
+                || top_p.is_some()
+                || top_k.is_some()
+                || max_tokens.is_some()
+                || repeat_penalty.is_some()
+                || presence_penalty.is_some()
+                || min_p.is_some()
+            {
+                Some(InferenceConfig {
+                    temperature,
+                    top_p,
+                    top_k,
+                    max_tokens,
+                    repeat_penalty,
+                    presence_penalty,
+                    min_p,
+                })
+            } else {
+                None
+            };
             gglib_runtime::proxy::start_proxy_standalone(
                 host,
                 port,
