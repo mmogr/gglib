@@ -545,6 +545,7 @@ mod tests {
                 architecture: Some("llama".into()),
                 created_at: 1700000000,
                 file_size: 4_000_000_000,
+                inference_defaults: None,
             },
             ModelSummary {
                 id: 2,
@@ -556,6 +557,7 @@ mod tests {
                 architecture: Some("mistral".into()),
                 created_at: 1700000001,
                 file_size: 7_000_000_000,
+                inference_defaults: None,
             },
         ];
 
@@ -580,6 +582,7 @@ mod tests {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            inference_defaults: None,
         }]);
 
         let json = serde_json::to_value(&resp).unwrap();
@@ -605,6 +608,7 @@ mod tests {
             architecture: Some("llama".into()),
             created_at: 0,
             file_size: 0,
+            inference_defaults: None,
         };
         let info = ModelInfo::from(summary);
         let desc = info.description.unwrap();
@@ -625,6 +629,7 @@ mod tests {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            inference_defaults: None,
         };
         let info = ModelInfo::from(summary);
         let desc = info.description.unwrap();

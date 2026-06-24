@@ -11,9 +11,11 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
+    SettingsRepository,
 };
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
@@ -91,6 +93,17 @@ fn make_orchestrator_deps() -> CouncilDeps {
 }
 
 // ─── Mock ports ────────────────────────────────────────────────────────────
+
+struct MockSettingsRepo;
+#[async_trait::async_trait]
+impl SettingsRepository for MockSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        Ok(Settings::with_defaults())
+    }
+    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 struct MockRuntimePort;
@@ -186,6 +199,7 @@ async fn start_proxy() -> (String, CancellationToken) {
             mcp,
             make_orchestrator_deps(),
             cancel_clone,
+            Arc::new(MockSettingsRepo),
         )
         .await
         .ok();

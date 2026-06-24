@@ -8,6 +8,12 @@
 //! - Per-model defaults (`Model.inference_defaults`)
 //! - Global settings (`Settings.inference_defaults`)
 //! - Request-level overrides (flattened in `ChatProxyRequest`)
+//! - `gglib proxy` — per-request injection into OpenAI-format request bodies
+//! - `gglib chat` / `gglib q` — hierarchy resolution for the agentic loop
+//!
+//! All surfaces resolve inference parameters through
+//! [`InferenceConfig::resolve_with_defaults`], which is the single source of
+//! truth for the 4-level hierarchy.
 
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +105,44 @@ pub struct InferenceConfig {
     /// - 0.0: Disabled (explicit off; recommended by Qwen3.6)
     /// - 0.05: llama.cpp built-in default when the flag is omitted
     pub min_p: Option<f32>,
+}
+
+/// Convert a camelCase string to `snake_case`.
+///
+/// Used internally to rename `InferenceConfig`'s serde camelCase output to the
+/// `OpenAI` wire format (`topP` → `top_p`, `maxTokens` → `max_tokens`, etc.).
+fn camel_to_snake(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 4);
+    for ch in s.chars() {
+        if ch.is_uppercase() {
+            out.push('_');
+            out.push(ch.to_ascii_lowercase());
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// Convert a `snake_case` string to camelCase.
+///
+/// Inverse of [`camel_to_snake`]; used to normalise OpenAI-format body keys
+/// (`top_p`, `max_tokens`, etc.) into the camelCase form expected by
+/// `InferenceConfig`'s serde impl before deserialisation.
+fn snake_to_camel(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut cap = false;
+    for ch in s.chars() {
+        if ch == '_' {
+            cap = true;
+        } else if cap {
+            out.push(ch.to_ascii_uppercase());
+            cap = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 impl InferenceConfig {
@@ -262,6 +306,95 @@ impl InferenceConfig {
             min_p: Some(0.0),
         }
     }
+
+    /// Resolve inference parameters using the 4-level hierarchy.
+    ///
+    /// Applies fallback layers in order, with each layer filling only `None`
+    /// fields from `self` — explicit values are never overwritten:
+    ///
+    /// 1. `self` — caller-supplied overrides (request params, CLI flags, etc.)
+    /// 2. `model` — per-model stored defaults
+    /// 3. `global` — global settings defaults
+    /// 4. [`with_hardcoded_defaults`] — compile-time fallback values
+    ///
+    /// This is the single source of truth for inference parameter resolution,
+    /// used by every gglib surface: `gglib serve`, `gglib chat`, `gglib q`,
+    /// `gglib proxy`, and the internal Web UI chat API.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::InferenceConfig;
+    ///
+    /// let request = InferenceConfig { temperature: Some(0.9), ..Default::default() };
+    /// let model   = InferenceConfig { temperature: Some(0.5), top_p: Some(0.8), ..Default::default() };
+    ///
+    /// let resolved = request.resolve_with_defaults(Some(&model), None);
+    /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
+    /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
+    /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
+    /// ```
+    ///
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    #[must_use]
+    pub const fn resolve_with_defaults(
+        mut self,
+        model: Option<&Self>,
+        global: Option<&Self>,
+    ) -> Self {
+        if let Some(m) = model {
+            self.merge_with(m);
+        }
+        if let Some(g) = global {
+            self.merge_with(g);
+        }
+        self.merge_with(&Self::with_hardcoded_defaults());
+        self
+    }
+
+    /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
+    ///
+    /// Converts wire-format `snake_case` field names (`top_p`, `max_tokens`,
+    /// `repeat_penalty`, etc.) to the internal camelCase representation via
+    /// [`snake_to_camel`], then deserialises using the existing `serde` impl.
+    /// Unknown or missing fields default to `None`.
+    ///
+    /// This is the inverse of [`to_openai_json_patch`].
+    ///
+    /// [`to_openai_json_patch`]: Self::to_openai_json_patch
+    #[must_use]
+    pub fn from_openai_json(value: &serde_json::Value) -> Self {
+        let Some(obj) = value.as_object() else {
+            return Self::default();
+        };
+        let camel: serde_json::Map<String, serde_json::Value> = obj
+            .iter()
+            .map(|(k, v)| (snake_to_camel(k), v.clone()))
+            .collect();
+        serde_json::from_value(serde_json::Value::Object(camel)).unwrap_or_default()
+    }
+
+    /// Serialise as an OpenAI-format JSON patch (`snake_case` keys, `Some` fields only).
+    ///
+    /// Uses `serde` to produce the camelCase form, then renames each key to
+    /// `snake_case` via [`camel_to_snake`]. Only `Some` fields are emitted — `None`
+    /// values are filtered out. The returned map can be merged directly into an
+    /// OpenAI-compatible request body with `body_obj.insert(k, v)`.
+    ///
+    /// This is the inverse of [`from_openai_json`].
+    ///
+    /// [`from_openai_json`]: Self::from_openai_json
+    #[must_use]
+    pub fn to_openai_json_patch(&self) -> serde_json::Map<String, serde_json::Value> {
+        let camel = serde_json::to_value(self).unwrap_or_default();
+        camel
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, v)| !v.is_null())
+            .map(|(k, v)| (camel_to_snake(k), v.clone()))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -343,5 +476,99 @@ mod tests {
         let deserialized: InferenceConfig = serde_json::from_str(&json).unwrap();
 
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_camel_to_snake() {
+        assert_eq!(camel_to_snake("temperature"), "temperature");
+        assert_eq!(camel_to_snake("topP"), "top_p");
+        assert_eq!(camel_to_snake("topK"), "top_k");
+        assert_eq!(camel_to_snake("maxTokens"), "max_tokens");
+        assert_eq!(camel_to_snake("repeatPenalty"), "repeat_penalty");
+        assert_eq!(camel_to_snake("presencePenalty"), "presence_penalty");
+        assert_eq!(camel_to_snake("minP"), "min_p");
+    }
+
+    #[test]
+    fn test_snake_to_camel() {
+        assert_eq!(snake_to_camel("temperature"), "temperature");
+        assert_eq!(snake_to_camel("top_p"), "topP");
+        assert_eq!(snake_to_camel("top_k"), "topK");
+        assert_eq!(snake_to_camel("max_tokens"), "maxTokens");
+        assert_eq!(snake_to_camel("repeat_penalty"), "repeatPenalty");
+        assert_eq!(snake_to_camel("presence_penalty"), "presencePenalty");
+        assert_eq!(snake_to_camel("min_p"), "minP");
+    }
+
+    #[test]
+    fn test_resolve_with_defaults_hierarchy() {
+        let request = InferenceConfig {
+            temperature: Some(0.9),
+            ..Default::default()
+        };
+        let model = InferenceConfig {
+            temperature: Some(0.5),
+            top_p: Some(0.8),
+            ..Default::default()
+        };
+        let global = InferenceConfig {
+            top_k: Some(10),
+            ..Default::default()
+        };
+
+        let resolved = request.resolve_with_defaults(Some(&model), Some(&global));
+
+        assert_eq!(resolved.temperature, Some(0.9)); // request wins
+        assert_eq!(resolved.top_p, Some(0.8)); // model fills in
+        assert_eq!(resolved.top_k, Some(10)); // global fills in
+        assert_eq!(resolved.max_tokens, Some(2048)); // hardcoded fallback
+        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+    }
+
+    #[test]
+    fn test_resolve_with_defaults_no_layers() {
+        let base = InferenceConfig::default();
+        let resolved = base.resolve_with_defaults(None, None);
+        // Should equal hardcoded defaults
+        assert_eq!(resolved, InferenceConfig::with_hardcoded_defaults());
+    }
+
+    #[test]
+    fn test_openai_json_roundtrip() {
+        let config = InferenceConfig {
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            repeat_penalty: Some(1.1),
+            ..Default::default()
+        };
+        let patch = config.to_openai_json_patch();
+
+        // snake_case keys present for Some fields
+        assert!(patch.contains_key("temperature"));
+        assert!(patch.contains_key("top_p"));
+        assert!(patch.contains_key("repeat_penalty"));
+        // None fields absent
+        assert!(!patch.contains_key("top_k"));
+        assert!(!patch.contains_key("max_tokens"));
+
+        // Roundtrip via from_openai_json
+        let val = serde_json::Value::Object(patch);
+        let back = InferenceConfig::from_openai_json(&val);
+        assert_eq!(back.temperature, Some(0.7));
+        assert_eq!(back.top_p, Some(0.9));
+        assert_eq!(back.repeat_penalty, Some(1.1));
+        assert!(back.top_k.is_none());
+    }
+
+    #[test]
+    fn test_from_openai_json_unknown_fields_ignored() {
+        let val = serde_json::json!({
+            "temperature": 0.5,
+            "model": "llama3",
+            "messages": []
+        });
+        let config = InferenceConfig::from_openai_json(&val);
+        assert_eq!(config.temperature, Some(0.5));
+        assert!(config.top_p.is_none());
     }
 }

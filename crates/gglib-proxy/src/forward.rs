@@ -70,7 +70,7 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
 use gglib_core::ModelCapabilities;
-use gglib_core::domain::{ChatMessage, transform_messages_for_capabilities};
+use gglib_core::domain::{ChatMessage, InferenceConfig, transform_messages_for_capabilities};
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{SseEncoder, SseStreamDecoder};
@@ -112,6 +112,8 @@ struct ModelContext {
     capabilities: ModelCapabilities,
     /// `format:*` tags — drives response-stream parser selection.
     tags: Vec<String>,
+    /// Per-model inference defaults to merge into each request.
+    inference_defaults: Option<InferenceConfig>,
 }
 
 /// Resolve the [`ModelContext`] for a model in a single catalog round-trip.
@@ -124,12 +126,14 @@ async fn resolve_model_context(catalog: &dyn ModelCatalogPort, model_name: &str)
         Ok(Some(summary)) => ModelContext {
             capabilities: summary.capabilities,
             tags: summary.tags,
+            inference_defaults: summary.inference_defaults,
         },
         Ok(None) => {
             debug!(model = %model_name, "model not found in catalog; using pass-through context");
             ModelContext {
                 capabilities: ModelCapabilities::empty(),
                 tags: Vec::new(),
+                inference_defaults: None,
             }
         }
         Err(e) => {
@@ -137,6 +141,7 @@ async fn resolve_model_context(catalog: &dyn ModelCatalogPort, model_name: &str)
             ModelContext {
                 capabilities: ModelCapabilities::empty(),
                 tags: Vec::new(),
+                inference_defaults: None,
             }
         }
     }
@@ -309,6 +314,7 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// * `model_name` - Model name to advertise to the client (used in SSE envelope)
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 /// * `metrics` - Metrics store for recording per-request context snapshots
+/// * `global_inference_defaults` - Global inference defaults from settings
 ///
 /// # Returns
 ///
@@ -324,6 +330,7 @@ pub async fn forward_chat_completion(
     model_name: &str,
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
+    global_inference_defaults: Option<InferenceConfig>,
 ) -> Response {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -389,6 +396,30 @@ pub async fn forward_chat_completion(
         body_bytes = body.len(),
         "sending request to upstream (post-transform)"
     );
+
+    // 4. Inject resolved inference defaults.
+    //
+    // Extract any params the client already sent, then merge model-level and
+    // global defaults behind them via the 4-level hierarchy.  The resolved
+    // values are aggressively inserted (not `or_insert`) so that every
+    // param in the final config is forwarded to llama-server.
+    let body = if let Ok(mut body_value) = serde_json::from_slice::<serde_json::Value>(&body) {
+        let client_params = InferenceConfig::from_openai_json(&body_value);
+        let resolved = client_params.resolve_with_defaults(
+            context.inference_defaults.as_ref(),
+            global_inference_defaults.as_ref(),
+        );
+        if let Some(body_obj) = body_value.as_object_mut() {
+            for (k, v) in resolved.to_openai_json_patch() {
+                body_obj.insert(k, v);
+            }
+        }
+        serde_json::to_vec(&body_value)
+            .map(Bytes::from)
+            .unwrap_or(body)
+    } else {
+        body
+    };
 
     // Build the request to upstream
     let mut req_builder = client

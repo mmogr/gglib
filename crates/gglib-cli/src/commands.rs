@@ -398,5 +398,40 @@ pub enum Commands {
         /// compiled default (4096) if unset. Accepts a positive number or `max`.
         #[arg(long)]
         default_context: Option<String>,
+
+        /// Override sampling temperature for this proxy session (0.0–2.0).
+        ///
+        /// Applied as a global default: requests that don't specify temperature
+        /// will use this value. Per-request and per-model values still win.
+        #[arg(long)]
+        temperature: Option<f32>,
+
+        /// Override nucleus sampling top-p for this proxy session (0.0–1.0).
+        #[arg(long)]
+        top_p: Option<f32>,
+
+        /// Override top-k sampling limit for this proxy session.
+        #[arg(long)]
+        top_k: Option<i32>,
+
+        /// Override max tokens to generate for this proxy session.
+        #[arg(long)]
+        max_tokens: Option<u32>,
+
+        /// Override repetition penalty for this proxy session (typically 1.0–1.3).
+        #[arg(long)]
+        repeat_penalty: Option<f32>,
+
+        /// Override presence penalty for this proxy session (0.0–2.0).
+        ///
+        /// Useful for reasoning/thinking models (e.g. `1.5` for Qwen3, DeepSeek-R1).
+        #[arg(long)]
+        presence_penalty: Option<f32>,
+
+        /// Override min-p sampling threshold for this proxy session (0.0–1.0).
+        ///
+        /// Set `0.0` to disable (recommended by Qwen3).
+        #[arg(long)]
+        min_p: Option<f32>,
     },
 }

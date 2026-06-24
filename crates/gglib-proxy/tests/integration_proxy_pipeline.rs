@@ -29,9 +29,11 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::Settings;
 use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
+    SettingsRepository,
 };
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
@@ -105,6 +107,17 @@ fn make_orchestrator_deps() -> CouncilDeps {
         runner: Arc::new(NoopRunner),
         approval_registry: Arc::new(NoopApprovalRegistry),
         council_repo: Arc::new(NoopOrchestratorRepo),
+    }
+}
+
+struct MockSettingsRepo;
+#[async_trait]
+impl SettingsRepository for MockSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        Ok(Settings::with_defaults())
+    }
+    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
+        Ok(())
     }
 }
 
@@ -185,6 +198,7 @@ impl TaggedCatalog {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            inference_defaults: None,
         }
     }
 }
@@ -305,6 +319,7 @@ async fn spawn_proxy(
             mcp,
             make_orchestrator_deps(),
             cancel_clone,
+            Arc::new(MockSettingsRepo),
         )
         .await
         .ok();

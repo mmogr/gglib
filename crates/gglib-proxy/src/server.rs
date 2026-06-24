@@ -18,7 +18,9 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
+use gglib_core::ports::{
+    ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
+};
 use gglib_mcp::McpService;
 
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
@@ -48,6 +50,8 @@ pub(crate) struct AppState {
     /// Ring-buffer store of per-request context metrics, exposed via
     /// `GET /v1/proxy/status`.
     pub(crate) metrics: Arc<ContextMetricsStore>,
+    /// Settings repository for loading global inference defaults per-request.
+    settings_repo: Arc<dyn SettingsRepository>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -63,10 +67,12 @@ pub(crate) struct AppState {
 /// * `mcp` - MCP service for tool gateway
 /// * `council` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
+/// * `settings_repo` - Settings repository for loading global inference defaults
 ///
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
+#[allow(clippy::too_many_arguments)]
 pub async fn serve(
     listener: TcpListener,
     default_ctx: u64,
@@ -75,6 +81,7 @@ pub async fn serve(
     mcp: Arc<McpService>,
     council: CouncilDeps,
     cancel: CancellationToken,
+    settings_repo: Arc<dyn SettingsRepository>,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -91,6 +98,7 @@ pub async fn serve(
         default_ctx,
         council,
         metrics: Arc::new(ContextMetricsStore::new()),
+        settings_repo,
     };
 
     let app = Router::new()
@@ -238,6 +246,14 @@ async fn chat_completions(
         "Routing to llama-server"
     );
 
+    // Load global inference defaults for this request.
+    let global_inference_defaults = state
+        .settings_repo
+        .load()
+        .await
+        .ok()
+        .and_then(|s| s.inference_defaults);
+
     // Forward the request
     forward_chat_completion(
         &state.client,
@@ -248,6 +264,7 @@ async fn chat_completions(
         &model_name,
         state.catalog_port.clone(),
         state.metrics.clone(),
+        global_inference_defaults,
     )
     .await
 }
