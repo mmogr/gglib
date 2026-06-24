@@ -436,10 +436,40 @@ To pre-generate badge structure for a new crate or update module tables, use `sc
 ### Prerequisites
 
 - Rust 1.91.0 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
-- Node.js 20+
+- Node.js 22.12+ (see below)
 - Platform system libraries (see `scripts/check-deps.sh` for a live dependency check)
 
 Run `make setup` for a one-command first-time setup on macOS. On Linux, review `scripts/check-deps.sh` first to install system packages.
+
+### Node Version Management
+
+The repo pins Node 22 via `.nvmrc` and `.tool-versions`. Any of the following version managers will auto-activate the right version when you `cd` into the repo:
+
+**Recommended — [mise](https://mise.jdx.dev)** (polyglot: manages Node, Ruby, Python, and more in one tool; works on Linux and macOS)
+```sh
+# Install mise (once per machine)
+curl https://mise.run | sh
+# Add to your shell — e.g. for fish:
+echo 'mise activate fish | source' >> ~/.config/fish/config.fish
+
+# In the repo — install the pinned Node version
+mise install
+```
+
+**Alternative — nvm or fnm** (Node-only managers; both read `.nvmrc` automatically)
+```sh
+# nvm
+nvm install   # reads .nvmrc
+nvm use
+
+# fnm
+fnm install   # reads .nvmrc
+fnm use
+```
+
+**Manual fallback** — install Node ≥22.12 directly from [nodejs.org](https://nodejs.org) and verify with `node --version`.
+
+> **Note:** if you ever see `EACCES: permission denied` on `npm install -g`, that means the active Node is a system-owned binary. The fix is always to switch to a version-manager-managed Node — never `sudo npm install -g`.
 
 ### Common commands
 

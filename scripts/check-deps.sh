@@ -158,6 +158,7 @@ check_node_version() {
 
     if ! command_exists node; then
         printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "node" "✗" "MISSING" "$description"
+        echo -e "   ${YELLOW}Hint: run 'mise install' or 'nvm use' in the repo root to activate the version from .nvmrc${RESET}"
         MISSING_REQUIRED+=("node")
         return 1
     fi
@@ -185,7 +186,7 @@ check_node_version() {
     else
         printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "node" "✗" "v$version (TOO OLD)" "$description"
         echo -e "   ${YELLOW}Node.js v$version is installed but v20.19+, v22.12+, or v24+ is required.${RESET}"
-        echo -e "   ${YELLOW}Run: nvm install 22 && nvm use 22  (or update via https://nodejs.org)${RESET}"
+        echo -e "   ${YELLOW}Run: mise install  (or: nvm install 22 && nvm use 22)  — see CONTRIBUTING.md for setup${RESET}"
         MISSING_REQUIRED+=("node")
         return 1
     fi
