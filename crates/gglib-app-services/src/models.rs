@@ -6,7 +6,7 @@ use std::sync::Arc;
 use gglib_core::domain::Model;
 use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
-use gglib_core::{ModelCapabilities, ModelFilterOptions};
+use gglib_core::{ModelCapabilities, ModelFilterOptions, domain::{apply_query, ModelListQuery}};
 
 use crate::error::GuiError;
 use crate::types::{
@@ -80,6 +80,31 @@ impl ModelOps {
 
         let mut gui_models = Vec::new();
         for model in models {
+            let (is_serving, port) = self.get_server_status(model.id).await;
+            gui_models.push(GuiModel::from_model(model, is_serving, port));
+        }
+
+        Ok(gui_models)
+    }
+
+    /// List models filtered and sorted by the given query.
+    ///
+    /// Fetches all models from the repository, applies [`apply_query`] (the
+    /// single source of truth for filter/sort semantics), then enriches each
+    /// surviving model with its current serving status.
+    pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
+        let models = self
+            .deps
+            .core
+            .models()
+            .list()
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to list models: {e}")))?;
+
+        let filtered = apply_query(models, &query);
+
+        let mut gui_models = Vec::new();
+        for model in filtered {
             let (is_serving, port) = self.get_server_status(model.id).await;
             gui_models.push(GuiModel::from_model(model, is_serving, port));
         }
