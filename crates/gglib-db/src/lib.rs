@@ -21,6 +21,7 @@ pub use repositories::{
 };
 
 // Re-export setup functions for convenient access
+pub use setup::cleanup_zombie_benchmark_runs;
 pub use setup::setup_database;
 #[cfg(any(test, feature = "test-utils"))]
 pub use setup::setup_test_database;

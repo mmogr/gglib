@@ -23,6 +23,7 @@ use gglib_core::ports::{
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteCouncilRepository;
+use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
@@ -200,6 +201,18 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     //    after AppCore has verification attached).
     if let Err(e) = core.models().bootstrap_capabilities().await {
         tracing::warn!("Failed to bootstrap model capabilities: {}", e);
+    }
+
+    // 3b. Zombie-run cleanup — daemon-only, runs once at startup.
+    //
+    // Any benchmark_run left in status='running' from a prior crash is
+    // immediately corrected. This hook lives here (not in the CLI) because only
+    // the daemon can safely assume no other process owns a 'running' row: the
+    // daemon is the sole long-lived process with a stable DB connection. The
+    // CLI only performs this cleanup when it has confirmed (via health-ping)
+    // that no daemon is currently active — see Phase 3b implementation notes.
+    if let Err(e) = cleanup_zombie_benchmark_runs(&pool).await {
+        tracing::warn!("Failed to clean up zombie benchmark runs on startup: {e}");
     }
 
     // 4. MCP service with SSE emitter.

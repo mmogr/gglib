@@ -119,6 +119,7 @@ fn main() {
                 approval_registry: ctx.approval_registry.clone(),
                 council_repo: ctx.council_repo.clone(),
                 steering_note_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+                runtime: ctx.runtime.clone(),
             };
 
             // Start embedded API server with auth and ephemeral port

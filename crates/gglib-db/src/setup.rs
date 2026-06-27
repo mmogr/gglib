@@ -81,6 +81,23 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
     Ok(pool)
 }
 
+/// Mark any benchmark runs that are stuck in `running` status as `failed`.
+///
+/// Call this **once** at daemon boot, after the schema is ready. It corrects
+/// rows left in an inconsistent state by a prior crash. This function is
+/// intentionally **not** called by the CLI — the CLI cannot safely determine
+/// whether a `running` row belongs to a live daemon session.
+pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
+    sqlx::query(
+        "UPDATE benchmark_runs \
+         SET status = 'failed', error = 'Process terminated unexpectedly' \
+         WHERE status = 'running'",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Creates the complete database schema.
 ///
 /// This function creates all tables and indexes required by the application.

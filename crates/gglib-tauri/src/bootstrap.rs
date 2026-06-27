@@ -17,9 +17,12 @@ use gglib_app_services::{
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, HfClientPort, ModelRepository, NoopEmitter,
-    ProcessRunner, Repos,
+    AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
 };
+use gglib_core::DEFAULT_LLAMA_BASE_PORT;
+use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+use gglib_runtime::process::ProcessManager;
 use gglib_core::services::AppCore;
 use gglib_db::repositories::SqliteCouncilRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
@@ -94,6 +97,8 @@ pub struct TauriContext {
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Orchestrator run repository (for HITL persistence via the embedded Axum server).
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
+    pub runtime: Arc<dyn ModelRuntimePort>,
 }
 
 impl TauriContext {
@@ -180,6 +185,14 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     // 4. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
+        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        DEFAULT_LLAMA_BASE_PORT,
+        config.llama_server_path.to_string_lossy().into_owned(),
+        catalog_for_runtime,
+    ));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
     // 5. Build 7 domain ops.
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
@@ -222,6 +235,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         council_repo: Arc::clone(&council_repo)
             as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        runtime: Arc::clone(&runtime),
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -246,6 +260,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         setup,
         approval_registry,
         council_repo,
+        runtime,
     })
 }
 
@@ -267,6 +282,14 @@ pub fn bootstrap_with(
     // Create proxy infrastructure for tests
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
+        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        DEFAULT_LLAMA_BASE_PORT,
+        String::from("llama-server"),
+        catalog_for_runtime,
+    ));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
     // Build 7 domain ops (Noop for tests — no server events, no hardware probing)
     let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
@@ -313,6 +336,7 @@ pub fn bootstrap_with(
         approval_registry: Arc::clone(&approval_registry_w)
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         council_repo: Arc::clone(&orch_repo_w) as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        runtime: Arc::clone(&runtime),
     }));
     let setup_ops = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -337,10 +361,9 @@ pub fn bootstrap_with(
         setup: setup_ops,
         approval_registry: approval_registry_w,
         council_repo: orch_repo_w,
+        runtime,
     }
 }
-
-/// Bootstrap without AppHandle - uses a Noop emitter for download events.
 ///
 /// This variant is for cases where bootstrap must happen before
 /// Tauri's setup() phase (e.g., starting embedded API server).
@@ -399,6 +422,14 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     // 3. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
+        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        DEFAULT_LLAMA_BASE_PORT,
+        config.llama_server_path.to_string_lossy().into_owned(),
+        catalog_for_runtime,
+    ));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
     // 4. Build 7 domain ops (no AppHandle → NoopServerEvents).
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
@@ -441,6 +472,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         council_repo: Arc::clone(&council_repo)
             as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        runtime: Arc::clone(&runtime),
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -465,6 +497,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         setup,
         approval_registry: approval_registry_e,
         council_repo,
+        runtime,
     })
 }
 // `bootstrap_with` is the only place where the verification service is
