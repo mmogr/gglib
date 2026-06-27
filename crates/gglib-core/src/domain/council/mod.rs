@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Orchestrator domain model.
 //!
 //! This module owns the pure data types that drive the Director/Worker

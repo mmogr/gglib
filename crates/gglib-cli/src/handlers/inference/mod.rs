@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Inference command handlers.
 //!
 //! Handles `serve`, `chat`, and `question` — the three top-level commands

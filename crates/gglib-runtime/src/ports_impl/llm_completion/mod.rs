@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Concrete [`LlmCompletionPort`] adapter for a llama-server instance.
 //!
 //! Translates domain [`AgentMessage`] / [`ToolDefinition`] values into the

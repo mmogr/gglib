@@ -1,5 +1,6 @@
 # manager
 
+<!-- module-docs:start -->
 Download manager coordinating queues, executors, and state tracking.
 
 ## Purpose
@@ -181,3 +182,18 @@ Use mock executors and queues for unit tests.
 | [`shard_group_tracker.rs`](shard_group_tracker.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-coverage.json) |
 | [`worker.rs`](worker.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-coverage.json) |
 <!-- module-table:end -->
+
+<!-- module-docs:end -->
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`paths.rs`](paths.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-paths-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-paths-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-paths-coverage.json) |
+| [`shard_group_tracker.rs`](shard_group_tracker.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-shard_group_tracker-coverage.json) |
+| [`worker.rs`](worker.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-worker-coverage.json) |
+<!-- module-table:end -->
+
+</details>

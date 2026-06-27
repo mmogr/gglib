@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Tool-call loop detection via FNV-1a batch signatures.
 //!
 //! # Algorithm

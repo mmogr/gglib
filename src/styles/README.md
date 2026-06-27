@@ -1,5 +1,6 @@
 # Styling & UI Architecture Contracts
 
+<!-- module-docs:start -->
 **Version**: Phase 0 (foundational contracts)  
 **Status**: Active  
 **Epic**: [#19 - Tailwind-first UI rewrite](https://github.com/mmogr/gglib/issues/19)
@@ -408,3 +409,5 @@ For questions about these contracts or proposed changes:
 - Propose alternatives with justification
 
 **These contracts are living documentation**—they may evolve based on learnings from Phases 1-5, but changes require explicit discussion and approval.
+
+<!-- module-docs:end -->

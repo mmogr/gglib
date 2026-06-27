@@ -214,7 +214,23 @@ main() {
         RESULTS+=("{\"crate\": \"gglib-bootstrap-source-guard\", \"status\": \"pass\", \"violations\": []}")
     fi
     log ""
-    
+
+    # README coverage and quality (all logic delegated to check_readmes.sh)
+    log "📋 README coverage and quality"
+    _readme_exit=0
+    bash "$(dirname "${BASH_SOURCE[0]}")/check_readmes.sh" --json --strict || _readme_exit=$?
+    if [[ $_readme_exit -ne 0 ]]; then
+        FAILED=1
+    fi
+    # Merge readme-status.txt entries into RESULTS before writing boundary-status.json
+    if [[ -f "readme-status.txt" ]]; then
+        while IFS= read -r _entry; do
+            [[ -n "$_entry" ]] && RESULTS+=("$_entry")
+        done < "readme-status.txt"
+        rm -f "readme-status.txt"
+    fi
+    log ""
+
     # Build JSON output
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local overall_status="pass"

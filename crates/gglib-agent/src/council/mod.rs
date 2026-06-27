@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Orchestrator Director — decompose goals into task graphs.
 //!
 //! This module contains the director agent that translates a high-level goal

@@ -1,3 +1,5 @@
+#![doc = include_str!("README.md")]
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! MCP Streamable HTTP gateway for the proxy.
 //!
 //! Implements the MCP Streamable HTTP transport (spec 2025-03-26) so
