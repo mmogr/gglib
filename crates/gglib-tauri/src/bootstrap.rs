@@ -12,8 +12,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps,
-    ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+    BenchmarkDeps, BenchmarkOps, CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps,
+    McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps,
+    SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
@@ -25,6 +26,7 @@ use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use gglib_runtime::process::ProcessManager;
 use gglib_core::services::AppCore;
 use gglib_db::repositories::SqliteCouncilRepository;
+use gglib_db::SqliteBenchmarkRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_mcp::McpService;
 use gglib_runtime::proxy::ProxySupervisor;
@@ -97,6 +99,10 @@ pub struct TauriContext {
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Orchestrator run repository (for HITL persistence via the embedded Axum server).
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Benchmark run repository for compare and perf results.
+    pub bench_repo: Arc<SqliteBenchmarkRepository>,
+    /// Benchmark operations: run_compare and run_perf.
+    pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
     pub runtime: Arc<dyn ModelRuntimePort>,
 }
@@ -171,9 +177,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     } = CoreBootstrap::build(bootstrap_config, Arc::clone(&tauri_emitter)).await?;
 
     // Orchestrator persistence (Phase D).
-    let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
-
-    // 3. MCP service — NoopEmitter until the Tauri MCP event bridge is wired.
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
@@ -193,6 +197,16 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         catalog_for_runtime,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+
+    // Benchmark ops — constructed after runtime to share SingleSwap semantics.
+    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool));
+    let benchmark_http = BenchmarkDeps::build_http_client()?;
+    let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
+        model_repo: repos.models.clone(),
+        runtime: Arc::clone(&runtime),
+        bench_repo: bench_repo.clone(),
+        http_client: benchmark_http,
+    }));
 
     // 5. Build 7 domain ops.
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
@@ -260,6 +274,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         setup,
         approval_registry,
         council_repo,
+        bench_repo,
+        benchmark,
         runtime,
     })
 }
@@ -328,6 +344,13 @@ pub fn bootstrap_with(
     let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
     let approval_registry_w = Arc::new(CouncilApprovalRegistry::new());
     let orch_repo_w = Arc::new(SqliteCouncilRepository::new_in_memory_blocking());
+    let bench_repo_w = Arc::new(SqliteBenchmarkRepository::new_in_memory_blocking());
+    let benchmark_w = Arc::new(BenchmarkOps::new(BenchmarkDeps {
+        model_repo: model_repo.clone(),
+        runtime: Arc::clone(&runtime),
+        bench_repo: bench_repo_w.clone(),
+        http_client: BenchmarkDeps::build_http_client().expect("benchmark http client"),
+    }));
     let proxy_ops = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor.clone(),
         model_repo: model_repo.clone(),
@@ -361,6 +384,8 @@ pub fn bootstrap_with(
         setup: setup_ops,
         approval_registry: approval_registry_w,
         council_repo: orch_repo_w,
+        bench_repo: bench_repo_w,
+        benchmark: benchmark_w,
         runtime,
     }
 }
@@ -408,9 +433,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         model_registrar: _,
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
-    let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
-
-    // 2. MCP service.
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
@@ -430,6 +453,16 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         catalog_for_runtime,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+
+    // Benchmark ops — constructed after runtime to share SingleSwap semantics.
+    let bench_repo_e = Arc::new(SqliteBenchmarkRepository::new(pool));
+    let benchmark_e_http = BenchmarkDeps::build_http_client()?;
+    let benchmark_e = Arc::new(BenchmarkOps::new(BenchmarkDeps {
+        model_repo: repos.models.clone(),
+        runtime: Arc::clone(&runtime),
+        bench_repo: bench_repo_e.clone(),
+        http_client: benchmark_e_http,
+    }));
 
     // 4. Build 7 domain ops (no AppHandle → NoopServerEvents).
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
@@ -496,8 +529,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         proxy,
         setup,
         approval_registry: approval_registry_e,
-        council_repo,
-        runtime,
+        council_repo,        bench_repo: bench_repo_e,
+        benchmark: benchmark_e,        runtime,
     })
 }
 // `bootstrap_with` is the only place where the verification service is

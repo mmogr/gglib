@@ -6,6 +6,8 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
+use axum::Json;
+use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -132,6 +134,24 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/council/runs/{run_id}/note",
             post(handlers::council::note::post_note),
         )
+        // Benchmark — compare and perf SSE streams
+        .route(
+            "/benchmark/compare",
+            post(handlers::benchmark::compare::compare_sse),
+        )
+        .route(
+            "/benchmark/perf",
+            post(handlers::benchmark::perf::perf_sse),
+        )
+        // Benchmark — run history
+        .route(
+            "/benchmark/runs",
+            get(handlers::benchmark::history::list_runs),
+        )
+        .route(
+            "/benchmark/runs/{id}",
+            get(handlers::benchmark::history::get_run),
+        )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }
@@ -163,6 +183,11 @@ fn model_routes() -> Router<AppState> {
         // Returns ModelDetailDto — superset of GuiModel with raw GGUF metadata,
         // MoE topology, HuggingFace provenance, inference defaults, and timestamps.
         .route("/{id}/detail", get(handlers::model::models::detail))
+        // Benchmark history for this model
+        .route(
+            "/{id}/benchmark",
+            get(handlers::benchmark::history::model_benchmark),
+        )
         // Tags
         .route(
             "/{id}/tags",
@@ -327,6 +352,10 @@ pub fn create_spa_router<P: AsRef<Path>>(
 }
 
 /// Health check endpoint.
-pub(crate) async fn health_check() -> &'static str {
-    "OK"
+///
+/// Returns `{"service":"gglib-daemon","status":"ok"}` so the CLI daemon
+/// detection logic (Phase 3b) can confirm it is talking to a live gglib
+/// daemon rather than an unrelated HTTP server on the same port.
+pub(crate) async fn health_check() -> Json<Value> {
+    Json(json!({ "service": "gglib-daemon", "status": "ok" }))
 }
