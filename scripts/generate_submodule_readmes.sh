@@ -400,7 +400,7 @@ create_missing_readmes() {
             generate_rust_stub "$dir" > "$readme"
             (( CREATED_RUST++ )) || true
 
-            if [[ -f "$modrs" ]]; then
+            if [[ -f "$modrs" ]] && ! grep -q '#!\[doc = include_str!("README.md")]' "$modrs" 2>/dev/null; then
                 echo "  Updating: $rel/mod.rs"
                 update_modrs_for_migration "$modrs"
                 (( MODRS_UPDATED++ )) || true
