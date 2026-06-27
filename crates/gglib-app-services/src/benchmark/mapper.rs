@@ -116,28 +116,107 @@ pub struct PerfBenchOutput {
     pub ngl: Option<i64>,
 }
 
-/// Parse the first entry of `llama-bench -o json` stdout into
-/// [`PerfBenchOutput`].
+/// Parse `llama-bench -o json` stdout into [`PerfBenchOutput`].
 ///
 /// Returns `None` when:
 /// - `stdout` is not valid JSON
 /// - the top-level value is not a non-empty JSON array
 ///
-/// Individual missing or wrongly-typed fields within the entry produce `None`
+/// Individual missing or wrongly-typed fields within an entry produce `None`
 /// for that specific field rather than causing the whole parse to fail.
+///
+/// # Multi-entry output and field-name evolution
+///
+/// `llama-bench` output format varies across versions:
+///
+/// **Old format** (single entry, explicit per-metric fields):
+/// ```json
+/// [{ "t_avg_pp": 200.0, "t_avg_tg": 50.0, "n_prompt": 512, "n_gen": 128 }]
+/// ```
+///
+/// **New format** (two entries, generic `avg_ts`, disambiguated by
+/// `n_prompt`/`n_gen`):
+/// ```json
+/// [
+///   { "n_prompt": 512, "n_gen": 0,   "avg_ts": 200.0 },
+///   { "n_prompt": 0,   "n_gen": 128, "avg_ts": 50.0  }
+/// ]
+/// ```
+///
+/// MTP/draft models (e.g. Qwen3-MTP) always use the two-entry format.
+/// The parser handles both: it tries `t_avg_pp`/`t_avg_tg` first, then
+/// falls back to `avg_ts` with `n_prompt`/`n_gen` disambiguation.
 pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
     let array: Vec<Value> = serde_json::from_slice(stdout).ok()?;
-    let entry = array.into_iter().next()?;
+    if array.is_empty() {
+        return None;
+    }
 
-    let tg_tps = entry.get("t_avg_tg").and_then(|v| v.as_f64());
-    let pp_tps = entry.get("t_avg_pp").and_then(|v| v.as_f64());
-    let n_gen = entry.get("n_gen").and_then(|v| v.as_i64());
-    let n_prompt = entry.get("n_prompt").and_then(|v| v.as_i64());
-    let backend = entry
-        .get("model_type")
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
+    let mut tg_tps: Option<f64> = None;
+    let mut pp_tps: Option<f64> = None;
+    let mut n_gen: Option<i64> = None;
+    let mut n_prompt: Option<i64> = None;
+    let mut backend: Option<String> = None;
+    let mut ngl: Option<i64> = None;
+
+    for entry in &array {
+        let entry_n_prompt = entry.get("n_prompt").and_then(|v| v.as_i64()).unwrap_or(0);
+        let entry_n_gen = entry.get("n_gen").and_then(|v| v.as_i64()).unwrap_or(0);
+
+        // PP throughput: old-style explicit field, or new-style avg_ts on a
+        // prompt-only entry (n_gen == 0).
+        if pp_tps.is_none() {
+            pp_tps = entry
+                .get("t_avg_pp")
+                .and_then(|v| v.as_f64())
+                .filter(|&v| v > 0.0)
+                .or_else(|| {
+                    if entry_n_prompt > 0 && entry_n_gen == 0 {
+                        entry
+                            .get("avg_ts")
+                            .and_then(|v| v.as_f64())
+                            .filter(|&v| v > 0.0)
+                    } else {
+                        None
+                    }
+                });
+        }
+
+        // TG throughput: old-style explicit field, or new-style avg_ts on a
+        // generation-only entry (n_prompt == 0).
+        if tg_tps.is_none() {
+            tg_tps = entry
+                .get("t_avg_tg")
+                .and_then(|v| v.as_f64())
+                .filter(|&v| v > 0.0)
+                .or_else(|| {
+                    if entry_n_gen > 0 && entry_n_prompt == 0 {
+                        entry
+                            .get("avg_ts")
+                            .and_then(|v| v.as_f64())
+                            .filter(|&v| v > 0.0)
+                    } else {
+                        None
+                    }
+                });
+        }
+
+        if n_gen.is_none() {
+            n_gen = Some(entry_n_gen).filter(|&v| v > 0);
+        }
+        if n_prompt.is_none() {
+            n_prompt = Some(entry_n_prompt).filter(|&v| v > 0);
+        }
+        if backend.is_none() {
+            backend = entry
+                .get("model_type")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+        if ngl.is_none() {
+            ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
+        }
+    }
 
     Some(PerfBenchOutput {
         tg_tps,
@@ -308,5 +387,64 @@ mod tests {
         assert_eq!(out.tg_tps, None, "missing t_avg_tg → tg_tps is None");
         assert_eq!(out.pp_tps, Some(214.5));
         assert_eq!(out.backend, Some("llama 7B Q4_0".to_string()));
+    }
+
+    /// MTP / draft model output: `llama-bench` emits two entries using the
+    /// new `avg_ts` format — a PP-only entry (`n_gen=0`) followed by a
+    /// TG-only entry (`n_prompt=0`).  Both fields must be gathered correctly.
+    #[test]
+    fn test_perf_bench_mtp_split_entries() {
+        let stdout = serde_json::to_vec(&json!([
+            // PP-only entry (n_gen=0) — new avg_ts format
+            {
+                "model_type": "qwen35moe 35B.A3B Q8_0",
+                "n_prompt": 512,
+                "n_gen": 0,
+                "avg_ts": 180.0,
+                "n_gpu_layers": -1
+            },
+            // TG-only entry (n_prompt=0) — new avg_ts format
+            {
+                "model_type": "qwen35moe 35B.A3B Q8_0",
+                "n_prompt": 0,
+                "n_gen": 128,
+                "avg_ts": 45.7,
+                "n_gpu_layers": -1
+            }
+        ]))
+        .unwrap();
+
+        let out = parse_perf_output(&stdout).expect("should parse MTP split output");
+        assert_eq!(out.tg_tps, Some(45.7), "tg_tps from TG entry avg_ts");
+        assert_eq!(out.pp_tps, Some(180.0), "pp_tps from PP entry avg_ts");
+        assert_eq!(out.n_prompt, Some(512));
+        assert_eq!(out.n_gen, Some(128));
+        assert_eq!(out.backend, Some("qwen35moe 35B.A3B Q8_0".to_string()));
+        assert_eq!(out.ngl, Some(-1));
+    }
+
+    /// Old-format single entry with explicit t_avg_pp / t_avg_tg still parses.
+    #[test]
+    fn test_perf_bench_old_format_single_entry() {
+        let stdout = serde_json::to_vec(&json!([{
+            "t_avg_pp": 200.0,
+            "t_avg_tg": 55.0,
+            "model_type": "llama 7B Q4_0",
+            "n_prompt": 512,
+            "n_gen": 128,
+            "n_gpu_layers": 32
+        }]))
+        .unwrap();
+
+        let out = parse_perf_output(&stdout).expect("should parse old format");
+        assert_eq!(out.pp_tps, Some(200.0));
+        assert_eq!(out.tg_tps, Some(55.0));
+    }
+
+    /// Empty JSON array → `None` returned (not a panic).
+    #[test]
+    fn test_perf_bench_empty_array() {
+        let stdout = b"[]";
+        assert!(parse_perf_output(stdout).is_none());
     }
 }

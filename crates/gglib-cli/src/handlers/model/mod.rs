@@ -25,8 +25,28 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         ModelCommand::Add { file_path } => {
             add::execute(ctx, &file_path).await?;
         }
-        ModelCommand::List => {
-            list::execute(ctx).await?;
+        ModelCommand::List {
+            sort,
+            order,
+            min_params,
+            max_params,
+            min_speed,
+            max_speed,
+            tags,
+        } => {
+            list::execute(
+                ctx,
+                list::ListArgs {
+                    sort,
+                    order,
+                    min_params,
+                    max_params,
+                    min_speed,
+                    max_speed,
+                    tags,
+                },
+            )
+            .await?;
         }
         ModelCommand::Remove { identifier, force } => {
             remove::execute(ctx, &identifier, force).await?;

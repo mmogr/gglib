@@ -367,10 +367,28 @@ impl ModelService {
             Some(RangeValues { min, max })
         };
 
+        // Compute latest_tg_tps range across benchmarked models
+        let tps_values: Vec<f64> = models
+            .iter()
+            .filter_map(|m| m.benchmark_summary.as_ref()?.latest_tg_tps)
+            .collect();
+        let speed_range = if tps_values.is_empty() {
+            None
+        } else {
+            let min = tps_values.iter().copied().fold(f64::INFINITY, f64::min);
+            let max = tps_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            if min.is_finite() && max.is_finite() {
+                Some(RangeValues { min, max })
+            } else {
+                None
+            }
+        };
+
         Ok(ModelFilterOptions {
             quantizations,
             param_range,
             context_range,
+            speed_range,
         })
     }
 
