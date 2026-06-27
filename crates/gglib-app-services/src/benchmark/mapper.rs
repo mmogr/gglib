@@ -116,28 +116,75 @@ pub struct PerfBenchOutput {
     pub ngl: Option<i64>,
 }
 
-/// Parse the first entry of `llama-bench -o json` stdout into
-/// [`PerfBenchOutput`].
+/// Parse `llama-bench -o json` stdout into [`PerfBenchOutput`].
 ///
 /// Returns `None` when:
 /// - `stdout` is not valid JSON
 /// - the top-level value is not a non-empty JSON array
 ///
-/// Individual missing or wrongly-typed fields within the entry produce `None`
+/// Individual missing or wrongly-typed fields within an entry produce `None`
 /// for that specific field rather than causing the whole parse to fail.
+///
+/// # Multi-entry output (MTP / draft models)
+///
+/// Models with Multi-Token Prediction (e.g. Qwen3-MTP) cause `llama-bench`
+/// to emit **multiple** JSON entries: a PP-only entry (`n_gen=0`,
+/// `t_avg_tg` absent) and a TG-only entry (`n_prompt=0`, `t_avg_pp` absent).
+/// Picking only the first entry would therefore always miss `t_avg_tg` for
+/// those models.
+///
+/// To handle this robustly, each field is gathered from the **first entry
+/// that provides a non-zero value** across all entries, rather than
+/// restricting the search to `array[0]`.  Metadata fields (`model_type`,
+/// `n_gpu_layers`) are taken from the first entry that carries them.
 pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
     let array: Vec<Value> = serde_json::from_slice(stdout).ok()?;
-    let entry = array.into_iter().next()?;
+    if array.is_empty() {
+        return None;
+    }
 
-    let tg_tps = entry.get("t_avg_tg").and_then(|v| v.as_f64());
-    let pp_tps = entry.get("t_avg_pp").and_then(|v| v.as_f64());
-    let n_gen = entry.get("n_gen").and_then(|v| v.as_i64());
-    let n_prompt = entry.get("n_prompt").and_then(|v| v.as_i64());
-    let backend = entry
-        .get("model_type")
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
+    let mut tg_tps: Option<f64> = None;
+    let mut pp_tps: Option<f64> = None;
+    let mut n_gen: Option<i64> = None;
+    let mut n_prompt: Option<i64> = None;
+    let mut backend: Option<String> = None;
+    let mut ngl: Option<i64> = None;
+
+    for entry in &array {
+        if tg_tps.is_none() {
+            tg_tps = entry
+                .get("t_avg_tg")
+                .and_then(|v| v.as_f64())
+                .filter(|&v| v > 0.0);
+        }
+        if pp_tps.is_none() {
+            pp_tps = entry
+                .get("t_avg_pp")
+                .and_then(|v| v.as_f64())
+                .filter(|&v| v > 0.0);
+        }
+        if n_gen.is_none() {
+            n_gen = entry
+                .get("n_gen")
+                .and_then(|v| v.as_i64())
+                .filter(|&v| v > 0);
+        }
+        if n_prompt.is_none() {
+            n_prompt = entry
+                .get("n_prompt")
+                .and_then(|v| v.as_i64())
+                .filter(|&v| v > 0);
+        }
+        if backend.is_none() {
+            backend = entry
+                .get("model_type")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+        if ngl.is_none() {
+            ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
+        }
+    }
 
     Some(PerfBenchOutput {
         tg_tps,
@@ -308,5 +355,47 @@ mod tests {
         assert_eq!(out.tg_tps, None, "missing t_avg_tg → tg_tps is None");
         assert_eq!(out.pp_tps, Some(214.5));
         assert_eq!(out.backend, Some("llama 7B Q4_0".to_string()));
+    }
+
+    /// MTP / draft model output: `llama-bench` emits two entries — the first
+    /// is a PP-only run (`n_gen=0`, `t_avg_tg` absent) and the second is a
+    /// TG-only run (`n_prompt=0`, `t_avg_tg` present).  Both fields must be
+    /// gathered and combined correctly.
+    #[test]
+    fn test_perf_bench_mtp_split_entries() {
+        let stdout = serde_json::to_vec(&json!([
+            // PP-only entry (n_gen=0, no t_avg_tg)
+            {
+                "t_avg_pp": 180.0,
+                "n_prompt": 512,
+                "n_gen": 0,
+                "model_type": "qwen2moe 35B-A3B Q4_K_M",
+                "n_gpu_layers": 48
+            },
+            // TG-only entry (n_prompt=0, no t_avg_pp)
+            {
+                "t_avg_tg": 45.7,
+                "n_prompt": 0,
+                "n_gen": 128,
+                "model_type": "qwen2moe 35B-A3B Q4_K_M",
+                "n_gpu_layers": 48
+            }
+        ]))
+        .unwrap();
+
+        let out = parse_perf_output(&stdout).expect("should parse MTP split output");
+        assert_eq!(out.tg_tps, Some(45.7), "tg_tps gathered from second entry");
+        assert_eq!(out.pp_tps, Some(180.0), "pp_tps gathered from first entry");
+        assert_eq!(out.n_prompt, Some(512));
+        assert_eq!(out.n_gen, Some(128));
+        assert_eq!(out.backend, Some("qwen2moe 35B-A3B Q4_K_M".to_string()));
+        assert_eq!(out.ngl, Some(48));
+    }
+
+    /// Empty JSON array → `None` returned (not a panic).
+    #[test]
+    fn test_perf_bench_empty_array() {
+        let stdout = b"[]";
+        assert!(parse_perf_output(stdout).is_none());
     }
 }
