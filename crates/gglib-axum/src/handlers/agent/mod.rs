@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-
 // MIGRATION: content extracted to README.md — remove this //! block after review
 //! POST /api/agent/chat — server-side agentic loop with SSE streaming.
 //!

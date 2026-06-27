@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-
 // MIGRATION: content extracted to README.md — remove this //! block after review
 //! Orchestrator endpoints: decompose a goal into a task-graph plan via SSE, and
 //! execute the full Director/Worker pipeline.
