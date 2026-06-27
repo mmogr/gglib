@@ -481,6 +481,7 @@ mod tests {
             capabilities: gglib_core::ModelCapabilities::default(),
             last_update_check: None,
             tags: Vec::new(),
+            benchmark_summary: None,
         }
     }
 

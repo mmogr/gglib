@@ -343,6 +343,7 @@ mod tests {
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            benchmark_summary: None,
         };
 
         let new_model = model.to_new_model();
