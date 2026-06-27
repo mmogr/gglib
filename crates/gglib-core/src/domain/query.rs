@@ -136,14 +136,10 @@ pub fn apply_query(mut models: Vec<Model>, query: &ModelListQuery) -> Vec<Model>
             });
         }
         (ModelSortBy::LatestTgTps, SortOrder::Asc) => {
-            models.sort_by(|a, b| {
-                cmp_tps_asc(tps(a), tps(b))
-            });
+            models.sort_by(|a, b| cmp_tps_asc(tps(a), tps(b)));
         }
         (ModelSortBy::LatestTgTps, SortOrder::Desc) => {
-            models.sort_by(|a, b| {
-                cmp_tps_desc(tps(a), tps(b))
-            });
+            models.sort_by(|a, b| cmp_tps_desc(tps(a), tps(b)));
         }
         (ModelSortBy::AddedAt, SortOrder::Asc) => {
             models.sort_by(|a, b| a.added_at.cmp(&b.added_at));
@@ -346,7 +342,11 @@ mod tests {
         };
         let result = apply_query(models(), &query);
         assert_eq!(result.len(), 2);
-        assert!(result.iter().all(|m| m.quantization.as_deref() == Some("Q4_K_M")));
+        assert!(
+            result
+                .iter()
+                .all(|m| m.quantization.as_deref() == Some("Q4_K_M"))
+        );
     }
 
     #[test]

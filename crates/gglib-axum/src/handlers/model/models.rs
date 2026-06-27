@@ -9,8 +9,8 @@ use gglib_app_services::types::{
     AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
     UpdateModelRequest,
 };
-use gglib_core::domain::{ModelListQuery, ModelSortBy, SortOrder};
 use gglib_core::ModelFilterOptions;
+use gglib_core::domain::{ModelListQuery, ModelSortBy, SortOrder};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Query-parameter struct for GET /api/models

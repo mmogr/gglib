@@ -31,7 +31,7 @@ pub use model::{
 };
 
 // Re-export query types at the domain level for convenience
-pub use query::{apply_query, ModelListQuery, ModelSortBy, SortOrder};
+pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
 
 // Re-export benchmark types at the domain level for convenience
 pub use benchmark::{

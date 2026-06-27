@@ -6,7 +6,10 @@ use std::sync::Arc;
 use gglib_core::domain::Model;
 use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
-use gglib_core::{ModelCapabilities, ModelFilterOptions, domain::{apply_query, ModelListQuery}};
+use gglib_core::{
+    ModelCapabilities, ModelFilterOptions,
+    domain::{ModelListQuery, apply_query},
+};
 
 use crate::error::GuiError;
 use crate::types::{

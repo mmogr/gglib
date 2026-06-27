@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gglib_app_services::types::GuiModel;
-use gglib_core::domain::{apply_query, ModelListQuery};
+use gglib_core::domain::{ModelListQuery, apply_query};
 
 use crate::bootstrap::CliContext;
 use crate::model_commands::{CliModelSortBy, CliSortOrder};
