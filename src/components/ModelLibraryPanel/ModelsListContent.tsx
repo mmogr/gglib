@@ -85,6 +85,11 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {model.quantization && (
                   <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-primary-border">{model.quantization}</span>
                 )}
+                {(model.benchmarkSummary?.latest_tg_tps ?? model.benchmarkSummary?.best_tg_tps) != null && (
+                  <span className="py-xs px-sm bg-warning-subtle text-warning rounded-sm text-xs font-medium border border-warning-border">
+                    ⚡ {((model.benchmarkSummary!.latest_tg_tps ?? model.benchmarkSummary!.best_tg_tps)!).toFixed(0)} t/s
+                  </span>
+                )}
               </div>
             </div>
           </div>
