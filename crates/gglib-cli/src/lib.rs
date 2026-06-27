@@ -24,6 +24,7 @@ use gglib_runtime as _;
 use gglib_axum as _;
 
 pub mod assistant_ui_commands;
+pub mod benchmark_commands;
 pub mod bootstrap;
 pub mod commands;
 pub mod config_commands;

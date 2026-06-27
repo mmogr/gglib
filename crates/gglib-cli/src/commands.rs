@@ -8,6 +8,7 @@
 use clap::Subcommand;
 use clap_complete::Shell;
 
+use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
@@ -297,9 +298,17 @@ pub enum Commands {
         #[arg(long = "max-observation-steps")]
         max_observation_steps: Option<usize>,
     },
-
-    /// Decompose a goal into a validated task graph (planning only, no execution)
+    /// Run benchmark comparisons and performance tests across local models
+    ///
+    /// Compare outputs side-by-side (same prompt through N models) or measure
+    /// raw prompt-processing and token-generation throughput with llama-bench.
     #[command(display_order = 13)]
+    Benchmark {
+        #[command(subcommand)]
+        command: BenchmarkCommand,
+    },
+    /// Decompose a goal into a validated task graph (planning only, no execution)
+    #[command(display_order = 14)]
     Plan {
         /// High-level goal to decompose into a task graph
         goal: String,
@@ -317,7 +326,7 @@ pub enum Commands {
     },
 
     /// Plan and execute a Council of Director/Worker agents end-to-end
-    #[command(display_order = 14)]
+    #[command(display_order = 15)]
     Council {
         #[command(subcommand)]
         cmd: CouncilCmd,

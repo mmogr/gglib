@@ -313,6 +313,11 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             handlers::mcp_cli::dispatch(ctx, command).await?;
         }
 
+        // ── Benchmarking ────────────────────────────────────────────────────
+        Commands::Benchmark { command } => {
+            handlers::benchmark::dispatch(ctx, command).await?;
+        }
+
         // ── Shell completions ───────────────────────────────────────────────
         Commands::Completions { shell } => {
             handlers::completions::execute(shell)?;
