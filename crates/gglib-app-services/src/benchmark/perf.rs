@@ -40,8 +40,8 @@ use gglib_core::domain::benchmark::{
 };
 use gglib_core::paths::llama_bench_path;
 
-use super::mapper::{PerfBenchOutput, parse_perf_output};
 use super::BenchmarkDeps;
+use super::mapper::{PerfBenchOutput, parse_perf_output};
 
 /// Entry point called by [`super::BenchmarkOps::run_perf`].
 pub async fn run_perf(
@@ -196,7 +196,14 @@ async fn run_single_perf(
         )
     })?;
 
-    let PerfBenchOutput { tg_tps, pp_tps, n_gen, n_prompt, backend, ngl } = parsed;
+    let PerfBenchOutput {
+        tg_tps,
+        pp_tps,
+        n_gen,
+        n_prompt,
+        backend,
+        ngl,
+    } = parsed;
 
     let tg_tps = tg_tps.ok_or_else(|| {
         anyhow::anyhow!("llama-bench output missing t_avg_tg for '{}'", model.name)

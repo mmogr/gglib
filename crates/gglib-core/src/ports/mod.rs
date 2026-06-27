@@ -52,6 +52,7 @@ pub use structured_llm::StructuredOutputError;
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
 // Re-export repository traits for convenience
+pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
 pub use council_repository::CouncilRepositoryPort;
@@ -73,7 +74,6 @@ pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSu
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
-pub use benchmark::BenchmarkRepositoryPort;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;

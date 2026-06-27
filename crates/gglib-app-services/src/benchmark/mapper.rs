@@ -55,7 +55,9 @@ pub fn extract_finish_reason(val: &Value) -> Option<String> {
 /// - `predicted_ms`         → `generation_ms`
 /// - `prompt_per_second`    → `prompt_tps`
 /// - `predicted_per_second` → `generation_tps`
-pub fn extract_compare_timings(val: &Value) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
+pub fn extract_compare_timings(
+    val: &Value,
+) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
     let timings = val.get("timings");
     let prompt_ms = timings
         .and_then(|t| t.get("prompt_ms"))
@@ -137,7 +139,14 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
         .map(String::from);
     let ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
 
-    Some(PerfBenchOutput { tg_tps, pp_tps, n_gen, n_prompt, backend, ngl })
+    Some(PerfBenchOutput {
+        tg_tps,
+        pp_tps,
+        n_gen,
+        n_prompt,
+        backend,
+        ngl,
+    })
 }
 
 // ────────────────────────────────────────────────────────────────────────────

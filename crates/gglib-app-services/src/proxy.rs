@@ -115,10 +115,7 @@ impl ProxyOps {
     /// # Arguments
     ///
     /// * `config` - Proxy server configuration (host, port, default context)
-    pub async fn start(
-        &self,
-        config: ProxyConfig,
-    ) -> Result<SocketAddr, GuiError> {
+    pub async fn start(&self, config: ProxyConfig) -> Result<SocketAddr, GuiError> {
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).
         let catalog: Arc<dyn ModelCatalogPort> =

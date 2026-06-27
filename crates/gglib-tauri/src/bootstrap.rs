@@ -17,18 +17,18 @@ use gglib_app_services::{
     SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::DEFAULT_LLAMA_BASE_PORT;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_core::DEFAULT_LLAMA_BASE_PORT;
-use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
-use gglib_runtime::process::ProcessManager;
 use gglib_core::services::AppCore;
-use gglib_db::repositories::SqliteCouncilRepository;
 use gglib_db::SqliteBenchmarkRepository;
+use gglib_db::repositories::SqliteCouncilRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_mcp::McpService;
+use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+use gglib_runtime::process::ProcessManager;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
 use tauri::AppHandle;
@@ -529,8 +529,10 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         proxy,
         setup,
         approval_registry: approval_registry_e,
-        council_repo,        bench_repo: bench_repo_e,
-        benchmark: benchmark_e,        runtime,
+        council_repo,
+        bench_repo: bench_repo_e,
+        benchmark: benchmark_e,
+        runtime,
     })
 }
 // `bootstrap_with` is the only place where the verification service is

@@ -5,7 +5,10 @@
 //! resolved database path.
 
 use anyhow::Result;
-use sqlx::{SqlitePool, sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions}};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+};
 use std::path::Path;
 use std::time::Duration;
 

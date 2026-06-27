@@ -66,10 +66,7 @@ pub async fn list_runs(
     Query(params): Query<ListRunsQuery>,
 ) -> Result<Json<ListRunsResponse>, HttpError> {
     let limit = params.limit.clamp(1, 100);
-    let runs = state
-        .bench_repo
-        .list_runs(limit, params.offset)
-        .await?;
+    let runs = state.bench_repo.list_runs(limit, params.offset).await?;
     Ok(Json(ListRunsResponse { runs }))
 }
 

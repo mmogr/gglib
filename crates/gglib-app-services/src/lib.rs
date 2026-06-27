@@ -16,8 +16,8 @@ mod test_support;
 
 mod error;
 
-pub mod council_approvals;
 pub mod benchmark;
+pub mod council_approvals;
 mod downloads;
 mod mcp;
 mod models;

@@ -6,7 +6,9 @@ use sqlx::SqlitePool;
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
-use super::row_mappers::{BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model};
+use super::row_mappers::{
+    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model,
+};
 
 /// Compute a canonical model key for deduplication.
 ///

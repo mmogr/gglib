@@ -33,9 +33,10 @@ use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
 
-use super::mapper::{extract_compare_timings, extract_finish_reason, extract_text_delta,
-    extract_usage};
 use super::BenchmarkDeps;
+use super::mapper::{
+    extract_compare_timings, extract_finish_reason, extract_text_delta, extract_usage,
+};
 
 /// Entry point called by [`super::BenchmarkOps::run_compare`].
 pub async fn run_compare(
@@ -221,22 +222,39 @@ async fn run_single_compare(
                                             .await;
                                     }
                                     // Finish reason
-                                    if matches!(extract_finish_reason(&val).as_deref(), Some("length")) {
+                                    if matches!(
+                                        extract_finish_reason(&val).as_deref(),
+                                        Some("length")
+                                    ) {
                                         was_truncated = true;
                                     }
                                     // Timings (update only when present)
                                     let (pm, gm, pt, gt) = extract_compare_timings(&val);
-                                    if pm.is_some() { prompt_ms = pm; }
-                                    if gm.is_some() { generation_ms = gm; }
-                                    if pt.is_some() { prompt_tps = pt; }
-                                    if gt.is_some() { generation_tps = gt; }
+                                    if pm.is_some() {
+                                        prompt_ms = pm;
+                                    }
+                                    if gm.is_some() {
+                                        generation_ms = gm;
+                                    }
+                                    if pt.is_some() {
+                                        prompt_tps = pt;
+                                    }
+                                    if gt.is_some() {
+                                        generation_tps = gt;
+                                    }
                                     // Usage
                                     let (ptu, ctu) = extract_usage(&val);
-                                    if ptu.is_some() { prompt_tokens = ptu; }
-                                    if ctu.is_some() { completion_tokens = ctu; }
+                                    if ptu.is_some() {
+                                        prompt_tokens = ptu;
+                                    }
+                                    if ctu.is_some() {
+                                        completion_tokens = ctu;
+                                    }
                                 }
                                 Err(e) => {
-                                    warn!("benchmark: failed to parse SSE chunk for '{model_name}': {e}");
+                                    warn!(
+                                        "benchmark: failed to parse SSE chunk for '{model_name}': {e}"
+                                    );
                                 }
                             }
                         }

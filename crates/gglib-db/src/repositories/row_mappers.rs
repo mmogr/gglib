@@ -12,8 +12,7 @@ pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, arch
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
 /// prefix to avoid conflicts and allow defensive parsing in `row_to_model`.
-pub const BENCHMARK_SUMMARY_COLUMNS: &str =
-    "s.model_id AS s_model_id, \
+pub const BENCHMARK_SUMMARY_COLUMNS: &str = "s.model_id AS s_model_id, \
      s.best_tg_tps AS s_best_tg_tps, \
      s.best_pp_tps AS s_best_pp_tps, \
      s.latest_tg_tps AS s_latest_tg_tps, \

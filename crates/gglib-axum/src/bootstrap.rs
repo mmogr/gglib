@@ -23,8 +23,8 @@ use gglib_core::ports::{
     ModelRuntimePort, ProcessRunner,
 };
 use gglib_core::services::AppCore;
-use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_db::cleanup_zombie_benchmark_runs;
+use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;

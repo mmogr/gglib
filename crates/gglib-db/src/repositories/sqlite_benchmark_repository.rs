@@ -86,8 +86,7 @@ fn row_to_benchmark_run(row: &sqlx::sqlite::SqliteRow) -> Result<BenchmarkRun, R
     let model_ids_json: String = row
         .try_get("model_ids")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-    let model_ids: Vec<i64> =
-        serde_json::from_str(&model_ids_json).unwrap_or_default();
+    let model_ids: Vec<i64> = serde_json::from_str(&model_ids_json).unwrap_or_default();
 
     let run_type_str: String = row
         .try_get("run_type")
@@ -152,9 +151,7 @@ fn row_to_compare_result(
     })
 }
 
-fn row_to_perf_result(
-    row: &sqlx::sqlite::SqliteRow,
-) -> Result<ModelPerfResult, RepositoryError> {
+fn row_to_perf_result(row: &sqlx::sqlite::SqliteRow) -> Result<ModelPerfResult, RepositoryError> {
     let created_at_str: Option<String> = row
         .try_get("created_at")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -245,7 +242,9 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        Ok(rec.try_get(0).map_err(|e| RepositoryError::Storage(e.to_string()))?)
+        Ok(rec
+            .try_get(0)
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?)
     }
 
     async fn complete_run(&self, run_id: i64) -> Result<(), RepositoryError> {

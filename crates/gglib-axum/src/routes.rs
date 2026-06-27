@@ -3,10 +3,10 @@
 //! This module defines the HTTP routes and creates the main router.
 //! Handlers delegate to the shared GuiBackend facade.
 
+use axum::Json;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
-use axum::Json;
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
@@ -139,10 +139,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/benchmark/compare",
             post(handlers::benchmark::compare::compare_sse),
         )
-        .route(
-            "/benchmark/perf",
-            post(handlers::benchmark::perf::perf_sse),
-        )
+        .route("/benchmark/perf", post(handlers::benchmark::perf::perf_sse))
         // Benchmark — run history
         .route(
             "/benchmark/runs",

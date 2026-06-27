@@ -39,13 +39,13 @@ use anyhow::Result;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::domain::benchmark::{CompareConfig, PerfConfig, BenchmarkEvent};
+use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
 use gglib_core::ports::{BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort};
 
 mod compare;
-mod perf;
 pub mod guard;
 pub mod mapper;
+mod perf;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Dependency bundle

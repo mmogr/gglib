@@ -19,13 +19,13 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use gglib_app_services::{BenchmarkDeps, BenchmarkOps};
-use gglib_core::domain::benchmark::{
-    BenchmarkEvent, BenchmarkModelResult, CompareConfig, PerfConfig,
-    ModelCompareResult, ModelPerfResult,
-};
 use gglib_core::domain::InferenceConfig;
-use gglib_runtime::{CatalogPortImpl, RuntimePortImpl};
+use gglib_core::domain::benchmark::{
+    BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
+    PerfConfig,
+};
 use gglib_runtime::process::ProcessManager;
+use gglib_runtime::{CatalogPortImpl, RuntimePortImpl};
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
@@ -102,7 +102,8 @@ async fn proxy_to_daemon(ctx: &CliContext, port: u16, cmd: &BenchmarkCommand) ->
     eprintln!(
         "{}note:{} daemon detected but HTTP benchmark proxy not yet implemented — \
          running locally",
-        style::WARNING, style::RESET
+        style::WARNING,
+        style::RESET
     );
     let _ = port;
     local_dispatch(ctx, cmd.clone()).await
@@ -126,11 +127,26 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             temperature,
             max_tokens,
             ctx_size,
-        } => cmd_compare(ctx, ops, prompt, models, system_prompt, temperature, max_tokens, ctx_size).await,
-
-        BenchmarkCommand::Perf { models, pp, tg, reps } => {
-            cmd_perf(ctx, ops, models, pp, tg, reps).await
+        } => {
+            cmd_compare(
+                ctx,
+                ops,
+                prompt,
+                models,
+                system_prompt,
+                temperature,
+                max_tokens,
+                ctx_size,
+            )
+            .await
         }
+
+        BenchmarkCommand::Perf {
+            models,
+            pp,
+            tg,
+            reps,
+        } => cmd_perf(ctx, ops, models, pp, tg, reps).await,
 
         // Read-only commands are handled before reaching this path.
         BenchmarkCommand::List { limit } => cmd_list(ctx, limit).await,
@@ -148,8 +164,8 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         catalog,
     ));
     let runtime = Arc::new(RuntimePortImpl::new(process_mgr));
-    let http_client = BenchmarkDeps::build_http_client()
-        .context("failed to build benchmark HTTP client")?;
+    let http_client =
+        BenchmarkDeps::build_http_client().context("failed to build benchmark HTTP client")?;
 
     Ok(BenchmarkOps::new(BenchmarkDeps {
         model_repo: ctx.model_repo.clone(),
@@ -210,10 +226,7 @@ async fn cmd_compare(
     };
 
     style::print_info_banner("Benchmark Compare", "\u{1f4ca}");
-    eprintln!(
-        "  Models : {}",
-        models.join(", ")
-    );
+    eprintln!("  Models : {}", models.join(", "));
     style::print_banner_close();
 
     let cancel = CancellationToken::new();
@@ -308,7 +321,9 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
 
     println!(
         "{BOLD}{:>6}  {:<8}  {:<19}  Status{RESET}",
-        "ID", "Type", "Started",
+        "ID",
+        "Type",
+        "Started",
         BOLD = style::BOLD,
         RESET = style::RESET,
     );
@@ -316,7 +331,10 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
     for run in &runs {
         let run_type = format!("{:?}", run.run_type).to_lowercase();
         let started = run.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
-        println!("{:>6}  {:<8}  {:<19}  {:?}", run.id, run_type, started, run.status);
+        println!(
+            "{:>6}  {:<8}  {:<19}  {:?}",
+            run.id, run_type, started, run.status
+        );
     }
     Ok(())
 }
@@ -340,7 +358,10 @@ async fn cmd_show(ctx: &CliContext, run_id: i64) -> Result<()> {
     );
     println!("  Type    : {:?}", run.run_type);
     println!("  Status  : {:?}", run.status);
-    println!("  Started : {}", run.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "  Started : {}",
+        run.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+    );
     if let Some(finished) = run.completed_at {
         println!("  Finished: {}", finished.format("%Y-%m-%d %H:%M:%S UTC"));
     }
@@ -390,26 +411,39 @@ async fn cmd_model(ctx: &CliContext, model_id: i64) -> Result<()> {
                 RESET = style::RESET
             );
         }
-        println!("  Runs:  {} compare,  {} perf", s.compare_run_count, s.perf_run_count);
+        println!(
+            "  Runs:  {} compare,  {} perf",
+            s.compare_run_count, s.perf_run_count
+        );
     } else {
         println!("  No benchmark data for this model yet.");
         return Ok(());
     }
 
     if !compare_history.is_empty() {
-        println!("\n{BOLD}── Compare results ──────────────────{RESET}", BOLD = style::BOLD, RESET = style::RESET);
+        println!(
+            "\n{BOLD}── Compare results ──────────────────{RESET}",
+            BOLD = style::BOLD,
+            RESET = style::RESET
+        );
         for r in &compare_history {
             let date = r.created_at.format("%Y-%m-%d %H:%M");
-        let gen_tps = r.generation_tps.map_or("—".into(), |t| format!("{t:.1} tok/s"));
-        println!(
-            "  {date}  gen={gen_tps}  tokens={tokens}",
-            tokens = r.completion_tokens.unwrap_or(0)
-        );
+            let gen_tps = r
+                .generation_tps
+                .map_or("—".into(), |t| format!("{t:.1} tok/s"));
+            println!(
+                "  {date}  gen={gen_tps}  tokens={tokens}",
+                tokens = r.completion_tokens.unwrap_or(0)
+            );
         }
     }
 
     if !perf_history.is_empty() {
-        println!("\n{BOLD}── Perf results ─────────────────────{RESET}", BOLD = style::BOLD, RESET = style::RESET);
+        println!(
+            "\n{BOLD}── Perf results ─────────────────────{RESET}",
+            BOLD = style::BOLD,
+            RESET = style::RESET
+        );
         for r in &perf_history {
             let date = r.created_at.format("%Y-%m-%d %H:%M");
             let backend = r.backend.as_deref().unwrap_or("cpu");
@@ -428,7 +462,12 @@ async fn cmd_model(ctx: &CliContext, model_id: i64) -> Result<()> {
 
 fn render_event(event: &BenchmarkEvent) {
     match event {
-        BenchmarkEvent::ModelStarted { model_name, position, total, .. } => {
+        BenchmarkEvent::ModelStarted {
+            model_name,
+            position,
+            total,
+            ..
+        } => {
             eprintln!(
                 "\n{BOLD}[{position}/{total}]{RESET} {model_name}",
                 BOLD = style::BOLD,
@@ -450,7 +489,9 @@ fn render_event(event: &BenchmarkEvent) {
             }
         }
 
-        BenchmarkEvent::ModelFailed { model_name, error, .. } => {
+        BenchmarkEvent::ModelFailed {
+            model_name, error, ..
+        } => {
             eprintln!(
                 "\n{DANGER}✗ {model_name}: {error}{RESET}",
                 DANGER = style::DANGER,
@@ -477,10 +518,16 @@ fn render_event(event: &BenchmarkEvent) {
 }
 
 fn render_compare_complete(r: &ModelCompareResult) {
-    let gen_tps = r.generation_tps.map_or("—".into(), |t| format!("{t:.1} tok/s gen"));
-    let pp = r.prompt_tps.map_or("—".into(), |t| format!("{t:.1} tok/s prompt"));
+    let gen_tps = r
+        .generation_tps
+        .map_or("—".into(), |t| format!("{t:.1} tok/s gen"));
+    let pp = r
+        .prompt_tps
+        .map_or("—".into(), |t| format!("{t:.1} tok/s prompt"));
     let tokens = r.completion_tokens.unwrap_or(0);
-    let ms = r.generation_ms.map_or("—".into(), |m| format!("{:.1}s", m / 1000.0));
+    let ms = r
+        .generation_ms
+        .map_or("—".into(), |m| format!("{:.1}s", m / 1000.0));
     eprintln!(
         "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} tokens  ·  {ms}{RESET}",
         SUCCESS = style::SUCCESS,
