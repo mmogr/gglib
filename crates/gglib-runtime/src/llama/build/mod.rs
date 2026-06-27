@@ -90,6 +90,7 @@ fn configure_cmake(
         "-DCMAKE_BUILD_TYPE=Release",
         "-DGGML_METAL_EMBED_LIBRARY=ON",
         "-DLLAMA_BUILD_SERVER=ON",
+        "-DLLAMA_BUILD_BENCH=ON",     // Build llama-bench for throughput benchmarking
         "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
         "-DLLAMA_BUILD_TESTS=OFF",    // Skip tests to avoid GCC bug in some files
         // Upstream llama.cpp enables -Wmissing-noreturn via LLAMA_ALL_WARNINGS,
