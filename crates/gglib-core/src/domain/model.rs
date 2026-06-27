@@ -47,6 +47,9 @@ pub struct ModelFilterOptions {
     pub param_range: Option<RangeValues>,
     /// Minimum and maximum context lengths.
     pub context_range: Option<RangeValues>,
+    /// Minimum and maximum `latest_tg_tps` from benchmark summaries.
+    /// `None` when no models have been benchmarked.
+    pub speed_range: Option<RangeValues>,
 }
 
 /// A range of numeric values with min and max.

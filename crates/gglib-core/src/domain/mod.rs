@@ -22,12 +22,16 @@ pub mod gguf;
 pub mod inference;
 pub mod mcp;
 mod model;
+pub mod query;
 
 // Re-export model types at the domain level for convenience
 pub use model::{
     Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile, RangeValues, SYSTEM_TAG_PREFIX,
     is_system_tag,
 };
+
+// Re-export query types at the domain level for convenience
+pub use query::{apply_query, ModelListQuery, ModelSortBy, SortOrder};
 
 // Re-export benchmark types at the domain level for convenience
 pub use benchmark::{
