@@ -290,7 +290,7 @@ generate_rust_stub() {
     # Extract //! doc content for the module-docs section
     local doc_content=""
     if [[ -f "$modrs" ]] && grep -q '^//!' "$modrs" 2>/dev/null; then
-        doc_content=$(grep '^//!' "$modrs" | sed 's|^//! \?||')
+        doc_content=$(grep '^//!' "$modrs" | sed -E 's|^//! ?||')
     fi
 
 cat << EOF
