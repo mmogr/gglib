@@ -13,8 +13,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps,
-    ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+    BenchmarkDeps, BenchmarkOps, CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps,
+    McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps,
+    SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
@@ -22,7 +23,7 @@ use gglib_core::ports::{
     ModelRuntimePort, ProcessRunner,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteCouncilRepository;
+use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
@@ -143,6 +144,13 @@ pub struct AxumContext {
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Repository for persisting orchestrator run records and events.
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Benchmark run repository for compare and perf results.
+    ///
+    /// Stored directly in `AxumContext` (alongside `benchmark`) so history
+    /// handlers can query past runs without going through `BenchmarkOps`.
+    pub bench_repo: Arc<SqliteBenchmarkRepository>,
+    /// Benchmark operations: run_compare and run_perf with SSE streaming.
+    pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
     ///
     /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that exactly
@@ -284,6 +292,17 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     }
     let approval_registry = Arc::new(CouncilApprovalRegistry::new());
 
+    // Benchmark repository and ops — constructed after runtime so BenchmarkOps
+    // shares the same SingleSwap ProcessManager as ProxyOps.
+    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
+    let benchmark_http_client = BenchmarkDeps::build_http_client()?;
+    let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
+        model_repo: repos.models.clone(),
+        runtime: Arc::clone(&runtime),
+        bench_repo: bench_repo.clone(),
+        http_client: benchmark_http_client,
+    }));
+
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor,
         model_repo,
@@ -345,6 +364,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         )),
         approval_registry,
         council_repo,
+        bench_repo,
+        benchmark,
         runtime,
         steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })

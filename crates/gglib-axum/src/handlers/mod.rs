@@ -5,6 +5,7 @@
 //! - [`config`] — settings, system setup
 
 pub mod agent;
+pub mod benchmark;
 pub mod builtin;
 pub mod chat;
 pub mod config;
