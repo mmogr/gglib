@@ -18,7 +18,8 @@ use gglib_app_services::{
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelRepository, ProcessRunner,
+    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort, ProcessRunner,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteCouncilRepository;
@@ -26,6 +27,8 @@ use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
 
+use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+use gglib_runtime::process::ProcessManager;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
 
@@ -139,6 +142,11 @@ pub struct AxumContext {
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Repository for persisting orchestrator run records and events.
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
+    ///
+    /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that exactly
+    /// one llama-server can run at a time system-wide, preventing VRAM contention.
+    pub runtime: Arc<dyn ModelRuntimePort>,
     /// Per-run queues for conversational steering notes (keyed by run_id).
     #[allow(clippy::type_complexity)]
     pub steering_note_queues:
@@ -210,6 +218,19 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         Arc::new(ToolSupportDetector::new());
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+
+    // Create the shared SingleSwap ProcessManager and ModelRuntimePort at the
+    // composition root. Injecting this into both ProxyOps and (later)
+    // BenchmarkOps ensures that only one llama-server can run at a time
+    // system-wide — enforced by SingleSwap — preventing VRAM contention.
+    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
+        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        config.base_port,
+        config.llama_server_path.to_string_lossy().into_owned(),
+        catalog_for_runtime,
+    ));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
     let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
@@ -259,6 +280,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         council_repo: Arc::clone(&council_repo)
             as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        runtime: Arc::clone(&runtime),
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {
@@ -310,6 +332,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         )),
         approval_registry,
         council_repo,
+        runtime,
         steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }
