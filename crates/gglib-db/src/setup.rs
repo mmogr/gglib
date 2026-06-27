@@ -5,8 +5,9 @@
 //! resolved database path.
 
 use anyhow::Result;
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{SqlitePool, sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions}};
 use std::path::Path;
+use std::time::Duration;
 
 /// Sets up the `SQLite` database connection and ensures the schema exists.
 ///
@@ -48,12 +49,17 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let pool = SqlitePool::connect_with(
-        SqliteConnectOptions::new()
-            .filename(db_path)
-            .create_if_missing(true),
-    )
-    .await?;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(db_path)
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .busy_timeout(Duration::from_secs(5))
+                .pragma("synchronous", "NORMAL"),
+        )
+        .await?;
 
     // Create all tables and indexes
     create_schema(&pool).await?;
