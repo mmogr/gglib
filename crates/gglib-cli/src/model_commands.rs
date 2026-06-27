@@ -3,7 +3,81 @@
 //! This module defines the model CRUD, verification, download, and
 //! HuggingFace discovery commands that live under `gglib model <sub>`.
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
+use gglib_core::domain::{ModelSortBy, SortOrder};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLI-friendly sort types (ValueEnum)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Sort field for `gglib model list`.
+///
+/// Each variant maps to the corresponding [`ModelSortBy`] domain value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum CliModelSortBy {
+    /// Sort by date added (most recent first by default).
+    #[default]
+    Added,
+    /// Sort alphabetically by model name.
+    Name,
+    /// Sort by parameter count in billions.
+    Params,
+    /// Sort by latest token-generation throughput (t/s) from benchmarks.
+    /// Models without benchmark data sort last.
+    Speed,
+}
+
+impl CliModelSortBy {
+    /// The snake_case name expected by the HTTP query parameter `sort=`.
+    pub fn api_value(self) -> &'static str {
+        match self {
+            CliModelSortBy::Added => "added_at",
+            CliModelSortBy::Name => "name",
+            CliModelSortBy::Params => "param_count",
+            CliModelSortBy::Speed => "latest_tg_tps",
+        }
+    }
+}
+
+impl From<CliModelSortBy> for ModelSortBy {
+    fn from(v: CliModelSortBy) -> Self {
+        match v {
+            CliModelSortBy::Added => ModelSortBy::AddedAt,
+            CliModelSortBy::Name => ModelSortBy::Name,
+            CliModelSortBy::Params => ModelSortBy::ParamCount,
+            CliModelSortBy::Speed => ModelSortBy::LatestTgTps,
+        }
+    }
+}
+
+/// Sort direction for `gglib model list`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum CliSortOrder {
+    /// Largest / most-recent first.
+    #[default]
+    Desc,
+    /// Smallest / oldest first.
+    Asc,
+}
+
+impl CliSortOrder {
+    /// The value expected by the HTTP query parameter `order=`.
+    pub fn api_value(self) -> &'static str {
+        match self {
+            CliSortOrder::Asc => "asc",
+            CliSortOrder::Desc => "desc",
+        }
+    }
+}
+
+impl From<CliSortOrder> for SortOrder {
+    fn from(v: CliSortOrder) -> Self {
+        match v {
+            CliSortOrder::Asc => SortOrder::Asc,
+            CliSortOrder::Desc => SortOrder::Desc,
+        }
+    }
+}
 
 /// Model management commands.
 ///
@@ -18,8 +92,32 @@ pub enum ModelCommand {
         file_path: String,
     },
 
-    /// List all GGUF models in the database
-    List,
+    /// List GGUF models in the database
+    List {
+        /// Field to sort by.
+        #[arg(long, value_enum, default_value = "added")]
+        sort: CliModelSortBy,
+        /// Sort direction.
+        #[arg(long, value_enum, default_value = "desc")]
+        order: CliSortOrder,
+        /// Only show models with at least this many parameters (in billions).
+        #[arg(long)]
+        min_params: Option<f64>,
+        /// Only show models with at most this many parameters (in billions).
+        #[arg(long)]
+        max_params: Option<f64>,
+        /// Only include models whose latest_tg_tps >= this value (t/s).
+        /// Models with no benchmark data are excluded.
+        #[arg(long)]
+        min_speed: Option<f64>,
+        /// Only include models whose latest_tg_tps <= this value (t/s).
+        /// Models with no benchmark data are excluded.
+        #[arg(long)]
+        max_speed: Option<f64>,
+        /// Only show models that have this tag (repeatable: AND semantics).
+        #[arg(long = "tag", action = clap::ArgAction::Append)]
+        tags: Vec<String>,
+    },
 
     /// Remove a GGUF model from the database
     Remove {
