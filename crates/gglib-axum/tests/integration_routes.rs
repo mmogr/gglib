@@ -49,7 +49,8 @@ async fn health_endpoint_returns_ok() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("health response is valid JSON");
+    let json: serde_json::Value =
+        serde_json::from_slice(&body).expect("health response is valid JSON");
     assert_eq!(json["service"], "gglib-daemon");
     assert_eq!(json["status"], "ok");
 }
