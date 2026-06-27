@@ -11,6 +11,7 @@
 //! - Intent-based methods for process runner (not implementation-leaking)
 
 pub mod agent;
+pub mod benchmark;
 pub mod chat_history;
 pub mod council_approvals;
 pub mod council_repository;
@@ -51,6 +52,7 @@ pub use structured_llm::StructuredOutputError;
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
 // Re-export repository traits for convenience
+pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
 pub use council_repository::CouncilRepositoryPort;

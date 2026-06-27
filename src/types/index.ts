@@ -1,3 +1,5 @@
+import type { ModelBenchmarkSummary } from './benchmark';
+
 // ============================================================================
 // Inference Configuration
 // ============================================================================
@@ -54,6 +56,8 @@ export interface GgufModel {
   port?: number;
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
+  // Benchmark summary (cached from benchmark_summaries table)
+  benchmarkSummary?: ModelBenchmarkSummary;
 }
 
 /**

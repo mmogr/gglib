@@ -13,19 +13,24 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps,
-    ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+    BenchmarkDeps, BenchmarkOps, CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps,
+    McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps,
+    SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelRepository, ProcessRunner,
+    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort, ProcessRunner,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteCouncilRepository;
+use gglib_db::cleanup_zombie_benchmark_runs;
+use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
 
+use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+use gglib_runtime::process::ProcessManager;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
 
@@ -139,6 +144,18 @@ pub struct AxumContext {
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Repository for persisting orchestrator run records and events.
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Benchmark run repository for compare and perf results.
+    ///
+    /// Stored directly in `AxumContext` (alongside `benchmark`) so history
+    /// handlers can query past runs without going through `BenchmarkOps`.
+    pub bench_repo: Arc<SqliteBenchmarkRepository>,
+    /// Benchmark operations: run_compare and run_perf with SSE streaming.
+    pub benchmark: Arc<BenchmarkOps>,
+    /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
+    ///
+    /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that exactly
+    /// one llama-server can run at a time system-wide, preventing VRAM contention.
+    pub runtime: Arc<dyn ModelRuntimePort>,
     /// Per-run queues for conversational steering notes (keyed by run_id).
     #[allow(clippy::type_complexity)]
     pub steering_note_queues:
@@ -194,6 +211,18 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tracing::warn!("Failed to bootstrap model capabilities: {}", e);
     }
 
+    // 3b. Zombie-run cleanup — daemon-only, runs once at startup.
+    //
+    // Any benchmark_run left in status='running' from a prior crash is
+    // immediately corrected. This hook lives here (not in the CLI) because only
+    // the daemon can safely assume no other process owns a 'running' row: the
+    // daemon is the sole long-lived process with a stable DB connection. The
+    // CLI only performs this cleanup when it has confirmed (via health-ping)
+    // that no daemon is currently active — see Phase 3b implementation notes.
+    if let Err(e) = cleanup_zombie_benchmark_runs(&pool).await {
+        tracing::warn!("Failed to clean up zombie benchmark runs on startup: {e}");
+    }
+
     // 4. MCP service with SSE emitter.
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
@@ -210,6 +239,19 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         Arc::new(ToolSupportDetector::new());
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+
+    // Create the shared SingleSwap ProcessManager and ModelRuntimePort at the
+    // composition root. Injecting this into both ProxyOps and (later)
+    // BenchmarkOps ensures that only one llama-server can run at a time
+    // system-wide — enforced by SingleSwap — preventing VRAM contention.
+    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
+        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        config.base_port,
+        config.llama_server_path.to_string_lossy().into_owned(),
+        catalog_for_runtime,
+    ));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
     let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
@@ -250,6 +292,17 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     }
     let approval_registry = Arc::new(CouncilApprovalRegistry::new());
 
+    // Benchmark repository and ops — constructed after runtime so BenchmarkOps
+    // shares the same SingleSwap ProcessManager as ProxyOps.
+    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
+    let benchmark_http_client = BenchmarkDeps::build_http_client()?;
+    let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
+        model_repo: repos.models.clone(),
+        runtime: Arc::clone(&runtime),
+        bench_repo: bench_repo.clone(),
+        http_client: benchmark_http_client,
+    }));
+
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor,
         model_repo,
@@ -259,6 +312,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         council_repo: Arc::clone(&council_repo)
             as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        runtime: Arc::clone(&runtime),
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {
@@ -310,6 +364,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         )),
         approval_registry,
         council_repo,
+        bench_repo,
+        benchmark,
+        runtime,
         steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }

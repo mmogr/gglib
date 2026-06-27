@@ -16,6 +16,7 @@ mod test_support;
 
 mod error;
 
+pub mod benchmark;
 pub mod council_approvals;
 mod downloads;
 mod mcp;
@@ -31,6 +32,7 @@ pub use council_approvals::CouncilApprovalRegistry;
 pub use error::GuiError;
 
 // Domain ops + their Deps
+pub use benchmark::{BenchmarkDeps, BenchmarkOps};
 pub use downloads::{DownloadDeps, DownloadOps};
 pub use mcp::{McpDeps, McpOps};
 pub use models::{ModelDeps, ModelOps};

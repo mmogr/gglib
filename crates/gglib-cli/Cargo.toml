@@ -43,6 +43,8 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 dotenvy = "0.15"
 rustyline = "14"
+serde = { workspace = true }
+tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

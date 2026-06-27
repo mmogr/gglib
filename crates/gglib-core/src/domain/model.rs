@@ -111,6 +111,12 @@ pub struct Model {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
+    ///
+    /// `None` when no benchmark has been run for this model yet, or when the
+    /// model is fetched without the summary join (e.g. lightweight lookups).
+    #[serde(default)]
+    pub benchmark_summary: Option<crate::domain::benchmark::ModelBenchmarkSummary>,
 }
 
 /// A model to be inserted into the system (no ID yet).
@@ -337,6 +343,7 @@ mod tests {
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            benchmark_summary: None,
         };
 
         let new_model = model.to_new_model();

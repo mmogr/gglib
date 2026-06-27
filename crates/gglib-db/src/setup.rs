@@ -5,8 +5,12 @@
 //! resolved database path.
 
 use anyhow::Result;
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+};
 use std::path::Path;
+use std::time::Duration;
 
 /// Sets up the `SQLite` database connection and ensures the schema exists.
 ///
@@ -48,12 +52,17 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let pool = SqlitePool::connect_with(
-        SqliteConnectOptions::new()
-            .filename(db_path)
-            .create_if_missing(true),
-    )
-    .await?;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(db_path)
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .busy_timeout(Duration::from_secs(5))
+                .pragma("synchronous", "NORMAL"),
+        )
+        .await?;
 
     // Create all tables and indexes
     create_schema(&pool).await?;
@@ -73,6 +82,23 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
     create_schema(&pool).await?;
     init_settings_table(&pool).await?;
     Ok(pool)
+}
+
+/// Mark any benchmark runs that are stuck in `running` status as `failed`.
+///
+/// Call this **once** at daemon boot, after the schema is ready. It corrects
+/// rows left in an inconsistent state by a prior crash. This function is
+/// intentionally **not** called by the CLI — the CLI cannot safely determine
+/// whether a `running` row belongs to a live daemon session.
+pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
+    sqlx::query(
+        "UPDATE benchmark_runs \
+         SET status = 'failed', error = 'Process terminated unexpectedly' \
+         WHERE status = 'running'",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Creates the complete database schema.
@@ -376,6 +402,102 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Index to allow efficient rewind lookups per run + wave.
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_orchestrator_events_wave ON orchestrator_events(run_id, wave_index)",
+    )
+    .execute(pool)
+    .await?;
+
+    // ── Benchmark tables ─────────────────────────────────────────────────────
+
+    // Lightweight grouping record; results reference this via SET NULL FK so
+    // deleting a run does not delete the per-model data.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS benchmark_runs (
+            id           INTEGER PRIMARY KEY,
+            run_type     TEXT    NOT NULL,
+            status       TEXT    NOT NULL,
+            model_ids    TEXT    NOT NULL,
+            prompt_text  TEXT,
+            system_prompt TEXT,
+            config_json  TEXT,
+            error        TEXT,
+            created_at   TEXT    NOT NULL,
+            completed_at TEXT
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Per-model compare results: real inference quality + real-world timing.
+    // Timing fields are nullable — llama-server may omit the timings object.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_compare_results (
+            id               INTEGER PRIMARY KEY,
+            model_id         INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id           INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            prompt_text      TEXT    NOT NULL,
+            system_prompt    TEXT,
+            response_text    TEXT    NOT NULL,
+            was_truncated    INTEGER NOT NULL DEFAULT 0,
+            prompt_tokens    INTEGER,
+            completion_tokens INTEGER,
+            prompt_ms        REAL,
+            generation_ms    REAL,
+            prompt_tps       REAL,
+            generation_tps   REAL,
+            created_at       TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Per-model perf results: synthetic llama-bench throughput.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_perf_results (
+            id           INTEGER PRIMARY KEY,
+            model_id     INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id       INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            pp_tps       REAL    NOT NULL,
+            tg_tps       REAL    NOT NULL,
+            pp_tokens    INTEGER NOT NULL,
+            tg_tokens    INTEGER NOT NULL,
+            backend      TEXT,
+            ngl          INTEGER,
+            context_size INTEGER,
+            repetitions  INTEGER NOT NULL,
+            created_at   TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // 1:1 with models; upserted on every result save; LEFT JOINed into model
+    // list so the frontend can show speed badges without extra round-trips.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_benchmark_summaries (
+            model_id             INTEGER PRIMARY KEY REFERENCES models(id) ON DELETE CASCADE,
+            best_tg_tps          REAL,
+            best_pp_tps          REAL,
+            latest_tg_tps        REAL,
+            latest_pp_tps        REAL,
+            latest_backend       TEXT,
+            perf_run_count       INTEGER NOT NULL DEFAULT 0,
+            compare_run_count    INTEGER NOT NULL DEFAULT 0,
+            last_benchmarked_at  TEXT    NOT NULL,
+            updated_at           TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Indexes for common benchmark queries
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_compare_results_model ON model_compare_results(model_id, created_at DESC)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_perf_results_model ON model_perf_results(model_id, created_at DESC)",
     )
     .execute(pool)
     .await?;

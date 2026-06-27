@@ -24,7 +24,7 @@ use super::build_events::{BuildEvent, BuildPhase};
 use super::config::BuildConfig;
 use super::detect::Acceleration;
 use anyhow::{Context, Result, bail};
-use gglib_core::paths::llama_config_path;
+use gglib_core::paths::{llama_bench_path, llama_config_path};
 use gglib_core::utils::process::cmd;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -89,6 +89,8 @@ pub async fn run_llama_source_build(
                 phase: BuildPhase::InstallBinaries,
             });
             install_binary(&dir, "llama-server", &sp)?;
+            let bench_dest = path_err(llama_bench_path())?;
+            install_binary(&dir, "llama-bench", &bench_dest)?;
             let _ = tx_clone.blocking_send(BuildEvent::PhaseCompleted {
                 phase: BuildPhase::InstallBinaries,
             });

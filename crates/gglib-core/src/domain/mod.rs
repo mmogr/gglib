@@ -14,6 +14,7 @@
 //! - `thinking` - Thinking/reasoning tag parsing and streaming accumulation
 
 pub mod agent;
+pub mod benchmark;
 pub mod capabilities;
 pub mod chat;
 pub mod council;
@@ -26,6 +27,12 @@ mod model;
 pub use model::{
     Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile, RangeValues, SYSTEM_TAG_PREFIX,
     is_system_tag,
+};
+
+// Re-export benchmark types at the domain level for convenience
+pub use benchmark::{
+    BenchmarkEvent, BenchmarkModelResult, BenchmarkRun, BenchmarkRunStatus, BenchmarkRunType,
+    CompareConfig, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 // Re-export inference types at the domain level for convenience

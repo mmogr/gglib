@@ -3,7 +3,6 @@
 use axum::{Json, extract::State};
 
 use crate::{error::HttpError, state::AppState};
-use gglib_core::paths::llama_server_path;
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
@@ -79,20 +78,10 @@ pub async fn start(
 ) -> Result<Json<ProxyStatus>, HttpError> {
     let cfg = cfg.unwrap_or_default();
 
-    // Resolve llama-server path on demand
-    let llama_path = llama_server_path()
-        .map_err(|e| HttpError::Internal(format!("Failed to resolve llama-server path: {}", e)))?
-        .to_string_lossy()
-        .into_owned();
-
     let runtime_cfg = to_runtime_config(&cfg);
 
     // Idempotent: if already running (Conflict), treat as success
-    match state
-        .proxy
-        .start(runtime_cfg, cfg.llama_base_port, llama_path)
-        .await
-    {
+    match state.proxy.start(runtime_cfg).await {
         Ok(_addr) => {}
         Err(e) => {
             let http: HttpError = e.into();

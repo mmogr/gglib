@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { Check, Pencil, Rocket, Square, Trash2, X } from 'lucide-react';
+import { BarChart2, Check, Pencil, Rocket, Square, Trash2, X } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 
@@ -11,6 +11,7 @@ interface InspectorActionsProps {
   onSave: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  onBenchmark?: () => void;
 }
 
 /**
@@ -25,6 +26,7 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
   onSave,
   onCancel,
   onDelete,
+  onBenchmark,
 }) => {
   return (
     <section className="mb-xl flex flex-col gap-base">
@@ -71,6 +73,15 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
             >
               Delete
             </Button>
+            {onBenchmark && (
+              <Button
+                variant="secondary"
+                onClick={onBenchmark}
+                leftIcon={<Icon icon={BarChart2} size={14} />}
+              >
+                Benchmark
+              </Button>
+            )}
           </>
         )}
       </div>

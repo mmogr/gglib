@@ -16,6 +16,8 @@ import { useMccLayout } from './modelControlCenter/useMccLayout';
 import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
 // Lazy load ChatPage to avoid loading assistant-ui until needed
 const ChatPage = lazy(() => import('./ChatPage'));
+// Lazy load BenchmarkPage to keep initial bundle small
+const BenchmarkPage = lazy(() => import('./BenchmarkPage'));
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
@@ -92,6 +94,9 @@ export default function ModelControlCenterPage({
   
   // Chat session state - when set, shows ChatPage instead of model panels
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+
+  // Benchmark state - when set, shows BenchmarkPage instead of model panels
+  const [benchmarkModelId, setBenchmarkModelId] = useState<number | null>(null);
   
   // Ref for file input (for menu-triggered file add)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,6 +232,19 @@ export default function ModelControlCenterPage({
     );
   }
 
+  // If benchmark is active, show BenchmarkPage
+  if (benchmarkModelId !== null) {
+    return (
+      <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden items-center justify-center text-text-muted">Loading benchmark...</div>}>
+        <BenchmarkPage
+          models={models}
+          initialModelIds={[benchmarkModelId]}
+          onClose={() => setBenchmarkModelId(null)}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <div className="flex flex-col w-full min-h-full overflow-auto md:h-full md:min-h-0 md:overflow-hidden">
       <TwoPanelLayout
@@ -290,6 +308,7 @@ export default function ModelControlCenterPage({
               onRefresh={handleRefreshAll}
               queueStatus={queueStatus}
               onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
+              onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
             />
           </>
         }

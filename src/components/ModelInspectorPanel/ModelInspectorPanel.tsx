@@ -52,6 +52,7 @@ interface ModelInspectorPanelProps {
   onRefresh?: () => Promise<void>;
   queueStatus?: DownloadQueueStatus | null;
   onRegisterServeModalOpener?: (opener: () => void) => void;
+  onBenchmark?: (modelId: number) => void;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
@@ -69,6 +70,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onRefresh,
   queueStatus,
   onRegisterServeModalOpener,
+  onBenchmark,
 }) => {
   const { settings } = useSettings();
   const { showToast } = useToastContext();
@@ -280,6 +282,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             onSave={serverActions.handleSave}
             onCancel={editMode.handleCancel}
             onDelete={deleteModal.openDeleteModal}
+            onBenchmark={onBenchmark && model?.id != null ? () => onBenchmark(model.id!) : undefined}
           />
         </div>
       </div>

@@ -156,6 +156,11 @@ pub struct GuiModel {
     /// endpoint lets the user override them.
     #[serde(default)]
     pub capabilities: gglib_core::ModelCapabilities,
+    /// Denormalised benchmark summary (speed badges).
+    ///
+    /// `None` if the model has never been benchmarked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub benchmark_summary: Option<gglib_core::domain::benchmark::ModelBenchmarkSummary>,
 }
 
 impl GuiModel {
@@ -176,6 +181,7 @@ impl GuiModel {
             port,
             inference_defaults: model.inference_defaults,
             capabilities: model.capabilities,
+            benchmark_summary: model.benchmark_summary,
         }
     }
 

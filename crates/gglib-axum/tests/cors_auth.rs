@@ -4,6 +4,14 @@
 //! - OPTIONS preflight requests with proper CORS headers
 //! - Bearer token authentication on /api/* endpoints
 //! - Unauthenticated access to /health endpoint
+//!
+//! # Parallelism note
+//!
+//! All tests in this file share the same on-disk SQLite database (resolved
+//! by `database_path()`).  The WAL pragma sequence inside `bootstrap()` needs
+//! an exclusive lock, so concurrent bootstrap calls cause SQLITE_BUSY (code 5).
+//! `BOOTSTRAP_LOCK` serialises the bootstrap phase; once the pool is open the
+//! WAL mode handles concurrent readers without further serialisation.
 
 mod common;
 
@@ -13,6 +21,9 @@ use gglib_axum::{
     embedded::{EmbeddedServerConfig, default_embedded_cors_origins, start_embedded_server},
 };
 use reqwest::{Method, StatusCode, header};
+
+/// Process-level mutex that serialises concurrent `bootstrap()` calls.
+static BOOTSTRAP_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
@@ -29,7 +40,12 @@ fn test_config() -> ServerConfig {
 
 /// Helper to create test server and return (base_url, token)
 async fn setup_test_server() -> (String, String) {
+    // Serialise bootstrap to avoid concurrent WAL-setup conflicts on the
+    // shared database file.  The lock is released as soon as bootstrap
+    // completes; the pool itself handles concurrent access thereafter.
+    let _lock = BOOTSTRAP_LOCK.lock().await;
     let ctx = bootstrap(test_config()).await.expect("Failed to bootstrap");
+    drop(_lock);
 
     let server_config = EmbeddedServerConfig {
         cors_origins: default_embedded_cors_origins(),

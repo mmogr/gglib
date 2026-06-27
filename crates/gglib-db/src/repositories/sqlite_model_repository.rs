@@ -6,7 +6,9 @@ use sqlx::SqlitePool;
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
-use super::row_mappers::{MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model};
+use super::row_mappers::{
+    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model,
+};
 
 /// Compute a canonical model key for deduplication.
 ///
@@ -56,9 +58,13 @@ impl SqliteModelRepository {
 #[async_trait]
 impl ModelRepository for SqliteModelRepository {
     async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+        // Include benchmark summary via LEFT JOIN so model cards can show
+        // speed badges without a separate round-trip.
         let query = format!(
-            "SELECT {} FROM models ORDER BY added_at DESC",
-            MODEL_SELECT_COLUMNS
+            "SELECT {}, {} FROM models \
+             LEFT JOIN model_benchmark_summaries s ON s.model_id = models.id \
+             ORDER BY models.added_at DESC",
+            MODEL_SELECT_COLUMNS, BENCHMARK_SUMMARY_COLUMNS
         );
 
         let rows = sqlx::query(&query)

@@ -3,9 +3,10 @@
 //! Wraps the ProxySupervisor to provide start/stop/status operations
 //! for the OpenAI-compatible proxy.
 //!
-//! The SingleSwap ProcessManager is created on-demand when starting
-//! the proxy, ensuring it's independent from the GUI's Concurrent
-//! process management.
+//! The `ModelRuntimePort` (wrapping a shared `SingleSwap` `ProcessManager`) is
+//! injected at construction time from the composition root, ensuring that the
+//! proxy and any other service that drives llama-server (e.g. benchmarking)
+//! share a single manager — preventing VRAM contention.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -19,8 +20,7 @@ use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
 use gglib_runtime::CouncilRunnerAdapter;
-use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
-use gglib_runtime::process::ProcessManager;
+use gglib_runtime::ports_impl::CatalogPortImpl;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 use tracing::info;
 
@@ -72,12 +72,17 @@ pub struct ProxyDeps {
     pub approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
     /// Shared run repository for interactive-mode persistence.
     pub council_repo: Arc<dyn CouncilRepositoryPort>,
+    /// Shared runtime port — injected from the composition root so proxy and
+    /// benchmark share the same `SingleSwap` `ProcessManager`, enforcing the
+    /// invariant that only one llama-server runs at a time system-wide.
+    pub runtime: Arc<dyn ModelRuntimePort>,
 }
 
 /// Proxy operations facade.
 ///
 /// Provides GUI-friendly interface to proxy lifecycle management.
-/// Creates port implementations and ProcessManager on-demand when starting.
+/// The `ModelRuntimePort` is shared with other services (e.g. benchmarking)
+/// via the composition root, so only one llama-server can run system-wide.
 pub struct ProxyOps {
     supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,
@@ -85,6 +90,7 @@ pub struct ProxyOps {
     core: Arc<AppCore>,
     approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
     council_repo: Arc<dyn CouncilRepositoryPort>,
+    runtime: Arc<dyn ModelRuntimePort>,
 }
 
 impl ProxyOps {
@@ -97,48 +103,25 @@ impl ProxyOps {
             core: deps.core,
             approval_registry: deps.approval_registry,
             council_repo: deps.council_repo,
+            runtime: deps.runtime,
         }
     }
 
     /// Start the proxy server.
     ///
-    /// Creates a SingleSwap ProcessManager and port implementations,
-    /// then delegates to the supervisor. Returns the bound address.
+    /// Delegates to the supervisor using the shared `ModelRuntimePort`
+    /// that was injected at construction time. Returns the bound address.
     ///
     /// # Arguments
     ///
     /// * `config` - Proxy server configuration (host, port, default context)
-    /// * `llama_base_port_override` - Optional override for llama-server base port
-    /// * `llama_server_path` - Path to llama-server binary
-    pub async fn start(
-        &self,
-        config: ProxyConfig,
-        llama_base_port_override: Option<u16>,
-        llama_server_path: String,
-    ) -> Result<SocketAddr, GuiError> {
-        // Resolve the llama-server base port from override, settings, or default
-        let settings = self
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
-        let (llama_base_port, _source) =
-            resolve_llama_base_port(llama_base_port_override, &settings)?;
-
-        // Create catalog port from model repository
+    pub async fn start(&self, config: ProxyConfig) -> Result<SocketAddr, GuiError> {
+        // Create catalog port from model repository (cheap wrapper; safe to
+        // recreate per call — the underlying model repository is shared).
         let catalog: Arc<dyn ModelCatalogPort> =
             Arc::new(CatalogPortImpl::new(self.model_repo.clone()));
 
-        // Create a fresh SingleSwap ProcessManager for this proxy session
-        let process_manager = Arc::new(ProcessManager::new_single_swap(
-            llama_base_port,
-            llama_server_path,
-            catalog.clone(),
-        ));
-
-        // Create runtime port wrapping the process manager
-        let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+        let runtime = Arc::clone(&self.runtime);
 
         // Create CouncilDeps — shares approval_registry and council_repo
         // with the main Axum server so interactive-mode runs appear in
