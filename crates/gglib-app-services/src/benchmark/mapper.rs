@@ -172,7 +172,10 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
                 .filter(|&v| v > 0.0)
                 .or_else(|| {
                     if entry_n_prompt > 0 && entry_n_gen == 0 {
-                        entry.get("avg_ts").and_then(|v| v.as_f64()).filter(|&v| v > 0.0)
+                        entry
+                            .get("avg_ts")
+                            .and_then(|v| v.as_f64())
+                            .filter(|&v| v > 0.0)
                     } else {
                         None
                     }
@@ -188,7 +191,10 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
                 .filter(|&v| v > 0.0)
                 .or_else(|| {
                     if entry_n_gen > 0 && entry_n_prompt == 0 {
-                        entry.get("avg_ts").and_then(|v| v.as_f64()).filter(|&v| v > 0.0)
+                        entry
+                            .get("avg_ts")
+                            .and_then(|v| v.as_f64())
+                            .filter(|&v| v > 0.0)
                     } else {
                         None
                     }
