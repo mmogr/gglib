@@ -17,7 +17,7 @@ use gglib_core::ports::{
     NoopEmitter, ProcessRunner, Repos,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteCouncilRepository;
+use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_download::CliDownloadEventEmitter;
 use gglib_mcp::McpService;
 
@@ -82,6 +82,8 @@ pub struct CliContext {
     pub http_client: reqwest::Client,
     /// Orchestrator run repository for persistence and resume support.
     pub council_repo: Arc<SqliteCouncilRepository>,
+    /// Benchmark run repository for compare and perf results.
+    pub bench_repo: Arc<SqliteBenchmarkRepository>,
     /// Orchestrator approval registry for HITL gates.
     pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Terminal progress emitter used by the interactive download monitor.
@@ -129,6 +131,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
+    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
     let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
     let approval_registry = Arc::new(CouncilApprovalRegistry::new());
 
@@ -151,6 +154,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         base_port: config.base_port,
         http_client: reqwest::Client::new(),
         council_repo,
+        bench_repo,
         approval_registry,
         download_emitter,
     })
@@ -186,6 +190,7 @@ pub fn bootstrap_with(
         base_port: 9000,
         http_client: reqwest::Client::new(),
         council_repo: Arc::new(SqliteCouncilRepository::new_in_memory_blocking()),
+        bench_repo: Arc::new(SqliteBenchmarkRepository::new_in_memory_blocking()),
         approval_registry: Arc::new(CouncilApprovalRegistry::new()),
         download_emitter: Arc::new(CliDownloadEventEmitter::new()),
     }

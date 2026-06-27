@@ -22,6 +22,38 @@ impl SqliteBenchmarkRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
+
+    /// Create a new in-memory repository (blocking, for tests and stubs).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the in-memory SQLite connection cannot be established.
+    #[must_use]
+    pub fn new_in_memory_blocking() -> Self {
+        let pool = tokio::runtime::Handle::try_current()
+            .map(|h| {
+                h.block_on(SqlitePool::connect("sqlite::memory:"))
+                    .expect("in-memory SQLite pool")
+            })
+            .unwrap_or_else(|_| {
+                tokio::runtime::Runtime::new()
+                    .expect("tokio runtime")
+                    .block_on(SqlitePool::connect("sqlite::memory:"))
+                    .expect("in-memory SQLite pool")
+            });
+        Self { pool }
+    }
+
+    /// Reset any benchmark runs that are still in `Running` status to
+    /// `Failed` (zombie cleanup on process restart).
+    ///
+    /// Convenience wrapper around [`crate::setup::cleanup_zombie_benchmark_runs`]
+    /// so callers do not need a direct `sqlx` dependency.
+    pub async fn cleanup_zombie_runs(&self) -> Result<(), RepositoryError> {
+        crate::setup::cleanup_zombie_benchmark_runs(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))
+    }
 }
 
 // ── Helper: enum ↔ string ────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 use clap::Subcommand;
 
 /// Subcommands available under `gglib benchmark`.
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 pub enum BenchmarkCommand {
     /// Run the same prompt through multiple models and compare outputs side-by-side
     #[command(display_order = 1)]
