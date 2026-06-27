@@ -1,12 +1,28 @@
 //! Row mapping helpers for `SQLite` queries.
 
 use chrono::{DateTime, NaiveDateTime, Utc};
+use gglib_core::domain::benchmark::ModelBenchmarkSummary;
 use gglib_core::{Model, ModelCapabilities, RepositoryError};
 use sqlx::Row;
 use std::path::Path;
 
-/// Shared SELECT column list for model queries.
+/// Shared SELECT column list for model queries (no table alias required).
 pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults";
+
+/// Additional columns to SELECT when the model query includes a LEFT JOIN
+/// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
+/// prefix to avoid conflicts and allow defensive parsing in `row_to_model`.
+pub const BENCHMARK_SUMMARY_COLUMNS: &str =
+    "s.model_id AS s_model_id, \
+     s.best_tg_tps AS s_best_tg_tps, \
+     s.best_pp_tps AS s_best_pp_tps, \
+     s.latest_tg_tps AS s_latest_tg_tps, \
+     s.latest_pp_tps AS s_latest_pp_tps, \
+     s.latest_backend AS s_latest_backend, \
+     s.perf_run_count AS s_perf_run_count, \
+     s.compare_run_count AS s_compare_run_count, \
+     s.last_benchmarked_at AS s_last_benchmarked_at, \
+     s.updated_at AS s_updated_at";
 
 /// Helper to parse datetime strings that may have "UTC" suffix.
 pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
@@ -99,6 +115,40 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),
+        // Defensively attempt to read benchmark summary columns (only present
+        // when the query includes a LEFT JOIN with model_benchmark_summaries).
+        benchmark_summary: try_read_summary(row),
+    })
+}
+
+/// Try to read benchmark summary columns from a row.
+///
+/// Returns `None` if the `s_model_id` column is absent (query has no JOIN) or
+/// if the joined row was NULL (model has no benchmark data yet).
+fn try_read_summary(row: &sqlx::sqlite::SqliteRow) -> Option<ModelBenchmarkSummary> {
+    // s_model_id is the sentinel: absent means no JOIN was present;
+    // NULL means LEFT JOIN found no matching summary row.
+    let model_id: i64 = row.try_get("s_model_id").ok().flatten()?;
+
+    let last_benchmarked_at_str: Option<String> =
+        row.try_get("s_last_benchmarked_at").ok().flatten();
+    let updated_at_str: Option<String> = row.try_get("s_updated_at").ok().flatten();
+
+    Some(ModelBenchmarkSummary {
+        model_id,
+        best_tg_tps: row.try_get("s_best_tg_tps").ok().flatten(),
+        best_pp_tps: row.try_get("s_best_pp_tps").ok().flatten(),
+        latest_tg_tps: row.try_get("s_latest_tg_tps").ok().flatten(),
+        latest_pp_tps: row.try_get("s_latest_pp_tps").ok().flatten(),
+        latest_backend: row.try_get("s_latest_backend").ok().flatten(),
+        perf_run_count: row.try_get("s_perf_run_count").ok().flatten().unwrap_or(0),
+        compare_run_count: row
+            .try_get("s_compare_run_count")
+            .ok()
+            .flatten()
+            .unwrap_or(0),
+        last_benchmarked_at: parse_datetime(last_benchmarked_at_str).unwrap_or_else(Utc::now),
+        updated_at: parse_datetime(updated_at_str).unwrap_or_else(Utc::now),
     })
 }
 

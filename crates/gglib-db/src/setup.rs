@@ -386,6 +386,102 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // ── Benchmark tables ─────────────────────────────────────────────────────
+
+    // Lightweight grouping record; results reference this via SET NULL FK so
+    // deleting a run does not delete the per-model data.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS benchmark_runs (
+            id           INTEGER PRIMARY KEY,
+            run_type     TEXT    NOT NULL,
+            status       TEXT    NOT NULL,
+            model_ids    TEXT    NOT NULL,
+            prompt_text  TEXT,
+            system_prompt TEXT,
+            config_json  TEXT,
+            error        TEXT,
+            created_at   TEXT    NOT NULL,
+            completed_at TEXT
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Per-model compare results: real inference quality + real-world timing.
+    // Timing fields are nullable — llama-server may omit the timings object.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_compare_results (
+            id               INTEGER PRIMARY KEY,
+            model_id         INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id           INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            prompt_text      TEXT    NOT NULL,
+            system_prompt    TEXT,
+            response_text    TEXT    NOT NULL,
+            was_truncated    INTEGER NOT NULL DEFAULT 0,
+            prompt_tokens    INTEGER,
+            completion_tokens INTEGER,
+            prompt_ms        REAL,
+            generation_ms    REAL,
+            prompt_tps       REAL,
+            generation_tps   REAL,
+            created_at       TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Per-model perf results: synthetic llama-bench throughput.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_perf_results (
+            id           INTEGER PRIMARY KEY,
+            model_id     INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id       INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            pp_tps       REAL    NOT NULL,
+            tg_tps       REAL    NOT NULL,
+            pp_tokens    INTEGER NOT NULL,
+            tg_tokens    INTEGER NOT NULL,
+            backend      TEXT,
+            ngl          INTEGER,
+            context_size INTEGER,
+            repetitions  INTEGER NOT NULL,
+            created_at   TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // 1:1 with models; upserted on every result save; LEFT JOINed into model
+    // list so the frontend can show speed badges without extra round-trips.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS model_benchmark_summaries (
+            model_id             INTEGER PRIMARY KEY REFERENCES models(id) ON DELETE CASCADE,
+            best_tg_tps          REAL,
+            best_pp_tps          REAL,
+            latest_tg_tps        REAL,
+            latest_pp_tps        REAL,
+            latest_backend       TEXT,
+            perf_run_count       INTEGER NOT NULL DEFAULT 0,
+            compare_run_count    INTEGER NOT NULL DEFAULT 0,
+            last_benchmarked_at  TEXT    NOT NULL,
+            updated_at           TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Indexes for common benchmark queries
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_compare_results_model ON model_compare_results(model_id, created_at DESC)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_perf_results_model ON model_perf_results(model_id, created_at DESC)",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 
