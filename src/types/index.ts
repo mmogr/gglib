@@ -377,5 +377,34 @@ export interface ModelFilterOptions {
   param_range: RangeValues | null;
   /** Minimum and maximum context lengths */
   context_range: RangeValues | null;
+  /** Token-generation speed range (t/s) derived from benchmark data.
+   *  Only present when at least one model has been benchmarked. */
+  speed_range?: RangeValues | null;
+}
+
+/**
+ * Sort field for `GET /api/models`.
+ * Matches the backend `ModelSortBy` domain enum (snake_case).
+ */
+export type ModelSortBy = 'added_at' | 'name' | 'param_count' | 'latest_tg_tps';
+
+/**
+ * Sort direction for model list queries.
+ */
+export type SortOrder = 'asc' | 'desc';
+
+/**
+ * Query parameters for `GET /api/models`.
+ * Maps directly to the backend `ModelListQueryParams` struct.
+ */
+export interface ModelListQuery {
+  sort?: ModelSortBy;
+  order?: SortOrder;
+  min_params?: number;
+  max_params?: number;
+  min_speed?: number;
+  max_speed?: number;
+  tags?: string[];
+  quantizations?: string[];
 }
 
