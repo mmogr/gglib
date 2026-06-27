@@ -142,10 +142,10 @@ pub fn apply_query(mut models: Vec<Model>, query: &ModelListQuery) -> Vec<Model>
             models.sort_by(|a, b| cmp_tps_desc(tps(a), tps(b)));
         }
         (ModelSortBy::AddedAt, SortOrder::Asc) => {
-            models.sort_by(|a, b| a.added_at.cmp(&b.added_at));
+            models.sort_by_key(|a| a.added_at);
         }
         (ModelSortBy::AddedAt, SortOrder::Desc) => {
-            models.sort_by(|a, b| b.added_at.cmp(&a.added_at));
+            models.sort_by_key(|b| std::cmp::Reverse(b.added_at));
         }
     }
 
@@ -251,6 +251,7 @@ fn cmp_tps_desc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
 mod tests {
     use super::*;
     use crate::domain::benchmark::ModelBenchmarkSummary;
+    use crate::ModelCapabilities;
     use chrono::Utc;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -275,7 +276,7 @@ mod tests {
             download_date: None,
             last_update_check: None,
             tags: vec![],
-            capabilities: Default::default(),
+            capabilities: ModelCapabilities::default(),
             inference_defaults: None,
             benchmark_summary: None,
         }
@@ -287,7 +288,7 @@ mod tests {
     }
 
     fn with_tags(mut m: Model, tags: &[&str]) -> Model {
-        m.tags = tags.iter().map(|t| t.to_string()).collect();
+        m.tags = tags.iter().map(ToString::to_string).collect();
         m
     }
 
