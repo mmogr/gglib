@@ -1904,9 +1904,12 @@ dependencies = [
 name = "gglib-app-services"
 version = "0.8.2"
 dependencies = [
+ "anyhow",
  "async-trait",
+ "chrono",
  "dashmap",
  "dirs",
+ "futures-core",
  "futures-util",
  "gglib-core",
  "gglib-db",
@@ -1921,6 +1924,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
  "tokio-test",
  "tokio-util",
  "tracing",

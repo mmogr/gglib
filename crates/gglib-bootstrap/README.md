@@ -123,3 +123,16 @@ let config = BootstrapConfig {
 let core = CoreBootstrap::build(config, emitter).await?;
 // core.app, core.runner, core.downloads, core.hf_client … all ready
 ```
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`build.rs`](build) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-build-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-build-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-build-coverage.json) |
+| [`src/`](src/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-src-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-src-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-src-coverage.json) |
+| [`tests/`](tests/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/mattogrady/.local/src/gglib/crates/gglib-bootstrap-tests-coverage.json) |
+<!-- module-table:end -->
+
+</details>
