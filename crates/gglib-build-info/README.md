@@ -81,6 +81,8 @@ When git is unavailable (e.g., downloaded tarball), constants fall back to safe 
 - `GIT_DIRTY` → `false`
 - `LONG_VERSION` → just `SEMVER`
 
+## Internal Structure
+
 <details>
 <summary><h2>Modules</h2></summary>
 

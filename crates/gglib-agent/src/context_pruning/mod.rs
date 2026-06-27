@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Context-budget pruning for the agentic loop.
 //!
 //! Long agentic runs accumulate tool messages that can exceed the LLM's context

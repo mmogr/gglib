@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Universal local-LLM consistency layer.
 //!
 //! This module rewrites model-specific output dialects into the strict

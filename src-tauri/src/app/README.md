@@ -156,3 +156,13 @@ Backend Operation (server start, download progress, etc.)
 | Menu Actions | `MENU_ADD_MODEL`, `MENU_REMOVE_MODEL`, `MENU_BROWSE_HUGGINGFACE`, `MENU_START_SERVER`, `MENU_STOP_SERVER`, `MENU_OPEN_CHAT`, `MENU_INSTALL_LLAMA` |
 
 <!-- module-docs:end -->
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+<!-- module-table:end -->
+
+</details>

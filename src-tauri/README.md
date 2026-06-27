@@ -223,6 +223,8 @@ The Rust backend is organized into three main modules:
 └─────────────────┘
 ```
 
+## Internal Structure
+
 For detailed documentation on each module, see:
 - [app/README.md](src/app/README.md) — State and event infrastructure
 - [LIFECYCLE.md](LIFECYCLE.md) — Application startup and hardened shutdown architecture

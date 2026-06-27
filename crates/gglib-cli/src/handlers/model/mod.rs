@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Model management command handlers.
 //!
 //! Dispatches [`ModelCommand`] variants to focused handler modules covering

@@ -1,5 +1,6 @@
 # useGglibRuntime
 
+<!-- module-docs:start -->
 React hook that drives the chat runtime by delegating the agentic loop to the
 Rust backend (`POST /api/agent/chat`) and streaming the results back to the UI.
 
@@ -63,3 +64,5 @@ exposed to untrusted callers.
 
 When `supportsToolCalls === false`, an empty `tool_filter` is sent so the
 backend exposes no tools to the model.
+
+<!-- module-docs:end -->

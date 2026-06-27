@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Configuration, tooling, and system management handlers.
 //!
 //! Dispatches [`ConfigCommand`] variants to focused sub-modules:

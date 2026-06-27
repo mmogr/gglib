@@ -1,3 +1,9 @@
+#![doc = include_str!("README.md")]
+
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Submodule index for concrete [`super::parser::ToolCallParser`] implementations.
 //!
 //! Each parser lives in its own file and is named after the dialect it

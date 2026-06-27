@@ -189,3 +189,13 @@ Run gates locally:
 Both must pass before merging changes to commands/.
 
 <!-- module-docs:end -->
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+<!-- module-table:end -->
+
+</details>
