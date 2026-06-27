@@ -250,8 +250,8 @@ fn cmp_tps_desc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::benchmark::ModelBenchmarkSummary;
     use crate::ModelCapabilities;
+    use crate::domain::benchmark::ModelBenchmarkSummary;
     use chrono::Utc;
     use std::collections::HashMap;
     use std::path::PathBuf;
