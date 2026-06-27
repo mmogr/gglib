@@ -29,6 +29,23 @@ pub fn llama_server_path() -> Result<PathBuf, PathError> {
     Ok(gglib_dir.join("bin").join(binary_name))
 }
 
+/// Get the path to the managed `llama-bench` binary.
+///
+/// `llama-bench` is included in the pre-built binary archives alongside
+/// `llama-server`. For source builds it requires `-DLLAMA_BUILD_BENCH=ON`
+/// (see Phase 6 of the benchmark implementation plan).
+pub fn llama_bench_path() -> Result<PathBuf, PathError> {
+    let gglib_dir = gglib_data_dir()?;
+
+    #[cfg(target_os = "windows")]
+    let binary_name = "llama-bench.exe";
+
+    #[cfg(not(target_os = "windows"))]
+    let binary_name = "llama-bench";
+
+    Ok(gglib_dir.join("bin").join(binary_name))
+}
+
 /// Get the path to the llama.cpp repository directory.
 pub fn llama_cpp_dir() -> Result<PathBuf, PathError> {
     let gglib_dir = gglib_data_dir()?;
@@ -56,5 +73,18 @@ mod tests {
 
         #[cfg(not(target_os = "windows"))]
         assert!(path.to_string_lossy().ends_with("llama-server"));
+    }
+
+    #[test]
+    fn test_llama_bench_path() {
+        let result = llama_bench_path();
+        assert!(result.is_ok());
+
+        let path = result.unwrap();
+        #[cfg(target_os = "windows")]
+        assert!(path.to_string_lossy().ends_with("llama-bench.exe"));
+
+        #[cfg(not(target_os = "windows"))]
+        assert!(path.to_string_lossy().ends_with("llama-bench"));
     }
 }

@@ -11,6 +11,7 @@
 //! - Intent-based methods for process runner (not implementation-leaking)
 
 pub mod agent;
+pub mod benchmark;
 pub mod chat_history;
 pub mod council_approvals;
 pub mod council_repository;
@@ -72,6 +73,7 @@ pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSu
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
+pub use benchmark::BenchmarkRepositoryPort;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
