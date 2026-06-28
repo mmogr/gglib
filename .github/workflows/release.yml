@@ -171,7 +171,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.webui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -342,7 +342,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.webui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -445,7 +445,7 @@ jobs:
           cache-on-failure: true
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
