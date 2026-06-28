@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout badges branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: badges
           fetch-depth: 1
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout badges branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: badges
           fetch-depth: 1
@@ -729,7 +729,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main branch (for source analysis)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 1

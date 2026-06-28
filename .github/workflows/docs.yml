@@ -39,7 +39,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Always checkout main branch for docs, even when triggered by release tag
           ref: main
