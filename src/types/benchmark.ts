@@ -82,6 +82,7 @@ export interface CompareConfig {
   prompt: string;
   system_prompt?: string | null;
   inference?: Record<string, unknown> | null;
+  ctx_size?: number | null;
 }
 
 export interface PerfConfig {

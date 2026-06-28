@@ -40,7 +40,9 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
-use gglib_core::ports::{BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort};
+use gglib_core::ports::{
+    BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository,
+};
 
 mod compare;
 pub mod guard;
@@ -77,6 +79,10 @@ pub struct BenchmarkDeps {
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
     /// HTTP client with a ≥ 10-minute timeout for compare-mode SSE streaming.
     pub http_client: reqwest::Client,
+    /// Settings repository used to read `default_context_size` and global
+    /// `inference_defaults` at the start of each compare run — mirrors the
+    /// same per-request settings read the proxy performs.
+    pub settings_repo: Arc<dyn SettingsRepository>,
 }
 
 impl BenchmarkDeps {

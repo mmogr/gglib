@@ -38,7 +38,8 @@ use crate::state::AppState;
 ///   "model_ids": [1, 2],
 ///   "prompt": "Explain gradient descent in one paragraph.",
 ///   "system_prompt": null,
-///   "inference": null
+///   "inference": null,
+///   "ctx_size": null
 /// }
 /// ```
 ///

@@ -172,6 +172,7 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         runtime,
         bench_repo: ctx.bench_repo.clone(),
         http_client,
+        settings_repo: ctx.settings_repo.clone(),
     }))
 }
 
@@ -215,14 +216,12 @@ async fn cmd_compare(
     } else {
         None
     };
-    // Note: ctx_size is not yet wired into CompareConfig; reserved for Phase 4.
-    let _ = ctx_size;
-
     let config = CompareConfig {
         model_ids,
         prompt,
         system_prompt,
         inference,
+        ctx_size,
     };
 
     style::print_info_banner("Benchmark Compare", "\u{1f4ca}");
