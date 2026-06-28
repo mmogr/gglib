@@ -36,7 +36,7 @@ This module defines all the **port traits** (interfaces) that the core domain ne
 ### Agent Loop Ports
 - **`agent.rs`** - `ToolExecutorPort` and `AgentLoopPort` traits for the backend agentic loop
   - `ToolExecutorPort` — list and execute tools; returns `anyhow::Error` for infrastructure failures so they are decoupled from loop logic
-  - `AgentLoopPort` — drives the ReAct loop; takes a `tokio::sync::mpsc::Sender<AgentEvent>` for SSE-ready streaming; returns `Result<String, AgentError>` (final answer)
+  - `AgentLoopPort` — drives the `ReAct` loop; takes a `tokio::sync::mpsc::Sender<AgentEvent>` for SSE-ready streaming; returns `Result<String, AgentError>` (final answer)
   - `AgentError` — fatal loop-level failures only (`MaxIterationsReached`, `LoopDetected`, `ParallelToolLimitExceeded`, `StagnationDetected`, `Internal`)
 
 ### Repository Ports (Data Persistence)
@@ -46,7 +46,7 @@ This module defines all the **port traits** (interfaces) that the core domain ne
 - **`settings_repository.rs`** - Application settings storage
 
 ### External Service Ports
-- **`huggingface/`** - HuggingFace API client interface
+- **`huggingface/`** - `HuggingFace` API client interface
   - `client.rs` - Main client trait
   - `error.rs` - HF-specific error types
   - `types.rs` - HF domain types
@@ -101,7 +101,7 @@ async fn use_port<R: ModelRepository>(repo: &R) -> Result<Vec<Model>, Repository
 
 Concrete implementations are in:
 - **gglib-db**: Repository ports (`SqlxModelRepository`, etc.)
-- **gglib-hf**: HuggingFace client port
+- **gglib-hf**: `HuggingFace` client port
 - **gglib-runtime**: Runtime/process ports
 - **gglib-download**: Download management ports
 - **gglib-agent** *(Phase 2, epic #247)*: `AgentLoopPort` implementation; `ToolExecutorPort` adapter over `gglib-mcp`

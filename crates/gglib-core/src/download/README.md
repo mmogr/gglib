@@ -28,7 +28,7 @@ This module contains pure data types and traits for the download system. No I/O,
 | Type | Description |
 |------|-------------|
 | `DownloadId` | Unique identifier for a download job |
-| `Quantization` | Quantization level (Q4_0, Q8_0, etc.) |
+| `Quantization` | Quantization level (`Q4_0`, `Q8_0`, etc.) |
 | `DownloadEvent` | Progress/completion events for UI updates |
 | `QueueSnapshot` | Point-in-time view of the download queue |
 

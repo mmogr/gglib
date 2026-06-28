@@ -44,7 +44,7 @@ These types form the heart of the hexagonal architecture — they have **no infr
 
 | Type | Description |
 |------|-------------|
-| `Model` | A persisted GGUF model with metadata, path, and HuggingFace provenance |
+| `Model` | A persisted GGUF model with metadata, path, and `HuggingFace` provenance |
 | `NewModel` | Data for inserting a new model (no ID yet) |
 | `Conversation` | A chat conversation with title, model reference, and system prompt |
 | `Message` | A single chat message with role (system/user/assistant) |

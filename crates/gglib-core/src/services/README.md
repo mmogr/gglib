@@ -76,9 +76,9 @@ This module contains the **application services** that orchestrate business logi
 
 #### Model Integrity
 - **`model_verification.rs`** - Model verification and repair
-  - SHA256 integrity verification against HuggingFace LFS OIDs
+  - SHA256 integrity verification against `HuggingFace` LFS OIDs
   - Per-shard health tracking with SSE progress streaming
-  - Update detection via HuggingFace API comparison
+  - Update detection via `HuggingFace` API comparison
   - Corrupt shard repair by triggering re-download
   - Support for single-file and sharded models
 

@@ -12,7 +12,7 @@ This module provides canonical path resolution for all gglib components across p
 |----------|-------------|
 | `data_root()` | Platform-specific data directory (`~/.local/share/gglib` on Linux) |
 | `resource_root()` | Bundled resources directory (app bundle on macOS) |
-| `database_path()` | SQLite database location |
+| `database_path()` | `SQLite` database location |
 | `llama_server_path()` | Path to `llama-server` binary |
 | `default_models_dir()` | Default directory for downloaded models |
 
