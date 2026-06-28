@@ -36,7 +36,7 @@ jobs:
       is-prerelease: ${{ steps.version-check.outputs.is-prerelease }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +96,7 @@ jobs:
           echo "This is a test run. Skipping actual release creation."
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -111,15 +111,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           name: Release v${{ needs.check-version.outputs.new-version }}
           draft: false
           prerelease: ${{ needs.check-version.outputs.is-prerelease == 'true' }}
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-docs:
     name: Deploy Documentation
@@ -132,7 +131,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Always checkout main branch for docs, even when triggered by release tag
           ref: main
@@ -157,21 +156,21 @@ jobs:
           cache-on-failure: true
 
       - name: Cache node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: ubuntu-${{ runner.arch }}-node-${{ hashFiles('package.json') }}
 
       - name: Cache Web UI
         id: webui-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: web_ui
           key: ubuntu-${{ runner.arch }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
 
       - name: Setup Node.js
         if: steps.webui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -230,13 +229,13 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: './target/doc'
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Update deployment status
         if: always()
@@ -299,7 +298,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -328,21 +327,21 @@ jobs:
           cache-on-failure: true
 
       - name: Cache node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: ${{ matrix.target }}-node-${{ hashFiles('package.json') }}
 
       - name: Cache Web UI
         id: webui-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: web_ui
           key: ${{ matrix.target }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
 
       - name: Setup Node.js
         if: steps.webui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -377,21 +376,19 @@ jobs:
 
       - name: Upload binary to release (Unix)
         if: matrix.os != 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload binary to release (Windows)
         if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-gui:
     name: Build GUI ${{ matrix.target }}
@@ -428,7 +425,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -445,7 +442,7 @@ jobs:
           cache-on-failure: true
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -616,18 +613,16 @@ jobs:
 
       - name: Upload GUI binary to release (Unix)
         if: (startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')) && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GUI binary to release (Windows)
         if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

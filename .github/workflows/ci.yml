@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -33,13 +33,13 @@ jobs:
     needs: [fmt]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check crate boundaries
         run: ./scripts/check_boundaries.sh
 
       - name: Upload boundary results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: boundary-results
@@ -51,7 +51,7 @@ jobs:
     needs: [fmt]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check Tauri command placement
         run: ./scripts/check-tauri-commands.sh
@@ -79,7 +79,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -102,7 +102,7 @@ jobs:
           cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -113,7 +113,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -146,7 +146,7 @@ jobs:
         run: cargo test --doc --verbose
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
@@ -174,10 +174,10 @@ jobs:
     needs: [clippy]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -188,7 +188,7 @@ jobs:
         run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ts-test-results
@@ -214,7 +214,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -233,7 +233,7 @@ jobs:
           components: clippy
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -244,7 +244,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
 
@@ -273,7 +273,7 @@ jobs:
             os: windows-2022
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -281,7 +281,7 @@ jobs:
           toolchain: 1.91.0
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
