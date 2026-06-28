@@ -182,8 +182,14 @@ pub struct CompareConfig {
     pub prompt: String,
     /// Optional system prompt.
     pub system_prompt: Option<String>,
-    /// Per-request inference overrides (temperature, context size, etc.).
+    /// Per-request inference overrides (`temperature`, `max_tokens`, etc.).
     pub inference: Option<InferenceConfig>,
+    /// Override the llama-server context window size for this run.
+    ///
+    /// When `None` the benchmark service falls back to the app-wide
+    /// `default_context_size` setting (same fallback the proxy uses).
+    #[serde(default)]
+    pub ctx_size: Option<u64>,
 }
 
 /// Configuration for a performance (`llama-bench`) run.
