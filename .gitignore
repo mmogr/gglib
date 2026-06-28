@@ -72,5 +72,7 @@ tarpaulin-report.html
 .env
 boundary-status.json
 .vscode/settings.json
+lcov.info
+coverage/html
 
 logs/
