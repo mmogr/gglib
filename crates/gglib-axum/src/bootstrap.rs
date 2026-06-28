@@ -301,6 +301,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         runtime: Arc::clone(&runtime),
         bench_repo: bench_repo.clone(),
         http_client: benchmark_http_client,
+        settings_repo: repos.settings.clone(),
     }));
 
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {

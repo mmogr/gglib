@@ -20,15 +20,36 @@ use serde_json::Value;
 
 /// Extract the streaming text delta from one SSE chunk.
 ///
-/// Returns the content string from `choices[0].delta.content`, or `None` if
-/// that path is absent (e.g. the final chunk with `finish_reason`).
+/// Checks `choices[0].delta.content` first.  When that field is absent or an
+/// empty string — as happens during the *thinking* phase of reasoning models
+/// such as Qwen3, which stream thinking tokens in `reasoning_content` instead
+/// of `content` — this falls back to `choices[0].delta.reasoning_content`.
+///
+/// Priority: `content` (non-empty) > `reasoning_content` (non-empty) > `None`.
+///
+/// Returning `None` signals "no text in this chunk" (e.g. the final chunk
+/// that only carries `finish_reason`).
 pub fn extract_text_delta(val: &Value) -> Option<String> {
-    val.get("choices")
+    let delta = val
+        .get("choices")
         .and_then(|c| c.get(0))
-        .and_then(|c| c.get("delta"))
-        .and_then(|d| d.get("content"))
+        .and_then(|c| c.get("delta"))?;
+
+    // `content` takes priority — present and non-empty means the model is in
+    // its answer phase (or is a non-thinking model).
+    if let Some(s) = delta.get("content").and_then(|v| v.as_str())
+        && !s.is_empty()
+    {
+        return Some(s.to_owned());
+    }
+
+    // Fall back to `reasoning_content` for thinking models (Qwen3, DeepSeek-R1,
+    // etc.) that stream thinking tokens here while `content` is null/"".
+    delta
+        .get("reasoning_content")
         .and_then(|v| v.as_str())
-        .map(String::from)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
 }
 
 /// Extract `finish_reason` from `choices[0].finish_reason`.
@@ -344,6 +365,64 @@ mod tests {
         let reason = extract_finish_reason(&val);
         let was_truncated = reason.as_deref() == Some("length");
         assert!(!was_truncated, "finish_reason=stop → was_truncated=false");
+    }
+
+    // ── Text delta extraction tests ──────────────────────────────────────────
+
+    /// Normal (non-thinking) model: `content` field present → returned as-is.
+    #[test]
+    fn test_extract_text_delta_content_present() {
+        let val = json!({
+            "choices": [{ "delta": { "content": "Hello, world!" } }]
+        });
+        assert_eq!(extract_text_delta(&val), Some("Hello, world!".to_string()));
+    }
+
+    /// Thinking model during reasoning phase: `content` is null, only
+    /// `reasoning_content` is present → `reasoning_content` returned.
+    #[test]
+    fn test_extract_text_delta_reasoning_content_fallback() {
+        let val = json!({
+            "choices": [{ "delta": { "content": null, "reasoning_content": "<think>step 1</think>" } }]
+        });
+        assert_eq!(
+            extract_text_delta(&val),
+            Some("<think>step 1</think>".to_string())
+        );
+    }
+
+    /// Thinking model: `content` is empty string, `reasoning_content` is
+    /// present → empty `content` is skipped; `reasoning_content` returned.
+    #[test]
+    fn test_extract_text_delta_empty_content_falls_back_to_reasoning() {
+        let val = json!({
+            "choices": [{ "delta": { "content": "", "reasoning_content": "thinking..." } }]
+        });
+        assert_eq!(extract_text_delta(&val), Some("thinking...".to_string()));
+    }
+
+    /// Both `content` and `reasoning_content` present and non-empty →
+    /// `content` wins (answer-phase takes priority over thinking-phase).
+    #[test]
+    fn test_extract_text_delta_content_wins_over_reasoning() {
+        let val = json!({
+            "choices": [{ "delta": { "content": "answer", "reasoning_content": "thought" } }]
+        });
+        assert_eq!(
+            extract_text_delta(&val),
+            Some("answer".to_string()),
+            "content takes priority over reasoning_content"
+        );
+    }
+
+    /// Neither `content` nor `reasoning_content` present (final chunk with
+    /// only `finish_reason`) → `None`.
+    #[test]
+    fn test_extract_text_delta_neither_present_returns_none() {
+        let val = json!({
+            "choices": [{ "delta": {}, "finish_reason": "stop" }]
+        });
+        assert_eq!(extract_text_delta(&val), None);
     }
 
     // ── Perf output tests ────────────────────────────────────────────────────

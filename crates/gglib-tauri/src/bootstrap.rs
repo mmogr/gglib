@@ -206,6 +206,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         runtime: Arc::clone(&runtime),
         bench_repo: bench_repo.clone(),
         http_client: benchmark_http,
+        settings_repo: repos.settings.clone(),
     }));
 
     // 5. Build 7 domain ops.
@@ -350,6 +351,7 @@ pub fn bootstrap_with(
         runtime: Arc::clone(&runtime),
         bench_repo: bench_repo_w.clone(),
         http_client: BenchmarkDeps::build_http_client().expect("benchmark http client"),
+        settings_repo: repos.settings.clone(),
     }));
     let proxy_ops = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor.clone(),
@@ -462,6 +464,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         runtime: Arc::clone(&runtime),
         bench_repo: bench_repo_e.clone(),
         http_client: benchmark_e_http,
+        settings_repo: repos.settings.clone(),
     }));
 
     // 4. Build 7 domain ops (no AppHandle → NoopServerEvents).

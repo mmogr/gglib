@@ -29,9 +29,11 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
+use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
+use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 
 use super::BenchmarkDeps;
 use super::mapper::{
@@ -45,6 +47,13 @@ pub async fn run_compare(
     tx: Sender<BenchmarkEvent>,
     cancel: CancellationToken,
 ) -> Result<()> {
+    // ── Load settings once per run (mirrors the proxy's per-request read) ──
+    let settings = deps.settings_repo.load().await.ok();
+    let default_ctx = settings
+        .as_ref()
+        .and_then(|s| s.default_context_size)
+        .unwrap_or(DEFAULT_CONTEXT_SIZE);
+    let global_inf = settings.and_then(|s| s.inference_defaults);
     let config_json = serde_json::to_string(&config).ok();
     let run_id = deps
         .bench_repo
@@ -95,7 +104,18 @@ pub async fn run_compare(
             })
             .await;
 
-        match run_single_compare(deps, model_id, &model.name, &config, run_id, &tx).await {
+        match run_single_compare(
+            deps,
+            model_id,
+            &model,
+            &config,
+            run_id,
+            &tx,
+            default_ctx,
+            global_inf.as_ref(),
+        )
+        .await
+        {
             Ok(result) => {
                 if let Err(e) = deps.bench_repo.save_compare_result(&result, run_id).await {
                     warn!("benchmark: failed to save compare result for model {model_id}: {e}");
@@ -127,35 +147,31 @@ pub async fn run_compare(
 }
 
 /// Run the compare prompt through one model and collect results.
+///
+/// `default_ctx` and `global_inf` are resolved once per run by the caller
+/// ([`run_compare`]) to avoid redundant settings reads per model.
+#[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,
     model_id: i64,
-    model_name: &str,
+    model: &gglib_core::domain::Model,
     config: &CompareConfig,
     run_id: i64,
     tx: &Sender<BenchmarkEvent>,
+    default_ctx: u64,
+    global_inf: Option<&InferenceConfig>,
 ) -> Result<ModelCompareResult> {
     // Start (or keep running) the model server via SingleSwap.
+    // `config.ctx_size` is the per-run override (CLI --ctx-size / API field);
+    // `default_ctx` comes from `settings.default_context_size` (same as proxy).
     let target = deps
         .runtime
-        .ensure_model_running(model_name, None, 4096)
+        .ensure_model_running(&model.name, config.ctx_size, default_ctx)
         .await
-        .with_context(|| format!("failed to start model '{model_name}'"))?;
+        .with_context(|| format!("failed to start model '{}'", model.name))?;
 
-    // Build the chat completions request body.
-    let mut req_body = serde_json::json!({
-        "model": model_name,
-        "messages": build_messages(config),
-        "stream": true
-    });
-    if let Some(inf) = &config.inference {
-        if let Some(temp) = inf.temperature {
-            req_body["temperature"] = serde_json::json!(temp);
-        }
-        if let Some(max_tokens) = inf.max_tokens {
-            req_body["max_tokens"] = serde_json::json!(max_tokens);
-        }
-    }
+    // Build the request body with fully-resolved inference parameters.
+    let req_body = build_compare_request_body(config, model, global_inf);
 
     let response = deps
         .http_client
@@ -191,7 +207,10 @@ async fn run_single_compare(
         let chunk = match chunk_result {
             Ok(c) => c,
             Err(e) => {
-                warn!("benchmark: SSE byte-stream error for model '{model_name}': {e}");
+                warn!(
+                    "benchmark: SSE byte-stream error for model '{}': {e}",
+                    model.name
+                );
                 break;
             }
         };
@@ -253,7 +272,8 @@ async fn run_single_compare(
                                 }
                                 Err(e) => {
                                     warn!(
-                                        "benchmark: failed to parse SSE chunk for '{model_name}': {e}"
+                                        "benchmark: failed to parse SSE chunk for '{}': {e}",
+                                        model.name
                                     );
                                 }
                             }
@@ -298,4 +318,53 @@ fn build_messages(config: &CompareConfig) -> serde_json::Value {
     }
     messages.push(serde_json::json!({ "role": "user", "content": config.prompt }));
     serde_json::json!(messages)
+}
+
+/// Build the full chat-completions request body with resolved inference params.
+///
+/// Applies the 4-level inference defaults hierarchy to ALL sampling parameters:
+///   request (`config.inference`) → model defaults → global settings defaults
+///   → hardcoded fallback (`InferenceConfig::with_hardcoded_defaults`).
+///
+/// This mirrors the resolution the proxy performs for every routed request.
+fn build_compare_request_body(
+    config: &CompareConfig,
+    model: &gglib_core::domain::Model,
+    global_inf: Option<&InferenceConfig>,
+) -> serde_json::Value {
+    let resolved = config
+        .inference
+        .clone()
+        .unwrap_or_default()
+        .resolve_with_defaults(model.inference_defaults.as_ref(), global_inf);
+
+    let mut body = serde_json::json!({
+        "model": model.name,
+        "messages": build_messages(config),
+        "stream": true
+    });
+
+    if let Some(v) = resolved.temperature {
+        body["temperature"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.max_tokens {
+        body["max_tokens"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.top_p {
+        body["top_p"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.top_k {
+        body["top_k"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.repeat_penalty {
+        body["repeat_penalty"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.presence_penalty {
+        body["presence_penalty"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.min_p {
+        body["min_p"] = serde_json::json!(v);
+    }
+
+    body
 }
