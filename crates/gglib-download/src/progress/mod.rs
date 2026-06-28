@@ -1,8 +1,4 @@
-//! Progress tracking and throttling.
-//!
-//! This module handles progress aggregation and rate-limiting for download
-//! progress events.
-
+#![doc = include_str!("README.md")]
 mod throttle;
 
 pub use throttle::ProgressThrottle;

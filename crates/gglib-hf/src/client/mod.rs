@@ -1,8 +1,4 @@
-//! `HuggingFace` client for searching models and fetching metadata.
-//!
-//! This module provides the main client interface for interacting with
-//! the `HuggingFace` Hub API.
-
+#![doc = include_str!("README.md")]
 // Constructor is used via port.rs which compiler doesn't detect
 #![allow(dead_code)]
 

@@ -4,19 +4,8 @@
 
 Data Transfer Objects (DTOs) for HTTP API contract.
 
-These types define the stable HTTP API contract with explicit serialization control, decoupling internal domain types from external API representation.
-
-## Purpose
-
-- **API stability** — Internal domain changes don't break clients
-- **Explicit serialization** — Full control over JSON field names
-- **Validation** — Input validation at API boundary
-
-## Submodules
-
-| Module | Description |
-|--------|-------------|
-| `system` | System info DTOs (`SystemMemoryInfoDto`) |
+These types define the stable HTTP API contract with explicit serialization
+control. They decouple internal domain types from external API representation.
 
 <!-- module-docs:end -->
 

@@ -1,8 +1,4 @@
-//! `HuggingFace` file resolution.
-//!
-//! This module resolves quantization-specific files from `HuggingFace` repositories
-//! using the `HfClientPort` abstraction.
-
+#![doc = include_str!("README.md")]
 use std::sync::Arc;
 
 use async_trait::async_trait;

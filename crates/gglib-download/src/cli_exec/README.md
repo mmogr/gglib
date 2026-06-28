@@ -1,41 +1,24 @@
-# cli_exec
+# CLI Exec
 
 <!-- module-docs:start -->
 
-CLI download execution layer.
+CLI download utility layer.
 
-Provides download execution logic for CLI commands, intentionally separated from the async queue-based `DownloadManagerPort` designed for GUI/background downloads.
+This module provides utilities used by CLI commands that are intentionally
+separated from the queue-based [`DownloadManagerPort`] path.
 
-## Architecture
+# What lives here
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              cli_exec/                                             │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │     api     │  │    exec     │  │    types    │  │    utils    │                 │
-│  │search, list│  │  download   │  │  requests   │  │   helpers   │                 │
-│  │quantizations│  │   update    │  │  results    │  │             │                 │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+- [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`
+- [`check_update`] / [`update_model`] — update path for `model upgrade`
+- Python bridge helpers ([`ensure_fast_helper_ready`], [`run_fast_download`]) shared
+  with the async download manager
 
-## Key Functions
+# What moved out
 
-| Function | Description |
-|----------|-------------|
-| `download()` | Download a model with terminal progress bar |
-| `update_model()` | Check and apply updates to a model |
-| `search_models()` | Search HuggingFace for models |
-| `list_quantizations()` | List available quantizations for a repo |
-
-## Design Principles
-
-- Synchronous/blocking patterns suitable for CLI UX
-- Progress bars displayed directly in terminal
-- **No `AppCore`** — database registration is the handler's job
+Interactive downloads (the `model download` command) now route through
+[`DownloadManagerPort::queue_smart`], giving the CLI the same queue,
+progress events, and model registration path as the GUI.
 
 <!-- module-docs:end -->
 

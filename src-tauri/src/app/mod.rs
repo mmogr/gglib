@@ -1,5 +1,4 @@
-//! Application state and shared utilities for the Tauri app.
-
+#![doc = include_str!("README.md")]
 pub mod events;
 pub mod state;
 

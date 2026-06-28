@@ -1,8 +1,4 @@
-//! GUI backend bridge module - re-exports from gglib-gui.
-//!
-//! This module is a thin bridge that re-exports types from the shared
-//! `gglib-gui` crate. Tauri command handlers import from here.
-
+#![doc = include_str!("README.md")]
 // Re-export all types from gglib-gui
 pub use gglib_app_services::types::*;
 

@@ -1,8 +1,4 @@
-//! Model management command handlers.
-//!
-//! Dispatches [`ModelCommand`] variants to focused handler modules covering
-//! CRUD, verification, download, and HuggingFace discovery.
-
+#![doc = include_str!("README.md")]
 pub mod add;
 pub mod capabilities;
 pub mod download;

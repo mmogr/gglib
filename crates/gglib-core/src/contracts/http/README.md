@@ -2,18 +2,7 @@
 
 <!-- module-docs:start -->
 
-HTTP route constants for the REST API.
-
-These constants define the canonical paths for all HTTP endpoints, ensuring consistency between `gglib-axum` routes and any client code that constructs URLs.
-
-## Example Routes
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `MODELS` | `/api/models` | Model CRUD operations |
-| `CHAT_COMPLETIONS` | `/api/chat/completions` | OpenAI-compatible chat |
-| `MCP_SERVERS` | `/api/mcp/servers` | MCP server management |
-| `HEALTH` | `/health` | Server health check |
+HTTP route constants.
 
 <!-- module-docs:end -->
 

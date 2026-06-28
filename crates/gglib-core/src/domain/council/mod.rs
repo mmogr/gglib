@@ -1,17 +1,4 @@
-//! Orchestrator domain model.
-//!
-//! This module owns the pure data types that drive the Director/Worker
-//! orchestration pattern.  No I/O, no async, no adapter dependencies.
-//!
-//! # Submodules
-//!
-//! | Module | Contents |
-//! |--------|---------|
-//! | [`task_graph`] | [`TaskGraph`], [`TaskNode`], [`TaskNodeKind`], [`NodeId`], [`NodeStatus`], [`HitlMode`], [`TaskGraphError`] |
-//! | [`role_catalog`] | [`RoleId`], [`RoleSpec`], [`RoleCatalog`] — built-in specialist roles |
-//! | [`events`] | [`CouncilEvent`] — SSE event stream types |
-//! | [`run`] | [`CouncilRun`], [`CouncilRunStatus`], [`CouncilRunEvent`] |
-
+#![doc = include_str!("README.md")]
 pub mod events;
 pub mod role_catalog;
 pub mod run;

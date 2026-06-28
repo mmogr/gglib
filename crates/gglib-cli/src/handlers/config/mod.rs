@@ -1,9 +1,4 @@
-//! Configuration, tooling, and system management handlers.
-//!
-//! Dispatches [`ConfigCommand`] variants to focused sub-modules:
-//! settings/default/models-dir, llama.cpp lifecycle, assistant-ui,
-//! dependency checks, and resolved-path inspection.
-
+#![doc = include_str!("README.md")]
 pub mod assistant_ui;
 pub mod check_deps;
 pub mod llama;

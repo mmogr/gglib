@@ -1,5 +1,4 @@
-//! Utility modules for gglib-core.
-
+#![doc = include_str!("README.md")]
 pub mod process;
 pub mod shard_filename;
 pub mod system;

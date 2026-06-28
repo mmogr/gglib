@@ -1,7 +1,4 @@
-//! Assistant-UI runtime handlers.
-//!
-//! Thin wrappers for assistant-ui npm package management.
-
+#![doc = include_str!("README.md")]
 use std::path::PathBuf;
 use std::process::Command;
 

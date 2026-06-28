@@ -1,23 +1,4 @@
-//! Canonical event union for all cross-adapter events.
-//!
-//! This module is the single source of truth for events used by Tauri listeners,
-//! SSE handlers, and backend emitters.
-//!
-//! # Structure
-//!
-//! - `app` - Application-level events (model added/removed/updated)
-//! - `download` - Download progress and completion events
-//! - `server` - Model server lifecycle events
-//! - `mcp` - MCP server lifecycle events
-//!
-//! # Wire Format
-//!
-//! Events are serialized with a `type` tag for TypeScript compatibility:
-//!
-//! ```json
-//! { "type": "server_started", "modelName": "Llama-2-7B", "port": 8080 }
-//! ```
-
+#![doc = include_str!("README.md")]
 mod app;
 mod download;
 mod mcp;

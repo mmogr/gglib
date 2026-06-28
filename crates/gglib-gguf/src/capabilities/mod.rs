@@ -1,14 +1,4 @@
-//! Model capability detection.
-//!
-//! This module analyzes GGUF metadata to detect model capabilities
-//! such as reasoning/thinking support and tool/function calling.
-//!
-//! # Structure
-//!
-//! - `reasoning` - Reasoning/thinking model detection
-//! - `tool_calling` - Tool/function calling detection
-//! - `patterns` - Pattern constants shared across detection modules
-
+#![doc = include_str!("README.md")]
 mod mtp;
 mod patterns;
 mod reasoning;

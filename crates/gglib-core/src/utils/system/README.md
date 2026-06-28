@@ -2,16 +2,16 @@
 
 <!-- module-docs:start -->
 
-System information utilities.
+System utility types for dependency and environment detection.
 
-Provides detection and reporting of system capabilities:
+This module provides pure domain types for system dependencies,
+GPU information, and memory details. Active system probing is
+implemented by `DefaultSystemProbe` in `gglib-runtime`.
 
-- CPU core count and architecture
-- Available memory
-- GPU detection (Metal on macOS, CUDA on Linux/Windows)
-- Platform identification
+# Architecture Note
 
-Used by the runtime to configure llama.cpp with optimal settings.
+Core defines types + the `SystemProbePort` trait (in `ports::system_probe`).
+Runtime implements `DefaultSystemProbe` which performs actual system queries.
 
 <!-- module-docs:end -->
 

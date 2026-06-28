@@ -2,17 +2,7 @@
 
 <!-- module-docs:start -->
 
-Shared utility functions and helpers.
-
-This module contains cross-cutting utilities used throughout gglib-core and dependent crates.
-
-## Submodules
-
-| Module | Description |
-|--------|-------------|
-| `shard_filename` | Parsing and generating GGUF shard filenames |
-| `system` | System information utilities (CPU, memory, GPU detection) |
-| `validation` | Input validation helpers |
+Utility modules for gglib-core.
 
 <!-- module-docs:end -->
 

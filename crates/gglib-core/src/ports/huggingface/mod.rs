@@ -1,8 +1,4 @@
-//! `HuggingFace` client port definitions.
-//!
-//! This module defines the port trait and DTOs for `HuggingFace` Hub interaction.
-//! The actual implementation lives in `gglib-hf`.
-
+#![doc = include_str!("README.md")]
 mod client;
 mod error;
 mod types;

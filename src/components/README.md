@@ -1,5 +1,6 @@
 # Frontend Components
 
+<!-- module-docs:start -->
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-complexity.json)
 
@@ -82,3 +83,5 @@ When a model is served, users can switch between Chat and Console views:
 ### Support Components
 - **`DownloadProgressDisplay/`**: Download progress indicators
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
+
+<!-- module-docs:end -->

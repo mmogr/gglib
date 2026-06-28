@@ -4,57 +4,42 @@
 
 Vulkan acceleration detection with build-readiness validation.
 
-Vulkan is a portable GPU API supported on AMD, Intel, and NVIDIA hardware
-across Linux and Windows. This module determines whether all components
-needed for a `-DGGML_VULKAN=ON` llama.cpp build are present on the current
-system.
+Vulkan is a portable GPU API supported on AMD, Intel, and NVIDIA
+hardware across Linux and Windows. Building llama.cpp with
+`-DGGML_VULKAN=ON` requires three things beyond the runtime:
 
-## Platform scope
+1. **Vulkan loader** — `libvulkan.so.1` (Linux) or `vulkan-1.dll`
+   (Windows), confirmed by `vulkaninfo --summary`.
+2. **Vulkan development headers** — `vulkan/vulkan.h`, needed by
+   CMake's `FindVulkan.cmake` to set `Vulkan_INCLUDE_DIR`.
+3. **SPIR-V shader compiler** — `glslc`, used to compile Vulkan
+   compute shaders at build time.
 
-Vulkan probing is **only compiled on Linux and Windows**. On macOS, the
-`vulkan_status()` function returns `VulkanStatus::absent()` directly —
-this is not an error. macOS uses Metal as its native GPU API, and Metal
-detection lives in the sibling `metal` module.
+[`VulkanStatus`] captures all three independently so callers can
+give precise, actionable diagnostics when a build fails the
+pre-flight check.
 
-The platform isolation is enforced at the module declaration level in
-`mod.rs`, not with scattered `#[allow(dead_code)]` attributes:
+# Platform scope
 
-```rust
-// In mod.rs:
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-mod probe;          // ← never compiled on macOS
+Vulkan probing ([`probe`]) is compiled only on Linux and Windows.
+On macOS, [`vulkan_status`] returns [`VulkanStatus::absent`] — not
+an error, but the canonical signal that Metal is the native GPU API
+and Vulkan is not applicable on this platform.
 
-pub fn vulkan_status() -> VulkanStatus {
-    // macOS: single-line stub, no dead helpers compiled
-    VulkanStatus::absent()
-}
+# Why this matters
+
+Many Linux distributions ship Vulkan *runtime* libraries by default
+(Mesa drivers, libvulkan), but **not** the development headers or
+shader compiler. A system that passes `vulkaninfo --summary` can
+still fail CMake's `FindVulkan` with:
+
+```text
+Could NOT find Vulkan (missing: Vulkan_INCLUDE_DIR)
 ```
 
-## Cross-platform requirements
-
-| Platform | Loader | Dev Headers | glslc | SPIR-V Headers | Result |
-|----------|--------|-------------|-------|----------------|--------|
-| **Linux** | `libvulkan.so.1` | `vulkan/vulkan.h` | `glslc` | `spirv/unified1/spirv.hpp` | Probed at runtime |
-| **Windows** | `vulkan-1.dll` | LunarG Vulkan SDK | LunarG SDK | LunarG SDK | Probed at runtime |
-| **macOS** | — | — | — | — | `absent()` stub, Metal used instead |
-
-## File layout
-
-| File | Compiled on | Responsibility |
-|------|-------------|---------------|
-| `types.rs` | All platforms | `MissingPackage`, `VulkanStatus`, `VulkanStatus::absent()` |
-| `probe.rs` | Linux + Windows | Component probes, `pkg-config` queries, `header_exists_in` helper |
-| `mod.rs` | All platforms | Public facade — dispatches to `probe` or returns `absent()` |
-
-## Components checked (Linux/Windows)
-
-`VulkanStatus` captures each component independently for targeted
-remediation advice:
-
-1. **Vulkan loader** — `vulkaninfo --summary`, fallback disk paths
-2. **Vulkan headers** — `pkg-config`, fallback `/usr/include`
-3. **glslc** — `glslc --version` (SPIR-V shader compiler, separate from headers)
-4. **SPIR-V headers** — `pkg-config SPIRV-Headers`, fallback disk paths
+This module's [`vulkan_status`] function detects the gap *before*
+invoking CMake, allowing the CLI and GUI to surface distro-specific
+install instructions.
 
 <!-- module-docs:end -->
 

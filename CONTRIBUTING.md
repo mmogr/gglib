@@ -304,27 +304,90 @@ Each crate's `README.md` serves two narrow purposes:
 
 Crate READMEs are **not** the place for API documentation, usage examples, or explanatory prose about how individual types work — that belongs in Rustdoc.
 
-### Surface 2: Module-level Rustdoc (`//!`)
+### Surface 2: Module-level documentation (`README.md` + `include_str!`)
 
-Every public module should open with a `//!` block that explains:
-
-- What the module is responsible for.
-- What it is **not** responsible for (prevents scope creep in future changes).
-- If it is part of a streaming pipeline, a table showing which consumers read from its channel.
+Every public module has a `README.md` alongside its `mod.rs`. The README is the canonical location for module-level documentation and is pulled into `cargo doc` via an inner attribute at the top of `mod.rs`:
 
 ```rust
-//! Download progress events for the pre-built binary pipeline.
-//!
-//! [`DownloadEvent`] is produced by [`download_prebuilt_binaries`] and consumed by:
-//!
-//! | Consumer    | Output                                          |
-//! |-------------|--------------------------------------------------|
-//! | CLI         | `indicatif` progress bar                        |
-//! | Axum        | SSE stream at `GET /api/llama/install`           |
-//! | Tauri       | `llama-install-progress` event to WebView        |
+#![doc = include_str!("README.md")]
 ```
 
-This is the canonical location for architectural explanation of a module. When you add a new module, write the `//!` block first — it forces you to be clear about what the module owns before you write a single line of implementation.
+**Do not write `//!` blocks.** The README is the single source of truth — rustdoc, GitHub, and the CI README-coverage check all read from it. Writing `//!` in addition to a README causes duplicate content in the generated docs.
+
+#### README structure
+
+Each submodule README must contain these two marker pairs (used by CI and badge generation):
+
+```markdown
+<!-- module-docs:start -->
+
+What the module is responsible for.
+What it is **not** responsible for (prevents scope creep).
+If part of a streaming pipeline, a table of consumers.
+
+<!-- module-docs:end -->
+```
+
+```markdown
+<!-- module-table:start -->
+| Module | Tests | Coverage | LOC | Complexity |
+|--------|-------|----------|-----|------------|
+<!-- module-table:end -->
+```
+
+**Example** (`crates/gglib-download/src/progress/README.md`):
+
+```markdown
+# Progress
+
+![LOC](https://img.shields.io/endpoint?url=...)
+![Complexity](https://img.shields.io/endpoint?url=...)
+
+<!-- module-docs:start -->
+
+Download progress events for the pre-built binary pipeline.
+
+[`DownloadEvent`] is produced by [`download_prebuilt_binaries`] and consumed by:
+
+| Consumer | Output                                        |
+|----------|-----------------------------------------------|
+| CLI      | `indicatif` progress bar                      |
+| Axum     | SSE stream at `GET /api/llama/install`        |
+| Tauri    | `llama-install-progress` event to WebView     |
+
+<!-- module-docs:end -->
+
+<!-- module-table:start -->
+<!-- module-table:end -->
+```
+
+#### Cargo doc link syntax in READMEs
+
+Because the README is included via `include_str!`, it is processed as rustdoc. You can use cargo doc link syntax inside the `module-docs` section:
+
+```markdown
+[`DownloadEvent`], [`build_llama_cpp`], [`crate::domain::Model`]
+```
+
+These links resolve at `cargo doc` time and show as hyperlinks in the generated docs. They appear as plain text on GitHub — that is acceptable.
+
+#### Adding a new Rust module
+
+1. Create `README.md` next to `mod.rs` with the structure above.
+2. Add `#![doc = include_str!("README.md")]` as the **first line** of `mod.rs`.
+3. Fill the `<!-- module-docs:start/end -->` section with a description, ownership boundaries, and any consumer tables.
+4. Run `bash scripts/check_readmes.sh --strict` locally — CI enforces this and will fail if the README is missing, incomplete (contains `TODO:`), or if `mod.rs` is missing the `include_str!` attribute.
+
+#### Clippy and README content
+
+Because the README is compiled as rustdoc, Clippy's `doc_markdown` lint applies to it. Identifiers that look like Rust code must be wrapped in backticks:
+
+- `HuggingFace` → `` `HuggingFace` ``
+- `Q4_0`, `Q8_0` → `` `Q4_0` ``, `` `Q8_0` ``
+- `SQLite` → `` `SQLite` ``
+- `ReAct` → `` `ReAct` ``
+
+Snake_case module names used as top-level headings must be written in title case (`# Context Pruning`, not `# context_pruning`) to avoid the same lint.
 
 ### Surface 3: Item-level Rustdoc (`///`)
 

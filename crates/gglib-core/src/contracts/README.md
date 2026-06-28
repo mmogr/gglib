@@ -2,30 +2,11 @@
 
 <!-- module-docs:start -->
 
-Transport contract constants shared across adapters.
+Transport contract constants.
 
-This module contains string constants for API routes and command names used by both Axum (HTTP) and Tauri (IPC) adapters. By keeping these as pure string constants with no framework-specific types, we avoid dependency creep and ensure consistency.
-
-## Design
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           contracts/                                                │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │  http/                                                                       │   │
-│  │  HTTP route constants: "/api/models", "/api/chat/completions", etc.         │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Rules
-
-- **String-only** — No framework types (no `axum::Router`, no `tauri::Command`)
-- **No logic** — Pure constants, no validation or parsing
-- **Single source of truth** — Both adapters import from here
+This module contains string constants for API routes and command names
+shared across adapters (Axum, Tauri). Keep these string-only with no
+framework-specific types to avoid dependency creep.
 
 <!-- module-docs:end -->
 

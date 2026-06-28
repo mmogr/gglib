@@ -1,8 +1,4 @@
-//! Shared helpers for building llama.cpp invocations.
-//!
-//! This module hosts reusable utilities for resolving CLI flags and
-//! configuration options so that multiple commands can stay DRY.
-
+#![doc = include_str!("README.md")]
 pub mod context;
 pub mod jinja;
 pub mod mtp;

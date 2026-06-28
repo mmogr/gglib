@@ -1,7 +1,4 @@
-//! Model domain handlers.
-//!
-//! CRUD, verification, downloads, and HuggingFace discovery.
-
+#![doc = include_str!("README.md")]
 pub mod downloads;
 pub mod hf;
 pub mod models;

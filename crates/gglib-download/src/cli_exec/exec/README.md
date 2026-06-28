@@ -2,18 +2,10 @@
 
 <!-- module-docs:start -->
 
-Download execution implementation.
+Download execution module.
 
-Core download logic including:
-
-- `download()` — Main download function with progress tracking
-- `update_model()` — Check for and apply model updates
-- `check_update()` — Check if a model has updates available
-- `python_bridge` — Interface to `hf_xet` fast download helper
-
-## Python Bridge
-
-For large downloads, uses `hf_xet` CLI tool (a Rust-based fast downloader) via subprocess for optimal throughput.
+This module handles the actual model download execution using the Python helper.
+It is intentionally kept separate from queue management.
 
 <!-- module-docs:end -->
 

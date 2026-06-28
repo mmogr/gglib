@@ -4,31 +4,17 @@
 
 Path utilities for gglib data directories and user-configurable locations.
 
-This module provides canonical path resolution for all gglib components across platforms (macOS, Linux, Windows).
+This module provides the canonical path resolution for all gglib components:
+- Database location
+- Models directory
+- Llama.cpp binaries
+- Application data and resource roots
 
-## Key Functions
+# Design
 
-| Function | Description |
-|----------|-------------|
-| `data_root()` | Platform-specific data directory (`~/.local/share/gglib` on Linux) |
-| `resource_root()` | Bundled resources directory (app bundle on macOS) |
-| `database_path()` | SQLite database location |
-| `llama_server_path()` | Path to `llama-server` binary |
-| `default_models_dir()` | Default directory for downloaded models |
-
-## Platform Defaults
-
-```text
-macOS:   ~/Library/Application Support/gglib/
-Linux:   ~/.local/share/gglib/
-Windows: %APPDATA%\gglib\
-```
-
-## Design
-
-- Returns `PathBuf` with clear `PathError` for missing files
-- No interactive/terminal I/O — adapters handle user prompts
-- Platform logic is private in `platform` submodule
+- Returns `PathBuf` and `PathError` for clear error handling
+- No interactive/terminal I/O - adapters handle user prompts separately
+- OS-specific logic is kept private in `platform`
 
 <!-- module-docs:end -->
 

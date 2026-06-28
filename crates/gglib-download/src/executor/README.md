@@ -2,13 +2,13 @@
 
 <!-- module-docs:start -->
 
-Download execution workers.
+Download execution.
 
-This module is reserved for future refactoring to extract Python subprocess logic from the manager.
+This module handles the actual download execution via Python subprocess.
+All Python-related logic is internal to this module.
 
-## Status
-
-Currently a placeholder. The actual download execution lives in `gglib-download::manager::worker`.
+Note: The actual download execution currently lives in `gglib-download::manager::worker`.
+This module is reserved for future refactoring to extract the Python subprocess logic.
 
 <!-- module-docs:end -->
 

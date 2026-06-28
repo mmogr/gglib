@@ -1,9 +1,4 @@
-//! Repository implementations using `SQLite`.
-//!
-//! These implementations encapsulate all SQL queries and database access.
-//! The `SqlitePool` is confined to this module and never exposed through
-//! the port trait signatures.
-
+#![doc = include_str!("README.md")]
 mod model_files_repository;
 mod row_mappers;
 mod sqlite_benchmark_repository;

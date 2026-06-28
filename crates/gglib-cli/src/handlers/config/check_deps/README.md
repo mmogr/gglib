@@ -1,4 +1,4 @@
-# check_deps
+# Check Dependencies
 
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-check_deps-tests.json)
 ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-check_deps-coverage.json)

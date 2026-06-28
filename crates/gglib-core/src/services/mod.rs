@@ -1,9 +1,4 @@
-//! Core services - the application's business logic layer.
-//!
-//! This module contains high-level service abstractions that council
-//! between ports (trait interfaces) and domain logic. Services here are
-//! pure orchestrators - they don't know about concrete implementations.
-
+#![doc = include_str!("README.md")]
 mod app_core;
 mod chat_history;
 mod model_registrar;

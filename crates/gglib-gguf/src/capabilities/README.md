@@ -2,29 +2,16 @@
 
 <!-- module-docs:start -->
 
-Model capability detection from GGUF metadata.
+Model capability detection.
 
-Analyzes GGUF metadata to detect model capabilities such as reasoning/thinking support and tool/function calling.
+This module analyzes GGUF metadata to detect model capabilities
+such as reasoning/thinking support and tool/function calling.
 
-## Detected Capabilities
+# Structure
 
-| Capability | Detection Method |
-|------------|------------------|
-| Reasoning | Template patterns, model name heuristics |
-| Tool Calling | Template `tools` blocks, Hermes/Functionary patterns |
-| Vision | (planned) multimodal architecture detection |
-
-## Submodules
-
-| Module | Description |
-|--------|-------------|
-| `reasoning` | Reasoning/thinking model detection |
-| `tool_calling` | Tool/function calling detection |
-| `patterns` | Shared pattern constants |
-
-## Entry Point
-
-`detect_all(metadata)` → `GgufCapabilities` with flags and extensions.
+- `reasoning` - Reasoning/thinking model detection
+- `tool_calling` - Tool/function calling detection
+- `patterns` - Pattern constants shared across detection modules
 
 <!-- module-docs:end -->
 

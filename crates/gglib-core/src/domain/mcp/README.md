@@ -4,37 +4,21 @@
 
 MCP (Model Context Protocol) server domain types.
 
-These types represent MCP server configurations and runtime state, shared between the Rust backend and TypeScript frontend.
+These types represent MCP servers in the system, independent of any
+infrastructure concerns (database, process management, etc.).
 
-## Key Types
+# Design
 
-| Type | Description |
-|------|-------------|
-| `McpServer` | A persisted MCP server with ID, name, and configuration |
-| `NewMcpServer` | Data for registering a new MCP server |
-| `McpServerConfig` | Execution config (command, args, URL, working directory) |
-| `McpServerType` | Connection type: `Stdio` (gglib spawns) or `Sse` (external HTTP) |
-| `McpServerStatus` | Runtime status: `Stopped`, `Starting`, `Running`, `Error` |
-| `McpTool` | A tool exposed by an MCP server |
-| `McpEnvEntry` | Environment variable key-value pair |
-
-## Connection Types
-
-```text
-┌────────────────────────────────────────┐
-│            Stdio Server                │
-│  gglib spawns & manages the process    │
-│  Communication via stdin/stdout        │
-│  Example: npx @modelcontextprotocol/X  │
-└────────────────────────────────────────┘
-
-┌────────────────────────────────────────┐
-│            SSE Server                  │
-│  External process (user-managed)       │
-│  gglib connects via HTTP SSE           │
-│  Example: http://localhost:3001/sse    │
-└────────────────────────────────────────┘
-```
+- `McpServer` - A persisted MCP server with ID
+- `NewMcpServer` - An MCP server to be inserted (no ID yet)
+- `McpServerConfig` - Execution configuration (`exe_path`, args, URL, `path_extra`)
+- `McpServerType` - Connection type (stdio or SSE)
+- `McpServerStatus` - Runtime status (stopped, starting, running, error)
+- `McpLifecycle` - Startup lifecycle policy (eager, lazy, manual)
+- `McpEnvEntry` - Environment variable entry
+- `McpTool` - Tool exposed by an MCP server
+- `McpToolResult` - Result of a tool invocation
+- `ToolIndex` / `ToolSummary` - Progressive-disclosure tool registry index
 
 <!-- module-docs:end -->
 

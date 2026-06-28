@@ -1,9 +1,4 @@
-//! Graceful process shutdown for llama-server instances.
-//!
-//! Provides two shutdown strategies:
-//! - `shutdown_child`: For running processes with a `Child` handle (includes reaping)
-//! - `kill_pid`: For orphaned processes from crashes (no reaping, PID-only)
-
+#![doc = include_str!("README.md")]
 mod child;
 mod pid;
 

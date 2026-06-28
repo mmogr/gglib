@@ -2,42 +2,21 @@
 
 <!-- module-docs:start -->
 
-Canonical event types for cross-adapter communication.
+Canonical event union for all cross-adapter events.
 
-This module defines the unified event system used by Tauri listeners, SSE handlers, and backend emitters. All events are serializable with a `type` tag for TypeScript compatibility.
+This module is the single source of truth for events used by Tauri listeners,
+SSE handlers, and backend emitters.
 
-## Architecture
+# Structure
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              events/                                                │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│                    ┌──────────────────────────────────────┐                         │
-│                    │          AppEvent (enum)             │                         │
-│                    │  Discriminated union of all events   │                         │
-│                    └───────────────┬──────────────────────┘                         │
-│                                    │                                                │
-│      ┌────────────┬────────────────┼────────────────┬────────────┐                  │
-│      ▼            ▼                ▼                ▼            ▼                  │
-│  ┌────────┐  ┌────────┐      ┌────────────┐   ┌────────┐   ┌────────┐               │
-│  │  app   │  │download│      │   server   │   │  mcp   │   │  ...   │               │
-│  │ events │  │ events │      │   events   │   │ events │   │        │               │
-│  └────────┘  └────────┘      └────────────┘   └────────┘   └────────┘               │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+- `app` - Application-level events (model added/removed/updated)
+- `download` - Download progress and completion events
+- `server` - Model server lifecycle events
+- `mcp` - MCP server lifecycle events
 
-## Event Categories
+# Wire Format
 
-| Category | Examples |
-|----------|----------|
-| `app` | `ModelAdded`, `ModelRemoved`, `ModelUpdated` |
-| `download` | `DownloadProgress`, `DownloadComplete`, `DownloadError` |
-| `server` | `ServerStarted`, `ServerStopped`, `ServerLogLine` |
-| `mcp` | `McpServerStarted`, `McpServerError`, `McpToolsUpdated` |
-
-## Wire Format
+Events are serialized with a `type` tag for TypeScript compatibility:
 
 ```json
 { "type": "server_started", "modelName": "Llama-2-7B", "port": 8080 }

@@ -1,8 +1,4 @@
-//! Download execution module.
-//!
-//! This module handles the actual model download execution using the Python helper.
-//! It is intentionally kept separate from queue management.
-
+#![doc = include_str!("README.md")]
 mod progress;
 pub mod python_bridge;
 mod python_env;
