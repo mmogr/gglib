@@ -375,10 +375,7 @@ mod tests {
         let val = json!({
             "choices": [{ "delta": { "content": "Hello, world!" } }]
         });
-        assert_eq!(
-            extract_text_delta(&val),
-            Some("Hello, world!".to_string())
-        );
+        assert_eq!(extract_text_delta(&val), Some("Hello, world!".to_string()));
     }
 
     /// Thinking model during reasoning phase: `content` is null, only
@@ -401,10 +398,7 @@ mod tests {
         let val = json!({
             "choices": [{ "delta": { "content": "", "reasoning_content": "thinking..." } }]
         });
-        assert_eq!(
-            extract_text_delta(&val),
-            Some("thinking...".to_string())
-        );
+        assert_eq!(extract_text_delta(&val), Some("thinking...".to_string()));
     }
 
     /// Both `content` and `reasoning_content` present and non-empty →

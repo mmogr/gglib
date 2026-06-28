@@ -40,7 +40,9 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
-use gglib_core::ports::{BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository};
+use gglib_core::ports::{
+    BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository,
+};
 
 mod compare;
 pub mod guard;

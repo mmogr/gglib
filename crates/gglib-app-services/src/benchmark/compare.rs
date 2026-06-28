@@ -104,7 +104,18 @@ pub async fn run_compare(
             })
             .await;
 
-        match run_single_compare(deps, model_id, &model, &config, run_id, &tx, default_ctx, global_inf.as_ref()).await {
+        match run_single_compare(
+            deps,
+            model_id,
+            &model,
+            &config,
+            run_id,
+            &tx,
+            default_ctx,
+            global_inf.as_ref(),
+        )
+        .await
+        {
             Ok(result) => {
                 if let Err(e) = deps.bench_repo.save_compare_result(&result, run_id).await {
                     warn!("benchmark: failed to save compare result for model {model_id}: {e}");
@@ -196,7 +207,10 @@ async fn run_single_compare(
         let chunk = match chunk_result {
             Ok(c) => c,
             Err(e) => {
-                warn!("benchmark: SSE byte-stream error for model '{}': {e}", model.name);
+                warn!(
+                    "benchmark: SSE byte-stream error for model '{}': {e}",
+                    model.name
+                );
                 break;
             }
         };
@@ -330,13 +344,27 @@ fn build_compare_request_body(
         "stream": true
     });
 
-    if let Some(v) = resolved.temperature        { body["temperature"]       = serde_json::json!(v); }
-    if let Some(v) = resolved.max_tokens         { body["max_tokens"]        = serde_json::json!(v); }
-    if let Some(v) = resolved.top_p              { body["top_p"]             = serde_json::json!(v); }
-    if let Some(v) = resolved.top_k              { body["top_k"]             = serde_json::json!(v); }
-    if let Some(v) = resolved.repeat_penalty     { body["repeat_penalty"]    = serde_json::json!(v); }
-    if let Some(v) = resolved.presence_penalty   { body["presence_penalty"]  = serde_json::json!(v); }
-    if let Some(v) = resolved.min_p              { body["min_p"]             = serde_json::json!(v); }
+    if let Some(v) = resolved.temperature {
+        body["temperature"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.max_tokens {
+        body["max_tokens"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.top_p {
+        body["top_p"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.top_k {
+        body["top_k"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.repeat_penalty {
+        body["repeat_penalty"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.presence_penalty {
+        body["presence_penalty"] = serde_json::json!(v);
+    }
+    if let Some(v) = resolved.min_p {
+        body["min_p"] = serde_json::json!(v);
+    }
 
     body
 }
