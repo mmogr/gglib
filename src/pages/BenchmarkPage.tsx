@@ -109,6 +109,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
   );
   const [prompt, setPrompt] = useState('Tell me a short story about a robot.');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [ctxSize, setCtxSize] = useState('');
   const [ppTokens, setPpTokens] = useState('512');
   const [tgTokens, setTgTokens] = useState('128');
   const [repetitions, setRepetitions] = useState('3');
@@ -261,6 +262,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           model_ids: selectedModelIds,
           prompt,
           system_prompt: systemPrompt.trim() || null,
+          ctx_size: parseInt(ctxSize, 10) || null,
         };
         await startCompareRun(config, handleEvent, abort.signal);
       } else {
@@ -281,7 +283,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         }));
       }
     }
-  }, [mode, selectedModelIds, models, prompt, systemPrompt, ppTokens, tgTokens, repetitions, handleEvent]);
+  }, [mode, selectedModelIds, models, prompt, systemPrompt, ctxSize, ppTokens, tgTokens, repetitions, handleEvent]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -479,6 +481,20 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                   rows={2}
                   disabled={isRunning}
                   placeholder="Optional system prompt…"
+                />
+              </div>
+              <div className="flex flex-col gap-xs">
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                  Context Size (optional)
+                </label>
+                <Input
+                  type="number"
+                  value={ctxSize}
+                  onChange={e => setCtxSize(e.target.value)}
+                  disabled={isRunning}
+                  min={512}
+                  size="sm"
+                  placeholder="Default from settings"
                 />
               </div>
             </>
