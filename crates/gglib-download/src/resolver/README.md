@@ -2,15 +2,15 @@
 
 <!-- module-docs:start -->
 
-HuggingFace file resolution.
+`HuggingFace` file resolution.
 
-Resolves quantization-specific files from HuggingFace repositories using the `HfClientPort` abstraction.
+Resolves quantization-specific files from `HuggingFace` repositories using the `HfClientPort` abstraction.
 
 ## Key Type: `HfQuantizationResolver`
 
 Implements `QuantizationResolver` trait to:
 
-1. Query HuggingFace for files matching a quantization (e.g., `Q4_K_M`)
+1. Query `HuggingFace` for files matching a quantization (e.g., `Q4_K_M`)
 2. Detect sharded models (multiple parts like `-00001-of-00004`)
 3. Return `Resolution` with download URLs and metadata
 

@@ -28,7 +28,7 @@ Provides download execution logic for CLI commands, intentionally separated from
 |----------|-------------|
 | `download()` | Download a model with terminal progress bar |
 | `update_model()` | Check and apply updates to a model |
-| `search_models()` | Search HuggingFace for models |
+| `search_models()` | Search `HuggingFace` for models |
 | `list_quantizations()` | List available quantizations for a repo |
 
 ## Design Principles

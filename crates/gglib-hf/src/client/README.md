@@ -2,9 +2,9 @@
 
 <!-- module-docs:start -->
 
-HuggingFace client for searching models and fetching metadata.
+`HuggingFace` client for searching models and fetching metadata.
 
-Provides the main client interface for interacting with the HuggingFace Hub API.
+Provides the main client interface for interacting with the `HuggingFace` Hub API.
 
 ## Key Types
 
