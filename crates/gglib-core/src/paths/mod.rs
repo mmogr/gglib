@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-
 // MIGRATION: content extracted to README.md — remove this //! block after review
 //! Path utilities for gglib data directories and user-configurable locations.
 //!

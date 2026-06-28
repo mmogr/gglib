@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-
 // MIGRATION: content extracted to README.md — remove this //! block after review
 //! System utility types for dependency and environment detection.
 //!
