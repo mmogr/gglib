@@ -4,39 +4,22 @@
 
 Process management infrastructure for GUI applications.
 
-Provides shared infrastructure for managing llama-server processes with integrated log streaming and event broadcasting for GUI use cases.
+This module provides shared infrastructure for managing llama-server processes
+with integrated log streaming and event broadcasting for GUI use cases.
 
-## Architecture
+# Structure
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              process/                                              │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────────┐                                                               │
-│  │ ProcessManager  │  High-level concurrent process orchestration                  │
-│  └────────┬────────┘                                                               │
-│           │                                                                        │
-│           ▼                                                                        │
-│  ┌─────────────────┐                                                               │
-│  │ GuiProcessCore  │  Low-level process spawning with log streaming               │
-│  └────────┬────────┘                                                               │
-│           │                                                                        │
-│   ┌───────┼───────────────┬─────────────────┐                                      │
-│   ▼       ▼              ▼                 ▼                                      │
-│ Events  Logs       Health           Shutdown                                       │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+- `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs)
+- `ProcessManager` - High-level concurrent process orchestration
+- `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
+- `ServerLogManager` - Log streaming infrastructure
+- Health check utilities
 
-## Key Components
+# Distinction from `ProcessCore`
 
-| Component | Description |
-|-----------|-------------|
-| `ProcessManager` | High-level orchestration (start/stop/switch models) |
-| `GuiProcessCore` | Low-level spawning with log streaming |
-| `ServerEventBroadcaster` | Lifecycle event broadcasting |
-| `ServerLogManager` | Log streaming infrastructure |
+This module's `GuiProcessCore` is distinct from the port-aligned `ProcessCore`
+in `process_core.rs`. The port version implements `ProcessRunner` for CLI use
+with `i64` model IDs and no log/event infrastructure.
 
 <!-- module-docs:end -->
 

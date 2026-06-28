@@ -1,17 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Interactive agentic chat handler for `gglib chat`.
-//!
-//! Entry point: [`run`].  Sub-modules keep each concern small and
-//! independently readable:
-//! - [`config`]   — resolves LLM port + MCP tools, composes an [`gglib_core::ports::AgentLoopPort`]
-//! - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
-//! - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
-//! - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
-//! - [`tool_format`] — tool-result summary formatters
-//! - [`markdown`] — Markdown normalisation + termimad rendering
-//! - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
-
 pub mod config;
 pub mod drain;
 mod markdown;

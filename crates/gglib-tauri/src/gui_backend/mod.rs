@@ -1,10 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! GUI backend bridge module - re-exports from gglib-gui.
-//!
-//! This module is a thin bridge that re-exports types from the shared
-//! `gglib-gui` crate. Tauri command handlers import from here.
-
 // Re-export all types from gglib-gui
 pub use gglib_app_services::types::*;
 

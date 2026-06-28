@@ -1,4 +1,4 @@
-# agent_chat
+# Agent Chat
 
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-agent_chat-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-agent_chat-complexity.json)

@@ -2,67 +2,20 @@
 
 <!-- module-docs:start -->
 
-Pure domain types representing the core business entities.
+Core domain types.
 
-These types form the heart of the hexagonal architecture — they have **no infrastructure dependencies** and can be used throughout the application without coupling to databases, filesystems, or external services.
+These types represent the pure domain model, independent of any
+infrastructure concerns (database, filesystem, etc.).
 
-## Architecture
+# Structure
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              domain/                                                │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                         Entity Types                                         │   │
-│  │  Model, ModelFilterOptions, NewModel                                         │   │
-│  │  Conversation, Message, NewConversation, NewMessage                          │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                              │
-│                                      ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                         Agent Types (agent.rs)                               │   │
-│  │  AgentConfig, AgentMessage, AgentEvent, ToolCall, ToolResult, ToolDefinition │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                              │
-│                                      ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                         MCP Types (mcp/)                                     │   │
-│  │  McpServer, McpServerConfig, McpTool, McpServerStatus                        │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                      │                                              │
-│                                      ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                         GGUF Types                                           │   │
-│  │  GgufMetadata, GgufCapabilities, CapabilityFlags                             │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Key Types
-
-| Type | Description |
-|------|-------------|
-| `Model` | A persisted GGUF model with metadata, path, and `HuggingFace` provenance |
-| `NewModel` | Data for inserting a new model (no ID yet) |
-| `Conversation` | A chat conversation with title, model reference, and system prompt |
-| `Message` | A single chat message with role (system/user/assistant) |
-| `McpServer` | An MCP server configuration with connection details |
-| `GgufCapabilities` | Detected model capabilities (reasoning, tool-calling, vision) |
-| `AgentConfig` | Loop control parameters (max iterations, timeouts, context budget) |
-| `AgentMessage` | Typed conversation message enum (`System`/`User`/`Assistant`/`Tool`) |
-| `AgentEvent` | Observable SSE event emitted during an agentic loop run |
-| `ToolDefinition` | Adapter-neutral tool schema (adapters convert `McpTool → ToolDefinition`) |
-| `ToolCall` | A tool invocation requested by the LLM |
-| `ToolResult` | Outcome of a tool call — `success: false` is LLM context, not an error |
-
-## Design Principles
-
-1. **Serializable** — All types derive `Serialize`/`Deserialize` for JSON transport
-2. **Cloneable** — Types are cheap to clone for passing between layers
-3. **Infrastructure-Free** — No database types, no filesystem types
-4. **New/Entity Pattern** — `NewX` types for insertion, `X` for persisted entities
+- `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
+- `model` - Model types (`Model`, `NewModel`)
+- `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
+- `chat` - Chat conversation and message types
+- `gguf` - GGUF metadata and capability types
+- `capabilities` - Model capability detection and inference
+- `thinking` - Thinking/reasoning tag parsing and streaming accumulation
 
 <!-- module-docs:end -->
 

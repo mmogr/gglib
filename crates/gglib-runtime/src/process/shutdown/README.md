@@ -5,18 +5,8 @@
 Graceful process shutdown for llama-server instances.
 
 Provides two shutdown strategies:
-
-| Strategy | Use Case |
-|----------|----------|
-| `shutdown_child()` | Running processes with a `Child` handle (includes reaping) |
-| `kill_pid()` | Orphaned processes from crashes (no reaping, PID-only) |
-
-## Shutdown Flow
-
-1. Send SIGTERM
-2. Wait for graceful shutdown (timeout)
-3. Send SIGKILL if still running
-4. Reap child process (for `shutdown_child`)
+- `shutdown_child`: For running processes with a `Child` handle (includes reaping)
+- `kill_pid`: For orphaned processes from crashes (no reaping, PID-only)
 
 <!-- module-docs:end -->
 

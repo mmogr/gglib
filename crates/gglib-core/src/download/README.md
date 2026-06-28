@@ -2,35 +2,18 @@
 
 <!-- module-docs:start -->
 
-Download domain types, events, and error definitions.
+Download domain types, events, errors, and traits.
 
-This module contains pure data types and traits for the download system. No I/O, networking, or runtime dependencies — those live in `gglib-download`.
+This module contains pure data types and trait definitions for the download
+system. No I/O, networking, or runtime dependencies allowed.
 
-## Architecture
+# Structure
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              download/                                              │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   types     │  │   events    │  │   errors    │  │   queue     │                 │
-│  │ DownloadId  │  │DownloadEvent│  │DownloadError│  │QueueSnapshot│                 │
-│  │ Quantization│  │DownloadStatus│ │DownloadResult│ │QueuedDownload│                │
-│  │  ShardInfo  │  │             │  │             │  │FailedDownload│                │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Key Types
-
-| Type | Description |
-|------|-------------|
-| `DownloadId` | Unique identifier for a download job |
-| `Quantization` | Quantization level (`Q4_0`, `Q8_0`, etc.) |
-| `DownloadEvent` | Progress/completion events for UI updates |
-| `QueueSnapshot` | Point-in-time view of the download queue |
+- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`, `ShardInfo`)
+- `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`)
+- `errors` - Error types for download operations
+- `queue` - Queue snapshot DTOs (`QueueSnapshot`, `QueuedDownload`, `FailedDownload`)
+- `completion` - Queue run completion tracking types
 
 <!-- module-docs:end -->
 

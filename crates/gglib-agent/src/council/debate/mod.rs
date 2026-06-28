@@ -1,27 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Debate node executor.
-//!
-//! This module contains the full debate engine that backs
-//! [`TaskNodeKind::Debate`] nodes.  The public entry point is
-//! [`run_debate_node`].
-//!
-//! # Execution sequence
-//!
-//! 1. For each round (0..config.rounds):
-//!    a. Emit [`CouncilEvent::DebateRoundStarted`].
-//!    b. Run all agents sequentially via [`round::run_sequential_round`].
-//!    c. If a judge is configured, run [`judge::run_judge`].
-//!    d. If early-stop is recommended, break.
-//!    e. If compaction is enabled (>3 rounds), run [`compaction::compact_round`].
-//!    f. Advance state round counter.
-//! 2. Emit stance map via [`stance::evaluate_stances`].
-//! 3. Run synthesis via [`synthesis::run_synthesis`].
-//! 4. Return synthesis text as the node's output string.
-//!
-//! The [`tokio_util::sync::CancellationToken`] is checked between every
-//! agent turn (inside `round.rs`) and after each round.
-
 use std::sync::Arc;
 
 use tokio::sync::mpsc;

@@ -1,16 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Model capability detection.
-//!
-//! This module analyzes GGUF metadata to detect model capabilities
-//! such as reasoning/thinking support and tool/function calling.
-//!
-//! # Structure
-//!
-//! - `reasoning` - Reasoning/thinking model detection
-//! - `tool_calling` - Tool/function calling detection
-//! - `patterns` - Pattern constants shared across detection modules
-
 mod mtp;
 mod patterns;
 mod reasoning;

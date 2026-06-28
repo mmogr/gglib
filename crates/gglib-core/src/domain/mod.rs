@@ -1,20 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Core domain types.
-//!
-//! These types represent the pure domain model, independent of any
-//! infrastructure concerns (database, filesystem, etc.).
-//!
-//! # Structure
-//!
-//! - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
-//! - `model` - Model types (`Model`, `NewModel`)
-//! - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
-//! - `chat` - Chat conversation and message types
-//! - `gguf` - GGUF metadata and capability types
-//! - `capabilities` - Model capability detection and inference
-//! - `thinking` - Thinking/reasoning tag parsing and streaming accumulation
-
 pub mod agent;
 pub mod benchmark;
 pub mod capabilities;

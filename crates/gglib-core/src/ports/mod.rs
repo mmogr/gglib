@@ -1,17 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Port definitions (trait abstractions) for external systems.
-//!
-//! Ports define the interfaces that the core domain expects from infrastructure.
-//! They contain no implementation details and use only domain types.
-//!
-//! # Design Rules
-//!
-//! - No `sqlx` types in any signature
-//! - No process/filesystem implementation details
-//! - Traits are minimal and CRUD-focused for repositories
-//! - Intent-based methods for process runner (not implementation-leaking)
-
 pub mod agent;
 pub mod benchmark;
 pub mod chat_history;

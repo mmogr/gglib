@@ -2,39 +2,22 @@
 
 <!-- module-docs:start -->
 
-Download queue state machine.
+Download queue management.
 
-A pure synchronous state machine for managing download queue state. No I/O is performed here — the orchestrator (`DownloadManager`) handles side effects.
+This module provides a pure state machine for managing download queue state.
+No I/O is performed here; the orchestrator (`DownloadManager`) handles I/O.
 
-## Design
+# Design
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              queue/                                                 │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│    Method Calls                DownloadQueue               Return Values           │
-│   ┌──────────────┐          ┌───────────────┐          ┌──────────────┐            │
-│   │queue_sharded │──────────▶│  Pure state  │──────────▶│   Position   │            │
-│   │   dequeue    │          │    machine   │          │  QueuedItem  │            │
-│   │   reorder    │          │   (no I/O)   │          │   Snapshot   │            │
-│   │    remove    │          │              │          │    Error     │            │
-│   └──────────────┘          └───────────────┘          └──────────────┘            │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Position Semantics
-
-- **Position 1** = Currently downloading
-- **Position 2+** = Waiting in queue
-- **Position 0** = Failed (not in active queue)
-
-## Principles
-
-- Pure synchronous state machine (no async, no I/O)
-- Direct method calls with Result/Option returns
+- Pure synchronous state machine (no async, no IO, no tracing)
+- Commands produce events that the caller can use for side effects
 - Deterministic: same inputs always produce same outputs
+
+# Position Semantics
+
+- Position 1 = currently downloading
+- Position 2+ = waiting in queue
+- Failed items have position 0 (not in active queue)
 
 <!-- module-docs:end -->
 

@@ -1,11 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! HTTP request handlers for the Axum web server.
-//!
-//! Handlers are organized into domain-scoped subdirectories:
-//! - [`model`]  — CRUD, verification, downloads, HuggingFace discovery
-//! - [`config`] — settings, system setup
-
 pub mod agent;
 pub mod benchmark;
 pub mod builtin;

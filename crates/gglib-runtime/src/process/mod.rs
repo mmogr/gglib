@@ -1,24 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Process management infrastructure for GUI applications.
-//!
-//! This module provides shared infrastructure for managing llama-server processes
-//! with integrated log streaming and event broadcasting for GUI use cases.
-//!
-//! # Structure
-//!
-//! - `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs)
-//! - `ProcessManager` - High-level concurrent process orchestration
-//! - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
-//! - `ServerLogManager` - Log streaming infrastructure
-//! - Health check utilities
-//!
-//! # Distinction from `ProcessCore`
-//!
-//! This module's `GuiProcessCore` is distinct from the port-aligned `ProcessCore`
-//! in `process_core.rs`. The port version implements `ProcessRunner` for CLI use
-//! with `i64` model IDs and no log/event infrastructure.
-
 mod broadcaster;
 mod core;
 mod events;

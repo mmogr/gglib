@@ -1,4 +1,4 @@
-# loop_detection
+# Loop Detection
 
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loop_detection-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loop_detection-complexity.json)

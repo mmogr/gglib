@@ -1,24 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Orchestrator endpoints: decompose a goal into a task-graph plan via SSE, and
-//! execute the full Director/Worker pipeline.
-//!
-//! # Route
-//!
-//! `POST /api/council/plan` — accepts a [`PlanRequest`] JSON body and
-//! streams [`CouncilEvent`]s as newline-delimited JSON SSE frames.
-//!
-//! # Event sequence
-//!
-//! 1. Zero or more [`CouncilEvent::ReplanAttempt`] events if the
-//!    director retries validation.
-//! 2. [`CouncilEvent::PlanProposed`] containing the validated
-//!    [`TaskGraph`].
-//! 3. [`CouncilEvent::CouncilComplete`] with a brief summary.
-//!
-//! On failure the stream emits [`CouncilEvent::CouncilError`] then
-//! closes.
-
 pub mod approve;
 pub mod note;
 pub mod resume;

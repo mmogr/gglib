@@ -2,27 +2,17 @@
 
 <!-- module-docs:start -->
 
-OpenAI-compatible proxy supervisor.
+OpenAI-compatible proxy module.
 
-This module provides the proxy supervisor for managing the OpenAI-compatible proxy server lifecycle. The actual HTTP server implementation lives in `gglib-proxy`; this module provides the runtime integration layer.
+This module provides the proxy supervisor for managing the OpenAI-compatible
+proxy server lifecycle. The actual HTTP server implementation lives in
+`gglib-proxy`; this module provides the runtime integration layer.
 
-## Architecture
+# Architecture
 
-```text
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Adapters        │     │ ProxySupervisor │     │   gglib-proxy   │
-│ (Tauri, Axum,   │───▶│ - start/stop    │───▶│ OpenAI-compat   │
-│  CLI)           │     │ - status        │     │ HTTP server     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-
-## Key Types
-
-| Type | Description |
-|------|-------------|
-| `ProxySupervisor` | Owns proxy state, provides start/stop/status |
-| `ProxyConfig` | Configuration (host, port, llama base port) |
-| `ProxyStatus` | Runtime status (starting, running, stopped) |
+- **ProxySupervisor**: Owns proxy state internally, provides start/stop/status
+- **gglib-proxy**: HTTP server with OpenAI-compatible endpoints
+- Adapters (Tauri, Axum, CLI) call supervisor methods without storing handles
 
 <!-- module-docs:end -->
 

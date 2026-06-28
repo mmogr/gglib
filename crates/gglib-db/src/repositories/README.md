@@ -2,31 +2,11 @@
 
 <!-- module-docs:start -->
 
-Repository implementations using SQLite.
+Repository implementations using `SQLite`.
 
-These implementations encapsulate all SQL queries and database access. The `SqlitePool` is confined to this module and never exposed through port trait signatures.
-
-## Implementations
-
-| Repository | Port |
-|------------|------|
-| `SqliteModelRepository` | `ModelRepository` |
-| `SqliteMcpRepository` | `McpRepository` |
-| `SqliteChatHistoryRepository` | `ChatHistoryRepository` |
-| `SqliteSettingsRepository` | `SettingsRepository` |
-| `SqliteDownloadStateRepository` | `DownloadStateRepositoryPort` |
-
-## Submodules
-
-| Module | Description |
-|--------|-------------|
-| `row_mappers` | SQL row to domain type conversions |
-
-## Design
-
-- SQL is fully encapsulated — domain types in/out only
-- Async via `sqlx` with connection pooling
-- Migrations managed separately
+These implementations encapsulate all SQL queries and database access.
+The `SqlitePool` is confined to this module and never exposed through
+the port trait signatures.
 
 <!-- module-docs:end -->
 

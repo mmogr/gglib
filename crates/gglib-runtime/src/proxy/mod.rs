@@ -1,17 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! OpenAI-compatible proxy module.
-//!
-//! This module provides the proxy supervisor for managing the OpenAI-compatible
-//! proxy server lifecycle. The actual HTTP server implementation lives in
-//! `gglib-proxy`; this module provides the runtime integration layer.
-//!
-//! # Architecture
-//!
-//! - **ProxySupervisor**: Owns proxy state internally, provides start/stop/status
-//! - **gglib-proxy**: HTTP server with OpenAI-compatible endpoints
-//! - Adapters (Tauri, Axum, CLI) call supervisor methods without storing handles
-
 pub mod models;
 pub mod supervisor;
 

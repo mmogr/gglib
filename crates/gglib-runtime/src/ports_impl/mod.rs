@@ -1,11 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Port implementations for gglib-runtime.
-//!
-//! These implementations provide concrete adapters for the abstract ports
-//! defined in gglib-core. They connect the port interfaces to the actual
-//! runtime infrastructure (ProcessManager, database, etc.).
-
 pub mod llm_completion;
 pub mod model_catalog;
 pub mod model_runtime;

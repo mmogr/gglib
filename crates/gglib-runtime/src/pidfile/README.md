@@ -6,20 +6,10 @@ PID file management for tracking llama-server processes.
 
 Provides atomic I/O, process verification, and startup orphan cleanup.
 
-## Safety Guarantees
-
-- **Atomic writes** — Via temp file + rename
-- **Process verification** — Before killing (prevents PID reuse issues)
-- **Conservative cleanup** — If verification fails, only delete PID file
-
-## Key Functions
-
-| Function | Description |
-|----------|-------------|
-| `write_pidfile()` | Atomically write PID file |
-| `read_pidfile()` | Read and parse PID file data |
-| `delete_pidfile()` | Remove PID file |
-| `cleanup_orphaned_servers()` | Kill orphaned processes on startup |
+# Safety guarantees
+- Atomic writes via temp file + rename
+- Process verification before killing (prevents PID reuse issues)
+- Conservative cleanup (if verification fails, only delete PID file)
 
 <!-- module-docs:end -->
 

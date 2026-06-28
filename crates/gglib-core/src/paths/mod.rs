@@ -1,19 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Path utilities for gglib data directories and user-configurable locations.
-//!
-//! This module provides the canonical path resolution for all gglib components:
-//! - Database location
-//! - Models directory
-//! - Llama.cpp binaries
-//! - Application data and resource roots
-//!
-//! # Design
-//!
-//! - Returns `PathBuf` and `PathError` for clear error handling
-//! - No interactive/terminal I/O - adapters handle user prompts separately
-//! - OS-specific logic is kept private in `platform`
-
 mod config;
 mod database;
 mod ensure;

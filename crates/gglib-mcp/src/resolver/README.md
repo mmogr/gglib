@@ -4,31 +4,33 @@
 
 Executable path resolution for MCP server commands.
 
-Provides a robust, testable way to resolve command names (like `npx`) to absolute executable paths across different platforms and installation methods.
+This module provides a robust, testable way to resolve command names
+(like "npx") to absolute executable paths across different platforms
+and installation methods.
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              resolver/                                              │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   types     │  │     env     │  │     fs      │  │   search    │                 │
-│  │ResolveResult│  │ EnvProvider │  │ FsProvider  │  │  Platform-  │                 │
-│  │  Attempt    │  │ (injectable)│  │ (injectable)│  │  specific   │                 │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+The resolver is split into small, focused modules:
+- `types`: Core types (`ResolveResult`, `Attempt`, `AttemptOutcome`)
+- `env`: Environment variable access trait (injectable for testing)
+- `fs`: Filesystem operations trait (injectable for testing)
+- `search`: Platform-specific search strategies
+- `resolve`: Main resolution logic and orchestration
+
+## Usage
+
+```rust,no_run
+use gglib_mcp::resolver::resolve_executable;
+
+// Resolve "npx" to absolute path
+let result = resolve_executable("npx", &[]).unwrap();
+println!("Resolved to: {}", result.resolved_path.display());
+
+// Show diagnostic info
+for attempt in &result.attempts {
+    println!("  {} - {}", attempt.candidate.display(), attempt.outcome);
+}
 ```
-
-## Key Function
-
-`resolve_executable("npx", &[])` → Searches PATH, nvm, homebrew, etc.
-
-## Testability
-
-`EnvProvider` and `FsProvider` traits allow injecting mock environment and filesystem for deterministic testing.
 
 <!-- module-docs:end -->
 

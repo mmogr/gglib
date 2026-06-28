@@ -1,11 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Repository implementations using `SQLite`.
-//!
-//! These implementations encapsulate all SQL queries and database access.
-//! The `SqlitePool` is confined to this module and never exposed through
-//! the port trait signatures.
-
 mod model_files_repository;
 mod row_mappers;
 mod sqlite_benchmark_repository;

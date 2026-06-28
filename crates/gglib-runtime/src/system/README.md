@@ -2,23 +2,11 @@
 
 <!-- module-docs:start -->
 
-System probe implementation.
+System probe implementation for gglib-runtime.
 
-Provides `DefaultSystemProbe` which implements `SystemProbePort` from gglib-core. Performs active system probing via command execution and hardware detection.
-
-## Capabilities
-
-| Capability | Description |
-|------------|-------------|
-| GPU detection | Metal (macOS), CUDA (Linux/Windows) |
-| Memory info | Total and available system memory |
-| Dependencies | Check for cmake, git, gcc, rustc, etc. |
-
-## Submodules
-
-- `commands` — Command execution for version detection
-- `deps` — Library dependency checks (libssl, webkit2gtk, etc.)
-- `gpu` — GPU and memory detection
+This module provides the `DefaultSystemProbe` which implements
+`SystemProbePort` from gglib-core. It performs active system probing
+via command execution and hardware detection.
 
 <!-- module-docs:end -->
 

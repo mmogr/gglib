@@ -1,21 +1,12 @@
-# ports_impl
+# Ports Implementation
 
 <!-- module-docs:start -->
 
 Port implementations for gglib-runtime.
 
-These implementations provide concrete adapters for the abstract ports defined in gglib-core, connecting port interfaces to actual runtime infrastructure.
-
-## Implementations
-
-| Implementation | Port | Description |
-|----------------|------|-------------|
-| `CatalogPortImpl` | `ModelCatalogPort` | Model lookup from database |
-| `RuntimePortImpl` | `ModelRuntimePort` | Process lifecycle management |
-
-## Design
-
-These adapters bridge the gap between abstract ports (defined in core) and concrete infrastructure (ProcessManager, database connections).
+These implementations provide concrete adapters for the abstract ports
+defined in gglib-core. They connect the port interfaces to the actual
+runtime infrastructure (ProcessManager, database, etc.).
 
 <!-- module-docs:end -->
 

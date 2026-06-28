@@ -1,24 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Download manager implementation.
-//!
-//! This module provides the concrete implementation of `DownloadManagerPort`
-//! with a long-lived runner, lease-based state management, and clean separation
-//! between the worker (core download logic) and bridges (event emission).
-//!
-//! # Architecture
-//!
-//! - **Manager**: Orchestrates queue, leases, and worker lifecycle
-//! - **Worker**: Executes downloads, writes only to `watch::Sender` (no events)
-//! - **Bridge tasks**: Subscribe to watch channels, emit events with rate-limiting
-//!
-//! # Concurrency Model
-//!
-//! - Single long-lived runner (never resets `runner_started`)
-//! - `Notify` for efficient wake-on-work
-//! - Lease tokens prevent stale finalize commits
-//! - Lock order: queue → active (consistent everywhere)
-
 mod paths;
 mod shard_group_tracker;
 mod worker;

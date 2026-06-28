@@ -1,17 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! In-process built-in tool executor.
-//!
-//! Implements [`ToolExecutorPort`] for tools that run directly inside the
-//! server process rather than through an external MCP child process.
-//!
-//! # Tool-name format
-//!
-//! Names are qualified with `"builtin:"` (e.g. `"builtin:get_current_time"`),
-//! matching the convention used by [`McpToolExecutorAdapter`] where names are
-//! qualified with the numeric server id (e.g. `"3:read_file"`).
-//! [`CombinedToolExecutor`] routes calls with the `"builtin:"` prefix here.
-
 mod fs_grep;
 mod fs_list;
 mod fs_read;

@@ -4,25 +4,8 @@
 
 `HuggingFace` client for searching models and fetching metadata.
 
-Provides the main client interface for interacting with the `HuggingFace` Hub API.
-
-## Key Types
-
-| Type | Description |
-|------|-------------|
-| `HfClient<B>` | Generic client over HTTP backend |
-| `DefaultHfClient` | Production client using reqwest |
-
-## Submodules
-
-| Module | Description |
-|--------|-------------|
-| `repo_files` | Repository file listing |
-| `search` | Model search queries |
-
-## Design
-
-The client is generic over an HTTP backend (`B: HttpBackend`), allowing easy testing with mock backends. Use `DefaultHfClient` for production.
+This module provides the main client interface for interacting with
+the `HuggingFace` Hub API.
 
 <!-- module-docs:end -->
 

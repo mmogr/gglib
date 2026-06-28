@@ -1,10 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! `HuggingFace` client port definitions.
-//!
-//! This module defines the port trait and DTOs for `HuggingFace` Hub interaction.
-//! The actual implementation lives in `gglib-hf`.
-
 mod client;
 mod error;
 mod types;

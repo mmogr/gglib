@@ -4,17 +4,8 @@
 
 Progress tracking and throttling.
 
-This module handles progress aggregation and rate-limiting for download progress events to prevent UI flooding.
-
-## Components
-
-| Component | Description |
-|-----------|-------------|
-| `ProgressThrottle` | Rate-limits progress events (e.g., max 10/sec) |
-
-## Design
-
-Downloads may report progress thousands of times per second. This module aggregates updates and emits throttled events suitable for UI consumption.
+This module handles progress aggregation and rate-limiting for download
+progress events.
 
 <!-- module-docs:end -->
 

@@ -1,9 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Assistant-UI runtime handlers.
-//!
-//! Thin wrappers for assistant-ui npm package management.
-
 use std::path::PathBuf;
 use std::process::Command;
 

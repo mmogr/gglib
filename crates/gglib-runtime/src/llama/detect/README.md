@@ -4,33 +4,28 @@
 
 Hardware acceleration detection for llama.cpp builds.
 
-This module probes the current system to determine which GPU backend
-(Metal, CUDA, or Vulkan) is available and fully build-ready. It is the
-authoritative source for acceleration decisions used by the CLI,
-REST API, and Tauri GUI — all three surfaces call
-`detect_optimal_acceleration()` and `vulkan_status()` from here.
+This module detects which GPU acceleration backend (Metal, CUDA, or
+Vulkan) is available on the current system and selects the optimal
+one for building llama.cpp.
 
-## Priority order
+# Submodules
 
-`detect_optimal_acceleration()` returns the first fully-buildable backend:
+| Module | Responsibility |
+|--------|---------------|
+| [`tools`] | Shared command-execution and version-parsing utilities |
+| [`metal`] | Apple Metal detection (macOS only) |
+| [`cuda`] | NVIDIA CUDA toolkit detection and GCC compatibility |
+| [`vulkan`] | Vulkan loader, header, and `glslc` detection |
 
-| Priority | Backend | Platform |
-|----------|---------|----------|
-| 1 | Metal | macOS (Apple Silicon or Intel Mac ≥ 10.13) |
-| 2 | CUDA | Any platform with `nvcc` in `PATH` |
-| 3 | Vulkan | Linux or Windows with loader + headers + `glslc` + SPIR-V headers |
+# Priority order
 
-CPU-only inference is not supported; the function returns `Err` if no
-GPU backend is fully buildable so callers can surface install hints.
+[`detect_optimal_acceleration`] selects backends in this priority:
 
-## Submodules
+1. **Metal** — macOS with Apple Silicon or Intel Mac ≥10.13
+2. **CUDA** — NVIDIA GPU with `nvcc` in `PATH`
+3. **Vulkan** — AMD/Intel/NVIDIA via portable GPU API (runtime only)
 
-| Submodule | Responsibility |
-|-----------|---------------|
-| [`tools`](tools) | Shared command-execution and version-parsing helpers |
-| [`metal`](metal) | Apple Metal detection (macOS only) |
-| [`cuda`](cuda) | NVIDIA CUDA toolkit detection and GCC compatibility |
-| [`vulkan/`](vulkan/) | Vulkan loader, header, `glslc`, and SPIR-V detection (Linux/Windows) |
+CPU-only inference is not supported.
 
 <!-- module-docs:end -->
 

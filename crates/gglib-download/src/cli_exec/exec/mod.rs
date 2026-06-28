@@ -1,10 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Download execution module.
-//!
-//! This module handles the actual model download execution using the Python helper.
-//! It is intentionally kept separate from queue management.
-
 mod progress;
 pub mod python_bridge;
 mod python_env;

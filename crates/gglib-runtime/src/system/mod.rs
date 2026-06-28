@@ -1,11 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! System probe implementation for gglib-runtime.
-//!
-//! This module provides the `DefaultSystemProbe` which implements
-//! `SystemProbePort` from gglib-core. It performs active system probing
-//! via command execution and hardware detection.
-
 mod commands;
 mod deps;
 pub(crate) mod gpu;

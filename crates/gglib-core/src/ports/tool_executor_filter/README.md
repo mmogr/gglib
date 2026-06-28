@@ -1,4 +1,4 @@
-# tool_executor_filter
+# Tool Executor Filter
 
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-tool_executor_filter-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-tool_executor_filter-complexity.json)

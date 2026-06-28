@@ -1,10 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! `HuggingFace` file resolution.
-//!
-//! This module resolves quantization-specific files from `HuggingFace` repositories
-//! using the `HfClientPort` abstraction.
-
 use std::sync::Arc;
 
 use async_trait::async_trait;

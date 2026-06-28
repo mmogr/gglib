@@ -1,31 +1,4 @@
 #![doc = include_str!("README.md")]
-// MIGRATION: content extracted to README.md — remove this //! block after review
-//! Llama.cpp management for gglib-runtime.
-//!
-//! This module provides all llama.cpp-related functionality:
-//! - Installation (pre-built download or source build)
-//! - Hardware acceleration detection (Metal, CUDA, CPU)
-//! - Binary validation and status checking
-//! - Update management
-//! - Command invocation building
-//!
-//! # Public API
-//!
-//! The public API is intentionally minimal. Import from `gglib_runtime::llama`:
-//!
-//! ```rust,ignore
-//! use gglib_runtime::llama::{
-//!     ensure_llama_initialized,
-//!     check_llama_installed,
-//!     LlamaCommandBuilder,
-//!     resolve_context_size,
-//! };
-//! ```
-//!
-//! # Feature Flags
-//!
-//! - `cli`: Enables `CliProgress` and `CliPrompt` for interactive CLI usage.
-
 // === Submodules ===
 
 pub mod args;

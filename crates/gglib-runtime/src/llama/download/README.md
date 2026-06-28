@@ -4,23 +4,14 @@
 
 Pre-built llama.cpp binary download support.
 
-Handles downloading pre-built llama.cpp binaries from GitHub releases for users running pre-built gglib binaries.
+This module handles downloading pre-built llama.cpp binaries from GitHub releases
+for users running pre-built gglib binaries (not building from source).
 
-## Platform Support
-
-| Platform | Status |
-|----------|--------|
-| macOS ARM64 | ✅ Metal-enabled pre-built |
-| macOS x64 | ✅ Metal-enabled pre-built |
-| Windows x64 | ✅ CUDA-enabled pre-built |
-| Linux | ❌ Must build from source |
-
-## Flow
-
-1. Check GitHub releases for matching version
-2. Download appropriate archive for platform
-3. Extract binaries to data directory
-4. Verify binaries are executable
+Platform support:
+- macOS ARM64: Metal-enabled pre-built binaries
+- macOS x64: Metal-enabled pre-built binaries
+- Windows x64: CUDA or Vulkan pre-built binaries (selected at runtime via GPU detection)
+- Linux x64: CPU pre-built binaries (CUDA requires building from source)
 
 <!-- module-docs:end -->
 

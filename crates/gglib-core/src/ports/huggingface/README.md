@@ -2,27 +2,10 @@
 
 <!-- module-docs:start -->
 
-`HuggingFace` Hub client port definition.
+`HuggingFace` client port definitions.
 
-Defines the `HfClientPort` trait for interacting with the `HuggingFace` Hub API. The actual implementation lives in `gglib-hf`.
-
-## Trait: `HfClientPort`
-
-| Method | Description |
-|--------|-------------|
-| `search_models()` | Search for GGUF models on `HuggingFace` |
-| `get_repo_info()` | Get repository metadata |
-| `list_files()` | List files in a repository |
-| `get_download_url()` | Generate authenticated download URL |
-
-## Types
-
-| Type | Description |
-|------|-------------|
-| `HfRepoInfo` | Repository metadata (name, downloads, likes) |
-| `HfFileInfo` | File metadata (name, size, SHA) |
-| `HfQuantInfo` | Quantization info parsed from filename |
-| `HfSearchResult` | Paginated search results |
+This module defines the port trait and DTOs for `HuggingFace` Hub interaction.
+The actual implementation lives in `gglib-hf`.
 
 <!-- module-docs:end -->
 
