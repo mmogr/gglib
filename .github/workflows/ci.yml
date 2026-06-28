@@ -39,7 +39,7 @@ jobs:
         run: ./scripts/check_boundaries.sh
 
       - name: Upload boundary results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: boundary-results
@@ -146,7 +146,7 @@ jobs:
         run: cargo test --doc --verbose
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
@@ -188,7 +188,7 @@ jobs:
         run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ts-test-results
