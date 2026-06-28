@@ -102,7 +102,7 @@ jobs:
           cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -233,7 +233,7 @@ jobs:
           components: clippy
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -281,7 +281,7 @@ jobs:
           toolchain: 1.91.0
 
       - name: Cache Cargo registry and target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry

@@ -157,14 +157,14 @@ jobs:
           cache-on-failure: true
 
       - name: Cache node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: ubuntu-${{ runner.arch }}-node-${{ hashFiles('package.json') }}
 
       - name: Cache Web UI
         id: webui-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: web_ui
           key: ubuntu-${{ runner.arch }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
@@ -328,14 +328,14 @@ jobs:
           cache-on-failure: true
 
       - name: Cache node_modules
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: ${{ matrix.target }}-node-${{ hashFiles('package.json') }}
 
       - name: Cache Web UI
         id: webui-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v6
         with:
           path: web_ui
           key: ${{ matrix.target }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
