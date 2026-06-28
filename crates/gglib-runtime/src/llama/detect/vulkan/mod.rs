@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Vulkan acceleration detection with build-readiness validation.
 //!
 //! Vulkan is a portable GPU API supported on AMD, Intel, and NVIDIA

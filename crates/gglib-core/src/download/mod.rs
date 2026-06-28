@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Download domain types, events, errors, and traits.
 //!
 //! This module contains pure data types and trait definitions for the download

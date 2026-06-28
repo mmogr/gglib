@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Tauri command handlers.
 //!
 //! After Phase 3 HTTP API consolidation, only OS-specific commands remain:

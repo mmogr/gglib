@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! MCP (Model Context Protocol) server domain types.
 //!
 //! These types represent MCP servers in the system, independent of any

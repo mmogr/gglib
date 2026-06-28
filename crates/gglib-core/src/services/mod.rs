@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Core services - the application's business logic layer.
 //!
 //! This module contains high-level service abstractions that council

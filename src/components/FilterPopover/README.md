@@ -5,6 +5,14 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+Popover containing model library filter controls: sort field and direction selectors, dual-handle `RangeSlider` components for parameter count, context length, and token generation speed, plus checkboxes for quantization types and user tags.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `FilterPopover.tsx` | Full filter UI; delegates slider rendering to `RangeSlider`; close-on-outside-click |
+
+Value formatters (`formatParamCount`, `formatContextLength`, `formatSpeed`) convert raw numbers to human-readable labels (e.g., `7B`, `128k`, `45 t/s`) for slider thumb display.
 
 <!-- module-docs:end -->

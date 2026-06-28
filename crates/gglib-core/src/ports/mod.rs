@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Port definitions (trait abstractions) for external systems.
 //!
 //! Ports define the interfaces that the core domain expects from infrastructure.

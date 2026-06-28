@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Model capability detection.
 //!
 //! This module analyzes GGUF metadata to detect model capabilities

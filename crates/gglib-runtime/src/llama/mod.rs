@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Llama.cpp management for gglib-runtime.
 //!
 //! This module provides all llama.cpp-related functionality:

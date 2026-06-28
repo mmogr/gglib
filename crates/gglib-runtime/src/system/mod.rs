@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! System probe implementation for gglib-runtime.
 //!
 //! This module provides the `DefaultSystemProbe` which implements

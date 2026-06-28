@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! CLI download utility layer.
 //!
 //! This module provides utilities used by CLI commands that are intentionally

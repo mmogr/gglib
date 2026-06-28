@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Pre-built llama.cpp binary download support.
 //!
 //! This module handles downloading pre-built llama.cpp binaries from GitHub releases

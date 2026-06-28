@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Build orchestration for llama.cpp.
 //!
 //! [`build_llama_cpp`] emits [`BuildEvent`] values over a

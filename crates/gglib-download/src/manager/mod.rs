@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Download manager implementation.
 //!
 //! This module provides the concrete implementation of `DownloadManagerPort`

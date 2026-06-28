@@ -5,6 +5,15 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+Page-level download progress indicator showing the active download's progress bar, queue depth, and a dismissible completion summary banner. Groups multi-shard downloads into a single logical entry so the queue count is not inflated.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `GlobalDownloadStatus.tsx` | Active progress bar or completion summary; queue popover toggle |
+| `DownloadQueuePopover.tsx` | Pending items grouped by model/shard; up/down reorder; per-item cancel |
+
+`groupPendingItems()` collapses all shard items sharing a `group_id` into one queue entry with combined progress.
 
 <!-- module-docs:end -->

@@ -5,6 +5,14 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+Application-wide shared constant values: fixed, non-environment-specific values used across UI components and the runtime layer.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `prompts.ts` | `DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.'` — default chat system prompt; keeps runtime hooks free of UI-level defaults |
+
+Adding constants here prevents duplication and ensures consistent defaults across tests, the backend API, and the UI.
 
 <!-- module-docs:end -->

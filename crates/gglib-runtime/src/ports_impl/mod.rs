@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Port implementations for gglib-runtime.
 //!
 //! These implementations provide concrete adapters for the abstract ports

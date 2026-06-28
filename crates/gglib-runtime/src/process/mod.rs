@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Process management infrastructure for GUI applications.
 //!
 //! This module provides shared infrastructure for managing llama-server processes

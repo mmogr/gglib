@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Source-build installation pipeline for llama.cpp.
 //!
 //! The primary streaming entry point is [`run_llama_source_build`], which emits

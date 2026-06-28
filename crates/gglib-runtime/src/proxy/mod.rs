@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! OpenAI-compatible proxy module.
 //!
 //! This module provides the proxy supervisor for managing the OpenAI-compatible

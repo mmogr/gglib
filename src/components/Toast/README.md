@@ -5,6 +5,23 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+Toast notification system with auto-dismiss, pause-on-hover, keyboard-dismiss support, and enter/exit CSS animations. Supports `success`, `error`, `info`, and `warning` severity types.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `Toast.tsx` | `ToastContainer` renders the stack; `ToastItem` manages individual toast lifecycle |
+
+## Lifecycle
+
+```
+Enqueued → auto-dismiss timer starts
+         → user hovers: timer pauses
+         → user leaves: timer resumes
+         → timer expires or × clicked: exit animation → unmount
+```
+
+Driven entirely by `toasts[]` prop and `onDismiss` callback — no internal queue state.
 
 <!-- module-docs:end -->

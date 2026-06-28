@@ -5,6 +5,12 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+Presentational sub-components for the HuggingFace model browser.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `ModelCard.tsx` | Clickable card: model ID, parameter count badge, tool-support indicator, download count, likes; highlights when selected |
 
 <!-- module-docs:end -->

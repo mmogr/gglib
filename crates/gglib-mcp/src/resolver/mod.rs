@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Executable path resolution for MCP server commands.
 //!
 //! This module provides a robust, testable way to resolve command names

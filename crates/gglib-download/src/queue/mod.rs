@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Download queue management.
 //!
 //! This module provides a pure state machine for managing download queue state.

@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Transport contract constants.
 //!
 //! This module contains string constants for API routes and command names

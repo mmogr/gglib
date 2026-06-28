@@ -5,6 +5,14 @@
 
 <!-- module-docs:start -->
 
-TODO: Describe the purpose and responsibilities of this module.
+State management hooks for the HuggingFace model browser.
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `useHuggingFaceSearch.ts` | Search query, sort/filter state, API calls, pagination cursor, direct-download intent detection |
+
+All state mutations go through this hook — the browser component is purely presentational.
 
 <!-- module-docs:end -->

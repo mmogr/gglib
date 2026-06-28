@@ -1,3 +1,6 @@
+#![doc = include_str!("README.md")]
+
+// MIGRATION: content extracted to README.md — remove this //! block after review
 //! Core domain types.
 //!
 //! These types represent the pure domain model, independent of any
