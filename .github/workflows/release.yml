@@ -111,15 +111,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           name: Release v${{ needs.check-version.outputs.new-version }}
           draft: false
           prerelease: ${{ needs.check-version.outputs.is-prerelease == 'true' }}
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-docs:
     name: Deploy Documentation
@@ -377,21 +376,19 @@ jobs:
 
       - name: Upload binary to release (Unix)
         if: matrix.os != 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload binary to release (Windows)
         if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-gui:
     name: Build GUI ${{ matrix.target }}
@@ -616,18 +613,16 @@ jobs:
 
       - name: Upload GUI binary to release (Unix)
         if: (startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')) && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GUI binary to release (Windows)
         if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
