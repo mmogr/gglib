@@ -16,7 +16,7 @@ use bytes::Bytes;
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
@@ -24,7 +24,7 @@ use gglib_core::ports::{
 use gglib_mcp::McpService;
 
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
-use crate::forward::forward_chat_completion;
+use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
@@ -255,7 +255,7 @@ async fn chat_completions(
         .and_then(|s| s.inference_defaults);
 
     // Forward the request
-    forward_chat_completion(
+    match forward_chat_completion(
         &state.client,
         &upstream_url,
         &headers,
@@ -267,6 +267,29 @@ async fn chat_completions(
         global_inference_defaults,
     )
     .await
+    {
+        Ok(resp) => resp,
+        Err(ForwardError::UpstreamDead) => {
+            // The llama-server process crashed or timed out after
+            // ensure_model_running() already returned a stale port.
+            // Clear the stale CurrentModelState so the next request
+            // triggers a clean restart via ensure_model_running().
+            warn!(
+                upstream = %upstream_url,
+                "upstream dead after ensure_model_running — clearing stale state for restart"
+            );
+            let _ = state.runtime_port.stop_current().await;
+            let mut response = (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse::model_loading()),
+            )
+                .into_response();
+            if let Ok(value) = "5".parse() {
+                response.headers_mut().insert("retry-after", value);
+            }
+            response
+        }
+    }
 }
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
