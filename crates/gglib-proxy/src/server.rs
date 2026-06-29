@@ -262,6 +262,10 @@ async fn chat_completions(
         .ok()
         .and_then(|s| s.inference_defaults);
 
+    // Clone body before forwarding — Bytes is reference-counted so this is
+    // O(1).  Needed to retry with the original payload if the upstream dies.
+    let body_for_retry = body.clone();
+
     // Forward the request
     match forward_chat_completion(
         &state.client,
@@ -278,24 +282,88 @@ async fn chat_completions(
     {
         Ok(resp) => resp,
         Err(ForwardError::UpstreamDead) => {
-            // The llama-server process crashed or timed out after
-            // ensure_model_running() already returned a stale port.
-            // Clear the stale CurrentModelState so the next request
-            // triggers a clean restart via ensure_model_running().
+            // llama-server was dead after ensure_model_running() returned a
+            // stale port.  Strategy:
+            //   1. Clear stale state via stop_current().
+            //   2. Poll ensure_model_running() until it returns Ok (one
+            //      request drives the restart; concurrent requests wait here
+            //      rather than surfacing a 503 to the client, because the VS
+            //      Code LLM Gateway treats 503 as a terminal error).
+            //   3. Retry the forward once with the cloned body.
             warn!(
                 upstream = %upstream_url,
-                "upstream dead after ensure_model_running — clearing stale state for restart"
+                "upstream dead — clearing stale state and restarting model for transparent retry"
             );
             let _ = state.runtime_port.stop_current().await;
-            let mut response = (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(ErrorResponse::model_loading()),
+
+            // Bounded polling: give up after 130 s (120 s health-check window
+            // plus 10 s of margin).
+            let deadline = std::time::Instant::now()
+                + std::time::Duration::from_secs(130);
+
+            let new_target = loop {
+                match state
+                    .runtime_port
+                    .ensure_model_running(&model_name, num_ctx, state.default_ctx)
+                    .await
+                {
+                    Ok(t) => break t,
+                    Err(ModelRuntimeError::ModelLoading) => {
+                        // Another request is already driving the restart.
+                        // Sleep briefly then re-poll rather than returning a
+                        // fatal 503 to the client.
+                        if std::time::Instant::now() >= deadline {
+                            warn!("Timed out waiting for model restart after upstream failure");
+                            return handle_runtime_error(
+                                ModelRuntimeError::ModelLoading,
+                            );
+                        }
+                        tokio::time::sleep(
+                            std::time::Duration::from_secs(2),
+                        )
+                        .await;
+                    }
+                    Err(e) => return handle_runtime_error(e),
+                }
+            };
+
+            let retry_url =
+                format!("{}/v1/chat/completions", new_target.base_url);
+            let retry_defaults = state
+                .settings_repo
+                .load()
+                .await
+                .ok()
+                .and_then(|s| s.inference_defaults);
+
+            match forward_chat_completion(
+                &state.client,
+                &retry_url,
+                &headers,
+                body_for_retry,
+                is_streaming,
+                &model_name,
+                state.catalog_port.clone(),
+                state.metrics.clone(),
+                retry_defaults,
             )
-                .into_response();
-            if let Ok(value) = "5".parse() {
-                response.headers_mut().insert("retry-after", value);
+            .await
+            {
+                Ok(resp) => resp,
+                Err(_) => {
+                    // Server failed immediately after a fresh restart —
+                    // genuinely pathological; give up.
+                    let mut resp = (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(ErrorResponse::model_loading()),
+                    )
+                        .into_response();
+                    if let Ok(value) = "5".parse() {
+                        resp.headers_mut().insert("retry-after", value);
+                    }
+                    resp
+                }
             }
-            response
         }
     }
 }
