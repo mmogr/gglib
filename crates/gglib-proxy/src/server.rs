@@ -16,7 +16,7 @@ use bytes::Bytes;
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
@@ -24,7 +24,7 @@ use gglib_core::ports::{
 use gglib_mcp::McpService;
 
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
-use crate::forward::forward_chat_completion;
+use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
@@ -86,8 +86,16 @@ pub async fn serve(
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
 
-    // Create HTTP client for upstream requests
-    let client = Client::builder().pool_max_idle_per_host(10).build()?;
+    // Create HTTP client for upstream requests.
+    // 300-second timeout guards against a hung-but-alive llama-server that
+    // stops responding mid-inference (e.g. OOM stall).  The timeout fires
+    // as a reqwest::Error::is_timeout(), which forward_chat_completion
+    // maps to ForwardError::UpstreamDead so the handler can clear stale
+    // state and return a retriable 503 instead of hanging indefinitely.
+    let client = Client::builder()
+        .pool_max_idle_per_host(10)
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
 
     let state = AppState {
         client,
@@ -254,8 +262,12 @@ async fn chat_completions(
         .ok()
         .and_then(|s| s.inference_defaults);
 
+    // Clone body before forwarding — Bytes is reference-counted so this is
+    // O(1).  Needed to retry with the original payload if the upstream dies.
+    let body_for_retry = body.clone();
+
     // Forward the request
-    forward_chat_completion(
+    match forward_chat_completion(
         &state.client,
         &upstream_url,
         &headers,
@@ -267,6 +279,86 @@ async fn chat_completions(
         global_inference_defaults,
     )
     .await
+    {
+        Ok(resp) => resp,
+        Err(ForwardError::UpstreamDead) => {
+            // llama-server was dead after ensure_model_running() returned a
+            // stale port.  Strategy:
+            //   1. Clear stale state via stop_current().
+            //   2. Poll ensure_model_running() until it returns Ok (one
+            //      request drives the restart; concurrent requests wait here
+            //      rather than surfacing a 503 to the client, because the VS
+            //      Code LLM Gateway treats 503 as a terminal error).
+            //   3. Retry the forward once with the cloned body.
+            warn!(
+                upstream = %upstream_url,
+                "upstream dead — clearing stale state and restarting model for transparent retry"
+            );
+            let _ = state.runtime_port.stop_current().await;
+
+            // Bounded polling: give up after 130 s (120 s health-check window
+            // plus 10 s of margin).
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(130);
+
+            let new_target = loop {
+                match state
+                    .runtime_port
+                    .ensure_model_running(&model_name, num_ctx, state.default_ctx)
+                    .await
+                {
+                    Ok(t) => break t,
+                    Err(ModelRuntimeError::ModelLoading) => {
+                        // Another request is already driving the restart.
+                        // Sleep briefly then re-poll rather than returning a
+                        // fatal 503 to the client.
+                        if std::time::Instant::now() >= deadline {
+                            warn!("Timed out waiting for model restart after upstream failure");
+                            return handle_runtime_error(ModelRuntimeError::ModelLoading);
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                    Err(e) => return handle_runtime_error(e),
+                }
+            };
+
+            let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
+            let retry_defaults = state
+                .settings_repo
+                .load()
+                .await
+                .ok()
+                .and_then(|s| s.inference_defaults);
+
+            match forward_chat_completion(
+                &state.client,
+                &retry_url,
+                &headers,
+                body_for_retry,
+                is_streaming,
+                &model_name,
+                state.catalog_port.clone(),
+                state.metrics.clone(),
+                retry_defaults,
+            )
+            .await
+            {
+                Ok(resp) => resp,
+                Err(_) => {
+                    // Server failed immediately after a fresh restart —
+                    // genuinely pathological; give up.
+                    let mut resp = (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(ErrorResponse::model_loading()),
+                    )
+                        .into_response();
+                    if let Ok(value) = "5".parse() {
+                        resp.headers_mut().insert("retry-after", value);
+                    }
+                    resp
+                }
+            }
+        }
+    }
 }
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.

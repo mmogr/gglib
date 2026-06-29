@@ -79,6 +79,16 @@ use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::truncation::truncate_history;
 
+/// Signals that the upstream llama-server was unreachable (connection refused
+/// or timed out).  Returned by [`forward_chat_completion`] so the caller can
+/// invalidate stale model state and surface a retriable 503 to the client
+/// instead of a terminal 502.
+#[derive(Debug)]
+pub(crate) enum ForwardError {
+    /// The upstream llama-server could not be reached (ECONNREFUSED or timeout).
+    UpstreamDead,
+}
+
 /// Headers that should NOT be forwarded (hop-by-hop headers).
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
@@ -321,7 +331,7 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// The response from llama-server, with the streaming SSE body re-emitted
 /// through the universal normalization pipeline when `is_streaming` is true.
 #[allow(clippy::too_many_arguments)]
-pub async fn forward_chat_completion(
+pub(crate) async fn forward_chat_completion(
     client: &Client,
     upstream_url: &str,
     headers: &HeaderMap,
@@ -331,7 +341,7 @@ pub async fn forward_chat_completion(
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
-) -> Response {
+) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
     // Single catalog lookup — yields both capabilities (request preprocessing)
@@ -388,7 +398,7 @@ pub async fn forward_chat_completion(
                     .unwrap_or_default()
                     .as_secs(),
             });
-            return *response;
+            return Ok(*response);
         }
     };
 
@@ -438,13 +448,20 @@ pub async fn forward_chat_completion(
     // Send the request
     let response = match req_builder.body(body).send().await {
         Ok(resp) => resp,
+        Err(e) if e.is_connect() || e.is_timeout() => {
+            // Connection refused or timed out — the llama-server process is dead
+            // or hung.  Signal the caller so it can clear stale state and return
+            // a retriable 503 rather than a terminal 502.
+            error!("Upstream llama-server unreachable (connect/timeout): {e}");
+            return Err(ForwardError::UpstreamDead);
+        }
         Err(e) => {
-            error!("Failed to connect to llama-server: {e}");
-            return (
+            error!("Failed to send request to llama-server: {e}");
+            return Ok((
                 StatusCode::BAD_GATEWAY,
                 axum::Json(ErrorResponse::upstream_error(&e.to_string())),
             )
-                .into_response();
+                .into_response());
         }
     };
 
@@ -459,11 +476,11 @@ pub async fn forward_chat_completion(
             body = %error_body,
             "upstream llama-server returned error"
         );
-        return Response::builder()
+        return Ok(Response::builder()
             .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
             .header("content-type", "application/json")
             .body(Body::from(error_bytes))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()));
     }
 
     debug!(
@@ -473,13 +490,13 @@ pub async fn forward_chat_completion(
 
     if is_streaming {
         // Tags resolved above — no second catalog lookup needed.
-        forward_streaming_response(response, model_name.to_owned(), context.tags).await
+        Ok(forward_streaming_response(response, model_name.to_owned(), context.tags).await)
     } else {
         // Non-streaming: read full response. Dialect normalization for
         // non-streaming responses is intentionally deferred — the wire
         // formats we currently rewrite (Qwen XML tool calls, bare <think>
         // tags) only manifest in streaming clients today.
-        forward_non_streaming_response(response).await
+        Ok(forward_non_streaming_response(response).await)
     }
 }
 
