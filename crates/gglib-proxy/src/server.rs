@@ -298,8 +298,7 @@ async fn chat_completions(
 
             // Bounded polling: give up after 130 s (120 s health-check window
             // plus 10 s of margin).
-            let deadline = std::time::Instant::now()
-                + std::time::Duration::from_secs(130);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(130);
 
             let new_target = loop {
                 match state
@@ -314,21 +313,15 @@ async fn chat_completions(
                         // fatal 503 to the client.
                         if std::time::Instant::now() >= deadline {
                             warn!("Timed out waiting for model restart after upstream failure");
-                            return handle_runtime_error(
-                                ModelRuntimeError::ModelLoading,
-                            );
+                            return handle_runtime_error(ModelRuntimeError::ModelLoading);
                         }
-                        tokio::time::sleep(
-                            std::time::Duration::from_secs(2),
-                        )
-                        .await;
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     }
                     Err(e) => return handle_runtime_error(e),
                 }
             };
 
-            let retry_url =
-                format!("{}/v1/chat/completions", new_target.base_url);
+            let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
             let retry_defaults = state
                 .settings_repo
                 .load()
