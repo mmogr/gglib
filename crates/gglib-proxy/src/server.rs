@@ -86,8 +86,16 @@ pub async fn serve(
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
 
-    // Create HTTP client for upstream requests
-    let client = Client::builder().pool_max_idle_per_host(10).build()?;
+    // Create HTTP client for upstream requests.
+    // 300-second timeout guards against a hung-but-alive llama-server that
+    // stops responding mid-inference (e.g. OOM stall).  The timeout fires
+    // as a reqwest::Error::is_timeout(), which forward_chat_completion
+    // maps to ForwardError::UpstreamDead so the handler can clear stale
+    // state and return a retriable 503 instead of hanging indefinitely.
+    let client = Client::builder()
+        .pool_max_idle_per_host(10)
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
 
     let state = AppState {
         client,
