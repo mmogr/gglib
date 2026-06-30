@@ -87,14 +87,28 @@ pub async fn serve(
     info!("Proxy server starting on {addr}");
 
     // Create HTTP client for upstream requests.
-    // 300-second timeout guards against a hung-but-alive llama-server that
-    // stops responding mid-inference (e.g. OOM stall).  The timeout fires
-    // as a reqwest::Error::is_timeout(), which forward_chat_completion
-    // maps to ForwardError::UpstreamDead so the handler can clear stale
-    // state and return a retriable 503 instead of hanging indefinitely.
+    //
+    // We use connect_timeout (not a total-request timeout) deliberately:
+    //
+    // * A wall-clock `.timeout()` on the whole request kills long-running
+    //   SSE streams — e.g. a 36 k-token prompt at 125 t/s takes ~290 s of
+    //   prompt processing before the first generated token appears.  With a
+    //   300 s total timeout, any heavy request races against that deadline
+    //   and the proxy severs the connection mid-stream, surfacing a spurious
+    //   "upstream SSE byte-stream error" to the client.
+    //
+    // * connect_timeout only measures the TCP handshake to 127.0.0.1, which
+    //   completes in <1 ms under normal conditions.  A 10 s budget is more
+    //   than enough to detect a dead/not-yet-started port while imposing no
+    //   limit on how long an actual inference may take.
+    //
+    // Dead-server protection during streaming is handled separately: if
+    // llama-server crashes mid-stream the reqwest byte-stream returns an
+    // error, which forward_chat_completion surfaces as ForwardError::UpstreamDead
+    // and the handler clears stale state for the next request.
     let client = Client::builder()
         .pool_max_idle_per_host(10)
-        .timeout(std::time::Duration::from_secs(300))
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()?;
 
     let state = AppState {
