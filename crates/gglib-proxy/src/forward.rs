@@ -465,6 +465,36 @@ pub(crate) async fn forward_chat_completion(
         //    to assign a slot.  Once headers arrive the task streams the real
         //    response through the normalization pipeline via the same channel.
 
+        // Inject `stream_options: { include_usage: true }` so llama.cpp emits
+        // a final usage SSE chunk with real token counts.  The LLM Gateway
+        // extension (v1.1.0) reads `e.usage` in `dispatchParsedChunk` and
+        // reports it to VS Code via `LanguageModelDataPart("usage")`, which
+        // feeds the context window indicator and enables automatic proactive
+        // compaction before the context limit is ever reached.
+        //
+        // Safety: if the body is not a JSON object the original bytes are
+        // forwarded unchanged.  No panic paths — every operation returns an
+        // Option or Result and is handled explicitly.
+        let body = match serde_json::from_slice::<serde_json::Value>(&body) {
+            Ok(mut value) => {
+                if let Some(obj) = value.as_object_mut() {
+                    let stream_opts = obj
+                        .entry("stream_options")
+                        .or_insert_with(|| serde_json::json!({}));
+                    if let serde_json::Value::Object(opts) = stream_opts {
+                        // Force-insert: we always need usage data, even if
+                        // the client sent include_usage: false.
+                        opts.insert(
+                            "include_usage".to_owned(),
+                            serde_json::Value::Bool(true),
+                        );
+                    }
+                }
+                serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
+            }
+            Err(_) => body, // not JSON — forward as-is
+        };
+
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
         let probe_result = tokio::time::timeout(
@@ -524,19 +554,52 @@ pub(crate) async fn forward_chat_completion(
                 Ok(resp) => {
                     let status = resp.status();
                     let error_bytes = resp.bytes().await.unwrap_or_default();
-                    let body_str = String::from_utf8_lossy(&error_bytes);
                     warn!(
                         status = status.as_u16(),
-                        body = %body_str,
+                        bytes = error_bytes.len(),
                         "upstream returned error during slot-queue wait"
                     );
-                    let payload = serde_json::json!({
-                        "error": {
-                            "message": format!("upstream returned {}: {}", status, body_str),
-                            "type": "server_error",
-                            "code": "upstream_error",
+                    // Preserve the upstream error's `type` and `code` so the
+                    // LLM Gateway extension (and VS Code) can identify errors
+                    // like `context_length_exceeded` rather than seeing an
+                    // opaque `server_error` wrapper.  Falls back to the
+                    // generic envelope only when the body is not valid JSON.
+                    // No panic paths: every operation is Option/Result-safe.
+                    let payload = match serde_json::from_slice::<serde_json::Value>(&error_bytes)
+                    {
+                        Ok(upstream) => {
+                            let msg = upstream
+                                .pointer("/error/message")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("upstream returned an error");
+                            let typ = upstream
+                                .pointer("/error/type")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("server_error");
+                            let code = upstream
+                                .pointer("/error/code")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("upstream_error");
+                            serde_json::json!({
+                                "error": { "message": msg, "type": typ, "code": code }
+                            })
                         }
-                    });
+                        Err(_) => {
+                            // Non-JSON body — fall back to a generic wrapper
+                            // that includes the raw bytes as context.
+                            let body_str = String::from_utf8_lossy(&error_bytes);
+                            serde_json::json!({
+                                "error": {
+                                    "message": format!(
+                                        "upstream returned {}: {}",
+                                        status, body_str
+                                    ),
+                                    "type": "server_error",
+                                    "code": "upstream_error",
+                                }
+                            })
+                        }
+                    };
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
                     let _ = tx.send(Ok(Bytes::from(frame))).await;
                 }
