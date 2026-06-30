@@ -431,7 +431,7 @@ pub(crate) async fn forward_chat_completion(
         body
     };
 
-    // Build the request to upstream
+    // Build the request builder with all forwarded headers.
     let mut req_builder = client
         .post(upstream_url)
         .header("content-type", "application/json");
@@ -445,7 +445,135 @@ pub(crate) async fn forward_chat_completion(
         }
     }
 
-    // Send the request
+    if is_streaming {
+        // ── Streaming path: keepalive background task ─────────────────────
+        //
+        // llama.cpp queues requests internally when all N slots are busy and
+        // does not send HTTP response headers until a slot is assigned.  For
+        // large-context prompts this wait can exceed 6 minutes, causing the
+        // VS Code LLM Gateway extension to abort with "This operation was
+        // aborted" before the response begins.
+        //
+        // Strategy:
+        // 1. Quick TCP probe — distinguishes a dead server (ECONNREFUSED)
+        //    from a live-but-busy one (TCP ACCEPT succeeds).  Dead → return
+        //    UpstreamDead so the caller triggers the transparent restart loop.
+        // 2. Return 200 + text/event-stream headers immediately so the client
+        //    considers the connection live.
+        // 3. Background task races the real send() against a 15-second timer,
+        //    emitting SSE comment frames (":" ) while waiting for llama.cpp
+        //    to assign a slot.  Once headers arrive the task streams the real
+        //    response through the normalization pipeline via the same channel.
+
+        // Phase 1 — TCP probe (1 s timeout).
+        let probe_addr = host_port_from_url(upstream_url);
+        let probe_result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            tokio::net::TcpStream::connect(probe_addr.as_str()),
+        )
+        .await;
+        let server_alive = match probe_result {
+            Ok(Ok(_conn)) => true,
+            Ok(Err(e)) => {
+                error!(addr = %probe_addr, "upstream llama-server TCP probe failed: {e}");
+                false
+            }
+            Err(_) => {
+                warn!(addr = %probe_addr, "upstream llama-server TCP probe timed out");
+                false
+            }
+        };
+        if !server_alive {
+            return Err(ForwardError::UpstreamDead);
+        }
+
+        // Phase 2 — channel-backed response + keepalive background task.
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
+        let model_name_owned = model_name.to_owned();
+        let tags = context.tags;
+
+        tokio::spawn(async move {
+            let mut keepalive_interval = tokio::time::interval(std::time::Duration::from_secs(15));
+            keepalive_interval.tick().await; // skip first immediate tick
+
+            // Race: llama.cpp response headers vs 15-second keepalive timer.
+            let send_future = req_builder.body(body).send();
+            tokio::pin!(send_future);
+
+            let upstream_response = loop {
+                tokio::select! {
+                    biased;
+                    result = &mut send_future => break result,
+                    _ = keepalive_interval.tick() => {
+                        debug!("slot-queue wait: sending SSE keepalive to client");
+                        if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
+                            return; // client disconnected
+                        }
+                    }
+                }
+            };
+
+            match upstream_response {
+                Ok(resp) if resp.status().is_success() => {
+                    debug!(
+                        status = resp.status().as_u16(),
+                        "upstream accepted streaming request after slot-queue wait"
+                    );
+                    stream_response_to_channel(resp, model_name_owned, tags, tx).await;
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let error_bytes = resp.bytes().await.unwrap_or_default();
+                    let body_str = String::from_utf8_lossy(&error_bytes);
+                    warn!(
+                        status = status.as_u16(),
+                        body = %body_str,
+                        "upstream returned error during slot-queue wait"
+                    );
+                    let payload = serde_json::json!({
+                        "error": {
+                            "message": format!("upstream returned {}: {}", status, body_str),
+                            "type": "server_error",
+                            "code": "upstream_error",
+                        }
+                    });
+                    let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let _ = tx.send(Ok(Bytes::from(frame))).await;
+                }
+                Err(e) => {
+                    error!("upstream llama-server unreachable during slot-queue wait: {e}");
+                    let payload = serde_json::json!({
+                        "error": {
+                            "message": format!("upstream llama-server unavailable: {e}"),
+                            "type": "server_error",
+                            "code": "upstream_error",
+                        }
+                    });
+                    let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let _ = tx.send(Ok(Bytes::from(frame))).await;
+                }
+            }
+        });
+
+        // Return 200 immediately — the client sees a live SSE stream right
+        // away, keeps the connection open, and receives keepalive comments
+        // while llama.cpp assigns a slot.
+        let body = Body::from_stream(async_stream::stream! {
+            let mut rx = rx;
+            while let Some(item) = rx.recv().await {
+                yield item;
+            }
+        });
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/event-stream")
+            .header("cache-control", "no-cache")
+            .header("x-accel-buffering", "no")
+            .body(body)
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()));
+    }
+
+    // ── Non-streaming path (unchanged) ────────────────────────────────────
     let response = match req_builder.body(body).send().await {
         Ok(resp) => resp,
         Err(e) if e.is_connect() || e.is_timeout() => {
@@ -488,27 +616,46 @@ pub(crate) async fn forward_chat_completion(
         "upstream llama-server accepted request"
     );
 
-    if is_streaming {
-        // Tags resolved above — no second catalog lookup needed.
-        Ok(forward_streaming_response(response, model_name.to_owned(), context.tags).await)
-    } else {
-        // Non-streaming: read full response. Dialect normalization for
-        // non-streaming responses is intentionally deferred — the wire
-        // formats we currently rewrite (Qwen XML tool calls, bare <think>
-        // tags) only manifest in streaming clients today.
-        Ok(forward_non_streaming_response(response).await)
-    }
+    // Non-streaming: read full response. Dialect normalization for
+    // non-streaming responses is intentionally deferred — the wire
+    // formats we currently rewrite (Qwen XML tool calls, bare <think>
+    // tags) only manifest in streaming clients today.
+    Ok(forward_non_streaming_response(response).await)
 }
 
-/// Forward a streaming SSE response after running it through the universal
-/// normalization pipeline (decode → normalize → re-encode).
-async fn forward_streaming_response(
+/// Extract the `host:port` authority from an HTTP/HTTPS URL string.
+///
+/// Returns `"127.0.0.1:0"` on any parse failure, which causes the TCP probe
+/// to fail immediately (treated as `UpstreamDead`) — the safe fallback that
+/// triggers the transparent restart loop in the caller.
+fn host_port_from_url(url: &str) -> String {
+    // Strip the scheme prefix ("http://" or "https://"), then take everything
+    // up to the first path separator as the authority ("host:port").
+    url.find("://")
+        .and_then(|i| url[i + 3..].split('/').next())
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            warn!(
+                url,
+                "could not parse host:port from upstream URL; TCP probe will fail safely"
+            );
+            "127.0.0.1:0".to_owned()
+        })
+}
+
+/// Feed a streaming response through the normalization pipeline and send each
+/// encoded frame to `tx`.
+///
+/// Used by the keepalive streaming path in [`forward_chat_completion`] where
+/// the `Response` has already been returned to the client before llama.cpp
+/// assigns a slot.
+async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     tags: Vec<String>,
-) -> Response {
-    // Stable envelope metadata — same `id`/`created` for every chunk of
-    // this response, matching the OpenAI streaming contract.
+    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -516,7 +663,6 @@ async fn forward_streaming_response(
         .unwrap_or(0);
     let encoder = SseEncoder::new(id, model_name, created);
 
-    // 1. Raw upstream bytes → typed LlmStreamEvent stream.
     let byte_stream = response.bytes_stream();
     let event_stream = async_stream::stream! {
         let mut decoder = SseStreamDecoder::default();
@@ -531,7 +677,6 @@ async fn forward_streaming_response(
                     return;
                 }
             };
-
             let (events, stop) = decoder.feed_bytes(&chunk);
             for event in events {
                 yield event;
@@ -546,12 +691,9 @@ async fn forward_streaming_response(
         }
     };
 
-    // 2. Wrap with the universal normalization layer.
     let parser = get_parser(&tags);
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
 
-    // 3. Re-encode each typed event back into pristine OpenAI `data:` frames.
-    //    NormalizationError events are logged but never reach the wire.
     let wire_stream = normalized.filter_map(move |event| {
         let encoder = encoder.clone();
         async move {
@@ -566,8 +708,6 @@ async fn forward_streaming_response(
                 }
                 Err(e) => {
                     error!("proxy stream error: {e}");
-                    // Convert internal error into a structured SSE error frame
-                    // so the client sees a terminal signal rather than a hang.
                     let payload = serde_json::json!({
                         "error": {
                             "message": e.to_string(),
@@ -582,15 +722,13 @@ async fn forward_streaming_response(
         }
     });
 
-    let body = Body::from_stream(wire_stream);
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "text/event-stream")
-        .header("cache-control", "no-cache")
-        .header("x-accel-buffering", "no") // Disable nginx buffering
-        .body(body)
-        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+    let mut wire_stream = Box::pin(wire_stream);
+    while let Some(item) = wire_stream.next().await {
+        if tx.send(item).await.is_err() {
+            // Client disconnected; stop draining the upstream.
+            break;
+        }
+    }
 }
 
 /// Forward a non-streaming JSON response from llama-server.
