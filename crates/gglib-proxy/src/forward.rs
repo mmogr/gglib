@@ -484,10 +484,7 @@ pub(crate) async fn forward_chat_completion(
                     if let serde_json::Value::Object(opts) = stream_opts {
                         // Force-insert: we always need usage data, even if
                         // the client sent include_usage: false.
-                        opts.insert(
-                            "include_usage".to_owned(),
-                            serde_json::Value::Bool(true),
-                        );
+                        opts.insert("include_usage".to_owned(), serde_json::Value::Bool(true));
                     }
                 }
                 serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
@@ -565,8 +562,7 @@ pub(crate) async fn forward_chat_completion(
                     // opaque `server_error` wrapper.  Falls back to the
                     // generic envelope only when the body is not valid JSON.
                     // No panic paths: every operation is Option/Result-safe.
-                    let payload = match serde_json::from_slice::<serde_json::Value>(&error_bytes)
-                    {
+                    let payload = match serde_json::from_slice::<serde_json::Value>(&error_bytes) {
                         Ok(upstream) => {
                             let msg = upstream
                                 .pointer("/error/message")
