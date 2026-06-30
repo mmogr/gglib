@@ -493,8 +493,7 @@ pub(crate) async fn forward_chat_completion(
         let tags = context.tags;
 
         tokio::spawn(async move {
-            let mut keepalive_interval =
-                tokio::time::interval(std::time::Duration::from_secs(15));
+            let mut keepalive_interval = tokio::time::interval(std::time::Duration::from_secs(15));
             keepalive_interval.tick().await; // skip first immediate tick
 
             // Race: llama.cpp response headers vs 15-second keepalive timer.
@@ -637,7 +636,10 @@ fn host_port_from_url(url: &str) -> String {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            warn!(url, "could not parse host:port from upstream URL; TCP probe will fail safely");
+            warn!(
+                url,
+                "could not parse host:port from upstream URL; TCP probe will fail safely"
+            );
             "127.0.0.1:0".to_owned()
         })
 }
