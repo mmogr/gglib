@@ -432,6 +432,48 @@ mod tests {
     }
 
     #[test]
+    fn test_attempt_counts_all_kinds() {
+        // from_kind(Failed) — single failed attempt
+        let failed = AttemptCounts::from_kind(CompletionKind::Failed);
+        assert_eq!(failed.failed, 1);
+        assert_eq!(failed.downloaded, 0);
+        assert_eq!(failed.cancelled, 0);
+        assert_eq!(failed.total(), 1);
+
+        // from_kind(Cancelled) — single cancelled attempt
+        let cancelled = AttemptCounts::from_kind(CompletionKind::Cancelled);
+        assert_eq!(cancelled.cancelled, 1);
+        assert_eq!(cancelled.downloaded, 0);
+        assert_eq!(cancelled.failed, 0);
+        assert_eq!(cancelled.total(), 1);
+
+        // from_kind(AlreadyPresent) — produces all zeros, identical to Default
+        let already = AttemptCounts::from_kind(CompletionKind::AlreadyPresent);
+        let default_counts = AttemptCounts::default();
+        assert_eq!(already, default_counts);
+        assert_eq!(already.downloaded, 0);
+        assert_eq!(already.failed, 0);
+        assert_eq!(already.cancelled, 0);
+        assert_eq!(already.total(), 0);
+
+        // increment(Cancelled) — properly increments the cancelled counter
+        let mut counts = AttemptCounts::default();
+        counts.increment(CompletionKind::Cancelled);
+        assert_eq!(counts.cancelled, 1);
+        assert_eq!(counts.total(), 1);
+
+        // increment(AlreadyPresent) — no-op: counts before == counts after
+        let before = AttemptCounts {
+            downloaded: 2,
+            failed: 1,
+            cancelled: 0,
+        };
+        let mut counts = before;
+        counts.increment(CompletionKind::AlreadyPresent);
+        assert_eq!(counts, before, "increment(AlreadyPresent) should be a no-op");
+    }
+
+    #[test]
     fn test_queue_run_summary_totals() {
         let summary = QueueRunSummary {
             run_id: Uuid::nil(),
