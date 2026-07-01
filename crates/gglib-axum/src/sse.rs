@@ -3,6 +3,11 @@
 //! This module provides an SSE broadcaster that implements the core event
 //! emitter ports, allowing the download manager and MCP service to emit
 //! events that are streamed to connected web clients.
+//!
+//! The actual broadcast-channel + SSE-encoding plumbing lives in the shared
+//! `gglib-sse` crate (a dependency-free leaf); this module just wraps it to
+//! implement the `AppEventEmitter` port, keeping that port-implementation
+//! glue in the adapter layer where it belongs.
 
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -11,17 +16,23 @@ use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
 use gglib_core::events::{AppEvent, ServerEvents, ServerSummary};
 use gglib_core::ports::AppEventEmitter;
-use tokio::sync::broadcast;
-use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
+use gglib_sse::{Broadcaster, SseOptions};
 
 /// SSE broadcaster that implements event emitter ports.
 ///
 /// Events are sent via a broadcast channel and streamed to connected clients.
 /// Multiple clients can receive the same events simultaneously.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SseBroadcaster {
-    sender: broadcast::Sender<AppEvent>,
+    inner: Arc<Broadcaster<AppEvent>>,
+}
+
+impl std::fmt::Debug for SseBroadcaster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SseBroadcaster")
+            .field("subscriber_count", &self.subscriber_count())
+            .finish()
+    }
 }
 
 impl SseBroadcaster {
@@ -33,8 +44,9 @@ impl SseBroadcaster {
     ///   Slow clients may miss events if the buffer overflows.
     #[must_use]
     pub fn new(capacity: usize) -> Self {
-        let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
+        Self {
+            inner: Arc::new(Broadcaster::new(capacity)),
+        }
     }
 
     /// Create a new SSE broadcaster with default capacity (256 events).
@@ -46,51 +58,23 @@ impl SseBroadcaster {
     /// Create an SSE stream for a new client connection.
     ///
     /// Returns an Axum SSE response that streams events to the client.
-    /// Takes `Arc<Self>` to ensure proper ownership for the stream.
     /// Includes a keep-alive ping every 30 seconds to prevent proxy timeouts.
     pub fn subscribe(
-        self: Arc<Self>,
-    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-        let receiver = self.sender.subscribe();
-        let stream = BroadcastStream::new(receiver).filter_map(|result| {
-            match result {
-                Ok(event) => {
-                    // Serialize event to JSON
-                    match serde_json::to_string(&event) {
-                        Ok(json) => Some(Ok(Event::default().data(json))),
-                        Err(e) => {
-                            tracing::warn!("Failed to serialize event: {}", e);
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Log lagged or closed errors and continue
-                    tracing::debug!("SSE stream error: {}", e);
-                    None
-                }
-            }
-        });
-
-        Sse::new(stream).keep_alive(
-            axum::response::sse::KeepAlive::new()
-                .interval(std::time::Duration::from_secs(30))
-                .text("ping"),
-        )
+        &self,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static + use<>> {
+        self.inner.clone().subscribe(SseOptions::default())
     }
 
     /// Get the number of active subscribers.
     #[must_use]
     pub fn subscriber_count(&self) -> usize {
-        self.sender.receiver_count()
+        self.inner.subscriber_count()
     }
 }
 
 impl AppEventEmitter for SseBroadcaster {
     fn emit(&self, event: AppEvent) {
-        // Send event to all subscribers
-        // Ignore send errors (no subscribers is fine)
-        let _ = self.sender.send(event);
+        self.inner.send(event);
     }
 
     fn clone_box(&self) -> Box<dyn AppEventEmitter> {
@@ -191,12 +175,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscriber_receives_events() {
+        use tokio_stream::StreamExt as _;
+
         let broadcaster = SseBroadcaster::with_defaults();
-        let mut receiver = broadcaster.sender.subscribe();
+        let mut stream = broadcaster.inner.subscribe_events();
 
         AppEventEmitter::emit(&broadcaster, AppEvent::model_removed(42));
 
-        let event = receiver.recv().await.unwrap();
+        let event = stream.next().await.unwrap();
         match event {
             AppEvent::ModelRemoved { model_id } => assert_eq!(model_id, 42),
             _ => panic!("Unexpected event type"),

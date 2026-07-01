@@ -1979,6 +1979,7 @@ dependencies = [
  "gglib-gguf",
  "gglib-mcp",
  "gglib-runtime",
+ "gglib-sse",
  "http-body-util",
  "hyper",
  "reqwest 0.13.4",
@@ -2231,6 +2232,19 @@ dependencies = [
  "tokio-util",
  "tracing",
  "zip",
+]
+
+[[package]]
+name = "gglib-sse"
+version = "0.8.4"
+dependencies = [
+ "axum",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
