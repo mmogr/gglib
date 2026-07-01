@@ -107,11 +107,24 @@ pub struct SlotSnapshot {
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens: Option<u64>,
     /// Current-schema field: how many of `n_prompt_tokens` have actually
-    /// been processed (prefilled) so far. Preferred over `n_prompt_tokens`
-    /// itself when present, since it tracks real progress during an
-    /// in-flight prefill rather than the eventual total.
+    /// been processed (prefilled) so far, i.e. run through the model this
+    /// round — this is a *delta*, excluding anything reused from cache.
+    /// Preferred over `n_prompt_tokens` itself when present, since it
+    /// tracks real progress during an in-flight prefill rather than the
+    /// eventual total; must be combined with `n_prompt_tokens_cache` to
+    /// recover the true total prompt usage, see [`Self::tokens_in_use`].
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens_processed: Option<u64>,
+    /// Current-schema field: number of prompt tokens reused from KV cache
+    /// (prefix-match reuse across requests to the same slot), i.e. *not*
+    /// re-run through the model this round. Mirrors the `cache_n` field in
+    /// the `/v1/chat/completions` response's `timings` object, where
+    /// llama.cpp documents the invariant `prompt_n + cache_n + predicted_n`
+    /// as the total tokens in context — only meaningful alongside
+    /// `n_prompt_tokens_processed` (the `prompt_n` analogue); adding it to
+    /// the grand-total `n_prompt_tokens` fallback would double-count.
+    #[serde(default, deserialize_with = "tolerant_u64")]
+    n_prompt_tokens_cache: Option<u64>,
     /// Current-schema nested object carrying generation progress. We only
     /// need `n_decoded` out of it — the count of tokens generated so far,
     /// which is additive with `n_prompt_tokens(_processed)` to get total
@@ -169,14 +182,25 @@ impl SlotSnapshot {
     /// Best-effort count of tokens currently occupying this slot's context.
     ///
     /// Current-schema builds report prompt usage and generation progress as
-    /// two separate counters — `n_prompt_tokens(_processed)` and
-    /// `next_token.n_decoded` — which must be **added together** to get the
-    /// true total (a 20k-token prompt with 89 tokens generated so far is
-    /// ~20k tokens in use, not 89). When either prompt-side field is
-    /// present, `n_prompt_tokens_processed` is preferred over
+    /// separate counters that must be **added together** to get the true
+    /// total (a 20k-token prompt with 89 tokens generated so far is ~20k
+    /// tokens in use, not 89) — mirroring the invariant llama.cpp documents
+    /// for `/v1/chat/completions`' `timings` object: total context =
+    /// `prompt_n + cache_n + predicted_n`.
+    ///
+    /// When `n_prompt_tokens_processed` is present, it is preferred over
     /// `n_prompt_tokens` (it tracks real progress mid-prefill rather than
-    /// the eventual total), and `next_token.n_decoded` is added on top
-    /// (defaulting to 0 if generation hasn't started yet).
+    /// the eventual total) and is combined with `n_prompt_tokens_cache`
+    /// (tokens reused from KV cache this round, not re-run through the
+    /// model) — without this, a cache hit on a follow-up prompt makes
+    /// context usage appear to collapse to just the small newly-processed
+    /// delta. `next_token.n_decoded` is added on top of either (defaulting
+    /// to 0 if generation hasn't started yet).
+    ///
+    /// When only the grand-total `n_prompt_tokens` is present (no
+    /// `_processed` reported), it is used as-is — it already represents
+    /// the full prompt including any cached prefix, so `n_prompt_tokens_cache`
+    /// is **not** added on top of it (that would double-count).
     ///
     /// Only when **neither** prompt-side field is present (older
     /// llama-server versions, which never report them alongside
@@ -194,7 +218,13 @@ impl SlotSnapshot {
             .and_then(NextTokenField::primary)
             .and_then(|nt| nt.n_decoded);
 
-        if let Some(prompt_tokens) = self.n_prompt_tokens_processed.or(self.n_prompt_tokens) {
+        let prompt_component = if let Some(processed) = self.n_prompt_tokens_processed {
+            Some(processed + self.n_prompt_tokens_cache.unwrap_or(0))
+        } else {
+            self.n_prompt_tokens
+        };
+
+        if let Some(prompt_tokens) = prompt_component {
             return Some(prompt_tokens + n_decoded.unwrap_or(0));
         }
 
@@ -499,6 +529,57 @@ mod tests {
             panic!("expected Available");
         };
         assert_eq!(slots[0].tokens_in_use(), Some(510));
+    }
+
+    /// Real-world KV-cache-reuse scenario: a follow-up prompt where
+    /// llama-server found a large cached prefix match (`f_keep` close to 1)
+    /// and only had to newly process a small delta. `n_prompt_tokens_cache`
+    /// must be added to `n_prompt_tokens_processed`, or context usage would
+    /// falsely collapse to just the tiny newly-processed delta on every
+    /// cache-hit follow-up turn.
+    #[test]
+    fn cache_reuse_adds_n_prompt_tokens_cache_to_processed_delta() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 131072,
+            "is_processing": true,
+            "n_prompt_tokens": 7981,
+            "n_prompt_tokens_processed": 1245,
+            "n_prompt_tokens_cache": 6736,
+            "next_token": [{ "n_decoded": 12 }]
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(
+            slots[0].tokens_in_use(),
+            Some(1245 + 6736 + 12),
+            "must be processed + cache + decoded, not just processed + decoded (1257)"
+        );
+    }
+
+    /// The grand-total `n_prompt_tokens` fallback (used only when
+    /// `n_prompt_tokens_processed` is absent) already includes any cached
+    /// prefix, so `n_prompt_tokens_cache` must NOT be added on top of it —
+    /// doing so would double-count the cached tokens.
+    #[test]
+    fn n_prompt_tokens_cache_is_not_double_counted_against_the_grand_total() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 1000,
+            "is_processing": true,
+            "n_prompt_tokens": 500,
+            "n_prompt_tokens_cache": 400,
+            "next_token": [{ "n_decoded": 10 }]
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(
+            slots[0].tokens_in_use(),
+            Some(510),
+            "n_prompt_tokens (500) already includes the cached prefix; adding cache (400) again would double-count"
+        );
     }
 
     #[test]

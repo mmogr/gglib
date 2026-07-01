@@ -78,5 +78,38 @@ describe('tokensInUse', () => {
   it('does not add n_decoded onto the legacy n_past/cache_tokens branch', () => {
     expect(tokensInUse(slot({ n_past: 512, next_token: { n_decoded: 89 } }))).toBe(512);
   });
+
+  it('adds n_prompt_tokens_cache to the processed delta on a KV-cache-reuse hit', () => {
+    // Real-world scenario: a follow-up prompt where llama-server found a
+    // large cached prefix match and only newly processed a small delta.
+    // n_prompt_tokens_cache must be added to n_prompt_tokens_processed, or
+    // context usage falsely collapses to just the tiny newly-processed
+    // delta (the exact regression this test guards against).
+    expect(
+      tokensInUse(
+        slot({
+          n_prompt_tokens: 7981,
+          n_prompt_tokens_processed: 1245,
+          n_prompt_tokens_cache: 6736,
+          next_token: [{ n_decoded: 12 }],
+        }),
+      ),
+    ).toBe(1245 + 6736 + 12);
+  });
+
+  it('does not double-count n_prompt_tokens_cache against the n_prompt_tokens grand total', () => {
+    // n_prompt_tokens (the fallback used when _processed is absent) already
+    // includes any cached prefix, so cache must not be added on top of it.
+    expect(
+      tokensInUse(
+        slot({
+          n_prompt_tokens: 500,
+          n_prompt_tokens_cache: 400,
+          next_token: { n_decoded: 10 },
+        }),
+      ),
+    ).toBe(510);
+  });
 });
+
 

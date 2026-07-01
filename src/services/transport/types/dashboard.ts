@@ -57,6 +57,7 @@ export interface SlotSnapshot {
   cache_tokens?: number | null;
   n_prompt_tokens?: number | null;
   n_prompt_tokens_processed?: number | null;
+  n_prompt_tokens_cache?: number | null;
   next_token?: NextTokenInfo | NextTokenInfo[] | null;
 }
 
@@ -70,9 +71,15 @@ export interface SlotSnapshot {
  * — which must be added together to get the true total (a 20k-token prompt
  * with 89 tokens generated so far is ~20k tokens in use, not 89).
  * `n_prompt_tokens_processed` is preferred over `n_prompt_tokens` when both
- * are present (it tracks real progress mid-prefill). Only when neither
- * prompt-side field is present does this fall back to the legacy,
- * non-additive chain: `n_past`, then `cache_tokens`, then `n_decoded` alone.
+ * are present (it tracks real progress mid-prefill) and, when present, is
+ * combined with `n_prompt_tokens_cache` (tokens reused from KV cache this
+ * round, not re-processed) — otherwise a cache-hit follow-up prompt would
+ * falsely collapse context usage down to just the tiny newly-processed
+ * delta. The grand-total `n_prompt_tokens` fallback (used only when
+ * `_processed` is absent) already includes any cached prefix, so cache is
+ * NOT added on top of it. Only when neither prompt-side field is present
+ * does this fall back to the legacy, non-additive chain: `n_past`, then
+ * `cache_tokens`, then `n_decoded` alone.
  *
  * `next_token` may be a single object or an array (MTP builds); element 0 is
  * the accepted/main decode stream when it's an array.
@@ -81,9 +88,13 @@ export function tokensInUse(slot: SlotSnapshot): number | null {
   const nextToken = Array.isArray(slot.next_token) ? slot.next_token[0] : slot.next_token;
   const nDecoded = nextToken?.n_decoded ?? undefined;
 
-  const promptTokens = slot.n_prompt_tokens_processed ?? slot.n_prompt_tokens;
-  if (promptTokens != null) {
-    return promptTokens + (nDecoded ?? 0);
+  const promptComponent =
+    slot.n_prompt_tokens_processed != null
+      ? slot.n_prompt_tokens_processed + (slot.n_prompt_tokens_cache ?? 0)
+      : slot.n_prompt_tokens;
+
+  if (promptComponent != null) {
+    return promptComponent + (nDecoded ?? 0);
   }
 
   return slot.n_past ?? slot.cache_tokens ?? nDecoded ?? null;

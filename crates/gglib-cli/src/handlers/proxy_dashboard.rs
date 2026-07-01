@@ -119,6 +119,8 @@ struct SlotSnapshot {
     #[serde(default)]
     n_prompt_tokens_processed: Option<u64>,
     #[serde(default)]
+    n_prompt_tokens_cache: Option<u64>,
+    #[serde(default)]
     next_token: Option<NextTokenField>,
 }
 
@@ -155,10 +157,13 @@ impl NextTokenField {
 
 impl SlotSnapshot {
     /// Same additive logic as the server's `SlotSnapshot::tokens_in_use`:
-    /// prefer `n_prompt_tokens_processed` (else `n_prompt_tokens`) plus
-    /// `next_token.n_decoded`; only fall back to the legacy `n_past`/
-    /// `cache_tokens` chain (no addition) when neither prompt-side field
-    /// is present.
+    /// when `n_prompt_tokens_processed` is present, combine it with
+    /// `n_prompt_tokens_cache` (tokens reused from KV cache this round) plus
+    /// `next_token.n_decoded`. The grand-total `n_prompt_tokens` fallback
+    /// (used only when `_processed` is absent) already includes any cached
+    /// prefix, so cache is not added on top of it. Only falls back to the
+    /// legacy `n_past`/`cache_tokens` chain (no addition) when neither
+    /// prompt-side field is present.
     fn tokens_in_use(&self) -> Option<u64> {
         let n_decoded = self
             .next_token
@@ -166,7 +171,13 @@ impl SlotSnapshot {
             .and_then(NextTokenField::primary)
             .and_then(|nt| nt.n_decoded);
 
-        if let Some(prompt_tokens) = self.n_prompt_tokens_processed.or(self.n_prompt_tokens) {
+        let prompt_component = if let Some(processed) = self.n_prompt_tokens_processed {
+            Some(processed + self.n_prompt_tokens_cache.unwrap_or(0))
+        } else {
+            self.n_prompt_tokens
+        };
+
+        if let Some(prompt_tokens) = prompt_component {
             return Some(prompt_tokens + n_decoded.unwrap_or(0));
         }
 
@@ -560,6 +571,7 @@ mod tests {
                 cache_tokens: None,
                 n_prompt_tokens: None,
                 n_prompt_tokens_processed: None,
+                n_prompt_tokens_cache: None,
                 next_token: None,
             }],
             slots_status: None,
@@ -609,6 +621,27 @@ mod tests {
         }"#;
         let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse");
         assert_eq!(slot.tokens_in_use(), Some(20906 + 89));
+    }
+
+    #[test]
+    fn slot_snapshot_tokens_in_use_adds_cache_reused_tokens() {
+        // KV-cache-reuse scenario: a follow-up prompt where llama-server
+        // found a large cached prefix match and only newly processed a
+        // small delta. n_prompt_tokens_cache must be added to
+        // n_prompt_tokens_processed, or context usage falsely collapses to
+        // just the tiny newly-processed delta.
+        let json = r#"{
+            "id": 0,
+            "n_ctx": 131072,
+            "n_prompt_tokens": 7981,
+            "n_prompt_tokens_processed": 1245,
+            "n_prompt_tokens_cache": 6736,
+            "next_token": [
+                { "n_decoded": 12 }
+            ]
+        }"#;
+        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse");
+        assert_eq!(slot.tokens_in_use(), Some(1245 + 6736 + 12));
     }
 
     #[test]
