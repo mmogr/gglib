@@ -244,6 +244,7 @@ impl QueueRunSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::download::types::DownloadId;
 
     #[test]
     fn test_completion_key_display() {
@@ -471,6 +472,60 @@ mod tests {
         let mut counts = before;
         counts.increment(CompletionKind::AlreadyPresent);
         assert_eq!(counts, before, "increment(AlreadyPresent) should be a no-op");
+    }
+
+    #[test]
+    fn test_completion_detail_serde_roundtrip() {
+        // Construct a retry scenario: same model downloaded via two different DownloadIds
+        // (first attempt failed, second succeeded).
+        let id1 = DownloadId::from_model("llama-3");
+        let id2 = DownloadId::new("unsloth/llama-3-gguf", Some("Q4_K_M"));
+
+        let key = CompletionKey::HfFile {
+            repo_id: "unsloth/llama-3-gguf".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+
+        let mut counts = AttemptCounts::default();
+        counts.increment(CompletionKind::Failed);
+        counts.increment(CompletionKind::Downloaded);
+
+        let detail = CompletionDetail {
+            key: key.clone(),
+            display_name: "unsloth/llama-3-gguf (Q4_K_M)".to_string(),
+            last_result: CompletionKind::Downloaded,
+            last_completed_at_ms: 1700000000000,
+            download_ids: vec![id1.clone(), id2.clone()],
+            attempt_counts: counts,
+        };
+
+        // Serialize to JSON string
+        let json = serde_json::to_string(&detail).expect("should serialize");
+
+        // Deserialize back
+        let restored: CompletionDetail =
+            serde_json::from_str(&json).expect("should deserialize");
+
+        // Full equality — all fields must match exactly
+        assert_eq!(detail, restored);
+
+        // Verify the retry scenario is preserved through the round-trip
+        assert_eq!(restored.download_ids.len(), 2);
+        assert_eq!(restored.download_ids[0], id1);
+        assert_eq!(restored.download_ids[1], id2);
+        assert_eq!(restored.attempt_counts.failed, 1);
+        assert_eq!(restored.attempt_counts.downloaded, 1);
+        assert_eq!(restored.attempt_counts.total(), 2);
+
+        // Verify the JSON contains expected keys (wire-shape sanity)
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("should parse as Value");
+        assert!(value.get("download_ids").is_some());
+        assert!(value.get("attempt_counts").is_some());
+        assert!(value.get("key").is_some());
+        assert!(value.get("display_name").is_some());
     }
 
     #[test]
