@@ -42,6 +42,10 @@ export interface NextTokenInfo {
  * Mirrors `gglib_proxy::slots::SlotSnapshot`, including its private-but-serialized
  * legacy fields — serde ignores Rust visibility, so `n_past`/`cache_tokens`/
  * `next_token` all appear on the wire despite being private in Rust.
+ *
+ * `next_token` is a single object on regular llama-server builds, but an
+ * array of objects on builds with Multi-Token Prediction ("draft-mtp")
+ * enabled — mirrors `gglib_proxy::slots::NextTokenField`.
  */
 export interface SlotSnapshot {
   id: number;
@@ -50,16 +54,20 @@ export interface SlotSnapshot {
   is_processing: boolean;
   n_past?: number | null;
   cache_tokens?: number | null;
-  next_token?: NextTokenInfo | null;
+  next_token?: NextTokenInfo | NextTokenInfo[] | null;
 }
 
 /**
  * Same priority-fallback chain as `SlotSnapshot::tokens_in_use()` (Rust) and
  * `proxy_dashboard.rs`'s local reimplementation (CLI) — kept in sync by hand,
  * since it's a tiny amount of logic mirrored across three consumers.
+ *
+ * `next_token` may be a single object or an array (MTP builds); element 0 is
+ * the accepted/main decode stream when it's an array.
  */
 export function tokensInUse(slot: SlotSnapshot): number | null {
-  return slot.n_past ?? slot.cache_tokens ?? slot.next_token?.n_decoded ?? null;
+  const nextToken = Array.isArray(slot.next_token) ? slot.next_token[0] : slot.next_token;
+  return slot.n_past ?? slot.cache_tokens ?? nextToken?.n_decoded ?? null;
 }
 
 /** Mirrors `gglib_proxy::metrics::ContextSnapshot`. */

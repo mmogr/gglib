@@ -10,19 +10,43 @@
 //! The `/slots` JSON shape is not stable across llama.cpp versions (older
 //! builds exposed a flat `n_past` field; the current upstream schema
 //! nests generation-progress info under `next_token` and drops `n_past`
-//! entirely). Rather than accepting an untyped [`serde_json::Value`] and
-//! probing it ad hoc at every call site, [`SlotSnapshot`] declares only the
-//! handful of fields the dashboard actually needs, with `Option<T>` (plus
-//! `#[serde(default)]`) on every field whose presence varies by version.
-//! Fields we don't care about (`params`, `speculative`, etc.) are simply
-//! never named, so serde silently drops them — no `deny_unknown_fields`,
-//! no brittle JSON-pointer probing, no risk of a partially-unknown schema
-//! causing the whole response to fail to parse.
+//! entirely; builds with Multi-Token Prediction, aka "draft-mtp", send
+//! `next_token` as an **array** of objects instead of a single object).
+//! Rather than accepting an untyped [`serde_json::Value`] and probing it
+//! ad hoc at every call site, [`SlotSnapshot`] declares only the handful of
+//! fields the dashboard actually needs, with `Option<T>` (plus
+//! `#[serde(default)]`) on every field whose presence varies by version,
+//! plus [`tolerant_u64`] on every numeric field whose *type* has been known
+//! to shift (so a future schema change degrades that one field to `None`
+//! instead of failing the entire response). Fields we don't care about
+//! (`params`, `speculative`, etc.) are simply never named, so serde
+//! silently drops them — no `deny_unknown_fields`, no brittle JSON-pointer
+//! probing, no risk of a partially-unknown schema causing the whole
+//! response to fail to parse.
 
 use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+
+/// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
+/// any other JSON type (object, array, string, bool, `null`) as simply
+/// absent (`None`) rather than a hard parse error.
+///
+/// llama.cpp's `/slots` schema has changed the *type* of individual fields
+/// across versions (not just their presence) — e.g. a future build could
+/// promote `n_ctx` or `cache_tokens` to a nested object the way `next_token`
+/// already has been. Without this, a single unexpected field type fails
+/// `serde_json::from_str::<Vec<SlotSnapshot>>` for the *entire* `/slots`
+/// response, dropping data for every slot rather than just the one field
+/// that changed shape.
+fn tolerant_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|v| v.as_u64()))
+}
 
 /// Per-request timeout for `GET /slots` polls.
 ///
@@ -50,7 +74,7 @@ pub struct SlotSnapshot {
     #[serde(default)]
     pub id_task: Option<i64>,
     /// Context size configured for this slot, in tokens.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "tolerant_u64")]
     pub n_ctx: Option<u64>,
     /// Whether this slot is actively processing a request right now.
     #[serde(default)]
@@ -59,38 +83,78 @@ pub struct SlotSnapshot {
     /// this slot's KV cache. Superseded by `next_token` in current upstream
     /// versions, where it is simply absent — kept only as a best-effort
     /// fallback, see [`Self::tokens_in_use`].
-    #[serde(default)]
+    #[serde(default, deserialize_with = "tolerant_u64")]
     n_past: Option<u64>,
     /// Alternate legacy field name seen in some intermediate llama.cpp
     /// builds; same role as `n_past`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "tolerant_u64")]
     cache_tokens: Option<u64>,
     /// Current-schema nested object carrying generation progress. We only
     /// need `n_decoded` out of it, as a last-resort usage signal.
+    ///
+    /// On llama.cpp builds with Multi-Token Prediction ("draft-mtp")
+    /// enabled, upstream sends this as a JSON **array** of objects (one per
+    /// predicted token) instead of a single object — see [`NextTokenField`].
     #[serde(default)]
-    next_token: Option<NextTokenInfo>,
+    next_token: Option<NextTokenField>,
 }
 
 /// The subset of the current schema's `next_token` object we care about.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 struct NextTokenInfo {
     /// Number of tokens decoded (generated) so far for the active task.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "tolerant_u64")]
     n_decoded: Option<u64>,
+}
+
+/// `next_token` can be either a single object (regular builds) or an array
+/// of objects (Multi-Token Prediction / "draft-mtp" builds, one entry per
+/// predicted token). `#[serde(untagged)]` tries each variant in declared
+/// order until one succeeds.
+///
+/// `Many` **must** be declared before `Single`: since every field on
+/// [`NextTokenInfo`] is `Option` + `#[serde(default)]`, serde's derived
+/// struct deserializer also accepts a JSON *array* as positional field
+/// values (not just a map) — so a single-element array like
+/// `[{"n_decoded": 89}]` would otherwise wrongly succeed as `Single` first
+/// (assigning the whole inner object to the `n_decoded` field, which
+/// `tolerant_u64` then silently downgrades to `None` instead of erroring).
+/// Trying `Many` first avoids this false-positive match.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+enum NextTokenField {
+    Many(Vec<NextTokenInfo>),
+    Single(NextTokenInfo),
+}
+
+impl NextTokenField {
+    /// The representative entry to read progress from: the object itself
+    /// for the single-object shape, or element 0 for the MTP array shape
+    /// (the accepted/main decode stream — later elements are speculative
+    /// draft predictions, not relevant to a "tokens in use" signal).
+    fn primary(&self) -> Option<&NextTokenInfo> {
+        match self {
+            Self::Single(info) => Some(info),
+            Self::Many(items) => items.first(),
+        }
+    }
 }
 
 impl SlotSnapshot {
     /// Best-effort count of tokens currently occupying this slot's context.
     ///
     /// Tries, in priority order: `n_past`, then `cache_tokens`, then
-    /// `next_token.n_decoded`. Returns `None` if the running llama-server
-    /// version exposes none of them (shown as "unknown" by consumers,
-    /// never treated as zero).
+    /// `next_token.n_decoded` (via [`NextTokenField::primary`]). Returns
+    /// `None` if the running llama-server version exposes none of them
+    /// (shown as "unknown" by consumers, never treated as zero).
     #[must_use]
     pub fn tokens_in_use(&self) -> Option<u64> {
-        self.n_past
-            .or(self.cache_tokens)
-            .or_else(|| self.next_token.as_ref().and_then(|nt| nt.n_decoded))
+        self.n_past.or(self.cache_tokens).or_else(|| {
+            self.next_token
+                .as_ref()
+                .and_then(NextTokenField::primary)
+                .and_then(|nt| nt.n_decoded)
+        })
     }
 
     /// Remaining context budget for this slot (`n_ctx - tokens_in_use`).
@@ -324,5 +388,85 @@ mod tests {
         // proxy/error page returning `{}`.
         let result = parse_slots_response(StatusCode::OK, r#"{"unexpected": true}"#);
         assert!(matches!(result, SlotsPollResult::Unreachable(_)));
+    }
+
+    /// Exact (trimmed) payload shape reported from a live llama.cpp
+    /// `8c146a8` build with Multi-Token Prediction ("draft-mtp") enabled:
+    /// `next_token` is a single-element array, not a bare object.
+    #[test]
+    fn parses_mtp_array_next_token_schema() {
+        let body = r#"[{
+            "id": 3,
+            "n_ctx": 131072,
+            "is_processing": true,
+            "n_prompt_tokens": 20994,
+            "n_prompt_tokens_processed": 20906,
+            "n_prompt_tokens_cache": 0,
+            "next_token": [
+                { "n_remain": 8103, "n_decoded": 89 }
+            ]
+        }]"#;
+        let result = parse_slots_response(StatusCode::OK, body);
+        let SlotsPollResult::Available(slots) = result else {
+            panic!("expected Available, got {result:?}");
+        };
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].n_ctx, Some(131072));
+        assert_eq!(slots[0].tokens_in_use(), Some(89));
+        assert_eq!(slots[0].context_remaining(), Some(131072 - 89));
+    }
+
+    #[test]
+    fn mtp_array_with_multiple_predictions_uses_first_element() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 1000,
+            "is_processing": true,
+            "next_token": [
+                { "n_remain": 10, "n_decoded": 42 },
+                { "n_remain": 9, "n_decoded": 999 }
+            ]
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(
+            slots[0].tokens_in_use(),
+            Some(42),
+            "should use element 0 (accepted stream), not later speculative entries"
+        );
+    }
+
+    #[test]
+    fn tolerant_u64_field_downgrades_to_none_not_parse_error() {
+        // n_ctx sent as a nested object — a hypothetical future schema
+        // change. Must not fail the whole `/slots` parse.
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": { "unexpected": "shape" },
+            "is_processing": false
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available, not Unreachable, when only n_ctx's type changes");
+        };
+        assert_eq!(slots[0].n_ctx, None);
+    }
+
+    #[test]
+    fn tolerant_u64_downgrades_n_past_and_cache_tokens_too() {
+        for field in ["n_past", "cache_tokens"] {
+            let body = format!(
+                r#"[{{ "id": 0, "n_ctx": 1000, "is_processing": false, "{field}": [1, 2, 3] }}]"#
+            );
+            let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, &body)
+            else {
+                panic!("expected Available when only '{field}' has an unexpected type");
+            };
+            assert_eq!(
+                slots[0].tokens_in_use(),
+                None,
+                "'{field}' with an unexpected type should degrade to None, not panic/error"
+            );
+        }
     }
 }

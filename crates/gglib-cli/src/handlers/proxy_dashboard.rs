@@ -115,7 +115,7 @@ struct SlotSnapshot {
     #[serde(default)]
     cache_tokens: Option<u64>,
     #[serde(default)]
-    next_token: Option<NextTokenInfo>,
+    next_token: Option<NextTokenField>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,12 +124,40 @@ struct NextTokenInfo {
     n_decoded: Option<u64>,
 }
 
+/// Mirrors `gglib_proxy::slots::NextTokenField` — `next_token` is a single
+/// object on regular llama-server builds, but an array of objects on builds
+/// with Multi-Token Prediction ("draft-mtp") enabled.
+///
+/// `Many` must come before `Single` — see the server-side type's doc
+/// comment for why (a single-element array can otherwise falsely match
+/// `Single` via serde's struct-from-seq deserialization).
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum NextTokenField {
+    Many(Vec<NextTokenInfo>),
+    Single(NextTokenInfo),
+}
+
+impl NextTokenField {
+    /// See `gglib_proxy::slots::NextTokenField::primary` — element 0 is the
+    /// accepted/main decode stream on MTP builds.
+    fn primary(&self) -> Option<&NextTokenInfo> {
+        match self {
+            Self::Single(info) => Some(info),
+            Self::Many(items) => items.first(),
+        }
+    }
+}
+
 impl SlotSnapshot {
     /// Same priority-fallback chain as the server's `SlotSnapshot::tokens_in_use`.
     fn tokens_in_use(&self) -> Option<u64> {
-        self.n_past
-            .or(self.cache_tokens)
-            .or_else(|| self.next_token.as_ref().and_then(|nt| nt.n_decoded))
+        self.n_past.or(self.cache_tokens).or_else(|| {
+            self.next_token
+                .as_ref()
+                .and_then(NextTokenField::primary)
+                .and_then(|nt| nt.n_decoded)
+        })
     }
 }
 
@@ -532,6 +560,21 @@ mod tests {
         assert!(frame.contains("50%")); // 50/100 prompt progress
         assert!(frame.contains("slot 0"));
         assert!(frame.contains("Total requests served: 3"));
+    }
+
+    #[test]
+    fn slot_snapshot_parses_mtp_array_next_token_shape() {
+        // Same wire shape the proxy re-serializes for an MTP ("draft-mtp")
+        // llama-server build — `next_token` is an array, not a bare object.
+        let json = r#"{
+            "id": 3,
+            "n_ctx": 131072,
+            "next_token": [
+                { "n_decoded": 89 }
+            ]
+        }"#;
+        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse MTP shape");
+        assert_eq!(slot.tokens_in_use(), Some(89));
     }
 
     #[test]
