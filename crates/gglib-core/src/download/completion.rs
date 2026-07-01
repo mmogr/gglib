@@ -287,6 +287,81 @@ mod tests {
     }
 
     #[test]
+    fn test_completion_key_serde_roundtrip() {
+        // HfFile with quantization — round-trip
+        let hf_with_quant = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        let json = serde_json::to_string(&hf_with_quant).unwrap();
+        let parsed: CompletionKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, hf_with_quant);
+
+        // HfFile without quantization — round-trip AND verify skip_serializing_if
+        let hf_no_quant = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: None,
+        };
+        let json_no_quant = serde_json::to_string(&hf_no_quant).unwrap();
+        let parsed_no_quant: CompletionKey = serde_json::from_str(&json_no_quant).unwrap();
+        assert_eq!(parsed_no_quant, hf_no_quant);
+
+        // Verify "quantization" key is ABSENT when None (not null)
+        let value: serde_json::Value = serde_json::from_str(&json_no_quant).unwrap();
+        assert!(
+            !value.get("quantization").is_some(),
+            "quantization key should be absent when None, not present as null"
+        );
+
+        // Verify "quantization" key IS present when Some
+        let value_with: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(
+            value_with.get("quantization").is_some(),
+            "quantization key should be present when Some"
+        );
+
+        // UrlFile round-trip
+        let url_key = CompletionKey::UrlFile {
+            url: "https://example.com/model.gguf".to_string(),
+            filename: "model.gguf".to_string(),
+        };
+        let json_url = serde_json::to_string(&url_key).unwrap();
+        let parsed_url: CompletionKey = serde_json::from_str(&json_url).unwrap();
+        assert_eq!(parsed_url, url_key);
+
+        // LocalFile round-trip
+        let local_key = CompletionKey::LocalFile {
+            path: "/home/user/models/llama.gguf".to_string(),
+        };
+        let json_local = serde_json::to_string(&local_key).unwrap();
+        let parsed_local: CompletionKey = serde_json::from_str(&json_local).unwrap();
+        assert_eq!(parsed_local, local_key);
+
+        // CompletionKind snake_case wire format
+        for (kind, expected_wire) in [
+            (CompletionKind::Downloaded, "downloaded"),
+            (CompletionKind::Failed, "failed"),
+            (CompletionKind::Cancelled, "cancelled"),
+            (CompletionKind::AlreadyPresent, "already_present"),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert!(
+                json.contains(expected_wire),
+                "Expected CompletionKind {:?} to serialize to snake_case '{}', got: {}",
+                kind,
+                expected_wire,
+                json
+            );
+            let parsed: CompletionKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, kind);
+        }
+    }
+
+    #[test]
     fn test_completion_key_hash_dedup() {
         use std::collections::HashSet;
         use std::hash::{Hash, Hasher};
