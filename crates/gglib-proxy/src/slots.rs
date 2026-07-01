@@ -50,11 +50,22 @@ where
 
 /// Per-request timeout for `GET /slots` polls.
 ///
-/// Deliberately short and independent of the main proxy client's
-/// (intentionally unbounded) chat-completion timeout — a hung or
-/// struggling llama-server should never make the dashboard poller wait
-/// longer than this before the caller treats it as unreachable.
-const SLOTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+/// llama-server serves `/slots` from the same single HTTP thread that
+/// processes prompts, so a poll can legitimately block for as long as the
+/// server is busy with prompt evaluation — this is normal backpressure, not
+/// a hang. With a large context window (e.g. 131k tokens), a full prompt
+/// fill can take on the order of `prompt eval time` scaled up from typical
+/// measurements like `30.5s / 4181 tokens`, i.e. upwards of 15+ minutes.
+///
+/// This timeout is independent of the main proxy client's (intentionally
+/// unbounded) chat-completion timeout. It is deliberately generous rather
+/// than short: `fetch_slots` is only ever called from `spawn_slots_poller`'s
+/// isolated `tokio::spawn` task, so a slow poll can only delay that task's
+/// own next tick — it never blocks Axum request handling, chat-completion
+/// forwarding, or the dashboard's SSE stream. A poll that genuinely never
+/// returns (dead server, not just a busy one) is still eventually caught,
+/// just after a much more forgiving wait.
+const SLOTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(900);
 
 // =============================================================================
 // SlotSnapshot
