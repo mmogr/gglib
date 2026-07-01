@@ -8,6 +8,8 @@ pub mod mcp;
 pub mod metrics;
 pub mod models;
 pub mod server;
+pub mod slots;
+pub mod slots_poller;
 pub mod truncation;
 
 pub use council_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};

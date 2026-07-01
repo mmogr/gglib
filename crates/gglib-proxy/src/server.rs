@@ -30,6 +30,7 @@ use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
+use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -54,6 +55,16 @@ pub(crate) struct AppState {
     /// Registry of in-flight `/v1/chat/completions` connections, exposed via
     /// the future proxy dashboard endpoint.
     pub(crate) connections: Arc<ActiveConnectionsRegistry>,
+    /// Cache of the most recent llama.cpp `/slots` poll, refreshed by the
+    /// background poller spawned in `serve()`. Exposed via the future proxy
+    /// dashboard endpoint.
+    ///
+    /// Not read anywhere yet — the dashboard endpoint that will consume it
+    /// lands in a later phase. Wired into `AppState` now (rather than left
+    /// as a bare local in `serve()`) so the poller's cache is available to
+    /// handlers from day one with no further plumbing required.
+    #[allow(dead_code)]
+    pub(crate) slots: Arc<SlotsCache>,
     /// Settings repository for loading global inference defaults per-request.
     settings_repo: Arc<dyn SettingsRepository>,
 }
@@ -115,6 +126,19 @@ pub async fn serve(
         .connect_timeout(std::time::Duration::from_secs(10))
         .build()?;
 
+    // Background poller for llama.cpp's native `/slots` endpoint, feeding
+    // the future proxy dashboard's context-remaining display. It runs as
+    // its own isolated Tokio task (see `slots_poller` module docs for the
+    // backoff/lifecycle design) and is joined below after `axum::serve`
+    // returns, so it never outlives the server or gets left detached.
+    let slots_cache = Arc::new(SlotsCache::new());
+    let slots_poller = spawn_slots_poller(
+        Arc::clone(&runtime_port),
+        client.clone(),
+        Arc::clone(&slots_cache),
+        cancel.clone(),
+    );
+
     let state = AppState {
         client,
         runtime_port,
@@ -125,6 +149,7 @@ pub async fn serve(
         council,
         metrics: Arc::new(ContextMetricsStore::new()),
         connections: Arc::new(ActiveConnectionsRegistry::new()),
+        slots: slots_cache,
         settings_repo,
     };
 
@@ -143,6 +168,13 @@ pub async fn serve(
     axum::serve(listener, app)
         .with_graceful_shutdown(cancel.cancelled_owned())
         .await?;
+
+    // Ensure the poller task is fully joined (not just cancelled-and-
+    // detached) before `serve()` returns, so callers can rely on a clean
+    // shutdown leaving no dangling tasks behind.
+    if let Err(e) = slots_poller.await {
+        warn!("proxy dashboard: /slots poller task panicked during shutdown: {e}");
+    }
 
     info!("Proxy server shut down");
     Ok(())
