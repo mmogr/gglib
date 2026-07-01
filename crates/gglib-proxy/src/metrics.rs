@@ -1,10 +1,11 @@
 //! In-memory metrics store for the proxy pipeline.
 //!
 //! [`ContextMetricsStore`] is a fixed-capacity ring buffer that records one
-//! [`ContextSnapshot`] per handled `/v1/chat/completions` request.  It is
-//! the sole data source for the `GET /v1/proxy/status` endpoint, which
-//! provides the shared data contract consumed by the CLI TUI and web
-//! dashboard.
+//! [`ContextSnapshot`] per handled `/v1/chat/completions` request. It feeds
+//! the `recent_requests` field of [`crate::dashboard::DashboardSnapshot`] —
+//! the unified data contract returned by `GET /v1/proxy/status` and pushed
+//! over `GET /v1/proxy/status/stream`, consumed by both the CLI (`gglib
+//! proxy dashboard`) and the web GUI's Proxy Dashboard modal.
 //!
 //! ## Concurrency design
 //!

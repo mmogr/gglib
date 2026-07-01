@@ -49,7 +49,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Exposes proxy telemetry** at `GET /v1/proxy/status` for CLI and web dashboards
+6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, and recent request history — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 
@@ -96,6 +96,16 @@ This crate provides an OpenAI-compatible HTTP server that:
 │  │  └─ session.rs   (Mcp-Session-Id tracking)  │                                     │
 │  └─────────────────────────────────────────────┘                                     │
 │                                                                                      │
+│         │ GET /v1/proxy/status(/stream)                                             │
+│         ▼                                                                            │
+│  ┌─────────────────────────────────────────────┐                                     │
+│  │  dashboard.rs                                │                                     │
+│  │  aggregates connections.rs (active reqs),    │                                     │
+│  │  slots.rs / slots_poller.rs (context usage), │                                     │
+│  │  metrics.rs (recent requests) into one       │                                     │
+│  │  DashboardSnapshot (JSON or SSE)              │                                     │
+│  └─────────────────────────────────────────────┘                                     │
+│                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -121,11 +131,16 @@ This crate provides an OpenAI-compatible HTTP server that:
 </details>
 
 **Module Descriptions:**
-- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions` and `/v1/proxy/status` handlers
+- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
-- **`metrics.rs`** — `ContextMetricsStore` ring buffer powering `/v1/proxy/status`
+- **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
+- **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request (direct and council/virtual-model) through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
+- **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`
+- **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
+- **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
+- **`council_proxy.rs`** — Routes virtual-model (council/orchestrator) requests; registers active connections and forwards `AgentEvent::PromptProgress` the same way `forward.rs` does for direct completions
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
@@ -145,6 +160,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 | `/mcp` | POST | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | Returns 405 (server-push not yet supported) |
 | `/mcp` | DELETE | Terminate MCP session by `Mcp-Session-Id` |
+| `/v1/proxy/status` | GET | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
+| `/v1/proxy/status/stream` | GET | Proxy dashboard live updates (SSE, hydrate-then-stream) |
 
 ### Model Resolution
 
@@ -334,22 +351,62 @@ truncation pass **before** forwarding to llama-server:
 **Zero blast radius:** On JSON parse failure the original body is forwarded
 unchanged; the upstream llama-server produces its own diagnostic.
 
-## Proxy Status Endpoint
+## Proxy Dashboard
 
 ```text
-GET /v1/proxy/status
+GET /v1/proxy/status         (JSON snapshot)
+GET /v1/proxy/status/stream  (SSE, hydrate-then-stream)
 ```
 
-Returns a JSON snapshot of the last 20 requests processed by the truncation
-pipeline. This is the shared data contract for the CLI TUI (future) and web
-dashboard (future).
+Both endpoints return the same [`DashboardSnapshot`](src/dashboard.rs) shape
+— the single, unified data contract consumed by both `gglib proxy dashboard`
+(CLI, `crates/gglib-cli/src/handlers/proxy_dashboard.rs`) and the web GUI's
+Proxy Dashboard modal (`src/components/ProxyDashboardModal.tsx`). It fully
+replaces the old `{snapshots, total_requests}` shape — there is no
+backwards-compatible shim, since nothing consumed the old shape (it was
+explicitly documented as a not-yet-consumed "future" contract).
+
+- `GET /v1/proxy/status` returns one snapshot, computed on demand.
+- `GET /v1/proxy/status/stream` is a Server-Sent Events stream: the first
+  event is always the current snapshot (hydration), followed by a fresh
+  snapshot roughly once per second for as long as the client stays
+  connected (via [`gglib_sse::Broadcaster::subscribe_with_hydration`],
+  see `crates/gglib-sse`). Keepalive comments (`: ping`) are sent every 30s
+  on idle connections; native `EventSource` clients (browsers, and this is
+  what the web GUI uses) ignore these transparently.
 
 ### Response shape
 
 ```json
 {
-  "total_requests": 42,
-  "snapshots": [
+  "active_connections": [
+    {
+      "id": "5b1b6f0e-9b1a-4e9a-8f7b-9c9f9a9b9c9d",
+      "model_name": "qwen-3b",
+      "started_at_secs": 1749283200,
+      "is_streaming": true,
+      "num_ctx": 8192,
+      "phase": "processing_prompt",
+      "prompt_processed": 512,
+      "prompt_total": 2048,
+      "prompt_cached": 0,
+      "prompt_time_ms": 340
+    }
+  ],
+  "slots_available": true,
+  "slots": [
+    {
+      "id": 0,
+      "id_task": 7,
+      "n_ctx": 8192,
+      "is_processing": true,
+      "n_past": null,
+      "cache_tokens": null,
+      "next_token": { "n_decoded": 512 }
+    }
+  ],
+  "slots_status": null,
+  "recent_requests": [
     {
       "model_name": "qwen-3b",
       "payload_chars_before": 52000,
@@ -358,19 +415,80 @@ dashboard (future).
       "was_clamped": false,
       "recorded_at_secs": 1749283200
     }
-  ]
+  ],
+  "total_requests": 42
 }
 ```
 
+#### `DashboardSnapshot`
+
 | Field | Type | Description |
 |-------|------|-------------|
+| `active_connections` | array | Every currently in-flight `/v1/chat/completions` request (direct and council/virtual-model) |
+| `slots_available` | `bool` | `true` if the running llama-server's `/slots` endpoint is reachable and enabled |
+| `slots` | array | Per-slot context usage; empty unless `slots_available` is `true` |
+| `slots_status` | `string \| null` | Reason `slots` is empty (disabled via `--no-slots`, or the poller's last connect/timeout/parse error); `null` when `slots_available` |
+| `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
-| `snapshots` | array | Last ≤ 20 requests, oldest-first |
+
+#### `active_connections[]` (`ActiveConnectionSnapshot`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` (UUID) | Assigned at registration |
+| `model_name` | `string` | Model (or virtual council model) serving this connection |
+| `started_at_secs` | `u64` | Unix timestamp when registered |
+| `is_streaming` | `bool` | `true` for a streaming (SSE) request |
+| `num_ctx` | `u64 \| null` | Effective context size, when known (`null` for council virtual-model runs) |
+| `phase` | `"queued" \| "processing_prompt" \| "generating"` | Lifecycle phase |
+| `prompt_processed` | `u32 \| null` | Tokens processed so far (from the most recent prompt-progress frame) |
+| `prompt_total` | `u32 \| null` | Total prompt tokens |
+| `prompt_cached` | `u32 \| null` | Tokens served from the KV cache |
+| `prompt_time_ms` | `u64 \| null` | Wall-clock milliseconds elapsed |
+
+#### `slots[]` (`SlotSnapshot`, mirrors llama.cpp's `GET /slots`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `i64` | Slot index within the running llama-server |
+| `id_task` | `i64 \| null` | ID of the task currently occupying this slot |
+| `n_ctx` | `u64 \| null` | Context size configured for this slot |
+| `is_processing` | `bool` | Whether this slot is actively processing a request |
+| `n_past` | `u64 \| null` | Legacy tokens-in-KV-cache field (older llama.cpp versions) |
+| `cache_tokens` | `u64 \| null` | Alternate legacy field name for the same thing |
+| `next_token.n_decoded` | `u64 \| null` | Current-schema generation-progress field |
+
+`/slots`'s JSON shape varies across llama.cpp versions, so consumers should
+compute "tokens in use" via the same priority-fallback chain the proxy itself
+uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
+`next_token.n_decoded`, `None` if none are present. Context remaining is
+`n_ctx.saturating_sub(tokens_in_use())` when both are known
+(`SlotSnapshot::context_remaining()`).
+
+#### `recent_requests[]` (`ContextSnapshot`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model_name` | `string` | Model targeted by the request |
 | `payload_chars_before` | `usize` | Body size before truncation |
 | `payload_chars_after` | `usize` | Body size after truncation |
 | `messages_truncated` | `usize` | Number of messages whose content was replaced |
 | `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
 | `recorded_at_secs` | `u64` | Unix timestamp of the observation |
 
-The ring buffer retains at most 50 entries. `total_requests` grows
-monotonically regardless of evictions.
+The underlying ring buffer retains at most 50 entries; `recent_requests`
+surfaces the newest 20 of those. `total_requests` grows monotonically
+regardless of evictions.
+
+### Consuming the stream
+
+```bash
+curl -N http://localhost:8080/v1/proxy/status/stream
+```
+
+- **CLI**: `gglib proxy dashboard [--host HOST] [--port PORT]` — see
+  [`gglib-cli`](../gglib-cli/README.md#proxy-dashboard).
+- **Web GUI**: click "View Dashboard" in the Proxy control's dropdown
+  (`src/components/ProxyControl.tsx`), which opens `ProxyDashboardModal` —
+  a native browser `EventSource` connected directly to the proxy's own
+  port, independent of the app's own backend/Tauri IPC.
