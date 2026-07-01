@@ -1,0 +1,31 @@
+[package]
+name = "gglib-sse"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Generic Server-Sent Events broadcast utility shared by gglib-axum and gglib-proxy"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_sse"
+path = "src/lib.rs"
+
+[dependencies]
+# Axum SSE response types only - this crate does NOT depend on any other
+# gglib-* crate. It is a pure, reusable leaf so that both the Adapter layer
+# (gglib-axum) and the Infrastructure layer (gglib-proxy) can depend on it
+# without inverting the hexagonal layering rules enforced by
+# scripts/check_boundaries.sh.
+axum = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

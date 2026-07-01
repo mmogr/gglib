@@ -17,9 +17,18 @@ gglib-core = { path = "../gglib-core" }
 # MCP service for tool gateway
 gglib-mcp = { path = "../gglib-mcp" }
 
+# Generic SSE broadcast utility, shared with gglib-axum (no gglib-* deps of its own)
+gglib-sse = { workspace = true }
+
 # HTTP server
 axum = { workspace = true }
 tokio = { version = "1.0", features = ["full"] }
+
+# CORS middleware — the Tauri GUI's webview runs on the `tauri://localhost`
+# (and `http://tauri.localhost` on Windows) origin, which browsers treat as
+# cross-origin relative to this proxy's `127.0.0.1:<port>` origin; without
+# this, EventSource/fetch calls to the proxy are blocked by CORS.
+tower-http = { workspace = true }
 
 # HTTP client for forwarding
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }

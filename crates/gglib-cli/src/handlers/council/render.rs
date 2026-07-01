@@ -308,6 +308,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::NodeProgress { .. }
+        | CouncilEvent::DebateAgentProgress { .. }
         | CouncilEvent::SynthesisProgress { .. }
         | CouncilEvent::RunCostEstimate { .. }
         | CouncilEvent::SubteamSpawned { .. }

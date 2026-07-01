@@ -162,6 +162,17 @@ main() {
     fi
     log ""
 
+    # gglib-sse: pure leaf utility (generic SSE broadcaster). It legitimately
+    # depends on axum (for the Sse/Event response types), so it is NOT
+    # checked against DOMAIN_FORBIDDEN. It must never gain adapter-specific
+    # deps beyond that, nor depend on any other gglib-* crate.
+    SSE_FORBIDDEN=(clap tauri sqlx tower-http)
+    log "📦 gglib-sse (pure leaf - generic SSE broadcaster, no gglib-* deps)"
+    if ! check_crate_deps "gglib-sse" "${SSE_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+
     # Source-level guards: shared composition root (gglib-bootstrap) is the
     # ONLY place where the following infrastructure entry points may be
     # called from adapters. This prevents Phase 1/2/3 of #458 from regressing.

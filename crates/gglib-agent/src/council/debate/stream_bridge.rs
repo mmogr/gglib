@@ -85,11 +85,23 @@ pub async fn bridge_agent_events(
                 continue;
             }
 
+            AgentEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            } => CouncilEvent::DebateAgentProgress {
+                node_id: node_id.to_owned(),
+                agent_id: id.clone(),
+                processed,
+                total,
+                cached,
+                time_ms,
+            },
+
             // Iteration boundaries are internal to the agent loop.
-            // Progress/warning events — not part of the debate wire format.
-            AgentEvent::IterationComplete { .. }
-            | AgentEvent::PromptProgress { .. }
-            | AgentEvent::SystemWarning { .. } => continue,
+            // Warning events — not part of the debate wire format.
+            AgentEvent::IterationComplete { .. } | AgentEvent::SystemWarning { .. } => continue,
 
             // Agent-level errors are logged but don't terminate the debate.
             AgentEvent::Error { message } => {
@@ -282,5 +294,48 @@ mod tests {
 
         let answer = bridge_agent_events("node-1", &agent, 0, agent_rx, &council_tx).await;
         assert!(answer.is_none());
+    }
+
+    #[tokio::test]
+    async fn prompt_progress_forwarded_as_debate_agent_progress() {
+        // Regression test: PromptProgress used to be silently dropped here
+        // (`continue`d alongside IterationComplete/SystemWarning), which
+        // meant debate-mode requests never showed prompt-processing
+        // progress on the proxy dashboard. It must now be forwarded.
+        let agent = test_agent();
+        let (agent_tx, agent_rx) = mpsc::channel(32);
+        let (council_tx, mut council_rx) = mpsc::channel(32);
+
+        agent_tx
+            .send(AgentEvent::PromptProgress {
+                processed: 128,
+                total: 512,
+                cached: 64,
+                time_ms: 42,
+            })
+            .await
+            .unwrap();
+        agent_tx
+            .send(AgentEvent::FinalAnswer {
+                content: "done".into(),
+            })
+            .await
+            .unwrap();
+        drop(agent_tx);
+
+        bridge_agent_events("node-1", &agent, 0, agent_rx, &council_tx).await;
+
+        let event = council_rx.recv().await.unwrap();
+        assert!(matches!(
+            event,
+            CouncilEvent::DebateAgentProgress {
+                node_id,
+                agent_id,
+                processed: 128,
+                total: 512,
+                cached: 64,
+                time_ms: 42,
+            } if node_id == "node-1" && agent_id == "test-1"
+        ));
     }
 }

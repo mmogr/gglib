@@ -119,13 +119,17 @@ is forwarded to llama-server, a stateless truncation pass runs:
   (`context_length_exceeded`) rather than forwarding a prompt that would cause
   the model to fail.
 
-**Proxy telemetry** is available at `GET /v1/proxy/status`, which returns a JSON
-snapshot of the last 20 requests including before/after payload sizes and
-truncation counts. This endpoint is the shared data contract for future CLI TUI
-and web dashboard integrations.
+**Proxy dashboard** — a unified `DashboardSnapshot` of active connections,
+per-slot context usage, and recent request history — is available at
+`GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (live SSE
+updates). It's consumed by both `gglib proxy dashboard` (a live terminal
+view) and the web GUI's Proxy Dashboard modal. See
+[`gglib-proxy`'s docs](crates/gglib-proxy/README.md#proxy-dashboard) for the
+full data contract.
 
 ```bash
 curl http://localhost:9887/v1/proxy/status | jq .
+gglib proxy dashboard --port 9887
 ```
 
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)

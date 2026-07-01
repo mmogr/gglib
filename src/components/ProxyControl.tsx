@@ -1,5 +1,5 @@
 import { FC, useState, useRef } from "react";
-import { ClipboardCopy, Power, Repeat2 } from "lucide-react";
+import { ClipboardCopy, LayoutDashboard, Power, Repeat2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { useProxyState } from "../services/proxyRegistry";
@@ -10,6 +10,7 @@ import { Input } from "./ui/Input";
 import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
 import { useToastContext } from '../contexts/ToastContext';
+import { ProxyDashboardModal } from './ProxyDashboardModal';
 
 interface ProxyConfig {
   host: string;
@@ -39,6 +40,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
 
@@ -133,6 +135,15 @@ const ProxyControl: FC<ProxyControlProps> = ({
               </div>
 
               <Button
+                variant="secondary"
+                className="w-full p-sm mb-md rounded-base text-sm font-medium"
+                onClick={() => setShowDashboard(true)}
+                leftIcon={<Icon icon={LayoutDashboard} size={14} />}
+              >
+                View Dashboard
+              </Button>
+
+              <Button
                 variant="danger"
                 className="w-full p-md border-none rounded-md text-sm font-semibold cursor-pointer transition-all bg-danger text-white hover:bg-danger-hover disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={handleStop}
@@ -201,6 +212,13 @@ const ProxyControl: FC<ProxyControlProps> = ({
           )}
         </div>
       )}
+
+      <ProxyDashboardModal
+        isOpen={showDashboard}
+        onClose={() => setShowDashboard(false)}
+        host={config.host}
+        port={proxyState.port ?? config.port}
+      />
     </div>
   );
 };

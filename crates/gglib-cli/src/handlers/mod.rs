@@ -12,6 +12,7 @@
 //! Top-level handlers for commands that stand alone:
 //! - [`gui`]       — Tauri desktop GUI launcher
 //! - [`web`]       — Axum web-server GUI launcher
+//! - [`proxy_dashboard`] — live terminal view of a running proxy's dashboard stream
 
 pub mod agent_chat;
 pub mod benchmark;
@@ -24,4 +25,5 @@ pub mod inference;
 pub mod mcp_cli;
 pub mod model;
 pub mod plan;
+pub mod proxy_dashboard;
 pub mod web;

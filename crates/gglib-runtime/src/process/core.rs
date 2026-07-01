@@ -63,6 +63,19 @@ impl GuiProcessCore {
         }
 
         let port = self.resolve_port(config.port)?;
+        // TEMPORARY diagnostic for the proxy-dashboard port-mismatch bug
+        // report (gglib PR #568) — logs the configured base port alongside
+        // the port actually allocated for this spawn, so a future repro can
+        // confirm whether `--llama-port` reached this point correctly.
+        // Safe to remove once the bug is confirmed resolved or a root cause
+        // is found elsewhere.
+        tracing::info!(
+            model_id = %model_id,
+            base_port = %self.base_port,
+            requested_port = ?config.port,
+            allocated_port = %port,
+            "GuiProcessCore::spawn allocated port"
+        );
         let llama_path = Path::new(&self.llama_server_path);
         let mut child = build_and_spawn(Some(llama_path), &config, port)?;
         let pid = child

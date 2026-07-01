@@ -75,6 +75,7 @@ use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{SseEncoder, SseStreamDecoder};
 
+use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::truncation::truncate_history;
@@ -109,6 +110,46 @@ const HOP_BY_HOP_HEADERS: &[&str] = &[
 fn should_forward_header(name: &str) -> bool {
     let lower = name.to_lowercase();
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
+}
+
+/// Force-insert the streaming-only overrides every forwarded chat-completion
+/// request needs, regardless of what the client sent.
+///
+/// - `stream_options.include_usage: true` — so llama.cpp emits a final usage
+///   SSE chunk with real token counts.  The LLM Gateway extension (v1.1.0)
+///   reads `e.usage` in `dispatchParsedChunk` and reports it to VS Code via
+///   `LanguageModelDataPart("usage")`, which feeds the context window
+///   indicator and enables automatic proactive compaction before the context
+///   limit is ever reached.
+/// - `return_progress: true` — so llama.cpp emits `prompt_progress` SSE
+///   frames during the pre-fill phase (see `gglib_core::sse::parser`).
+///   Without this, the proxy dashboard's progress bar has no data to show
+///   during pre-fill and the connection appears to jump straight from 0%
+///   to "generating" on the first token.
+///
+/// Both are force-inserted (not `or_insert`) so they take effect even if the
+/// client explicitly requested them disabled — the proxy always needs this
+/// data for its own bookkeeping.
+///
+/// Safety: if the body is not a JSON object the original bytes are forwarded
+/// unchanged.  No panic paths — every operation returns an `Option`/`Result`
+/// and is handled explicitly.
+fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
+    match serde_json::from_slice::<serde_json::Value>(&body) {
+        Ok(mut value) => {
+            if let Some(obj) = value.as_object_mut() {
+                let stream_opts = obj
+                    .entry("stream_options")
+                    .or_insert_with(|| serde_json::json!({}));
+                if let serde_json::Value::Object(opts) = stream_opts {
+                    opts.insert("include_usage".to_owned(), serde_json::Value::Bool(true));
+                }
+                obj.insert("return_progress".to_owned(), serde_json::Value::Bool(true));
+            }
+            serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
+        }
+        Err(_) => body, // not JSON — forward as-is
+    }
 }
 
 /// Resolved per-request model context: capabilities for request preprocessing
@@ -325,6 +366,11 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 /// * `metrics` - Metrics store for recording per-request context snapshots
 /// * `global_inference_defaults` - Global inference defaults from settings
+/// * `connection` - RAII dashboard-registry guard for this request. Moved
+///   into the spawned streaming task for the streaming path (so it lives
+///   exactly as long as that task); held for the duration of this function
+///   for the non-streaming path. Dropping it (by any path — completion,
+///   early return, or panic) unregisters the connection from the dashboard.
 ///
 /// # Returns
 ///
@@ -341,6 +387,7 @@ pub(crate) async fn forward_chat_completion(
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
+    connection: ConnectionGuard,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -465,32 +512,10 @@ pub(crate) async fn forward_chat_completion(
         //    to assign a slot.  Once headers arrive the task streams the real
         //    response through the normalization pipeline via the same channel.
 
-        // Inject `stream_options: { include_usage: true }` so llama.cpp emits
-        // a final usage SSE chunk with real token counts.  The LLM Gateway
-        // extension (v1.1.0) reads `e.usage` in `dispatchParsedChunk` and
-        // reports it to VS Code via `LanguageModelDataPart("usage")`, which
-        // feeds the context window indicator and enables automatic proactive
-        // compaction before the context limit is ever reached.
-        //
-        // Safety: if the body is not a JSON object the original bytes are
-        // forwarded unchanged.  No panic paths — every operation returns an
-        // Option or Result and is handled explicitly.
-        let body = match serde_json::from_slice::<serde_json::Value>(&body) {
-            Ok(mut value) => {
-                if let Some(obj) = value.as_object_mut() {
-                    let stream_opts = obj
-                        .entry("stream_options")
-                        .or_insert_with(|| serde_json::json!({}));
-                    if let serde_json::Value::Object(opts) = stream_opts {
-                        // Force-insert: we always need usage data, even if
-                        // the client sent include_usage: false.
-                        opts.insert("include_usage".to_owned(), serde_json::Value::Bool(true));
-                    }
-                }
-                serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
-            }
-            Err(_) => body, // not JSON — forward as-is
-        };
+        // Inject `stream_options.include_usage` and top-level
+        // `return_progress` overrides — see `inject_streaming_body_overrides`
+        // doc comment for why each is needed.
+        let body = inject_streaming_body_overrides(body);
 
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
@@ -519,7 +544,15 @@ pub(crate) async fn forward_chat_completion(
         let model_name_owned = model_name.to_owned();
         let tags = context.tags;
 
+        // `connection` is moved into this task so it lives exactly as long
+        // as the streaming task does — dropped (unregistering from the
+        // dashboard) whether the task finishes normally, the client
+        // disconnects (the task is a detached `tokio::spawn`, but `tx` being
+        // dropped ends the response body stream, and the task itself exits
+        // once `stream_response_to_channel` observes the closed channel), or
+        // panics.
         tokio::spawn(async move {
+            let connection = connection;
             let mut keepalive_interval = tokio::time::interval(std::time::Duration::from_secs(15));
             keepalive_interval.tick().await; // skip first immediate tick
 
@@ -546,7 +579,7 @@ pub(crate) async fn forward_chat_completion(
                         status = resp.status().as_u16(),
                         "upstream accepted streaming request after slot-queue wait"
                     );
-                    stream_response_to_channel(resp, model_name_owned, tags, tx).await;
+                    stream_response_to_channel(resp, model_name_owned, tags, tx, &connection).await;
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -709,11 +742,17 @@ fn host_port_from_url(url: &str) -> String {
 /// Used by the keepalive streaming path in [`forward_chat_completion`] where
 /// the `Response` has already been returned to the client before llama.cpp
 /// assigns a slot.
+///
+/// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
+/// records them on `connection` (the dashboard registry entry for this
+/// request) as a side effect — the frame is still encoded and forwarded to
+/// the client unchanged; this never alters what the client receives.
 async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     tags: Vec<String>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    connection: &ConnectionGuard,
 ) {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
@@ -758,8 +797,19 @@ async fn stream_response_to_channel(
         async move {
             match event {
                 Ok(ev) => {
-                    if let LlmStreamEvent::NormalizationError { kind, raw } = &ev {
-                        warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
+                    match &ev {
+                        LlmStreamEvent::PromptProgress {
+                            processed,
+                            total,
+                            cached,
+                            time_ms,
+                        } => {
+                            connection.update_progress(*processed, *total, *cached, *time_ms);
+                        }
+                        LlmStreamEvent::NormalizationError { kind, raw } => {
+                            warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
+                        }
+                        _ => connection.mark_generating(),
                     }
                     encoder
                         .encode(&ev)
@@ -872,6 +922,35 @@ mod tests {
                 "request header '{header}' should be forwarded"
             );
         }
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_sets_include_usage_and_return_progress() {
+        let body = Bytes::from(r#"{"model":"foo","messages":[]}"#);
+        let out = inject_streaming_body_overrides(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+        assert_eq!(value["stream_options"]["include_usage"], true);
+        assert_eq!(value["return_progress"], true);
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_forces_include_usage_even_if_client_disabled_it() {
+        let body = Bytes::from(
+            r#"{"model":"foo","messages":[],"stream_options":{"include_usage":false}}"#,
+        );
+        let out = inject_streaming_body_overrides(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+        assert_eq!(
+            value["stream_options"]["include_usage"], true,
+            "proxy must force include_usage on regardless of client request"
+        );
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_leaves_non_json_body_unchanged() {
+        let body = Bytes::from_static(b"not json at all");
+        let out = inject_streaming_body_overrides(body.clone());
+        assert_eq!(out, body, "non-JSON bodies must pass through unchanged");
     }
 
     fn parse(b: &Bytes) -> serde_json::Value {

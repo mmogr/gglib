@@ -19,6 +19,7 @@ gglib-db = { path = "../gglib-db" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: ToolSupportDetector
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
+gglib-sse = { path = "../gglib-sse" }
 
 # Shared deps
 chrono = { workspace = true }

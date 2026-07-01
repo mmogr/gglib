@@ -116,6 +116,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question --agent <text>` | Agentic question with filesystem tools |
 | `chat history` | List past conversations with message counts |
 | `proxy` | Start the OpenAI-compatible proxy (context defaults to settings `default_context_size`) |
+| `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, and request history |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
@@ -142,6 +143,21 @@ Enable tab completion for your shell by piping the generated script into place:
 | powershell | `gglib completions powershell >> $PROFILE` |
 
 Supported shells: `bash`, `zsh`, `fish`, `elvish`, `powershell`.
+
+### Proxy Dashboard
+
+`gglib proxy dashboard` connects to an already-running proxy's `GET /v1/proxy/status/stream` SSE endpoint (see [`gglib-proxy`'s Proxy Dashboard docs](../gglib-proxy/README.md#proxy-dashboard) for the full `DashboardSnapshot` data contract) and redraws a live terminal view in place on every update — active connections (model, phase, prompt progress), per-slot context-usage gauges, and total request counts.
+
+```bash
+# In one terminal
+gglib proxy
+
+# In another
+gglib proxy dashboard
+gglib proxy dashboard --host 127.0.0.1 --port 8080
+```
+
+This is a simple redraw-in-place view (via `crossterm` cursor moves), not a full raw-mode TUI — consistent with this crate's existing terminal-handling conventions (see `handlers/model/download/interactive.rs`). Falls back to plain sequential prints on a non-TTY stdout. Press `Ctrl+C` to exit.
 
 ### Question Command
 

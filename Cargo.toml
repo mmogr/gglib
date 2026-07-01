@@ -13,6 +13,7 @@ members = [
     "crates/gglib-proxy",
     "crates/gglib-runtime",
     "crates/gglib-agent",
+    "crates/gglib-sse",
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
@@ -22,7 +23,7 @@ members = [
 
 # Shared package metadata for all workspace crates
 [workspace.package]
-version = "0.8.4"
+version = "0.8.5"
 edition = "2024"
 license = "AGPL-3.0"
 repository = "https://github.com/mmogr/gglib"
@@ -100,6 +101,7 @@ gglib-hf = { path = "crates/gglib-hf" }
 gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-agent = { path = "crates/gglib-agent" }
 gglib-runtime = { path = "crates/gglib-runtime" }
+gglib-sse = { path = "crates/gglib-sse" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }
 gglib-tauri = { path = "crates/gglib-tauri" }
