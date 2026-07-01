@@ -53,6 +53,11 @@ use serde::Deserialize;
 /// Width (in bar cells) of every progress bar drawn by this dashboard.
 const BAR_WIDTH: usize = 20;
 
+/// Fallback terminal width (columns) used when stdout isn't a TTY or
+/// `crossterm::terminal::size()` fails to report one. Matches the common
+/// default terminal width so output still looks reasonable when piped.
+const DEFAULT_TERM_WIDTH: u16 = 80;
+
 // =============================================================================
 // Local mirror of the server's JSON contract (see module docs)
 // =============================================================================
@@ -169,7 +174,16 @@ fn format_elapsed_secs(started_at_secs: u64) -> String {
 
 /// Build the full multi-line dashboard frame for one snapshot. Pure text
 /// generation — no IO — so it's testable without a terminal or network.
-fn render_frame(url: &str, snapshot: &DashboardSnapshot) -> String {
+///
+/// `term_width` bounds every rendered line to at most one physical terminal
+/// row. Without this, an unbounded string (e.g. the `/slots` unreachable
+/// reason, which can easily exceed 100 characters) wraps onto extra
+/// *physical* rows that the caller's `frame.lines().count()` bookkeeping
+/// never sees, undercounting how far to move the cursor up on the next
+/// redraw — this both corrupts the display (stale wrapped remnants left
+/// on screen, looking like truncation) and makes the whole frame drift
+/// down the terminal on every subsequent tick (visible scrolling).
+fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> String {
     let mut out = String::new();
     out.push_str(&format!("gglib proxy dashboard — {url}\n"));
     out.push_str("(Ctrl+C to exit)\n\n");
@@ -201,7 +215,10 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot) -> String {
     out.push_str("Slots (llama.cpp /slots)\n");
     if !snapshot.slots_available {
         let reason = snapshot.slots_status.as_deref().unwrap_or("unavailable");
-        out.push_str(&format!("  {reason}\n"));
+        // "  " prefix takes 2 columns — clip so the whole line fits in
+        // one physical row regardless of terminal width.
+        let max_reason_chars = usize::from(term_width.saturating_sub(2));
+        out.push_str(&format!("  {}\n", truncate(reason, max_reason_chars)));
     } else if snapshot.slots.is_empty() {
         out.push_str("  (no slots reported)\n");
     } else {
@@ -346,7 +363,13 @@ pub async fn execute(host: String, port: u16) -> Result<()> {
                         }
                     };
 
-                    let frame = render_frame(&url, &snapshot);
+                    // Re-check on every tick (not just once) so a mid-session
+                    // terminal resize is picked up rather than rendering
+                    // against a stale width.
+                    let term_width = terminal::size()
+                        .map(|(cols, _rows)| cols)
+                        .unwrap_or(DEFAULT_TERM_WIDTH);
+                    let frame = render_frame(&url, &snapshot, term_width);
                     if is_tty {
                         let mut out = stdout();
                         execute!(
@@ -465,7 +488,11 @@ mod tests {
             slots_status: Some("disabled upstream (--no-slots)".to_string()),
             total_requests: 0,
         };
-        let frame = render_frame("http://127.0.0.1:8080/v1/proxy/status/stream", &snapshot);
+        let frame = render_frame(
+            "http://127.0.0.1:8080/v1/proxy/status/stream",
+            &snapshot,
+            DEFAULT_TERM_WIDTH,
+        );
         assert!(frame.contains("(none)"));
         assert!(frame.contains("disabled upstream (--no-slots)"));
         assert!(frame.contains("Total requests served: 0"));
@@ -495,11 +522,57 @@ mod tests {
             slots_status: None,
             total_requests: 3,
         };
-        let frame = render_frame("http://127.0.0.1:8080/v1/proxy/status/stream", &snapshot);
+        let frame = render_frame(
+            "http://127.0.0.1:8080/v1/proxy/status/stream",
+            &snapshot,
+            DEFAULT_TERM_WIDTH,
+        );
         assert!(frame.contains("qwen3-30b"));
         assert!(frame.contains("prompt"));
         assert!(frame.contains("50%")); // 50/100 prompt progress
         assert!(frame.contains("slot 0"));
         assert!(frame.contains("Total requests served: 3"));
+    }
+
+    #[test]
+    fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
+        // A realistic reqwest connect-error string easily exceeds 100 chars
+        // — e.g. "error sending request for url (http://127.0.0.1:5500/slots):
+        // error trying to connect: tcp connect error: Connection refused (os
+        // error 61)". Without width-aware truncation this would wrap onto
+        // multiple physical terminal rows that `frame.lines().count()` can't
+        // see, corrupting the redraw (bugs #1 and #4).
+        let long_reason = "error sending request for url (http://127.0.0.1:5500/slots): "
+            .to_string()
+            + &"error trying to connect: tcp connect error: Connection refused ".repeat(3);
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: Some(long_reason.clone()),
+            total_requests: 0,
+        };
+        let width = 80u16;
+        let frame = render_frame(
+            "http://127.0.0.1:8080/v1/proxy/status/stream",
+            &snapshot,
+            width,
+        );
+
+        assert!(
+            long_reason.chars().count() as u16 > width,
+            "test fixture must actually exceed the terminal width"
+        );
+        for line in frame.lines() {
+            assert!(
+                line.chars().count() <= width as usize,
+                "line exceeds terminal width ({} > {width}): {line:?}",
+                line.chars().count()
+            );
+        }
+        assert!(
+            frame.contains('\u{2026}'),
+            "long reason should be truncated with an ellipsis"
+        );
     }
 }

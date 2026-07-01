@@ -112,6 +112,46 @@ fn should_forward_header(name: &str) -> bool {
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
 
+/// Force-insert the streaming-only overrides every forwarded chat-completion
+/// request needs, regardless of what the client sent.
+///
+/// - `stream_options.include_usage: true` — so llama.cpp emits a final usage
+///   SSE chunk with real token counts.  The LLM Gateway extension (v1.1.0)
+///   reads `e.usage` in `dispatchParsedChunk` and reports it to VS Code via
+///   `LanguageModelDataPart("usage")`, which feeds the context window
+///   indicator and enables automatic proactive compaction before the context
+///   limit is ever reached.
+/// - `return_progress: true` — so llama.cpp emits `prompt_progress` SSE
+///   frames during the pre-fill phase (see `gglib_core::sse::parser`).
+///   Without this, the proxy dashboard's progress bar has no data to show
+///   during pre-fill and the connection appears to jump straight from 0%
+///   to "generating" on the first token.
+///
+/// Both are force-inserted (not `or_insert`) so they take effect even if the
+/// client explicitly requested them disabled — the proxy always needs this
+/// data for its own bookkeeping.
+///
+/// Safety: if the body is not a JSON object the original bytes are forwarded
+/// unchanged.  No panic paths — every operation returns an `Option`/`Result`
+/// and is handled explicitly.
+fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
+    match serde_json::from_slice::<serde_json::Value>(&body) {
+        Ok(mut value) => {
+            if let Some(obj) = value.as_object_mut() {
+                let stream_opts = obj
+                    .entry("stream_options")
+                    .or_insert_with(|| serde_json::json!({}));
+                if let serde_json::Value::Object(opts) = stream_opts {
+                    opts.insert("include_usage".to_owned(), serde_json::Value::Bool(true));
+                }
+                obj.insert("return_progress".to_owned(), serde_json::Value::Bool(true));
+            }
+            serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
+        }
+        Err(_) => body, // not JSON — forward as-is
+    }
+}
+
 /// Resolved per-request model context: capabilities for request preprocessing
 /// and tags for response-stream parser selection.
 ///
@@ -472,32 +512,10 @@ pub(crate) async fn forward_chat_completion(
         //    to assign a slot.  Once headers arrive the task streams the real
         //    response through the normalization pipeline via the same channel.
 
-        // Inject `stream_options: { include_usage: true }` so llama.cpp emits
-        // a final usage SSE chunk with real token counts.  The LLM Gateway
-        // extension (v1.1.0) reads `e.usage` in `dispatchParsedChunk` and
-        // reports it to VS Code via `LanguageModelDataPart("usage")`, which
-        // feeds the context window indicator and enables automatic proactive
-        // compaction before the context limit is ever reached.
-        //
-        // Safety: if the body is not a JSON object the original bytes are
-        // forwarded unchanged.  No panic paths — every operation returns an
-        // Option or Result and is handled explicitly.
-        let body = match serde_json::from_slice::<serde_json::Value>(&body) {
-            Ok(mut value) => {
-                if let Some(obj) = value.as_object_mut() {
-                    let stream_opts = obj
-                        .entry("stream_options")
-                        .or_insert_with(|| serde_json::json!({}));
-                    if let serde_json::Value::Object(opts) = stream_opts {
-                        // Force-insert: we always need usage data, even if
-                        // the client sent include_usage: false.
-                        opts.insert("include_usage".to_owned(), serde_json::Value::Bool(true));
-                    }
-                }
-                serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
-            }
-            Err(_) => body, // not JSON — forward as-is
-        };
+        // Inject `stream_options.include_usage` and top-level
+        // `return_progress` overrides — see `inject_streaming_body_overrides`
+        // doc comment for why each is needed.
+        let body = inject_streaming_body_overrides(body);
 
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
@@ -904,6 +922,35 @@ mod tests {
                 "request header '{header}' should be forwarded"
             );
         }
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_sets_include_usage_and_return_progress() {
+        let body = Bytes::from(r#"{"model":"foo","messages":[]}"#);
+        let out = inject_streaming_body_overrides(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+        assert_eq!(value["stream_options"]["include_usage"], true);
+        assert_eq!(value["return_progress"], true);
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_forces_include_usage_even_if_client_disabled_it() {
+        let body = Bytes::from(
+            r#"{"model":"foo","messages":[],"stream_options":{"include_usage":false}}"#,
+        );
+        let out = inject_streaming_body_overrides(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+        assert_eq!(
+            value["stream_options"]["include_usage"], true,
+            "proxy must force include_usage on regardless of client request"
+        );
+    }
+
+    #[test]
+    fn inject_streaming_body_overrides_leaves_non_json_body_unchanged() {
+        let body = Bytes::from_static(b"not json at all");
+        let out = inject_streaming_body_overrides(body.clone());
+        assert_eq!(out, body, "non-JSON bodies must pass through unchanged");
     }
 
     fn parse(b: &Bytes) -> serde_json::Value {
