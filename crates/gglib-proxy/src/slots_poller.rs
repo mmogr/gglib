@@ -84,8 +84,10 @@ impl SlotsCache {
             .clone()
     }
 
-    /// Overwrite the cached result. Only called from the poller task.
-    fn set(&self, result: SlotsPollResult) {
+    /// Overwrite the cached result. Called from the poller task; also used
+    /// directly by `dashboard`'s unit tests to seed a known state without
+    /// spinning up the poller.
+    pub(crate) fn set(&self, result: SlotsPollResult) {
         *self.latest.lock().unwrap_or_else(|e| e.into_inner()) = result;
     }
 }

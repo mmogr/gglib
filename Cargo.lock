@@ -2189,6 +2189,7 @@ dependencies = [
  "futures-util",
  "gglib-core",
  "gglib-mcp",
+ "gglib-sse",
  "http-body-util",
  "reqwest 0.13.4",
  "serde",

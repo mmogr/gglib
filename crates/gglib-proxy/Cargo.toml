@@ -17,6 +17,9 @@ gglib-core = { path = "../gglib-core" }
 # MCP service for tool gateway
 gglib-mcp = { path = "../gglib-mcp" }
 
+# Generic SSE broadcast utility, shared with gglib-axum (no gglib-* deps of its own)
+gglib-sse = { workspace = true }
+
 # HTTP server
 axum = { workspace = true }
 tokio = { version = "1.0", features = ["full"] }

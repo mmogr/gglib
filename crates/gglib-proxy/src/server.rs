@@ -25,12 +25,14 @@ use gglib_mcp::McpService;
 
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
+use crate::dashboard::{DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
+use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -49,22 +51,12 @@ pub(crate) struct AppState {
     default_ctx: u64,
     /// Orchestrator services for virtual model routing.
     council: CouncilDeps,
-    /// Ring-buffer store of per-request context metrics, exposed via
-    /// `GET /v1/proxy/status`.
-    pub(crate) metrics: Arc<ContextMetricsStore>,
-    /// Registry of in-flight `/v1/chat/completions` connections, exposed via
-    /// the future proxy dashboard endpoint.
-    pub(crate) connections: Arc<ActiveConnectionsRegistry>,
-    /// Cache of the most recent llama.cpp `/slots` poll, refreshed by the
-    /// background poller spawned in `serve()`. Exposed via the future proxy
-    /// dashboard endpoint.
-    ///
-    /// Not read anywhere yet — the dashboard endpoint that will consume it
-    /// lands in a later phase. Wired into `AppState` now (rather than left
-    /// as a bare local in `serve()`) so the poller's cache is available to
-    /// handlers from day one with no further plumbing required.
-    #[allow(dead_code)]
-    pub(crate) slots: Arc<SlotsCache>,
+    /// Unified proxy dashboard state: active-connections registry, llama.cpp
+    /// `/slots` cache, and request metrics, plus the SSE broadcaster that
+    /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
+    /// previously three separate `AppState` fields (`metrics`, `connections`,
+    /// `slots`) — see `dashboard` module docs for the consolidation rationale.
+    pub(crate) dashboard: Arc<DashboardState>,
     /// Settings repository for loading global inference defaults per-request.
     settings_repo: Arc<dyn SettingsRepository>,
 }
@@ -127,8 +119,8 @@ pub async fn serve(
         .build()?;
 
     // Background poller for llama.cpp's native `/slots` endpoint, feeding
-    // the future proxy dashboard's context-remaining display. It runs as
-    // its own isolated Tokio task (see `slots_poller` module docs for the
+    // the proxy dashboard's context-remaining display. It runs as its own
+    // isolated Tokio task (see `slots_poller` module docs for the
     // backoff/lifecycle design) and is joined below after `axum::serve`
     // returns, so it never outlives the server or gets left detached.
     let slots_cache = Arc::new(SlotsCache::new());
@@ -139,6 +131,17 @@ pub async fn serve(
         cancel.clone(),
     );
 
+    let dashboard = Arc::new(DashboardState::new(
+        Arc::new(ActiveConnectionsRegistry::new()),
+        slots_cache,
+        Arc::new(ContextMetricsStore::new()),
+    ));
+    // Second background task: periodically recomputes and broadcasts the
+    // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
+    // (see `dashboard` module docs). Same join-on-shutdown treatment as the
+    // slots poller above.
+    let dashboard_publisher = spawn_dashboard_publisher(Arc::clone(&dashboard), cancel.clone());
+
     let state = AppState {
         client,
         runtime_port,
@@ -147,9 +150,7 @@ pub async fn serve(
         sessions: SessionManager::new(),
         default_ctx,
         council,
-        metrics: Arc::new(ContextMetricsStore::new()),
-        connections: Arc::new(ActiveConnectionsRegistry::new()),
-        slots: slots_cache,
+        dashboard,
         settings_repo,
     };
 
@@ -158,6 +159,7 @@ pub async fn serve(
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/proxy/status", get(handle_proxy_status))
+        .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .with_state(state);
 
@@ -169,11 +171,14 @@ pub async fn serve(
         .with_graceful_shutdown(cancel.cancelled_owned())
         .await?;
 
-    // Ensure the poller task is fully joined (not just cancelled-and-
-    // detached) before `serve()` returns, so callers can rely on a clean
-    // shutdown leaving no dangling tasks behind.
+    // Ensure both background tasks are fully joined (not just cancelled-
+    // and-detached) before `serve()` returns, so callers can rely on a
+    // clean shutdown leaving no dangling tasks behind.
     if let Err(e) = slots_poller.await {
         warn!("proxy dashboard: /slots poller task panicked during shutdown: {e}");
+    }
+    if let Err(e) = dashboard_publisher.await {
+        warn!("proxy dashboard: publisher task panicked during shutdown: {e}");
     }
 
     info!("Proxy server shut down");
@@ -227,18 +232,27 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-/// Return a snapshot of recent proxy request metrics.
+/// Return the unified proxy dashboard snapshot: active connections,
+/// llama.cpp `/slots` state, and recent request metrics.
 ///
-/// Responds with the last 20 request snapshots and the total request count
-/// since the proxy started.  This is the shared data contract for the CLI
-/// TUI and web dashboard.
+/// This is the shared data contract for the CLI TUI and web dashboard.
+/// Fully replaces the old `{snapshots, total_requests}` shape — see the
+/// `dashboard` module docs for why no backwards-compatible shim is kept.
 async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse {
-    let snapshots = state.metrics.recent(20);
-    let total_requests = state.metrics.total_requests();
-    Json(serde_json::json!({
-        "snapshots": snapshots,
-        "total_requests": total_requests,
-    }))
+    Json(state.dashboard.snapshot())
+}
+
+/// Subscribe to a live stream of [`crate::dashboard::DashboardSnapshot`]
+/// updates via Server-Sent Events.
+///
+/// Uses hydrate-then-stream semantics (via [`gglib_sse::Broadcaster`]): the
+/// client immediately receives one event carrying the current snapshot,
+/// then a fresh snapshot on every subsequent publish tick — no waiting for
+/// the next tick to see the current state.
+async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoResponse {
+    let current = state.dashboard.snapshot();
+    Arc::clone(&state.dashboard.broadcaster)
+        .subscribe_with_hydration(current, SseOptions::default())
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
@@ -281,7 +295,13 @@ async fn chat_completions(
 
     // Intercept virtual council model names before forwarding.
     if VIRTUAL_MODELS.contains(&model_name.as_str()) {
-        return handle_virtual_model(&state.council, &state.connections, &model_name, &body).await;
+        return handle_virtual_model(
+            &state.council,
+            &state.dashboard.connections,
+            &model_name,
+            &body,
+        )
+        .await;
     }
 
     // Ensure the model is running with specified context or default
@@ -309,10 +329,11 @@ async fn chat_completions(
     // The returned guard unregisters on drop (see `connections` module docs)
     // — normal completion, early return, client disconnect, or panic all
     // clean up without any explicit unregister call at each exit point.
-    let connection =
-        state
-            .connections
-            .register(model_name.clone(), is_streaming, Some(target.effective_ctx));
+    let connection = state.dashboard.connections.register(
+        model_name.clone(),
+        is_streaming,
+        Some(target.effective_ctx),
+    );
 
     // Load global inference defaults for this request.
     let global_inference_defaults = state
@@ -335,7 +356,7 @@ async fn chat_completions(
         is_streaming,
         &model_name,
         state.catalog_port.clone(),
-        state.metrics.clone(),
+        state.dashboard.metrics.clone(),
         global_inference_defaults,
         connection,
     )
@@ -393,7 +414,7 @@ async fn chat_completions(
             // Fresh connection for the retried attempt — the original guard
             // (moved into the first `forward_chat_completion` call above)
             // was already dropped when that call returned `UpstreamDead`.
-            let retry_connection = state.connections.register(
+            let retry_connection = state.dashboard.connections.register(
                 model_name.clone(),
                 is_streaming,
                 Some(new_target.effective_ctx),
@@ -407,7 +428,7 @@ async fn chat_completions(
                 is_streaming,
                 &model_name,
                 state.catalog_port.clone(),
-                state.metrics.clone(),
+                state.dashboard.metrics.clone(),
                 retry_defaults,
                 retry_connection,
             )

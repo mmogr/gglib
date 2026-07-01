@@ -112,8 +112,15 @@ impl SlotSnapshot {
 /// Outcome of one `GET /slots` poll attempt. Always a displayable,
 /// non-fatal state — this type is constructed by [`fetch_slots`], which
 /// never panics regardless of what llama-server sends back.
+///
+/// Deliberately *not* `#[serde(tag = "...")]` (internally tagged): serde
+/// cannot inject a tag key into the `Available` variant's payload because
+/// it serializes as a JSON array (`Vec<SlotSnapshot>`), not an object —
+/// internally-tagged newtype variants require map-shaped content, so that
+/// representation fails at runtime for this enum. Callers that need a
+/// stable JSON contract (e.g. [`crate::dashboard::DashboardSnapshot`])
+/// flatten this enum into plain fields instead of serializing it directly.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
 pub enum SlotsPollResult {
     /// The endpoint responded with a well-formed slots array.
     Available(Vec<SlotSnapshot>),
