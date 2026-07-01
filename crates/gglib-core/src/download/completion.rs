@@ -265,6 +265,28 @@ mod tests {
     }
 
     #[test]
+    fn test_completion_key_display_variants() {
+        // UrlFile displays the filename
+        let url_key = CompletionKey::UrlFile {
+            url: "https://example.com/model.gguf".to_string(),
+            filename: "model.gguf".to_string(),
+        };
+        assert_eq!(url_key.to_string(), "model.gguf");
+
+        // LocalFile with slash — shows only the basename
+        let local_key = CompletionKey::LocalFile {
+            path: "/home/user/models/llama-3.Q4_K_M.gguf".to_string(),
+        };
+        assert_eq!(local_key.to_string(), "llama-3.Q4_K_M.gguf");
+
+        // LocalFile without slash — falls back to full path
+        let local_no_slash = CompletionKey::LocalFile {
+            path: "model.gguf".to_string(),
+        };
+        assert_eq!(local_no_slash.to_string(), "model.gguf");
+    }
+
+    #[test]
     fn test_completion_key_hash_dedup() {
         use std::collections::HashSet;
         use std::hash::{Hash, Hasher};
