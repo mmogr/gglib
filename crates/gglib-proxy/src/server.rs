@@ -16,6 +16,7 @@ use bytes::Bytes;
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{
@@ -161,6 +162,21 @@ pub async fn serve(
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
+        // Permissive CORS: this proxy only ever binds to 127.0.0.1 for local
+        // developer use (CLI or the Tauri GUI) and strips `Authorization`
+        // before forwarding upstream (see `forward.rs`), so there's no
+        // credentialed session to protect and no benefit to restricting
+        // origins — same rationale as `CorsConfig::AllowAll` in gglib-axum.
+        // Without this, browser-based clients (notably the Tauri webview,
+        // which runs on the `tauri://localhost` / `http://tauri.localhost`
+        // origin) are blocked from calling this proxy's endpoints, including
+        // the `EventSource` connection to `/v1/proxy/status/stream`.
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .with_state(state);
 
     info!("Proxy listening on {addr}");
