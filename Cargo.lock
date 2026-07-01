@@ -2035,6 +2035,7 @@ dependencies = [
  "console 0.16.3",
  "crossterm",
  "dotenvy",
+ "futures-util",
  "gglib-agent",
  "gglib-app-services",
  "gglib-axum",

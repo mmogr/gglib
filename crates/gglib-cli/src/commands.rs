@@ -145,6 +145,24 @@ pub enum ChatCommand {
     },
 }
 
+/// Subcommands available under `gglib proxy`.
+#[derive(Subcommand)]
+pub enum ProxyCommand {
+    /// Show a live terminal dashboard for an already-running proxy
+    ///
+    /// Connects to `GET /v1/proxy/status/stream` on the target proxy and
+    /// redraws active connections, llama.cpp `/slots` context usage, and
+    /// the running request count in place until Ctrl+C is pressed.
+    Dashboard {
+        /// Host of the already-running proxy to connect to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Port of the already-running proxy to connect to
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+    },
+}
+
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
 pub enum Commands {
@@ -442,5 +460,8 @@ pub enum Commands {
         /// Set `0.0` to disable (recommended by Qwen3).
         #[arg(long)]
         min_p: Option<f32>,
+        /// Subcommand (e.g. `dashboard`)
+        #[command(subcommand)]
+        command: Option<ProxyCommand>,
     },
 }

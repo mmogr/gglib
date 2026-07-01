@@ -263,7 +263,22 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             repeat_penalty,
             presence_penalty,
             min_p,
+            command,
         } => {
+            // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
+            // connects to an already-running proxy rather than starting one.
+            if let Some(sub) = command {
+                match sub {
+                    crate::commands::ProxyCommand::Dashboard {
+                        host: dash_host,
+                        port: dash_port,
+                    } => {
+                        handlers::proxy_dashboard::execute(dash_host, dash_port).await?;
+                    }
+                }
+                return Ok(());
+            }
+
             let settings = ctx.app.settings().get().await?;
             let context_resolution = resolve_context_size(ContextInput {
                 flag: default_context,
