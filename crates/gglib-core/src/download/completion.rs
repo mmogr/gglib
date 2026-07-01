@@ -265,6 +265,59 @@ mod tests {
     }
 
     #[test]
+    fn test_completion_key_hash_dedup() {
+        use std::collections::HashSet;
+        use std::hash::{Hash, Hasher};
+
+        let key1 = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        let key2 = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+
+        // Identical keys must be equal
+        assert_eq!(key1, key2);
+
+        // Identical keys must produce the same hash
+        let mut h1 = std::collections::hash_map::DefaultHasher::new();
+        let mut h2 = std::collections::hash_map::DefaultHasher::new();
+        key1.hash(&mut h1);
+        key2.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+
+        // Insert duplicates into HashSet — should collapse to 1
+        let mut set = HashSet::new();
+        set.insert(key1);
+        set.insert(key2.clone());
+        assert_eq!(set.len(), 1);
+
+        // Keys differing in revision are NOT equal (different revisions = distinct artifacts)
+        let key_diff_revision = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "v2.0".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        assert_ne!(key2, key_diff_revision);
+
+        // Keys differing in filename_canon are NOT equal (different files = distinct)
+        let key_diff_filename = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model-q8.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        assert_ne!(key2, key_diff_filename);
+    }
+
+    #[test]
     fn test_attempt_counts() {
         let mut counts = AttemptCounts::from_kind(CompletionKind::Downloaded);
         assert_eq!(counts.downloaded, 1);
