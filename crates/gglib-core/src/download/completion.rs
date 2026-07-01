@@ -314,7 +314,7 @@ mod tests {
         // Verify "quantization" key is ABSENT when None (not null)
         let value: serde_json::Value = serde_json::from_str(&json_no_quant).unwrap();
         assert!(
-            !value.get("quantization").is_some(),
+            value.get("quantization").is_none(),
             "quantization key should be absent when None, not present as null"
         );
 
@@ -352,10 +352,7 @@ mod tests {
             let json = serde_json::to_string(&kind).unwrap();
             assert!(
                 json.contains(expected_wire),
-                "Expected CompletionKind {:?} to serialize to snake_case '{}', got: {}",
-                kind,
-                expected_wire,
-                json
+                "Expected CompletionKind {kind:?} to serialize to snake_case '{expected_wire}', got: {json}"
             );
             let parsed: CompletionKind = serde_json::from_str(&json).unwrap();
             assert_eq!(parsed, kind);
@@ -471,7 +468,10 @@ mod tests {
         };
         let mut counts = before;
         counts.increment(CompletionKind::AlreadyPresent);
-        assert_eq!(counts, before, "increment(AlreadyPresent) should be a no-op");
+        assert_eq!(
+            counts, before,
+            "increment(AlreadyPresent) should be a no-op"
+        );
     }
 
     #[test]
@@ -493,10 +493,10 @@ mod tests {
         counts.increment(CompletionKind::Downloaded);
 
         let detail = CompletionDetail {
-            key: key.clone(),
+            key,
             display_name: "unsloth/llama-3-gguf (Q4_K_M)".to_string(),
             last_result: CompletionKind::Downloaded,
-            last_completed_at_ms: 1700000000000,
+            last_completed_at_ms: 1_700_000_000_000,
             download_ids: vec![id1.clone(), id2.clone()],
             attempt_counts: counts,
         };
@@ -505,8 +505,7 @@ mod tests {
         let json = serde_json::to_string(&detail).expect("should serialize");
 
         // Deserialize back
-        let restored: CompletionDetail =
-            serde_json::from_str(&json).expect("should deserialize");
+        let restored: CompletionDetail = serde_json::from_str(&json).expect("should deserialize");
 
         // Full equality — all fields must match exactly
         assert_eq!(detail, restored);
@@ -520,8 +519,7 @@ mod tests {
         assert_eq!(restored.attempt_counts.total(), 2);
 
         // Verify the JSON contains expected keys (wire-shape sanity)
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("should parse as Value");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("should parse as Value");
         assert!(value.get("download_ids").is_some());
         assert!(value.get("attempt_counts").is_some());
         assert!(value.get("key").is_some());
@@ -622,7 +620,11 @@ mod tests {
             unique_models_downloaded: 3,
             unique_models_failed: 0,
             unique_models_cancelled: 0,
-            items: vec![single_attempt_detail.clone(), retried_detail.clone(), single_attempt_detail],
+            items: vec![
+                single_attempt_detail.clone(),
+                retried_detail.clone(),
+                single_attempt_detail,
+            ],
             truncated: false,
         };
         assert!(
