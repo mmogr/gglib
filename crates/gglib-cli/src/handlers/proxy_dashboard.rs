@@ -115,6 +115,10 @@ struct SlotSnapshot {
     #[serde(default)]
     cache_tokens: Option<u64>,
     #[serde(default)]
+    n_prompt_tokens: Option<u64>,
+    #[serde(default)]
+    n_prompt_tokens_processed: Option<u64>,
+    #[serde(default)]
     next_token: Option<NextTokenField>,
 }
 
@@ -150,14 +154,23 @@ impl NextTokenField {
 }
 
 impl SlotSnapshot {
-    /// Same priority-fallback chain as the server's `SlotSnapshot::tokens_in_use`.
+    /// Same additive logic as the server's `SlotSnapshot::tokens_in_use`:
+    /// prefer `n_prompt_tokens_processed` (else `n_prompt_tokens`) plus
+    /// `next_token.n_decoded`; only fall back to the legacy `n_past`/
+    /// `cache_tokens` chain (no addition) when neither prompt-side field
+    /// is present.
     fn tokens_in_use(&self) -> Option<u64> {
-        self.n_past.or(self.cache_tokens).or_else(|| {
-            self.next_token
-                .as_ref()
-                .and_then(NextTokenField::primary)
-                .and_then(|nt| nt.n_decoded)
-        })
+        let n_decoded = self
+            .next_token
+            .as_ref()
+            .and_then(NextTokenField::primary)
+            .and_then(|nt| nt.n_decoded);
+
+        if let Some(prompt_tokens) = self.n_prompt_tokens_processed.or(self.n_prompt_tokens) {
+            return Some(prompt_tokens + n_decoded.unwrap_or(0));
+        }
+
+        self.n_past.or(self.cache_tokens).or(n_decoded)
     }
 }
 
@@ -545,6 +558,8 @@ mod tests {
                 n_ctx: Some(4096),
                 n_past: Some(2048),
                 cache_tokens: None,
+                n_prompt_tokens: None,
+                n_prompt_tokens_processed: None,
                 next_token: None,
             }],
             slots_status: None,
@@ -575,6 +590,25 @@ mod tests {
         }"#;
         let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse MTP shape");
         assert_eq!(slot.tokens_in_use(), Some(89));
+    }
+
+    #[test]
+    fn slot_snapshot_tokens_in_use_is_additive_with_prompt_tokens() {
+        // Real payload shape: n_prompt_tokens_processed (prompt usage) and
+        // next_token.n_decoded (generated tokens) must be summed, not just
+        // read as n_decoded alone (which previously showed ~0% used for a
+        // 20k+-token prompt).
+        let json = r#"{
+            "id": 3,
+            "n_ctx": 131072,
+            "n_prompt_tokens": 20994,
+            "n_prompt_tokens_processed": 20906,
+            "next_token": [
+                { "n_decoded": 89 }
+            ]
+        }"#;
+        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse");
+        assert_eq!(slot.tokens_in_use(), Some(20906 + 89));
     }
 
     #[test]

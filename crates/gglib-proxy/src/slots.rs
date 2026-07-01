@@ -9,7 +9,8 @@
 //!
 //! The `/slots` JSON shape is not stable across llama.cpp versions (older
 //! builds exposed a flat `n_past` field; the current upstream schema
-//! nests generation-progress info under `next_token` and drops `n_past`
+//! reports prompt usage via `n_prompt_tokens`/`n_prompt_tokens_processed`
+//! and nests generation progress under `next_token`, dropping `n_past`
 //! entirely; builds with Multi-Token Prediction, aka "draft-mtp", send
 //! `next_token` as an **array** of objects instead of a single object).
 //! Rather than accepting an untyped [`serde_json::Value`] and probing it
@@ -91,17 +92,30 @@ pub struct SlotSnapshot {
     #[serde(default)]
     pub is_processing: bool,
     /// Legacy field (older llama.cpp versions): tokens already resident in
-    /// this slot's KV cache. Superseded by `next_token` in current upstream
-    /// versions, where it is simply absent — kept only as a best-effort
-    /// fallback, see [`Self::tokens_in_use`].
+    /// this slot's KV cache. Superseded by `n_prompt_tokens`/`next_token` in
+    /// current upstream versions, where it is simply absent — kept only as
+    /// a best-effort fallback, see [`Self::tokens_in_use`].
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_past: Option<u64>,
     /// Alternate legacy field name seen in some intermediate llama.cpp
     /// builds; same role as `n_past`.
     #[serde(default, deserialize_with = "tolerant_u64")]
     cache_tokens: Option<u64>,
+    /// Current-schema field: total token count of the prompt currently
+    /// loaded into this slot (the "prompt half" of context usage, as
+    /// opposed to `next_token.n_decoded`'s generated-token count).
+    #[serde(default, deserialize_with = "tolerant_u64")]
+    n_prompt_tokens: Option<u64>,
+    /// Current-schema field: how many of `n_prompt_tokens` have actually
+    /// been processed (prefilled) so far. Preferred over `n_prompt_tokens`
+    /// itself when present, since it tracks real progress during an
+    /// in-flight prefill rather than the eventual total.
+    #[serde(default, deserialize_with = "tolerant_u64")]
+    n_prompt_tokens_processed: Option<u64>,
     /// Current-schema nested object carrying generation progress. We only
-    /// need `n_decoded` out of it, as a last-resort usage signal.
+    /// need `n_decoded` out of it — the count of tokens generated so far,
+    /// which is additive with `n_prompt_tokens(_processed)` to get total
+    /// context usage, see [`Self::tokens_in_use`].
     ///
     /// On llama.cpp builds with Multi-Token Prediction ("draft-mtp")
     /// enabled, upstream sends this as a JSON **array** of objects (one per
@@ -154,18 +168,37 @@ impl NextTokenField {
 impl SlotSnapshot {
     /// Best-effort count of tokens currently occupying this slot's context.
     ///
-    /// Tries, in priority order: `n_past`, then `cache_tokens`, then
-    /// `next_token.n_decoded` (via [`NextTokenField::primary`]). Returns
-    /// `None` if the running llama-server version exposes none of them
-    /// (shown as "unknown" by consumers, never treated as zero).
+    /// Current-schema builds report prompt usage and generation progress as
+    /// two separate counters — `n_prompt_tokens(_processed)` and
+    /// `next_token.n_decoded` — which must be **added together** to get the
+    /// true total (a 20k-token prompt with 89 tokens generated so far is
+    /// ~20k tokens in use, not 89). When either prompt-side field is
+    /// present, `n_prompt_tokens_processed` is preferred over
+    /// `n_prompt_tokens` (it tracks real progress mid-prefill rather than
+    /// the eventual total), and `next_token.n_decoded` is added on top
+    /// (defaulting to 0 if generation hasn't started yet).
+    ///
+    /// Only when **neither** prompt-side field is present (older
+    /// llama-server versions, which never report them alongside
+    /// `next_token`) does this fall back to the legacy, non-additive chain:
+    /// `n_past`, then `cache_tokens`, then `next_token.n_decoded` alone.
+    ///
+    /// Returns `None` if the running llama-server version exposes none of
+    /// these fields (shown as "unknown" by consumers, never treated as
+    /// zero).
     #[must_use]
     pub fn tokens_in_use(&self) -> Option<u64> {
-        self.n_past.or(self.cache_tokens).or_else(|| {
-            self.next_token
-                .as_ref()
-                .and_then(NextTokenField::primary)
-                .and_then(|nt| nt.n_decoded)
-        })
+        let n_decoded = self
+            .next_token
+            .as_ref()
+            .and_then(NextTokenField::primary)
+            .and_then(|nt| nt.n_decoded);
+
+        if let Some(prompt_tokens) = self.n_prompt_tokens_processed.or(self.n_prompt_tokens) {
+            return Some(prompt_tokens + n_decoded.unwrap_or(0));
+        }
+
+        self.n_past.or(self.cache_tokens).or(n_decoded)
     }
 
     /// Remaining context budget for this slot (`n_ctx - tokens_in_use`).
@@ -404,6 +437,12 @@ mod tests {
     /// Exact (trimmed) payload shape reported from a live llama.cpp
     /// `8c146a8` build with Multi-Token Prediction ("draft-mtp") enabled:
     /// `next_token` is a single-element array, not a bare object.
+    ///
+    /// `tokens_in_use()` must be `n_prompt_tokens_processed + n_decoded`
+    /// (20906 + 89 = 20995), NOT just `n_decoded` (89) — a prior version of
+    /// this test asserted `Some(89)`, which enshrined the real bug reported
+    /// against this exact payload: a 20k+-token prompt showing as ~0% used
+    /// because only the generated-token count was read.
     #[test]
     fn parses_mtp_array_next_token_schema() {
         let body = r#"[{
@@ -423,8 +462,62 @@ mod tests {
         };
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].n_ctx, Some(131072));
-        assert_eq!(slots[0].tokens_in_use(), Some(89));
-        assert_eq!(slots[0].context_remaining(), Some(131072 - 89));
+        assert_eq!(slots[0].tokens_in_use(), Some(20906 + 89));
+        assert_eq!(slots[0].context_remaining(), Some(131072 - (20906 + 89)));
+    }
+
+    #[test]
+    fn n_prompt_tokens_processed_takes_priority_over_n_prompt_tokens() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 1000,
+            "is_processing": true,
+            "n_prompt_tokens": 500,
+            "n_prompt_tokens_processed": 300,
+            "next_token": [{ "n_decoded": 10 }]
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(
+            slots[0].tokens_in_use(),
+            Some(310),
+            "should prefer n_prompt_tokens_processed (300) over n_prompt_tokens (500), plus n_decoded"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_n_prompt_tokens_when_processed_absent() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 1000,
+            "is_processing": true,
+            "n_prompt_tokens": 500,
+            "next_token": [{ "n_decoded": 10 }]
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(slots[0].tokens_in_use(), Some(510));
+    }
+
+    #[test]
+    fn prompt_tokens_present_but_generation_not_started_yet() {
+        let body = r#"[{
+            "id": 0,
+            "n_ctx": 1000,
+            "is_processing": true,
+            "n_prompt_tokens": 500,
+            "n_prompt_tokens_processed": 250
+        }]"#;
+        let SlotsPollResult::Available(slots) = parse_slots_response(StatusCode::OK, body) else {
+            panic!("expected Available");
+        };
+        assert_eq!(
+            slots[0].tokens_in_use(),
+            Some(250),
+            "no next_token yet: n_decoded contribution should default to 0"
+        );
     }
 
     #[test]
