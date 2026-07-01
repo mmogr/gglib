@@ -418,6 +418,22 @@ pub enum CouncilEvent {
         delta: String,
     },
 
+    /// Prompt-processing progress during a debating agent's LLM pre-fill phase.
+    DebateAgentProgress {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// Tokens processed so far.
+        processed: u32,
+        /// Total tokens in the prompt.
+        total: u32,
+        /// Tokens served from the KV cache.
+        cached: u32,
+        /// Wall-clock time elapsed in milliseconds.
+        time_ms: u64,
+    },
+
     /// A debating agent has initiated a tool call.
     DebateAgentToolCallStart {
         /// The id of the `Debate` node.

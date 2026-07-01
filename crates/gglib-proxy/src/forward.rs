@@ -75,6 +75,7 @@ use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{SseEncoder, SseStreamDecoder};
 
+use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::truncation::truncate_history;
@@ -325,6 +326,11 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 /// * `metrics` - Metrics store for recording per-request context snapshots
 /// * `global_inference_defaults` - Global inference defaults from settings
+/// * `connection` - RAII dashboard-registry guard for this request. Moved
+///   into the spawned streaming task for the streaming path (so it lives
+///   exactly as long as that task); held for the duration of this function
+///   for the non-streaming path. Dropping it (by any path — completion,
+///   early return, or panic) unregisters the connection from the dashboard.
 ///
 /// # Returns
 ///
@@ -341,6 +347,7 @@ pub(crate) async fn forward_chat_completion(
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
+    connection: ConnectionGuard,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -519,7 +526,15 @@ pub(crate) async fn forward_chat_completion(
         let model_name_owned = model_name.to_owned();
         let tags = context.tags;
 
+        // `connection` is moved into this task so it lives exactly as long
+        // as the streaming task does — dropped (unregistering from the
+        // dashboard) whether the task finishes normally, the client
+        // disconnects (the task is a detached `tokio::spawn`, but `tx` being
+        // dropped ends the response body stream, and the task itself exits
+        // once `stream_response_to_channel` observes the closed channel), or
+        // panics.
         tokio::spawn(async move {
+            let connection = connection;
             let mut keepalive_interval = tokio::time::interval(std::time::Duration::from_secs(15));
             keepalive_interval.tick().await; // skip first immediate tick
 
@@ -546,7 +561,7 @@ pub(crate) async fn forward_chat_completion(
                         status = resp.status().as_u16(),
                         "upstream accepted streaming request after slot-queue wait"
                     );
-                    stream_response_to_channel(resp, model_name_owned, tags, tx).await;
+                    stream_response_to_channel(resp, model_name_owned, tags, tx, &connection).await;
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -709,11 +724,17 @@ fn host_port_from_url(url: &str) -> String {
 /// Used by the keepalive streaming path in [`forward_chat_completion`] where
 /// the `Response` has already been returned to the client before llama.cpp
 /// assigns a slot.
+///
+/// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
+/// records them on `connection` (the dashboard registry entry for this
+/// request) as a side effect — the frame is still encoded and forwarded to
+/// the client unchanged; this never alters what the client receives.
 async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     tags: Vec<String>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    connection: &ConnectionGuard,
 ) {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
@@ -758,8 +779,19 @@ async fn stream_response_to_channel(
         async move {
             match event {
                 Ok(ev) => {
-                    if let LlmStreamEvent::NormalizationError { kind, raw } = &ev {
-                        warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
+                    match &ev {
+                        LlmStreamEvent::PromptProgress {
+                            processed,
+                            total,
+                            cached,
+                            time_ms,
+                        } => {
+                            connection.update_progress(*processed, *total, *cached, *time_ms);
+                        }
+                        LlmStreamEvent::NormalizationError { kind, raw } => {
+                            warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
+                        }
+                        _ => connection.mark_generating(),
                     }
                     encoder
                         .encode(&ev)

@@ -23,6 +23,7 @@ use gglib_core::ports::{
 };
 use gglib_mcp::McpService;
 
+use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
@@ -50,6 +51,9 @@ pub(crate) struct AppState {
     /// Ring-buffer store of per-request context metrics, exposed via
     /// `GET /v1/proxy/status`.
     pub(crate) metrics: Arc<ContextMetricsStore>,
+    /// Registry of in-flight `/v1/chat/completions` connections, exposed via
+    /// the future proxy dashboard endpoint.
+    pub(crate) connections: Arc<ActiveConnectionsRegistry>,
     /// Settings repository for loading global inference defaults per-request.
     settings_repo: Arc<dyn SettingsRepository>,
 }
@@ -120,6 +124,7 @@ pub async fn serve(
         default_ctx,
         council,
         metrics: Arc::new(ContextMetricsStore::new()),
+        connections: Arc::new(ActiveConnectionsRegistry::new()),
         settings_repo,
     };
 
@@ -244,7 +249,7 @@ async fn chat_completions(
 
     // Intercept virtual council model names before forwarding.
     if VIRTUAL_MODELS.contains(&model_name.as_str()) {
-        return handle_virtual_model(&state.council, &model_name, &body).await;
+        return handle_virtual_model(&state.council, &state.connections, &model_name, &body).await;
     }
 
     // Ensure the model is running with specified context or default
@@ -267,6 +272,15 @@ async fn chat_completions(
         model_name = %target.model_name,
         "Routing to llama-server"
     );
+
+    // Register this request in the active-connections dashboard registry.
+    // The returned guard unregisters on drop (see `connections` module docs)
+    // — normal completion, early return, client disconnect, or panic all
+    // clean up without any explicit unregister call at each exit point.
+    let connection =
+        state
+            .connections
+            .register(model_name.clone(), is_streaming, Some(target.effective_ctx));
 
     // Load global inference defaults for this request.
     let global_inference_defaults = state
@@ -291,6 +305,7 @@ async fn chat_completions(
         state.catalog_port.clone(),
         state.metrics.clone(),
         global_inference_defaults,
+        connection,
     )
     .await
     {
@@ -343,6 +358,15 @@ async fn chat_completions(
                 .ok()
                 .and_then(|s| s.inference_defaults);
 
+            // Fresh connection for the retried attempt — the original guard
+            // (moved into the first `forward_chat_completion` call above)
+            // was already dropped when that call returned `UpstreamDead`.
+            let retry_connection = state.connections.register(
+                model_name.clone(),
+                is_streaming,
+                Some(new_target.effective_ctx),
+            );
+
             match forward_chat_completion(
                 &state.client,
                 &retry_url,
@@ -353,6 +377,7 @@ async fn chat_completions(
                 state.catalog_port.clone(),
                 state.metrics.clone(),
                 retry_defaults,
+                retry_connection,
             )
             .await
             {

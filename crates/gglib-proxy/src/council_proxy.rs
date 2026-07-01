@@ -61,6 +61,7 @@ use gglib_core::domain::council::run::CouncilRunStatus;
 use gglib_core::domain::council::task_graph::{HitlMode, NodeStatus, TaskGraph};
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 
+use crate::connections::{ActiveConnectionsRegistry, ConnectionGuard};
 use crate::models::{ChatChunkChoice, ChatCompletionChunk, ChatDelta, ErrorResponse, ModelInfo};
 
 // =============================================================================
@@ -183,13 +184,14 @@ pub(crate) struct MessageSlice {
 /// identifies a virtual model name.
 pub(crate) async fn handle_virtual_model(
     deps: &CouncilDeps,
+    connections: &Arc<ActiveConnectionsRegistry>,
     model_name: &str,
     body: &Bytes,
 ) -> Response {
     match model_name {
         VIRTUAL_MODEL_NATIVE => handle_native_mode(),
         VIRTUAL_MODEL_AUTO => match serde_json::from_slice::<OrchestratorRequest>(body) {
-            Ok(req) => handle_auto_mode(deps, req).await,
+            Ok(req) => handle_auto_mode(deps, connections, req).await,
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 axum::Json(ErrorResponse::new(
@@ -200,7 +202,7 @@ pub(crate) async fn handle_virtual_model(
                 .into_response(),
         },
         VIRTUAL_MODEL_INTERACTIVE => match serde_json::from_slice::<OrchestratorRequest>(body) {
-            Ok(req) => handle_interactive_mode(deps, req).await,
+            Ok(req) => handle_interactive_mode(deps, connections, req).await,
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 axum::Json(ErrorResponse::new(
@@ -241,7 +243,11 @@ fn handle_native_mode() -> Response {
 // Auto mode  (HitlMode::None)
 // =============================================================================
 
-async fn handle_auto_mode(deps: &CouncilDeps, req: OrchestratorRequest) -> Response {
+async fn handle_auto_mode(
+    deps: &CouncilDeps,
+    connections: &Arc<ActiveConnectionsRegistry>,
+    req: OrchestratorRequest,
+) -> Response {
     let goal = match extract_last_user_message(&req.messages) {
         Some(g) => g,
         None => {
@@ -278,17 +284,24 @@ async fn handle_auto_mode(deps: &CouncilDeps, req: OrchestratorRequest) -> Respo
         }
     });
 
-    build_sse_stream(rx, cancel, req.model, false, None)
+    // Orchestrator runs span many models/nodes rather than a single
+    // llama-server context, so `num_ctx` is not applicable here.
+    let connection = connections.register(req.model.clone(), true, None);
+    build_sse_stream(rx, cancel, req.model, false, None, connection)
 }
 
 // =============================================================================
 // Interactive mode  (HitlMode::ApprovePlan)
 // =============================================================================
 
-async fn handle_interactive_mode(deps: &CouncilDeps, req: OrchestratorRequest) -> Response {
+async fn handle_interactive_mode(
+    deps: &CouncilDeps,
+    connections: &Arc<ActiveConnectionsRegistry>,
+    req: OrchestratorRequest,
+) -> Response {
     // --- Check for a sentinel in the previous assistant turn ---
     if let Some((run_id, approval_id)) = extract_sentinel(&req.messages) {
-        return resume_interactive_run(deps, req, run_id, approval_id).await;
+        return resume_interactive_run(deps, connections, req, run_id, approval_id).await;
     }
 
     // --- First turn: start a new plan-approval run ---
@@ -330,11 +343,13 @@ async fn handle_interactive_mode(deps: &CouncilDeps, req: OrchestratorRequest) -
         }
     });
 
-    build_sse_stream(rx, cancel, req.model, true, Some(run_id))
+    let connection = connections.register(req.model.clone(), true, None);
+    build_sse_stream(rx, cancel, req.model, true, Some(run_id), connection)
 }
 
 async fn resume_interactive_run(
     deps: &CouncilDeps,
+    connections: &Arc<ActiveConnectionsRegistry>,
     req: OrchestratorRequest,
     run_id: String,
     _approval_id: String,
@@ -444,7 +459,8 @@ async fn resume_interactive_run(
                 }
             });
 
-            build_sse_stream(rx, cancel, req.model, false, None)
+            let connection = connections.register(req.model.clone(), true, None);
+            build_sse_stream(rx, cancel, req.model, false, None, connection)
         }
     }
 }
@@ -457,17 +473,27 @@ async fn resume_interactive_run(
 ///
 /// `interactive` — when `true`, the stream terminates on [`CouncilEvent::AwaitingApproval`]
 /// and embeds a sentinel so the next turn can resume the run.
+///
+/// `connection` is the dashboard-registry guard for this request; it is
+/// moved into the stream generator so it lives exactly as long as the SSE
+/// response does, and is dropped (unregistering the connection) whether the
+/// stream ends normally, the client disconnects mid-stream, or the task
+/// panics. [`CouncilEvent::NodeProgress`] and [`CouncilEvent::DebateAgentProgress`]
+/// frames update its prompt-processing fields; any other event that yields
+/// visible markdown content marks it as generating.
 fn build_sse_stream(
     rx: mpsc::Receiver<CouncilEvent>,
     cancel: CancellationToken,
     model: String,
     interactive: bool,
     run_id_for_sentinel: Option<String>,
+    connection: ConnectionGuard,
 ) -> Response {
     let stream_id = format!("chatcmpl-{}", Uuid::new_v4().simple());
 
     let sse_stream = async_stream::stream! {
         let _drop_guard = DropCancels(cancel.clone());
+        let _connection = connection;
         let mut inner = ReceiverStream::new(rx);
         let mut first_chunk = true;
 
@@ -486,8 +512,13 @@ fn build_sse_stream(
                     cancel.cancel();
                     return;
                 }
+                CouncilEvent::NodeProgress { processed, total, cached, time_ms, .. }
+                | CouncilEvent::DebateAgentProgress { processed, total, cached, time_ms, .. } => {
+                    _connection.update_progress(*processed, *total, *cached, *time_ms);
+                }
                 _ => {
                     if let Some(content) = orchestrator_event_to_content(&event) {
+                        _connection.mark_generating();
                         yield sse_chunk(&stream_id, &model, &content, None, &mut first_chunk);
                     }
                     if matches!(event, CouncilEvent::CouncilComplete { .. }) {
@@ -627,6 +658,7 @@ pub(crate) fn orchestrator_event_to_content(event: &CouncilEvent) -> Option<Stri
         | CouncilEvent::DebateAgentTurnStarted { .. }
         | CouncilEvent::DebateAgentTextDelta { .. }
         | CouncilEvent::DebateAgentReasoningDelta { .. }
+        | CouncilEvent::DebateAgentProgress { .. }
         | CouncilEvent::DebateAgentToolCallStart { .. }
         | CouncilEvent::DebateAgentToolCallComplete { .. }
         | CouncilEvent::DebateAgentTurnComplete { .. }
