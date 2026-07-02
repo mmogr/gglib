@@ -244,6 +244,7 @@ impl QueueRunSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::download::types::DownloadId;
 
     #[test]
     fn test_completion_key_display() {
@@ -265,6 +266,153 @@ mod tests {
     }
 
     #[test]
+    fn test_completion_key_display_variants() {
+        // UrlFile displays the filename
+        let url_key = CompletionKey::UrlFile {
+            url: "https://example.com/model.gguf".to_string(),
+            filename: "model.gguf".to_string(),
+        };
+        assert_eq!(url_key.to_string(), "model.gguf");
+
+        // LocalFile with slash — shows only the basename
+        let local_key = CompletionKey::LocalFile {
+            path: "/home/user/models/llama-3.Q4_K_M.gguf".to_string(),
+        };
+        assert_eq!(local_key.to_string(), "llama-3.Q4_K_M.gguf");
+
+        // LocalFile without slash — falls back to full path
+        let local_no_slash = CompletionKey::LocalFile {
+            path: "model.gguf".to_string(),
+        };
+        assert_eq!(local_no_slash.to_string(), "model.gguf");
+    }
+
+    #[test]
+    fn test_completion_key_serde_roundtrip() {
+        // HfFile with quantization — round-trip
+        let hf_with_quant = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        let json = serde_json::to_string(&hf_with_quant).unwrap();
+        let parsed: CompletionKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, hf_with_quant);
+
+        // HfFile without quantization — round-trip AND verify skip_serializing_if
+        let hf_no_quant = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: None,
+        };
+        let json_no_quant = serde_json::to_string(&hf_no_quant).unwrap();
+        let parsed_no_quant: CompletionKey = serde_json::from_str(&json_no_quant).unwrap();
+        assert_eq!(parsed_no_quant, hf_no_quant);
+
+        // Verify "quantization" key is ABSENT when None (not null)
+        let value: serde_json::Value = serde_json::from_str(&json_no_quant).unwrap();
+        assert!(
+            value.get("quantization").is_none(),
+            "quantization key should be absent when None, not present as null"
+        );
+
+        // Verify "quantization" key IS present when Some
+        let value_with: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(
+            value_with.get("quantization").is_some(),
+            "quantization key should be present when Some"
+        );
+
+        // UrlFile round-trip
+        let url_key = CompletionKey::UrlFile {
+            url: "https://example.com/model.gguf".to_string(),
+            filename: "model.gguf".to_string(),
+        };
+        let json_url = serde_json::to_string(&url_key).unwrap();
+        let parsed_url: CompletionKey = serde_json::from_str(&json_url).unwrap();
+        assert_eq!(parsed_url, url_key);
+
+        // LocalFile round-trip
+        let local_key = CompletionKey::LocalFile {
+            path: "/home/user/models/llama.gguf".to_string(),
+        };
+        let json_local = serde_json::to_string(&local_key).unwrap();
+        let parsed_local: CompletionKey = serde_json::from_str(&json_local).unwrap();
+        assert_eq!(parsed_local, local_key);
+
+        // CompletionKind snake_case wire format
+        for (kind, expected_wire) in [
+            (CompletionKind::Downloaded, "downloaded"),
+            (CompletionKind::Failed, "failed"),
+            (CompletionKind::Cancelled, "cancelled"),
+            (CompletionKind::AlreadyPresent, "already_present"),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert!(
+                json.contains(expected_wire),
+                "Expected CompletionKind {kind:?} to serialize to snake_case '{expected_wire}', got: {json}"
+            );
+            let parsed: CompletionKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, kind);
+        }
+    }
+
+    #[test]
+    fn test_completion_key_hash_dedup() {
+        use std::collections::HashSet;
+        use std::hash::{Hash, Hasher};
+
+        let key1 = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        let key2 = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+
+        // Identical keys must be equal
+        assert_eq!(key1, key2);
+
+        // Identical keys must produce the same hash
+        let mut h1 = std::collections::hash_map::DefaultHasher::new();
+        let mut h2 = std::collections::hash_map::DefaultHasher::new();
+        key1.hash(&mut h1);
+        key2.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+
+        // Insert duplicates into HashSet — should collapse to 1
+        let mut set = HashSet::new();
+        set.insert(key1);
+        set.insert(key2.clone());
+        assert_eq!(set.len(), 1);
+
+        // Keys differing in revision are NOT equal (different revisions = distinct artifacts)
+        let key_diff_revision = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "v2.0".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        assert_ne!(key2, key_diff_revision);
+
+        // Keys differing in filename_canon are NOT equal (different files = distinct)
+        let key_diff_filename = CompletionKey::HfFile {
+            repo_id: "unsloth/Llama-3-GGUF".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model-q8.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+        assert_ne!(key2, key_diff_filename);
+    }
+
+    #[test]
     fn test_attempt_counts() {
         let mut counts = AttemptCounts::from_kind(CompletionKind::Downloaded);
         assert_eq!(counts.downloaded, 1);
@@ -279,6 +427,103 @@ mod tests {
         counts.increment(CompletionKind::Downloaded);
         assert_eq!(counts.downloaded, 2);
         assert_eq!(counts.total(), 3);
+    }
+
+    #[test]
+    fn test_attempt_counts_all_kinds() {
+        // from_kind(Failed) — single failed attempt
+        let failed = AttemptCounts::from_kind(CompletionKind::Failed);
+        assert_eq!(failed.failed, 1);
+        assert_eq!(failed.downloaded, 0);
+        assert_eq!(failed.cancelled, 0);
+        assert_eq!(failed.total(), 1);
+
+        // from_kind(Cancelled) — single cancelled attempt
+        let cancelled = AttemptCounts::from_kind(CompletionKind::Cancelled);
+        assert_eq!(cancelled.cancelled, 1);
+        assert_eq!(cancelled.downloaded, 0);
+        assert_eq!(cancelled.failed, 0);
+        assert_eq!(cancelled.total(), 1);
+
+        // from_kind(AlreadyPresent) — produces all zeros, identical to Default
+        let already = AttemptCounts::from_kind(CompletionKind::AlreadyPresent);
+        let default_counts = AttemptCounts::default();
+        assert_eq!(already, default_counts);
+        assert_eq!(already.downloaded, 0);
+        assert_eq!(already.failed, 0);
+        assert_eq!(already.cancelled, 0);
+        assert_eq!(already.total(), 0);
+
+        // increment(Cancelled) — properly increments the cancelled counter
+        let mut counts = AttemptCounts::default();
+        counts.increment(CompletionKind::Cancelled);
+        assert_eq!(counts.cancelled, 1);
+        assert_eq!(counts.total(), 1);
+
+        // increment(AlreadyPresent) — no-op: counts before == counts after
+        let before = AttemptCounts {
+            downloaded: 2,
+            failed: 1,
+            cancelled: 0,
+        };
+        let mut counts = before;
+        counts.increment(CompletionKind::AlreadyPresent);
+        assert_eq!(
+            counts, before,
+            "increment(AlreadyPresent) should be a no-op"
+        );
+    }
+
+    #[test]
+    fn test_completion_detail_serde_roundtrip() {
+        // Construct a retry scenario: same model downloaded via two different DownloadIds
+        // (first attempt failed, second succeeded).
+        let id1 = DownloadId::from_model("llama-3");
+        let id2 = DownloadId::new("unsloth/llama-3-gguf", Some("Q4_K_M"));
+
+        let key = CompletionKey::HfFile {
+            repo_id: "unsloth/llama-3-gguf".to_string(),
+            revision: "main".to_string(),
+            filename_canon: "model.gguf".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+        };
+
+        let mut counts = AttemptCounts::default();
+        counts.increment(CompletionKind::Failed);
+        counts.increment(CompletionKind::Downloaded);
+
+        let detail = CompletionDetail {
+            key,
+            display_name: "unsloth/llama-3-gguf (Q4_K_M)".to_string(),
+            last_result: CompletionKind::Downloaded,
+            last_completed_at_ms: 1_700_000_000_000,
+            download_ids: vec![id1.clone(), id2.clone()],
+            attempt_counts: counts,
+        };
+
+        // Serialize to JSON string
+        let json = serde_json::to_string(&detail).expect("should serialize");
+
+        // Deserialize back
+        let restored: CompletionDetail = serde_json::from_str(&json).expect("should deserialize");
+
+        // Full equality — all fields must match exactly
+        assert_eq!(detail, restored);
+
+        // Verify the retry scenario is preserved through the round-trip
+        assert_eq!(restored.download_ids.len(), 2);
+        assert_eq!(restored.download_ids[0], id1);
+        assert_eq!(restored.download_ids[1], id2);
+        assert_eq!(restored.attempt_counts.failed, 1);
+        assert_eq!(restored.attempt_counts.downloaded, 1);
+        assert_eq!(restored.attempt_counts.total(), 2);
+
+        // Verify the JSON contains expected keys (wire-shape sanity)
+        let value: serde_json::Value = serde_json::from_str(&json).expect("should parse as Value");
+        assert!(value.get("download_ids").is_some());
+        assert!(value.get("attempt_counts").is_some());
+        assert!(value.get("key").is_some());
+        assert!(value.get("display_name").is_some());
     }
 
     #[test]
@@ -299,5 +544,107 @@ mod tests {
 
         assert_eq!(summary.total_attempts(), 6);
         assert_eq!(summary.total_unique_models(), 4);
+    }
+
+    #[test]
+    fn test_queue_run_summary_has_retries() {
+        // FALSE scenario: all items have exactly 1 attempt — no retries
+        let single_attempt_detail = CompletionDetail {
+            key: CompletionKey::HfFile {
+                repo_id: "model-a".to_string(),
+                revision: "main".to_string(),
+                filename_canon: "a.gguf".to_string(),
+                quantization: None,
+            },
+            display_name: "model-a".to_string(),
+            last_result: CompletionKind::Downloaded,
+            last_completed_at_ms: 1000,
+            download_ids: vec![DownloadId::from_model("model-a")],
+            attempt_counts: AttemptCounts::from_kind(CompletionKind::Downloaded),
+        };
+
+        let no_retry_summary = QueueRunSummary {
+            run_id: Uuid::nil(),
+            started_at_ms: 0,
+            completed_at_ms: 1000,
+            total_attempts_downloaded: 3,
+            total_attempts_failed: 0,
+            total_attempts_cancelled: 0,
+            unique_models_downloaded: 3,
+            unique_models_failed: 0,
+            unique_models_cancelled: 0,
+            items: vec![
+                single_attempt_detail.clone(),
+                single_attempt_detail.clone(),
+                single_attempt_detail.clone(),
+            ],
+            truncated: false,
+        };
+        assert!(
+            !no_retry_summary.has_retries(),
+            "should be false when all items have exactly 1 attempt"
+        );
+
+        // TRUE scenario: one item has 3 attempts (2 failures + 1 success)
+        let mut retried_counts = AttemptCounts::default();
+        retried_counts.increment(CompletionKind::Failed);
+        retried_counts.increment(CompletionKind::Failed);
+        retried_counts.increment(CompletionKind::Downloaded);
+
+        let retried_detail = CompletionDetail {
+            key: CompletionKey::HfFile {
+                repo_id: "model-b".to_string(),
+                revision: "main".to_string(),
+                filename_canon: "b.gguf".to_string(),
+                quantization: None,
+            },
+            display_name: "model-b".to_string(),
+            last_result: CompletionKind::Downloaded,
+            last_completed_at_ms: 2000,
+            download_ids: vec![
+                DownloadId::from_model("model-b"),
+                DownloadId::from_model("model-b"),
+                DownloadId::from_model("model-b"),
+            ],
+            attempt_counts: retried_counts,
+        };
+
+        let retry_summary = QueueRunSummary {
+            run_id: Uuid::nil(),
+            started_at_ms: 0,
+            completed_at_ms: 2000,
+            // 3 unique models downloaded, but 5 total attempts (one was retried)
+            total_attempts_downloaded: 4,
+            total_attempts_failed: 2,
+            total_attempts_cancelled: 0,
+            unique_models_downloaded: 3,
+            unique_models_failed: 0,
+            unique_models_cancelled: 0,
+            items: vec![
+                single_attempt_detail.clone(),
+                retried_detail.clone(),
+                single_attempt_detail,
+            ],
+            truncated: false,
+        };
+        assert!(
+            retry_summary.has_retries(),
+            "should be true when at least one item has >1 attempt"
+        );
+
+        // Verify unique-vs-attempts distinction: 3 unique models but 6 total attempts
+        assert_eq!(retry_summary.total_unique_models(), 3);
+        assert_eq!(retry_summary.total_attempts(), 6);
+        assert_ne!(
+            retry_summary.total_unique_models(),
+            retry_summary.total_attempts(),
+            "unique models should differ from total attempts when retries occurred"
+        );
+
+        // Verify the retried item specifically
+        assert_eq!(retried_detail.attempt_counts.failed, 2);
+        assert_eq!(retried_detail.attempt_counts.downloaded, 1);
+        assert_eq!(retried_detail.attempt_counts.total(), 3);
+        assert!(retried_detail.attempt_counts.has_retries());
     }
 }
