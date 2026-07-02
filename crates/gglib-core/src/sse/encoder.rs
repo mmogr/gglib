@@ -29,6 +29,16 @@ use serde_json::{Value, json};
 
 use crate::LlmStreamEvent;
 
+/// The SSE stream-terminator sentinel.
+///
+/// Must be sent by the caller exactly once, only after the entire event
+/// stream from [`SseEncoder::encode`] is truly exhausted — never bundled
+/// into an individual event's encoding, since [`LlmStreamEvent::Done`] is
+/// not guaranteed to be the last event (a trailing
+/// [`LlmStreamEvent::Usage`] can legitimately follow it) and nothing may
+/// be sent after `[DONE]` on the wire.
+pub const DONE_SENTINEL: &str = "data: [DONE]\n\n";
+
 /// Stateful encoder that produces OpenAI-shape SSE frames for one response.
 ///
 /// The `id`, `model`, and `created` fields are stable across all frames the
@@ -60,10 +70,14 @@ impl SseEncoder {
     /// [`LlmStreamEvent::NormalizationError`], which the proxy logs but never
     /// forwards to clients).
     ///
-    /// For [`LlmStreamEvent::Done`], the returned `String` includes both the
-    /// terminating chunk (with `finish_reason` set) **and** the trailing
-    /// `data: [DONE]\n\n` sentinel, so the caller can write a single payload
-    /// and end the response.
+    /// For [`LlmStreamEvent::Done`], the returned `String` is only the
+    /// terminating chunk (with `finish_reason` set) — it deliberately does
+    /// **not** include the trailing `data: [DONE]\n\n` sentinel
+    /// ([`DONE_SENTINEL`]).  `Done` is not guaranteed to be the last event on
+    /// the wire: a trailing [`LlmStreamEvent::Usage`] can legitimately arrive
+    /// afterward (see that variant's doc), and nothing may follow `[DONE]`
+    /// once it's sent.  Callers must append [`DONE_SENTINEL`] themselves,
+    /// exactly once, only after the entire event stream is truly exhausted.
     #[must_use]
     pub fn encode(&self, event: &LlmStreamEvent) -> Option<String> {
         match event {
@@ -127,14 +141,11 @@ impl SseEncoder {
                 });
                 Some(format!("data: {value}\n\n"))
             }
-            LlmStreamEvent::Done { finish_reason } => {
-                let chunk = self.frame(&json!({
-                    "index": 0,
-                    "delta": {},
-                    "finish_reason": finish_reason,
-                }));
-                Some(format!("{chunk}data: [DONE]\n\n"))
-            }
+            LlmStreamEvent::Done { finish_reason } => Some(self.frame(&json!({
+                "index": 0,
+                "delta": {},
+                "finish_reason": finish_reason,
+            }))),
             LlmStreamEvent::Usage {
                 prompt_tokens,
                 completion_tokens,
@@ -180,6 +191,9 @@ impl SseEncoder {
     /// (`'error' in obj && !('choices' in obj)`) to recognise an inline
     /// mid-stream failure; wrapping it in the usual envelope or adding an
     /// empty `choices: []` would hide it as an ordinary chunk instead.
+    ///
+    /// Does **not** append [`DONE_SENTINEL`] — see [`Self::encode`] doc; the
+    /// caller appends it exactly once after the stream is truly exhausted.
     fn upstream_error_frame(message: &str, error_type: &str, code: &str) -> String {
         let error_obj = json!({
             "error": {
@@ -188,7 +202,7 @@ impl SseEncoder {
                 "code": code,
             }
         });
-        format!("data: {error_obj}\n\ndata: [DONE]\n\n")
+        format!("data: {error_obj}\n\n")
     }
 
     /// Wrap a `choice` value in the standard chunk envelope and SSE framing.
@@ -291,19 +305,20 @@ mod tests {
     }
 
     #[test]
-    fn done_event_emits_finish_chunk_and_done_sentinel() {
+    fn done_event_emits_only_finish_chunk_no_sentinel() {
         let out = enc()
             .encode(&LlmStreamEvent::Done {
                 finish_reason: "stop".to_owned(),
             })
             .expect("frame");
-        // Two SSE frames: the terminating chunk and the [DONE] sentinel.
+        // Exactly one SSE frame -- [DONE] is the caller's responsibility now
+        // (see DONE_SENTINEL doc), since a trailing Usage event can
+        // legitimately follow Done.
         let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
-        assert_eq!(lines.len(), 2, "Done emits two data: lines");
+        assert_eq!(lines.len(), 1, "Done emits exactly one data: line");
         let v: serde_json::Value =
             serde_json::from_str(lines[0].strip_prefix("data: ").unwrap()).unwrap();
         assert_eq!(v["choices"][0]["finish_reason"], "stop");
-        assert_eq!(lines[1], "data: [DONE]");
     }
 
     #[test]
@@ -329,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn upstream_error_event_encodes_to_bare_error_frame_and_done_sentinel() {
+    fn upstream_error_event_encodes_to_bare_error_frame_no_sentinel() {
         let out = enc()
             .encode(&LlmStreamEvent::UpstreamError {
                 message: "Context window limit reached.".to_owned(),
@@ -338,7 +353,7 @@ mod tests {
             })
             .expect("frame");
         let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
-        assert_eq!(lines.len(), 2, "expects the error frame plus [DONE]");
+        assert_eq!(lines.len(), 1, "expects only the bare error frame");
         let v: serde_json::Value =
             serde_json::from_str(lines[0].strip_prefix("data: ").unwrap()).unwrap();
         assert_eq!(v["error"]["message"], "Context window limit reached.");
@@ -352,7 +367,6 @@ mod tests {
             v.get("id").is_none(),
             "inline error frame is deliberately bare, no envelope fields"
         );
-        assert_eq!(lines[1], "data: [DONE]");
     }
 
     #[test]
