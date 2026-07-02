@@ -44,6 +44,16 @@ pub struct ModelSummary {
     pub created_at: i64,
     /// File size in bytes.
     pub file_size: u64,
+    /// Maximum context length the model supports, in tokens (from GGUF
+    /// metadata). `None` when unknown.
+    ///
+    /// This is a static, per-model ceiling — it does not reflect the
+    /// `--ctx-size` a currently-running instance was actually launched
+    /// with, which can be smaller (see `gglib_core::ports::model_runtime::RunningTarget::effective_ctx`
+    /// for the live value). Consumers that need the true, currently-running
+    /// context size should prefer `effective_ctx` when the model is running
+    /// and fall back to this field otherwise.
+    pub context_length: Option<u64>,
     /// Per-model inference parameter defaults.
     ///
     /// When `Some`, these are resolved per-request via

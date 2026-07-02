@@ -73,7 +73,7 @@ use gglib_core::ModelCapabilities;
 use gglib_core::domain::{ChatMessage, InferenceConfig, transform_messages_for_capabilities};
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
-use gglib_core::sse::{SseEncoder, SseStreamDecoder};
+use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
@@ -824,7 +824,9 @@ async fn stream_response_to_channel(
                             "code": "upstream_error",
                         }
                     });
-                    let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    // No inline [DONE] here -- appended once, unconditionally,
+                    // after the wire stream is exhausted (see below).
+                    let frame = format!("data: {payload}\n\n");
                     Some(Ok::<Bytes, std::io::Error>(Bytes::from(frame)))
                 }
             }
@@ -832,11 +834,23 @@ async fn stream_response_to_channel(
     });
 
     let mut wire_stream = Box::pin(wire_stream);
+    let mut client_connected = true;
     while let Some(item) = wire_stream.next().await {
         if tx.send(item).await.is_err() {
             // Client disconnected; stop draining the upstream.
+            client_connected = false;
             break;
         }
+    }
+    // Exactly one [DONE] sentinel, sent once the wire stream is truly
+    // exhausted -- never bundled into an individual event's encoding, since
+    // a trailing Usage event can legitimately follow Done (see
+    // `gglib_core::sse::DONE_SENTINEL` doc). Skipped if the client already
+    // disconnected -- the channel is closed, nothing to send.
+    if client_connected {
+        let _ = tx
+            .send(Ok(Bytes::from_static(DONE_SENTINEL.as_bytes())))
+            .await;
     }
 }
 

@@ -34,6 +34,70 @@ pub enum SseParseResult {
 // Parser
 // =============================================================================
 
+/// Parse a top-level `usage` object into a [`LlmStreamEvent::Usage`] event.
+///
+/// Returns `None` when the frame carries no `usage` field. Deliberately
+/// returns just the event (not a full [`SseParseResult`]) — unlike
+/// [`parse_inline_error_frame`], a `usage` field does **not** imply the rest
+/// of the frame should be skipped. See the call site in [`parse_sse_frame`]
+/// for why.
+fn parse_usage_event(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
+    let usage = parsed.get("usage")?;
+    let prompt_tokens =
+        u32::try_from(usage["prompt_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    let completion_tokens =
+        u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    let total_tokens =
+        u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    Some(LlmStreamEvent::Usage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+    })
+}
+
+/// Parse a bare top-level `error` object (with no `choices` key) into an
+/// [`LlmStreamEvent::UpstreamError`] event.
+///
+/// Returns `None` when the frame carries no `error` field, or when it also
+/// carries a `choices` key (even an empty one) — that shape doesn't match
+/// what downstream clients detect as an inline error, so it falls through
+/// to the remaining frame-shape checks instead.
+fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
+    let err = parsed.get("error")?;
+    if parsed.get("choices").is_some() {
+        return None;
+    }
+    let (message, error_type, code) = match err {
+        serde_json::Value::String(s) => (
+            s.clone(),
+            "server_error".to_owned(),
+            "upstream_error".to_owned(),
+        ),
+        _ => (
+            err.get("message")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream returned an error")
+                .to_owned(),
+            err.get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("server_error")
+                .to_owned(),
+            err.get("code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream_error")
+                .to_owned(),
+        ),
+    };
+    Some(SseParseResult::Events(vec![
+        LlmStreamEvent::UpstreamError {
+            message,
+            error_type,
+            code,
+        },
+    ]))
+}
+
 /// Parse a single SSE `data:` payload into zero or more [`LlmStreamEvent`]s.
 ///
 /// Returns:
@@ -72,12 +136,41 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         ]));
     }
 
+    // ── Usage totals (`stream_options.include_usage: true`) ──────────────
+    // Extracted here but *not* an early return: strict OpenAI servers send
+    // this on a trailing chunk with empty `choices`, but llama-server
+    // attaches `usage` directly onto the same chunk that also carries a
+    // real `finish_reason` and non-empty `choices`
+    // (ggml-org/llama.cpp#12102, #15443). Treating `usage` presence as a
+    // reason to skip the rest of the frame would silently discard that
+    // finish_reason/delta. Decided below once we know whether `choices`
+    // is actually empty.
+    let usage_event = parse_usage_event(&parsed);
+
+    // ── Inline upstream error frame ───────────────────────────────────────
+    // Some OpenAI-compatible servers (including llama.cpp) can emit a bare
+    // `{"error": {...}}` frame mid-stream instead of a hard HTTP-level
+    // failure (e.g. a context-length overflow discovered only once
+    // generation is underway). Checked *before* the choices guard below for
+    // the same reason as `prompt_progress`/`usage`: this frame has no
+    // `choices` key at all, and clients such as the GitHub Copilot LLM
+    // Gateway extension specifically detect this shape via
+    // `'error' in obj && !('choices' in obj)` to surface a real error
+    // instead of hanging or seeing a silently truncated response.
+    if let Some(result) = parse_inline_error_frame(&parsed) {
+        return Ok(result);
+    }
+
     // Guard against keepalive / error frames that carry no `choices` array.
     // Without this check every field access falls through to `Value::Null`,
     // events are silently dropped, and a `finish_reason: "stop"` in such a
     // frame would mean the stream never emits `Done`.
     let choices = &parsed["choices"];
     if choices.as_array().is_none_or(Vec::is_empty) {
+        // Strict-OpenAI shape: no real choice, usage (if any) stands alone.
+        if let Some(usage_event) = usage_event {
+            return Ok(SseParseResult::Events(vec![usage_event]));
+        }
         tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
         return Ok(SseParseResult::Events(vec![]));
     }
@@ -130,6 +223,14 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
                 arguments,
             });
         }
+    }
+
+    // ── Usage totals bundled with this finish chunk (llama.cpp shape) ────
+    // Pushed *before* the finish_reason/Done event below, never after: the
+    // encoder appends the `[DONE]` sentinel immediately after `Done`, and
+    // nothing may follow `[DONE]` on the wire.
+    if let Some(usage_event) = usage_event {
+        events.push(usage_event);
     }
 
     // ── Finish reason → Done ────────────────────────────────────────────────
@@ -439,6 +540,175 @@ mod tests {
         assert!(
             !events.is_empty(),
             "prompt_progress frame must not be skipped"
+        );
+    }
+
+    #[test]
+    fn usage_frame_emits_usage_event() {
+        let frame = serde_json::json!({
+            "id": "chatcmpl-1",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "test-model",
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "total_tokens": 168
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                prompt_tokens: 123,
+                completion_tokens: 45,
+                total_tokens: 168
+            }
+        ));
+    }
+
+    #[test]
+    fn usage_frame_not_confused_with_no_choices_guard() {
+        // Empty `choices` array — would be silently dropped by the "no
+        // choices" guard if the usage check didn't run first.
+        let frame = serde_json::json!({
+            "choices": [],
+            "usage": { "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(!events.is_empty(), "usage frame must not be skipped");
+    }
+
+    #[test]
+    fn llama_cpp_combined_usage_and_finish_chunk_emits_both_events() {
+        // Real llama-server shape (ggml-org/llama.cpp#12102, #15443): usage
+        // is attached to the *same* chunk as a real finish_reason and a
+        // non-empty `choices` array, not a separate trailing chunk with
+        // empty choices. Must not silently drop the finish_reason.
+        let frame = serde_json::json!({
+            "choices": [{ "finish_reason": "tool_calls", "index": 0, "delta": {} }],
+            "created": 0,
+            "id": "chatcmpl-1",
+            "model": "test-model",
+            "object": "chat.completion.chunk",
+            "usage": { "prompt_tokens": 4181, "completion_tokens": 12, "total_tokens": 4193 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2, "expected both a Usage and a Done event");
+        // Usage must come *before* Done -- the encoder appends `[DONE]`
+        // immediately after Done, so nothing may be emitted after it.
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                prompt_tokens: 4181,
+                completion_tokens: 12,
+                total_tokens: 4193
+            }
+        ));
+        assert!(matches!(
+            &events[1],
+            LlmStreamEvent::Done { finish_reason } if finish_reason == "tool_calls"
+        ));
+    }
+
+    #[test]
+    fn llama_cpp_combined_usage_and_stop_chunk_preserves_finish_reason() {
+        let frame = serde_json::json!({
+            "choices": [{ "finish_reason": "stop", "index": 0, "delta": {} }],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], LlmStreamEvent::Usage { .. }));
+        assert!(matches!(
+            &events[1],
+            LlmStreamEvent::Done { finish_reason } if finish_reason == "stop"
+        ));
+    }
+
+    #[test]
+    fn inline_error_frame_object_form_extracts_all_fields() {
+        let frame = serde_json::json!({
+            "error": {
+                "message": "Context window limit reached.",
+                "type": "context_length_exceeded",
+                "code": "context_length_exceeded"
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::UpstreamError { message, error_type, code }
+                if message == "Context window limit reached."
+                    && error_type == "context_length_exceeded"
+                    && code == "context_length_exceeded"
+        ));
+    }
+
+    #[test]
+    fn inline_error_frame_string_form_uses_defaults() {
+        let frame = serde_json::json!({ "error": "boom" }).to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::UpstreamError { message, error_type, code }
+                if message == "boom" && error_type == "server_error" && code == "upstream_error"
+        ));
+    }
+
+    #[test]
+    fn inline_error_frame_not_dropped_by_no_choices_guard() {
+        // No `choices` key at all -- would be silently dropped by the "no
+        // choices" guard if the error check didn't run first.
+        let frame = serde_json::json!({ "error": { "message": "oops" } }).to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(!events.is_empty(), "inline error frame must not be skipped");
+    }
+
+    #[test]
+    fn error_alongside_choices_key_is_not_treated_as_inline_error() {
+        // `choices` key present (even empty) means this isn't the bare
+        // inline-error shape the extension detects via `!('choices' in
+        // obj)` -- falls through to the normal "no choices" skip instead.
+        let frame =
+            serde_json::json!({ "error": { "message": "oops" }, "choices": [] }).to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(
+            events.is_empty(),
+            "frame with a choices key should not be parsed as UpstreamError"
         );
     }
 }

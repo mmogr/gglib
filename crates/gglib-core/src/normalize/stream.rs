@@ -20,9 +20,17 @@
 //!   non-colliding indices.
 //! - `PromptProgress` → forwarded unchanged.
 //! - `Done` → [`ToolCallParser::finish`] is called first, any flushed
-//!   bytes / tool calls / errors are emitted, **then** `Done` is forwarded
-//!   last.  The contract that every stream ends with exactly one `Done`
-//!   item is preserved.
+//!   bytes / tool calls / errors are emitted, **then** `Done` is forwarded.
+//!   The contract that every stream carries exactly one `Done` item is
+//!   preserved — but `Done` is *not* treated as an absolute end-of-stream
+//!   signal. Per the `OpenAI` `stream_options.include_usage` convention (and
+//!   llama.cpp's actual wire behaviour), a trailing [`LlmStreamEvent::Usage`]
+//!   event can legitimately arrive *after* `Done`, before the underlying
+//!   byte stream closes — that event (and `PromptProgress` /
+//!   `NormalizationError` / `UpstreamError`) still gets forwarded. Any
+//!   content-bearing event arriving after `Done` (`TextDelta`,
+//!   `ReasoningDelta`, `ToolCallDelta`, a second `Done`) is dropped
+//!   defensively, since a well-formed stream never sends those.
 //!
 //! ## Errors
 //!
@@ -56,9 +64,23 @@ pub struct NormalizingStream {
     /// Bumped past every upstream `index` we observe so downstream
     /// collectors can use indices as keys without collision.
     next_index: usize,
-    /// `true` once we've forwarded the upstream `Done` (or upstream ended
-    /// or errored).  Subsequent polls return `None`.
+    /// `true` once the upstream `inner` stream is fully exhausted (ended or
+    /// errored).  Subsequent polls return `None`.  Note this is **not** set
+    /// merely because a `Done` event was seen — see `done_forwarded`.
     terminated: bool,
+    /// `true` once we've forwarded the upstream `Done` event.
+    ///
+    /// `Done` is *not* treated as an absolute end-of-stream signal: per the
+    /// `OpenAI` `stream_options.include_usage` convention (and llama.cpp's
+    /// wire behaviour), a trailing `Usage` event legitimately arrives
+    /// *after* the `finish_reason`/`Done` chunk, before the underlying byte
+    /// stream actually closes. Once this flag is set, only trailer-safe
+    /// events (`Usage`, `PromptProgress`, `NormalizationError`,
+    /// `UpstreamError`) are still queued; any further content-bearing event
+    /// (`TextDelta`, `ReasoningDelta`, `ToolCallDelta`, a second `Done`) is
+    /// dropped defensively — a well-formed stream never sends these after
+    /// `Done`, and the parser has already been finalised.
+    done_forwarded: bool,
 }
 
 impl NormalizingStream {
@@ -71,6 +93,7 @@ impl NormalizingStream {
             queued: VecDeque::new(),
             next_index: 0,
             terminated: false,
+            done_forwarded: false,
         }
     }
 
@@ -123,10 +146,20 @@ impl NormalizingStream {
     fn handle_upstream(&mut self, event: LlmStreamEvent) {
         match event {
             LlmStreamEvent::TextDelta { content } => {
+                if self.done_forwarded {
+                    tracing::warn!("NormalizingStream: dropping TextDelta received after Done");
+                    return;
+                }
                 let out = self.parser.push_text(&content);
                 self.enqueue_parser_output(out);
             }
             LlmStreamEvent::ReasoningDelta { content } => {
+                if self.done_forwarded {
+                    tracing::warn!(
+                        "NormalizingStream: dropping ReasoningDelta received after Done"
+                    );
+                    return;
+                }
                 let out = self.parser.push_reasoning(&content);
                 self.enqueue_parser_output(out);
             }
@@ -136,6 +169,10 @@ impl NormalizingStream {
                 name,
                 arguments,
             } => {
+                if self.done_forwarded {
+                    tracing::warn!("NormalizingStream: dropping ToolCallDelta received after Done");
+                    return;
+                }
                 if index >= self.next_index {
                     self.next_index = index + 1;
                 }
@@ -146,10 +183,19 @@ impl NormalizingStream {
                     arguments,
                 });
             }
-            LlmStreamEvent::PromptProgress { .. } | LlmStreamEvent::NormalizationError { .. } => {
+            LlmStreamEvent::PromptProgress { .. }
+            | LlmStreamEvent::NormalizationError { .. }
+            | LlmStreamEvent::Usage { .. }
+            | LlmStreamEvent::UpstreamError { .. } => {
+                // Trailer-safe: legitimately arrives before *or* after Done
+                // (e.g. a trailing Usage chunk), so no done_forwarded guard.
                 self.queued.push_back(event);
             }
             LlmStreamEvent::Done { finish_reason } => {
+                if self.done_forwarded {
+                    tracing::warn!("NormalizingStream: dropping duplicate Done event");
+                    return;
+                }
                 let out = self.parser.finish();
                 self.enqueue_parser_output(out);
                 // Qwen3.5 (and some other models) emit tool_calls in the
@@ -164,7 +210,12 @@ impl NormalizingStream {
                 };
                 self.queued
                     .push_back(LlmStreamEvent::Done { finish_reason });
-                self.terminated = true;
+                // Deliberately *not* `self.terminated = true` here — see the
+                // `done_forwarded` doc comment. The stream keeps polling
+                // `inner` (in `poll_next`) so a legitimate trailing `Usage`
+                // event can still be forwarded before the byte stream
+                // actually closes.
+                self.done_forwarded = true;
             }
         }
     }
@@ -193,9 +244,15 @@ impl Stream for NormalizingStream {
                 }
                 Poll::Ready(None) => {
                     // Upstream ended without a `Done`.  Flush any held-back
-                    // parser state so no bytes are lost, then end.
-                    let out = self.parser.finish();
-                    self.enqueue_parser_output(out);
+                    // parser state so no bytes are lost, then end.  Skipped
+                    // when `Done` was already forwarded (e.g. only a
+                    // trailing `Usage` event followed it) — the parser was
+                    // already finalised in `handle_upstream`'s `Done` arm,
+                    // and finishing it twice would re-flush stale state.
+                    if !self.done_forwarded {
+                        let out = self.parser.finish();
+                        self.enqueue_parser_output(out);
+                    }
                     self.terminated = true;
                     if let Some(ev) = self.queued.pop_front() {
                         return Poll::Ready(Some(Ok(ev)));
@@ -271,6 +328,85 @@ mod tests {
         ];
         let out = drain(wrap(events.clone(), false));
         assert_eq!(out, events);
+    }
+
+    #[test]
+    fn usage_event_passes_through_unchanged() {
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "hello".into(),
+            },
+            LlmStreamEvent::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ];
+        let out = drain(wrap(events.clone(), false));
+        assert_eq!(out, events);
+    }
+
+    #[test]
+    fn usage_event_after_done_still_forwarded() {
+        // The actual llama.cpp/OpenAI wire order: the finish_reason chunk
+        // (-> Done) arrives *before* the trailing usage-only chunk
+        // (-> Usage). NormalizingStream must not treat Done as a hard
+        // stream-end that discards this legitimate trailer.
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "hello".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+            LlmStreamEvent::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
+        ];
+        let out = drain(wrap(events.clone(), false));
+        assert_eq!(
+            out, events,
+            "Usage arriving after Done must still be forwarded, in order"
+        );
+    }
+
+    #[test]
+    fn text_delta_after_done_is_dropped_defensively() {
+        // Malformed upstream: content arriving after Done. Must not panic
+        // or resurrect already-finalised parser state; simply dropped.
+        let events = vec![
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+            LlmStreamEvent::TextDelta {
+                content: "should be dropped".into(),
+            },
+            LlmStreamEvent::Usage {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+                total_tokens: 2,
+            },
+        ];
+        let out = drain(wrap(events, false));
+        assert_eq!(
+            out,
+            vec![
+                LlmStreamEvent::Done {
+                    finish_reason: "stop".into(),
+                },
+                LlmStreamEvent::Usage {
+                    prompt_tokens: 1,
+                    completion_tokens: 1,
+                    total_tokens: 2,
+                },
+            ],
+            "stray TextDelta after Done must be dropped, Usage still forwarded"
+        );
     }
 
     #[test]

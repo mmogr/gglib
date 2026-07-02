@@ -190,6 +190,25 @@ pub enum LlmStreamEvent {
         time_ms: u64,
     },
 
+    /// Token usage totals for the completed response.
+    ///
+    /// Emitted when the request includes `stream_options.include_usage:
+    /// true` (see `gglib_proxy`'s `inject_streaming_body_overrides`).
+    /// Per the `OpenAI` streaming convention this arrives as a single
+    /// trailing chunk with an empty/absent `choices` array, immediately
+    /// before the `[DONE]` sentinel — never mixed with `TextDelta` or
+    /// `ToolCallDelta` events. Consumers that care about real token counts
+    /// (e.g. clients feeding a context-window UI widget) read this event;
+    /// everyone else can ignore it.
+    Usage {
+        /// Number of tokens in the prompt.
+        prompt_tokens: u32,
+        /// Number of tokens generated in the completion.
+        completion_tokens: u32,
+        /// Total tokens (`prompt_tokens + completion_tokens`).
+        total_tokens: u32,
+    },
+
     /// Signals the end of the stream.
     ///
     /// Every conforming stream must end with exactly one `Done` item.
@@ -197,6 +216,29 @@ pub enum LlmStreamEvent {
         /// The OpenAI-compatible finish reason (e.g. `"stop"`, `"tool_calls"`,
         /// `"length"`).
         finish_reason: String,
+    },
+
+    /// An upstream error reported inline, mid-stream.
+    ///
+    /// Some OpenAI-compatible servers (including llama.cpp) can emit a bare
+    /// `{"error": {...}}` frame in the middle of an otherwise-successful SSE
+    /// response — e.g. a context-length overflow discovered only once
+    /// generation is underway — rather than failing the initial HTTP
+    /// response. Without special handling this frame carries no `choices`
+    /// array and would otherwise be silently discarded by parsers that treat
+    /// "no choices" as an empty keepalive/heartbeat frame.
+    ///
+    /// `error_type` and `code` default to `"server_error"`/`"upstream_error"`
+    /// respectively when the upstream frame omits them, mirroring the
+    /// existing convention in `gglib_proxy::forward`'s pre-flight upstream
+    /// error handling.
+    UpstreamError {
+        /// Human-readable error message.
+        message: String,
+        /// Upstream `error.type` (or `"server_error"` if absent).
+        error_type: String,
+        /// Upstream `error.code` (or `"upstream_error"` if absent).
+        code: String,
     },
 
     /// A non-fatal normalization issue surfaced by the
