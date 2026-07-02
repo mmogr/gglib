@@ -139,49 +139,56 @@ impl SseEncoder {
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
-            } => {
-                // Per the OpenAI `stream_options.include_usage` convention,
-                // the usage-totals chunk carries an empty `choices` array
-                // (not omitted — see `crate::LlmStreamEvent::Usage` doc) and
-                // a top-level `usage` object.
-                let value = json!({
-                    "id": self.id,
-                    "object": "chat.completion.chunk",
-                    "created": self.created,
-                    "model": self.model,
-                    "choices": [],
-                    "usage": {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": total_tokens,
-                    },
-                });
-                Some(format!("data: {value}\n\n"))
-            }
+            } => Some(self.usage_frame(*prompt_tokens, *completion_tokens, *total_tokens)),
             LlmStreamEvent::NormalizationError { .. } => None,
             LlmStreamEvent::UpstreamError {
                 message,
                 error_type,
                 code,
-            } => {
-                // Deliberately bare -- no `id`/`object`/`created`/`model`
-                // envelope and, crucially, no `choices` key at all (unlike
-                // every other frame this encoder produces). Clients such as
-                // the GitHub Copilot LLM Gateway extension detect this exact
-                // shape (`'error' in obj && !('choices' in obj)`) to
-                // recognise an inline mid-stream failure; wrapping it in the
-                // usual envelope or adding an empty `choices: []` would hide
-                // it as an ordinary chunk instead.
-                let error_obj = json!({
-                    "error": {
-                        "message": message,
-                        "type": error_type,
-                        "code": code,
-                    }
-                });
-                Some(format!("data: {error_obj}\n\ndata: [DONE]\n\n"))
-            }
+            } => Some(Self::upstream_error_frame(message, error_type, code)),
         }
+    }
+
+    /// Encode a [`LlmStreamEvent::Usage`] event.
+    ///
+    /// Per the `OpenAI` `stream_options.include_usage` convention, the
+    /// usage-totals chunk carries an empty `choices` array (not omitted —
+    /// see [`crate::LlmStreamEvent::Usage`] doc) and a top-level `usage`
+    /// object.
+    fn usage_frame(&self, prompt_tokens: u32, completion_tokens: u32, total_tokens: u32) -> String {
+        let value = json!({
+            "id": self.id,
+            "object": "chat.completion.chunk",
+            "created": self.created,
+            "model": self.model,
+            "choices": [],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            },
+        });
+        format!("data: {value}\n\n")
+    }
+
+    /// Encode a [`LlmStreamEvent::UpstreamError`] event.
+    ///
+    /// Deliberately bare — no `id`/`object`/`created`/`model` envelope and,
+    /// crucially, no `choices` key at all (unlike every other frame this
+    /// encoder produces). Clients such as the GitHub Copilot LLM Gateway
+    /// extension detect this exact shape
+    /// (`'error' in obj && !('choices' in obj)`) to recognise an inline
+    /// mid-stream failure; wrapping it in the usual envelope or adding an
+    /// empty `choices: []` would hide it as an ordinary chunk instead.
+    fn upstream_error_frame(message: &str, error_type: &str, code: &str) -> String {
+        let error_obj = json!({
+            "error": {
+                "message": message,
+                "type": error_type,
+                "code": code,
+            }
+        });
+        format!("data: {error_obj}\n\ndata: [DONE]\n\n")
     }
 
     /// Wrap a `choice` value in the standard chunk envelope and SSE framing.

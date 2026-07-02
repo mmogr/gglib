@@ -194,7 +194,7 @@ pub enum LlmStreamEvent {
     ///
     /// Emitted when the request includes `stream_options.include_usage:
     /// true` (see `gglib_proxy`'s `inject_streaming_body_overrides`).
-    /// Per the OpenAI streaming convention this arrives as a single
+    /// Per the `OpenAI` streaming convention this arrives as a single
     /// trailing chunk with an empty/absent `choices` array, immediately
     /// before the `[DONE]` sentinel — never mixed with `TextDelta` or
     /// `ToolCallDelta` events. Consumers that care about real token counts

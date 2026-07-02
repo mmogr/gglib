@@ -34,6 +34,67 @@ pub enum SseParseResult {
 // Parser
 // =============================================================================
 
+/// Parse a top-level `usage` object into a [`LlmStreamEvent::Usage`] event.
+///
+/// Returns `None` when the frame carries no `usage` field, so the caller can
+/// fall through to the remaining frame-shape checks.
+fn parse_usage_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
+    let usage = parsed.get("usage")?;
+    let prompt_tokens =
+        u32::try_from(usage["prompt_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    let completion_tokens =
+        u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    let total_tokens =
+        u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    Some(SseParseResult::Events(vec![LlmStreamEvent::Usage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+    }]))
+}
+
+/// Parse a bare top-level `error` object (with no `choices` key) into an
+/// [`LlmStreamEvent::UpstreamError`] event.
+///
+/// Returns `None` when the frame carries no `error` field, or when it also
+/// carries a `choices` key (even an empty one) — that shape doesn't match
+/// what downstream clients detect as an inline error, so it falls through
+/// to the remaining frame-shape checks instead.
+fn parse_inline_error_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
+    let err = parsed.get("error")?;
+    if parsed.get("choices").is_some() {
+        return None;
+    }
+    let (message, error_type, code) = match err {
+        serde_json::Value::String(s) => (
+            s.clone(),
+            "server_error".to_owned(),
+            "upstream_error".to_owned(),
+        ),
+        _ => (
+            err.get("message")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream returned an error")
+                .to_owned(),
+            err.get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("server_error")
+                .to_owned(),
+            err.get("code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream_error")
+                .to_owned(),
+        ),
+    };
+    Some(SseParseResult::Events(vec![
+        LlmStreamEvent::UpstreamError {
+            message,
+            error_type,
+            code,
+        },
+    ]))
+}
+
 /// Parse a single SSE `data:` payload into zero or more [`LlmStreamEvent`]s.
 ///
 /// Returns:
@@ -77,18 +138,8 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // with an empty/absent `choices` array — checked *before* the choices
     // guard below for the same reason as `prompt_progress`, so it isn't
     // silently discarded as a "no choices" frame.
-    if let Some(usage) = parsed.get("usage") {
-        let prompt_tokens =
-            u32::try_from(usage["prompt_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
-        let completion_tokens =
-            u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
-        let total_tokens =
-            u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
-        return Ok(SseParseResult::Events(vec![LlmStreamEvent::Usage {
-            prompt_tokens,
-            completion_tokens,
-            total_tokens,
-        }]));
+    if let Some(result) = parse_usage_frame(&parsed) {
+        return Ok(result);
     }
 
     // ── Inline upstream error frame ───────────────────────────────────────
@@ -101,37 +152,8 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // Gateway extension specifically detect this shape via
     // `'error' in obj && !('choices' in obj)` to surface a real error
     // instead of hanging or seeing a silently truncated response.
-    if let Some(err) = parsed.get("error")
-        && parsed.get("choices").is_none()
-    {
-        let (message, error_type, code) = match err {
-            serde_json::Value::String(s) => (
-                s.clone(),
-                "server_error".to_owned(),
-                "upstream_error".to_owned(),
-            ),
-            _ => (
-                err.get("message")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("upstream returned an error")
-                    .to_owned(),
-                err.get("type")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("server_error")
-                    .to_owned(),
-                err.get("code")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("upstream_error")
-                    .to_owned(),
-            ),
-        };
-        return Ok(SseParseResult::Events(vec![
-            LlmStreamEvent::UpstreamError {
-                message,
-                error_type,
-                code,
-            },
-        ]));
+    if let Some(result) = parse_inline_error_frame(&parsed) {
+        return Ok(result);
     }
 
     // Guard against keepalive / error frames that carry no `choices` array.

@@ -239,12 +239,7 @@ pub async fn collect_stream(
                 message,
                 error_type,
                 code,
-            } => {
-                anyhow::bail!(
-                    "upstream reported an error mid-stream: {message} \
-                     (type={error_type}, code={code})"
-                );
-            }
+            } => return Err(upstream_error(&message, &error_type, &code)),
         }
     }
 
@@ -282,6 +277,17 @@ async fn handle_normalization_error(
             suggested_action: None,
         })
         .await;
+}
+
+/// Build the error returned when an upstream `LlmStreamEvent::UpstreamError`
+/// frame arrives mid-stream — a genuine upstream failure (e.g. a
+/// context-length overflow discovered mid-generation) rather than a
+/// connectivity problem, so it gets a specific message instead of the
+/// generic "stream ended without a Done event" bail below.
+fn upstream_error(message: &str, error_type: &str, code: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "upstream reported an error mid-stream: {message} (type={error_type}, code={code})"
+    )
 }
 
 /// Assemble accumulated [`PartialToolCall`]s into domain [`ToolCall`] values.
