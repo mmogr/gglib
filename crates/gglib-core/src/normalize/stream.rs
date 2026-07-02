@@ -155,7 +155,9 @@ impl NormalizingStream {
             }
             LlmStreamEvent::ReasoningDelta { content } => {
                 if self.done_forwarded {
-                    tracing::warn!("NormalizingStream: dropping ReasoningDelta received after Done");
+                    tracing::warn!(
+                        "NormalizingStream: dropping ReasoningDelta received after Done"
+                    );
                     return;
                 }
                 let out = self.parser.push_reasoning(&content);
