@@ -36,9 +36,12 @@ pub enum SseParseResult {
 
 /// Parse a top-level `usage` object into a [`LlmStreamEvent::Usage`] event.
 ///
-/// Returns `None` when the frame carries no `usage` field, so the caller can
-/// fall through to the remaining frame-shape checks.
-fn parse_usage_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
+/// Returns `None` when the frame carries no `usage` field. Deliberately
+/// returns just the event (not a full [`SseParseResult`]) — unlike
+/// [`parse_inline_error_frame`], a `usage` field does **not** imply the rest
+/// of the frame should be skipped. See the call site in [`parse_sse_frame`]
+/// for why.
+fn parse_usage_event(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
     let usage = parsed.get("usage")?;
     let prompt_tokens =
         u32::try_from(usage["prompt_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
@@ -46,11 +49,11 @@ fn parse_usage_frame(parsed: &serde_json::Value) -> Option<SseParseResult> {
         u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
     let total_tokens =
         u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
-    Some(SseParseResult::Events(vec![LlmStreamEvent::Usage {
+    Some(LlmStreamEvent::Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens,
-    }]))
+    })
 }
 
 /// Parse a bare top-level `error` object (with no `choices` key) into an
@@ -133,14 +136,16 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         ]));
     }
 
-    // ── Usage-totals frame (`stream_options.include_usage: true`) ────────
-    // Per the OpenAI streaming convention this arrives as a trailing chunk
-    // with an empty/absent `choices` array — checked *before* the choices
-    // guard below for the same reason as `prompt_progress`, so it isn't
-    // silently discarded as a "no choices" frame.
-    if let Some(result) = parse_usage_frame(&parsed) {
-        return Ok(result);
-    }
+    // ── Usage totals (`stream_options.include_usage: true`) ──────────────
+    // Extracted here but *not* an early return: strict OpenAI servers send
+    // this on a trailing chunk with empty `choices`, but llama-server
+    // attaches `usage` directly onto the same chunk that also carries a
+    // real `finish_reason` and non-empty `choices`
+    // (ggml-org/llama.cpp#12102, #15443). Treating `usage` presence as a
+    // reason to skip the rest of the frame would silently discard that
+    // finish_reason/delta. Decided below once we know whether `choices`
+    // is actually empty.
+    let usage_event = parse_usage_event(&parsed);
 
     // ── Inline upstream error frame ───────────────────────────────────────
     // Some OpenAI-compatible servers (including llama.cpp) can emit a bare
@@ -162,6 +167,10 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // frame would mean the stream never emits `Done`.
     let choices = &parsed["choices"];
     if choices.as_array().is_none_or(Vec::is_empty) {
+        // Strict-OpenAI shape: no real choice, usage (if any) stands alone.
+        if let Some(usage_event) = usage_event {
+            return Ok(SseParseResult::Events(vec![usage_event]));
+        }
         tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
         return Ok(SseParseResult::Events(vec![]));
     }
@@ -214,6 +223,14 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
                 arguments,
             });
         }
+    }
+
+    // ── Usage totals bundled with this finish chunk (llama.cpp shape) ────
+    // Pushed *before* the finish_reason/Done event below, never after: the
+    // encoder appends the `[DONE]` sentinel immediately after `Done`, and
+    // nothing may follow `[DONE]` on the wire.
+    if let Some(usage_event) = usage_event {
+        events.push(usage_event);
     }
 
     // ── Finish reason → Done ────────────────────────────────────────────────
@@ -570,6 +587,61 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         };
         assert!(!events.is_empty(), "usage frame must not be skipped");
+    }
+
+    #[test]
+    fn llama_cpp_combined_usage_and_finish_chunk_emits_both_events() {
+        // Real llama-server shape (ggml-org/llama.cpp#12102, #15443): usage
+        // is attached to the *same* chunk as a real finish_reason and a
+        // non-empty `choices` array, not a separate trailing chunk with
+        // empty choices. Must not silently drop the finish_reason.
+        let frame = serde_json::json!({
+            "choices": [{ "finish_reason": "tool_calls", "index": 0, "delta": {} }],
+            "created": 0,
+            "id": "chatcmpl-1",
+            "model": "test-model",
+            "object": "chat.completion.chunk",
+            "usage": { "prompt_tokens": 4181, "completion_tokens": 12, "total_tokens": 4193 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2, "expected both a Usage and a Done event");
+        // Usage must come *before* Done -- the encoder appends `[DONE]`
+        // immediately after Done, so nothing may be emitted after it.
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                prompt_tokens: 4181,
+                completion_tokens: 12,
+                total_tokens: 4193
+            }
+        ));
+        assert!(matches!(
+            &events[1],
+            LlmStreamEvent::Done { finish_reason } if finish_reason == "tool_calls"
+        ));
+    }
+
+    #[test]
+    fn llama_cpp_combined_usage_and_stop_chunk_preserves_finish_reason() {
+        let frame = serde_json::json!({
+            "choices": [{ "finish_reason": "stop", "index": 0, "delta": {} }],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], LlmStreamEvent::Usage { .. }));
+        assert!(matches!(
+            &events[1],
+            LlmStreamEvent::Done { finish_reason } if finish_reason == "stop"
+        ));
     }
 
     #[test]
