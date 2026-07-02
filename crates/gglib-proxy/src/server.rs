@@ -236,10 +236,7 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             }
 
             if let Some(target) = state.runtime_port.current_model().await
-                && let Some(model) = response
-                    .data
-                    .iter_mut()
-                    .find(|m| m.id == target.model_name)
+                && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
             {
                 model.context_window = Some(target.effective_ctx.min(ceiling));
             }

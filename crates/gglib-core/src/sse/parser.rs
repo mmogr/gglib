@@ -628,8 +628,8 @@ mod tests {
         // `choices` key present (even empty) means this isn't the bare
         // inline-error shape the extension detects via `!('choices' in
         // obj)` -- falls through to the normal "no choices" skip instead.
-        let frame = serde_json::json!({ "error": { "message": "oops" }, "choices": [] })
-            .to_string();
+        let frame =
+            serde_json::json!({ "error": { "message": "oops" }, "choices": [] }).to_string();
         let events = match parse_sse_frame(&frame) {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
