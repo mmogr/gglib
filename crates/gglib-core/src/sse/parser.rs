@@ -72,6 +72,25 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         ]));
     }
 
+    // ── Usage-totals frame (`stream_options.include_usage: true`) ────────
+    // Per the OpenAI streaming convention this arrives as a trailing chunk
+    // with an empty/absent `choices` array — checked *before* the choices
+    // guard below for the same reason as `prompt_progress`, so it isn't
+    // silently discarded as a "no choices" frame.
+    if let Some(usage) = parsed.get("usage") {
+        let prompt_tokens =
+            u32::try_from(usage["prompt_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+        let completion_tokens =
+            u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+        let total_tokens =
+            u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+        return Ok(SseParseResult::Events(vec![LlmStreamEvent::Usage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        }]));
+    }
+
     // Guard against keepalive / error frames that carry no `choices` array.
     // Without this check every field access falls through to `Value::Null`,
     // events are silently dropped, and a `finish_reason: "stop"` in such a
@@ -440,5 +459,51 @@ mod tests {
             !events.is_empty(),
             "prompt_progress frame must not be skipped"
         );
+    }
+
+    #[test]
+    fn usage_frame_emits_usage_event() {
+        let frame = serde_json::json!({
+            "id": "chatcmpl-1",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "test-model",
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 123,
+                "completion_tokens": 45,
+                "total_tokens": 168
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                prompt_tokens: 123,
+                completion_tokens: 45,
+                total_tokens: 168
+            }
+        ));
+    }
+
+    #[test]
+    fn usage_frame_not_confused_with_no_choices_guard() {
+        // Empty `choices` array — would be silently dropped by the "no
+        // choices" guard if the usage check didn't run first.
+        let frame = serde_json::json!({
+            "choices": [],
+            "usage": { "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2 }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(!events.is_empty(), "usage frame must not be skipped");
     }
 }

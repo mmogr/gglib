@@ -146,7 +146,9 @@ impl NormalizingStream {
                     arguments,
                 });
             }
-            LlmStreamEvent::PromptProgress { .. } | LlmStreamEvent::NormalizationError { .. } => {
+            LlmStreamEvent::PromptProgress { .. }
+            | LlmStreamEvent::NormalizationError { .. }
+            | LlmStreamEvent::Usage { .. } => {
                 self.queued.push_back(event);
             }
             LlmStreamEvent::Done { finish_reason } => {
@@ -264,6 +266,25 @@ mod tests {
         let events = vec![
             LlmStreamEvent::TextDelta {
                 content: "hello".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ];
+        let out = drain(wrap(events.clone(), false));
+        assert_eq!(out, events);
+    }
+
+    #[test]
+    fn usage_event_passes_through_unchanged() {
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "hello".into(),
+            },
+            LlmStreamEvent::Usage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
             },
             LlmStreamEvent::Done {
                 finish_reason: "stop".into(),

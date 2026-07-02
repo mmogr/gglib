@@ -135,6 +135,29 @@ impl SseEncoder {
                 }));
                 Some(format!("{chunk}data: [DONE]\n\n"))
             }
+            LlmStreamEvent::Usage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            } => {
+                // Per the OpenAI `stream_options.include_usage` convention,
+                // the usage-totals chunk carries an empty `choices` array
+                // (not omitted — see `crate::LlmStreamEvent::Usage` doc) and
+                // a top-level `usage` object.
+                let value = json!({
+                    "id": self.id,
+                    "object": "chat.completion.chunk",
+                    "created": self.created,
+                    "model": self.model,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": total_tokens,
+                    },
+                });
+                Some(format!("data: {value}\n\n"))
+            }
             LlmStreamEvent::NormalizationError { .. } => None,
         }
     }
@@ -252,6 +275,28 @@ mod tests {
             serde_json::from_str(lines[0].strip_prefix("data: ").unwrap()).unwrap();
         assert_eq!(v["choices"][0]["finish_reason"], "stop");
         assert_eq!(lines[1], "data: [DONE]");
+    }
+
+    #[test]
+    fn usage_event_encodes_to_trailing_chunk_with_empty_choices() {
+        let out = enc()
+            .encode(&LlmStreamEvent::Usage {
+                prompt_tokens: 123,
+                completion_tokens: 45,
+                total_tokens: 168,
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        assert_eq!(v["object"], "chat.completion.chunk");
+        assert_eq!(v["id"], "chatcmpl-1");
+        assert_eq!(v["model"], "test-model");
+        assert!(
+            v["choices"].as_array().is_some_and(Vec::is_empty),
+            "usage chunk must carry an empty choices array, not omit it"
+        );
+        assert_eq!(v["usage"]["prompt_tokens"], 123);
+        assert_eq!(v["usage"]["completion_tokens"], 45);
+        assert_eq!(v["usage"]["total_tokens"], 168);
     }
 
     #[test]

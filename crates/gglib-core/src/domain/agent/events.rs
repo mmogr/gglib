@@ -190,6 +190,25 @@ pub enum LlmStreamEvent {
         time_ms: u64,
     },
 
+    /// Token usage totals for the completed response.
+    ///
+    /// Emitted when the request includes `stream_options.include_usage:
+    /// true` (see `gglib_proxy`'s `inject_streaming_body_overrides`).
+    /// Per the OpenAI streaming convention this arrives as a single
+    /// trailing chunk with an empty/absent `choices` array, immediately
+    /// before the `[DONE]` sentinel — never mixed with `TextDelta` or
+    /// `ToolCallDelta` events. Consumers that care about real token counts
+    /// (e.g. clients feeding a context-window UI widget) read this event;
+    /// everyone else can ignore it.
+    Usage {
+        /// Number of tokens in the prompt.
+        prompt_tokens: u32,
+        /// Number of tokens generated in the completion.
+        completion_tokens: u32,
+        /// Total tokens (`prompt_tokens + completion_tokens`).
+        total_tokens: u32,
+    },
+
     /// Signals the end of the stream.
     ///
     /// Every conforming stream must end with exactly one `Done` item.

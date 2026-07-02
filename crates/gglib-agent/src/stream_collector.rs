@@ -229,6 +229,11 @@ pub async fn collect_stream(
             LlmStreamEvent::NormalizationError { kind, raw } => {
                 handle_normalization_error(tx, &kind, &raw).await;
             }
+
+            // Wire-facing telemetry (feeds e.g. a client's context-window
+            // UI widget) with no bearing on the agent loop's own internal
+            // state — nothing to accumulate or forward here.
+            LlmStreamEvent::Usage { .. } => {}
         }
     }
 
