@@ -91,6 +91,49 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         }]));
     }
 
+    // ── Inline upstream error frame ───────────────────────────────────────
+    // Some OpenAI-compatible servers (including llama.cpp) can emit a bare
+    // `{"error": {...}}` frame mid-stream instead of a hard HTTP-level
+    // failure (e.g. a context-length overflow discovered only once
+    // generation is underway). Checked *before* the choices guard below for
+    // the same reason as `prompt_progress`/`usage`: this frame has no
+    // `choices` key at all, and clients such as the GitHub Copilot LLM
+    // Gateway extension specifically detect this shape via
+    // `'error' in obj && !('choices' in obj)` to surface a real error
+    // instead of hanging or seeing a silently truncated response.
+    if let Some(err) = parsed.get("error")
+        && parsed.get("choices").is_none()
+    {
+        let (message, error_type, code) = match err {
+            serde_json::Value::String(s) => (
+                s.clone(),
+                "server_error".to_owned(),
+                "upstream_error".to_owned(),
+            ),
+            _ => (
+                err.get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("upstream returned an error")
+                    .to_owned(),
+                err.get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("server_error")
+                    .to_owned(),
+                err.get("code")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("upstream_error")
+                    .to_owned(),
+            ),
+        };
+        return Ok(SseParseResult::Events(vec![
+            LlmStreamEvent::UpstreamError {
+                message,
+                error_type,
+                code,
+            },
+        ]));
+    }
+
     // Guard against keepalive / error frames that carry no `choices` array.
     // Without this check every field access falls through to `Value::Null`,
     // events are silently dropped, and a `finish_reason: "stop"` in such a
@@ -505,5 +548,73 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         };
         assert!(!events.is_empty(), "usage frame must not be skipped");
+    }
+
+    #[test]
+    fn inline_error_frame_object_form_extracts_all_fields() {
+        let frame = serde_json::json!({
+            "error": {
+                "message": "Context window limit reached.",
+                "type": "context_length_exceeded",
+                "code": "context_length_exceeded"
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::UpstreamError { message, error_type, code }
+                if message == "Context window limit reached."
+                    && error_type == "context_length_exceeded"
+                    && code == "context_length_exceeded"
+        ));
+    }
+
+    #[test]
+    fn inline_error_frame_string_form_uses_defaults() {
+        let frame = serde_json::json!({ "error": "boom" }).to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::UpstreamError { message, error_type, code }
+                if message == "boom" && error_type == "server_error" && code == "upstream_error"
+        ));
+    }
+
+    #[test]
+    fn inline_error_frame_not_dropped_by_no_choices_guard() {
+        // No `choices` key at all -- would be silently dropped by the "no
+        // choices" guard if the error check didn't run first.
+        let frame = serde_json::json!({ "error": { "message": "oops" } }).to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(!events.is_empty(), "inline error frame must not be skipped");
+    }
+
+    #[test]
+    fn error_alongside_choices_key_is_not_treated_as_inline_error() {
+        // `choices` key present (even empty) means this isn't the bare
+        // inline-error shape the extension detects via `!('choices' in
+        // obj)` -- falls through to the normal "no choices" skip instead.
+        let frame = serde_json::json!({ "error": { "message": "oops" }, "choices": [] })
+            .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(
+            events.is_empty(),
+            "frame with a choices key should not be parsed as UpstreamError"
+        );
     }
 }

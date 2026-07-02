@@ -234,6 +234,17 @@ pub async fn collect_stream(
             // UI widget) with no bearing on the agent loop's own internal
             // state — nothing to accumulate or forward here.
             LlmStreamEvent::Usage { .. } => {}
+
+            LlmStreamEvent::UpstreamError {
+                message,
+                error_type,
+                code,
+            } => {
+                anyhow::bail!(
+                    "upstream reported an error mid-stream: {message} \
+                     (type={error_type}, code={code})"
+                );
+            }
         }
     }
 

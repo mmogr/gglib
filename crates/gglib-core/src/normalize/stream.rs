@@ -148,7 +148,8 @@ impl NormalizingStream {
             }
             LlmStreamEvent::PromptProgress { .. }
             | LlmStreamEvent::NormalizationError { .. }
-            | LlmStreamEvent::Usage { .. } => {
+            | LlmStreamEvent::Usage { .. }
+            | LlmStreamEvent::UpstreamError { .. } => {
                 self.queued.push_back(event);
             }
             LlmStreamEvent::Done { finish_reason } => {

@@ -82,11 +82,27 @@ impl SseStreamDecoder {
                     return (events, true);
                 }
                 Ok(SseParseResult::Events(parsed_events)) => {
+                    let mut saw_terminal_error = false;
                     for event in parsed_events {
                         if matches!(event, LlmStreamEvent::Done { .. }) {
                             self.done_sent = true;
                         }
+                        if matches!(event, LlmStreamEvent::UpstreamError { .. }) {
+                            // Terminal condition: the encoder appends its own
+                            // `[DONE]` sentinel right after this event (see
+                            // `SseEncoder::encode`), and nothing meaningful
+                            // is expected to follow an inline upstream
+                            // error. Stop feeding further bytes, same as the
+                            // literal `[DONE]` sentinel case above, so a
+                            // stray fallback `Done` isn't appended by
+                            // `finish()`.
+                            saw_terminal_error = true;
+                            self.done_sent = true;
+                        }
                         events.push(Ok(event));
+                    }
+                    if saw_terminal_error {
+                        return (events, true);
                     }
                 }
                 Err(e) => {
@@ -221,6 +237,23 @@ mod tests {
         assert!(
             dec.finish().is_none(),
             "finish() must not emit a second Done"
+        );
+    }
+
+    #[test]
+    fn inline_error_frame_signals_stop_and_suppresses_fallback_done() {
+        let mut dec = SseStreamDecoder::default();
+        let frame = format!(
+            "data: {}\n",
+            serde_json::json!({ "error": { "message": "boom" } })
+        );
+        let (events, stop) = collect_all(&mut dec, &frame);
+        assert!(stop, "inline error frame should signal stop");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], LlmStreamEvent::UpstreamError { .. }));
+        assert!(
+            dec.finish().is_none(),
+            "finish() must not append a fallback Done after an inline error"
         );
     }
 

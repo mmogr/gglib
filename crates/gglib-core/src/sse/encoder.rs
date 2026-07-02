@@ -159,6 +159,28 @@ impl SseEncoder {
                 Some(format!("data: {value}\n\n"))
             }
             LlmStreamEvent::NormalizationError { .. } => None,
+            LlmStreamEvent::UpstreamError {
+                message,
+                error_type,
+                code,
+            } => {
+                // Deliberately bare -- no `id`/`object`/`created`/`model`
+                // envelope and, crucially, no `choices` key at all (unlike
+                // every other frame this encoder produces). Clients such as
+                // the GitHub Copilot LLM Gateway extension detect this exact
+                // shape (`'error' in obj && !('choices' in obj)`) to
+                // recognise an inline mid-stream failure; wrapping it in the
+                // usual envelope or adding an empty `choices: []` would hide
+                // it as an ordinary chunk instead.
+                let error_obj = json!({
+                    "error": {
+                        "message": message,
+                        "type": error_type,
+                        "code": code,
+                    }
+                });
+                Some(format!("data: {error_obj}\n\ndata: [DONE]\n\n"))
+            }
         }
     }
 
@@ -297,6 +319,33 @@ mod tests {
         assert_eq!(v["usage"]["prompt_tokens"], 123);
         assert_eq!(v["usage"]["completion_tokens"], 45);
         assert_eq!(v["usage"]["total_tokens"], 168);
+    }
+
+    #[test]
+    fn upstream_error_event_encodes_to_bare_error_frame_and_done_sentinel() {
+        let out = enc()
+            .encode(&LlmStreamEvent::UpstreamError {
+                message: "Context window limit reached.".to_owned(),
+                error_type: "context_length_exceeded".to_owned(),
+                code: "context_length_exceeded".to_owned(),
+            })
+            .expect("frame");
+        let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
+        assert_eq!(lines.len(), 2, "expects the error frame plus [DONE]");
+        let v: serde_json::Value =
+            serde_json::from_str(lines[0].strip_prefix("data: ").unwrap()).unwrap();
+        assert_eq!(v["error"]["message"], "Context window limit reached.");
+        assert_eq!(v["error"]["type"], "context_length_exceeded");
+        assert_eq!(v["error"]["code"], "context_length_exceeded");
+        assert!(
+            v.get("choices").is_none(),
+            "inline error frame must not carry a choices key at all"
+        );
+        assert!(
+            v.get("id").is_none(),
+            "inline error frame is deliberately bare, no envelope fields"
+        );
+        assert_eq!(lines[1], "data: [DONE]");
     }
 
     #[test]
