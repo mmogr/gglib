@@ -858,5 +858,8 @@ pub fn virtual_model_info(name: &str, description: &str) -> ModelInfo {
         created: 0,
         owned_by: "gglib".to_string(),
         description: Some(description.to_string()),
+        // Virtual/orchestration entry points, not a single context-bounded
+        // model — no meaningful context window to advertise.
+        context_window: None,
     }
 }

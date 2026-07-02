@@ -264,6 +264,20 @@ pub struct ModelInfo {
     pub owned_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Model's context window size, in tokens (llama.cpp's `/v1/models`
+    /// field-naming convention). `None` when unknown.
+    ///
+    /// Populated from [`ModelSummary::context_length`] by default; callers
+    /// that know the model is currently running should overwrite this with
+    /// the live `effective_ctx` from `ModelRuntimePort::current_model()`,
+    /// which reflects the actual `--ctx-size` in use rather than the GGUF's
+    /// static max. Either way this value should be clamped to
+    /// `crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS` before being served,
+    /// so clients that auto-detect context size from this endpoint (e.g.
+    /// the GitHub Copilot LLM Gateway extension) never compute a budget
+    /// this proxy's own truncation guard will reject.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u64>,
 }
 
 impl From<ModelSummary> for ModelInfo {
@@ -274,6 +288,7 @@ impl From<ModelSummary> for ModelInfo {
             created: summary.created_at,
             owned_by: "gglib".to_string(),
             description: Some(summary.description()),
+            context_window: summary.context_length,
         }
     }
 }
@@ -545,6 +560,7 @@ mod tests {
                 architecture: Some("llama".into()),
                 created_at: 1700000000,
                 file_size: 4_000_000_000,
+                context_length: Some(8192),
                 inference_defaults: None,
             },
             ModelSummary {
@@ -557,6 +573,7 @@ mod tests {
                 architecture: Some("mistral".into()),
                 created_at: 1700000001,
                 file_size: 7_000_000_000,
+                context_length: None,
                 inference_defaults: None,
             },
         ];
@@ -582,6 +599,7 @@ mod tests {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            context_length: None,
             inference_defaults: None,
         }]);
 
@@ -608,6 +626,7 @@ mod tests {
             architecture: Some("llama".into()),
             created_at: 0,
             file_size: 0,
+            context_length: None,
             inference_defaults: None,
         };
         let info = ModelInfo::from(summary);
@@ -629,6 +648,7 @@ mod tests {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            context_length: None,
             inference_defaults: None,
         };
         let info = ModelInfo::from(summary);
@@ -637,6 +657,44 @@ mod tests {
             desc.contains("unknown"),
             "missing fields should show 'unknown'"
         );
+    }
+
+    #[test]
+    fn model_info_maps_context_length_to_context_window() {
+        let summary = ModelSummary {
+            id: 1,
+            name: "ctx-model".into(),
+            tags: vec![],
+            capabilities: ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: Some(32_768),
+            inference_defaults: None,
+        };
+        let info = ModelInfo::from(summary);
+        assert_eq!(info.context_window, Some(32_768));
+    }
+
+    #[test]
+    fn model_info_context_window_none_when_unknown() {
+        let summary = ModelSummary {
+            id: 1,
+            name: "unknown-ctx-model".into(),
+            tags: vec![],
+            capabilities: ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: None,
+            inference_defaults: None,
+        };
+        let info = ModelInfo::from(summary);
+        assert_eq!(info.context_window, None);
     }
 
     // =========================================================================

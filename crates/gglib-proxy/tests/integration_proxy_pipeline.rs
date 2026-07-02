@@ -198,6 +198,7 @@ impl TaggedCatalog {
             architecture: None,
             created_at: 0,
             file_size: 0,
+            context_length: None,
             inference_defaults: None,
         }
     }

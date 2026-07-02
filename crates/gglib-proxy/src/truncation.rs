@@ -58,6 +58,31 @@ pub const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 /// Approximation: 240,000 chars ÷ 4 ≈ 60,000 tokens.
 pub const TOTAL_PAYLOAD_LIMIT_CHARS: usize = 240_000;
 
+/// Character-to-token conversion factor used solely to translate
+/// [`TOTAL_PAYLOAD_LIMIT_CHARS`] (a **character** budget) into a **token**
+/// count for [`TOTAL_PAYLOAD_LIMIT_TOKENS`].
+///
+/// This value is not an attempt at precise real-world tokenization — it is
+/// deliberately chosen to match the GitHub Copilot LLM Gateway extension's
+/// own `TOKEN_CONSTANTS.CHARS_PER_TOKEN = 4` (see its `tokenBudget.ts`), so
+/// that gglib's advertised `context_window` (see `crate::models::ModelInfo`)
+/// and the extension's own char→token budget estimate agree on the same
+/// conversion factor. What matters here is consistency between the two
+/// sides, not tokenizer accuracy.
+pub const CHARS_PER_TOKEN_APPROX: usize = 4;
+
+/// [`TOTAL_PAYLOAD_LIMIT_CHARS`] expressed as a **token** count.
+///
+/// Used to clamp the `context_window` value gglib reports via `/v1/models`
+/// (see `crate::models::ModelInfo`) so that a client computing its own
+/// input-token budget from that field can never plan a prompt larger than
+/// what this proxy's own hard-abort in [`truncate_history`] will actually
+/// allow through. Without this clamp, advertising a model's full native
+/// context (e.g. 131,072 tokens) while enforcing a much smaller
+/// character-based ceiling here creates a split-brain where the client only
+/// discovers the real limit via a hard HTTP 400.
+pub const TOTAL_PAYLOAD_LIMIT_TOKENS: usize = TOTAL_PAYLOAD_LIMIT_CHARS / CHARS_PER_TOKEN_APPROX;
+
 /// Number of trailing messages (by index) that are always preserved from
 /// truncation regardless of role or content size.  These represent the
 /// immediate conversational context the model needs to respond coherently.

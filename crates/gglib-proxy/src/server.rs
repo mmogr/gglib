@@ -33,6 +33,7 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
+use crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -211,12 +212,38 @@ async fn health_check() -> impl IntoResponse {
 /// List all models from the catalog in OpenAI format.
 ///
 /// Appends the three virtual council model entries after the catalog models.
+///
+/// Each catalog entry's `context_window` (populated from the static
+/// GGUF-derived `context_length`) is clamped to
+/// [`crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS`] so clients that
+/// auto-detect context size from this endpoint (e.g. the GitHub Copilot LLM
+/// Gateway extension) never compute a token budget larger than what this
+/// proxy's own [`crate::truncation::truncate_history`] will actually allow
+/// through. Whichever model is currently running is then overridden with
+/// its live `effective_ctx` (the real `--ctx-size` llama-server was
+/// launched with), which is more accurate than the static value and can
+/// differ from it.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
     match state.catalog_port.list_models().await {
         Ok(models) => {
             let mut response = ModelsResponse::from_summaries(models);
+
+            let ceiling = TOTAL_PAYLOAD_LIMIT_TOKENS as u64;
+            for model in &mut response.data {
+                model.context_window = model.context_window.map(|ctx| ctx.min(ceiling));
+            }
+
+            if let Some(target) = state.runtime_port.current_model().await
+                && let Some(model) = response
+                    .data
+                    .iter_mut()
+                    .find(|m| m.id == target.model_name)
+            {
+                model.context_window = Some(target.effective_ctx.min(ceiling));
+            }
+
             // Append virtual council models.
             let virtuals: Vec<ModelInfo> = vec![
                 virtual_model_info(
