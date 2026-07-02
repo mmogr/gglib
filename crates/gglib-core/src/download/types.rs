@@ -316,15 +316,18 @@ fn find_boundary_match(haystack: &[u8], pattern: &[u8]) -> Option<usize> {
         return None;
     }
 
-    haystack.windows(plen).enumerate().find_map(|(start, window)| {
-        if !window.eq_ignore_ascii_case(pattern) {
-            return None;
-        }
-        let before_ok = start == 0 || !haystack[start - 1].is_ascii_alphanumeric();
-        let after = start + plen;
-        let after_ok = after == haystack.len() || !haystack[after].is_ascii_alphanumeric();
-        (before_ok && after_ok).then_some(start)
-    })
+    haystack
+        .windows(plen)
+        .enumerate()
+        .find_map(|(start, window)| {
+            if !window.eq_ignore_ascii_case(pattern) {
+                return None;
+            }
+            let before_ok = start == 0 || !haystack[start - 1].is_ascii_alphanumeric();
+            let after = start + plen;
+            let after_ok = after == haystack.len() || !haystack[after].is_ascii_alphanumeric();
+            (before_ok && after_ok).then_some(start)
+        })
 }
 
 /// Returns true if the standalone token immediately preceding `match_start`
@@ -668,7 +671,10 @@ mod tests {
 
     #[test]
     fn test_quantization_from_str_ud_prefix() {
-        assert_eq!("UD-Q6_K".parse::<Quantization>().unwrap(), Quantization::UdQ6K);
+        assert_eq!(
+            "UD-Q6_K".parse::<Quantization>().unwrap(),
+            Quantization::UdQ6K
+        );
         assert_eq!(
             "ud-q6_k".parse::<Quantization>().unwrap(),
             Quantization::UdQ6K

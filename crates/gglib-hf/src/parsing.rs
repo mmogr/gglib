@@ -267,7 +267,11 @@ mod tests {
 
         let quantizations = aggregate_quantizations(&files);
 
-        assert_eq!(quantizations.len(), 2, "plain and UD- quants must not merge");
+        assert_eq!(
+            quantizations.len(),
+            2,
+            "plain and UD- quants must not merge"
+        );
         let plain = quantizations
             .iter()
             .find(|q| q.name == "Q6_K")

@@ -228,10 +228,7 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("unsloth", "Qwen3-Coder-Next-GGUF");
 
-        let plain = client
-            .find_quantization_files(&repo, "Q6_K")
-            .await
-            .unwrap();
+        let plain = client.find_quantization_files(&repo, "Q6_K").await.unwrap();
         assert_eq!(plain.len(), 1);
         assert_eq!(plain[0].path, "model-Q6_K.gguf");
 
