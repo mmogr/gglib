@@ -373,6 +373,10 @@ gglib model search "llama 3 GGUF"
 
 # Download from HuggingFace
 gglib model download TheBloke/Llama-2-7B-GGUF --quant Q4_K_M
+
+# Download an Unsloth Dynamic ("UD-") quant -- distinct from the plain quant
+# of the same suffix, e.g. "UD-Q6_K" vs "Q6_K"
+gglib model download unsloth/Qwen3-Coder-Next-GGUF --quant UD-Q6_K
 ```
 
 ## Design Decisions
