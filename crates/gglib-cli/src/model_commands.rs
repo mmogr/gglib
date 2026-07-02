@@ -250,7 +250,8 @@ pub enum ModelCommand {
     Download {
         /// HuggingFace model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
         model_id: String,
-        /// Specific quantization to download (e.g., "Q4_K_M", "F16")
+        /// Specific quantization to download (e.g., "Q4_K_M", "F16", or an
+        /// Unsloth Dynamic quant like "UD-Q4_K_M")
         #[arg(short, long)]
         quantization: Option<String>,
         /// List available quantizations for the model

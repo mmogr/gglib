@@ -243,7 +243,65 @@ pub fn filter_files_by_quantization(files: &[HfFileEntry], quantization: &str) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::HfEntryType;
     use serde_json::json;
+
+    fn gguf_file(path: &str, size: u64) -> HfFileEntry {
+        HfFileEntry {
+            path: path.to_string(),
+            entry_type: HfEntryType::File,
+            size,
+            oid: None,
+        }
+    }
+
+    #[test]
+    fn test_aggregate_quantizations_distinguishes_ud_dynamic_quants() {
+        // Regression for the real unsloth/Qwen3-Coder-Next-GGUF collision: a
+        // plain Q6_K/ directory and a UD-Q6_K/ (Unsloth Dynamic) directory
+        // previously collapsed into a single merged HfQuantization group.
+        let files = vec![
+            gguf_file("Q6_K/model-Q6_K.gguf", 6_000_000_000),
+            gguf_file("UD-Q6_K/model-UD-Q6_K.gguf", 6_500_000_000),
+        ];
+
+        let quantizations = aggregate_quantizations(&files);
+
+        assert_eq!(
+            quantizations.len(),
+            2,
+            "plain and UD- quants must not merge"
+        );
+        let plain = quantizations
+            .iter()
+            .find(|q| q.name == "Q6_K")
+            .expect("plain Q6_K group present");
+        let dynamic = quantizations
+            .iter()
+            .find(|q| q.name == "UD-Q6_K")
+            .expect("UD-Q6_K group present");
+
+        assert_eq!(plain.shard_count, 1);
+        assert_eq!(plain.total_size, 6_000_000_000);
+        assert_eq!(dynamic.shard_count, 1);
+        assert_eq!(dynamic.total_size, 6_500_000_000);
+    }
+
+    #[test]
+    fn test_filter_files_by_quantization_excludes_ud_variant() {
+        let files = vec![
+            gguf_file("Q6_K/model-Q6_K.gguf", 6_000_000_000),
+            gguf_file("UD-Q6_K/model-UD-Q6_K.gguf", 6_500_000_000),
+        ];
+
+        let plain = filter_files_by_quantization(&files, "Q6_K");
+        assert_eq!(plain.len(), 1);
+        assert_eq!(plain[0].path, "Q6_K/model-Q6_K.gguf");
+
+        let dynamic = filter_files_by_quantization(&files, "UD-Q6_K");
+        assert_eq!(dynamic.len(), 1);
+        assert_eq!(dynamic[0].path, "UD-Q6_K/model-UD-Q6_K.gguf");
+    }
 
     #[test]
     fn test_parse_model_summary_with_all_fields() {

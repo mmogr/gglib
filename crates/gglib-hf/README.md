@@ -82,7 +82,9 @@ async fn example() {
 ## Features
 
 - **Model Search**: Search `HuggingFace` Hub for GGUF models with pagination and sorting
-- **Quantization Listing**: List available quantization variants (`Q4_K_M`, `Q5_K_S`, etc.)
+- **Quantization Listing**: List available quantization variants (`Q4_K_M`, `Q5_K_S`, etc.),
+  including Unsloth Dynamic ("UD-") quants (`UD-Q4_K_M`, `UD-Q6_K`, etc.) as separate,
+  independently selectable entries from their plain counterparts
 - **File Resolution**: Find specific GGUF files for download, including sharded models
 - **Commit SHA Lookup**: Get latest commit SHA for version tracking
 - **Authenticated Access**: Optional `HuggingFace` token for gated models

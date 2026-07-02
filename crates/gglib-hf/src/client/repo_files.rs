@@ -210,6 +210,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_find_quantization_files_excludes_unsloth_ud_variant() {
+        // Regression: a request for the plain "Q6_K" quantization must not
+        // also return the unrelated Unsloth Dynamic "UD-Q6_K" file, even
+        // though both share the same "Q6_K" bit-depth suffix.
+        let backend = FakeBackend::new().with_response(
+            "tree/main",
+            CannedResponse {
+                json: json!([
+                    {"path": "model-Q6_K.gguf", "type": "file", "size": 6_000_000_000_u64},
+                    {"path": "model-UD-Q6_K.gguf", "type": "file", "size": 6_500_000_000_u64},
+                ]),
+                has_more: false,
+            },
+        );
+
+        let client = HfClient::with_backend(test_config(), backend);
+        let repo = HfRepoRef::new("unsloth", "Qwen3-Coder-Next-GGUF");
+
+        let plain = client.find_quantization_files(&repo, "Q6_K").await.unwrap();
+        assert_eq!(plain.len(), 1);
+        assert_eq!(plain[0].path, "model-Q6_K.gguf");
+
+        let dynamic = client
+            .find_quantization_files(&repo, "UD-Q6_K")
+            .await
+            .unwrap();
+        assert_eq!(dynamic.len(), 1);
+        assert_eq!(dynamic[0].path, "model-UD-Q6_K.gguf");
+    }
+
+    #[tokio::test]
     async fn test_get_commit_sha() {
         let backend = FakeBackend::new().with_response(
             "Llama-2-7B-GGUF",

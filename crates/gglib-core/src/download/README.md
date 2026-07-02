@@ -9,7 +9,10 @@ system. No I/O, networking, or runtime dependencies allowed.
 
 # Structure
 
-- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`, `ShardInfo`)
+- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`, `ShardInfo`).
+  `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
+  values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
+  publish both with the same bit-depth suffix.
 - `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`)
 - `errors` - Error types for download operations
 - `queue` - Queue snapshot DTOs (`QueueSnapshot`, `QueuedDownload`, `FailedDownload`)

@@ -122,6 +122,10 @@ let id = manager.queue_download(request).await?;
 // - Single quant available → auto-picks it
 // - Multiple quants → uses default preference (Q5_K_M, Q4_K_M, etc.)
 // - Explicit quant → validates it exists
+//
+// Note: Unsloth Dynamic ("UD-") quants (e.g. "UD-Q6_K") are always distinct,
+// separately selectable entries from their plain counterparts ("Q6_K") -- they
+// are never picked by the default preference list, so request them explicitly.
 let (position, shard_count) = Arc::clone(&manager)
     .queue_smart("user/model".to_string(), Some("Q8_0".to_string()))
     .await?;
