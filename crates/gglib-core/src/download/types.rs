@@ -598,6 +598,86 @@ mod tests {
     }
 
     #[test]
+    fn test_quantization_distinguishes_ud_dynamic_from_plain() {
+        // Real-world collision: unsloth/Qwen3-Coder-Next-GGUF publishes both
+        // Q6_K/ and UD-Q6_K/ directories with the same bit-depth suffix.
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-Q6_K.gguf"),
+            Quantization::Q6K
+        );
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-UD-Q6_K.gguf"),
+            Quantization::UdQ6K
+        );
+        assert_ne!(Quantization::Q6K, Quantization::UdQ6K);
+    }
+
+    #[test]
+    fn test_quantization_longest_match_wins_over_table_order() {
+        // "UD-Q6_K_XL" contains the shorter "Q6_K" pattern as a boundary-valid
+        // substring too, but the longer, more specific "Q6_K_XL" pattern (which
+        // is listed *after* plain "UD-" handling would apply) must still win.
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-UD-Q6_K_XL.gguf"),
+            Quantization::Q6KXl
+        );
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-UD-Q4_K_XL.gguf"),
+            Quantization::Q4KXl
+        );
+    }
+
+    #[test]
+    fn test_quantization_boundary_avoids_model_name_collisions() {
+        // "Q6King" is not a delimited "Q6_K" token, so it must not match.
+        assert_eq!(
+            Quantization::from_filename("Deepseek-Q6King-7B.gguf"),
+            Quantization::Unknown
+        );
+    }
+
+    #[test]
+    fn test_quantization_ud_only_variants_previously_unknown() {
+        // These previously had no pattern at all and silently mapped to Unknown.
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-UD-IQ1_S.gguf"),
+            Quantization::UdIq1S
+        );
+        assert_eq!(
+            Quantization::from_filename("Qwen3-Coder-Next-UD-TQ1_0.gguf"),
+            Quantization::UdTq1_0
+        );
+    }
+
+    #[test]
+    fn test_quantization_ud_variant_as_str_round_trip() {
+        for (base, ud) in [
+            (Quantization::Q3KM, Quantization::UdQ3KM),
+            (Quantization::Q3KS, Quantization::UdQ3KS),
+            (Quantization::Q4KM, Quantization::UdQ4KM),
+            (Quantization::Q4KS, Quantization::UdQ4KS),
+            (Quantization::Q5KM, Quantization::UdQ5KM),
+            (Quantization::Q5KS, Quantization::UdQ5KS),
+            (Quantization::Q6K, Quantization::UdQ6K),
+        ] {
+            assert_eq!(ud.as_str(), format!("UD-{}", base.as_str()));
+            assert_eq!(ud.as_str().parse::<Quantization>().unwrap(), ud);
+            assert_eq!(base.as_str().parse::<Quantization>().unwrap(), base);
+        }
+    }
+
+    #[test]
+    fn test_quantization_from_str_ud_prefix() {
+        assert_eq!("UD-Q6_K".parse::<Quantization>().unwrap(), Quantization::UdQ6K);
+        assert_eq!(
+            "ud-q6_k".parse::<Quantization>().unwrap(),
+            Quantization::UdQ6K
+        );
+        assert_eq!("Q6_K".parse::<Quantization>().unwrap(), Quantization::Q6K);
+        assert!("UD-NOT_A_QUANT".parse::<Quantization>().is_err());
+    }
+
+    #[test]
     fn test_shard_info_display() {
         let shard = ShardInfo::new(1, 5, "model-00002-of-00005.gguf");
         assert_eq!(shard.display(), "Part 2/5");
