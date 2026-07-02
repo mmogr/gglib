@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.6.6"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97bf4965940c2382204c0ded6dd3dd48c0c4e872f1e76fb1bf94f45991a2cb6a"
+checksum = "db8b397918185f0161ff3d6fcaa9e4bfc09b8367caf6e1d4a2848e5477ed027b"
 dependencies = [
  "clap",
 ]
@@ -695,9 +695,9 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.3"
+version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d64e8af5551369d19cf50138de61f1c42074ab970f74e99be916646777f8fc87"
+checksum = "4fe5f465a4f6fee88fad41b85d990f84c835335e85b5d9e6e63e0d06d28cba7c"
 dependencies = [
  "encode_unicode",
  "libc",
@@ -1141,7 +1141,6 @@ version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
- "powerfmt",
  "serde_core",
 ]
 
@@ -1539,7 +1538,7 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
- "zlib-rs 0.6.4",
+ "zlib-rs 0.6.5",
 ]
 
 [[package]]
@@ -1885,7 +1884,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1908,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1936,7 +1935,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1966,7 +1965,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "axum",
@@ -2002,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2021,20 +2020,20 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "clap_complete",
- "console 0.16.3",
+ "console 0.16.4",
  "crossterm",
  "dotenvy",
  "futures-util",
@@ -2050,7 +2049,7 @@ dependencies = [
  "gglib-mcp",
  "gglib-runtime",
  "hf-hub",
- "indicatif 0.18.5",
+ "indicatif 0.18.6",
  "reqwest 0.13.4",
  "rustyline",
  "serde",
@@ -2067,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2089,7 +2088,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2109,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2118,7 +2117,7 @@ dependencies = [
  "gglib-hf",
  "hf-hub",
  "indexmap 2.14.0",
- "indicatif 0.18.5",
+ "indicatif 0.18.6",
  "mockall",
  "reqwest 0.13.4",
  "serde",
@@ -2135,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2147,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2164,7 +2163,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2181,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2209,7 +2208,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2222,7 +2221,7 @@ dependencies = [
  "gglib-core",
  "gglib-mcp",
  "gglib-proxy",
- "indicatif 0.18.5",
+ "indicatif 0.18.6",
  "nix 0.30.1",
  "num_cpus",
  "reqwest 0.13.4",
@@ -2241,7 +2240,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "axum",
  "futures-util",
@@ -2254,7 +2253,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "gglib-app-services",
@@ -3651,11 +3650,11 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.18.5"
+version = "0.18.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993f007684f2e9727160da8b960ec161264703bfd1af084fd2e34d040c9a0dd4"
+checksum = "9433806cd6b4ec1aba79c021c7e4c58fb4c3b9977c085062e611ac929998fb0c"
 dependencies = [
- "console 0.16.3",
+ "console 0.16.4",
  "portable-atomic",
  "unicode-width 0.2.2",
  "unit-prefix",
@@ -4014,14 +4013,14 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f02ab6bace2054fb888a3c16f990117b579d14a3088e472d63c6011fa185c9d3"
+checksum = "c943259e342f1e06ff2da7a83eabdfe7f92ce10262688dbf1895ff0b3e6e4652"
 dependencies = [
  "bitflags 2.13.0",
  "libc",
  "plain",
- "redox_syscall 0.8.1",
+ "redox_syscall 0.9.0",
 ]
 
 [[package]]
@@ -5277,9 +5276,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b44b894f2a6e36457d665d1e08c3866add6ed5e70050c1b4ba8a8ddedb02ce7"
+checksum = "c5102a6aaa05aa011a238e178e6bca86d2cb56fc9f586d37cb80f5bca6e07759"
 dependencies = [
  "bitflags 2.13.0",
 ]
@@ -6602,9 +6601,9 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tauri"
-version = "2.11.3"
+version = "2.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2616f96cb644bf2c5c456d9de4d5d5100e592d7424c74d8b55c5cb96e359e93"
+checksum = "667b20e2726d572dea2de7370da16e188eb06008faf9a92fab7cdc46791190b5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6967,12 +6966,11 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.47"
+version = "0.3.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
+checksum = "18dfaaeddcb932337b5e7866ee7d0ce9b76d2fd092997146f187ec09b4558a50"
 dependencies = [
  "deranged",
- "itoa",
  "js-sys",
  "libc",
  "num-conv",
@@ -6985,15 +6983,15 @@ dependencies = [
 
 [[package]]
 name = "time-core"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
+checksum = "9e1c906769ad99c88eaa54e728060edef082f8e358ff32030cb7c7d315e81109"
 
 [[package]]
 name = "time-macros"
-version = "0.2.27"
+version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
+checksum = "c431b87111666e491a90baa837f914fb45cd5dc3c268591b0220ff5057f2085f"
 dependencies = [
  "num-conv",
  "time-core",
@@ -8771,9 +8769,9 @@ checksum = "40990edd51aae2c2b6907af74ffb635029d5788228222c4bb811e9351c0caad3"
 
 [[package]]
 name = "zlib-rs"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "977347db8caa080403f6b6b7c1cda9479a8e869316f7e13a59b19076a40f94e3"
+checksum = "5431d5661c32445236631278f27946e444ddafe4684cac70b185272d4f9c52d5"
 
 [[package]]
 name = "zmij"
