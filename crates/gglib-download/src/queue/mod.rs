@@ -935,4 +935,41 @@ mod tests {
         assert_eq!(snapshot.items[1].position, 2);
         assert_eq!(snapshot.items[1].id, "c");
     }
+
+    /// Test that snapshot() produces correct DTOs with active/pending counts.
+    #[test]
+    fn test_snapshot_produces_correct_dtos() {
+        let mut queue = DownloadQueue::new(5);
+
+        // Enqueue 2 items: "model-x" and "model-y"
+        let id_x = test_id("model-x", None);
+        let id_y = test_id("model-y", None);
+
+        queue
+            .queue(id_x.clone(), test_completion_key(&id_x), false)
+            .unwrap();
+        queue
+            .queue(id_y.clone(), test_completion_key(&id_y), false)
+            .unwrap();
+
+        // Snapshot with nothing active: 0 active, 2 pending
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 2);
+        assert_eq!(snapshot.active_count, 0);
+        assert_eq!(snapshot.pending_count, 2);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "model-x");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "model-y");
+
+        // Dequeue "model-x" and mark it as downloading
+        let current = queue.dequeue().unwrap();
+        assert_eq!(current.id.model_id(), "model-x");
+        let current_dto = current.to_dto(1, DownloadStatus::Downloading);
+
+        // Snapshot with active item: 1 active, 1 pending
+        let snapshot = queue.snapshot(Some(current_dto));
+        assert_eq!(snapshot.active_count, 1);
+        assert_eq!(snapshot.pending_count, 1);
+    }
 }
