@@ -493,4 +493,40 @@ mod tests {
         assert_eq!(download.downloaded_bytes, 1000);
         assert!((download.speed_bps - 100.0).abs() < 0.01);
     }
+
+    /// Test `update_progress` with large u64 values — verifies no overflow/panic and results are in the right ballpark despite f64 precision loss.
+    #[test]
+    fn test_update_progress_large_u64_values() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // 50 TB downloaded out of 100 TB total, at 1 GB/s
+        let downloaded: u64 = 50_000_000_000_000;
+        let total: u64 = 100_000_000_000_000;
+        let speed_bps: f64 = 1_000_000_000.0; // 1 GB/s
+
+        download.update_progress(downloaded, total, speed_bps);
+
+        // Progress should be approximately 50% (within tolerance for f64 precision loss)
+        assert!(
+            (download.progress_percent - 50.0).abs() < 0.1,
+            "Progress should be ~50%, got {}",
+            download.progress_percent
+        );
+
+        // ETA: remaining bytes / speed = 50 TB / 1 GB/s = 50_000 seconds
+        assert!(
+            download.eta_seconds.is_some(),
+            "ETA should be Some for large values"
+        );
+        let eta = download.eta_seconds.unwrap();
+        assert!(
+            (eta - 50_000.0).abs() < 1.0,
+            "ETA should be ~50,000 seconds, got {}",
+            eta
+        );
+
+        // Verify downloaded_bytes and speed were updated
+        assert_eq!(download.downloaded_bytes, downloaded);
+        assert!((download.speed_bps - speed_bps).abs() < 0.01);
+    }
 }
