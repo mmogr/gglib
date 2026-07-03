@@ -374,4 +374,45 @@ mod tests {
         assert_eq!(parsed.id, "id");
         assert_eq!(parsed.quantization, Some(Quantization::Q4KM));
     }
+
+    /// Comprehensive test: verify `is_active()` and `is_complete()` for all 7 `DownloadStatus` variants.
+    #[test]
+    fn test_status_classification_all_variants() {
+        let base = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Queued: not active, not complete
+        let queued = base.clone().with_status(DownloadStatus::Queued);
+        assert!(!queued.is_active(), "Queued should not be active");
+        assert!(!queued.is_complete(), "Queued should not be complete");
+
+        // Downloading: active, not complete
+        let downloading = base.clone().with_status(DownloadStatus::Downloading);
+        assert!(downloading.is_active(), "Downloading should be active");
+        assert!(!downloading.is_complete(), "Downloading should not be complete");
+
+        // Finalizing: not active, not complete
+        let finalizing = base.clone().with_status(DownloadStatus::Finalizing);
+        assert!(!finalizing.is_active(), "Finalizing should not be active");
+        assert!(!finalizing.is_complete(), "Finalizing should not be complete");
+
+        // Registering: not active, not complete
+        let registering = base.clone().with_status(DownloadStatus::Registering);
+        assert!(!registering.is_active(), "Registering should not be active");
+        assert!(!registering.is_complete(), "Registering should not be complete");
+
+        // Completed: not active, complete
+        let completed = base.clone().with_status(DownloadStatus::Completed);
+        assert!(!completed.is_active(), "Completed should not be active");
+        assert!(completed.is_complete(), "Completed should be complete");
+
+        // Failed: not active, complete
+        let failed = base.clone().with_status(DownloadStatus::Failed);
+        assert!(!failed.is_active(), "Failed should not be active");
+        assert!(failed.is_complete(), "Failed should be complete");
+
+        // Cancelled: not active, complete
+        let cancelled = base.clone().with_status(DownloadStatus::Cancelled);
+        assert!(!cancelled.is_active(), "Cancelled should not be active");
+        assert!(cancelled.is_complete(), "Cancelled should be complete");
+    }
 }
