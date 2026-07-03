@@ -455,4 +455,23 @@ mod tests {
         assert_eq!(download.downloaded_bytes, 500);
         assert!((download.speed_bps - 100.0).abs() < 0.01);
     }
+
+    /// Test `update_progress` with zero speed (division-by-zero guard for ETA).
+    #[test]
+    fn test_update_progress_zero_speed() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with speed = 0.0
+        download.update_progress(500, 1000, 0.0);
+
+        // Progress percent is still calculated correctly (50%)
+        assert_eq!(download.progress_percent, 50.0, "Progress should be 50.0%");
+
+        // ETA is None because `speed_bps > 0.0` guard prevents division by zero / infinity
+        assert!(download.eta_seconds.is_none(), "ETA should be None when speed is 0");
+
+        // Downloaded bytes are updated, speed is 0
+        assert_eq!(download.downloaded_bytes, 500);
+        assert_eq!(download.speed_bps, 0.0);
+    }
 }
