@@ -201,7 +201,7 @@ mod tests {
     fn test_queued_item_to_dto_with_all_statuses() {
         let id = DownloadId::new("model/test", Some("Q4_K_M"));
         let key = test_completion_key(&id);
-        let item = QueuedItem::new(id.clone(), key);
+        let item = QueuedItem::new(id, key);
 
         let statuses = vec![
             DownloadStatus::Queued,
@@ -217,7 +217,7 @@ mod tests {
             let dto = item.to_dto(1, status);
 
             // Status should match what was passed
-            assert_eq!(dto.status, status, "Status mismatch for {:?}", status);
+            assert_eq!(dto.status, status, "Status mismatch for {status:?}");
 
             // Position should be preserved
             assert_eq!(dto.position, 1);

@@ -438,13 +438,13 @@ mod tests {
         assert!(failed.is_complete(), "Failed should be complete");
 
         // Cancelled: not active, complete
-        let cancelled = base.clone().with_status(DownloadStatus::Cancelled);
+        let cancelled = base.with_status(DownloadStatus::Cancelled);
         assert!(!cancelled.is_active(), "Cancelled should not be active");
         assert!(cancelled.is_complete(), "Cancelled should be complete");
     }
 
     /// Test `update_progress` when downloaded bytes exceed total bytes.
-    /// This documents the current behavior: progress_percent can exceed 100%, and eta_seconds becomes None.
+    /// This documents the current behavior: `progress_percent` can exceed 100%, and `eta_seconds` becomes None.
     #[test]
     fn test_update_progress_downloaded_exceeds_total() {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
@@ -475,6 +475,7 @@ mod tests {
 
     /// Test `update_progress` with zero total bytes (division-by-zero guard).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_update_progress_zero_total_bytes() {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
@@ -500,6 +501,7 @@ mod tests {
 
     /// Test `update_progress` with zero speed (division-by-zero guard for ETA).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_update_progress_zero_speed() {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
@@ -522,6 +524,7 @@ mod tests {
 
     /// Test `update_progress` when download is complete (downloaded == total).
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_update_progress_complete_download() {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
@@ -572,8 +575,7 @@ mod tests {
         let eta = download.eta_seconds.unwrap();
         assert!(
             (eta - 50_000.0).abs() < 1.0,
-            "ETA should be ~50,000 seconds, got {}",
-            eta
+            "ETA should be ~50,000 seconds, got {eta}"
         );
 
         // Verify downloaded_bytes and speed were updated

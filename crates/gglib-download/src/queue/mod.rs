@@ -936,7 +936,7 @@ mod tests {
         assert_eq!(snapshot.items[1].id, "c");
     }
 
-    /// Test that snapshot() produces correct DTOs with active/pending counts.
+    /// Test that `snapshot()` produces correct DTOs with active/pending counts.
     #[test]
     fn test_snapshot_produces_correct_dtos() {
         let mut queue = DownloadQueue::new(5);
@@ -973,7 +973,7 @@ mod tests {
         assert_eq!(snapshot.pending_count, 1);
     }
 
-    /// Test that mark_failed() moves an item to the failed list correctly.
+    /// Test that `mark_failed()` moves an item to the failed list correctly.
     #[test]
     fn test_remove_item_moves_to_failed() {
         let mut queue = DownloadQueue::new(3);
@@ -1008,7 +1008,7 @@ mod tests {
         assert_eq!(snapshot.recent_failures[0].error, error_msg);
     }
 
-    /// Test that clear_failed() drains the failed list.
+    /// Test that `clear_failed()` drains the failed list.
     #[test]
     fn test_clear_failed_drains_list() {
         let mut queue = DownloadQueue::new(5);
@@ -1054,8 +1054,8 @@ mod tests {
         assert!(queue.dequeue().is_none());
     }
 
-    /// Test that concurrent snapshot() reads complete without deadlock.
-    /// Because DownloadQueue is wrapped in a tokio::sync::RwLock, multiple
+    /// Test that concurrent `snapshot()` reads complete without deadlock.
+    /// Because `DownloadQueue` is wrapped in a `tokio::sync::RwLock`, multiple
     /// readers can hold shared references simultaneously — all snapshots
     /// should complete quickly and return consistent queued-item counts.
     #[tokio::test]
@@ -1148,8 +1148,9 @@ mod tests {
         assert_eq!(final_snapshot.pending_count, 2);
     }
 
-    /// Test that concurrent enqueue writes are serialized safely by RwLock.
+    /// Test that concurrent enqueue writes are serialized safely by `RwLock`.
     /// Multiple tasks enqueue simultaneously; none should be lost.
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_concurrent_enqueue_writes() {
         use std::sync::Arc;
