@@ -415,4 +415,25 @@ mod tests {
         assert!(!cancelled.is_active(), "Cancelled should not be active");
         assert!(cancelled.is_complete(), "Cancelled should be complete");
     }
+
+    /// Test `update_progress` when downloaded bytes exceed total bytes.
+    /// This documents the current behavior: progress_percent can exceed 100%, and eta_seconds becomes None.
+    #[test]
+    fn test_update_progress_downloaded_exceeds_total() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with downloaded > total
+        download.update_progress(1500, 1000, 100.0);
+
+        // Progress percent exceeds 100% (no clamping)
+        assert!(download.progress_percent > 100.0, "Progress should exceed 100% when downloaded > total");
+        assert!((download.progress_percent - 150.0).abs() < 0.01, "Progress should be 150.0%");
+
+        // ETA is None because total > downloaded condition is false
+        assert!(download.eta_seconds.is_none(), "ETA should be None when downloaded >= total");
+
+        // Speed and bytes are still updated
+        assert_eq!(download.downloaded_bytes, 1500);
+        assert!((download.speed_bps - 100.0).abs() < 0.01);
+    }
 }
