@@ -1017,8 +1017,12 @@ mod tests {
         let id_a = test_id("a", None);
         let id_b = test_id("b", None);
 
-        queue.queue(id_a.clone(), test_completion_key(&id_a), false).unwrap();
-        queue.queue(id_b.clone(), test_completion_key(&id_b), false).unwrap();
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
 
         // Dequeue both, then mark each as failed with different errors
         let item_a = queue.dequeue().unwrap();

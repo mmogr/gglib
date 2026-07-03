@@ -406,17 +406,26 @@ mod tests {
         // Downloading: active, not complete
         let downloading = base.clone().with_status(DownloadStatus::Downloading);
         assert!(downloading.is_active(), "Downloading should be active");
-        assert!(!downloading.is_complete(), "Downloading should not be complete");
+        assert!(
+            !downloading.is_complete(),
+            "Downloading should not be complete"
+        );
 
         // Finalizing: not active, not complete
         let finalizing = base.clone().with_status(DownloadStatus::Finalizing);
         assert!(!finalizing.is_active(), "Finalizing should not be active");
-        assert!(!finalizing.is_complete(), "Finalizing should not be complete");
+        assert!(
+            !finalizing.is_complete(),
+            "Finalizing should not be complete"
+        );
 
         // Registering: not active, not complete
         let registering = base.clone().with_status(DownloadStatus::Registering);
         assert!(!registering.is_active(), "Registering should not be active");
-        assert!(!registering.is_complete(), "Registering should not be complete");
+        assert!(
+            !registering.is_complete(),
+            "Registering should not be complete"
+        );
 
         // Completed: not active, complete
         let completed = base.clone().with_status(DownloadStatus::Completed);
@@ -444,11 +453,20 @@ mod tests {
         download.update_progress(1500, 1000, 100.0);
 
         // Progress percent exceeds 100% (no clamping)
-        assert!(download.progress_percent > 100.0, "Progress should exceed 100% when downloaded > total");
-        assert!((download.progress_percent - 150.0).abs() < 0.01, "Progress should be 150.0%");
+        assert!(
+            download.progress_percent > 100.0,
+            "Progress should exceed 100% when downloaded > total"
+        );
+        assert!(
+            (download.progress_percent - 150.0).abs() < 0.01,
+            "Progress should be 150.0%"
+        );
 
         // ETA is None because total > downloaded condition is false
-        assert!(download.eta_seconds.is_none(), "ETA should be None when downloaded >= total");
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when downloaded >= total"
+        );
 
         // Speed and bytes are still updated
         assert_eq!(download.downloaded_bytes, 1500);
@@ -464,10 +482,16 @@ mod tests {
         download.update_progress(500, 0, 100.0);
 
         // Progress percent is 0.0 (the `if total > 0` guard prevents division by zero)
-        assert_eq!(download.progress_percent, 0.0, "Progress should be 0.0 when total is 0");
+        assert_eq!(
+            download.progress_percent, 0.0,
+            "Progress should be 0.0 when total is 0"
+        );
 
         // ETA is None because `total > downloaded` is false when total is 0
-        assert!(download.eta_seconds.is_none(), "ETA should be None when total is 0");
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when total is 0"
+        );
 
         // Downloaded bytes and speed are still updated
         assert_eq!(download.downloaded_bytes, 500);
@@ -486,7 +510,10 @@ mod tests {
         assert_eq!(download.progress_percent, 50.0, "Progress should be 50.0%");
 
         // ETA is None because `speed_bps > 0.0` guard prevents division by zero / infinity
-        assert!(download.eta_seconds.is_none(), "ETA should be None when speed is 0");
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when speed is 0"
+        );
 
         // Downloaded bytes are updated, speed is 0
         assert_eq!(download.downloaded_bytes, 500);
@@ -502,10 +529,16 @@ mod tests {
         download.update_progress(1000, 1000, 100.0);
 
         // Progress percent should be 100%
-        assert_eq!(download.progress_percent, 100.0, "Progress should be 100.0%");
+        assert_eq!(
+            download.progress_percent, 100.0,
+            "Progress should be 100.0%"
+        );
 
         // ETA is None because `total > downloaded` guard is false when equal
-        assert!(download.eta_seconds.is_none(), "ETA should be None when download is complete");
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when download is complete"
+        );
 
         // Downloaded bytes and speed are updated normally
         assert_eq!(download.downloaded_bytes, 1000);
@@ -560,15 +593,24 @@ mod tests {
         assert_eq!(failed.failed_at, 1_234_567_890);
         // Defaults
         assert!(!failed.recoverable, "recoverable should default to false");
-        assert_eq!(failed.downloaded_bytes, 0, "downloaded_bytes should default to 0");
+        assert_eq!(
+            failed.downloaded_bytes, 0,
+            "downloaded_bytes should default to 0"
+        );
 
         // Chain builders and verify values are set
         let failed2 = FailedDownload::new("id2", "Display2", "timeout", 0)
             .with_recoverable(true)
             .with_downloaded_bytes(500_000);
 
-        assert!(failed2.recoverable, "recoverable should be true after with_recoverable(true)");
-        assert_eq!(failed2.downloaded_bytes, 500_000, "downloaded_bytes should be 500_000");
+        assert!(
+            failed2.recoverable,
+            "recoverable should be true after with_recoverable(true)"
+        );
+        assert_eq!(
+            failed2.downloaded_bytes, 500_000,
+            "downloaded_bytes should be 500_000"
+        );
     }
 
     /// Test `QueueSnapshot::default()` produces the same state as `QueueSnapshot::new(0)`.
@@ -592,6 +634,9 @@ mod tests {
 
         // recent_failures should be empty
         assert!(default_snapshot.recent_failures.is_empty());
-        assert_eq!(default_snapshot.recent_failures.len(), zero_snapshot.recent_failures.len());
+        assert_eq!(
+            default_snapshot.recent_failures.len(),
+            zero_snapshot.recent_failures.len()
+        );
     }
 }
