@@ -972,4 +972,39 @@ mod tests {
         assert_eq!(snapshot.active_count, 1);
         assert_eq!(snapshot.pending_count, 1);
     }
+
+    /// Test that mark_failed() moves an item to the failed list correctly.
+    #[test]
+    fn test_remove_item_moves_to_failed() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 2 items: "model-a" and "model-b"
+        let id_a = test_id("model-a", None);
+        let id_b = test_id("model-b", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+
+        // Dequeue "model-a" then mark it as failed
+        let item = queue.dequeue().unwrap();
+        assert_eq!(item.id.model_id(), "model-a");
+
+        let error_msg = "connection timeout";
+        queue.mark_failed(item, error_msg);
+
+        // Snapshot: only "model-b" remains in pending, failed item in recent_failures
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].id, "model-b");
+        assert_eq!(snapshot.pending_count, 1);
+
+        // Verify the failed item appears in recent_failures
+        assert_eq!(snapshot.recent_failures.len(), 1);
+        assert_eq!(snapshot.recent_failures[0].id, "model-a");
+        assert_eq!(snapshot.recent_failures[0].error, error_msg);
+    }
 }
