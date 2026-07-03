@@ -354,6 +354,19 @@ mod tests {
 
         download.speed_bps = 500.0;
         assert_eq!(download.speed_display(), "500 B/s");
+
+        // Edge cases: exact boundaries and just-below thresholds
+        download.speed_bps = 1_000.0;
+        assert_eq!(download.speed_display(), "1.0 KB/s");
+
+        download.speed_bps = 999.0;
+        assert_eq!(download.speed_display(), "999 B/s");
+
+        download.speed_bps = 1_000_000.0;
+        assert_eq!(download.speed_display(), "1.0 MB/s");
+
+        download.speed_bps = 1_000_000_000.0;
+        assert_eq!(download.speed_display(), "1.0 GB/s");
     }
 
     #[test]
@@ -361,6 +374,11 @@ mod tests {
         assert_eq!(format_duration(30), "30s");
         assert_eq!(format_duration(90), "1m 30s");
         assert_eq!(format_duration(3661), "1h 1m");
+
+        // Edge cases: exact hour boundaries and zero
+        assert_eq!(format_duration(0), "0s");
+        assert_eq!(format_duration(3600), "1h 0m");
+        assert_eq!(format_duration(7200), "2h 0m");
     }
 
     #[test]
