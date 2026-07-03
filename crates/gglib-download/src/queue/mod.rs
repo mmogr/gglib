@@ -858,4 +858,38 @@ mod tests {
         let result = queue.queue(id_c.clone(), test_completion_key(&id_c), false);
         assert!(matches!(result, Err(DownloadError::QueueFull { .. })));
     }
+
+    /// Test that enqueue → dequeue follows strict FIFO ordering with capacity 3.
+    #[test]
+    fn test_enqueue_dequeue_fifo_ordering() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 3 items with distinct IDs
+        let id_a = test_id("model-a", None);
+        let id_b = test_id("model-b", None);
+        let id_c = test_id("model-c", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+        queue
+            .queue(id_c.clone(), test_completion_key(&id_c), false)
+            .unwrap();
+
+        // Dequeue in FIFO order
+        let first = queue.dequeue().unwrap();
+        assert_eq!(first.id.model_id(), "model-a");
+
+        let second = queue.dequeue().unwrap();
+        assert_eq!(second.id.model_id(), "model-b");
+
+        let third = queue.dequeue().unwrap();
+        assert_eq!(third.id.model_id(), "model-c");
+
+        // Queue is now empty - dequeue returns None
+        assert!(queue.dequeue().is_none());
+    }
 }
