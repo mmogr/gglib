@@ -354,6 +354,19 @@ mod tests {
 
         download.speed_bps = 500.0;
         assert_eq!(download.speed_display(), "500 B/s");
+
+        // Edge cases: exact boundaries and just-below thresholds
+        download.speed_bps = 1_000.0;
+        assert_eq!(download.speed_display(), "1.0 KB/s");
+
+        download.speed_bps = 999.0;
+        assert_eq!(download.speed_display(), "999 B/s");
+
+        download.speed_bps = 1_000_000.0;
+        assert_eq!(download.speed_display(), "1.0 MB/s");
+
+        download.speed_bps = 1_000_000_000.0;
+        assert_eq!(download.speed_display(), "1.0 GB/s");
     }
 
     #[test]
@@ -361,6 +374,11 @@ mod tests {
         assert_eq!(format_duration(30), "30s");
         assert_eq!(format_duration(90), "1m 30s");
         assert_eq!(format_duration(3661), "1h 1m");
+
+        // Edge cases: exact hour boundaries and zero
+        assert_eq!(format_duration(0), "0s");
+        assert_eq!(format_duration(3600), "1h 0m");
+        assert_eq!(format_duration(7200), "2h 0m");
     }
 
     #[test]
@@ -373,5 +391,254 @@ mod tests {
 
         assert_eq!(parsed.id, "id");
         assert_eq!(parsed.quantization, Some(Quantization::Q4KM));
+    }
+
+    /// Comprehensive test: verify `is_active()` and `is_complete()` for all 7 `DownloadStatus` variants.
+    #[test]
+    fn test_status_classification_all_variants() {
+        let base = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Queued: not active, not complete
+        let queued = base.clone().with_status(DownloadStatus::Queued);
+        assert!(!queued.is_active(), "Queued should not be active");
+        assert!(!queued.is_complete(), "Queued should not be complete");
+
+        // Downloading: active, not complete
+        let downloading = base.clone().with_status(DownloadStatus::Downloading);
+        assert!(downloading.is_active(), "Downloading should be active");
+        assert!(
+            !downloading.is_complete(),
+            "Downloading should not be complete"
+        );
+
+        // Finalizing: not active, not complete
+        let finalizing = base.clone().with_status(DownloadStatus::Finalizing);
+        assert!(!finalizing.is_active(), "Finalizing should not be active");
+        assert!(
+            !finalizing.is_complete(),
+            "Finalizing should not be complete"
+        );
+
+        // Registering: not active, not complete
+        let registering = base.clone().with_status(DownloadStatus::Registering);
+        assert!(!registering.is_active(), "Registering should not be active");
+        assert!(
+            !registering.is_complete(),
+            "Registering should not be complete"
+        );
+
+        // Completed: not active, complete
+        let completed = base.clone().with_status(DownloadStatus::Completed);
+        assert!(!completed.is_active(), "Completed should not be active");
+        assert!(completed.is_complete(), "Completed should be complete");
+
+        // Failed: not active, complete
+        let failed = base.clone().with_status(DownloadStatus::Failed);
+        assert!(!failed.is_active(), "Failed should not be active");
+        assert!(failed.is_complete(), "Failed should be complete");
+
+        // Cancelled: not active, complete
+        let cancelled = base.with_status(DownloadStatus::Cancelled);
+        assert!(!cancelled.is_active(), "Cancelled should not be active");
+        assert!(cancelled.is_complete(), "Cancelled should be complete");
+    }
+
+    /// Test `update_progress` when downloaded bytes exceed total bytes.
+    /// This documents the current behavior: `progress_percent` can exceed 100%, and `eta_seconds` becomes None.
+    #[test]
+    fn test_update_progress_downloaded_exceeds_total() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with downloaded > total
+        download.update_progress(1500, 1000, 100.0);
+
+        // Progress percent exceeds 100% (no clamping)
+        assert!(
+            download.progress_percent > 100.0,
+            "Progress should exceed 100% when downloaded > total"
+        );
+        assert!(
+            (download.progress_percent - 150.0).abs() < 0.01,
+            "Progress should be 150.0%"
+        );
+
+        // ETA is None because total > downloaded condition is false
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when downloaded >= total"
+        );
+
+        // Speed and bytes are still updated
+        assert_eq!(download.downloaded_bytes, 1500);
+        assert!((download.speed_bps - 100.0).abs() < 0.01);
+    }
+
+    /// Test `update_progress` with zero total bytes (division-by-zero guard).
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_update_progress_zero_total_bytes() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with total = 0
+        download.update_progress(500, 0, 100.0);
+
+        // Progress percent is 0.0 (the `if total > 0` guard prevents division by zero)
+        assert_eq!(
+            download.progress_percent, 0.0,
+            "Progress should be 0.0 when total is 0"
+        );
+
+        // ETA is None because `total > downloaded` is false when total is 0
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when total is 0"
+        );
+
+        // Downloaded bytes and speed are still updated
+        assert_eq!(download.downloaded_bytes, 500);
+        assert!((download.speed_bps - 100.0).abs() < 0.01);
+    }
+
+    /// Test `update_progress` with zero speed (division-by-zero guard for ETA).
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_update_progress_zero_speed() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with speed = 0.0
+        download.update_progress(500, 1000, 0.0);
+
+        // Progress percent is still calculated correctly (50%)
+        assert_eq!(download.progress_percent, 50.0, "Progress should be 50.0%");
+
+        // ETA is None because `speed_bps > 0.0` guard prevents division by zero / infinity
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when speed is 0"
+        );
+
+        // Downloaded bytes are updated, speed is 0
+        assert_eq!(download.downloaded_bytes, 500);
+        assert_eq!(download.speed_bps, 0.0);
+    }
+
+    /// Test `update_progress` when download is complete (downloaded == total).
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_update_progress_complete_download() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with downloaded equal to total
+        download.update_progress(1000, 1000, 100.0);
+
+        // Progress percent should be 100%
+        assert_eq!(
+            download.progress_percent, 100.0,
+            "Progress should be 100.0%"
+        );
+
+        // ETA is None because `total > downloaded` guard is false when equal
+        assert!(
+            download.eta_seconds.is_none(),
+            "ETA should be None when download is complete"
+        );
+
+        // Downloaded bytes and speed are updated normally
+        assert_eq!(download.downloaded_bytes, 1000);
+        assert!((download.speed_bps - 100.0).abs() < 0.01);
+    }
+
+    /// Test `update_progress` with large u64 values — verifies no overflow/panic and results are in the right ballpark despite f64 precision loss.
+    #[test]
+    fn test_update_progress_large_u64_values() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // 50 TB downloaded out of 100 TB total, at 1 GB/s
+        let downloaded: u64 = 50_000_000_000_000;
+        let total: u64 = 100_000_000_000_000;
+        let speed_bps: f64 = 1_000_000_000.0; // 1 GB/s
+
+        download.update_progress(downloaded, total, speed_bps);
+
+        // Progress should be approximately 50% (within tolerance for f64 precision loss)
+        assert!(
+            (download.progress_percent - 50.0).abs() < 0.1,
+            "Progress should be ~50%, got {}",
+            download.progress_percent
+        );
+
+        // ETA: remaining bytes / speed = 50 TB / 1 GB/s = 50_000 seconds
+        assert!(
+            download.eta_seconds.is_some(),
+            "ETA should be Some for large values"
+        );
+        let eta = download.eta_seconds.unwrap();
+        assert!(
+            (eta - 50_000.0).abs() < 1.0,
+            "ETA should be ~50,000 seconds, got {eta}"
+        );
+
+        // Verify downloaded_bytes and speed were updated
+        assert_eq!(download.downloaded_bytes, downloaded);
+        assert!((download.speed_bps - speed_bps).abs() < 0.01);
+    }
+
+    /// Test `FailedDownload` builder pattern — defaults and chained setters.
+    #[test]
+    fn test_failed_download_builders() {
+        // Create with new() and verify defaults
+        let failed = FailedDownload::new("id", "Display", "network error", 1_234_567_890);
+
+        assert_eq!(failed.id, "id");
+        assert_eq!(failed.display_name, "Display");
+        assert_eq!(failed.error, "network error");
+        assert_eq!(failed.failed_at, 1_234_567_890);
+        // Defaults
+        assert!(!failed.recoverable, "recoverable should default to false");
+        assert_eq!(
+            failed.downloaded_bytes, 0,
+            "downloaded_bytes should default to 0"
+        );
+
+        // Chain builders and verify values are set
+        let failed2 = FailedDownload::new("id2", "Display2", "timeout", 0)
+            .with_recoverable(true)
+            .with_downloaded_bytes(500_000);
+
+        assert!(
+            failed2.recoverable,
+            "recoverable should be true after with_recoverable(true)"
+        );
+        assert_eq!(
+            failed2.downloaded_bytes, 500_000,
+            "downloaded_bytes should be 500_000"
+        );
+    }
+
+    /// Test `QueueSnapshot::default()` produces the same state as `QueueSnapshot::new(0)`.
+    #[test]
+    fn test_queue_snapshot_default() {
+        let default_snapshot = QueueSnapshot::default();
+        let zero_snapshot = QueueSnapshot::new(0);
+
+        // max_size should be 0 for both
+        assert_eq!(default_snapshot.max_size, 0);
+        assert_eq!(zero_snapshot.max_size, 0);
+        assert_eq!(default_snapshot.max_size, zero_snapshot.max_size);
+
+        // items should be empty
+        assert!(default_snapshot.items.is_empty());
+        assert_eq!(default_snapshot.items.len(), zero_snapshot.items.len());
+
+        // counts should be zero
+        assert_eq!(default_snapshot.active_count, 0);
+        assert_eq!(default_snapshot.pending_count, 0);
+
+        // recent_failures should be empty
+        assert!(default_snapshot.recent_failures.is_empty());
+        assert_eq!(
+            default_snapshot.recent_failures.len(),
+            zero_snapshot.recent_failures.len()
+        );
     }
 }

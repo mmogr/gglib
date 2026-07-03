@@ -175,4 +175,58 @@ mod tests {
 
         assert_eq!(failed.error, "Network timeout");
     }
+
+    #[test]
+    fn test_failed_item_from_queued_item() {
+        let id = DownloadId::new("author/model-name", Some("Q8_0"));
+        let key = test_completion_key(&id);
+        let item = QueuedItem::new(id.clone(), key);
+        let error_msg = "Connection refused";
+        let failed = FailedItem::new(item, error_msg);
+
+        // Error message is captured
+        assert_eq!(failed.error, error_msg);
+
+        // Original queued item is preserved
+        assert_eq!(failed.item.id, id);
+
+        // DTO conversion propagates model info and error
+        let dto = failed.to_dto();
+        assert_eq!(dto.id, "author/model-name:Q8_0");
+        assert_eq!(dto.error, error_msg);
+        assert_eq!(dto.failed_at, 0);
+    }
+
+    #[test]
+    fn test_queued_item_to_dto_with_all_statuses() {
+        let id = DownloadId::new("model/test", Some("Q4_K_M"));
+        let key = test_completion_key(&id);
+        let item = QueuedItem::new(id, key);
+
+        let statuses = vec![
+            DownloadStatus::Queued,
+            DownloadStatus::Downloading,
+            DownloadStatus::Finalizing,
+            DownloadStatus::Registering,
+            DownloadStatus::Completed,
+            DownloadStatus::Failed,
+            DownloadStatus::Cancelled,
+        ];
+
+        for status in statuses {
+            let dto = item.to_dto(1, status);
+
+            // Status should match what was passed
+            assert_eq!(dto.status, status, "Status mismatch for {status:?}");
+
+            // Position should be preserved
+            assert_eq!(dto.position, 1);
+
+            // ID fields should be populated
+            assert_eq!(dto.id, "model/test:Q4_K_M");
+
+            // Model ID should match
+            assert_eq!(dto.model_id.as_str(), "model/test");
+        }
+    }
 }

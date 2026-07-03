@@ -858,4 +858,411 @@ mod tests {
         let result = queue.queue(id_c.clone(), test_completion_key(&id_c), false);
         assert!(matches!(result, Err(DownloadError::QueueFull { .. })));
     }
+
+    /// Test that enqueue → dequeue follows strict FIFO ordering with capacity 3.
+    #[test]
+    fn test_enqueue_dequeue_fifo_ordering() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 3 items with distinct IDs
+        let id_a = test_id("model-a", None);
+        let id_b = test_id("model-b", None);
+        let id_c = test_id("model-c", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+        queue
+            .queue(id_c.clone(), test_completion_key(&id_c), false)
+            .unwrap();
+
+        // Dequeue in FIFO order
+        let first = queue.dequeue().unwrap();
+        assert_eq!(first.id.model_id(), "model-a");
+
+        let second = queue.dequeue().unwrap();
+        assert_eq!(second.id.model_id(), "model-b");
+
+        let third = queue.dequeue().unwrap();
+        assert_eq!(third.id.model_id(), "model-c");
+
+        // Queue is now empty - dequeue returns None
+        assert!(queue.dequeue().is_none());
+    }
+
+    /// Test that positions shift down after dequeue.
+    #[test]
+    fn test_position_tracking_on_enqueue_dequeue() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 3 items: "a", "b", "c"
+        let id_a = test_id("a", None);
+        let id_b = test_id("b", None);
+        let id_c = test_id("c", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+        queue
+            .queue(id_c.clone(), test_completion_key(&id_c), false)
+            .unwrap();
+
+        // Snapshot: positions should be 1, 2, 3
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 3);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "a");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "b");
+        assert_eq!(snapshot.items[2].position, 3);
+        assert_eq!(snapshot.items[2].id, "c");
+
+        // Dequeue "a"
+        let dequeued = queue.dequeue().unwrap();
+        assert_eq!(dequeued.id.model_id(), "a");
+
+        // Snapshot again: positions should have shifted down
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 2);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "b");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "c");
+    }
+
+    /// Test that `snapshot()` produces correct DTOs with active/pending counts.
+    #[test]
+    fn test_snapshot_produces_correct_dtos() {
+        let mut queue = DownloadQueue::new(5);
+
+        // Enqueue 2 items: "model-x" and "model-y"
+        let id_x = test_id("model-x", None);
+        let id_y = test_id("model-y", None);
+
+        queue
+            .queue(id_x.clone(), test_completion_key(&id_x), false)
+            .unwrap();
+        queue
+            .queue(id_y.clone(), test_completion_key(&id_y), false)
+            .unwrap();
+
+        // Snapshot with nothing active: 0 active, 2 pending
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 2);
+        assert_eq!(snapshot.active_count, 0);
+        assert_eq!(snapshot.pending_count, 2);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "model-x");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "model-y");
+
+        // Dequeue "model-x" and mark it as downloading
+        let current = queue.dequeue().unwrap();
+        assert_eq!(current.id.model_id(), "model-x");
+        let current_dto = current.to_dto(1, DownloadStatus::Downloading);
+
+        // Snapshot with active item: 1 active, 1 pending
+        let snapshot = queue.snapshot(Some(current_dto));
+        assert_eq!(snapshot.active_count, 1);
+        assert_eq!(snapshot.pending_count, 1);
+    }
+
+    /// Test that `mark_failed()` moves an item to the failed list correctly.
+    #[test]
+    fn test_remove_item_moves_to_failed() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 2 items: "model-a" and "model-b"
+        let id_a = test_id("model-a", None);
+        let id_b = test_id("model-b", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+
+        // Dequeue "model-a" then mark it as failed
+        let item = queue.dequeue().unwrap();
+        assert_eq!(item.id.model_id(), "model-a");
+
+        let error_msg = "connection timeout";
+        queue.mark_failed(item, error_msg);
+
+        // Snapshot: only "model-b" remains in pending, failed item in recent_failures
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].id, "model-b");
+        assert_eq!(snapshot.pending_count, 1);
+
+        // Verify the failed item appears in recent_failures
+        assert_eq!(snapshot.recent_failures.len(), 1);
+        assert_eq!(snapshot.recent_failures[0].id, "model-a");
+        assert_eq!(snapshot.recent_failures[0].error, error_msg);
+    }
+
+    /// Test that `clear_failed()` drains the failed list.
+    #[test]
+    fn test_clear_failed_drains_list() {
+        let mut queue = DownloadQueue::new(5);
+
+        // Enqueue 2 items: "a" and "b"
+        let id_a = test_id("a", None);
+        let id_b = test_id("b", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+
+        // Dequeue both, then mark each as failed with different errors
+        let item_a = queue.dequeue().unwrap();
+        let item_b = queue.dequeue().unwrap();
+
+        queue.mark_failed(item_a, "error for a");
+        queue.mark_failed(item_b, "error for b");
+
+        // Verify 2 failed items
+        assert_eq!(queue.failed_len(), 2);
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.recent_failures.len(), 2);
+
+        // Clear the failed list
+        queue.clear_failed();
+
+        // Verify list is drained
+        assert_eq!(queue.failed_len(), 0);
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.recent_failures.len(), 0);
+    }
+
+    /// Test that dequeue on an empty queue returns None gracefully.
+    #[test]
+    fn test_dequeue_from_empty_queue_returns_none() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Dequeue immediately — should return None, not panic or deadlock
+        assert!(queue.dequeue().is_none());
+    }
+
+    /// Test that concurrent `snapshot()` reads complete without deadlock.
+    /// Because `DownloadQueue` is wrapped in a `tokio::sync::RwLock`, multiple
+    /// readers can hold shared references simultaneously — all snapshots
+    /// should complete quickly and return consistent queued-item counts.
+    #[tokio::test]
+    async fn test_concurrent_snapshot_reads() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let mut queue = DownloadQueue::new(10);
+
+        // Enqueue 2 items so the queue is non-empty
+        let id_a = test_id("concurrent-a", None);
+        let id_b = test_id("concurrent-b", None);
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+
+        let queue = Arc::new(RwLock::new(queue));
+
+        // Launch 3 concurrent tasks, each reading a snapshot
+        let (s1, s2, s3) = tokio::join!(
+            async { queue.read().await.snapshot(None) },
+            async { queue.read().await.snapshot(None) },
+            async { queue.read().await.snapshot(None) },
+        );
+
+        // All three snapshots should succeed and agree on queued items count
+        assert_eq!(s1.items.len(), 2);
+        assert_eq!(s2.items.len(), 2);
+        assert_eq!(s3.items.len(), 2);
+
+        // Each snapshot should have the same pending count
+        assert_eq!(s1.pending_count, 2);
+        assert_eq!(s2.pending_count, 2);
+        assert_eq!(s3.pending_count, 2);
+    }
+
+    /// Test that enqueue can proceed while a snapshot reader is active.
+    /// The writer (enqueue) waits for the reader to release the lock, then proceeds.
+    #[tokio::test]
+    async fn test_enqueue_while_snapshot_reading() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let mut queue = DownloadQueue::new(10);
+
+        // Enqueue 1 initial item
+        let id_a = test_id("reader-item", None);
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+
+        let queue = Arc::new(RwLock::new(queue));
+
+        // Spawn a "reader" task that holds the read lock for 50ms
+        let reader_queue = Arc::clone(&queue);
+        let reader = tokio::spawn(async move {
+            let guard = reader_queue.read().await;
+            let snapshot = guard.snapshot(None);
+            drop(guard); // Release read lock before sleeping
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            snapshot
+        });
+
+        // Spawn an "enqueuer" task that adds a new item while reader is active
+        let enqueuer_queue = Arc::clone(&queue);
+        let id_b = test_id("writer-item", None);
+        let enqueuer = tokio::spawn(async move {
+            let mut guard = enqueuer_queue.write().await;
+            let key = test_completion_key(&id_b);
+            guard.queue(id_b.clone(), key, false).unwrap();
+            id_b
+        });
+
+        // Wait for both tasks to complete
+        let reader_snapshot = reader.await.unwrap();
+        let enqueued_id = enqueuer.await.unwrap();
+
+        // Reader saw 1 item (before enqueue)
+        assert_eq!(reader_snapshot.items.len(), 1);
+
+        // Enqueuer completed successfully
+        assert_eq!(enqueued_id.model_id(), "writer-item");
+
+        // Final snapshot should show 2 items
+        let final_snapshot = queue.read().await.snapshot(None);
+        assert_eq!(final_snapshot.items.len(), 2);
+        assert_eq!(final_snapshot.pending_count, 2);
+    }
+
+    /// Test that concurrent enqueue writes are serialized safely by `RwLock`.
+    /// Multiple tasks enqueue simultaneously; none should be lost.
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_concurrent_enqueue_writes() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let queue = Arc::new(RwLock::new(DownloadQueue::new(10)));
+
+        // Spawn 8 concurrent tasks, each enqueuing a unique item
+        let h0 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-0", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h1 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-1", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h2 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-2", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h3 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-3", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h4 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-4", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h5 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-5", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h6 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-6", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h7 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-7", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+
+        // Wait for all tasks to complete using tokio::join!
+        let (r0, r1, r2, r3, r4, r5, r6, r7) = tokio::join!(h0, h1, h2, h3, h4, h5, h6, h7);
+        // All tasks should have completed successfully
+        r0.unwrap();
+        r1.unwrap();
+        r2.unwrap();
+        r3.unwrap();
+        r4.unwrap();
+        r5.unwrap();
+        r6.unwrap();
+        r7.unwrap();
+
+        // Dequeue all items and verify none were lost
+        let mut dequeued = Vec::new();
+        loop {
+            let item = queue.write().await.dequeue();
+            match item {
+                Some(q_item) => dequeued.push(q_item.id),
+                None => break,
+            }
+        }
+
+        // Exactly 8 items should have been dequeued
+        assert_eq!(dequeued.len(), 8);
+    }
 }
