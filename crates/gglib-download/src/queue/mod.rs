@@ -1049,4 +1049,45 @@ mod tests {
         // Dequeue immediately — should return None, not panic or deadlock
         assert!(queue.dequeue().is_none());
     }
+
+    /// Test that concurrent snapshot() reads complete without deadlock.
+    /// Because DownloadQueue is wrapped in a tokio::sync::RwLock, multiple
+    /// readers can hold shared references simultaneously — all snapshots
+    /// should complete quickly and return consistent queued-item counts.
+    #[tokio::test]
+    async fn test_concurrent_snapshot_reads() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let mut queue = DownloadQueue::new(10);
+
+        // Enqueue 2 items so the queue is non-empty
+        let id_a = test_id("concurrent-a", None);
+        let id_b = test_id("concurrent-b", None);
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+
+        let queue = Arc::new(RwLock::new(queue));
+
+        // Launch 3 concurrent tasks, each reading a snapshot
+        let (s1, s2, s3) = tokio::join!(
+            async { queue.read().await.snapshot(None) },
+            async { queue.read().await.snapshot(None) },
+            async { queue.read().await.snapshot(None) },
+        );
+
+        // All three snapshots should succeed and agree on queued items count
+        assert_eq!(s1.items.len(), 2);
+        assert_eq!(s2.items.len(), 2);
+        assert_eq!(s3.items.len(), 2);
+
+        // Each snapshot should have the same pending count
+        assert_eq!(s1.pending_count, 2);
+        assert_eq!(s2.pending_count, 2);
+        assert_eq!(s3.pending_count, 2);
+    }
 }
