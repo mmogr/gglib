@@ -1090,4 +1090,57 @@ mod tests {
         assert_eq!(s2.pending_count, 2);
         assert_eq!(s3.pending_count, 2);
     }
+
+    /// Test that enqueue can proceed while a snapshot reader is active.
+    /// The writer (enqueue) waits for the reader to release the lock, then proceeds.
+    #[tokio::test]
+    async fn test_enqueue_while_snapshot_reading() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let mut queue = DownloadQueue::new(10);
+
+        // Enqueue 1 initial item
+        let id_a = test_id("reader-item", None);
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+
+        let queue = Arc::new(RwLock::new(queue));
+
+        // Spawn a "reader" task that holds the read lock for 50ms
+        let reader_queue = Arc::clone(&queue);
+        let reader = tokio::spawn(async move {
+            let guard = reader_queue.read().await;
+            let snapshot = guard.snapshot(None);
+            drop(guard); // Release read lock before sleeping
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            snapshot
+        });
+
+        // Spawn an "enqueuer" task that adds a new item while reader is active
+        let enqueuer_queue = Arc::clone(&queue);
+        let id_b = test_id("writer-item", None);
+        let enqueuer = tokio::spawn(async move {
+            let mut guard = enqueuer_queue.write().await;
+            let key = test_completion_key(&id_b);
+            guard.queue(id_b.clone(), key, false).unwrap();
+            id_b
+        });
+
+        // Wait for both tasks to complete
+        let reader_snapshot = reader.await.unwrap();
+        let enqueued_id = enqueuer.await.unwrap();
+
+        // Reader saw 1 item (before enqueue)
+        assert_eq!(reader_snapshot.items.len(), 1);
+
+        // Enqueuer completed successfully
+        assert_eq!(enqueued_id.model_id(), "writer-item");
+
+        // Final snapshot should show 2 items
+        let final_snapshot = queue.read().await.snapshot(None);
+        assert_eq!(final_snapshot.items.len(), 2);
+        assert_eq!(final_snapshot.pending_count, 2);
+    }
 }
