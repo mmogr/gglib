@@ -1007,4 +1007,37 @@ mod tests {
         assert_eq!(snapshot.recent_failures[0].id, "model-a");
         assert_eq!(snapshot.recent_failures[0].error, error_msg);
     }
+
+    /// Test that clear_failed() drains the failed list.
+    #[test]
+    fn test_clear_failed_drains_list() {
+        let mut queue = DownloadQueue::new(5);
+
+        // Enqueue 2 items: "a" and "b"
+        let id_a = test_id("a", None);
+        let id_b = test_id("b", None);
+
+        queue.queue(id_a.clone(), test_completion_key(&id_a), false).unwrap();
+        queue.queue(id_b.clone(), test_completion_key(&id_b), false).unwrap();
+
+        // Dequeue both, then mark each as failed with different errors
+        let item_a = queue.dequeue().unwrap();
+        let item_b = queue.dequeue().unwrap();
+
+        queue.mark_failed(item_a, "error for a");
+        queue.mark_failed(item_b, "error for b");
+
+        // Verify 2 failed items
+        assert_eq!(queue.failed_len(), 2);
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.recent_failures.len(), 2);
+
+        // Clear the failed list
+        queue.clear_failed();
+
+        // Verify list is drained
+        assert_eq!(queue.failed_len(), 0);
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.recent_failures.len(), 0);
+    }
 }
