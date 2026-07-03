@@ -529,4 +529,51 @@ mod tests {
         assert_eq!(download.downloaded_bytes, downloaded);
         assert!((download.speed_bps - speed_bps).abs() < 0.01);
     }
+
+    /// Test `FailedDownload` builder pattern — defaults and chained setters.
+    #[test]
+    fn test_failed_download_builders() {
+        // Create with new() and verify defaults
+        let failed = FailedDownload::new("id", "Display", "network error", 1_234_567_890);
+
+        assert_eq!(failed.id, "id");
+        assert_eq!(failed.display_name, "Display");
+        assert_eq!(failed.error, "network error");
+        assert_eq!(failed.failed_at, 1_234_567_890);
+        // Defaults
+        assert!(!failed.recoverable, "recoverable should default to false");
+        assert_eq!(failed.downloaded_bytes, 0, "downloaded_bytes should default to 0");
+
+        // Chain builders and verify values are set
+        let failed2 = FailedDownload::new("id2", "Display2", "timeout", 0)
+            .with_recoverable(true)
+            .with_downloaded_bytes(500_000);
+
+        assert!(failed2.recoverable, "recoverable should be true after with_recoverable(true)");
+        assert_eq!(failed2.downloaded_bytes, 500_000, "downloaded_bytes should be 500_000");
+    }
+
+    /// Test `QueueSnapshot::default()` produces the same state as `QueueSnapshot::new(0)`.
+    #[test]
+    fn test_queue_snapshot_default() {
+        let default_snapshot = QueueSnapshot::default();
+        let zero_snapshot = QueueSnapshot::new(0);
+
+        // max_size should be 0 for both
+        assert_eq!(default_snapshot.max_size, 0);
+        assert_eq!(zero_snapshot.max_size, 0);
+        assert_eq!(default_snapshot.max_size, zero_snapshot.max_size);
+
+        // items should be empty
+        assert!(default_snapshot.items.is_empty());
+        assert_eq!(default_snapshot.items.len(), zero_snapshot.items.len());
+
+        // counts should be zero
+        assert_eq!(default_snapshot.active_count, 0);
+        assert_eq!(default_snapshot.pending_count, 0);
+
+        // recent_failures should be empty
+        assert!(default_snapshot.recent_failures.is_empty());
+        assert_eq!(default_snapshot.recent_failures.len(), zero_snapshot.recent_failures.len());
+    }
 }
