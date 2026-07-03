@@ -1040,4 +1040,13 @@ mod tests {
         let snapshot = queue.snapshot(None);
         assert_eq!(snapshot.recent_failures.len(), 0);
     }
+
+    /// Test that dequeue on an empty queue returns None gracefully.
+    #[test]
+    fn test_dequeue_from_empty_queue_returns_none() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Dequeue immediately — should return None, not panic or deadlock
+        assert!(queue.dequeue().is_none());
+    }
 }
