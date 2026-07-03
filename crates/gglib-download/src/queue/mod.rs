@@ -892,4 +892,47 @@ mod tests {
         // Queue is now empty - dequeue returns None
         assert!(queue.dequeue().is_none());
     }
+
+    /// Test that positions shift down after dequeue.
+    #[test]
+    fn test_position_tracking_on_enqueue_dequeue() {
+        let mut queue = DownloadQueue::new(3);
+
+        // Enqueue 3 items: "a", "b", "c"
+        let id_a = test_id("a", None);
+        let id_b = test_id("b", None);
+        let id_c = test_id("c", None);
+
+        queue
+            .queue(id_a.clone(), test_completion_key(&id_a), false)
+            .unwrap();
+        queue
+            .queue(id_b.clone(), test_completion_key(&id_b), false)
+            .unwrap();
+        queue
+            .queue(id_c.clone(), test_completion_key(&id_c), false)
+            .unwrap();
+
+        // Snapshot: positions should be 1, 2, 3
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 3);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "a");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "b");
+        assert_eq!(snapshot.items[2].position, 3);
+        assert_eq!(snapshot.items[2].id, "c");
+
+        // Dequeue "a"
+        let dequeued = queue.dequeue().unwrap();
+        assert_eq!(dequeued.id.model_id(), "a");
+
+        // Snapshot again: positions should have shifted down
+        let snapshot = queue.snapshot(None);
+        assert_eq!(snapshot.items.len(), 2);
+        assert_eq!(snapshot.items[0].position, 1);
+        assert_eq!(snapshot.items[0].id, "b");
+        assert_eq!(snapshot.items[1].position, 2);
+        assert_eq!(snapshot.items[1].id, "c");
+    }
 }
