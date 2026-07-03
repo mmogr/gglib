@@ -436,4 +436,23 @@ mod tests {
         assert_eq!(download.downloaded_bytes, 1500);
         assert!((download.speed_bps - 100.0).abs() < 0.01);
     }
+
+    /// Test `update_progress` with zero total bytes (division-by-zero guard).
+    #[test]
+    fn test_update_progress_zero_total_bytes() {
+        let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
+
+        // Call update_progress with total = 0
+        download.update_progress(500, 0, 100.0);
+
+        // Progress percent is 0.0 (the `if total > 0` guard prevents division by zero)
+        assert_eq!(download.progress_percent, 0.0, "Progress should be 0.0 when total is 0");
+
+        // ETA is None because `total > downloaded` is false when total is 0
+        assert!(download.eta_seconds.is_none(), "ETA should be None when total is 0");
+
+        // Downloaded bytes and speed are still updated
+        assert_eq!(download.downloaded_bytes, 500);
+        assert!((download.speed_bps - 100.0).abs() < 0.01);
+    }
 }
