@@ -1143,4 +1143,121 @@ mod tests {
         assert_eq!(final_snapshot.items.len(), 2);
         assert_eq!(final_snapshot.pending_count, 2);
     }
+
+    /// Test that concurrent enqueue writes are serialized safely by RwLock.
+    /// Multiple tasks enqueue simultaneously; none should be lost.
+    #[tokio::test]
+    async fn test_concurrent_enqueue_writes() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let queue = Arc::new(RwLock::new(DownloadQueue::new(10)));
+
+        // Spawn 8 concurrent tasks, each enqueuing a unique item
+        let h0 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-0", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h1 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-1", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h2 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-2", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h3 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-3", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h4 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-4", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h5 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-5", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h6 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-6", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+        let h7 = {
+            let q = Arc::clone(&queue);
+            tokio::spawn(async move {
+                let id = test_id("concurrent-7", None);
+                let key = test_completion_key(&id);
+                let mut guard = q.write().await;
+                guard.queue(id.clone(), key, true).unwrap();
+                id
+            })
+        };
+
+        // Wait for all tasks to complete using tokio::join!
+        let (r0, r1, r2, r3, r4, r5, r6, r7) = tokio::join!(h0, h1, h2, h3, h4, h5, h6, h7);
+        // All tasks should have completed successfully
+        r0.unwrap();
+        r1.unwrap();
+        r2.unwrap();
+        r3.unwrap();
+        r4.unwrap();
+        r5.unwrap();
+        r6.unwrap();
+        r7.unwrap();
+
+        // Dequeue all items and verify none were lost
+        let mut dequeued = Vec::new();
+        loop {
+            let item = queue.write().await.dequeue();
+            match item {
+                Some(q_item) => dequeued.push(q_item.id),
+                None => break,
+            }
+        }
+
+        // Exactly 8 items should have been dequeued
+        assert_eq!(dequeued.len(), 8);
+    }
 }
