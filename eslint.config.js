@@ -70,7 +70,9 @@ export default [
       'no-restricted-syntax': [
         'error',
         {
-          selector: 'Literal[value=/\\bbtn\\b/]',
+          // Scoped to className attributes: data-testid values like
+          // "plan-editor-approve-btn" legitimately contain the word "btn".
+          selector: "JSXAttribute[name.name='className'] Literal[value=/\\bbtn\\b/]",
           message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
         },
       ],

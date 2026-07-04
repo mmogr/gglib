@@ -124,7 +124,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           const parsed = parsePrometheusMetrics(text);
           setMetrics(parsed);
         }
-      } catch (error) {
+      } catch {
         // On any error (including abort), clear metrics and stop polling for this effect instance
         if (!cancelled) {
           setMetrics(null);

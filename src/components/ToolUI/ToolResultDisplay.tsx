@@ -33,7 +33,7 @@ function safeRenderSummary(renderer: ToolResultRenderer, result: unknown, toolNa
  * This is the single source of truth for result rendering across
  * GenericToolUI (inline chat bubble) and ToolDetailsModal.
  */
-export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result, toolCallId }) => {
+export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result, toolCallId: _toolCallId }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -49,7 +49,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
       }
     })();
     return { summary: computedSummary, body: computedBody };
-  }, [toolName, result, toolCallId]);
+  }, [toolName, result]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();

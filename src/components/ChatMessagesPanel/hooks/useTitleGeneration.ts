@@ -150,7 +150,7 @@ export function useTitleGeneration({
     } finally {
       setIsGeneratingTitle(false);
     }
-  }, [activeConversation, activeConversationId, serverPort, titleGenerationPrompt, onRenameConversation, showToast]);
+  }, [activeConversation, activeConversationId, serverPort, titleGenerationPrompt, onRenameConversation, showToast, confirm]);
 
   // Auto-generate title on first assistant response.
   // IMPORTANT: Only triggers for NEW in-session messages (not messages hydrated from DB).
