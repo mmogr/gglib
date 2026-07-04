@@ -78,13 +78,11 @@ pub const CHARS_PER_TOKEN_APPROX: usize = 4;
 
 /// [`TOTAL_PAYLOAD_LIMIT_CHARS`] expressed as a **token** count.
 ///
-/// Used as the fallback clamp for the `context_window` value gglib reports
-/// via `/v1/models` (see `crate::models::ModelInfo`) for models that are
-/// NOT currently running, so a client computing its own input-token budget
-/// from that field can never plan a prompt larger than what this proxy's
-/// own hard-abort in [`truncate_history`] will actually allow through. The
-/// currently running model advertises its live `effective_ctx` instead,
-/// matching the dynamic per-request budget passed to [`truncate_history`].
+/// The token-denominated floor of the proxy's payload guard: requests up to
+/// this size are always accepted regardless of serving context (see the
+/// `limit_chars` floor in [`truncate_history`]). `/v1/models` advertisement
+/// no longer uses this value — models advertise the context they would
+/// actually be served with (see `server::list_models`).
 pub const TOTAL_PAYLOAD_LIMIT_TOKENS: usize = TOTAL_PAYLOAD_LIMIT_CHARS / CHARS_PER_TOKEN_APPROX;
 
 /// Number of trailing messages (by index) that are always preserved from

@@ -267,15 +267,16 @@ pub struct ModelInfo {
     /// Model's context window size, in tokens (llama.cpp's `/v1/models`
     /// field-naming convention). `None` when unknown.
     ///
-    /// Populated from [`ModelSummary::context_length`] by default; callers
-    /// that know the model is currently running should overwrite this with
-    /// the live `effective_ctx` from `ModelRuntimePort::current_model()`,
-    /// which reflects the actual `--ctx-size` in use rather than the GGUF's
-    /// static max. Either way this value should be clamped to
-    /// `crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS` before being served,
-    /// so clients that auto-detect context size from this endpoint (e.g.
-    /// the GitHub Copilot LLM Gateway extension) never compute a budget
-    /// this proxy's own truncation guard will reject.
+    /// Populated from [`ModelSummary::context_length`] by default. The
+    /// `/v1/models` handler (`server::list_models`) then adjusts it to the
+    /// context the model would actually be served with: non-running models
+    /// are clamped to the proxy's `default_ctx` (what `ensure_model_running`
+    /// would launch them with), and the currently running model is
+    /// overwritten with its live `effective_ctx` from
+    /// `ModelRuntimePort::current_model()`. Clients that auto-detect context
+    /// size from this endpoint (e.g. the GitHub Copilot LLM Gateway
+    /// extension) read it once at picker-build time — usually before any
+    /// model runs — so the pre-launch value must already be honest.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
 }
