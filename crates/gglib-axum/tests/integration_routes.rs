@@ -829,7 +829,8 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
     let app = create_router(ctx, &CorsConfig::AllowAll);
 
     // First, set a non-default context size in settings (8192 instead of 4096)
-    let settings_response = app.clone()
+    let settings_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("PUT")
@@ -880,7 +881,8 @@ async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
     let app = create_router(ctx, &CorsConfig::AllowAll);
 
     // Clear any settings default by explicitly setting null
-    let settings_response = app.clone()
+    let settings_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("PUT")
