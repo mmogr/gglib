@@ -118,6 +118,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             quantization TEXT,
             context_length INTEGER,
             inference_defaults TEXT,
+            server_defaults TEXT,
             expert_count INTEGER,
             expert_used_count INTEGER,
             expert_shared_count INTEGER,

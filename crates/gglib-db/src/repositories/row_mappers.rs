@@ -114,6 +114,11 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),
+        server_defaults: row
+            .try_get::<Option<String>, _>("server_defaults")
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
         // Defensively attempt to read benchmark summary columns (only present
         // when the query includes a LEFT JOIN with model_benchmark_summaries).
         benchmark_summary: try_read_summary(row),

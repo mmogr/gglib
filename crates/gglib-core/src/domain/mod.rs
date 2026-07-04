@@ -6,6 +6,7 @@ pub mod chat;
 pub mod council;
 pub mod gguf;
 pub mod inference;
+mod server_config;
 pub mod mcp;
 mod model;
 pub mod query;
@@ -27,6 +28,7 @@ pub use benchmark::{
 
 // Re-export inference types at the domain level for convenience
 pub use inference::InferenceConfig;
+pub use server_config::ServerConfig;
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{

@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
 use super::inference::InferenceConfig;
+use super::server_config::ServerConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // System tags
@@ -114,6 +115,12 @@ pub struct Model {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Per-model server-level defaults (`context_length`, etc.).
+    ///
+    /// Stored as JSON in the database. Overrides global settings but can
+    /// be overridden at request time. Part of the 4-level fallback chain.
+    #[serde(default)]
+    pub server_defaults: Option<ServerConfig>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
     ///
     /// `None` when no benchmark has been run for this model yet, or when the
@@ -346,6 +353,7 @@ mod tests {
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            server_defaults: None,
             benchmark_summary: None,
         };
 

@@ -570,6 +570,7 @@ mod tests {
                 tags: model.tags.clone(),
                 capabilities: model.capabilities,
                 inference_defaults: model.inference_defaults.clone(),
+                server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };
             models.push(created.clone());
