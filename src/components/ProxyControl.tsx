@@ -15,7 +15,13 @@ import { ProxyDashboardModal } from './ProxyDashboardModal';
 interface ProxyConfig {
   host: string;
   port: number;
-  default_context: number;
+  /**
+   * Explicit per-run context override. `undefined` means "no override" —
+   * the backend is the single source of truth and resolves the default
+   * from user settings (explicit override > settings default > built-in).
+   * Only ever set when the user manually edits the field.
+   */
+  default_context?: number;
 }
 interface ProxyControlProps {
   buttonClassName?: string;
@@ -36,7 +42,10 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [config, setConfig] = useState<ProxyConfig>({
     host: "127.0.0.1",
     port: settings?.proxyPort ?? 8080,
-    default_context: settings?.defaultContextSize ?? 4096,
+    // Intentionally no default_context: the backend resolves the default
+    // from settings. Seeding it here would send an accidental explicit
+    // override (and could freeze a stale value captured before settings
+    // finished loading).
   });
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -50,7 +59,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const handleStart = async () => {
     try {
       setLoading(true);
-      await startProxy(config);
+      // Only include default_context when the user explicitly set one —
+      // omitting it lets the backend resolve the default from settings.
+      const { default_context, ...rest } = config;
+      await startProxy(
+        default_context !== undefined ? { ...rest, default_context } : rest,
+      );
     } catch (err) {
       showToast(`Failed to start proxy: ${err}`, 'error');
     } finally {
@@ -177,8 +191,15 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     <label className="block text-xs font-semibold text-text-secondary mb-xs uppercase">Default Context:</label>
                     <Input
                       type="number"
-                      value={config.default_context}
-                      onChange={(e) => setConfig({ ...config, default_context: parseInt(e.target.value) })}
+                      value={config.default_context ?? ''}
+                      placeholder={`${settings?.defaultContextSize ?? 'server default'} (from settings)`}
+                      onChange={(e) => {
+                        const parsed = parseInt(e.target.value);
+                        setConfig({
+                          ...config,
+                          default_context: Number.isNaN(parsed) ? undefined : parsed,
+                        });
+                      }}
                     />
                   </div>
                 </div>

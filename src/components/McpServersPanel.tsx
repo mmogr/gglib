@@ -107,7 +107,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         setActionLoading(null);
       }
     },
-    [removeServer]
+    [confirm, removeServer]
   );
 
   const handleAutoFix = useCallback(
@@ -136,7 +136,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         setActionLoading(null);
       }
     },
-    [resolveMcpServerPath]
+    [showToast]
   );
 
   const getStatusBadge = (info: McpServerInfo) => {

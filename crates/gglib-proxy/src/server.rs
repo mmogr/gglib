@@ -33,7 +33,6 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
-use crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -213,16 +212,21 @@ async fn health_check() -> impl IntoResponse {
 ///
 /// Appends the three virtual council model entries after the catalog models.
 ///
-/// Each catalog entry's `context_window` (populated from the static
-/// GGUF-derived `context_length`) is clamped to
-/// [`crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS`] so clients that
-/// auto-detect context size from this endpoint (e.g. the GitHub Copilot LLM
-/// Gateway extension) never compute a token budget larger than what this
-/// proxy's own [`crate::truncation::truncate_history`] will actually allow
-/// through. Whichever model is currently running is then overridden with
-/// its live `effective_ctx` (the real `--ctx-size` llama-server was
-/// launched with), which is more accurate than the static value and can
-/// differ from it.
+/// Every model advertises the context it would actually be served with —
+/// clients like the GitHub Copilot LLM Gateway extension read this endpoint
+/// ONCE when building their model picker (typically before any model is
+/// running), so the pre-launch advertisement must already reflect the real
+/// serving context or clients budget against a stale floor for the entire
+/// session:
+///
+/// * **Non-running models**: `min(static GGUF context_length, default_ctx)`
+///   — `default_ctx` is the same value `ensure_model_running` will launch
+///   the model with on its first request.
+/// * **The currently running model**: its full live `effective_ctx` (the
+///   real `--ctx-size` llama-server was launched with), which also drives
+///   the per-request truncation budget in
+///   [`crate::forward::forward_chat_completion`] — advertised and enforced
+///   values stay in lockstep.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -230,15 +234,14 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
         Ok(models) => {
             let mut response = ModelsResponse::from_summaries(models);
 
-            let ceiling = TOTAL_PAYLOAD_LIMIT_TOKENS as u64;
             for model in &mut response.data {
-                model.context_window = model.context_window.map(|ctx| ctx.min(ceiling));
+                model.context_window = model.context_window.map(|ctx| ctx.min(state.default_ctx));
             }
 
             if let Some(target) = state.runtime_port.current_model().await
                 && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
             {
-                model.context_window = Some(target.effective_ctx.min(ceiling));
+                model.context_window = Some(target.effective_ctx);
             }
 
             // Append virtual council models.
@@ -395,6 +398,7 @@ async fn chat_completions(
         body,
         is_streaming,
         &model_name,
+        target.effective_ctx,
         state.catalog_port.clone(),
         state.dashboard.metrics.clone(),
         global_inference_defaults,
@@ -467,6 +471,7 @@ async fn chat_completions(
                 body_for_retry,
                 is_streaming,
                 &model_name,
+                new_target.effective_ctx,
                 state.catalog_port.clone(),
                 state.dashboard.metrics.clone(),
                 retry_defaults,

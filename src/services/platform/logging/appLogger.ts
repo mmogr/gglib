@@ -176,7 +176,7 @@ class AppLogger implements ILogger {
     for (const transport of this.transports) {
       try {
         transport.write(entry);
-      } catch (error) {
+      } catch {
         // Never throw from logging - silently ignore transport failures
         // In dev mode, the transport itself might log to console
       }

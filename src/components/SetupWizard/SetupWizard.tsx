@@ -43,6 +43,9 @@ import { updateSettings } from '../../services/transport/api/settings';
 
 type WizardStep = 'welcome' | 'models' | 'llama' | 'python' | 'complete';
 
+/** Ordered wizard steps. Module-level so hook dependencies stay stable. */
+const WIZARD_STEPS: readonly WizardStep[] = ['welcome', 'models', 'llama', 'python', 'complete'];
+
 interface SetupWizardProps {
   /** Called when the wizard completes setup. */
   onComplete: () => void;
@@ -58,11 +61,6 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial setup status
-  useEffect(() => {
-    loadStatus();
-  }, []);
-
   const loadStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -75,6 +73,11 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
       setLoading(false);
     }
   }, []);
+
+  // Load initial setup status
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   // Refresh status (for steps that change system state)
   const refreshStatus = useCallback(async () => {
@@ -96,7 +99,7 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
     }
   }, [onComplete]);
 
-  const steps: WizardStep[] = ['welcome', 'models', 'llama', 'python', 'complete'];
+  const steps: readonly WizardStep[] = WIZARD_STEPS;
   const currentIndex = steps.indexOf(step);
 
   const goNext = useCallback(() => {
@@ -211,7 +214,7 @@ const stepLabels: Record<WizardStep, string> = {
   complete: 'Done',
 };
 
-const StepIndicator: FC<{ steps: WizardStep[]; current: WizardStep }> = ({ steps, current }) => {
+const StepIndicator: FC<{ steps: readonly WizardStep[]; current: WizardStep }> = ({ steps, current }) => {
   const currentIndex = steps.indexOf(current);
 
   return (

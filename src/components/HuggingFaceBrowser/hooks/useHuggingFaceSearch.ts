@@ -109,11 +109,11 @@ export function useHuggingFaceSearch(
     [searchQuery]
   );
 
-  // Clear search error on query change
+  // Clear search error on query change. Unconditional set: React bails out
+  // of re-rendering when the value is already null, so no guard (and thus no
+  // searchError dependency) is needed.
   useEffect(() => {
-    if (searchError) {
-      setSearchError(null);
-    }
+    setSearchError(null);
   }, [searchQuery]);
 
   // Debounced search

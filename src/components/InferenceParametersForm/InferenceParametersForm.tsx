@@ -1,4 +1,4 @@
-import { FC, useCallback } from 'react';
+import { FC, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
 import type { InferenceConfig } from '../../types';
 import { Input } from '../ui/Input';
@@ -27,7 +27,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   onChange,
   disabled = false,
 }) => {
-  const config = value || {};
+  const config = useMemo(() => value || {}, [value]);
 
   const updateField = useCallback(<K extends keyof InferenceConfig>(
     field: K,

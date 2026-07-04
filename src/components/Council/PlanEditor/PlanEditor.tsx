@@ -462,9 +462,10 @@ const PlanEditor: FC<PlanEditorProps> = ({
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  const currentNodes = draft.current.nodes;
   const nodeIds = useMemo(
-    () => Object.keys(draft.current.nodes),
-    [draft.current.nodes],
+    () => Object.keys(currentNodes),
+    [currentNodes],
   );
 
   const selectedNode = selectedNodeId != null

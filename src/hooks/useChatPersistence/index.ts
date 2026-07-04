@@ -286,7 +286,7 @@ export function useChatPersistence({
         }
       })();
     }
-  }, [activeConversationId, messages, syncConversations]);
+  }, [activeConversationId, messages, syncConversations, timingTracker]);
 
   return {
     isLoading,

@@ -123,6 +123,11 @@ export function useChatPersistence({
 
     hydrate();
     return () => { cancelled = true; };
+    // Depends on specific activeConversation FIELDS (id, system_prompt,
+    // created_at) rather than the object: re-hydrating the thread whenever
+    // any other field changes (e.g. a title rename) would needlessly reload
+    // and reset the runtime mid-conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     threadRuntime,
     activeConversationId,

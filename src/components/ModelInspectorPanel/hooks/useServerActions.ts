@@ -180,7 +180,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         showToast(`Failed to stop server: ${error}`, 'error');
       }
     }
-  }, [model, isRunning, onStopServer]);
+  }, [model, isRunning, onStopServer, showToast]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (!model?.id) return;
@@ -194,7 +194,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsDeleting(false);
     }
-  }, [model, onRemoveModel, closeDeleteModal, setIsDeleting]);
+  }, [model, onRemoveModel, closeDeleteModal, setIsDeleting, showToast]);
 
   const handleSave = useCallback(async () => {
     if (!model?.id) return;
@@ -223,7 +223,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
       showToast(`Failed to update model: ${error}`, 'error');
     }
-  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, onUpdateModel, resetEditState]);
+  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, onUpdateModel, resetEditState, showToast]);
 
   return {
     handleStartServer,

@@ -363,6 +363,10 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 /// * `body` - Request body bytes
 /// * `is_streaming` - Whether this is a streaming request (affects response handling)
 /// * `model_name` - Model name to advertise to the client (used in SSE envelope)
+/// * `effective_ctx` - Live context size (tokens) the target llama-server
+///   was launched with. Converted to a character budget
+///   (`× CHARS_PER_TOKEN_APPROX`) for the history-truncation hard-abort;
+///   floored at the historical default inside [`truncate_history`].
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 /// * `metrics` - Metrics store for recording per-request context snapshots
 /// * `global_inference_defaults` - Global inference defaults from settings
@@ -384,6 +388,7 @@ pub(crate) async fn forward_chat_completion(
     body: Bytes,
     is_streaming: bool,
     model_name: &str,
+    effective_ctx: u64,
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
@@ -408,7 +413,12 @@ pub(crate) async fn forward_chat_completion(
 
     // 3. Truncate stale tool/large-assistant history to prevent local model
     //    context-window overflow caused by broken client-side compaction.
-    let body = match truncate_history(body) {
+    //    The budget scales with the live serving context so clients that
+    //    plan against the advertised context window are never rejected by a
+    //    smaller hidden ceiling (truncate_history floors it at the default).
+    let limit_chars =
+        (effective_ctx as usize).saturating_mul(crate::truncation::CHARS_PER_TOKEN_APPROX);
+    let body = match truncate_history(body, limit_chars) {
         Ok((b, report)) => {
             if report.messages_truncated > 0 {
                 info!(
