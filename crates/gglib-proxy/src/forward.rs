@@ -416,7 +416,8 @@ pub(crate) async fn forward_chat_completion(
     //    The budget scales with the live serving context so clients that
     //    plan against the advertised context window are never rejected by a
     //    smaller hidden ceiling (truncate_history floors it at the default).
-    let limit_chars = (effective_ctx as usize).saturating_mul(crate::truncation::CHARS_PER_TOKEN_APPROX);
+    let limit_chars =
+        (effective_ctx as usize).saturating_mul(crate::truncation::CHARS_PER_TOKEN_APPROX);
     let body = match truncate_history(body, limit_chars) {
         Ok((b, report)) => {
             if report.messages_truncated > 0 {
