@@ -115,6 +115,12 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        // Serialize server_defaults if present
+        let server_defaults_json = model
+            .server_defaults
+            .as_ref()
+            .and_then(|cfg| serde_json::to_string(cfg).ok());
+
         // Compute model key for deduplication
         let model_key = compute_model_key(model);
 
@@ -130,8 +136,8 @@ impl ModelRepository for SqliteModelRepository {
                 name, file_path, param_count_b, architecture, quantization, 
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha, 
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, server_defaults
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
@@ -168,6 +174,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&file_paths_json)
         .bind(model.capabilities.bits() as i64)
         .bind(&inference_defaults_json)
+        .bind(&server_defaults_json)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -197,8 +204,13 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        let server_defaults_json = model
+            .server_defaults
+            .as_ref()
+            .and_then(|cfg| serde_json::to_string(cfg).ok());
+
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, server_defaults = ? WHERE id = ?"
         )
             .bind(&model.name)
             .bind(model.file_path.to_string_lossy().as_ref())
@@ -215,6 +227,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&tags_json)
             .bind(model.capabilities.bits() as i64)
             .bind(&inference_defaults_json)
+            .bind(&server_defaults_json)
             .bind(model.id)
             .execute(&self.pool)
             .await

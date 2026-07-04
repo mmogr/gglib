@@ -288,6 +288,7 @@ mod tests {
             let persisted = Model {
                 id: *id,
                 name: model.name.clone(),
+                model_key: String::new(),
                 file_path: model.file_path.clone(),
                 param_count_b: model.param_count_b,
                 architecture: model.architecture.clone(),

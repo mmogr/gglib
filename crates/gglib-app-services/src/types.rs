@@ -409,6 +409,12 @@ pub struct UpdateModelRequest {
     pub quantization: Option<String>,
     pub file_path: Option<String>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Per-model server startup defaults.
+    /// - Some(Some(config)) — set/replace the model's server defaults
+    /// - Some(None) — clear the override (NULL in DB, revert to global default)
+    /// - None — don't touch this field (key omitted from payload)
+    #[serde(default)]
+    pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
 }
 
 /// Request body for overriding a model's capability flags.

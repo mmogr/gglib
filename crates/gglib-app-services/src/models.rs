@@ -176,6 +176,11 @@ impl ModelOps {
         if let Some(inference_defaults) = request.inference_defaults {
             model.inference_defaults = Some(inference_defaults);
         }
+        match request.server_defaults {
+            Some(Some(config)) => model.server_defaults = Some(config),
+            Some(None) => model.server_defaults = None,
+            None => {}, // don't touch
+        }
 
         self.deps
             .core

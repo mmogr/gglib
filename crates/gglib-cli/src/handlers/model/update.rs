@@ -463,6 +463,7 @@ mod tests {
         Model {
             id: 1,
             name: "Original Name".to_string(),
+            model_key: String::new(),
             file_path: PathBuf::from("/test/model.gguf"),
             param_count_b: 7.0,
             inference_defaults: None,
@@ -481,6 +482,7 @@ mod tests {
             capabilities: gglib_core::ModelCapabilities::default(),
             last_update_check: None,
             tags: Vec::new(),
+            server_defaults: None,
             benchmark_summary: None,
         }
     }

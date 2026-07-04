@@ -74,6 +74,8 @@ pub struct Model {
     pub id: i64,
     /// Human-readable name for the model.
     pub name: String,
+    /// Canonical deduplication key (e.g., `hf:repo@sha#file`).\n    #[serde(default)]
+    pub model_key: String,
     /// Absolute path to the GGUF file on the filesystem.
     pub file_path: PathBuf,
     /// Number of parameters in the model (in billions).
@@ -180,6 +182,9 @@ pub struct NewModel {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Per-model server startup defaults.
+    #[serde(default)]
+    pub server_defaults: Option<ServerConfig>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +280,7 @@ impl NewModel {
             file_paths: None,
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            server_defaults: None,
         }
     }
 }
@@ -306,6 +312,7 @@ impl Model {
             file_paths: None, // Not preserved in conversion
             capabilities: self.capabilities,
             inference_defaults: self.inference_defaults.clone(),
+            server_defaults: self.server_defaults.clone(),
         }
     }
 }
@@ -335,6 +342,7 @@ mod tests {
         let model = Model {
             id: 42,
             name: "Persisted Model".to_string(),
+            model_key: String::new(),
             file_path: PathBuf::from("/path/to/model.gguf"),
             param_count_b: 13.0,
             architecture: Some("llama".to_string()),
