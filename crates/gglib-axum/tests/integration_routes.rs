@@ -816,3 +816,105 @@ async fn model_tags_accepts_post_with_body() {
         "POST /api/models/{{id}}/tags should be allowed (frontend sends tag in body)"
     );
 }
+
+/// Proxy start should use the settings default_context_size when the frontend
+/// sends no explicit override (body is `null`).
+#[tokio::test]
+async fn proxy_start_uses_settings_default_context_when_not_overridden() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    // First, set a non-default context size in settings (8192 instead of 4096)
+    let settings_response = app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/config/settings")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"default_context_size": 8192}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        settings_response.status(),
+        StatusCode::OK,
+        "PUT /api/config/settings should return 200"
+    );
+
+    // Now start the proxy with no explicit config (null body)
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/proxy/start")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"null"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should NOT return 400 — the settings default should be used
+    assert_ne!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "POST /api/proxy/start with null body should not return 400 when settings have default_context_size"
+    );
+}
+
+/// Proxy start should fall back to the hard-coded default (4096) when no
+/// settings default is configured and no explicit override is provided.
+#[tokio::test]
+async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    // Clear any settings default by explicitly setting null
+    let settings_response = app.clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/config/settings")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"default_context_size": null}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        settings_response.status(),
+        StatusCode::OK,
+        "PUT /api/config/settings should return 200"
+    );
+
+    // Start the proxy with an empty config object (no default_context field)
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/proxy/start")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should NOT return 400 — the hard-coded default (4096) should be used
+    assert_ne!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "POST /api/proxy/start with empty body should not return 400 when falling back to hard-coded default"
+    );
+}
