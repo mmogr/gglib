@@ -1,7 +1,9 @@
 import js from '@eslint/js';
 import tsParser from '@typescript-eslint/parser';
+import tseslint from 'typescript-eslint';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
@@ -17,25 +19,37 @@ export default [
         },
       },
       globals: {
-        console: 'readonly',
+        ...globals.browser,
+        ...globals.es2021,
         process: 'readonly',
         __dirname: 'readonly',
-        window: 'readonly',
-        document: 'readonly',
-        navigator: 'readonly',
-        localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        fetch: 'readonly',
-        Headers: 'readonly',
-        Request: 'readonly',
-        Response: 'readonly',
       },
     },
     plugins: {
       react: reactPlugin,
       'react-hooks': reactHooksPlugin,
+      '@typescript-eslint': tseslint.plugin,
     },
     rules: {
+      // TypeScript itself reports undefined identifiers (including DOM/React
+      // types) with full type information; the core no-undef rule produces
+      // false positives on TS sources and is officially recommended OFF for
+      // TypeScript by typescript-eslint.
+      'no-undef': 'off',
+
+      // The core rule counts parameter names in TS type/interface signatures
+      // as "unused". Use the TS-aware variant instead; underscore-prefixed
+      // names are the conventional opt-out for intentionally unused values.
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+
       // React rules
       'react/jsx-uses-react': 'off', // Not needed in React 19
       'react/react-in-jsx-scope': 'off', // Not needed in React 19
@@ -43,22 +57,18 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
 
       // Phase 5 Architecture Guardrails
-      
-      // Forbid legacy CSS classes (Phase 1 cleanup)
+
+      // Forbid legacy CSS classes (Phase 1 cleanup).
+      //
+      // NOTE: earlier revisions also banned the design-token spacing
+      // utilities (p-sm, mb-md, gap-base, …). Those tokens are the
+      // project's OWN Tailwind theme (see src/styles/base/variables.css
+      // → --spacing-* mapped in src/styles/tailwind.css), used
+      // pervasively and intentionally — the ban only survived while the
+      // lint script itself was broken. Only the genuinely legacy .btn
+      // class remains banned.
       'no-restricted-syntax': [
         'error',
-        {
-          selector: 'Literal[value=/\\bm-(0|xs|sm|md|base|lg|xl|2xl|3xl|auto)\\b/]',
-          message: 'Use Tailwind margin classes (e.g., m-0, m-2, m-4) instead of custom utility classes',
-        },
-        {
-          selector: 'Literal[value=/\\b(mt|mb|ml|mr|mx|my)-(0|xs|sm|md|base|lg|xl|2xl|3xl|auto)\\b/]',
-          message: 'Use Tailwind spacing classes (e.g., mt-2, mb-4) instead of custom utility classes',
-        },
-        {
-          selector: 'Literal[value=/\\bp-(0|xs|sm|md|base|lg|xl|2xl|3xl|auto)\\b/]',
-          message: 'Use Tailwind padding classes (e.g., p-0, p-2, p-4) instead of custom utility classes',
-        },
         {
           selector: 'Literal[value=/\\bbtn\\b/]',
           message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
