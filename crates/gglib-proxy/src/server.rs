@@ -213,16 +213,17 @@ async fn health_check() -> impl IntoResponse {
 ///
 /// Appends the three virtual council model entries after the catalog models.
 ///
-/// Each catalog entry's `context_window` (populated from the static
-/// GGUF-derived `context_length`) is clamped to
-/// [`crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS`] so clients that
-/// auto-detect context size from this endpoint (e.g. the GitHub Copilot LLM
-/// Gateway extension) never compute a token budget larger than what this
-/// proxy's own [`crate::truncation::truncate_history`] will actually allow
-/// through. Whichever model is currently running is then overridden with
-/// its live `effective_ctx` (the real `--ctx-size` llama-server was
-/// launched with), which is more accurate than the static value and can
-/// differ from it.
+/// Non-running catalog entries have their `context_window` (populated from
+/// the static GGUF-derived `context_length`) clamped to
+/// [`crate::truncation::TOTAL_PAYLOAD_LIMIT_TOKENS`] — the floor budget the
+/// proxy guarantees for any request regardless of which model ends up
+/// serving it. The currently running model advertises its full live
+/// `effective_ctx` (the real `--ctx-size` llama-server was launched with)
+/// **unclamped**, because [`crate::forward::forward_chat_completion`]
+/// derives its per-request truncation budget from that same value — so
+/// clients that auto-detect context size from this endpoint (e.g. the
+/// GitHub Copilot LLM Gateway extension) can plan against the full window
+/// without ever exceeding what the proxy will actually allow through.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -230,15 +231,15 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
         Ok(models) => {
             let mut response = ModelsResponse::from_summaries(models);
 
-            let ceiling = TOTAL_PAYLOAD_LIMIT_TOKENS as u64;
+            let floor = TOTAL_PAYLOAD_LIMIT_TOKENS as u64;
             for model in &mut response.data {
-                model.context_window = model.context_window.map(|ctx| ctx.min(ceiling));
+                model.context_window = model.context_window.map(|ctx| ctx.min(floor));
             }
 
             if let Some(target) = state.runtime_port.current_model().await
                 && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
             {
-                model.context_window = Some(target.effective_ctx.min(ceiling));
+                model.context_window = Some(target.effective_ctx);
             }
 
             // Append virtual council models.
