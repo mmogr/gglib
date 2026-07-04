@@ -408,7 +408,7 @@ pub(crate) async fn forward_chat_completion(
 
     // 3. Truncate stale tool/large-assistant history to prevent local model
     //    context-window overflow caused by broken client-side compaction.
-    let body = match truncate_history(body) {
+    let body = match truncate_history(body, crate::truncation::TOTAL_PAYLOAD_LIMIT_CHARS) {
         Ok((b, report)) => {
             if report.messages_truncated > 0 {
                 info!(

@@ -19,10 +19,12 @@
 //!    [`TOOL_CONTENT_THRESHOLD_CHARS`] has its content replaced with
 //!    [`TRUNCATION_PLACEHOLDER`].
 //!
-//! 2. **Total budget hard abort** — if the payload still exceeds
-//!    [`TOTAL_PAYLOAD_LIMIT_CHARS`] after step 1, the request is rejected
-//!    with HTTP 400 / `context_length_exceeded` rather than forwarding a
-//!    prompt that would cause the model to fail.
+//! 2. **Total budget hard abort** — if the payload still exceeds the
+//!    request's character budget (the `limit_chars` argument to
+//!    [`truncate_history`], floored at [`TOTAL_PAYLOAD_LIMIT_CHARS`]) after
+//!    step 1, the request is rejected with HTTP 400 /
+//!    `context_length_exceeded` rather than forwarding a prompt that would
+//!    cause the model to fail.
 //!
 //! 3. **Protected set** — `role: "system"` messages and the last
 //!    [`PROTECTED_TAIL_COUNT`] messages by index (the immediate
@@ -51,9 +53,12 @@ use crate::models::ErrorResponse;
 /// [`TRUNCATION_PLACEHOLDER`].
 pub const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 
-/// Maximum total payload size in bytes.  If the serialised request body
-/// exceeds this limit after per-message truncation, the proxy rejects the
-/// request with HTTP 400 rather than forwarding an oversized prompt.
+/// Default (and floor) total payload size in bytes. Callers of
+/// [`truncate_history`] supply a per-request character budget derived from
+/// the running model's live context size; this constant is the fallback
+/// when no model is running and the floor below which a caller-supplied
+/// budget is never allowed to shrink, so no request ever gets less headroom
+/// than the historical default.
 ///
 /// Approximation: 240,000 chars ÷ 4 ≈ 60,000 tokens.
 pub const TOTAL_PAYLOAD_LIMIT_CHARS: usize = 240_000;
@@ -73,14 +78,13 @@ pub const CHARS_PER_TOKEN_APPROX: usize = 4;
 
 /// [`TOTAL_PAYLOAD_LIMIT_CHARS`] expressed as a **token** count.
 ///
-/// Used to clamp the `context_window` value gglib reports via `/v1/models`
-/// (see `crate::models::ModelInfo`) so that a client computing its own
-/// input-token budget from that field can never plan a prompt larger than
-/// what this proxy's own hard-abort in [`truncate_history`] will actually
-/// allow through. Without this clamp, advertising a model's full native
-/// context (e.g. 131,072 tokens) while enforcing a much smaller
-/// character-based ceiling here creates a split-brain where the client only
-/// discovers the real limit via a hard HTTP 400.
+/// Used as the fallback clamp for the `context_window` value gglib reports
+/// via `/v1/models` (see `crate::models::ModelInfo`) for models that are
+/// NOT currently running, so a client computing its own input-token budget
+/// from that field can never plan a prompt larger than what this proxy's
+/// own hard-abort in [`truncate_history`] will actually allow through. The
+/// currently running model advertises its live `effective_ctx` instead,
+/// matching the dynamic per-request budget passed to [`truncate_history`].
 pub const TOTAL_PAYLOAD_LIMIT_TOKENS: usize = TOTAL_PAYLOAD_LIMIT_CHARS / CHARS_PER_TOKEN_APPROX;
 
 /// Number of trailing messages (by index) that are always preserved from
@@ -137,6 +141,12 @@ impl TruncationReport {
 
 /// Apply history truncation to a raw `/v1/chat/completions` request body.
 ///
+/// `limit_chars` is the total payload character budget for this request,
+/// typically derived from the running model's live context size
+/// (`effective_ctx × CHARS_PER_TOKEN_APPROX`). It is floored at
+/// [`TOTAL_PAYLOAD_LIMIT_CHARS`], so a caller can never shrink the budget
+/// below the historical default.
+///
 /// See the [module documentation](self) for the full algorithm.
 ///
 /// # Returns
@@ -145,8 +155,12 @@ impl TruncationReport {
 ///   changes.  When no truncation was necessary the original `Bytes` value
 ///   is returned without re-serialisation.
 /// * `Err(response)` — an HTTP 400 `context_length_exceeded` response when
-///   the payload exceeds [`TOTAL_PAYLOAD_LIMIT_CHARS`] even after truncation.
-pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Response>> {
+///   the payload exceeds the character budget even after truncation.
+pub fn truncate_history(
+    body: Bytes,
+    limit_chars: usize,
+) -> Result<(Bytes, TruncationReport), Box<Response>> {
+    let limit_chars = limit_chars.max(TOTAL_PAYLOAD_LIMIT_CHARS);
     let payload_chars_before = body.len();
 
     // ── Pre-parse fast path ───────────────────────────────────────────────────
@@ -175,7 +189,7 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Re
     // ── Post-parse fast path ──────────────────────────────────────────────────
     // Avoid mutation and re-serialisation when the payload is under the total
     // budget and no unprotected message has oversized string content.
-    if payload_chars_before <= TOTAL_PAYLOAD_LIMIT_CHARS {
+    if payload_chars_before <= limit_chars {
         let has_oversized_candidate = messages
             .iter()
             .enumerate()
@@ -225,7 +239,7 @@ pub fn truncate_history(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Re
 
     // ── Budget check ──────────────────────────────────────────────────────────
     // Hard abort if still over budget (e.g. a huge protected system prompt).
-    if payload_chars_after > TOTAL_PAYLOAD_LIMIT_CHARS {
+    if payload_chars_after > limit_chars {
         let response = (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::context_length_exceeded()),
@@ -306,13 +320,18 @@ mod tests {
         "x".repeat(n)
     }
 
-    // ── Fast path ─────────────────────────────────────────────────────────────
+    /// Test shorthand: call [`truncate_history`] with the default budget.
+    fn truncate_default(body: Bytes) -> Result<(Bytes, TruncationReport), Box<Response>> {
+        truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS)
+    }
+
+    // ── Fast path ──────────────────────────────────────────────────────────────────
 
     #[test]
     fn fast_path_small_payload_returned_unchanged() {
         let body = make_body(vec![msg("user", "hello"), msg("assistant", "world")]);
         let original_len = body.len();
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(
             out.len(),
             original_len,
@@ -335,7 +354,7 @@ mod tests {
             msg("user", "d"),
         ]);
         let original_len = body.len();
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(out.len(), original_len);
         assert_eq!(report.messages_truncated, 0);
     }
@@ -353,7 +372,7 @@ mod tests {
             msg("user", "c"),
             msg("user", "d"),
         ]);
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 1);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
@@ -377,7 +396,7 @@ mod tests {
             msg("user", "d"),
             msg("user", "e"),
         ]);
-        let (_, report) = truncate_history(body).unwrap();
+        let (_, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 1);
     }
 
@@ -392,7 +411,7 @@ mod tests {
             msg("user", "d"),
             msg("user", "e"),
         ]);
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 0);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
@@ -415,7 +434,7 @@ mod tests {
             msg("user", "d"),
             msg("user", "e"),
         ]);
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 0);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
@@ -436,7 +455,7 @@ mod tests {
             msg("assistant", "ok"),
             msg("user", "thanks"),
         ]);
-        let (_, report) = truncate_history(body).unwrap();
+        let (_, report) = truncate_default(body).unwrap();
         assert_eq!(
             report.messages_truncated, 0,
             "messages inside the protected tail must not be truncated"
@@ -458,7 +477,7 @@ mod tests {
             msg("user", "b"),
             msg("user", "c"),
         ]);
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(
             report.messages_truncated, 1,
             "only the non-tail tool must be truncated"
@@ -487,7 +506,7 @@ mod tests {
             msg("user", "tail"),
             msg("user", "tail"),
         ]);
-        let result = truncate_history(body);
+        let result = truncate_default(body);
         assert!(
             result.is_err(),
             "must return Err when over budget even after truncation"
@@ -515,7 +534,7 @@ mod tests {
             }))
             .unwrap(),
         );
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(
             report.messages_truncated, 1,
             "only the string-form tool should be counted"
@@ -548,7 +567,7 @@ mod tests {
             }))
             .unwrap(),
         );
-        let (_, report) = truncate_history(body).unwrap();
+        let (_, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 0);
     }
 
@@ -575,7 +594,7 @@ mod tests {
             }))
             .unwrap(),
         );
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(report.messages_truncated, 1);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
@@ -590,7 +609,7 @@ mod tests {
     #[test]
     fn malformed_json_passes_through_unchanged() {
         let bad = Bytes::from(b"not json {{ garbage }}" as &[u8]);
-        let (out, report) = truncate_history(bad.clone()).unwrap();
+        let (out, report) = truncate_default(bad.clone()).unwrap();
         assert_eq!(out, bad, "non-JSON body must be returned byte-for-byte");
         assert_eq!(report.messages_truncated, 0);
         assert_eq!(report.payload_chars_before, bad.len());
@@ -600,7 +619,7 @@ mod tests {
     fn missing_messages_field_passes_through_unchanged() {
         let body = Bytes::from(b"{\"model\":\"test\"}" as &[u8]);
         let original_len = body.len();
-        let (out, report) = truncate_history(body).unwrap();
+        let (out, report) = truncate_default(body).unwrap();
         assert_eq!(out.len(), original_len);
         assert_eq!(report.messages_truncated, 0);
     }
@@ -618,10 +637,70 @@ mod tests {
             msg("user", "d"),
             msg("user", "e"),
         ]);
-        let (_, report) = truncate_history(body).unwrap();
+        let (_, report) = truncate_default(body).unwrap();
         assert!(
             report.payload_chars_after < report.payload_chars_before,
             "after must be smaller than before when content was replaced"
+        );
+    }
+
+    // ── Dynamic limit ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn dynamic_limit_allows_payload_above_default_floor() {
+        // A protected system prompt bigger than the historical floor but
+        // within a raised (e.g. 131k-ctx-derived) budget must pass.
+        let raised_limit = TOTAL_PAYLOAD_LIMIT_CHARS * 2;
+        let big_system = big(TOTAL_PAYLOAD_LIMIT_CHARS + 10_000);
+        let body = make_body(vec![
+            serde_json::json!({"role": "system", "content": big_system}),
+            msg("user", "a"),
+            msg("user", "b"),
+            msg("user", "c"),
+            msg("user", "d"),
+        ]);
+        let result = truncate_history(body, raised_limit);
+        assert!(
+            result.is_ok(),
+            "payload above the floor but within the dynamic budget must pass"
+        );
+    }
+
+    #[test]
+    fn dynamic_limit_hard_aborts_above_raised_budget() {
+        // Even a raised budget must still hard-abort payloads that exceed it.
+        let raised_limit = TOTAL_PAYLOAD_LIMIT_CHARS * 2;
+        let big_system = big(raised_limit + 10_000);
+        let body = make_body(vec![
+            serde_json::json!({"role": "system", "content": big_system}),
+            msg("user", "a"),
+            msg("user", "b"),
+            msg("user", "c"),
+            msg("user", "d"),
+        ]);
+        let result = truncate_history(body, raised_limit);
+        assert!(
+            result.is_err(),
+            "payload above the dynamic budget must still hard-abort"
+        );
+    }
+
+    #[test]
+    fn dynamic_limit_never_shrinks_below_floor() {
+        // A tiny caller-supplied limit must be floored at the default: a
+        // payload under the floor passes even when limit_chars is tiny.
+        let big_system = big(TOTAL_PAYLOAD_LIMIT_CHARS - 50_000);
+        let body = make_body(vec![
+            serde_json::json!({"role": "system", "content": big_system}),
+            msg("user", "a"),
+            msg("user", "b"),
+            msg("user", "c"),
+            msg("user", "d"),
+        ]);
+        let result = truncate_history(body, 1_000);
+        assert!(
+            result.is_ok(),
+            "limit_chars below the floor must be raised to the floor, not enforced"
         );
     }
 }
