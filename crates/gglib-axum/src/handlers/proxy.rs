@@ -5,6 +5,7 @@ use axum::{Json, extract::State};
 use crate::{error::HttpError, state::AppState};
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
+use gglib_runtime::llama::args::context::{ContextInput, resolve_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
@@ -58,12 +59,28 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
 }
 
 /// Convert handler config to runtime config with defaults.
-fn to_runtime_config(cfg: &StartProxyConfig) -> RuntimeProxyConfig {
-    RuntimeProxyConfig {
+fn to_runtime_config(
+    cfg: &StartProxyConfig,
+    settings_default: Option<u64>,
+) -> Result<RuntimeProxyConfig, HttpError> {
+    let context_resolution = resolve_context_size(ContextInput {
+        flag: cfg.default_context.map(|v| v.to_string()),
+        model_context_length: None,
+        settings_default,
+    })
+    .map_err(|e| HttpError::BadRequest(format!("Invalid context size configuration: {e}")))?;
+
+    // If resolution yields None, fall back to the hard-coded default (matches CLI behavior
+    // where llama-server uses its own built-in default).
+    let default_context = context_resolution
+        .value
+        .unwrap_or(DEFAULT_CONTEXT_SIZE as u32) as u64;
+
+    Ok(RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
         port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
-        default_context: cfg.default_context.unwrap_or(DEFAULT_CONTEXT_SIZE),
-    }
+        default_context,
+    })
 }
 
 /// Get current proxy status.
@@ -78,7 +95,10 @@ pub async fn start(
 ) -> Result<Json<ProxyStatus>, HttpError> {
     let cfg = cfg.unwrap_or_default();
 
-    let runtime_cfg = to_runtime_config(&cfg);
+    // Resolve context size through the shared 3-level fallback chain
+    // (flag > settings default > hard-coded default), matching CLI behavior.
+    let settings = state.settings.get().await?;
+    let runtime_cfg = to_runtime_config(&cfg, settings.default_context_size)?;
 
     // Idempotent: if already running (Conflict), treat as success
     match state.proxy.start(runtime_cfg).await {
