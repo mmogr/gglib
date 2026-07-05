@@ -14,21 +14,31 @@
 //! pass applied to every inbound `/v1/chat/completions` request before it
 //! reaches the upstream inference engine:
 //!
-//! 1. **Per-message threshold** — any unprotected `role: "tool"` or
-//!    `role: "assistant"` message whose `content` string exceeds
-//!    [`TOOL_CONTENT_THRESHOLD_CHARS`] has its content replaced with
-//!    [`TRUNCATION_PLACEHOLDER`].
+//! 1. **Budget gate** — if the whole payload already fits within the
+//!    request's character budget (the `limit_chars` argument, floored at
+//!    [`TOTAL_PAYLOAD_LIMIT_CHARS`]) the body is forwarded **unchanged**. No
+//!    history is elided while there is room, so the model keeps maximum
+//!    context on every turn that does not actually need trimming.
 //!
-//! 2. **Total budget hard abort** — if the payload still exceeds the
-//!    request's character budget (the `limit_chars` argument to
-//!    [`truncate_history`], floored at [`TOTAL_PAYLOAD_LIMIT_CHARS`]) after
-//!    step 1, the request is rejected with HTTP 400 /
+//! 2. **Oldest-first trim** — only when the payload exceeds the budget are
+//!    messages elided, and then only as many as necessary: unprotected
+//!    `role: "tool"` / `role: "assistant"` messages whose `content` string
+//!    exceeds [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with
+//!    [`TRUNCATION_PLACEHOLDER`] **from oldest to newest**, stopping as soon
+//!    as the running payload estimate drops back under budget. The freshest
+//!    tool outputs — the ones the model most likely still needs — are the
+//!    last to be sacrificed.
+//!
+//! 3. **Total budget hard abort** — if the payload still exceeds the budget
+//!    after every eligible message has been trimmed (e.g. an enormous
+//!    protected system prompt), the request is rejected with HTTP 400 /
 //!    `context_length_exceeded` rather than forwarding a prompt that would
 //!    cause the model to fail.
 //!
-//! 3. **Protected set** — `role: "system"` messages and the last
+//! 4. **Protected set** — `role: "system"` messages and the last
 //!    [`PROTECTED_TAIL_COUNT`] messages by index (the immediate
-//!    conversational context) are never modified.
+//!    conversational context, spanning several recent tool-call/result
+//!    pairs) are never modified.
 //!
 //! ## Zero blast radius
 //!
@@ -87,8 +97,10 @@ pub const TOTAL_PAYLOAD_LIMIT_TOKENS: usize = TOTAL_PAYLOAD_LIMIT_CHARS / CHARS_
 
 /// Number of trailing messages (by index) that are always preserved from
 /// truncation regardless of role or content size.  These represent the
-/// immediate conversational context the model needs to respond coherently.
-pub const PROTECTED_TAIL_COUNT: usize = 4;
+/// immediate conversational context the model needs to respond coherently —
+/// sized to span several recent tool-call/result pairs so a live tool
+/// exchange is never half-elided.
+pub const PROTECTED_TAIL_COUNT: usize = 8;
 
 /// Replacement string inserted in place of truncated message content.
 pub const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
@@ -161,10 +173,12 @@ pub fn truncate_history(
     let limit_chars = limit_chars.max(TOTAL_PAYLOAD_LIMIT_CHARS);
     let payload_chars_before = body.len();
 
-    // ── Pre-parse fast path ───────────────────────────────────────────────────
-    // If the entire body is smaller than the per-message threshold no
-    // individual message could possibly need truncation.
-    if payload_chars_before <= TOOL_CONTENT_THRESHOLD_CHARS {
+    // ── Budget gate ───────────────────────────────────────────────────────────
+    // While the whole payload fits within budget there is nothing to do:
+    // forward it byte-for-byte and keep the model's full history intact. This
+    // is the common case and the reason truncation no longer mutilates history
+    // pre-emptively.
+    if payload_chars_before <= limit_chars {
         return Ok((body, TruncationReport::zeroed(payload_chars_before)));
     }
 
@@ -183,26 +197,21 @@ pub fn truncate_history(
     };
 
     let total = messages.len();
+    let placeholder_len = TRUNCATION_PLACEHOLDER.len();
 
-    // ── Post-parse fast path ──────────────────────────────────────────────────
-    // Avoid mutation and re-serialisation when the payload is under the total
-    // budget and no unprotected message has oversized string content.
-    if payload_chars_before <= limit_chars {
-        let has_oversized_candidate = messages
-            .iter()
-            .enumerate()
-            .filter(|(i, msg)| !is_tail_protected(*i, total) && is_truncation_candidate(msg))
-            .any(|(_, msg)| exceeds_threshold(msg));
-
-        if !has_oversized_candidate {
-            return Ok((body, TruncationReport::zeroed(payload_chars_before)));
-        }
-    }
-
-    // ── Mutate ────────────────────────────────────────────────────────────────
+    // ── Oldest-first trim ──────────────────────────────────────────────────────
+    // Walk from the oldest message toward the newest, eliding eligible
+    // oversized content only until the running payload estimate drops back
+    // under budget. `running` tracks the approximate payload size as each
+    // replacement shrinks it, so we stop at the minimum necessary and leave
+    // the freshest tool outputs intact.
     let mut messages_truncated = 0usize;
+    let mut running = payload_chars_before;
 
     for (i, msg) in messages.iter_mut().enumerate() {
+        if running <= limit_chars {
+            break;
+        }
         // Tail-protected messages and non-candidate roles (system, user) are
         // skipped entirely.
         if is_tail_protected(i, total) || !is_truncation_candidate(msg) {
@@ -212,16 +221,19 @@ pub fn truncate_history(
         // Only string-form content is replaced.  Array-form content
         // (multi-part messages) is left untouched.  `tool_calls` is never
         // modified regardless of role.
-        let should_truncate = msg
+        let Some(content_len) = msg
             .get("content")
             .and_then(|c| c.as_str())
-            .map(|s| s.len() > TOOL_CONTENT_THRESHOLD_CHARS)
-            .unwrap_or(false);
+            .map(str::len)
+            .filter(|len| *len > TOOL_CONTENT_THRESHOLD_CHARS)
+        else {
+            continue;
+        };
 
-        if should_truncate {
-            msg["content"] = serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
-            messages_truncated += 1;
-        }
+        msg["content"] = serde_json::Value::String(TRUNCATION_PLACEHOLDER.to_string());
+        messages_truncated += 1;
+        // Each replacement reclaims (content_len - placeholder_len) chars.
+        running = running.saturating_sub(content_len.saturating_sub(placeholder_len));
     }
 
     // ── Re-serialise ──────────────────────────────────────────────────────────
@@ -278,16 +290,6 @@ fn is_truncation_candidate(msg: &serde_json::Value) -> bool {
         msg.get("role").and_then(|r| r.as_str()).unwrap_or(""),
         "tool" | "assistant"
     )
-}
-
-/// Returns `true` if the message has string-form `content` that exceeds
-/// [`TOOL_CONTENT_THRESHOLD_CHARS`].
-#[inline]
-fn exceeds_threshold(msg: &serde_json::Value) -> bool {
-    msg.get("content")
-        .and_then(|c| c.as_str())
-        .map(|s| s.len() > TOOL_CONTENT_THRESHOLD_CHARS)
-        .unwrap_or(false)
 }
 
 // =============================================================================
@@ -357,136 +359,166 @@ mod tests {
         assert_eq!(report.messages_truncated, 0);
     }
 
-    // ── Basic truncation ──────────────────────────────────────────────────────
+    // ── Budget-gated, oldest-first truncation ─────────────────────────────────
+
+    /// Build a chat body with `leading_big` oversized tool messages (oldest,
+    /// outside the protected tail) followed by `tail` small user messages.
+    fn over_budget_body(leading_big: usize, big_chars: usize, tail: usize) -> Bytes {
+        let mut messages = Vec::new();
+        for _ in 0..leading_big {
+            messages.push(msg("tool", &big(big_chars)));
+        }
+        for _ in 0..tail {
+            messages.push(msg("user", "ok"));
+        }
+        make_body(messages)
+    }
 
     #[test]
-    fn oversized_tool_content_replaced_with_placeholder() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
+    fn under_budget_leaves_oversized_content_intact() {
+        // Behavioural guard: with room in the budget, even a giant tool output
+        // is forwarded untouched — history is no longer mutilated pre-emptively.
+        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS * 10);
         let body = make_body(vec![
-            msg("user", "run"),
-            msg("tool", &oversized), // index 1 — not in tail (6 messages, tail = 2..5)
+            msg("tool", &oversized),
             msg("user", "a"),
             msg("user", "b"),
             msg("user", "c"),
             msg("user", "d"),
         ]);
+        let original_len = body.len();
         let (out, report) = truncate_default(body).unwrap();
-        assert_eq!(report.messages_truncated, 1);
+        assert_eq!(report.messages_truncated, 0, "nothing truncated under budget");
+        assert_eq!(out.len(), original_len, "body forwarded byte-for-byte");
+    }
+
+    #[test]
+    fn over_budget_trims_oldest_first_and_stops_early() {
+        // 4 large tool messages (indices 0..3, outside the 8-message tail) plus
+        // 8 small tail messages → total 12, tail_start = 4. Each big message is
+        // 100k chars, so the payload (~400k) exceeds the 240k budget. Trimming
+        // the two oldest brings it back under budget; the two newer big
+        // messages must survive.
+        let body = over_budget_body(4, 100_000, 8);
+        let (out, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
+
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(
+            report.messages_truncated, 2,
+            "only as many oldest messages as needed to get under budget"
+        );
+        assert_eq!(
+            parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER,
+            "oldest big message trimmed"
+        );
         assert_eq!(
             parsed["messages"][1]["content"], TRUNCATION_PLACEHOLDER,
-            "oversized tool content must be replaced"
+            "second-oldest big message trimmed"
         );
         assert_eq!(
-            parsed["messages"][0]["content"], "run",
-            "other messages must be untouched"
+            parsed["messages"][2]["content"].as_str().unwrap().len(),
+            100_000,
+            "newer big message preserved once under budget"
+        );
+        assert_eq!(
+            parsed["messages"][3]["content"].as_str().unwrap().len(),
+            100_000,
+            "newest unprotected big message preserved"
+        );
+        assert!(report.payload_chars_after <= TOTAL_PAYLOAD_LIMIT_CHARS);
+    }
+
+    #[test]
+    fn over_budget_trims_assistant_content_too() {
+        // Same shape but the oversized messages are assistant turns.
+        let mut messages = vec![
+            msg("assistant", &big(150_000)),
+            msg("assistant", &big(150_000)),
+        ];
+        for _ in 0..8 {
+            messages.push(msg("user", "ok"));
+        }
+        let body = make_body(messages);
+        let (_, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
+        assert!(
+            report.messages_truncated >= 1,
+            "assistant content is an eligible truncation candidate"
         );
     }
 
     #[test]
-    fn oversized_assistant_content_replaced() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        let body = make_body(vec![
-            msg("assistant", &oversized), // index 0, not in tail
-            msg("user", "a"),
-            msg("user", "b"),
-            msg("user", "c"),
-            msg("user", "d"),
-            msg("user", "e"),
-        ]);
-        let (_, report) = truncate_default(body).unwrap();
-        assert_eq!(report.messages_truncated, 1);
-    }
-
-    #[test]
-    fn content_under_threshold_not_truncated() {
-        let under = big(TOOL_CONTENT_THRESHOLD_CHARS - 1);
-        let body = make_body(vec![
-            msg("tool", &under), // under threshold — must not be replaced
-            msg("user", "a"),
-            msg("user", "b"),
-            msg("user", "c"),
-            msg("user", "d"),
-            msg("user", "e"),
-        ]);
-        let (out, report) = truncate_default(body).unwrap();
-        assert_eq!(report.messages_truncated, 0);
-        let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
-        assert_eq!(
-            parsed["messages"][0]["content"].as_str().unwrap().len(),
-            under.len()
+    fn content_under_threshold_not_truncated_even_over_budget() {
+        // A payload made entirely of many small tool messages exceeds budget by
+        // sheer count, but none individually exceeds the per-message threshold,
+        // so none is eligible — the request hard-aborts rather than trimming
+        // sub-threshold content.
+        let mut messages = Vec::new();
+        for _ in 0..300 {
+            messages.push(msg("tool", &big(TOOL_CONTENT_THRESHOLD_CHARS - 1)));
+        }
+        let body = make_body(messages);
+        let result = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS);
+        assert!(
+            result.is_err(),
+            "no eligible (over-threshold) content to trim → hard abort"
         );
     }
 
     // ── Protection ────────────────────────────────────────────────────────────
 
     #[test]
-    fn system_message_never_truncated() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        // System message at index 0 with oversized content — must never be touched.
-        let body = make_body(vec![
-            serde_json::json!({"role": "system", "content": oversized.clone()}),
-            msg("user", "a"),
-            msg("user", "b"),
-            msg("user", "c"),
-            msg("user", "d"),
-            msg("user", "e"),
-        ]);
-        let (out, report) = truncate_default(body).unwrap();
-        assert_eq!(report.messages_truncated, 0);
+    fn system_message_never_truncated_even_over_budget() {
+        // A huge system prompt plus enough oversized tool messages to blow the
+        // budget: the tools are trimmed, the system message is untouched.
+        let big_system = big(120_000);
+        let mut messages = vec![
+            serde_json::json!({"role": "system", "content": big_system.clone()}),
+            msg("tool", &big(120_000)),
+            msg("tool", &big(120_000)),
+        ];
+        for _ in 0..8 {
+            messages.push(msg("user", "ok"));
+        }
+        let body = make_body(messages);
+        let (out, _report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(
             parsed["messages"][0]["content"].as_str().unwrap().len(),
-            oversized.len(),
+            big_system.len(),
             "system message content must be preserved"
         );
     }
 
     #[test]
-    fn tail_messages_not_truncated() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        // Tool message sits entirely within the protected tail (≤ PROTECTED_TAIL_COUNT
-        // total messages → tail_start = 0 → every message is protected).
-        let body = make_body(vec![
-            msg("user", "hi"),
-            msg("tool", &oversized),
-            msg("assistant", "ok"),
-            msg("user", "thanks"),
-        ]);
-        let (_, report) = truncate_default(body).unwrap();
-        assert_eq!(
-            report.messages_truncated, 0,
-            "messages inside the protected tail must not be truncated"
-        );
-    }
-
-    #[test]
-    fn non_tail_tool_truncated_tail_tool_preserved() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        // 7 messages → tail starts at index 3.
-        // Index 0 tool: NOT in tail → truncated.
-        // Index 3 tool: in tail → preserved.
-        let body = make_body(vec![
-            msg("tool", &oversized), // index 0 — truncated
-            msg("user", "mid"),
-            msg("user", "mid2"),
-            msg("tool", &oversized), // index 3 — tail-protected
-            msg("user", "a"),
-            msg("user", "b"),
-            msg("user", "c"),
-        ]);
-        let (out, report) = truncate_default(body).unwrap();
-        assert_eq!(
-            report.messages_truncated, 1,
-            "only the non-tail tool must be truncated"
-        );
+    fn protected_tail_preserved_over_budget() {
+        // A single huge unprotected tool at index 0 (total = 9, tail_start = 1)
+        // plus two moderate oversized tools inside the protected tail. Trimming
+        // the index-0 message alone drops the payload under budget, so the tail
+        // tools must survive untouched.
+        let mut messages = vec![msg("tool", &big(300_000))];
+        messages.push(msg("tool", &big(30_000)));
+        messages.push(msg("tool", &big(30_000)));
+        for _ in 0..6 {
+            messages.push(msg("user", "ok"));
+        }
+        let body = make_body(messages);
+        let (out, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
-        assert_eq!(parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
         assert_eq!(
-            parsed["messages"][3]["content"].as_str().unwrap().len(),
-            oversized.len(),
-            "tail tool content must be preserved"
+            parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER,
+            "the single unprotected tool must be trimmed"
         );
+        assert_eq!(
+            parsed["messages"][1]["content"].as_str().unwrap().len(),
+            30_000,
+            "tail tool #1 must be preserved"
+        );
+        assert_eq!(
+            parsed["messages"][2]["content"].as_str().unwrap().len(),
+            30_000,
+            "tail tool #2 must be preserved"
+        );
+        assert_eq!(report.messages_truncated, 1);
     }
 
     // ── Hard abort ────────────────────────────────────────────────────────────
@@ -515,29 +547,24 @@ mod tests {
 
     #[test]
     fn array_form_content_skipped() {
-        let oversized_str = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        // Index 0: string tool (forces mutation path by triggering truncation)
-        // Index 1: array-form tool (must not be truncated)
-        let body = Bytes::from(
-            serde_json::to_vec(&serde_json::json!({
-                "model": "test",
-                "messages": [
-                    {"role": "tool", "tool_call_id": "c1", "content": oversized_str},
-                    {"role": "tool", "tool_call_id": "c2", "content": [{"type": "text", "text": "big array content"}]},
-                    {"role": "user", "content": "a"},
-                    {"role": "user", "content": "b"},
-                    {"role": "user", "content": "c"},
-                    {"role": "user", "content": "d"},
-                ]
-            }))
-            .unwrap(),
-        );
-        let (out, report) = truncate_default(body).unwrap();
+        // Index 0: oversized string tool (eligible, will be trimmed once over
+        // budget). Index 1: array-form tool (must never be truncated). Padded
+        // with a protected tail; total payload exceeds budget.
+        let mut messages = vec![
+            serde_json::json!({"role": "tool", "tool_call_id": "c1", "content": big(250_000)}),
+            serde_json::json!({"role": "tool", "tool_call_id": "c2", "content": [{"type": "text", "text": "big array content"}]}),
+        ];
+        for _ in 0..8 {
+            messages.push(msg("user", "ok"));
+        }
+        let body = make_body(messages);
+        let (out, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
         assert_eq!(
             report.messages_truncated, 1,
             "only the string-form tool should be counted"
         );
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
         assert!(
             parsed["messages"][1]["content"].is_array(),
             "array-form content must be left as an array"
@@ -571,28 +598,19 @@ mod tests {
 
     #[test]
     fn tool_calls_preserved_when_content_truncated() {
-        // An assistant message that has BOTH oversized content AND tool_calls.
-        // Content must be replaced; tool_calls must survive.
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        let body = Bytes::from(
-            serde_json::to_vec(&serde_json::json!({
-                "model": "test",
-                "messages": [
-                    {
-                        "role": "assistant",
-                        "content": oversized,
-                        "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "foo", "arguments": "{}"}}]
-                    },
-                    {"role": "user", "content": "a"},
-                    {"role": "user", "content": "b"},
-                    {"role": "user", "content": "c"},
-                    {"role": "user", "content": "d"},
-                    {"role": "user", "content": "e"},
-                ]
-            }))
-            .unwrap(),
-        );
-        let (out, report) = truncate_default(body).unwrap();
+        // An assistant message with BOTH oversized content AND tool_calls, old
+        // enough to be trimmed once the payload is over budget. Content must be
+        // replaced; tool_calls must survive.
+        let mut messages = vec![serde_json::json!({
+            "role": "assistant",
+            "content": big(250_000),
+            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "foo", "arguments": "{}"}}]
+        })];
+        for _ in 0..8 {
+            messages.push(msg("user", "ok"));
+        }
+        let body = make_body(messages);
+        let (out, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
         assert_eq!(report.messages_truncated, 1);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(parsed["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
@@ -626,16 +644,8 @@ mod tests {
 
     #[test]
     fn report_chars_after_less_than_before_when_truncated() {
-        let oversized = big(TOOL_CONTENT_THRESHOLD_CHARS + 1);
-        let body = make_body(vec![
-            msg("tool", &oversized),
-            msg("user", "a"),
-            msg("user", "b"),
-            msg("user", "c"),
-            msg("user", "d"),
-            msg("user", "e"),
-        ]);
-        let (_, report) = truncate_default(body).unwrap();
+        let body = over_budget_body(4, 100_000, 8);
+        let (_, report) = truncate_history(body, TOTAL_PAYLOAD_LIMIT_CHARS).unwrap();
         assert!(
             report.payload_chars_after < report.payload_chars_before,
             "after must be smaller than before when content was replaced"

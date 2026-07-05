@@ -15,13 +15,15 @@
 //!    Jinja template.  Mistral-family models raise a hard 500 exception
 //!    without this.
 //! 3. [`truncate_history`] — defends against client-side context compaction
-//!    failures.  Any unprotected `role: "tool"` or `role: "assistant"` message
-//!    whose string `content` exceeds **2,000 characters** is replaced with a
-//!    short placeholder.  If the total payload still exceeds **240,000
-//!    characters** (≈ 60,000 tokens) after this pass, the request is rejected
-//!    with HTTP 400 / `context_length_exceeded` rather than forwarding a
-//!    prompt that would cause the model to fail.  The last four messages and
-//!    all `role: "system"` messages are always preserved.
+//!    failures.  While the request fits within the model's live context
+//!    budget it is forwarded **unchanged**; only when the payload exceeds the
+//!    budget are the **oldest** unprotected `role: "tool"` / `role:
+//!    "assistant"` messages whose string `content` exceeds **2,000
+//!    characters** replaced with a short placeholder — just enough of them,
+//!    oldest-first, to drop back under budget.  If the payload still exceeds
+//!    the budget after every eligible message is trimmed, the request is
+//!    rejected with HTTP 400 / `context_length_exceeded`.  The last eight
+//!    messages and all `role: "system"` messages are always preserved.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`resolve_model_context`]) that yields both the `ModelCapabilities`
