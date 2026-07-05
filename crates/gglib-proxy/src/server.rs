@@ -33,6 +33,7 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
+use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use gglib_sse::SseOptions;
 
@@ -65,6 +66,9 @@ pub(crate) struct AppState {
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
     upstream_health: Arc<UpstreamHealth>,
+    /// Per-model chars-per-token calibration, learned from upstream usage
+    /// frames and used to size the truncation budget.
+    calibration: Arc<TokenCalibration>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -159,6 +163,7 @@ pub async fn serve(
         dashboard,
         settings_repo,
         upstream_health: Arc::new(UpstreamHealth::new()),
+        calibration: Arc::new(TokenCalibration::new()),
     };
 
     let app = Router::new()
@@ -442,6 +447,7 @@ async fn chat_completions(
         global_inference_defaults,
         connection,
         state.upstream_health.clone(),
+        state.calibration.clone(),
     )
     .await
     {
@@ -516,6 +522,7 @@ async fn chat_completions(
                 retry_defaults,
                 retry_connection,
                 state.upstream_health.clone(),
+                state.calibration.clone(),
             )
             .await
             {

@@ -80,6 +80,7 @@ use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
+use crate::token_calibration::TokenCalibration;
 use crate::truncation::truncate_history;
 use crate::upstream_health::UpstreamHealth;
 
@@ -106,6 +107,9 @@ pub(crate) struct StreamOutcome {
     pub saw_output: bool,
     /// The `finish_reason` from the terminating `Done` event, if one arrived.
     pub finish_reason: Option<String>,
+    /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
+    /// arrived. Feeds the per-model chars-per-token calibration.
+    pub prompt_tokens: Option<u32>,
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -452,6 +456,7 @@ pub(crate) async fn forward_chat_completion(
     global_inference_defaults: Option<InferenceConfig>,
     connection: ConnectionGuard,
     upstream_health: Arc<UpstreamHealth>,
+    calibration: Arc<TokenCalibration>,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -475,8 +480,11 @@ pub(crate) async fn forward_chat_completion(
     //    The budget scales with the live serving context so clients that
     //    plan against the advertised context window are never rejected by a
     //    smaller hidden ceiling (truncate_history floors it at the default).
-    let limit_chars =
-        (effective_ctx as usize).saturating_mul(crate::truncation::CHARS_PER_TOKEN_APPROX);
+    //    The chars-per-token factor is the model's calibrated ratio (learned
+    //    from prior usage frames), falling back to the static default until
+    //    the first observation lands.
+    let chars_per_token = calibration.chars_per_token(model_name);
+    let limit_chars = (effective_ctx as f64 * chars_per_token) as usize;
     let body = match truncate_history(body, limit_chars) {
         Ok((b, report)) => {
             if report.messages_truncated > 0 {
@@ -586,6 +594,11 @@ pub(crate) async fn forward_chat_completion(
         // doc comment for why each is needed.
         let body = inject_streaming_body_overrides(body);
 
+        // Byte count of the payload actually forwarded upstream, paired with
+        // the usage frame's prompt-token count after streaming to calibrate
+        // this model's chars-per-token ratio.
+        let forwarded_chars = body.len();
+
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
         let probe_result = tokio::time::timeout(
@@ -681,12 +694,22 @@ pub(crate) async fn forward_chat_completion(
                         status = resp.status().as_u16(),
                         "upstream accepted streaming request after slot-queue wait"
                     );
-                    let outcome =
-                        stream_response_to_channel(resp, model_name_owned, tags, tx, &connection)
-                            .await;
+                    let outcome = stream_response_to_channel(
+                        resp,
+                        model_name_owned.clone(),
+                        tags,
+                        tx,
+                        &connection,
+                    )
+                    .await;
                     // Feed the terminal outcome to the watchdog: an empty
                     // response is a strike, visible output resets the streak.
                     upstream_health.record_stream_outcome(outcome.saw_output);
+                    // Calibrate this model's chars-per-token ratio from the
+                    // real prompt-token count the upstream reported.
+                    if let Some(prompt_tokens) = outcome.prompt_tokens {
+                        calibration.record(&model_name_owned, forwarded_chars, prompt_tokens);
+                    }
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -981,8 +1004,11 @@ async fn stream_response_to_channel(
                     outcome.finish_reason = Some(finish_reason.clone());
                     encoder.encode(&ev).map(Bytes::from)
                 }
-                _ => {
-                    connection.mark_generating();
+                LlmStreamEvent::Usage { prompt_tokens, .. } => {
+                    // Trailing usage frame — capture the real prompt-token
+                    // count for chars-per-token calibration. Not counted as
+                    // visible output (it carries an empty `choices` array).
+                    outcome.prompt_tokens = Some(*prompt_tokens);
                     encoder.encode(&ev).map(Bytes::from)
                 }
             },
