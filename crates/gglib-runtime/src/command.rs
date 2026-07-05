@@ -135,6 +135,22 @@ pub fn build_and_spawn(
         .arg(port.to_string())
         .arg("--metrics");
 
+    // Serialize concurrent requests onto a single slot.
+    //
+    // Recent llama.cpp builds default to `--parallel 4` with a *unified* KV
+    // cache: the `-c` context tokens become a single pool shared across all 4
+    // slots, not a per-request allocation. When a client (e.g. the VS Code LLM
+    // Gateway) fires two chat completions concurrently against a large-context
+    // model, their combined prompts can exceed that shared pool even though
+    // each individually fits — llama-server then aborts BOTH with
+    // "Context size has been exceeded", surfacing as an empty response.
+    //
+    // Forcing a single slot gives every request the full `-c` context
+    // exclusively; a second concurrent request queues inside llama-server
+    // until the slot frees, which the proxy's streaming keepalive path is
+    // built to wait out.
+    cmd.arg("--parallel").arg("1");
+
     // Add context size if specified
     if let Some(ctx) = config.context_size {
         cmd.arg("-c").arg(ctx.to_string());
