@@ -292,7 +292,8 @@ mod tests {
             slots.set(result);
             let metrics = ContextMetricsStore::new();
             let upstream_health = UpstreamHealth::new();
-            let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
+            let snapshot =
+                DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
         }

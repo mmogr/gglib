@@ -388,7 +388,10 @@ mod tests {
         ]);
         let original_len = body.len();
         let (out, report) = truncate_default(body).unwrap();
-        assert_eq!(report.messages_truncated, 0, "nothing truncated under budget");
+        assert_eq!(
+            report.messages_truncated, 0,
+            "nothing truncated under budget"
+        );
         assert_eq!(out.len(), original_len, "body forwarded byte-for-byte");
     }
 

@@ -25,7 +25,10 @@ fn mtp_disabled_via_env() -> bool {
 
 /// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
 fn is_truthy_flag(v: &str) -> bool {
-    matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+    matches!(
+        v.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 /// Select the llama-server path to use.

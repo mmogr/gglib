@@ -154,8 +154,7 @@ const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call
 /// silent empty stream that the LLM Gateway reports as "the model returned an
 /// empty response" with no cause. Emitting a visible notice turns that silent
 /// failure into a diagnosable one.
-const EMPTY_STREAM_NOTICE: &str =
-    "⚠️ [proxy] The model produced no output for this request. The upstream \
+const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output for this request. The upstream \
      server may be overloaded or degraded — retry, and if it persists restart \
      the model.";
 
@@ -645,9 +644,8 @@ pub(crate) async fn forward_chat_completion(
             // Overall first-byte deadline: bounds pathological slot-queue
             // waits so a wedged upstream cannot hang the client indefinitely
             // on keepalive comments.
-            let deadline = tokio::time::sleep(std::time::Duration::from_secs(
-                FIRST_BYTE_DEADLINE_SECS,
-            ));
+            let deadline =
+                tokio::time::sleep(std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS));
             tokio::pin!(deadline);
 
             let upstream_response = loop {

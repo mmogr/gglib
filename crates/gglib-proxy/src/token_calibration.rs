@@ -61,7 +61,8 @@ impl TokenCalibration {
         if prompt_tokens == 0 {
             return;
         }
-        let observed = (payload_chars as f64 / f64::from(prompt_tokens)).clamp(MIN_RATIO, MAX_RATIO);
+        let observed =
+            (payload_chars as f64 / f64::from(prompt_tokens)).clamp(MIN_RATIO, MAX_RATIO);
 
         let mut guard = self.ratios.lock().unwrap_or_else(|e| e.into_inner());
         guard

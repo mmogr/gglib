@@ -220,15 +220,16 @@ impl ProcessManager {
         let cached = {
             let current_guard = current_lock.read().await;
             current_guard.as_ref().and_then(|current| {
-                (current.model_id == launch_spec.id && current.context_size == effective_ctx)
-                    .then(|| {
+                (current.model_id == launch_spec.id && current.context_size == effective_ctx).then(
+                    || {
                         (
                             current.port,
                             current.model_id,
                             current.model_name.clone(),
                             current.context_size,
                         )
-                    })
+                    },
+                )
             })
         };
         if let Some((port, model_id, cached_name, context_size)) = cached {
