@@ -94,8 +94,17 @@ pub async fn add(
     Ok(Json(state.models.add(req).await?))
 }
 
-/// Update an existing model.
+/// Update an existing model (PUT — full update).
 pub async fn update(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateModelRequest>,
+) -> Result<Json<GuiModel>, HttpError> {
+    Ok(Json(state.models.update(id, req).await?))
+}
+
+/// Partial update an existing model (PATCH — null semantics for optional fields).
+pub async fn patch(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateModelRequest>,

@@ -149,6 +149,9 @@ pub struct GuiModel {
     pub port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Per-model server defaults (port, URL overrides, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_defaults: Option<gglib_core::domain::ServerConfig>,
     /// Capability flags stored for this model.
     ///
     /// Serialized as a `u32` bit-field.  The frontend receives this value
@@ -180,6 +183,7 @@ impl GuiModel {
             is_serving,
             port,
             inference_defaults: model.inference_defaults,
+            server_defaults: model.server_defaults,
             capabilities: model.capabilities,
             benchmark_summary: model.benchmark_summary,
         }
