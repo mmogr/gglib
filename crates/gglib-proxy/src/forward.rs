@@ -680,6 +680,15 @@ pub(crate) async fn forward_chat_completion(
                         }
                     };
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let human = payload
+                        .pointer("/error/message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("upstream returned an error");
+                    let visible = visible_content_frame(
+                        &model_name_owned,
+                        &format!("⚠️ [proxy] upstream model server error ({status}): {human}"),
+                    );
+                    let frame = format!("{visible}{frame}");
                     let _ = tx.send(Ok(Bytes::from(frame))).await;
                 }
                 Err(e) => {
@@ -692,6 +701,11 @@ pub(crate) async fn forward_chat_completion(
                         }
                     });
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let visible = visible_content_frame(
+                        &model_name_owned,
+                        &format!("⚠️ [proxy] upstream llama-server unavailable: {e}"),
+                    );
+                    let frame = format!("{visible}{frame}");
                     let _ = tx.send(Ok(Bytes::from(frame))).await;
                 }
             }
@@ -784,6 +798,35 @@ fn host_port_from_url(url: &str) -> String {
             );
             "127.0.0.1:0".to_owned()
         })
+}
+
+/// Build a single SSE `chat.completion.chunk` frame carrying visible assistant
+/// `content`.
+///
+/// Used to surface proxy/upstream failures as text the human can actually read
+/// in the chat pane. Some clients (notably the VS Code LLM Gateway) do not
+/// render bare inline `{"error": {...}}` frames inside an already-committed
+/// 200 stream, so an error delivered only as a structured error frame looks
+/// like an empty response. Pairing every such error with a visible content
+/// frame guarantees the cause is shown.
+fn visible_content_frame(model: &str, content: &str) -> String {
+    let created = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
+    let value = serde_json::json!({
+        "id": id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "delta": { "content": content },
+            "finish_reason": serde_json::Value::Null,
+        }],
+    });
+    format!("data: {value}\n\n")
 }
 
 /// Feed a streaming response through the normalization pipeline and send each
