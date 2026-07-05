@@ -58,6 +58,7 @@ export interface UpdateModelParams {
   quantization?: string;
   filePath?: string;
   inferenceDefaults?: import('../../../types').InferenceConfig;
+  serverDefaults?: import('../../../types').ServerConfig | null;
 }
 
 /**

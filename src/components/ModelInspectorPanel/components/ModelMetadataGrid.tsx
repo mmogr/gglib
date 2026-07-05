@@ -43,12 +43,13 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model, detail })
             <span className="text-text text-sm text-right break-words font-semibold text-primary">{model.quantization}</span>
           </div>
         )}
-        {model.contextLength && (
-          <div className="flex justify-between items-start gap-base">
-            <span className="text-text-muted text-sm shrink-0">Context Length:</span>
-            <span className="text-text text-sm text-right break-words">{model.contextLength.toLocaleString()}</span>
-          </div>
-        )}
+        {/* Context Length — shows server default override or model metadata */}
+        <div className="flex justify-between items-start gap-base">
+          <span className="text-text-muted text-sm shrink-0">Context Length:</span>
+          <span className="text-text text-sm text-right break-words">
+            {model.serverDefaults?.contextLength ? model.serverDefaults.contextLength.toLocaleString() : (model.contextLength ? `${model.contextLength.toLocaleString()} (default)` : 'Using default')}
+          </span>
+        </div>
         <div className="flex justify-between items-start gap-base">
           <span className="text-text-muted text-sm shrink-0">Path:</span>
           <span className="text-text text-sm text-right break-words font-mono text-xs flex items-center gap-sm">

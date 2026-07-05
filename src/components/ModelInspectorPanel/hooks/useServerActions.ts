@@ -23,10 +23,11 @@ export interface ServerActionsConfig {
   mtpNMaxOverride: number | null;
   mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
+  editedServerDefaults: import('../../../types').ServerConfig | null | undefined;
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig }) => Promise<void>;
+  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerInfo) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
@@ -61,6 +62,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     editedQuantization,
     editedFilePath,
     editedInferenceDefaults,
+    editedServerDefaults,
     customContext,
     customPort,
     jinjaOverride,
@@ -199,7 +201,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
   const handleSave = useCallback(async () => {
     if (!model?.id) return;
     try {
-      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: InferenceConfig } = {};
+      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: InferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null } = {};
       
       if (editedName !== model.name) {
         updates.name = editedName;
@@ -214,6 +216,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       if (JSON.stringify(editedInferenceDefaults) !== JSON.stringify(model.inferenceDefaults)) {
         updates.inferenceDefaults = editedInferenceDefaults;
       }
+      // Include serverDefaults if it was edited (null = clear override, object = set value, undefined = no change)
+      if (editedServerDefaults !== model.serverDefaults) {
+        updates.serverDefaults = editedServerDefaults ?? undefined;
+      }
       
       if (Object.keys(updates).length > 0) {
         await onUpdateModel(model.id, updates);
@@ -223,7 +229,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
       showToast(`Failed to update model: ${error}`, 'error');
     }
-  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, onUpdateModel, resetEditState, showToast]);
+  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, editedServerDefaults, onUpdateModel, resetEditState, showToast]);
 
   return {
     handleStartServer,

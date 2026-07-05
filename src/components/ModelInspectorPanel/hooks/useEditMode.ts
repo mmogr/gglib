@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { GgufModel, InferenceConfig } from '../../../types';
+import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
 
 export interface EditModeState {
   isEditMode: boolean;
@@ -7,10 +7,12 @@ export interface EditModeState {
   editedQuantization: string;
   editedFilePath: string;
   editedInferenceDefaults: InferenceConfig | undefined;
+  editedServerDefaults: ServerConfig | null | undefined;
   setEditedName: (name: string) => void;
   setEditedQuantization: (quant: string) => void;
   setEditedFilePath: (path: string) => void;
   setEditedInferenceDefaults: (config: InferenceConfig) => void;
+  setEditedServerDefaults: (config: ServerConfig | null) => void;
   handleEdit: () => void;
   handleCancel: () => void;
   resetEditState: () => void;
@@ -26,6 +28,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
   const [editedQuantization, setEditedQuantization] = useState('');
   const [editedFilePath, setEditedFilePath] = useState('');
   const [editedInferenceDefaults, setEditedInferenceDefaults] = useState<InferenceConfig | undefined>(undefined);
+  const [editedServerDefaults, setEditedServerDefaults] = useState<ServerConfig | null | undefined>(undefined);
 
   const handleEdit = useCallback(() => {
     if (!model) return;
@@ -33,6 +36,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     setEditedQuantization(model.quantization || '');
     setEditedFilePath(model.filePath);
     setEditedInferenceDefaults(model.inferenceDefaults || undefined);
+    setEditedServerDefaults(model.serverDefaults ?? undefined);
     setIsEditMode(true);
   }, [model]);
 
@@ -46,6 +50,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     setEditedQuantization('');
     setEditedFilePath('');
     setEditedInferenceDefaults(undefined);
+    setEditedServerDefaults(undefined);
   }, []);
 
   return {
@@ -54,10 +59,12 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     editedQuantization,
     editedFilePath,
     editedInferenceDefaults,
+    editedServerDefaults,
     setEditedName,
     setEditedQuantization,
     setEditedFilePath,
     setEditedInferenceDefaults,
+    setEditedServerDefaults,
     handleEdit,
     handleCancel,
     resetEditState,

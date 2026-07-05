@@ -45,6 +45,7 @@ interface ModelInspectorPanelProps {
     name?: string;
     quantization?: string;
     file_path?: string;
+    serverDefaults?: import('../../types').ServerConfig | null;
   }) => Promise<void>;
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
@@ -121,6 +122,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     editedQuantization: editMode.editedQuantization,
     editedFilePath: editMode.editedFilePath,
     editedInferenceDefaults: editMode.editedInferenceDefaults,
+    editedServerDefaults: editMode.editedServerDefaults,
     customContext: serveModal.customContext,
     customPort: serveModal.customPort,
     jinjaOverride: serveModal.jinjaOverride,
@@ -249,9 +251,11 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               editedQuantization={editMode.editedQuantization}
               editedFilePath={editMode.editedFilePath}
               editedInferenceDefaults={editMode.editedInferenceDefaults}
+              editedServerDefaults={editMode.editedServerDefaults}
               onQuantizationChange={editMode.setEditedQuantization}
               onFilePathChange={editMode.setEditedFilePath}
               onInferenceDefaultsChange={editMode.setEditedInferenceDefaults}
+              onServerDefaultsChange={editMode.setEditedServerDefaults}
             />
           ) : (
             <ModelMetadataGrid model={model} detail={detail.modelDetail ?? undefined} />

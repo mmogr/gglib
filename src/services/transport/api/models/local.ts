@@ -81,6 +81,7 @@ export async function updateModel(params: UpdateModelParams): Promise<GgufModel>
     quantization: params.quantization,
     filePath: params.filePath,
     inferenceDefaults: params.inferenceDefaults,
+    serverDefaults: params.serverDefaults,
   });
 }
 
