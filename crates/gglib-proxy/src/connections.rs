@@ -235,6 +235,26 @@ impl ActiveConnectionsRegistry {
         self.len() == 0
     }
 
+    /// `true` if any connection *other than* `exclude` is actively occupying
+    /// the upstream — i.e. past the `Queued` phase (prompt processing or
+    /// generating).
+    ///
+    /// Used to distinguish a slow-because-busy upstream (another request holds
+    /// the single llama-server slot) from a genuinely wedged one, so the
+    /// streaming keepalive path does not treat a legitimate queue wait as a
+    /// degradation strike.
+    #[must_use]
+    pub fn others_busy(&self, exclude: Uuid) -> bool {
+        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        guard.iter().any(|(id, conn)| {
+            *id != exclude
+                && matches!(
+                    conn.phase,
+                    ConnectionPhase::ProcessingPrompt | ConnectionPhase::Generating
+                )
+        })
+    }
+
     /// Remove `id` from the registry. Only called from [`ConnectionGuard`]'s
     /// `Drop` impl.
     fn remove(&self, id: Uuid) {
@@ -274,6 +294,17 @@ impl ConnectionGuard {
     /// Mark this connection as generating (post-prefill).
     pub fn mark_generating(&self) {
         self.registry.mark_generating(self.id);
+    }
+
+    /// `true` if any *other* in-flight connection is actively occupying the
+    /// upstream slot (prompt processing or generating).
+    ///
+    /// A `true` result means "the upstream is busy serving someone else",
+    /// which the streaming keepalive path treats as a legitimate queue wait
+    /// rather than a degradation.
+    #[must_use]
+    pub fn others_active(&self) -> bool {
+        self.registry.others_busy(self.id)
     }
 }
 
@@ -342,6 +373,31 @@ mod tests {
 
         let snapshots = registry.snapshot();
         assert_eq!(snapshots[0].phase, ConnectionPhase::Generating);
+    }
+
+    #[test]
+    fn others_active_ignores_self_and_queued_peers() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let a = registry.register("m", true, None);
+        let b = registry.register("m", true, None);
+
+        // Both are in Queued phase → neither counts as busy for the other.
+        assert!(!a.others_active());
+        assert!(!b.others_active());
+
+        // b starts processing its prompt → now a sees a busy peer, but b
+        // (looking at itself + queued a) does not.
+        b.update_progress(10, 100, 0, 5);
+        assert!(a.others_active());
+        assert!(!b.others_active());
+
+        // A generating peer also counts as busy.
+        b.mark_generating();
+        assert!(a.others_active());
+
+        // Once b drops, a is alone again.
+        drop(b);
+        assert!(!a.others_active());
     }
 
     #[test]

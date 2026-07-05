@@ -167,6 +167,12 @@ const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output f
 /// bound *pathological* waits — a degraded or deadlocked llama-server that
 /// would otherwise keep the client hanging on keepalive comments indefinitely
 /// — not to cap normal prefill latency.
+///
+/// This is a *per-cycle* bound, not an absolute cap: with `--parallel 1` a
+/// second request legitimately queues behind an in-flight one, so when the
+/// deadline fires and another connection is still active the wait is extended
+/// for another cycle rather than failed (see the keepalive loop). Only an
+/// expiry with no other active request counts as degradation.
 const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 
 /// Force-insert the streaming-only overrides every forwarded chat-completion
@@ -653,9 +659,26 @@ pub(crate) async fn forward_chat_completion(
                     biased;
                     result = &mut send_future => break result,
                     () = &mut deadline => {
+                        // The single-slot upstream may legitimately be busy
+                        // serving another (possibly minutes-long) request, in
+                        // which case this request is correctly queued, not
+                        // wedged. Only treat a deadline expiry as degradation
+                        // when NO other connection is actively occupying the
+                        // slot; otherwise extend the deadline and keep waiting.
+                        if connection.others_active() {
+                            warn!(
+                                deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                                "slot-queue wait exceeded deadline but another request is active; extending (upstream busy, not wedged)"
+                            );
+                            deadline.as_mut().reset(
+                                tokio::time::Instant::now()
+                                    + std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
+                            );
+                            continue;
+                        }
                         warn!(
                             deadline_secs = FIRST_BYTE_DEADLINE_SECS,
-                            "slot-queue wait exceeded first-byte deadline; treating upstream as degraded"
+                            "slot-queue wait exceeded first-byte deadline with no other active request; treating upstream as degraded"
                         );
                         upstream_health.record_timeout();
                         let visible = visible_content_frame(
