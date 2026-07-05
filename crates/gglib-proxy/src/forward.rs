@@ -79,6 +79,7 @@ use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::truncation::truncate_history;
+use crate::upstream_health::UpstreamHealth;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
 /// or timed out).  Returned by [`forward_chat_completion`] so the caller can
@@ -426,6 +427,10 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 ///   exactly as long as that task); held for the duration of this function
 ///   for the non-streaming path. Dropping it (by any path — completion,
 ///   early return, or panic) unregisters the connection from the dashboard.
+/// * `upstream_health` - Consecutive-failure watchdog. The streaming task
+///   records each terminal outcome (empty stream or first-byte timeout is a
+///   strike; any visible output resets it) so the handler can recycle a
+///   degraded-but-`/health`-green upstream before the next request.
 ///
 /// # Returns
 ///
@@ -444,6 +449,7 @@ pub(crate) async fn forward_chat_completion(
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
     connection: ConnectionGuard,
+    upstream_health: Arc<UpstreamHealth>,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -638,6 +644,7 @@ pub(crate) async fn forward_chat_completion(
                             deadline_secs = FIRST_BYTE_DEADLINE_SECS,
                             "slot-queue wait exceeded first-byte deadline; treating upstream as degraded"
                         );
+                        upstream_health.record_timeout();
                         let visible = visible_content_frame(
                             &model_name_owned,
                             &format!(
@@ -672,7 +679,12 @@ pub(crate) async fn forward_chat_completion(
                         status = resp.status().as_u16(),
                         "upstream accepted streaming request after slot-queue wait"
                     );
-                    stream_response_to_channel(resp, model_name_owned, tags, tx, &connection).await;
+                    let outcome =
+                        stream_response_to_channel(resp, model_name_owned, tags, tx, &connection)
+                            .await;
+                    // Feed the terminal outcome to the watchdog: an empty
+                    // response is a strike, visible output resets the streak.
+                    upstream_health.record_stream_outcome(outcome.saw_output);
                 }
                 Ok(resp) => {
                     let status = resp.status();

@@ -12,6 +12,7 @@ pub mod server;
 pub mod slots;
 pub mod slots_poller;
 pub mod truncation;
+pub mod upstream_health;
 
 pub use council_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 pub use server::serve;

@@ -33,6 +33,7 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
+use crate::upstream_health::UpstreamHealth;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -60,6 +61,10 @@ pub(crate) struct AppState {
     pub(crate) dashboard: Arc<DashboardState>,
     /// Settings repository for loading global inference defaults per-request.
     settings_repo: Arc<dyn SettingsRepository>,
+    /// Consecutive-failure watchdog: trips a proactive model recycle when the
+    /// upstream degrades to empty responses / first-byte timeouts while still
+    /// passing its `/health` check.
+    upstream_health: Arc<UpstreamHealth>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -153,6 +158,7 @@ pub async fn serve(
         council,
         dashboard,
         settings_repo,
+        upstream_health: Arc::new(UpstreamHealth::new()),
     };
 
     let app = Router::new()
@@ -347,6 +353,15 @@ async fn chat_completions(
         .await;
     }
 
+    // Watchdog: if the upstream tripped the consecutive-failure threshold on
+    // prior requests (empty responses / first-byte timeouts while still
+    // passing /health), recycle it now — before routing this request into a
+    // server that has proven it is not producing output.
+    if state.upstream_health.take_recycle_request() {
+        warn!("upstream watchdog: recycling degraded model before next request");
+        let _ = state.runtime_port.stop_current().await;
+    }
+
     // Ensure the model is running with specified context or default
     let target = match state
         .runtime_port
@@ -403,6 +418,7 @@ async fn chat_completions(
         state.dashboard.metrics.clone(),
         global_inference_defaults,
         connection,
+        state.upstream_health.clone(),
     )
     .await
     {
@@ -476,6 +492,7 @@ async fn chat_completions(
                 state.dashboard.metrics.clone(),
                 retry_defaults,
                 retry_connection,
+                state.upstream_health.clone(),
             )
             .await
             {
