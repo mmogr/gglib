@@ -141,10 +141,15 @@ pub async fn serve(
         cancel.clone(),
     );
 
+    // Upstream-degradation watchdog, shared between the request path (strike
+    // recording + recycle) and the dashboard (counter surfacing).
+    let upstream_health = Arc::new(UpstreamHealth::new());
+
     let dashboard = Arc::new(DashboardState::new(
         Arc::new(ActiveConnectionsRegistry::new()),
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
+        Arc::clone(&upstream_health),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -162,7 +167,7 @@ pub async fn serve(
         council,
         dashboard,
         settings_repo,
-        upstream_health: Arc::new(UpstreamHealth::new()),
+        upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
     };
 

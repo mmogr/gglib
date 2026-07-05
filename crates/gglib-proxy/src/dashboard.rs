@@ -40,6 +40,7 @@ use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
+use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
 
 /// Number of recent request snapshots included in each [`DashboardSnapshot`].
 const RECENT_REQUEST_LIMIT: usize = 20;
@@ -83,6 +84,9 @@ pub struct DashboardSnapshot {
     /// Total requests handled since the proxy started, including any
     /// evicted from `recent_requests`'s ring buffer.
     pub total_requests: u64,
+    /// Upstream-degradation watchdog counters (empty responses, first-byte
+    /// timeouts, proactive recycles) since the proxy started.
+    pub upstream_health: UpstreamHealthSnapshot,
 }
 
 impl DashboardSnapshot {
@@ -94,6 +98,7 @@ impl DashboardSnapshot {
         connections: &ActiveConnectionsRegistry,
         slots: &SlotsCache,
         metrics: &ContextMetricsStore,
+        upstream_health: &UpstreamHealth,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -112,6 +117,7 @@ impl DashboardSnapshot {
             slots_status,
             recent_requests: metrics.recent(RECENT_REQUEST_LIMIT),
             total_requests: metrics.total_requests(),
+            upstream_health: upstream_health.snapshot(),
         }
     }
 }
@@ -130,6 +136,7 @@ pub struct DashboardState {
     pub connections: Arc<ActiveConnectionsRegistry>,
     pub slots: Arc<SlotsCache>,
     pub metrics: Arc<ContextMetricsStore>,
+    pub upstream_health: Arc<UpstreamHealth>,
     pub broadcaster: Arc<Broadcaster<DashboardSnapshot>>,
 }
 
@@ -141,11 +148,13 @@ impl DashboardState {
         connections: Arc<ActiveConnectionsRegistry>,
         slots: Arc<SlotsCache>,
         metrics: Arc<ContextMetricsStore>,
+        upstream_health: Arc<UpstreamHealth>,
     ) -> Self {
         Self {
             connections,
             slots,
             metrics,
+            upstream_health,
             broadcaster: Arc::new(Broadcaster::new(BROADCAST_CAPACITY)),
         }
     }
@@ -154,7 +163,12 @@ impl DashboardState {
     /// stores.
     #[must_use]
     pub fn snapshot(&self) -> DashboardSnapshot {
-        DashboardSnapshot::build(&self.connections, &self.slots, &self.metrics)
+        DashboardSnapshot::build(
+            &self.connections,
+            &self.slots,
+            &self.metrics,
+            &self.upstream_health,
+        )
     }
 }
 
@@ -202,6 +216,7 @@ mod tests {
             Arc::new(ActiveConnectionsRegistry::new()),
             Arc::new(SlotsCache::new()),
             Arc::new(ContextMetricsStore::new()),
+            Arc::new(UpstreamHealth::new()),
         ))
     }
 
@@ -210,8 +225,9 @@ mod tests {
         let connections = ActiveConnectionsRegistry::new();
         let slots = SlotsCache::new();
         let metrics = ContextMetricsStore::new();
+        let upstream_health = UpstreamHealth::new();
 
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics);
+        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
 
         assert!(snapshot.active_connections.is_empty());
         assert!(!snapshot.slots_available);
@@ -236,7 +252,8 @@ mod tests {
             recorded_at_secs: 0,
         });
 
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics);
+        let upstream_health = UpstreamHealth::new();
+        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
 
         assert_eq!(snapshot.active_connections.len(), 1);
         assert_eq!(snapshot.active_connections[0].model_name, "qwen-3b");
@@ -250,8 +267,9 @@ mod tests {
         let slots = SlotsCache::new();
         slots.set(SlotsPollResult::Available(vec![]));
         let metrics = ContextMetricsStore::new();
+        let upstream_health = UpstreamHealth::new();
 
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics);
+        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
 
         assert!(snapshot.slots_available);
         assert!(snapshot.slots_status.is_none());
@@ -273,7 +291,8 @@ mod tests {
             let slots = SlotsCache::new();
             slots.set(result);
             let metrics = ContextMetricsStore::new();
-            let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics);
+            let upstream_health = UpstreamHealth::new();
+            let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
         }
