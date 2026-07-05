@@ -12,6 +12,22 @@ use std::sync::Arc;
 use tokio::process::Child;
 use tracing::{debug, info, warn};
 
+/// Whether the `GGLIB_DISABLE_MTP` environment variable requests that MTP
+/// speculative-decoding flags be suppressed.
+///
+/// Truthy values (case-insensitive): `1`, `true`, `yes`, `on`. Anything else
+/// (including unset) leaves MTP enabled.
+fn mtp_disabled_via_env() -> bool {
+    std::env::var("GGLIB_DISABLE_MTP")
+        .ok()
+        .is_some_and(|v| is_truthy_flag(&v))
+}
+
+/// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
+fn is_truthy_flag(v: &str) -> bool {
+    matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+}
+
 /// Select the llama-server path to use.
 ///
 /// This function implements the "bootstrap path wins" rule:
@@ -137,11 +153,22 @@ pub fn build_and_spawn(
     }
 
     // Add MTP speculative decoding flags if enabled
+    //
+    // A global kill switch — the `GGLIB_DISABLE_MTP` environment variable set
+    // to a truthy value (`1`, `true`, `yes`, case-insensitive) — forces these
+    // flags off even for an MTP-tagged model. This exists so speculative
+    // decoding can be A/B tested as a suspect for long-context degenerate
+    // generations without editing any per-model config: `GGLIB_DISABLE_MTP=1
+    // gglib proxy`.
     if let Some(n) = config.spec_draft_n_max {
-        cmd.arg("--spec-type").arg("draft-mtp");
-        cmd.arg("--spec-draft-n-max").arg(n.to_string());
-        if let Some(p) = config.spec_draft_p_min {
-            cmd.arg("--spec-draft-p-min").arg(p.to_string());
+        if mtp_disabled_via_env() {
+            info!("MTP speculative decoding suppressed via GGLIB_DISABLE_MTP");
+        } else {
+            cmd.arg("--spec-type").arg("draft-mtp");
+            cmd.arg("--spec-draft-n-max").arg(n.to_string());
+            if let Some(p) = config.spec_draft_p_min {
+                cmd.arg("--spec-draft-p-min").arg(p.to_string());
+            }
         }
     }
 
@@ -219,6 +246,16 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn is_truthy_flag_recognises_on_values() {
+        for v in ["1", "true", "TRUE", " yes ", "On", "  on"] {
+            assert!(is_truthy_flag(v), "{v:?} should be truthy");
+        }
+        for v in ["0", "false", "no", "off", "", "2", "disable"] {
+            assert!(!is_truthy_flag(v), "{v:?} should be falsy");
+        }
+    }
 
     /// Test that a valid bootstrap path is used directly.
     #[test]
