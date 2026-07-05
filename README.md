@@ -290,6 +290,14 @@ gglib serve <id> --mtp-draft-n-max 0
 gglib serve <id> --mtp-draft-n-max 4 --mtp-draft-p-min 0.8
 ```
 
+Disable MTP globally on **every** launch path (including proxy auto-start,
+where no per-model flag is reachable) with an environment variable — useful
+for A/B testing speculative decoding as a suspect for long-context issues:
+```bash
+# Truthy values: 1, true, yes, on (case-insensitive)
+GGLIB_DISABLE_MTP=1 gglib proxy
+```
+
 These tags are **auto-detected at import time** by `gglib-gguf::capabilities::detect_all` and persisted by `ModelService::import_from_file`. They are protected as system tags: `gglib model remove-tag` will reject any attempt to remove a `format:*` tag (use the `_force` service path for admin operations).
 
 #### Inference parameter defaults
