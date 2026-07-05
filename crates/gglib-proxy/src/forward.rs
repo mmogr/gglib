@@ -112,6 +112,18 @@ fn should_forward_header(name: &str) -> bool {
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
 
+/// Prefix prepended to malformed / unclosed tool-call markup when it is
+/// surfaced to the client as visible assistant text instead of being silently
+/// dropped.
+///
+/// The old behaviour logged a `warn!` and discarded the offending bytes, so a
+/// turn whose entire output was an unparseable `<tool_call>` reached the client
+/// as a zero-content stream — indistinguishable from "the model returned an
+/// empty response". Surfacing the raw body (visually flagged) means the human
+/// always sees *something* and can tell the model attempted a tool call the
+/// proxy could not parse.
+const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
+
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
 ///
@@ -801,52 +813,54 @@ async fn stream_response_to_channel(
 
     let parser = get_parser(&tags);
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
+    let mut normalized = Box::pin(normalized);
 
-    let wire_stream = normalized.filter_map(move |event| {
-        let encoder = encoder.clone();
-        async move {
-            match event {
-                Ok(ev) => {
-                    match &ev {
-                        LlmStreamEvent::PromptProgress {
-                            processed,
-                            total,
-                            cached,
-                            time_ms,
-                        } => {
-                            connection.update_progress(*processed, *total, *cached, *time_ms);
-                        }
-                        LlmStreamEvent::NormalizationError { kind, raw } => {
-                            warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
-                        }
-                        _ => connection.mark_generating(),
-                    }
-                    encoder
-                        .encode(&ev)
-                        .map(|s| Ok::<Bytes, std::io::Error>(Bytes::from(s)))
-                }
-                Err(e) => {
-                    error!("proxy stream error: {e}");
-                    let payload = serde_json::json!({
-                        "error": {
-                            "message": e.to_string(),
-                            "type": "server_error",
-                            "code": "upstream_error",
-                        }
-                    });
-                    // No inline [DONE] here -- appended once, unconditionally,
-                    // after the wire stream is exhausted (see below).
-                    let frame = format!("data: {payload}\n\n");
-                    Some(Ok::<Bytes, std::io::Error>(Bytes::from(frame)))
-                }
-            }
-        }
-    });
-
-    let mut wire_stream = Box::pin(wire_stream);
     let mut client_connected = true;
-    while let Some(item) = wire_stream.next().await {
-        if tx.send(item).await.is_err() {
+    while let Some(event) = normalized.next().await {
+        let frame: Option<Bytes> = match event {
+            Ok(ev) => match &ev {
+                LlmStreamEvent::PromptProgress {
+                    processed,
+                    total,
+                    cached,
+                    time_ms,
+                } => {
+                    connection.update_progress(*processed, *total, *cached, *time_ms);
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::NormalizationError { kind, raw } => {
+                    // Surface the discarded body as visible assistant text
+                    // rather than dropping it silently (which manifested as an
+                    // empty response when the whole turn was one bad tool call).
+                    warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
+                    let recovered = LlmStreamEvent::TextDelta {
+                        content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
+                    };
+                    encoder.encode(&recovered).map(Bytes::from)
+                }
+                _ => {
+                    connection.mark_generating();
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+            },
+            Err(e) => {
+                error!("proxy stream error: {e}");
+                let payload = serde_json::json!({
+                    "error": {
+                        "message": e.to_string(),
+                        "type": "server_error",
+                        "code": "upstream_error",
+                    }
+                });
+                // No inline [DONE] here -- appended once, unconditionally,
+                // after the wire stream is exhausted (see below).
+                Some(Bytes::from(format!("data: {payload}\n\n")))
+            }
+        };
+
+        if let Some(bytes) = frame
+            && tx.send(Ok(bytes)).await.is_err()
+        {
             // Client disconnected; stop draining the upstream.
             client_connected = false;
             break;
