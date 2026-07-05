@@ -90,6 +90,21 @@ pub(crate) enum ForwardError {
     UpstreamDead,
 }
 
+/// Outcome of draining one upstream streaming response through the
+/// normalization pipeline, returned by [`stream_response_to_channel`].
+///
+/// Used by the caller to distinguish a healthy response from a degenerate one
+/// (no output at all) for upstream-health bookkeeping.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct StreamOutcome {
+    /// `true` if at least one visible frame (content, reasoning, tool call,
+    /// recovered normalization text, or an error frame) was emitted to the
+    /// client. `false` means the model produced a completely empty response.
+    pub saw_output: bool,
+    /// The `finish_reason` from the terminating `Done` event, if one arrived.
+    pub finish_reason: Option<String>,
+}
+
 /// Headers that should NOT be forwarded (hop-by-hop headers).
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
@@ -123,6 +138,19 @@ fn should_forward_header(name: &str) -> bool {
 /// always sees *something* and can tell the model attempted a tool call the
 /// proxy could not parse.
 const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
+
+/// Diagnostic text synthesized and sent to the client when an upstream
+/// streaming response completes without emitting a single visible frame.
+///
+/// Without this, a degenerate generation (the model producing zero tokens —
+/// e.g. a wedged or context-overflowed llama-server) reaches the client as a
+/// silent empty stream that the LLM Gateway reports as "the model returned an
+/// empty response" with no cause. Emitting a visible notice turns that silent
+/// failure into a diagnosable one.
+const EMPTY_STREAM_NOTICE: &str =
+    "⚠️ [proxy] The model produced no output for this request. The upstream \
+     server may be overloaded or degraded — retry, and if it persists restart \
+     the model.";
 
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
@@ -775,7 +803,7 @@ async fn stream_response_to_channel(
     tags: Vec<String>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
-) {
+) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -815,6 +843,7 @@ async fn stream_response_to_channel(
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
     let mut normalized = Box::pin(normalized);
 
+    let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
     while let Some(event) = normalized.next().await {
         let frame: Option<Bytes> = match event {
@@ -833,10 +862,24 @@ async fn stream_response_to_channel(
                     // rather than dropping it silently (which manifested as an
                     // empty response when the whole turn was one bad tool call).
                     warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
+                    outcome.saw_output = true;
                     let recovered = LlmStreamEvent::TextDelta {
                         content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
                     };
                     encoder.encode(&recovered).map(Bytes::from)
+                }
+                LlmStreamEvent::TextDelta { .. }
+                | LlmStreamEvent::ReasoningDelta { .. }
+                | LlmStreamEvent::ToolCallDelta { .. }
+                | LlmStreamEvent::UpstreamError { .. } => {
+                    connection.mark_generating();
+                    outcome.saw_output = true;
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::Done { finish_reason } => {
+                    connection.mark_generating();
+                    outcome.finish_reason = Some(finish_reason.clone());
+                    encoder.encode(&ev).map(Bytes::from)
                 }
                 _ => {
                     connection.mark_generating();
@@ -845,6 +888,7 @@ async fn stream_response_to_channel(
             },
             Err(e) => {
                 error!("proxy stream error: {e}");
+                outcome.saw_output = true;
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),
@@ -866,6 +910,22 @@ async fn stream_response_to_channel(
             break;
         }
     }
+
+    // Empty-stream detector: if the upstream completed without emitting a
+    // single visible frame, synthesize a diagnostic so the client never sees
+    // an unexplained empty response. Skipped when the client already
+    // disconnected (nothing to send) or when output was surfaced.
+    if client_connected && !outcome.saw_output {
+        let reason = outcome.finish_reason.as_deref().unwrap_or("none");
+        warn!(
+            finish_reason = %reason,
+            "proxy: upstream stream produced no visible output; emitting diagnostic"
+        );
+        let notice = format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})");
+        if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
+            let _ = tx.send(Ok(Bytes::from(s))).await;
+        }
+    }
     // Exactly one [DONE] sentinel, sent once the wire stream is truly
     // exhausted -- never bundled into an individual event's encoding, since
     // a trailing Usage event can legitimately follow Done (see
@@ -876,6 +936,8 @@ async fn stream_response_to_channel(
             .send(Ok(Bytes::from_static(DONE_SENTINEL.as_bytes())))
             .await;
     }
+
+    outcome
 }
 
 /// Forward a non-streaming JSON response from llama-server.
