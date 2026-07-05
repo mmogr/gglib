@@ -152,6 +152,17 @@ const EMPTY_STREAM_NOTICE: &str =
      server may be overloaded or degraded — retry, and if it persists restart \
      the model.";
 
+/// Maximum time (seconds) the proxy waits for llama-server to return response
+/// headers — i.e. assign a slot and begin the response — during the streaming
+/// keepalive wait, before treating the upstream as wedged.
+///
+/// Large-context prefills on constrained hardware are legitimately slow (a
+/// 60k-token prompt can take minutes), so this is generous. Its purpose is to
+/// bound *pathological* waits — a degraded or deadlocked llama-server that
+/// would otherwise keep the client hanging on keepalive comments indefinitely
+/// — not to cap normal prefill latency.
+const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
+
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
 ///
@@ -610,10 +621,42 @@ pub(crate) async fn forward_chat_completion(
             let send_future = req_builder.body(body).send();
             tokio::pin!(send_future);
 
+            // Overall first-byte deadline: bounds pathological slot-queue
+            // waits so a wedged upstream cannot hang the client indefinitely
+            // on keepalive comments.
+            let deadline = tokio::time::sleep(std::time::Duration::from_secs(
+                FIRST_BYTE_DEADLINE_SECS,
+            ));
+            tokio::pin!(deadline);
+
             let upstream_response = loop {
                 tokio::select! {
                     biased;
                     result = &mut send_future => break result,
+                    () = &mut deadline => {
+                        warn!(
+                            deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                            "slot-queue wait exceeded first-byte deadline; treating upstream as degraded"
+                        );
+                        let visible = visible_content_frame(
+                            &model_name_owned,
+                            &format!(
+                                "⚠️ [proxy] upstream model server did not begin responding within {FIRST_BYTE_DEADLINE_SECS}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
+                            ),
+                        );
+                        let payload = serde_json::json!({
+                            "error": {
+                                "message": format!(
+                                    "upstream did not respond within {FIRST_BYTE_DEADLINE_SECS}s"
+                                ),
+                                "type": "server_error",
+                                "code": "upstream_timeout",
+                            }
+                        });
+                        let frame = format!("{visible}data: {payload}\n\ndata: [DONE]\n\n");
+                        let _ = tx.send(Ok(Bytes::from(frame))).await;
+                        return;
+                    }
                     _ = keepalive_interval.tick() => {
                         debug!("slot-queue wait: sending SSE keepalive to client");
                         if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
