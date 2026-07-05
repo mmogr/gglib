@@ -4,8 +4,8 @@ use axum::{Json, extract::State};
 
 use crate::{error::HttpError, state::AppState};
 use gglib_core::ports::AppEventEmitter;
-use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
-use gglib_runtime::llama::args::context::{ContextInput, resolve_context_size};
+use gglib_core::settings::DEFAULT_PROXY_PORT;
+use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
@@ -63,18 +63,11 @@ fn to_runtime_config(
     cfg: &StartProxyConfig,
     settings_default: Option<u64>,
 ) -> Result<RuntimeProxyConfig, HttpError> {
-    let context_resolution = resolve_context_size(ContextInput {
-        flag: cfg.default_context.map(|v| v.to_string()),
-        model_context_length: None,
-        settings_default,
-    })
-    .map_err(|e| HttpError::BadRequest(format!("Invalid context size configuration: {e}")))?;
-
-    // If resolution yields None, fall back to the hard-coded default (matches CLI behavior
-    // where llama-server uses its own built-in default).
-    let default_context = context_resolution
-        .value
-        .unwrap_or(DEFAULT_CONTEXT_SIZE as u32) as u64;
+    let default_context = resolve_context_size(&ServerConfigOptions {
+        context_size: cfg.default_context,
+        global_default_ctx: settings_default,
+        ..Default::default()
+    });
 
     Ok(RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),

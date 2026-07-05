@@ -64,13 +64,13 @@ pub use uninstall::handle_uninstall;
 pub use update::{handle_check_updates, handle_update};
 
 // Command building
-pub use invocation::{LlamaCommandBuilder, log_context_info, log_model_info};
+pub use invocation::{LlamaCommandBuilder, log_model_info};
 
 // Args resolution
 pub use args::{
-    ContextInput, ContextResolution, ContextResolutionSource, JinjaResolution,
+    JinjaResolution,
     JinjaResolutionSource, MtpResolution, MtpResolutionSource, ReasoningDetection,
-    ReasoningFormatResolution, ReasoningFormatSource, resolve_context_size, resolve_jinja_flag,
+    ReasoningFormatResolution, ReasoningFormatSource, resolve_jinja_flag,
     resolve_mtp_args, resolve_reasoning_format,
 };
 

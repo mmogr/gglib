@@ -9,12 +9,13 @@ use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_runtime::llama::{
-    ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
+    LlamaCommandBuilder, ensure_llama_initialized,
     resolve_llama_server, resolve_mtp_args,
 };
+use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 
 use super::shared::{
-    log_command_execution, log_context_info, log_inference_info, log_mlock_info,
+    log_command_execution, log_inference_info, log_mlock_info,
     resolve_inference_config,
 };
 
@@ -56,12 +57,13 @@ pub async fn execute(
 
     // Handle context size
     let settings = ctx.app.settings().get().await?;
-    let context_resolution = resolve_context_size(ContextInput {
-        flag: context.ctx_size,
-        model_context_length: model.context_length,
-        settings_default: settings.default_context_size,
-    })?;
-    log_context_info(&context_resolution);
+    let effective_ctx = resolve_context_size(&ServerConfigOptions {
+        context_size: context.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok()),
+        model_server_ctx: model.server_defaults.as_ref().and_then(|s| s.context_length),
+        global_default_ctx: settings.default_context_size,
+        ..Default::default()
+    });
+    eprintln!("  Context size: {} (resolved)", effective_ctx);
     log_mlock_info(context.mlock);
 
     // Resolve inference parameters using 3-level hierarchy
@@ -91,7 +93,7 @@ pub async fn execute(
 
     // Build llama-server command
     let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
-        .context_resolution(context_resolution)
+        .context_size(effective_ctx)
         .mlock(context.mlock)
         .inference_config(inference_config)
         .arg_with_value("--port", options.port.to_string());

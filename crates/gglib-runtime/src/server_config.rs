@@ -31,6 +31,7 @@ use std::path::PathBuf;
 
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::ServerConfig;
+use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use tracing::debug;
 
 use crate::llama::args::{resolve_jinja_flag, resolve_mtp_args, resolve_reasoning_format};
@@ -48,6 +49,14 @@ pub struct ServerConfigOptions {
     /// Override the context window size forwarded to llama-server.
     /// `None` lets llama-server use its built-in default.
     pub context_size: Option<u64>,
+
+    /// Per-model server defaults context length (from Model.server_defaults.context_length).
+    /// Second tier in fallback chain.
+    pub model_server_ctx: Option<usize>,
+
+    /// Global app setting for default context size (from Settings.default_context_size).
+    /// Third tier in fallback chain.
+    pub global_default_ctx: Option<u64>,
 
     /// Bind llama-server to a specific port instead of letting the allocator
     /// choose.
@@ -88,6 +97,18 @@ pub struct ServerConfigOptions {
 // Builder
 // =============================================================================
 
+/// Resolve context size using the 4-level fallback chain.
+/// 1. Runtime request / CLI flag (opts.context_size) — highest priority
+/// 2. Per-model server defaults (opts.model_server_ctx) — from DB
+/// 3. Global app setting (opts.global_default_ctx)
+/// 4. Hardcoded default (DEFAULT_CONTEXT_SIZE = 4096) — lowest priority
+pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
+    opts.context_size
+        .or_else(|| opts.model_server_ctx.map(|v| v as u64))
+        .or(opts.global_default_ctx)
+        .unwrap_or(DEFAULT_CONTEXT_SIZE)
+}
+
 /// Build a [`ServerConfig`] from model identity, model tags, and caller options.
 ///
 /// This is the **canonical entry point** for constructing a [`ServerConfig`] and
@@ -118,9 +139,9 @@ pub fn build_server_config(
 ) -> ServerConfig {
     let mut config = ServerConfig::new(model_id, model_name, model_path, base_port);
 
-    if let Some(ctx) = opts.context_size {
-        config = config.with_context_size(ctx);
-    }
+    // --- Context size (4-level fallback chain) --------------------------------
+    let ctx = resolve_context_size(&opts);
+    config = config.with_context_size(ctx);
 
     if let Some(port) = opts.port {
         config = config.with_port(port);

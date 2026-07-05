@@ -9,7 +9,6 @@ use crate::bootstrap::CliContext;
 use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
-use gglib_runtime::llama::{ContextResolution, ContextResolutionSource};
 
 /// Resolve inference parameters via the 3-level merge hierarchy.
 ///
@@ -35,28 +34,6 @@ pub fn resolve_max_iterations(cli_override: Option<usize>, settings: &Settings) 
     cli_override
         .or_else(|| settings.max_tool_iterations.map(|v| v as usize))
         .unwrap_or(DEFAULT_MAX_ITERATIONS)
-}
-
-/// Log context-size resolution to stderr.
-pub fn log_context_info(resolution: &ContextResolution) {
-    match (&resolution.value, &resolution.source) {
-        (Some(size), ContextResolutionSource::ExplicitFlag) => {
-            eprintln!("  Context size: {} (explicit)", size);
-        }
-        (Some(size), ContextResolutionSource::ModelMetadata) => {
-            eprintln!("  Context size: {} (from model metadata)", size);
-        }
-        (Some(size), ContextResolutionSource::SettingsDefault) => {
-            eprintln!("  Context size: {} (from settings)", size);
-        }
-        (None, ContextResolutionSource::NotSpecified) => {
-            eprintln!("  Context size: default (not specified)");
-        }
-        (None, ContextResolutionSource::MaxRequestedMissing) => {
-            eprintln!("  Context size: max requested but not in metadata");
-        }
-        _ => {}
-    }
 }
 
 /// Log mlock status to stderr.
