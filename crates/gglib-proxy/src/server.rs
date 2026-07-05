@@ -390,7 +390,14 @@ async fn chat_completions(
     // prior requests (empty responses / first-byte timeouts while still
     // passing /health), recycle it now — before routing this request into a
     // server that has proven it is not producing output.
-    if state.upstream_health.take_recycle_request() {
+    //
+    // Gate the recycle on the upstream being idle: this check runs before the
+    // current request registers its connection, so a non-empty registry means
+    // another request is in flight. With `--parallel 1` that request owns the
+    // only slot, and stop_current() would kill its live generation. The `&&`
+    // short-circuits so the recycle flag is left un-consumed when busy and is
+    // honored by the next request that arrives while the upstream is idle.
+    if state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request() {
         warn!("upstream watchdog: recycling degraded model before next request");
         let _ = state.runtime_port.stop_current().await;
     }
