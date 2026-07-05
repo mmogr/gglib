@@ -124,7 +124,9 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
 | [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
 | [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
+| [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
 | [`truncation.rs`](src/truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-coverage.json) |
+| [`upstream_health.rs`](src/upstream_health.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-coverage.json) |
 | [`mcp/`](src/mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-coverage.json) |
 <!-- module-table:end -->
 
@@ -135,6 +137,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
+- **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
+- **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request (direct and council/virtual-model) through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`
@@ -322,22 +326,32 @@ truncation pass **before** forwarding to llama-server:
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
-| `TOOL_CONTENT_THRESHOLD_CHARS` | **2,000** chars | Per-message content length that triggers replacement |
-| `TOTAL_PAYLOAD_LIMIT_CHARS` | **240,000** chars | Total request body budget (≈ 60,000 tokens) |
-| `PROTECTED_TAIL_COUNT` | **4** messages | Most-recent messages always preserved |
+| `TOOL_CONTENT_THRESHOLD_CHARS` | **2,000** chars | Minimum per-message content length eligible for replacement |
+| `TOTAL_PAYLOAD_LIMIT_CHARS` | **240,000** chars | Floor for the request body budget (≈ 60,000 tokens) |
+| `PROTECTED_TAIL_COUNT` | **8** messages | Most-recent messages always preserved |
+
+The budget itself is dynamic: `effective_ctx × chars_per_token`, floored at
+`TOTAL_PAYLOAD_LIMIT_CHARS`. The `chars_per_token` factor is a per-model value
+calibrated from real `usage.prompt_tokens` counts (see
+[`token_calibration.rs`](src/token_calibration.rs)), falling back to the static
+default of 4 until a model has been observed.
 
 **Algorithm:**
 
-1. Any unprotected `role: "tool"` or `role: "assistant"` message whose
-   `content` string exceeds 2,000 characters has its content replaced with:
+1. **Budget gate** — while the whole payload fits within budget it is
+   forwarded **unchanged**; no history is elided while there is room.
+2. **Oldest-first trim** — only when over budget, unprotected `role: "tool"` /
+   `role: "assistant"` messages whose `content` string exceeds 2,000
+   characters are replaced **from oldest to newest**, stopping as soon as the
+   payload drops back under budget, with:
 
    > `[Raw tool output truncated by proxy to maintain context window. Rely on your previous observations.]`
 
-2. `role: "system"` messages and the last 4 messages are never modified.
-3. Array-form content (multi-part messages) and `tool_calls` fields are
+3. `role: "system"` messages and the last 8 messages are never modified.
+4. Array-form content (multi-part messages) and `tool_calls` fields are
    never touched.
-4. If the total payload still exceeds 240,000 characters after step 1, the
-   request is **rejected** with HTTP 400:
+5. If the payload still exceeds the budget after every eligible message is
+   trimmed, the request is **rejected** with HTTP 400:
    ```json
    {
      "error": {

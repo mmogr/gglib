@@ -15,13 +15,15 @@
 //!    Jinja template.  Mistral-family models raise a hard 500 exception
 //!    without this.
 //! 3. [`truncate_history`] — defends against client-side context compaction
-//!    failures.  Any unprotected `role: "tool"` or `role: "assistant"` message
-//!    whose string `content` exceeds **2,000 characters** is replaced with a
-//!    short placeholder.  If the total payload still exceeds **240,000
-//!    characters** (≈ 60,000 tokens) after this pass, the request is rejected
-//!    with HTTP 400 / `context_length_exceeded` rather than forwarding a
-//!    prompt that would cause the model to fail.  The last four messages and
-//!    all `role: "system"` messages are always preserved.
+//!    failures.  While the request fits within the model's live context
+//!    budget it is forwarded **unchanged**; only when the payload exceeds the
+//!    budget are the **oldest** unprotected `role: "tool"` / `role:
+//!    "assistant"` messages whose string `content` exceeds **2,000
+//!    characters** replaced with a short placeholder — just enough of them,
+//!    oldest-first, to drop back under budget.  If the payload still exceeds
+//!    the budget after every eligible message is trimmed, the request is
+//!    rejected with HTTP 400 / `context_length_exceeded`.  The last eight
+//!    messages and all `role: "system"` messages are always preserved.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`resolve_model_context`]) that yields both the `ModelCapabilities`
@@ -78,7 +80,9 @@ use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
+use crate::token_calibration::TokenCalibration;
 use crate::truncation::truncate_history;
+use crate::upstream_health::UpstreamHealth;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
 /// or timed out).  Returned by [`forward_chat_completion`] so the caller can
@@ -88,6 +92,24 @@ use crate::truncation::truncate_history;
 pub(crate) enum ForwardError {
     /// The upstream llama-server could not be reached (ECONNREFUSED or timeout).
     UpstreamDead,
+}
+
+/// Outcome of draining one upstream streaming response through the
+/// normalization pipeline, returned by [`stream_response_to_channel`].
+///
+/// Used by the caller to distinguish a healthy response from a degenerate one
+/// (no output at all) for upstream-health bookkeeping.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct StreamOutcome {
+    /// `true` if at least one visible frame (content, reasoning, tool call,
+    /// recovered normalization text, or an error frame) was emitted to the
+    /// client. `false` means the model produced a completely empty response.
+    pub saw_output: bool,
+    /// The `finish_reason` from the terminating `Done` event, if one arrived.
+    pub finish_reason: Option<String>,
+    /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
+    /// arrived. Feeds the per-model chars-per-token calibration.
+    pub prompt_tokens: Option<u32>,
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -111,6 +133,47 @@ fn should_forward_header(name: &str) -> bool {
     let lower = name.to_lowercase();
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
+
+/// Prefix prepended to malformed / unclosed tool-call markup when it is
+/// surfaced to the client as visible assistant text instead of being silently
+/// dropped.
+///
+/// The old behaviour logged a `warn!` and discarded the offending bytes, so a
+/// turn whose entire output was an unparseable `<tool_call>` reached the client
+/// as a zero-content stream — indistinguishable from "the model returned an
+/// empty response". Surfacing the raw body (visually flagged) means the human
+/// always sees *something* and can tell the model attempted a tool call the
+/// proxy could not parse.
+const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
+
+/// Diagnostic text synthesized and sent to the client when an upstream
+/// streaming response completes without emitting a single visible frame.
+///
+/// Without this, a degenerate generation (the model producing zero tokens —
+/// e.g. a wedged or context-overflowed llama-server) reaches the client as a
+/// silent empty stream that the LLM Gateway reports as "the model returned an
+/// empty response" with no cause. Emitting a visible notice turns that silent
+/// failure into a diagnosable one.
+const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output for this request. The upstream \
+     server may be overloaded or degraded — retry, and if it persists restart \
+     the model.";
+
+/// Maximum time (seconds) the proxy waits for llama-server to return response
+/// headers — i.e. assign a slot and begin the response — during the streaming
+/// keepalive wait, before treating the upstream as wedged.
+///
+/// Large-context prefills on constrained hardware are legitimately slow (a
+/// 60k-token prompt can take minutes), so this is generous. Its purpose is to
+/// bound *pathological* waits — a degraded or deadlocked llama-server that
+/// would otherwise keep the client hanging on keepalive comments indefinitely
+/// — not to cap normal prefill latency.
+///
+/// This is a *per-cycle* bound, not an absolute cap: with `--parallel 1` a
+/// second request legitimately queues behind an in-flight one, so when the
+/// deadline fires and another connection is still active the wait is extended
+/// for another cycle rather than failed (see the keepalive loop). Only an
+/// expiry with no other active request counts as degradation.
+const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
@@ -375,6 +438,10 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 ///   exactly as long as that task); held for the duration of this function
 ///   for the non-streaming path. Dropping it (by any path — completion,
 ///   early return, or panic) unregisters the connection from the dashboard.
+/// * `upstream_health` - Consecutive-failure watchdog. The streaming task
+///   records each terminal outcome (empty stream or first-byte timeout is a
+///   strike; any visible output resets it) so the handler can recycle a
+///   degraded-but-`/health`-green upstream before the next request.
 ///
 /// # Returns
 ///
@@ -393,6 +460,8 @@ pub(crate) async fn forward_chat_completion(
     metrics: Arc<ContextMetricsStore>,
     global_inference_defaults: Option<InferenceConfig>,
     connection: ConnectionGuard,
+    upstream_health: Arc<UpstreamHealth>,
+    calibration: Arc<TokenCalibration>,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -416,8 +485,11 @@ pub(crate) async fn forward_chat_completion(
     //    The budget scales with the live serving context so clients that
     //    plan against the advertised context window are never rejected by a
     //    smaller hidden ceiling (truncate_history floors it at the default).
-    let limit_chars =
-        (effective_ctx as usize).saturating_mul(crate::truncation::CHARS_PER_TOKEN_APPROX);
+    //    The chars-per-token factor is the model's calibrated ratio (learned
+    //    from prior usage frames), falling back to the static default until
+    //    the first observation lands.
+    let chars_per_token = calibration.chars_per_token(model_name);
+    let limit_chars = (effective_ctx as f64 * chars_per_token) as usize;
     let body = match truncate_history(body, limit_chars) {
         Ok((b, report)) => {
             if report.messages_truncated > 0 {
@@ -527,6 +599,11 @@ pub(crate) async fn forward_chat_completion(
         // doc comment for why each is needed.
         let body = inject_streaming_body_overrides(body);
 
+        // Byte count of the payload actually forwarded upstream, paired with
+        // the usage frame's prompt-token count after streaming to calibrate
+        // this model's chars-per-token ratio.
+        let forwarded_chars = body.len();
+
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);
         let probe_result = tokio::time::timeout(
@@ -570,10 +647,59 @@ pub(crate) async fn forward_chat_completion(
             let send_future = req_builder.body(body).send();
             tokio::pin!(send_future);
 
+            // Overall first-byte deadline: bounds pathological slot-queue
+            // waits so a wedged upstream cannot hang the client indefinitely
+            // on keepalive comments.
+            let deadline =
+                tokio::time::sleep(std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS));
+            tokio::pin!(deadline);
+
             let upstream_response = loop {
                 tokio::select! {
                     biased;
                     result = &mut send_future => break result,
+                    () = &mut deadline => {
+                        // The single-slot upstream may legitimately be busy
+                        // serving another (possibly minutes-long) request, in
+                        // which case this request is correctly queued, not
+                        // wedged. Only treat a deadline expiry as degradation
+                        // when NO other connection is actively occupying the
+                        // slot; otherwise extend the deadline and keep waiting.
+                        if connection.others_active() {
+                            warn!(
+                                deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                                "slot-queue wait exceeded deadline but another request is active; extending (upstream busy, not wedged)"
+                            );
+                            deadline.as_mut().reset(
+                                tokio::time::Instant::now()
+                                    + std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
+                            );
+                            continue;
+                        }
+                        warn!(
+                            deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                            "slot-queue wait exceeded first-byte deadline with no other active request; treating upstream as degraded"
+                        );
+                        upstream_health.record_timeout();
+                        let visible = visible_content_frame(
+                            &model_name_owned,
+                            &format!(
+                                "⚠️ [proxy] upstream model server did not begin responding within {FIRST_BYTE_DEADLINE_SECS}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
+                            ),
+                        );
+                        let payload = serde_json::json!({
+                            "error": {
+                                "message": format!(
+                                    "upstream did not respond within {FIRST_BYTE_DEADLINE_SECS}s"
+                                ),
+                                "type": "server_error",
+                                "code": "upstream_timeout",
+                            }
+                        });
+                        let frame = format!("{visible}data: {payload}\n\ndata: [DONE]\n\n");
+                        let _ = tx.send(Ok(Bytes::from(frame))).await;
+                        return;
+                    }
                     _ = keepalive_interval.tick() => {
                         debug!("slot-queue wait: sending SSE keepalive to client");
                         if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
@@ -589,7 +715,22 @@ pub(crate) async fn forward_chat_completion(
                         status = resp.status().as_u16(),
                         "upstream accepted streaming request after slot-queue wait"
                     );
-                    stream_response_to_channel(resp, model_name_owned, tags, tx, &connection).await;
+                    let outcome = stream_response_to_channel(
+                        resp,
+                        model_name_owned.clone(),
+                        tags,
+                        tx,
+                        &connection,
+                    )
+                    .await;
+                    // Feed the terminal outcome to the watchdog: an empty
+                    // response is a strike, visible output resets the streak.
+                    upstream_health.record_stream_outcome(outcome.saw_output);
+                    // Calibrate this model's chars-per-token ratio from the
+                    // real prompt-token count the upstream reported.
+                    if let Some(prompt_tokens) = outcome.prompt_tokens {
+                        calibration.record(&model_name_owned, forwarded_chars, prompt_tokens);
+                    }
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -640,6 +781,15 @@ pub(crate) async fn forward_chat_completion(
                         }
                     };
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let human = payload
+                        .pointer("/error/message")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("upstream returned an error");
+                    let visible = visible_content_frame(
+                        &model_name_owned,
+                        &format!("⚠️ [proxy] upstream model server error ({status}): {human}"),
+                    );
+                    let frame = format!("{visible}{frame}");
                     let _ = tx.send(Ok(Bytes::from(frame))).await;
                 }
                 Err(e) => {
@@ -652,6 +802,11 @@ pub(crate) async fn forward_chat_completion(
                         }
                     });
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
+                    let visible = visible_content_frame(
+                        &model_name_owned,
+                        &format!("⚠️ [proxy] upstream llama-server unavailable: {e}"),
+                    );
+                    let frame = format!("{visible}{frame}");
                     let _ = tx.send(Ok(Bytes::from(frame))).await;
                 }
             }
@@ -746,6 +901,35 @@ fn host_port_from_url(url: &str) -> String {
         })
 }
 
+/// Build a single SSE `chat.completion.chunk` frame carrying visible assistant
+/// `content`.
+///
+/// Used to surface proxy/upstream failures as text the human can actually read
+/// in the chat pane. Some clients (notably the VS Code LLM Gateway) do not
+/// render bare inline `{"error": {...}}` frames inside an already-committed
+/// 200 stream, so an error delivered only as a structured error frame looks
+/// like an empty response. Pairing every such error with a visible content
+/// frame guarantees the cause is shown.
+fn visible_content_frame(model: &str, content: &str) -> String {
+    let created = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
+    let value = serde_json::json!({
+        "id": id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "delta": { "content": content },
+            "finish_reason": serde_json::Value::Null,
+        }],
+    });
+    format!("data: {value}\n\n")
+}
+
 /// Feed a streaming response through the normalization pipeline and send each
 /// encoded frame to `tx`.
 ///
@@ -763,7 +947,7 @@ async fn stream_response_to_channel(
     tags: Vec<String>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
-) {
+) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -801,55 +985,92 @@ async fn stream_response_to_channel(
 
     let parser = get_parser(&tags);
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
+    let mut normalized = Box::pin(normalized);
 
-    let wire_stream = normalized.filter_map(move |event| {
-        let encoder = encoder.clone();
-        async move {
-            match event {
-                Ok(ev) => {
-                    match &ev {
-                        LlmStreamEvent::PromptProgress {
-                            processed,
-                            total,
-                            cached,
-                            time_ms,
-                        } => {
-                            connection.update_progress(*processed, *total, *cached, *time_ms);
-                        }
-                        LlmStreamEvent::NormalizationError { kind, raw } => {
-                            warn!(?kind, raw = %raw, "proxy: suppressing normalization issue from wire");
-                        }
-                        _ => connection.mark_generating(),
-                    }
-                    encoder
-                        .encode(&ev)
-                        .map(|s| Ok::<Bytes, std::io::Error>(Bytes::from(s)))
-                }
-                Err(e) => {
-                    error!("proxy stream error: {e}");
-                    let payload = serde_json::json!({
-                        "error": {
-                            "message": e.to_string(),
-                            "type": "server_error",
-                            "code": "upstream_error",
-                        }
-                    });
-                    // No inline [DONE] here -- appended once, unconditionally,
-                    // after the wire stream is exhausted (see below).
-                    let frame = format!("data: {payload}\n\n");
-                    Some(Ok::<Bytes, std::io::Error>(Bytes::from(frame)))
-                }
-            }
-        }
-    });
-
-    let mut wire_stream = Box::pin(wire_stream);
+    let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
-    while let Some(item) = wire_stream.next().await {
-        if tx.send(item).await.is_err() {
+    while let Some(event) = normalized.next().await {
+        let frame: Option<Bytes> = match event {
+            Ok(ev) => match &ev {
+                LlmStreamEvent::PromptProgress {
+                    processed,
+                    total,
+                    cached,
+                    time_ms,
+                } => {
+                    connection.update_progress(*processed, *total, *cached, *time_ms);
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::NormalizationError { kind, raw } => {
+                    // Surface the discarded body as visible assistant text
+                    // rather than dropping it silently (which manifested as an
+                    // empty response when the whole turn was one bad tool call).
+                    warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
+                    outcome.saw_output = true;
+                    let recovered = LlmStreamEvent::TextDelta {
+                        content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
+                    };
+                    encoder.encode(&recovered).map(Bytes::from)
+                }
+                LlmStreamEvent::TextDelta { .. }
+                | LlmStreamEvent::ReasoningDelta { .. }
+                | LlmStreamEvent::ToolCallDelta { .. }
+                | LlmStreamEvent::UpstreamError { .. } => {
+                    connection.mark_generating();
+                    outcome.saw_output = true;
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::Done { finish_reason } => {
+                    connection.mark_generating();
+                    outcome.finish_reason = Some(finish_reason.clone());
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::Usage { prompt_tokens, .. } => {
+                    // Trailing usage frame — capture the real prompt-token
+                    // count for chars-per-token calibration. Not counted as
+                    // visible output (it carries an empty `choices` array).
+                    outcome.prompt_tokens = Some(*prompt_tokens);
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+            },
+            Err(e) => {
+                error!("proxy stream error: {e}");
+                outcome.saw_output = true;
+                let payload = serde_json::json!({
+                    "error": {
+                        "message": e.to_string(),
+                        "type": "server_error",
+                        "code": "upstream_error",
+                    }
+                });
+                // No inline [DONE] here -- appended once, unconditionally,
+                // after the wire stream is exhausted (see below).
+                Some(Bytes::from(format!("data: {payload}\n\n")))
+            }
+        };
+
+        if let Some(bytes) = frame
+            && tx.send(Ok(bytes)).await.is_err()
+        {
             // Client disconnected; stop draining the upstream.
             client_connected = false;
             break;
+        }
+    }
+
+    // Empty-stream detector: if the upstream completed without emitting a
+    // single visible frame, synthesize a diagnostic so the client never sees
+    // an unexplained empty response. Skipped when the client already
+    // disconnected (nothing to send) or when output was surfaced.
+    if client_connected && !outcome.saw_output {
+        let reason = outcome.finish_reason.as_deref().unwrap_or("none");
+        warn!(
+            finish_reason = %reason,
+            "proxy: upstream stream produced no visible output; emitting diagnostic"
+        );
+        let notice = format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})");
+        if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
+            let _ = tx.send(Ok(Bytes::from(s))).await;
         }
     }
     // Exactly one [DONE] sentinel, sent once the wire stream is truly
@@ -862,6 +1083,8 @@ async fn stream_response_to_channel(
             .send(Ok(Bytes::from_static(DONE_SENTINEL.as_bytes())))
             .await;
     }
+
+    outcome
 }
 
 /// Forward a non-streaming JSON response from llama-server.

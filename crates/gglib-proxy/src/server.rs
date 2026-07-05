@@ -33,6 +33,8 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
+use crate::token_calibration::TokenCalibration;
+use crate::upstream_health::UpstreamHealth;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -60,6 +62,13 @@ pub(crate) struct AppState {
     pub(crate) dashboard: Arc<DashboardState>,
     /// Settings repository for loading global inference defaults per-request.
     settings_repo: Arc<dyn SettingsRepository>,
+    /// Consecutive-failure watchdog: trips a proactive model recycle when the
+    /// upstream degrades to empty responses / first-byte timeouts while still
+    /// passing its `/health` check.
+    upstream_health: Arc<UpstreamHealth>,
+    /// Per-model chars-per-token calibration, learned from upstream usage
+    /// frames and used to size the truncation budget.
+    calibration: Arc<TokenCalibration>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -132,10 +141,15 @@ pub async fn serve(
         cancel.clone(),
     );
 
+    // Upstream-degradation watchdog, shared between the request path (strike
+    // recording + recycle) and the dashboard (counter surfacing).
+    let upstream_health = Arc::new(UpstreamHealth::new());
+
     let dashboard = Arc::new(DashboardState::new(
         Arc::new(ActiveConnectionsRegistry::new()),
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
+        Arc::clone(&upstream_health),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -153,6 +167,8 @@ pub async fn serve(
         council,
         dashboard,
         settings_repo,
+        upstream_health,
+        calibration: Arc::new(TokenCalibration::new()),
     };
 
     let app = Router::new()
@@ -208,6 +224,23 @@ async fn health_check() -> impl IntoResponse {
     }))
 }
 
+/// Percentage shaved off a model's raw context window when advertised via
+/// `/v1/models`.
+///
+/// Reserves headroom for the tool-schema JSON and chat-template tokens that a
+/// client's own char→token budget estimate (e.g. the VS Code LLM Gateway's
+/// `CHARS_PER_TOKEN = 4`) does not account for. Advertising slightly less than
+/// the true ceiling makes such clients begin proactive context compaction
+/// before the real limit is hit, avoiding upstream context-overflow rejections
+/// on the final turns of a long session.
+const CONTEXT_WINDOW_SAFETY_MARGIN_PCT: u64 = 8;
+
+/// Apply [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] to a raw context-window token
+/// count, returning the value to advertise to clients.
+fn advertised_context_window(raw_ctx: u64) -> u64 {
+    raw_ctx.saturating_mul(100 - CONTEXT_WINDOW_SAFETY_MARGIN_PCT) / 100
+}
+
 /// List all models from the catalog in OpenAI format.
 ///
 /// Appends the three virtual council model entries after the catalog models.
@@ -227,6 +260,10 @@ async fn health_check() -> impl IntoResponse {
 ///   the per-request truncation budget in
 ///   [`crate::forward::forward_chat_completion`] — advertised and enforced
 ///   values stay in lockstep.
+///
+/// Both are shaved by [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] before being
+/// advertised, reserving headroom for tool-schema JSON and chat-template
+/// tokens that a client's own char→token budget does not account for.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -235,13 +272,15 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             let mut response = ModelsResponse::from_summaries(models);
 
             for model in &mut response.data {
-                model.context_window = model.context_window.map(|ctx| ctx.min(state.default_ctx));
+                model.context_window = model
+                    .context_window
+                    .map(|ctx| advertised_context_window(ctx.min(state.default_ctx)));
             }
 
             if let Some(target) = state.runtime_port.current_model().await
                 && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
             {
-                model.context_window = Some(target.effective_ctx);
+                model.context_window = Some(advertised_context_window(target.effective_ctx));
             }
 
             // Append virtual council models.
@@ -347,6 +386,22 @@ async fn chat_completions(
         .await;
     }
 
+    // Watchdog: if the upstream tripped the consecutive-failure threshold on
+    // prior requests (empty responses / first-byte timeouts while still
+    // passing /health), recycle it now — before routing this request into a
+    // server that has proven it is not producing output.
+    //
+    // Gate the recycle on the upstream being idle: this check runs before the
+    // current request registers its connection, so a non-empty registry means
+    // another request is in flight. With `--parallel 1` that request owns the
+    // only slot, and stop_current() would kill its live generation. The `&&`
+    // short-circuits so the recycle flag is left un-consumed when busy and is
+    // honored by the next request that arrives while the upstream is idle.
+    if state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request() {
+        warn!("upstream watchdog: recycling degraded model before next request");
+        let _ = state.runtime_port.stop_current().await;
+    }
+
     // Ensure the model is running with specified context or default
     let target = match state
         .runtime_port
@@ -403,6 +458,8 @@ async fn chat_completions(
         state.dashboard.metrics.clone(),
         global_inference_defaults,
         connection,
+        state.upstream_health.clone(),
+        state.calibration.clone(),
     )
     .await
     {
@@ -476,6 +533,8 @@ async fn chat_completions(
                 state.dashboard.metrics.clone(),
                 retry_defaults,
                 retry_connection,
+                state.upstream_health.clone(),
+                state.calibration.clone(),
             )
             .await
             {
