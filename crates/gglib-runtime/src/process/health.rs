@@ -86,6 +86,32 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
     }
 }
 
+/// Single-shot HTTP health probe of a llama-server `/health` endpoint.
+///
+/// Unlike [`wait_for_http_health`] this does **not** retry: it makes one
+/// request with a short timeout and reports whether the server responded
+/// `200 OK`. Used on the "already running" fast path to detect a cached
+/// server that has silently degraded or wedged, so the caller can recycle it
+/// instead of routing a request into a dead instance.
+///
+/// Never returns an error — any failure (connection refused, timeout,
+/// non-2xx) is reported as `false` so callers can treat "not healthy" and
+/// "unreachable" identically.
+pub async fn check_http_health(port: u16) -> bool {
+    let health_url = format!("http://127.0.0.1:{port}/health");
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+    else {
+        return false;
+    };
+
+    matches!(
+        client.get(&health_url).send().await,
+        Ok(response) if response.status().is_success()
+    )
+}
+
 /// Check if a process is alive and healthy using sysinfo
 pub fn check_process_health(pid: u32) -> bool {
     let mut system = System::new_all();
