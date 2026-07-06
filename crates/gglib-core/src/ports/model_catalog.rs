@@ -11,6 +11,7 @@ use thiserror::Error;
 
 use crate::domain::InferenceConfig;
 use crate::domain::ModelCapabilities;
+use crate::domain::ServerConfig;
 
 /// Domain model summary for catalog operations (listing).
 ///
@@ -83,6 +84,8 @@ pub struct ModelLaunchSpec {
     pub architecture: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
+    /// Per-model server defaults (e.g., `context_length` for launch).
+    pub server_defaults: Option<ServerConfig>,
 }
 
 impl ModelSummary {

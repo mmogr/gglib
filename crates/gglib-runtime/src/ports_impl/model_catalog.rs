@@ -50,6 +50,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         tags: m.tags,
         architecture: m.architecture,
         context_length: m.context_length,
+        server_defaults: m.server_defaults,
     }
 }
 
