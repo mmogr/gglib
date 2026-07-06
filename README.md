@@ -337,6 +337,22 @@ gglib model update <id> --clear-inference-defaults
 All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
 per-invocation overrides that sit at the top of the hierarchy.
 
+#### Server launch defaults
+
+In addition to inference parameters, each model can store per-model **server launch
+defaults** (e.g., `context_length`) in the `server_defaults` DB column. These are
+resolved through a 4-level fallback chain:
+
+```
+Runtime request / CLI flag  →  Per-model server_defaults  →  Global settings  →  Hardcoded default (4096)
+```
+
+Per-model server defaults can be set via the GUI or API (`PATCH /api/models/:id` with
+`serverDefaults: { contextLength: 8192 }`), cleared with `serverDefaults: null`, or
+left unchanged by omitting the field. The CLI `serve`, `chat`, and `q` commands
+automatically consume these defaults, so models with large context windows don't need
+manual `--context-size` flags on every invocation.
+
 #### Backfilling tags on existing catalogs
 
 Models imported before format-tag detection landed can be retagged in place from their persisted GGUF metadata — no re-download required:

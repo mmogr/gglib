@@ -109,7 +109,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `list` | List all models with metadata |
 | `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
 | `remove <id>` | Remove a model from the library |
-| `serve <id>` | Start llama-server for a model |
+| `serve <id>` | Start llama-server for a model (respects per-model server_defaults from DB, overridable with `--context-size`) |
 | `chat <id>` | Start interactive llama-cli chat |
 | `chat <id> --continue <N>` | Resume a previous conversation by ID |
 | `question <text>` | Ask a question (with optional piped context) |
