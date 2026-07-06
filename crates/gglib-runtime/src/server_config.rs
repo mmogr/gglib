@@ -200,3 +200,62 @@ pub fn build_server_config(
 
     config
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_context_size_default_when_all_none() {
+        let opts = ServerConfigOptions::default();
+        assert_eq!(resolve_context_size(&opts), DEFAULT_CONTEXT_SIZE);
+    }
+
+    #[test]
+    fn test_resolve_context_size_global_beats_default() {
+        let opts = ServerConfigOptions {
+            global_default_ctx: Some(8192),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 8192);
+    }
+
+    #[test]
+    fn test_resolve_context_size_model_beats_global() {
+        let opts = ServerConfigOptions {
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(8192),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 16_384);
+    }
+
+    #[test]
+    fn test_resolve_context_size_runtime_beats_all() {
+        let opts = ServerConfigOptions {
+            context_size: Some(32_768),
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(8192),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 32_768);
+    }
+
+    #[test]
+    fn test_resolve_context_size_model_without_global() {
+        let opts = ServerConfigOptions {
+            model_server_ctx: Some(2048),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 2048);
+    }
+
+    #[test]
+    fn test_resolve_context_size_zero_is_valid() {
+        let opts = ServerConfigOptions {
+            context_size: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 0);
+    }
+}
