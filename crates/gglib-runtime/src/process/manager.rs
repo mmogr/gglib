@@ -5,7 +5,7 @@
 //! - **SingleSwap**: Auto-swapping single model with smart context handling (Proxy use case)
 
 use super::core::GuiProcessCore;
-use super::health::wait_for_http_health;
+use super::health::{check_http_health, wait_for_http_health};
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{
@@ -213,28 +213,52 @@ impl ProcessManager {
             ));
         }
 
-        // 3. Compare by model_id (not name) + context for "already running"
-        {
+        // 3. Compare by model_id (not name) + context for "already running".
+        //    Snapshot the matching cached instance under the read lock, then
+        //    drop the lock before the (awaiting) health probe so we never hold
+        //    it across an await.
+        let cached = {
             let current_guard = current_lock.read().await;
-            if let Some(current) = current_guard.as_ref()
-                && current.model_id == launch_spec.id
-                && current.context_size == effective_ctx
-            {
-                // Same model, same context -> return existing
+            current_guard.as_ref().and_then(|current| {
+                (current.model_id == launch_spec.id && current.context_size == effective_ctx).then(
+                    || {
+                        (
+                            current.port,
+                            current.model_id,
+                            current.model_name.clone(),
+                            current.context_size,
+                        )
+                    },
+                )
+            })
+        };
+        if let Some((port, model_id, cached_name, context_size)) = cached {
+            // Verify the cached instance is actually healthy before routing to
+            // it. The in-memory bookkeeping only records that we *launched* a
+            // server — it says nothing about whether that process has since
+            // wedged or degraded. A silent health check here means a degraded
+            // server is recycled instead of receiving requests that would hang.
+            if check_http_health(port).await {
                 info!(
-                    model_id = %launch_spec.id,
-                    model_name = %launch_spec.name,
-                    port = %current.port,
-                    context = %current.context_size,
+                    model_id = %model_id,
+                    model_name = %cached_name,
+                    port = %port,
+                    context = %context_size,
                     "Model already running with correct context"
                 );
                 return Ok(RunningTarget::local(
-                    current.port,
-                    current.model_id,
-                    current.model_name.clone(),
-                    current.context_size,
+                    port,
+                    model_id,
+                    cached_name,
+                    context_size,
                 ));
             }
+            warn!(
+                model_id = %model_id,
+                port = %port,
+                "cached model failed health check; recycling degraded instance"
+            );
+            // Fall through to the restart path below.
         }
 
         // 4. Need restart: different model_id OR context mismatch

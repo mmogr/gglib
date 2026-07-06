@@ -11,7 +11,9 @@ pub mod models;
 pub mod server;
 pub mod slots;
 pub mod slots_poller;
+pub mod token_calibration;
 pub mod truncation;
+pub mod upstream_health;
 
 pub use council_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 pub use server::serve;
