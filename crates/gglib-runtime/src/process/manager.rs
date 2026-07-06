@@ -279,7 +279,10 @@ impl ProcessManager {
             &launch_spec.tags,
             ServerConfigOptions {
                 context_size: num_ctx,
-                model_server_ctx: launch_spec.server_defaults.as_ref().and_then(|sc| sc.context_length),
+                model_server_ctx: launch_spec
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|sc| sc.context_length),
                 global_default_ctx: Some(default_ctx),
                 ..Default::default()
             },

@@ -34,6 +34,7 @@ use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
+use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 
 use super::BenchmarkDeps;
 use super::mapper::{
@@ -95,6 +96,17 @@ pub async fn run_compare(
             }
         };
 
+        // 4-level fallback chain: config override → per-model server_defaults → global setting → hardcoded default
+        let resolved_ctx = resolve_context_size(&ServerConfigOptions {
+            context_size: config.ctx_size,
+            model_server_ctx: model
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
+            global_default_ctx: Some(default_ctx),
+            ..Default::default()
+        });
+
         let _ = tx
             .send(BenchmarkEvent::ModelStarted {
                 model_id,
@@ -111,7 +123,7 @@ pub async fn run_compare(
             &config,
             run_id,
             &tx,
-            default_ctx,
+            resolved_ctx,
             global_inf.as_ref(),
         )
         .await
@@ -148,8 +160,10 @@ pub async fn run_compare(
 
 /// Run the compare prompt through one model and collect results.
 ///
-/// `default_ctx` and `global_inf` are resolved once per run by the caller
-/// ([`run_compare`]) to avoid redundant settings reads per model.
+/// `resolved_ctx` is the fully-resolved context size (4-level fallback:
+/// config override → per-model server_defaults → global setting → hardcoded default),
+/// computed per-model by the caller ([`run_compare`]) to avoid redundant
+/// settings reads. `global_inf` is also resolved once per run.
 #[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,
@@ -158,15 +172,17 @@ async fn run_single_compare(
     config: &CompareConfig,
     run_id: i64,
     tx: &Sender<BenchmarkEvent>,
-    default_ctx: u64,
+    resolved_ctx: u64,
     global_inf: Option<&InferenceConfig>,
 ) -> Result<ModelCompareResult> {
     // Start (or keep running) the model server via SingleSwap.
-    // `config.ctx_size` is the per-run override (CLI --ctx-size / API field);
-    // `default_ctx` comes from `settings.default_context_size` (same as proxy).
+    // Pre-resolved per-model context size (4-level fallback).
+    // Both args are the same because resolution already happened above with
+    // per-model granularity — the runtime's internal resolution is a no-op
+    // when context_size is Some.
     let target = deps
         .runtime
-        .ensure_model_running(&model.name, config.ctx_size, default_ctx)
+        .ensure_model_running(&model.name, Some(resolved_ctx), resolved_ctx)
         .await
         .with_context(|| format!("failed to start model '{}'", model.name))?;
 
