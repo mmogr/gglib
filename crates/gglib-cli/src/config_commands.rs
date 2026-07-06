@@ -70,7 +70,8 @@ pub enum SettingsCommand {
     Show,
     /// Update application settings
     Set {
-        /// Default context size for models (512-1000000)
+        /// Default context size for models (512-1000000).
+        /// Global fallback (level 3 of 4); per-model server_defaults and runtime flags take precedence.
         #[arg(long)]
         default_context_size: Option<u64>,
         /// Port for the OpenAI-compatible proxy server (>= 1024)
