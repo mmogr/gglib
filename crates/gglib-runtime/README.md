@@ -161,7 +161,7 @@ let config = build_server_config(
 The `resolve_context_size()` function implements a strict 4-level fallback chain
 for determining the context window passed to llama-server:
 
-```
+```text
 1. Runtime request / CLI flag (opts.context_size)
 2. Per-model server_defaults (opts.model_server_ctx, from DB column server_defaults)
 3. Global app setting (opts.global_default_ctx)

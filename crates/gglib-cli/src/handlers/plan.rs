@@ -11,8 +11,8 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, anyhow};
 
 use gglib_agent::council::plan;
-use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::ProcessHandle;
+use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
@@ -130,7 +130,10 @@ async fn resolve_port(
         &model_id.tags,
         ServerConfigOptions {
             context_size: ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok()),
-            model_server_ctx: model_id.server_defaults.as_ref().and_then(|s| s.context_length),
+            model_server_ctx: model_id
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
             global_default_ctx: settings.default_context_size,
             ..Default::default()
         },

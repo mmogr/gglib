@@ -280,7 +280,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
 
             let settings = ctx.app.settings().get().await?;
             let effective_context = resolve_context_size(&ServerConfigOptions {
-                context_size: default_context.as_deref().and_then(|s| s.parse::<u64>().ok()),
+                context_size: default_context
+                    .as_deref()
+                    .and_then(|s| s.parse::<u64>().ok()),
                 global_default_ctx: settings.default_context_size,
                 ..Default::default()
             });

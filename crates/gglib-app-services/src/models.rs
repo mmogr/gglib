@@ -179,7 +179,7 @@ impl ModelOps {
         match request.server_defaults {
             Some(Some(config)) => model.server_defaults = Some(config),
             Some(None) => model.server_defaults = None,
-            None => {}, // don't touch
+            None => {} // don't touch
         }
 
         self.deps

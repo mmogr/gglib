@@ -5,9 +5,9 @@ use axum::{Json, extract::State};
 use crate::{error::HttpError, state::AppState};
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
-use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
+use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 
 /// Proxy status response.
 /// Matches Tauri's ProxyStatus for frontend compatibility.

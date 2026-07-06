@@ -9,14 +9,12 @@ use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_runtime::llama::{
-    LlamaCommandBuilder, ensure_llama_initialized,
-    resolve_llama_server, resolve_mtp_args,
+    LlamaCommandBuilder, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
 };
 use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
 
 use super::shared::{
-    log_command_execution, log_inference_info, log_mlock_info,
-    resolve_inference_config,
+    log_command_execution, log_inference_info, log_mlock_info, resolve_inference_config,
 };
 
 /// Execute the serve command.
@@ -58,8 +56,14 @@ pub async fn execute(
     // Handle context size
     let settings = ctx.app.settings().get().await?;
     let effective_ctx = resolve_context_size(&ServerConfigOptions {
-        context_size: context.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok()),
-        model_server_ctx: model.server_defaults.as_ref().and_then(|s| s.context_length),
+        context_size: context
+            .ctx_size
+            .as_deref()
+            .and_then(|s| s.parse::<u64>().ok()),
+        model_server_ctx: model
+            .server_defaults
+            .as_ref()
+            .and_then(|s| s.context_length),
         global_default_ctx: settings.default_context_size,
         ..Default::default()
     });

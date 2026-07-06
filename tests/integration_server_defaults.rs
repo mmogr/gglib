@@ -8,10 +8,8 @@ mod common;
 
 use chrono::Utc;
 use common::database::setup_test_pool;
-use gglib_core::{
-    ModelRepository, NewModel, services::ModelService,
-};
 use gglib_core::domain::ServerConfig;
+use gglib_core::{ModelRepository, NewModel, services::ModelService};
 use gglib_db::SqliteModelRepository;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -53,7 +51,10 @@ async fn test_server_defaults_patch_and_retrieve() {
     // Insert a model
     let new_model = make_new_model("patch-retrieve");
     let model = service.add(new_model).await.unwrap();
-    assert!(model.server_defaults.is_none(), "fresh model has no server_defaults");
+    assert!(
+        model.server_defaults.is_none(),
+        "fresh model has no server_defaults"
+    );
 
     // Update: set server_defaults with context_length = 32768
     let mut updated = model.clone();

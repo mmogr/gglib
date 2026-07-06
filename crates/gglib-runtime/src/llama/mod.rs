@@ -68,10 +68,9 @@ pub use invocation::{LlamaCommandBuilder, log_model_info};
 
 // Args resolution
 pub use args::{
-    JinjaResolution,
-    JinjaResolutionSource, MtpResolution, MtpResolutionSource, ReasoningDetection,
-    ReasoningFormatResolution, ReasoningFormatSource, resolve_jinja_flag,
-    resolve_mtp_args, resolve_reasoning_format,
+    JinjaResolution, JinjaResolutionSource, MtpResolution, MtpResolutionSource, ReasoningDetection,
+    ReasoningFormatResolution, ReasoningFormatSource, resolve_jinja_flag, resolve_mtp_args,
+    resolve_reasoning_format,
 };
 
 // Prebuilt download (for adapters that need fine-grained control - Tauri + CLI)

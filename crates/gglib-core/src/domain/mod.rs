@@ -6,10 +6,10 @@ pub mod chat;
 pub mod council;
 pub mod gguf;
 pub mod inference;
-mod server_config;
 pub mod mcp;
 mod model;
 pub mod query;
+mod server_config;
 
 // Re-export model types at the domain level for convenience
 pub use model::{

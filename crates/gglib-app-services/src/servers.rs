@@ -186,7 +186,10 @@ impl ServerOps {
             &model.tags,
             ServerConfigOptions {
                 context_size: request.context_length,
-                model_server_ctx: model.server_defaults.as_ref().and_then(|s| s.context_length),
+                model_server_ctx: model
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|s| s.context_length),
                 global_default_ctx: default_context_size,
                 port: request.port,
                 jinja: request.jinja,

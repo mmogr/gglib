@@ -187,8 +187,14 @@ async fn resolve_port(
         ctx.base_port,
         &model.tags,
         ServerConfigOptions {
-            context_size: params.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok()),
-            model_server_ctx: model.server_defaults.as_ref().and_then(|s| s.context_length),
+            context_size: params
+                .ctx_size
+                .as_deref()
+                .and_then(|s| s.parse::<u64>().ok()),
+            model_server_ctx: model
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
             global_default_ctx: settings.default_context_size,
             ..Default::default()
         },
