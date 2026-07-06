@@ -6,8 +6,6 @@
 use async_trait as _;
 use gglib_hf as _;
 #[cfg(test)]
-use sqlx as _;
-#[cfg(test)]
 use tempfile as _;
 use thiserror as _;
 use tokio as _;

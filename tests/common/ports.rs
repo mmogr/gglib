@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Test port constants.
 //!
 //! Centralized port definitions for tests to prevent hardcoded values

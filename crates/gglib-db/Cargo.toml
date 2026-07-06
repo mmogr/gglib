@@ -32,6 +32,13 @@ libsqlite3-sys = { version = "0.30", features = ["bundled", "unlock_notify"] }
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio-test = { workspace = true }
+gglib-core = { path = "../gglib-core" }
+
+# Integration tests live in the workspace root `tests/` directory.
+# They use `mod common;` which resolves to `tests/common/`.
+[[test]]
+name = "integration_server_defaults"
+path = "../../tests/integration_server_defaults.rs"
 
 [lints.rust]
 unsafe_code = "deny"
