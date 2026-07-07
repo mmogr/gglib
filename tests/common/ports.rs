@@ -1,5 +1,5 @@
-#![allow(dead_code)]
 //! Test port constants.
+#![allow(dead_code)]
 //!
 //! Centralized port definitions for tests to prevent hardcoded values
 //! and make it easier to adjust for CI environments or dynamic allocation.
