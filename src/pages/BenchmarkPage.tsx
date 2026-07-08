@@ -3,13 +3,16 @@
  *
  * Provides:
  * - Mode selector: "Compare" (side-by-side response quality) vs "Perf" (throughput)
+ *   vs "Tune" (sampling-parameter sweep for agentic tool-calling accuracy)
  * - Config form: model multi-select, prompt (compare) or pp/tg/reps (perf)
  * - Live streaming results panel with 100 ms throttled text delta rendering
  * - History table of recent benchmark runs
  *
  * Throttle pattern: incoming `model_text_delta` events are buffered in a
  * `useRef<Map<number, string>>` and flushed into React state every 100 ms to
- * avoid per-keystroke re-renders during fast SSE streams.
+ * avoid per-keystroke re-renders during fast SSE streams. Tune mode
+ * (`components/Benchmark/Tune/TuneTab`) reuses this exact pattern for its
+ * own high-frequency `tune_task_complete` events — see that module's docs.
  *
  * @module pages/BenchmarkPage
  */
@@ -21,12 +24,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ArrowLeft, BarChart2, Play, Square, Zap } from 'lucide-react';
+import { ArrowLeft, BarChart2, Play, Square, Target, Zap } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { cn } from '../utils/cn';
+import { TuneTab } from '../components/Benchmark/Tune/TuneTab';
 import type { GgufModel } from '../types';
 import type {
   BenchmarkEvent,
@@ -45,7 +49,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type RunMode = 'compare' | 'perf';
+type RunMode = 'compare' | 'perf' | 'tune';
 
 interface ModelResultState {
   modelId: number;
@@ -397,32 +401,39 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         </Button>
         <Icon icon={BarChart2} size={18} className="text-primary" />
         <h1 className="text-base font-semibold text-text m-0 flex-1">Benchmark Dashboard</h1>
+        <div className="flex gap-xs">
+          <Button
+            variant={mode === 'perf' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setMode('perf')}
+          >
+            Perf
+          </Button>
+          <Button
+            variant={mode === 'compare' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setMode('compare')}
+          >
+            Compare
+          </Button>
+          <Button
+            variant={mode === 'tune' ? 'primary' : 'secondary'}
+            size="sm"
+            leftIcon={<Icon icon={Target} size={14} />}
+            onClick={() => setMode('tune')}
+          >
+            Tune
+          </Button>
+        </div>
       </header>
 
       {/* Body */}
+      {mode === 'tune' ? (
+        <TuneTab models={models} />
+      ) : (
       <div className="flex flex-1 overflow-hidden gap-0">
         {/* ── Left: Config panel ── */}
         <aside className="w-[280px] shrink-0 flex flex-col gap-base p-base border-r border-border overflow-y-auto">
-          {/* Mode toggle */}
-          <div className="flex gap-sm">
-            <Button
-              variant={mode === 'perf' ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setMode('perf')}
-              fullWidth
-            >
-              Perf
-            </Button>
-            <Button
-              variant={mode === 'compare' ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setMode('compare')}
-              fullWidth
-            >
-              Compare
-            </Button>
-          </div>
-
           {/* Model selection */}
           <div className="flex flex-col gap-sm">
             <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
@@ -638,6 +649,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           </section>
         </div>
       </div>
+      )}
     </div>
   );
 };
