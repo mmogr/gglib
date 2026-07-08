@@ -16,8 +16,40 @@ pub enum CandidateSource {
     /// defaults, when present.
     GgufAuthorDefault,
     /// Seeded from the built-in per-model-family preset table (e.g. Qwen
-    /// coding-mode defaults). Carries the family name for display.
-    FamilyPreset(String),
+    /// coding-mode defaults).
+    FamilyPreset {
+        /// Display name of the matched family/preset (e.g. `"qwen-coding"`).
+        family: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `CandidateSource` is `#[serde(tag = "kind")]` (internally tagged),
+    /// which only supports newtype variants whose inner value serializes as
+    /// a JSON object/map. `FamilyPreset` must therefore stay a *struct*
+    /// variant (`{ family: String }`), never a bare `FamilyPreset(String)`
+    /// newtype — the latter fails at serialization time with "cannot
+    /// serialize tagged newtype variant ... containing a string".
+    #[test]
+    fn candidate_source_family_preset_round_trips() {
+        let source = CandidateSource::FamilyPreset {
+            family: "qwen-coding".to_string(),
+        };
+        let json = serde_json::to_string(&source).expect("serializes");
+        let round_tripped: CandidateSource = serde_json::from_str(&json).expect("deserializes");
+        assert!(matches!(round_tripped, CandidateSource::FamilyPreset { .. }));
+    }
+
+    #[test]
+    fn candidate_source_unit_variants_round_trip() {
+        for source in [CandidateSource::UserGrid, CandidateSource::GgufAuthorDefault] {
+            let json = serde_json::to_string(&source).expect("serializes");
+            let _: CandidateSource = serde_json::from_str(&json).expect("deserializes");
+        }
+    }
 }
 
 /// Result of evaluating one task against one candidate's sampling settings.

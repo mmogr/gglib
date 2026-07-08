@@ -59,7 +59,10 @@ pub struct ExpectedCall {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExpectedOutcome {
     /// One or more tool calls are expected, matched AST-style.
-    ToolCalls(Vec<ExpectedCall>),
+    ToolCalls {
+        /// The expected calls (order-checked only when a call sets `ordered: true`).
+        calls: Vec<ExpectedCall>,
+    },
     /// No tool call is expected (irrelevance-detection task).
     NoToolCall,
 }
@@ -95,4 +98,55 @@ pub enum TaskSuite {
     Default,
     /// A user-authored suite.
     Custom { tasks: Vec<TuneTask> },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `ExpectedOutcome` is `#[serde(tag = "kind")]` (internally tagged), which
+    /// only supports newtype variants whose inner value serializes as a JSON
+    /// object/map. `ToolCalls` must therefore stay a *struct* variant
+    /// (`{ calls: Vec<..> }`), never a bare `ToolCalls(Vec<..>)` newtype —
+    /// the latter fails at serialization time with "cannot serialize tagged
+    /// newtype variant ... containing a sequence".
+    #[test]
+    fn expected_outcome_tool_calls_round_trips() {
+        let outcome = ExpectedOutcome::ToolCalls {
+            calls: vec![ExpectedCall {
+                name: "get_weather".to_string(),
+                required_args: serde_json::Map::new(),
+                ordered: false,
+            }],
+        };
+        let json = serde_json::to_string(&outcome).expect("serializes");
+        let round_tripped: ExpectedOutcome =
+            serde_json::from_str(&json).expect("deserializes");
+        assert!(matches!(round_tripped, ExpectedOutcome::ToolCalls { .. }));
+    }
+
+    #[test]
+    fn expected_outcome_no_tool_call_round_trips() {
+        let json = serde_json::to_string(&ExpectedOutcome::NoToolCall).expect("serializes");
+        let round_tripped: ExpectedOutcome =
+            serde_json::from_str(&json).expect("deserializes");
+        assert!(matches!(round_tripped, ExpectedOutcome::NoToolCall));
+    }
+
+    #[test]
+    fn task_suite_custom_round_trips() {
+        let suite = TaskSuite::Custom {
+            tasks: vec![TuneTask {
+                id: "single_call_example".to_string(),
+                category: TaskCategory::SingleCall,
+                system_prompt: None,
+                user_prompt: "What's the weather in Boston?".to_string(),
+                tools: vec![],
+                expected: ExpectedOutcome::NoToolCall,
+            }],
+        };
+        let json = serde_json::to_string(&suite).expect("serializes");
+        let round_tripped: TaskSuite = serde_json::from_str(&json).expect("deserializes");
+        assert!(matches!(round_tripped, TaskSuite::Custom { .. }));
+    }
 }
