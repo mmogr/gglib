@@ -6,7 +6,7 @@ use sqlx::{Row, SqlitePool};
 
 use gglib_core::domain::{
     BenchmarkRun, BenchmarkRunStatus, BenchmarkRunType, ModelBenchmarkSummary, ModelCompareResult,
-    ModelPerfResult,
+    ModelPerfResult, TuneCandidateResult,
 };
 use gglib_core::ports::{BenchmarkRepositoryPort, RepositoryError};
 
@@ -209,6 +209,37 @@ pub(crate) fn row_to_summary(
         compare_run_count: row.try_get("compare_run_count").unwrap_or(0),
         last_benchmarked_at: parse_datetime(last_benchmarked_at_str).unwrap_or_else(Utc::now),
         updated_at: parse_datetime(updated_at_str).unwrap_or_else(Utc::now),
+    })
+}
+
+fn row_to_tune_result(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<TuneCandidateResult, RepositoryError> {
+    let config_json: String = row
+        .try_get("config_json")
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+    let source_json: String = row
+        .try_get("source_json")
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+    let task_results_json: String = row
+        .try_get("task_results_json")
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+    let pruned: i64 = row
+        .try_get("pruned")
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+    Ok(TuneCandidateResult {
+        config: serde_json::from_str(&config_json)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?,
+        source: serde_json::from_str(&source_json)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?,
+        task_results: serde_json::from_str(&task_results_json)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?,
+        composite_score: row
+            .try_get("composite_score")
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?,
+        pruned: pruned != 0,
+        tg_tps: row.try_get("tg_tps").ok().flatten(),
     })
 }
 
@@ -510,5 +541,66 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         row.as_ref().map(row_to_summary).transpose()
+    }
+
+    async fn save_tune_result(
+        &self,
+        result: &TuneCandidateResult,
+        run_id: i64,
+        model_id: i64,
+    ) -> Result<i64, RepositoryError> {
+        let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let config_json = serde_json::to_string(&result.config)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
+        let source_json = serde_json::to_string(&result.source)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
+        let task_results_json = serde_json::to_string(&result.task_results)
+            .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
+        let pruned: i64 = if result.pruned { 1 } else { 0 };
+
+        let rec = sqlx::query(
+            "INSERT INTO benchmark_tune_results
+             (model_id, run_id, config_json, source_json, composite_score, pruned,
+              tg_tps, task_results_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             RETURNING id",
+        )
+        .bind(model_id)
+        .bind(run_id)
+        .bind(config_json)
+        .bind(source_json)
+        .bind(result.composite_score)
+        .bind(pruned)
+        .bind(result.tg_tps)
+        .bind(task_results_json)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        Ok(rec
+            .try_get(0)
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?)
+    }
+
+    async fn get_model_tune_history(
+        &self,
+        model_id: i64,
+        limit: i64,
+    ) -> Result<Vec<TuneCandidateResult>, RepositoryError> {
+        let rows = sqlx::query(
+            "SELECT config_json, source_json, composite_score, pruned, tg_tps, task_results_json
+             FROM benchmark_tune_results
+             WHERE model_id = ?
+             ORDER BY created_at DESC
+             LIMIT ?",
+        )
+        .bind(model_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        rows.iter().map(row_to_tune_result).collect()
     }
 }

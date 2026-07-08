@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use super::RepositoryError;
 use crate::domain::{
     BenchmarkRun, BenchmarkRunType, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
+    TuneCandidateResult,
 };
 
 /// Repository interface for benchmark persistence.
@@ -93,4 +94,26 @@ pub trait BenchmarkRepositoryPort: Send + Sync {
         &self,
         model_id: i64,
     ) -> Result<Option<ModelBenchmarkSummary>, RepositoryError>;
+
+    /// Persist one tune candidate's result.
+    ///
+    /// Unlike compare/perf, tune results do not upsert
+    /// `model_benchmark_summaries` — a candidate's `composite_score` is only
+    /// meaningful relative to the other candidates in the same run, so it is
+    /// not a useful cross-run "best" figure to denormalise.
+    ///
+    /// Returns the auto-assigned result ID.
+    async fn save_tune_result(
+        &self,
+        result: &TuneCandidateResult,
+        run_id: i64,
+        model_id: i64,
+    ) -> Result<i64, RepositoryError>;
+
+    /// Get tune candidate results for one model, most recent first.
+    async fn get_model_tune_history(
+        &self,
+        model_id: i64,
+        limit: i64,
+    ) -> Result<Vec<TuneCandidateResult>, RepositoryError>;
 }
