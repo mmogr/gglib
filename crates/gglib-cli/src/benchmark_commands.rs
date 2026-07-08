@@ -74,4 +74,85 @@ pub enum BenchmarkCommand {
         /// Database ID of the model to show history for
         model_id: i64,
     },
+
+    /// Sweep sampling parameters for one model against an agentic
+    /// tool-calling task suite to find the settings that make it both
+    /// accurate at tool calls and resistant to loop/stagnation
+    #[command(display_order = 6)]
+    Tune {
+        /// Model name or database ID to tune (exactly one)
+        #[arg(long = "model", short = 'm')]
+        model: String,
+
+        /// Sweep a sampling parameter across candidate values, e.g.
+        /// `--sweep temperature=0.2,0.5,0.8`. Repeatable — one flag per
+        /// dimension (`temperature`, `top_p`, `top_k`, `min_p`,
+        /// `repeat_penalty`). A dimension left unswept is not varied; the
+        /// normal per-model/global/hardcoded fallback chain fills it in.
+        #[arg(long = "sweep", value_name = "DIM=V1,V2,...")]
+        sweep: Vec<String>,
+
+        /// Task suite to evaluate candidates against: `default` for the
+        /// built-in BFCL-style suite (single-call, parallel-call,
+        /// multi-turn, irrelevance-detection, long-context-endurance), or
+        /// a path to a custom JSON file containing an array of task
+        /// definitions in the same schema as the built-in suite (see
+        /// `gglib-core/assets/tune_default_suite.json` for the shape to
+        /// copy). The GUI accepts the identical array shape from a file
+        /// upload — there is one shared task schema for both surfaces.
+        #[arg(long = "task-suite", default_value = "default")]
+        task_suite: String,
+
+        /// Seed the candidate grid with the model's GGUF metadata
+        /// author-recommended sampling defaults, when present (no-op
+        /// today — no GGUF metadata convention for this exists yet).
+        /// Pass `--seed-from-gguf false` to disable
+        #[arg(long, action = clap::ArgAction::Set, default_value_t = true)]
+        seed_from_gguf: bool,
+
+        /// Seed the candidate grid with built-in per-model-family sampling
+        /// presets (e.g. Qwen coding-mode defaults), matched by a
+        /// case-insensitive substring of the model's name. Pass
+        /// `--seed-from-family-presets false` to disable
+        #[arg(long, action = clap::ArgAction::Set, default_value_t = true)]
+        seed_from_family_presets: bool,
+
+        /// Fraction of candidates dropped after the cheap pre-screen round
+        /// (one `single_call` + one `irrelevance` task). Clamped to
+        /// `[0.0, 0.9]`; a floor of 3 survivors always applies regardless
+        /// of how aggressive this is set
+        #[arg(long, default_value = "0.5")]
+        prune_fraction: f32,
+
+        /// Composite-score weight for average tool-call match accuracy
+        #[arg(long)]
+        weight_tool_accuracy: Option<f32>,
+
+        /// Composite-score weight for `1 - (loop/stagnation trigger rate)`
+        #[arg(long)]
+        weight_loop_avoidance: Option<f32>,
+
+        /// Composite-score weight for the fraction of tasks completed
+        /// (produced a final answer instead of hitting a loop/stagnation
+        /// guard or the iteration ceiling)
+        #[arg(long)]
+        weight_task_completion: Option<f32>,
+
+        /// Composite-score weight for token-generation throughput
+        /// (currently a no-op — `tg_tps` is not yet measured per
+        /// candidate, see the tune service's module docs)
+        #[arg(long)]
+        weight_speed: Option<f32>,
+
+        /// Context size override (number of tokens)
+        #[arg(long)]
+        ctx_size: Option<u64>,
+
+        /// After the run completes, write the highest-scoring candidate's
+        /// sampling settings to this model's `inference_defaults` — the
+        /// same effect as `gglib model update <id> --temperature ...`,
+        /// applied automatically
+        #[arg(long)]
+        apply_best: bool,
+    },
 }

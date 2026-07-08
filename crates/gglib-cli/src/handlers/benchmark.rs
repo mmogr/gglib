@@ -20,6 +20,9 @@ use tokio_util::sync::CancellationToken;
 
 use gglib_app_services::{BenchmarkDeps, BenchmarkOps};
 use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
+use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
+use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
     PerfConfig,
@@ -147,6 +150,39 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             tg,
             reps,
         } => cmd_perf(ctx, ops, models, pp, tg, reps).await,
+
+        BenchmarkCommand::Tune {
+            model,
+            sweep,
+            task_suite,
+            seed_from_gguf,
+            seed_from_family_presets,
+            prune_fraction,
+            weight_tool_accuracy,
+            weight_loop_avoidance,
+            weight_task_completion,
+            weight_speed,
+            ctx_size,
+            apply_best,
+        } => {
+            cmd_tune(
+                ctx,
+                ops,
+                model,
+                sweep,
+                task_suite,
+                seed_from_gguf,
+                seed_from_family_presets,
+                prune_fraction,
+                weight_tool_accuracy,
+                weight_loop_avoidance,
+                weight_task_completion,
+                weight_speed,
+                ctx_size,
+                apply_best,
+            )
+            .await
+        }
 
         // Read-only commands are handled before reaching this path.
         BenchmarkCommand::List { limit } => cmd_list(ctx, limit).await,
@@ -300,6 +336,190 @@ async fn cmd_perf(
         .map_err(|e| anyhow!("benchmark task panicked: {e}"))?
         .context("benchmark perf failed")?;
 
+    Ok(())
+}
+
+// ─── benchmark tune ───────────────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+async fn cmd_tune(
+    ctx: &CliContext,
+    ops: BenchmarkOps,
+    model: String,
+    sweep: Vec<String>,
+    task_suite: String,
+    seed_from_gguf: bool,
+    seed_from_family_presets: bool,
+    prune_fraction: f32,
+    weight_tool_accuracy: Option<f32>,
+    weight_loop_avoidance: Option<f32>,
+    weight_task_completion: Option<f32>,
+    weight_speed: Option<f32>,
+    ctx_size: Option<u64>,
+    apply_best: bool,
+) -> Result<()> {
+    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+
+    let sweep_spec = parse_sweep_args(&sweep)?;
+    let resolved_task_suite = load_task_suite(&task_suite)?;
+
+    let defaults = ScoreWeights::default();
+    let weights = ScoreWeights {
+        tool_accuracy: weight_tool_accuracy.unwrap_or(defaults.tool_accuracy),
+        loop_avoidance: weight_loop_avoidance.unwrap_or(defaults.loop_avoidance),
+        task_completion: weight_task_completion.unwrap_or(defaults.task_completion),
+        speed: weight_speed.unwrap_or(defaults.speed),
+    };
+
+    let config = TuneConfig {
+        model_id,
+        task_suite: resolved_task_suite,
+        sweep: sweep_spec,
+        seed_from_gguf,
+        seed_from_family_presets,
+        weights,
+        prune_fraction,
+        ctx_size,
+    };
+
+    style::print_info_banner("Benchmark Tune", "\u{1f3af}");
+    eprintln!("  Model : {model}");
+    eprintln!("  Suite : {task_suite}");
+    style::print_banner_close();
+
+    let cancel = CancellationToken::new();
+    let (tx, mut rx) = mpsc::channel::<BenchmarkEvent>(256);
+
+    let cancel_clone = cancel.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            cancel_clone.cancel();
+        }
+    });
+
+    let run_task = tokio::spawn(async move { ops.run_tune(config, tx, cancel).await });
+
+    let mut best: Option<TuneCandidateResult> = None;
+    while let Some(event) = rx.recv().await {
+        if let BenchmarkEvent::TuneCandidateComplete { result } = &event
+            && !result.pruned
+            && best
+                .as_ref()
+                .is_none_or(|b| result.composite_score > b.composite_score)
+        {
+            best = Some(result.clone());
+        }
+        render_event(&event);
+    }
+
+    run_task
+        .await
+        .map_err(|e| anyhow!("benchmark task panicked: {e}"))?
+        .context("benchmark tune failed")?;
+
+    if apply_best {
+        match best {
+            Some(winner) => apply_best_config(ctx, model_id, &winner).await?,
+            None => eprintln!(
+                "{}note:{} no surviving candidate to apply (run may have been aborted)",
+                style::WARNING,
+                style::RESET
+            ),
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse `--sweep DIM=V1,V2,...` arguments into a [`SweepSpec`].
+fn parse_sweep_args(args: &[String]) -> Result<SweepSpec> {
+    let mut sweep = SweepSpec::default();
+    for arg in args {
+        let (key, values) = arg
+            .split_once('=')
+            .ok_or_else(|| anyhow!("invalid --sweep '{arg}': expected DIM=V1,V2,..."))?;
+        match key {
+            "temperature" => sweep.temperature = parse_f32_list(values)?,
+            "top_p" => sweep.top_p = parse_f32_list(values)?,
+            "top_k" => sweep.top_k = parse_i32_list(values)?,
+            "min_p" => sweep.min_p = parse_f32_list(values)?,
+            "repeat_penalty" => sweep.repeat_penalty = parse_f32_list(values)?,
+            other => anyhow::bail!(
+                "unknown --sweep dimension '{other}': expected one of \
+                 temperature, top_p, top_k, min_p, repeat_penalty"
+            ),
+        }
+    }
+    Ok(sweep)
+}
+
+fn parse_f32_list(values: &str) -> Result<Vec<f32>> {
+    values
+        .split(',')
+        .map(|v| {
+            v.trim()
+                .parse::<f32>()
+                .map_err(|e| anyhow!("invalid numeric value '{v}': {e}"))
+        })
+        .collect()
+}
+
+fn parse_i32_list(values: &str) -> Result<Vec<i32>> {
+    values
+        .split(',')
+        .map(|v| {
+            v.trim()
+                .parse::<i32>()
+                .map_err(|e| anyhow!("invalid integer value '{v}': {e}"))
+        })
+        .collect()
+}
+
+/// Resolve `--task-suite` into a [`TaskSuite`].
+///
+/// `"default"` selects the built-in suite. Any other value is treated as a
+/// file path containing a JSON array of [`TuneTask`] values — the identical
+/// array shape the GUI parses from an uploaded file — which is wrapped into
+/// [`TaskSuite::Custom`].
+fn load_task_suite(spec: &str) -> Result<TaskSuite> {
+    if spec == "default" {
+        return Ok(TaskSuite::Default);
+    }
+    let content = std::fs::read_to_string(spec)
+        .with_context(|| format!("failed to read task suite file: {spec}"))?;
+    let tasks: Vec<TuneTask> = serde_json::from_str(&content)
+        .with_context(|| format!("failed to parse '{spec}' as a JSON array of task definitions"))?;
+    Ok(TaskSuite::Custom { tasks })
+}
+
+/// Write the winning candidate's sampling settings to the model's
+/// `inference_defaults`, mirroring `gglib model update <id> --temperature ...`.
+async fn apply_best_config(
+    ctx: &CliContext,
+    model_id: i64,
+    winner: &TuneCandidateResult,
+) -> Result<()> {
+    let mut model = ctx
+        .model_repo
+        .get_by_id(model_id)
+        .await
+        .with_context(|| format!("failed to load model {model_id} to apply tune result"))?;
+    model.inference_defaults = Some(winner.config.clone());
+    ctx.model_repo
+        .update(&model)
+        .await
+        .context("failed to save tuned inference defaults")?;
+
+    println!(
+        "{SUCCESS}\u{2713} Applied best config (score {:.3}) to model {model_id}'s inference_defaults{RESET}",
+        winner.composite_score,
+        SUCCESS = style::SUCCESS,
+        RESET = style::RESET
+    );
     Ok(())
 }
 
@@ -526,7 +746,9 @@ fn render_event(event: &BenchmarkEvent) {
             );
         }
 
-        BenchmarkEvent::TuneTaskComplete { task_id, passed, .. } => {
+        BenchmarkEvent::TuneTaskComplete {
+            task_id, passed, ..
+        } => {
             let mark = if *passed { "✓" } else { "✗" };
             eprintln!("  {mark} {task_id}");
         }
