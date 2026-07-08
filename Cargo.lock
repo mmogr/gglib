@@ -1943,6 +1943,7 @@ dependencies = [
  "dirs",
  "futures-core",
  "futures-util",
+ "gglib-agent",
  "gglib-core",
  "gglib-db",
  "gglib-download",

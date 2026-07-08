@@ -23,7 +23,9 @@ pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
 // Re-export benchmark types at the domain level for convenience
 pub use benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRun, BenchmarkRunStatus, BenchmarkRunType,
-    CompareConfig, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult, PerfConfig,
+    CandidateSource, CompareConfig, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
+    PerfConfig, ScoreWeights, SweepSpec, TaskCategory, TaskSuite, TuneCandidateResult, TuneConfig,
+    TuneTask, TuneTaskResult,
 };
 
 // Re-export inference types at the domain level for convenience

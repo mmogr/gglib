@@ -490,6 +490,28 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Per-model tune candidate results. `config_json`/`source_json`/
+    // `task_results_json` store the corresponding `InferenceConfig`,
+    // `CandidateSource`, and `Vec<TuneTaskResult>` domain types respectively —
+    // no separate normalized tables, mirroring how `benchmark_runs.config_json`
+    // already stores whole-config JSON blobs elsewhere in this schema.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS benchmark_tune_results (
+            id                INTEGER PRIMARY KEY,
+            model_id          INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id            INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            config_json       TEXT    NOT NULL,
+            source_json       TEXT    NOT NULL,
+            composite_score   REAL    NOT NULL,
+            pruned            INTEGER NOT NULL DEFAULT 0,
+            tg_tps            REAL,
+            task_results_json TEXT    NOT NULL,
+            created_at        TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     // Indexes for common benchmark queries
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_compare_results_model ON model_compare_results(model_id, created_at DESC)",
@@ -499,6 +521,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_perf_results_model ON model_perf_results(model_id, created_at DESC)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_tune_results_model ON benchmark_tune_results(model_id, created_at DESC)",
     )
     .execute(pool)
     .await?;

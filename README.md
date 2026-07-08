@@ -73,6 +73,74 @@ gglib q --agent "How is error handling structured in this project?"
 
 Works with any command that produces text. If you can `cat` it, you can ask a local model about it.
 
+## Benchmarking & inference tuning
+
+`gglib benchmark` answers three questions about a model, from the same CLI/API/GUI surface:
+
+```bash
+# How fast is it? (llama-bench throughput)
+gglib benchmark perf --model qwen2.5
+
+# Side-by-side response quality across models
+gglib benchmark compare --model qwen2.5 --model llama3 --prompt "Explain gradient descent"
+
+# What sampling settings make it a good tool-calling agent?
+gglib benchmark tune --model qwen2.5 --sweep temperature=0.2,0.5,0.8 --apply-best
+```
+
+`tune` sweeps sampling parameters (temperature, top-p, top-k, min-p, repeat-penalty)
+against an agentic tool-calling task suite, scoring each candidate on tool-call
+accuracy (AST-style structural matching, not string diffing) and resistance to
+the agent loop's loop/stagnation guards — the failure mode that matters most
+when a local model is powering an agentic coding IDE via `gglib proxy`, where
+losing attention over a long session can send it into an infinite tool-call
+loop. `--apply-best` writes the winning settings straight to the model's
+`inference_defaults`, the same effect as `gglib model update --temperature ...`.
+
+The built-in task suite covers five categories (modeled on the Berkeley
+Function Calling Leaderboard, plus one gglib-specific category):
+
+| Category | Tests |
+|----------|-------|
+| `single_call` | Exactly one tool call is expected |
+| `parallel_call` | Multiple independent tool calls in the same turn |
+| `multi_turn` | Sequential tool calls that build on prior results |
+| `irrelevance` | Correctly abstaining from a tool call when none applies |
+| `long_context` | Loop/stagnation resistance after a long simulated prior session |
+
+**Custom task suites** — write your own scenarios (e.g. targeting your real MCP
+tools) as a plain JSON array and pass it with `--task-suite path.json`. The CLI
+and the GUI (file upload, parsed client-side) accept the identical schema —
+see [`gglib-core/assets/tune_default_suite.json`](crates/gglib-core/assets/tune_default_suite.json)
+for a full worked example. Each element is:
+
+```jsonc
+{
+  "id": "single_call_weather",          // stable identifier
+  "category": "single_call",            // single_call | parallel_call | multi_turn | irrelevance | long_context
+  "system_prompt": null,                // optional
+  "history": null,                      // optional: simulated prior turns (long_context only),
+                                         // an array of ChatMessage-shaped objects, e.g.
+                                         // [{"role":"user","content":"..."},
+                                         //  {"role":"assistant","tool_calls":[...]}]
+  "user_prompt": "What's the weather in Boston, MA?",
+  "tools": [
+    { "name": "get_weather", "description": "...", "input_schema": { "type": "object", "properties": { "location": { "type": "string" } }, "required": ["location"] } }
+  ],
+  "expected": {
+    "kind": "tool_calls",                // "tool_calls" | "no_tool_call"
+    "calls": [
+      { "name": "get_weather", "required_args": { "location": "Boston, MA" }, "ordered": false }
+    ]
+  }
+}
+```
+
+Scoring is partial-credit: extra arguments the model supplies are never
+penalized, missing required arguments reduce the score proportionally
+(`matching / total`), and values are compared structurally (a JSON `1` matches
+`1.0` — never a string diff).
+
 ## Architecture
 
 Cargo workspace with compile-time enforced boundaries. Adapters → infrastructure → core — never the reverse.

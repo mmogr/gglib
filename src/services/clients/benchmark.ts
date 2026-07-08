@@ -18,7 +18,10 @@ import type {
   GetBenchmarkRunResponse,
   ListBenchmarkRunsResponse,
   ModelBenchmarkHistoryResponse,
+  ModelTuneHistoryResponse,
   PerfConfig,
+  TuneCandidateResult,
+  TuneConfig,
 } from '../../types/benchmark';
 
 // ─── REST endpoints ───────────────────────────────────────────────────────────
@@ -57,6 +60,20 @@ export async function getModelBenchmarkHistory(
   return get<ModelBenchmarkHistoryResponse>(
     `/api/models/${modelId}/benchmark?limit=${limit}`,
   );
+}
+
+/**
+ * GET /api/models/:id/tune-history
+ * Fetch past tune candidate results for a model.
+ */
+export async function getModelTuneHistory(
+  modelId: number,
+  limit = 20,
+): Promise<TuneCandidateResult[]> {
+  const response = await get<ModelTuneHistoryResponse>(
+    `/api/models/${modelId}/tune-history?limit=${limit}`,
+  );
+  return response.results;
 }
 
 // ─── SSE streaming helpers ────────────────────────────────────────────────────
@@ -160,6 +177,45 @@ export async function startPerfRun(
     throw new Error(
       (body as { error?: string }).error ??
         `Perf run failed: ${response.status}`,
+    );
+  }
+
+  await consumeSseStream(response, onEvent);
+}
+
+/**
+ * POST /api/benchmark/tune  (SSE)
+ * Start a tune run for the given config and stream events via `onEvent`.
+ * Resolves when the stream ends; throws on HTTP errors.
+ *
+ * `config.task_suite` accepts either `{ source: 'default' }` or
+ * `{ source: 'custom', tasks: TuneTask[] }` — for a custom suite, parse the
+ * user's uploaded JSON file client-side into a plain `TuneTask[]` array
+ * (the same shape `gglib benchmark tune --task-suite path.json` reads from
+ * disk) and wrap it in the `custom` shape before calling this function.
+ */
+export async function startTuneRun(
+  config: TuneConfig,
+  onEvent: (event: BenchmarkEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+
+  const response = await fetch(`${baseUrl}/api/benchmark/tune`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers as Record<string, string>),
+    },
+    body: JSON.stringify(config),
+    signal,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ??
+        `Tune run failed: ${response.status}`,
     );
   }
 

@@ -19,6 +19,14 @@ gglib-mcp = { path = "../gglib-mcp" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-proxy = { path = "../gglib-proxy" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
+# Pure-domain agentic loop (no HTTP/infra deps of its own — see its own
+# Cargo.toml). Used only by the tune service to drive AgentLoop::build()
+# directly with a local ScoringToolExecutorPort; compose_agent_loop() in
+# gglib-runtime is not reusable here since it hardwires an MCP tool
+# executor. Only gglib-agent's [dependencies] (its library) are pulled in —
+# its [dev-dependencies] (e.g. test-only mock executors) never ship in any
+# downstream binary, Cargo excludes them by construction.
+gglib-agent = { path = "../gglib-agent" }
 
 # Shared deps
 anyhow = { workspace = true }

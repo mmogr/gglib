@@ -140,6 +140,17 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::benchmark::compare::compare_sse),
         )
         .route("/benchmark/perf", post(handlers::benchmark::perf::perf_sse))
+        // Benchmark — tune SSE stream (sampling-parameter sweep)
+        //
+        // Body limit: **5 MiB** (vs the Axum default of 2 MiB).
+        //
+        // A custom `task_suite` can embed `long_context` tasks with thousands
+        // of tokens of simulated prior-session history per task, so the
+        // default limit is comfortably breached by a handful of scenarios.
+        .route(
+            "/benchmark/tune",
+            post(handlers::benchmark::tune::tune_sse).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
         // Benchmark — run history
         .route(
             "/benchmark/runs",
@@ -185,6 +196,10 @@ fn model_routes() -> Router<AppState> {
         .route(
             "/{id}/benchmark",
             get(handlers::benchmark::history::model_benchmark),
+        )
+        .route(
+            "/{id}/tune-history",
+            get(handlers::benchmark::history::model_tune_history),
         )
         // Tags
         .route(
