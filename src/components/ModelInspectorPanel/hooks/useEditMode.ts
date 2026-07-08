@@ -36,7 +36,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     setEditedQuantization(model.quantization || '');
     setEditedFilePath(model.filePath);
     setEditedInferenceDefaults(model.inferenceDefaults || undefined);
-    setEditedServerDefaults(model.serverDefaults ?? undefined);
+    setEditedServerDefaults(model.serverDefaults);
     setIsEditMode(true);
   }, [model]);
 

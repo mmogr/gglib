@@ -13,6 +13,7 @@ use anyhow::{Context as _, Result};
 use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::compose_agent_loop_with_sampling;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
@@ -178,7 +179,11 @@ async fn resolve_port(
         .context("failed to look up model")?;
 
     // Resolve context size via the shared 4-level fallback chain.
+    // The raw flag is shape-validated up front and resolved against the
+    // model's GGUF context length now that `model` is available (this is
+    // what makes `--ctx-size max` work).
     let settings = ctx.app.settings().get().await?;
+    let ctx_arg = parse_ctx_size_flag(params.ctx_size.as_deref())?;
 
     let server_config = build_server_config(
         model.id,
@@ -187,10 +192,7 @@ async fn resolve_port(
         ctx.base_port,
         &model.tags,
         ServerConfigOptions {
-            context_size: params
-                .ctx_size
-                .as_deref()
-                .and_then(|s| s.parse::<u64>().ok()),
+            context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
             model_server_ctx: model
                 .server_defaults
                 .as_ref()

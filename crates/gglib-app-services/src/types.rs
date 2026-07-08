@@ -417,7 +417,7 @@ pub struct UpdateModelRequest {
     /// - Some(Some(config)) — set/replace the model's server defaults
     /// - Some(None) — clear the override (NULL in DB, revert to global default)
     /// - None — don't touch this field (key omitted from payload)
-    #[serde(default)]
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
 }
 

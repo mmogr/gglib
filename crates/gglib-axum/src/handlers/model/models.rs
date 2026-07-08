@@ -94,17 +94,14 @@ pub async fn add(
     Ok(Json(state.models.add(req).await?))
 }
 
-/// Update an existing model (PUT — full update).
+/// Update an existing model.
+///
+/// Registered for both `PUT` and `PATCH` (see [`crate::routes`]): every
+/// field on [`UpdateModelRequest`] is optional and a no-op when omitted, and
+/// `server_defaults` additionally supports explicit-`null` clearing via
+/// double-`Option` semantics — i.e. this handler already behaves like a
+/// partial update regardless of which verb the caller uses.
 pub async fn update(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Json(req): Json<UpdateModelRequest>,
-) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.models.update(id, req).await?))
-}
-
-/// Partial update an existing model (PATCH — null semantics for optional fields).
-pub async fn patch(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateModelRequest>,

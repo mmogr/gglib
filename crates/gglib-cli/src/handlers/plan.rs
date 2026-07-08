@@ -13,6 +13,7 @@ use anyhow::{Context as _, Result, anyhow};
 use gglib_agent::council::plan;
 use gglib_core::ProcessHandle;
 use gglib_core::domain::council::task_graph::HitlMode;
+use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
@@ -122,6 +123,9 @@ async fn resolve_port(
     };
 
     let settings = ctx.app.settings().get().await.unwrap_or_default();
+    // Shape-validate the raw flag first, resolve against the model's GGUF
+    // context length now that `model_id` is available (`--ctx-size max`).
+    let ctx_arg = parse_ctx_size_flag(ctx_size.as_deref())?;
     let server_config = build_server_config(
         model_id.id,
         model_id.name.clone(),
@@ -129,7 +133,7 @@ async fn resolve_port(
         ctx.base_port,
         &model_id.tags,
         ServerConfigOptions {
-            context_size: ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok()),
+            context_size: ctx_arg.and_then(|arg| arg.resolve(model_id.context_length)),
             model_server_ctx: model_id
                 .server_defaults
                 .as_ref()

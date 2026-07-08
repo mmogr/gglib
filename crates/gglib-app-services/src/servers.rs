@@ -170,8 +170,9 @@ impl ServerOps {
     /// Delegates to [`build_server_config`] so that this path generates
     /// identical llama-server arguments to every other launch surface.
     ///
-    /// Context size precedence: explicit request field → global settings
-    /// default → llama-server built-in default.
+    /// Context size precedence (4-level fallback chain): explicit request
+    /// field → per-model `server_defaults.context_length` → global settings
+    /// default → hardcoded default.
     fn build_config(
         model: &Model,
         request: &StartServerRequest,

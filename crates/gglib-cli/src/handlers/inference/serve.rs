@@ -8,7 +8,7 @@ use std::process::Stdio;
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
 use gglib_runtime::llama::{
     LlamaCommandBuilder, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
 };
@@ -53,13 +53,14 @@ pub async fn execute(
     eprintln!("  Using model: {} (ID: {})", model.name, model.id);
     eprintln!("  File: {}", model.file_path.display());
 
-    // Handle context size
+    // Handle context size.
+    // The raw flag is parsed (shape-validated) independently of the model,
+    // then resolved against the model's GGUF context length now that it's
+    // available — this is what makes `--ctx-size max` work.
     let settings = ctx.app.settings().get().await?;
+    let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
     let effective_ctx = resolve_context_size(&ServerConfigOptions {
-        context_size: context
-            .ctx_size
-            .as_deref()
-            .and_then(|s| s.parse::<u64>().ok()),
+        context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
         model_server_ctx: model
             .server_defaults
             .as_ref()

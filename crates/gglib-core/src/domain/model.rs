@@ -74,7 +74,8 @@ pub struct Model {
     pub id: i64,
     /// Human-readable name for the model.
     pub name: String,
-    /// Canonical deduplication key (e.g., `hf:repo@sha#file`).\n    #[serde(default)]
+    /// Canonical deduplication key (e.g., `hf:repo@sha#file`).
+    #[serde(default)]
     pub model_key: String,
     /// Absolute path to the GGUF file on the filesystem.
     pub file_path: PathBuf,

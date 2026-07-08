@@ -218,7 +218,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       }
       // Include serverDefaults if it was edited (null = clear override, object = set value, undefined = no change)
       if (editedServerDefaults !== model.serverDefaults) {
-        updates.serverDefaults = editedServerDefaults ?? undefined;
+        updates.serverDefaults = editedServerDefaults;
       }
       
       if (Object.keys(updates).length > 0) {
