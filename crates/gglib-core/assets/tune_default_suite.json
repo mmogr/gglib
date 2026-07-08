@@ -245,5 +245,144 @@
         }
       ]
     }
+  },
+  {
+    "id": "long_context_refactor_endurance",
+    "category": "long_context",
+    "system_prompt": "You are a helpful coding assistant with access to filesystem tools. Work efficiently and avoid repeating actions you have already completed.",
+    "history": [
+      {
+        "role": "user",
+        "content": "I'm refactoring the `UserService` class to split it into `UserRepository` and `UserValidator`. Here's the current file:\n\n```python\nclass UserService:\n    def __init__(self, db_connection):\n        self.db = db_connection\n\n    def validate_email(self, email):\n        if \"@\" not in email:\n            raise ValueError(\"invalid email\")\n        local, _, domain = email.partition(\"@\")\n        if not local or \".\" not in domain:\n            raise ValueError(\"invalid email domain\")\n        return True\n\n    def validate_password(self, password):\n        if len(password) < 8:\n            raise ValueError(\"password too short\")\n        if not any(c.isdigit() for c in password):\n            raise ValueError(\"password needs a digit\")\n        return True\n\n    def get_user_by_id(self, user_id):\n        return self.db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,)).fetchone()\n\n    def get_user_by_email(self, email):\n        return self.db.execute(\"SELECT * FROM users WHERE email = ?\", (email,)).fetchone()\n\n    def create_user(self, email, password):\n        self.validate_email(email)\n        self.validate_password(password)\n        self.db.execute(\"INSERT INTO users (email, password) VALUES (?, ?)\", (email, password))\n        self.db.commit()\n```\n\nLet's start by extracting the validation logic."
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          { "id": "call_1", "name": "read_file", "arguments": { "path": "user_service.py" } }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": "class UserService:\n    def __init__(self, db_connection):\n        self.db = db_connection\n    # ... (full contents already shown above)"
+      },
+      {
+        "role": "assistant",
+        "content": "I've reviewed the file. I'll extract `validate_email` and `validate_password` into a new `UserValidator` class."
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_2",
+            "name": "edit_file",
+            "arguments": {
+              "path": "user_validator.py",
+              "content": "class UserValidator:\n    @staticmethod\n    def validate_email(email):\n        if \"@\" not in email:\n            raise ValueError(\"invalid email\")\n        local, _, domain = email.partition(\"@\")\n        if not local or \".\" not in domain:\n            raise ValueError(\"invalid email domain\")\n        return True\n\n    @staticmethod\n    def validate_password(password):\n        if len(password) < 8:\n            raise ValueError(\"password too short\")\n        if not any(c.isdigit() for c in password):\n            raise ValueError(\"password needs a digit\")\n        return True\n"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_2",
+        "content": "File user_validator.py created successfully."
+      },
+      {
+        "role": "user",
+        "content": "Great, now let's also extract the database access logic into `UserRepository`."
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_3",
+            "name": "edit_file",
+            "arguments": {
+              "path": "user_repository.py",
+              "content": "class UserRepository:\n    def __init__(self, db_connection):\n        self.db = db_connection\n\n    def get_user_by_id(self, user_id):\n        return self.db.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,)).fetchone()\n\n    def get_user_by_email(self, email):\n        return self.db.execute(\"SELECT * FROM users WHERE email = ?\", (email,)).fetchone()\n\n    def insert_user(self, email, password):\n        self.db.execute(\"INSERT INTO users (email, password) VALUES (?, ?)\", (email, password))\n        self.db.commit()\n"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_3",
+        "content": "File user_repository.py created successfully."
+      },
+      {
+        "role": "user",
+        "content": "Now simplify `UserService` to delegate to both new classes instead of duplicating their logic."
+      },
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_4",
+            "name": "edit_file",
+            "arguments": {
+              "path": "user_service.py",
+              "content": "class UserService:\n    def __init__(self, db_connection):\n        self.repository = UserRepository(db_connection)\n        self.validator = UserValidator()\n\n    def create_user(self, email, password):\n        self.validator.validate_email(email)\n        self.validator.validate_password(password)\n        self.repository.insert_user(email, password)\n"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_4",
+        "content": "File user_service.py updated successfully."
+      },
+      {
+        "role": "assistant",
+        "content": "Done — `UserRepository` now owns all database access, `UserValidator` owns validation, and `UserService` delegates to both. Let me know what's next."
+      }
+    ],
+    "user_prompt": "Now check whether there's an existing test file for `UserService` so we can update it to match the new structure.",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      },
+      {
+        "name": "edit_file",
+        "description": "Create or overwrite a file with the given content.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "content": { "type": "string" }
+          },
+          "required": ["path", "content"]
+        }
+      },
+      {
+        "name": "file_exists",
+        "description": "Check whether a file exists at the given path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "file_exists",
+          "required_args": { "path": "test_user_service.py" },
+          "ordered": false
+        }
+      ]
+    }
   }
 ]

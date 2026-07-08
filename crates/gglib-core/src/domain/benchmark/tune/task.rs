@@ -11,13 +11,18 @@
 //! methodology: single-call and parallel-call correctness, multi-turn
 //! (stateful) tool use, and — importantly for avoiding loops — irrelevance
 //! detection (can the model correctly abstain from calling a tool when none
-//! applies).
+//! applies). A fifth category, [`TaskCategory::LongContext`], goes beyond
+//! BFCL: it pre-fills the conversation with a long simulated history before
+//! `user_prompt`, testing whether context degradation over a long session
+//! (attention fixating on stale context) causes the model to loop or
+//! stagnate on a task it would otherwise handle cleanly from a cold start.
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::agent::ToolDefinition;
+use crate::domain::agent::{AgentMessage, ToolDefinition};
 
-/// Category of an agentic tool-calling scenario, following the BFCL split.
+/// Category of an agentic tool-calling scenario, following the BFCL split
+/// (plus [`LongContext`](Self::LongContext), which is gglib-specific).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskCategory {
@@ -31,6 +36,14 @@ pub enum TaskCategory {
     /// No tool call is expected at all — tests whether the model correctly
     /// abstains instead of calling a tool it doesn't need.
     Irrelevance,
+    /// Same evaluation as the other categories, but `user_prompt` is sent
+    /// after [`TuneTask::history`] has already been injected into the
+    /// conversation — tests whether a long prior session (thousands of
+    /// tokens of simulated dummy code/turns) causes the model to lose
+    /// attention and trigger the agent loop's `LoopDetector`/
+    /// `StagnationDetector`, or mis-call a tool it would otherwise get
+    /// right from a cold start.
+    LongContext,
 }
 
 /// One expected tool call within a task's [`ExpectedOutcome::ToolCalls`].
@@ -77,7 +90,14 @@ pub struct TuneTask {
     /// Optional system prompt for this task.
     #[serde(default)]
     pub system_prompt: Option<String>,
-    /// User prompt sent to the agent loop.
+    /// Simulated prior conversation turns injected before `user_prompt`,
+    /// used by [`TaskCategory::LongContext`] tasks to test whether context
+    /// degradation over a long session induces loop/stagnation behavior
+    /// that would not occur from a cold start. `None`/empty for every other
+    /// category.
+    #[serde(default)]
+    pub history: Option<Vec<AgentMessage>>,
+    /// User prompt sent to the agent loop (after `history`, if present).
     pub user_prompt: String,
     /// Tools advertised to the model for this task (OpenAI-format schema).
     pub tools: Vec<ToolDefinition>,
@@ -102,7 +122,8 @@ pub enum TaskSuite {
 
 impl TaskSuite {
     /// Embedded JSON for the built-in default suite (BFCL-style: single-call,
-    /// parallel-call, multi-turn, and irrelevance-detection scenarios).
+    /// parallel-call, multi-turn, and irrelevance-detection scenarios, plus
+    /// a long-context endurance scenario).
     const DEFAULT_SUITE_JSON: &'static str =
         include_str!("../../../../assets/tune_default_suite.json");
 
@@ -163,6 +184,7 @@ mod tests {
                 id: "single_call_example".to_string(),
                 category: TaskCategory::SingleCall,
                 system_prompt: None,
+                history: None,
                 user_prompt: "What's the weather in Boston?".to_string(),
                 tools: vec![],
                 expected: ExpectedOutcome::NoToolCall,
@@ -174,9 +196,9 @@ mod tests {
     }
 
     /// Guards the embedded default suite asset: it must always parse, and
-    /// must cover all four BFCL-style categories so the pre-screen round
-    /// (which picks one `SingleCall` + one `Irrelevance` task) always has
-    /// candidates to draw from.
+    /// must cover all five categories so the pre-screen round (which picks
+    /// one `SingleCall` + one `Irrelevance` task) always has candidates to
+    /// draw from, and the endurance scenario is never silently dropped.
     #[test]
     fn default_suite_parses_and_covers_all_categories() {
         let tasks = TaskSuite::Default.resolve().expect("embedded suite parses");
@@ -187,6 +209,7 @@ mod tests {
             TaskCategory::ParallelCall,
             TaskCategory::MultiTurn,
             TaskCategory::Irrelevance,
+            TaskCategory::LongContext,
         ] {
             assert!(
                 tasks.iter().any(|t| t.category == category),
@@ -199,5 +222,34 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), tasks.len(), "default suite has duplicate task IDs");
+    }
+
+    /// The long-context task must actually carry a non-trivial pre-filled
+    /// history — otherwise it's indistinguishable from a cold-start task and
+    /// defeats the purpose of the category.
+    #[test]
+    fn long_context_task_has_substantial_history() {
+        let tasks = TaskSuite::Default.resolve().expect("embedded suite parses");
+        let long_context_tasks: Vec<_> = tasks
+            .iter()
+            .filter(|t| t.category == TaskCategory::LongContext)
+            .collect();
+        assert!(
+            !long_context_tasks.is_empty(),
+            "expected at least one long_context task"
+        );
+        for task in long_context_tasks {
+            let history = task
+                .history
+                .as_ref()
+                .expect("long_context task must set history");
+            assert!(
+                history.len() >= 8,
+                "long_context task '{}' history too short ({} messages) to \
+                 meaningfully simulate context degradation",
+                task.id,
+                history.len()
+            );
+        }
     }
 }

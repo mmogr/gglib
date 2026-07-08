@@ -18,8 +18,17 @@ accurate at tool calls and resistant to loop/stagnation guard triggers.
 | [`task`] | [`TuneTask`], [`TaskCategory`], [`ExpectedOutcome`], [`ExpectedCall`], [`TaskSuite`] |
 | [`result`] | [`TuneCandidateResult`], [`CandidateSource`], [`TuneTaskResult`] |
 
-Candidate results (`TuneCandidateResult`, `TuneTaskResult`) and the default
-task suite JSON asset are added incrementally alongside the `tune` service.
+# Task Categories
+
+Four are modeled after the Berkeley Function Calling Leaderboard (BFCL):
+`single_call`, `parallel_call`, `multi_turn`, and `irrelevance` (correctly
+abstaining from a tool call). A fifth, `long_context`, is gglib-specific:
+it pre-fills [`TuneTask::history`](task::TuneTask::history) with a long
+simulated prior conversation before `user_prompt`, testing whether context
+degradation over a long session (the model's attention fixating on stale
+context) causes it to loop or stagnate on a task it would otherwise handle
+cleanly from a cold start — the failure mode this whole feature exists to
+catch for agentic coding use.
 
 # Task Schema
 
