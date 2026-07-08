@@ -5,6 +5,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
+use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::{
     BenchmarkRun, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
 };
@@ -58,6 +59,20 @@ pub struct ModelBenchmarkResponse {
     pub perf_history: Vec<ModelPerfResult>,
 }
 
+/// Query parameters for `GET /api/models/{id}/tune-history`.
+#[derive(Debug, serde::Deserialize)]
+pub struct ModelTuneHistoryQuery {
+    /// Maximum number of tune candidate results to return (default: 20).
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+}
+
+/// Response body for `GET /api/models/{id}/tune-history`.
+#[derive(Debug, serde::Serialize)]
+pub struct ModelTuneHistoryResponse {
+    pub results: Vec<TuneCandidateResult>,
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// `GET /api/benchmark/runs` — list recent benchmark runs.
@@ -102,4 +117,15 @@ pub async fn model_benchmark(
         compare_history,
         perf_history,
     }))
+}
+
+/// `GET /api/models/{id}/tune-history` — get past tune candidate results for one model.
+pub async fn model_tune_history(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Query(params): Query<ModelTuneHistoryQuery>,
+) -> Result<Json<ModelTuneHistoryResponse>, HttpError> {
+    let limit = params.limit.clamp(1, 100);
+    let results = state.bench_repo.get_model_tune_history(id, limit).await?;
+    Ok(Json(ModelTuneHistoryResponse { results }))
 }
