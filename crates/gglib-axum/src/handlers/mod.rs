@@ -2,7 +2,6 @@
 pub mod agent;
 pub mod benchmark;
 pub mod builtin;
-pub mod chat;
 pub mod config;
 pub mod council;
 pub mod events;
