@@ -29,8 +29,8 @@
 
 use std::path::PathBuf;
 
-pub use gglib_core::server_config::{resolve_context_size, ServerConfigOptions};
 use gglib_core::ports::ServerConfig;
+pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use tracing::debug;
 
 use crate::llama::args::{resolve_jinja_flag, resolve_mtp_args, resolve_reasoning_format};

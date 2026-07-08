@@ -8,10 +8,10 @@ use std::process::Stdio;
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_runtime::llama::{
     LlamaCommandBuilder, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
 };
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 
 use super::shared::{
     log_command_execution, log_inference_info, log_mlock_info, resolve_inference_config,

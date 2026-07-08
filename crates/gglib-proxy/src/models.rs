@@ -4,7 +4,7 @@
 //! Domain types live in `gglib-core`; this module handles the API layer mapping.
 
 use gglib_core::ports::{ModelRuntimeError, ModelSummary};
-use gglib_core::server_config::{resolve_context_size, ServerConfigOptions};
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -308,8 +308,6 @@ pub struct ModelInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
 }
-
-
 
 // =============================================================================
 // Error Response Types

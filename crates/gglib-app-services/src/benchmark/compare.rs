@@ -33,8 +33,8 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
-use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 
 use super::BenchmarkDeps;
 use super::mapper::{

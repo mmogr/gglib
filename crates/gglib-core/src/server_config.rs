@@ -81,7 +81,7 @@ pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::server_config::{resolve_context_size, ServerConfigOptions};
+    use crate::server_config::{ServerConfigOptions, resolve_context_size};
     use crate::settings::DEFAULT_CONTEXT_SIZE;
 
     #[test]

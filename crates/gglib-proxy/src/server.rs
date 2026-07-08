@@ -273,9 +273,7 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 
             // Apply safety margin to every model's context_window.
             for model in &mut response.data {
-                model.context_window = model
-                    .context_window
-                    .map(advertised_context_window);
+                model.context_window = model.context_window.map(advertised_context_window);
             }
 
             if let Some(target) = state.runtime_port.current_model().await
