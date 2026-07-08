@@ -176,6 +176,11 @@ impl ModelOps {
         if let Some(inference_defaults) = request.inference_defaults {
             model.inference_defaults = Some(inference_defaults);
         }
+        match request.server_defaults {
+            Some(Some(config)) => model.server_defaults = Some(config),
+            Some(None) => model.server_defaults = None,
+            None => {} // don't touch
+        }
 
         self.deps
             .core
@@ -430,5 +435,76 @@ mod tests {
         let ops = make_ops(core);
         let tags = ops.list_tags().await.expect("list_tags should succeed");
         assert!(tags.is_empty());
+    }
+
+    /// End-to-end: drive `ModelOps::update` with `UpdateModelRequest` values
+    /// built from real `serde_json::from_str` payloads (not constructed
+    /// directly in Rust) to prove the double-`Option` null-clearing fix
+    /// works across the actual JSON boundary, not just in isolated
+    /// deserialization tests.
+    #[tokio::test]
+    async fn update_server_defaults_json_round_trip() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+
+        let dir = tempdir().unwrap();
+        let gguf_path = dir.path().join("model.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+        let gguf_path = gguf_path.canonicalize().unwrap();
+
+        let added = ops
+            .add(AddModelRequest {
+                file_path: gguf_path.to_str().unwrap().to_string(),
+            })
+            .await
+            .expect("add should succeed");
+        assert!(
+            added.server_defaults.is_none(),
+            "fresh model has no override"
+        );
+
+        // 1. Set server_defaults via a populated-object JSON payload.
+        let set_req: UpdateModelRequest =
+            serde_json::from_str(r#"{"serverDefaults": {"contextLength": 8192}}"#).unwrap();
+        let updated = ops
+            .update(added.id, set_req)
+            .await
+            .expect("update should succeed");
+        assert_eq!(
+            updated
+                .server_defaults
+                .as_ref()
+                .and_then(|c| c.context_length),
+            Some(8192),
+            "server_defaults.contextLength should be set from JSON"
+        );
+
+        // 2. Omitted key is a no-op — other fields change, override survives.
+        let noop_req: UpdateModelRequest = serde_json::from_str(r#"{"name": "Renamed"}"#).unwrap();
+        let after_noop = ops
+            .update(added.id, noop_req)
+            .await
+            .expect("update should succeed");
+        assert_eq!(after_noop.name, "Renamed");
+        assert_eq!(
+            after_noop
+                .server_defaults
+                .as_ref()
+                .and_then(|c| c.context_length),
+            Some(8192),
+            "omitted serverDefaults key must not clear the existing override"
+        );
+
+        // 3. Explicit JSON null clears the override.
+        let clear_req: UpdateModelRequest =
+            serde_json::from_str(r#"{"serverDefaults": null}"#).unwrap();
+        let cleared = ops
+            .update(added.id, clear_req)
+            .await
+            .expect("update should succeed");
+        assert!(
+            cleared.server_defaults.is_none(),
+            "explicit JSON null must clear server_defaults"
+        );
     }
 }

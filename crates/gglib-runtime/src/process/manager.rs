@@ -302,7 +302,12 @@ impl ProcessManager {
             0, // base_port unused — GuiProcessCore resolves port internally
             &launch_spec.tags,
             ServerConfigOptions {
-                context_size: Some(effective_ctx),
+                context_size: num_ctx,
+                model_server_ctx: launch_spec
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|sc| sc.context_length),
+                global_default_ctx: Some(default_ctx),
                 ..Default::default()
             },
         );

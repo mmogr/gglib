@@ -422,7 +422,9 @@ pub enum Commands {
         llama_port: u16,
         /// Default context size when not specified by client.
         /// Falls back to the app settings `default_context_size`, then to the
-        /// compiled default (4096) if unset. Accepts a positive number or `max`.
+        /// compiled default (4096) if unset. Must be a positive number — `max`
+        /// is not supported here since no specific model is in scope for a
+        /// standalone proxy.
         #[arg(long)]
         default_context: Option<String>,
 

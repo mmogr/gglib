@@ -92,7 +92,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence
 - **`setup.rs`** — `SetupOps` first-run setup and dependency checking
-- **`types.rs`** — Shared DTOs and type definitions for the service layer
+- **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` with triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op.
 
 ## Design Principles
 

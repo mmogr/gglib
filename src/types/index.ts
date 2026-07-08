@@ -34,6 +34,19 @@ export interface InferenceConfig {
 }
 
 // ============================================================================
+// Server Configuration
+// ============================================================================
+
+/**
+ * Per-model server defaults.
+ * Overrides global settings for specific llama-server launch parameters.
+ */
+export interface ServerConfig {
+  /** Context window size (e.g., 4096, 8192, 32768). */
+  contextLength?: number;
+}
+
+// ============================================================================
 // Model Types
 // ============================================================================
 
@@ -56,6 +69,8 @@ export interface GgufModel {
   port?: number;
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
+  // Per-model server defaults (overrides global settings for launch params)
+  serverDefaults?: ServerConfig;
   // Benchmark summary (cached from benchmark_summaries table)
   benchmarkSummary?: ModelBenchmarkSummary;
 }

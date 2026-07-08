@@ -13,13 +13,13 @@ use anyhow::{Context as _, Result};
 use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::compose_agent_loop_with_sampling;
-use gglib_runtime::llama::{ContextInput, resolve_context_size};
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
-use crate::handlers::inference::shared::{log_context_info, resolve_inference_config};
+use crate::handlers::inference::shared::resolve_inference_config;
 use crate::presentation::style;
 
 // =============================================================================
@@ -178,13 +178,12 @@ async fn resolve_port(
         .await
         .context("failed to look up model")?;
 
-    // Resolve context size via the shared 3-level fallback chain.
+    // Resolve context size via the shared 4-level fallback chain.
+    // The raw flag is shape-validated up front and resolved against the
+    // model's GGUF context length now that `model` is available (this is
+    // what makes `--ctx-size max` work).
     let settings = ctx.app.settings().get().await?;
-    let context_resolution = resolve_context_size(ContextInput {
-        flag: params.ctx_size.clone(),
-        model_context_length: model.context_length,
-        settings_default: settings.default_context_size,
-    })?;
+    let ctx_arg = parse_ctx_size_flag(params.ctx_size.as_deref())?;
 
     let server_config = build_server_config(
         model.id,
@@ -193,7 +192,12 @@ async fn resolve_port(
         ctx.base_port,
         &model.tags,
         ServerConfigOptions {
-            context_size: context_resolution.value.map(u64::from),
+            context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
+            model_server_ctx: model
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
+            global_default_ctx: settings.default_context_size,
             ..Default::default()
         },
     );
@@ -214,9 +218,6 @@ async fn resolve_port(
 
     if !banner.quiet {
         eprintln!("  llama-server ready on port {}", handle.port);
-
-        // Context size
-        log_context_info(&context_resolution);
 
         // Sampling overrides
         if let Some(ref s) = banner.sampling {

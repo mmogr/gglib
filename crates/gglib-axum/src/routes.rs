@@ -167,6 +167,7 @@ fn model_routes() -> Router<AppState> {
             "/{id}",
             get(handlers::model::models::get)
                 .put(handlers::model::models::update)
+                .patch(handlers::model::models::update)
                 .delete(handlers::model::models::remove),
         )
         // Capability override: PATCH /api/models/{id}/capabilities

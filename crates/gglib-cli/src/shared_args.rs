@@ -40,7 +40,8 @@ pub struct SamplingArgs {
 #[derive(Args, Debug, Clone, Default)]
 pub struct ContextArgs {
     /// Context size override (number or 'max' for model metadata).
-    /// Falls back to the global default from 'gglib config settings'.
+    /// Resolved through a 4-level fallback chain:
+    /// runtime flag → per-model server_defaults (from DB) → global default → hardcoded 4096.
     #[arg(short, long)]
     pub ctx_size: Option<String>,
     /// Enable memory lock

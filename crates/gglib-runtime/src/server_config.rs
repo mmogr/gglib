@@ -29,60 +29,11 @@
 
 use std::path::PathBuf;
 
-use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::ServerConfig;
+pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use tracing::debug;
 
 use crate::llama::args::{resolve_jinja_flag, resolve_mtp_args, resolve_reasoning_format};
-
-// =============================================================================
-// Options
-// =============================================================================
-
-/// Caller-supplied overrides for [`build_server_config`].
-///
-/// All fields default to `None`, which means "auto-detect from model tags".
-/// Explicit values always take precedence over tag detection.
-#[derive(Debug, Clone, Default)]
-pub struct ServerConfigOptions {
-    /// Override the context window size forwarded to llama-server.
-    /// `None` lets llama-server use its built-in default.
-    pub context_size: Option<u64>,
-
-    /// Bind llama-server to a specific port instead of letting the allocator
-    /// choose.
-    pub port: Option<u16>,
-
-    /// Override Jinja template support.
-    /// - `None` → auto-detect: enabled when the model has the `"agent"` tag.
-    /// - `Some(true)` → force enable regardless of tags.
-    /// - `Some(false)` → force disable regardless of tags.
-    pub jinja: Option<bool>,
-
-    /// Override the reasoning format passed to llama-server.
-    /// - `None` → auto-detect from model tags (e.g. `"reasoning"` tag).
-    /// - `Some("none")` → explicitly suppress reasoning extraction even if the
-    ///   model has a reasoning tag.
-    /// - `Some("deepseek")` / `Some("deepseek-legacy")` → force a specific
-    ///   format.
-    pub reasoning_format: Option<String>,
-
-    /// Override the MTP draft token count.
-    /// - `None` → auto-detect: enabled with default `n=2` when the model has
-    ///   the `"mtp"` tag.
-    /// - `Some(0)` → explicitly disable MTP even if the model has the `"mtp"`
-    ///   tag.
-    /// - `Some(n)` → enable MTP with `n` draft tokens.
-    pub mtp_draft_n_max: Option<u32>,
-
-    /// Override the MTP acceptance probability threshold.
-    /// Only meaningful when MTP is enabled. `None` uses the default (`0.75`).
-    pub mtp_draft_p_min: Option<f32>,
-
-    /// Inference parameter overrides (temperature, top-p, etc.) forwarded
-    /// directly to llama-server.
-    pub inference_params: Option<InferenceConfig>,
-}
 
 // =============================================================================
 // Builder
@@ -118,9 +69,9 @@ pub fn build_server_config(
 ) -> ServerConfig {
     let mut config = ServerConfig::new(model_id, model_name, model_path, base_port);
 
-    if let Some(ctx) = opts.context_size {
-        config = config.with_context_size(ctx);
-    }
+    // --- Context size (4-level fallback chain) --------------------------------
+    let ctx = resolve_context_size(&opts);
+    config = config.with_context_size(ctx);
 
     if let Some(port) = opts.port {
         config = config.with_port(port);

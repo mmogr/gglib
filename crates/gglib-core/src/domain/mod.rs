@@ -9,6 +9,7 @@ pub mod inference;
 pub mod mcp;
 mod model;
 pub mod query;
+mod server_config;
 
 // Re-export model types at the domain level for convenience
 pub use model::{
@@ -27,6 +28,7 @@ pub use benchmark::{
 
 // Re-export inference types at the domain level for convenience
 pub use inference::InferenceConfig;
+pub use server_config::ServerConfig;
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{

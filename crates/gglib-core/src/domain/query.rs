@@ -260,6 +260,7 @@ mod tests {
         Model {
             id,
             name: name.to_string(),
+            model_key: String::new(),
             file_path: PathBuf::from(format!("/models/{name}.gguf")),
             param_count_b: params,
             architecture: None,
@@ -278,6 +279,7 @@ mod tests {
             tags: vec![],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            server_defaults: None,
             benchmark_summary: None,
         }
     }

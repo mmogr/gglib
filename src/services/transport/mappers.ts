@@ -6,7 +6,6 @@
  */
 
 import type { ServeConfig } from '../transport/types/models';
-import type { CreateConversationParams, SaveMessageParams } from '../transport/types/chat';
 
 /**
  * Request shape matching Rust's StartServerRequest.
@@ -30,35 +29,6 @@ export interface StartServerRequest {
     maxTokens?: number;
     repeatPenalty?: number;
   };
-}
-
-/**
- * Request shape matching Rust's CreateConversationRequest.
- * Must stay in sync with gglib-axum/src/handlers/chat.rs
- */
-export interface CreateConversationRequest {
-  title?: string | null;
-  model_id?: number | null;
-  system_prompt?: string | null;
-}
-
-/**
- * Request shape matching Rust's SaveMessageRequest.
- * Must stay in sync with gglib-axum/src/handlers/chat.rs
- */
-export interface SaveMessageRequest {
-  conversation_id: number;
-  role: string;
-  content: string;
-}
-
-/**
- * Request shape matching Rust's UpdateConversationRequest.
- * Must stay in sync with gglib-axum/src/handlers/chat.rs
- */
-export interface UpdateConversationRequest {
-  title?: string | null;
-  system_prompt?: string | null;
 }
 
 /**
@@ -96,40 +66,5 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     mtpDraftNMax: config.specDraftNMax,
     mtpDraftPMin: config.specDraftPMin,
     inferenceParams,
-  };
-}
-
-/**
- * Convert CreateConversationParams to CreateConversationRequest for Tauri IPC.
- */
-export function toCreateConversationRequest(params: CreateConversationParams): CreateConversationRequest {
-  return {
-    title: params.title ?? null,
-    model_id: params.modelId ?? null,
-    system_prompt: params.systemPrompt ?? null,
-  };
-}
-
-/**
- * Convert SaveMessageParams to SaveMessageRequest for Tauri IPC.
- */
-export function toSaveMessageRequest(params: SaveMessageParams): SaveMessageRequest {
-  return {
-    conversation_id: params.conversationId,
-    role: params.role,
-    content: params.content,
-  };
-}
-
-/**
- * Convert update params to UpdateConversationRequest for Tauri IPC.
- */
-export function toUpdateConversationRequest(
-  title?: string,
-  systemPrompt?: string | null
-): UpdateConversationRequest {
-  return {
-    title: title ?? null,
-    system_prompt: systemPrompt,
   };
 }

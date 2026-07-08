@@ -182,4 +182,54 @@ describe('services/clients/models', () => {
       expect(mockTransport.getModelFilterOptions).toHaveBeenCalled();
     });
   });
+
+  describe('serverDefaults serialization', () => {
+    it('sends serverDefaults object when set', async () => {
+      const params = {
+        id: 1,
+        name: 'Test Model',
+        serverDefaults: { contextLength: 8192 },
+      };
+      const updatedModel = { ...mockModel, name: 'Test Model' };
+      vi.mocked(mockTransport.updateModel).mockResolvedValue(updatedModel);
+
+      await updateModel(params);
+
+      expect(mockTransport.updateModel).toHaveBeenCalledWith(params);
+    });
+
+    it('sends null to clear serverDefaults', async () => {
+      const params = { id: 1, serverDefaults: null };
+      vi.mocked(mockTransport.updateModel).mockResolvedValue(mockModel);
+
+      await updateModel(params);
+
+      expect(mockTransport.updateModel).toHaveBeenCalledWith(params);
+    });
+
+    it('omits serverDefaults when not provided', async () => {
+      const params = { id: 1, name: 'Renamed Model' };
+      const updatedModel = { ...mockModel, name: 'Renamed Model' };
+      vi.mocked(mockTransport.updateModel).mockResolvedValue(updatedModel);
+
+      await updateModel(params);
+
+      expect(mockTransport.updateModel).toHaveBeenCalledWith(
+        expect.not.objectContaining({ serverDefaults: expect.anything() })
+      );
+    });
+
+    it('model with serverDefaults round-trips via getModel', async () => {
+      const modelWithServerDefaults = {
+        ...mockModel,
+        serverDefaults: { contextLength: 16384 },
+      };
+      vi.mocked(mockTransport.getModel).mockResolvedValue(modelWithServerDefaults);
+
+      const result = await getModel(1);
+
+      expect(result).toEqual(modelWithServerDefaults);
+      expect(result?.serverDefaults).toEqual({ contextLength: 16384 });
+    });
+  });
 });

@@ -11,8 +11,7 @@
 
 use anyhow::Result;
 use gglib_core::domain::inference::InferenceConfig;
-use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
-use gglib_runtime::llama::{ContextInput, resolve_context_size};
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -280,15 +279,13 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             }
 
             let settings = ctx.app.settings().get().await?;
-            let context_resolution = resolve_context_size(ContextInput {
-                flag: default_context,
-                model_context_length: None,
-                settings_default: settings.default_context_size,
-            })?;
-            let effective_context = context_resolution
-                .value
-                .map(u64::from)
-                .unwrap_or(DEFAULT_CONTEXT_SIZE);
+            let effective_context = resolve_context_size(&ServerConfigOptions {
+                context_size: default_context
+                    .as_deref()
+                    .and_then(|s| s.parse::<u64>().ok()),
+                global_default_ctx: settings.default_context_size,
+                ..Default::default()
+            });
             let inference_override = if temperature.is_some()
                 || top_p.is_some()
                 || top_k.is_some()

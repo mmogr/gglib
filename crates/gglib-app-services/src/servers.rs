@@ -170,8 +170,9 @@ impl ServerOps {
     /// Delegates to [`build_server_config`] so that this path generates
     /// identical llama-server arguments to every other launch surface.
     ///
-    /// Context size precedence: explicit request field → global settings
-    /// default → llama-server built-in default.
+    /// Context size precedence (4-level fallback chain): explicit request
+    /// field → per-model `server_defaults.context_length` → global settings
+    /// default → hardcoded default.
     fn build_config(
         model: &Model,
         request: &StartServerRequest,
@@ -185,7 +186,12 @@ impl ServerOps {
             base_port,
             &model.tags,
             ServerConfigOptions {
-                context_size: request.context_length.or(default_context_size),
+                context_size: request.context_length,
+                model_server_ctx: model
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|s| s.context_length),
+                global_default_ctx: default_context_size,
                 port: request.port,
                 jinja: request.jinja,
                 reasoning_format: request.reasoning_format.clone(),

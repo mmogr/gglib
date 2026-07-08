@@ -288,6 +288,7 @@ mod tests {
             let persisted = Model {
                 id: *id,
                 name: model.name.clone(),
+                model_key: String::new(),
                 file_path: model.file_path.clone(),
                 param_count_b: model.param_count_b,
                 architecture: model.architecture.clone(),
@@ -306,6 +307,7 @@ mod tests {
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
                 inference_defaults: model.inference_defaults.clone(),
+                server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };
             *id += 1;

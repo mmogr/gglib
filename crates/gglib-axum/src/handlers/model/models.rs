@@ -95,6 +95,12 @@ pub async fn add(
 }
 
 /// Update an existing model.
+///
+/// Registered for both `PUT` and `PATCH` (see [`crate::routes`]): every
+/// field on [`UpdateModelRequest`] is optional and a no-op when omitted, and
+/// `server_defaults` additionally supports explicit-`null` clearing via
+/// double-`Option` semantics — i.e. this handler already behaves like a
+/// partial update regardless of which verb the caller uses.
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<i64>,

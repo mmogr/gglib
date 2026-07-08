@@ -149,6 +149,9 @@ pub struct GuiModel {
     pub port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Per-model server defaults (port, URL overrides, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_defaults: Option<gglib_core::domain::ServerConfig>,
     /// Capability flags stored for this model.
     ///
     /// Serialized as a `u32` bit-field.  The frontend receives this value
@@ -180,6 +183,7 @@ impl GuiModel {
             is_serving,
             port,
             inference_defaults: model.inference_defaults,
+            server_defaults: model.server_defaults,
             capabilities: model.capabilities,
             benchmark_summary: model.benchmark_summary,
         }
@@ -409,6 +413,12 @@ pub struct UpdateModelRequest {
     pub quantization: Option<String>,
     pub file_path: Option<String>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Per-model server startup defaults.
+    /// - Some(Some(config)) — set/replace the model's server defaults
+    /// - Some(None) — clear the override (NULL in DB, revert to global default)
+    /// - None — don't touch this field (key omitted from payload)
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
 }
 
 /// Request body for overriding a model's capability flags.
@@ -474,23 +484,40 @@ pub struct AppSettings {
 }
 
 /// Request body for updating application settings.
+///
+/// Every field is `Option<Option<T>>` with `serde_with::rust::double_option`
+/// so an explicit JSON `null` (clear the setting) is distinguished from an
+/// omitted key (leave unchanged) — the same pattern used by
+/// [`UpdateModelRequest::server_defaults`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSettingsRequest {
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_download_path: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_context_size: Option<Option<u64>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_port: Option<Option<u16>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub llama_base_port: Option<Option<u16>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_download_queue_size: Option<Option<u32>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub show_memory_fit_indicators: Option<Option<bool>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_tool_iterations: Option<Option<u32>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_stagnation_steps: Option<Option<u32>>,
     /// Default model ID for quick commands (e.g., `gglib question`).
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
     // Setup wizard
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub setup_completed: Option<Option<bool>>,
     // Title generation
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub title_generation_prompt: Option<Option<String>>,
 }
 
@@ -629,3 +656,50 @@ pub struct McpToolCallResponse {
 
 // Re-export from gglib-runtime for cross-adapter use
 pub use gglib_runtime::ServerLogEntry;
+
+#[cfg(test)]
+mod update_model_request_tests {
+    //! JSON-boundary tests for `UpdateModelRequest.server_defaults`.
+    //!
+    //! These deserialize raw JSON strings (rather than constructing the
+    //! struct directly in Rust) to prove the `serde_with::rust::double_option`
+    //! wiring actually distinguishes "field omitted" from "field explicitly
+    //! null" at the layer where it matters — every other test for this
+    //! feature bypassed serde entirely and would not have caught the
+    //! original bug (double `Option` collapsing `null` into "omitted").
+
+    use super::UpdateModelRequest;
+    use gglib_core::domain::ServerConfig;
+
+    #[test]
+    fn server_defaults_omitted_key_is_none() {
+        let req: UpdateModelRequest = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            req.server_defaults, None,
+            "omitted key must resolve to None (no-op / don't touch)"
+        );
+    }
+
+    #[test]
+    fn server_defaults_explicit_null_is_some_none() {
+        let req: UpdateModelRequest = serde_json::from_str(r#"{"serverDefaults": null}"#).unwrap();
+        assert_eq!(
+            req.server_defaults,
+            Some(None),
+            "explicit null must resolve to Some(None) (clear the override)"
+        );
+    }
+
+    #[test]
+    fn server_defaults_populated_object_is_some_some() {
+        let req: UpdateModelRequest =
+            serde_json::from_str(r#"{"serverDefaults": {"contextLength": 8192}}"#).unwrap();
+        assert_eq!(
+            req.server_defaults,
+            Some(Some(ServerConfig {
+                context_length: Some(8192)
+            })),
+            "populated object must resolve to Some(Some(config))"
+        );
+    }
+}

@@ -8,14 +8,13 @@ use std::process::Stdio;
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
 use gglib_runtime::llama::{
-    ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
-    resolve_llama_server, resolve_mtp_args,
+    LlamaCommandBuilder, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
 };
 
 use super::shared::{
-    log_command_execution, log_context_info, log_inference_info, log_mlock_info,
-    resolve_inference_config,
+    log_command_execution, log_inference_info, log_mlock_info, resolve_inference_config,
 };
 
 /// Execute the serve command.
@@ -54,14 +53,22 @@ pub async fn execute(
     eprintln!("  Using model: {} (ID: {})", model.name, model.id);
     eprintln!("  File: {}", model.file_path.display());
 
-    // Handle context size
+    // Handle context size.
+    // The raw flag is parsed (shape-validated) independently of the model,
+    // then resolved against the model's GGUF context length now that it's
+    // available — this is what makes `--ctx-size max` work.
     let settings = ctx.app.settings().get().await?;
-    let context_resolution = resolve_context_size(ContextInput {
-        flag: context.ctx_size,
-        model_context_length: model.context_length,
-        settings_default: settings.default_context_size,
-    })?;
-    log_context_info(&context_resolution);
+    let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
+    let effective_ctx = resolve_context_size(&ServerConfigOptions {
+        context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
+        model_server_ctx: model
+            .server_defaults
+            .as_ref()
+            .and_then(|s| s.context_length),
+        global_default_ctx: settings.default_context_size,
+        ..Default::default()
+    });
+    eprintln!("  Context size: {} (resolved)", effective_ctx);
     log_mlock_info(context.mlock);
 
     // Resolve inference parameters using 3-level hierarchy
@@ -91,7 +98,7 @@ pub async fn execute(
 
     // Build llama-server command
     let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
-        .context_resolution(context_resolution)
+        .context_size(effective_ctx)
         .mlock(context.mlock)
         .inference_config(inference_config)
         .arg_with_value("--port", options.port.to_string());

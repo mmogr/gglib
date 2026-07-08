@@ -13,13 +13,12 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
 
+use gglib_core::ProcessHandle;
 use gglib_core::domain::council::task_graph::HitlMode;
-use gglib_core::{ProcessHandle, ServerConfig};
+use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
-use gglib_runtime::llama::args::{
-    ContextInput, resolve_context_size, resolve_jinja_flag, resolve_reasoning_format,
-};
+use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use gglib_core::domain::council::run::CouncilRunStatus;
 
@@ -122,31 +121,26 @@ pub(crate) async fn resolve_port(
             .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?
     };
 
-    let mut server_config = ServerConfig::new(
+    let settings = ctx.app.settings().get().await.unwrap_or_default();
+    // Shape-validate the raw flag first, resolve against the model's GGUF
+    // context length now that `model_id` is available (`--ctx-size max`).
+    let ctx_arg = parse_ctx_size_flag(ctx_size.as_deref())?;
+    let server_config = build_server_config(
         model_id.id,
         model_id.name.clone(),
         model_id.file_path.clone(),
         ctx.base_port,
+        &model_id.tags,
+        ServerConfigOptions {
+            context_size: ctx_arg.and_then(|arg| arg.resolve(model_id.context_length)),
+            model_server_ctx: model_id
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
+            global_default_ctx: settings.default_context_size,
+            ..Default::default()
+        },
     );
-
-    let jinja = resolve_jinja_flag(None, &model_id.tags);
-    if jinja.enabled {
-        server_config = server_config.with_jinja();
-    }
-    let reasoning = resolve_reasoning_format(None, &model_id.tags);
-    if let Some(format) = reasoning.format {
-        server_config = server_config.with_reasoning_format(format);
-    }
-
-    let settings = ctx.app.settings().get().await.unwrap_or_default();
-    let context_resolution = resolve_context_size(ContextInput {
-        flag: ctx_size,
-        model_context_length: model_id.context_length,
-        settings_default: settings.default_context_size,
-    })?;
-    if let Some(ctx_val) = context_resolution.value {
-        server_config = server_config.with_context_size(u64::from(ctx_val));
-    }
 
     style::print_info_banner("Orchestrate", "\u{1f916}");
     eprintln!("  Starting llama-server for '{}' \u{2026}", model_id.name);

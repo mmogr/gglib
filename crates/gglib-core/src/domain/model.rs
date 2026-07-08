@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
 use super::inference::InferenceConfig;
+use super::server_config::ServerConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // System tags
@@ -73,6 +74,9 @@ pub struct Model {
     pub id: i64,
     /// Human-readable name for the model.
     pub name: String,
+    /// Canonical deduplication key (e.g., `hf:repo@sha#file`).
+    #[serde(default)]
+    pub model_key: String,
     /// Absolute path to the GGUF file on the filesystem.
     pub file_path: PathBuf,
     /// Number of parameters in the model (in billions).
@@ -114,6 +118,12 @@ pub struct Model {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Per-model server-level defaults (`context_length`, etc.).
+    ///
+    /// Stored as JSON in the database. Overrides global settings but can
+    /// be overridden at request time. Part of the 4-level fallback chain.
+    #[serde(default)]
+    pub server_defaults: Option<ServerConfig>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
     ///
     /// `None` when no benchmark has been run for this model yet, or when the
@@ -173,6 +183,9 @@ pub struct NewModel {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Per-model server startup defaults.
+    #[serde(default)]
+    pub server_defaults: Option<ServerConfig>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,6 +281,7 @@ impl NewModel {
             file_paths: None,
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            server_defaults: None,
         }
     }
 }
@@ -299,6 +313,7 @@ impl Model {
             file_paths: None, // Not preserved in conversion
             capabilities: self.capabilities,
             inference_defaults: self.inference_defaults.clone(),
+            server_defaults: self.server_defaults.clone(),
         }
     }
 }
@@ -328,6 +343,7 @@ mod tests {
         let model = Model {
             id: 42,
             name: "Persisted Model".to_string(),
+            model_key: String::new(),
             file_path: PathBuf::from("/path/to/model.gguf"),
             param_count_b: 13.0,
             architecture: Some("llama".to_string()),
@@ -346,6 +362,7 @@ mod tests {
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            server_defaults: None,
             benchmark_summary: None,
         };
 

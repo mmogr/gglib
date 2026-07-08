@@ -201,6 +201,7 @@ impl ModelService {
             file_paths: None,
             capabilities: model_capabilities,
             inference_defaults: None,
+            server_defaults: None,
         };
 
         // 6. Persist to repository
@@ -552,6 +553,7 @@ mod tests {
             let created = Model {
                 id,
                 name: model.name.clone(),
+                model_key: String::new(),
                 file_path: model.file_path.clone(),
                 param_count_b: model.param_count_b,
                 architecture: model.architecture.clone(),
@@ -570,6 +572,7 @@ mod tests {
                 tags: model.tags.clone(),
                 capabilities: model.capabilities,
                 inference_defaults: model.inference_defaults.clone(),
+                server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };
             models.push(created.clone());

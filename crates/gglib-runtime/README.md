@@ -156,6 +156,22 @@ let config = build_server_config(
 | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
 | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → `n=2, p_min=0.75` |
 
+### Context size resolution
+
+The `resolve_context_size()` function implements a strict 4-level fallback chain
+for determining the context window passed to llama-server:
+
+```text
+1. Runtime request / CLI flag (opts.context_size)
+2. Per-model server_defaults (opts.model_server_ctx, from DB column server_defaults)
+3. Global app setting (opts.global_default_ctx)
+4. Hardcoded DEFAULT_CONTEXT_SIZE = 4096
+```
+
+Each level fills in only if the previous levels are `None`. This ensures per-model
+overrides (`server_defaults.context_length`) take precedence over global settings,
+while still allowing runtime flags to win when explicitly provided.
+
 ## Usage
 
 ```rust,ignore

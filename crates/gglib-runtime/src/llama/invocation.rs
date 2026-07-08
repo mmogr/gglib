@@ -3,7 +3,6 @@
 //! This module provides a DRY abstraction for building llama-server
 //! command invocations, eliminating duplication between serve and other commands.
 
-use super::args::{ContextResolution, ContextResolutionSource};
 use gglib_core::domain::InferenceConfig;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,7 +24,7 @@ use std::process::Command;
 pub struct LlamaCommandBuilder {
     binary_path: PathBuf,
     model_path: PathBuf,
-    context_resolution: Option<ContextResolution>,
+    context_size: Option<u64>,
     mlock: bool,
     inference_config: Option<InferenceConfig>,
     additional_args: Vec<(String, Option<String>)>,
@@ -37,16 +36,16 @@ impl LlamaCommandBuilder {
         Self {
             binary_path: binary_path.into(),
             model_path: model_path.into(),
-            context_resolution: None,
+            context_size: None,
             mlock: false,
             inference_config: None,
             additional_args: Vec::new(),
         }
     }
 
-    /// Set the context size resolution result.
-    pub fn context_resolution(mut self, resolution: ContextResolution) -> Self {
-        self.context_resolution = Some(resolution);
+    /// Set the context size to forward to llama-server.
+    pub fn context_size(mut self, size: u64) -> Self {
+        self.context_size = Some(size);
         self
     }
 
@@ -96,11 +95,8 @@ impl LlamaCommandBuilder {
         // Model path (always required)
         cmd.arg("-m").arg(&self.model_path);
 
-        // Context size (if resolved)
-        if let Some(ContextResolution {
-            value: Some(size), ..
-        }) = self.context_resolution
-        {
+        // Context size (if set)
+        if let Some(size) = self.context_size {
             cmd.arg("-c").arg(size.to_string());
         }
 
@@ -126,43 +122,6 @@ impl LlamaCommandBuilder {
         }
 
         cmd
-    }
-
-    /// Get the context resolution source for logging purposes.
-    pub fn get_context_source(&self) -> Option<ContextResolutionSource> {
-        self.context_resolution.map(|r| r.source)
-    }
-
-    /// Get the resolved context value for logging purposes.
-    pub fn get_context_value(&self) -> Option<u32> {
-        self.context_resolution.and_then(|r| r.value)
-    }
-}
-
-/// Print standardized context size information to stdout.
-///
-/// This provides consistent UX across commands when displaying context information.
-pub fn log_context_info(resolution: &ContextResolution) {
-    match resolution.source {
-        ContextResolutionSource::ExplicitFlag => {
-            if let Some(size) = resolution.value {
-                println!("Using context size: {}", size);
-            }
-        }
-        ContextResolutionSource::ModelMetadata => {
-            if let Some(size) = resolution.value {
-                println!("Using maximum context size from model: {}", size);
-            }
-        }
-        ContextResolutionSource::SettingsDefault => {
-            if let Some(size) = resolution.value {
-                println!("Using context size from settings: {}", size);
-            }
-        }
-        ContextResolutionSource::MaxRequestedMissing => {
-            println!("Warning: 'max' specified but no context length found in model metadata");
-        }
-        ContextResolutionSource::NotSpecified => {}
     }
 }
 
@@ -216,13 +175,8 @@ mod tests {
 
     #[test]
     fn builder_adds_context_size() {
-        let resolution = ContextResolution {
-            value: Some(4096),
-            source: ContextResolutionSource::ExplicitFlag,
-        };
-
         let cmd = LlamaCommandBuilder::new("/usr/bin/llama-cli", "/models/test.gguf")
-            .context_resolution(resolution)
+            .context_size(4096)
             .build();
 
         let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
@@ -277,13 +231,8 @@ mod tests {
 
     #[test]
     fn builder_combines_all_features() {
-        let resolution = ContextResolution {
-            value: Some(8192),
-            source: ContextResolutionSource::ModelMetadata,
-        };
-
         let cmd = LlamaCommandBuilder::new("/usr/bin/llama-server", "/models/test.gguf")
-            .context_resolution(resolution)
+            .context_size(8192)
             .mlock(true)
             .arg("--port", Some("8080"))
             .flag("--api")
@@ -300,22 +249,5 @@ mod tests {
         assert!(args.contains(&"--port".into()));
         assert!(args.contains(&"8080".into()));
         assert!(args.contains(&"--api".into()));
-    }
-
-    #[test]
-    fn builder_getters_work() {
-        let resolution = ContextResolution {
-            value: Some(4096),
-            source: ContextResolutionSource::ExplicitFlag,
-        };
-
-        let builder = LlamaCommandBuilder::new("/usr/bin/llama-cli", "/models/test.gguf")
-            .context_resolution(resolution);
-
-        assert_eq!(builder.get_context_value(), Some(4096));
-        assert_eq!(
-            builder.get_context_source(),
-            Some(ContextResolutionSource::ExplicitFlag)
-        );
     }
 }

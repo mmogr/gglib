@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { ExternalLink } from 'lucide-react';
-import type { GgufModel, InferenceConfig } from '../../../types';
+import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
@@ -12,9 +12,11 @@ interface ModelEditFormProps {
   editedQuantization: string;
   editedFilePath: string;
   editedInferenceDefaults: InferenceConfig | undefined;
+  editedServerDefaults: ServerConfig | null | undefined;
   onQuantizationChange: (quant: string) => void;
   onFilePathChange: (path: string) => void;
   onInferenceDefaultsChange: (config: InferenceConfig) => void;
+  onServerDefaultsChange: (config: ServerConfig | null) => void;
 }
 
 /**
@@ -27,9 +29,11 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   editedQuantization,
   editedFilePath,
   editedInferenceDefaults,
+  editedServerDefaults,
   onQuantizationChange,
   onFilePathChange,
   onInferenceDefaultsChange,
+  onServerDefaultsChange,
 }) => {
 
   return (
@@ -57,12 +61,41 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
             placeholder="e.g., Q4_0"
           />
         </div>
-        {model.contextLength && (
-          <div className="flex justify-between items-start gap-base">
-            <span className="text-text-muted text-sm shrink-0">Context Length:</span>
-            <span className="text-text text-sm text-right break-words">{model.contextLength.toLocaleString()}</span>
+        {/* Context Length — editable override */}
+        <div className="flex justify-between items-start gap-base">
+          <span className="text-text-muted text-sm shrink-0">Context Length:</span>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={256}
+              step={1}
+              value={editedServerDefaults?.contextLength ?? ''}
+              onChange={(e) => {
+                const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                onServerDefaultsChange(val !== undefined ? { contextLength: val } : null);
+              }}
+              placeholder="Use default"
+              className="w-32"
+            />
+            {editedServerDefaults !== undefined && (
+              <button
+                type="button"
+                onClick={() => {
+                  // Toggle: null (clear) ↔ object with current model value (revert to model default)
+                  if (editedServerDefaults === null) {
+                    onServerDefaultsChange(model.serverDefaults ?? {});
+                  } else {
+                    onServerDefaultsChange(null);
+                  }
+                }}
+                title={editedServerDefaults === null ? "Revert 'clear' action" : "Clear override"}
+                className="text-text-muted hover:text-text"
+              >
+                {editedServerDefaults === null ? "↩" : "✕"}
+              </button>
+            )}
           </div>
-        )}
+        </div>
         <div className="flex justify-between items-start gap-base">
           <span className="text-text-muted text-sm shrink-0">Path:</span>
           <Input

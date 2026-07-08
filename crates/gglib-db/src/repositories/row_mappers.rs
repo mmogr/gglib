@@ -7,7 +7,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, server_defaults, model_key";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -67,6 +67,9 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
         name: row
             .try_get("name")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
+        model_key: row
+            .try_get("model_key")
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?,
         file_path: row
             .try_get::<String, _>("file_path")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?
@@ -111,6 +114,11 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .unwrap_or_default(),
         inference_defaults: row
             .try_get::<Option<String>, _>("inference_defaults")
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
+        server_defaults: row
+            .try_get::<Option<String>, _>("server_defaults")
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),

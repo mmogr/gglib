@@ -56,6 +56,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`server_config.rs`](src/server_config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-server_config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-server_config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-server_config-coverage.json) |
 | [`settings.rs`](src/settings.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-settings-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-settings-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-settings-coverage.json) |
 | [`contracts/`](src/contracts/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-contracts-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-contracts-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-contracts-coverage.json) |
 | [`domain/`](src/domain/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-coverage.json) |
@@ -72,7 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
-- **`domain/`** — Pure domain types: `Model`, `ModelFile`, `McpServer`, `Conversation`; and agent loop primitives: `AgentConfig`, `AgentMessage`, `AgentEvent`, `ToolDefinition`, `ToolCall`, `ToolResult`
+- **`domain/`** — Pure domain types: `Model`, `ModelFile`, `McpServer`, `Conversation`; agent loop primitives: `AgentConfig`, `AgentMessage`, `AgentEvent`, `ToolDefinition`, `ToolCall`, `ToolResult`; and server configuration: `ServerConfig` (per-model launch defaults with `context_length`, used in the 4-level fallback chain: runtime request → model `server_defaults` → global settings → hardcoded `DEFAULT_CONTEXT_SIZE`)
 - **`ports/`** — Trait definitions (repository ports, HF client port, event emitter, `VoicePipelinePort` for voice, `AgentLoopPort` / `ToolExecutorPort` / `AgentError` for the backend agentic loop)
 - **`services/`** — Application use cases and business logic orchestration (model management, server lifecycle, chat history, settings, model verification & repair)
 - **`events/`** — Strongly-typed application events for UI/adapter notification
