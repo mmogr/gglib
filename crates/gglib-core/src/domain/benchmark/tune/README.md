@@ -16,6 +16,7 @@ accurate at tool calls and resistant to loop/stagnation guard triggers.
 |--------|----------|
 | [`config`] | [`TuneConfig`], [`SweepSpec`], [`ScoreWeights`] |
 | [`task`] | [`TuneTask`], [`TaskCategory`], [`ExpectedOutcome`], [`ExpectedCall`], [`TaskSuite`] |
+| [`result`] | [`TuneCandidateResult`], [`CandidateSource`], [`TuneTaskResult`] |
 
 Candidate results (`TuneCandidateResult`, `TuneTaskResult`) and the default
 task suite JSON asset are added incrementally alongside the `tune` service.
@@ -46,6 +47,7 @@ sets `ordered: true`.
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`config.rs`](config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-config-coverage.json) |
+| [`result.rs`](result.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-result-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-result-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-result-coverage.json) |
 | [`task.rs`](task.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-task-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-task-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-tune-task-coverage.json) |
 <!-- module-table:end -->
 
