@@ -13,6 +13,9 @@ Two benchmark modes today (a third, tuning, is being added incrementally):
   `timings` response field.
 - **Perf** ([`perf`]): run `llama-bench` for raw prompt-processing (pp) and
   token-generation (tg) throughput in tokens/sec.
+- **Tune** ([`tune`]): sweep sampling parameters for one model against an
+  agentic tool-calling task suite, scoring each candidate for tool-call
+  accuracy and loop/stagnation avoidance to find the best-scoring settings.
 
 All timing fields are `Option<f64>` because llama-server may omit the
 `timings` object (e.g. older builds, stream errors). Missing timing data
@@ -26,6 +29,7 @@ is gracefully represented as `None` — never causes a panic or parse error.
 | [`summary`] | [`ModelBenchmarkSummary`] — denormalised per-model aggregate |
 | [`compare`] | [`CompareConfig`], [`ModelCompareResult`] |
 | [`perf`] | [`PerfConfig`], [`ModelPerfResult`] |
+| [`tune`] | [`TuneConfig`], task-suite schema, scoring result types |
 | [`events`] | [`BenchmarkEvent`] (SSE units), [`BenchmarkModelResult`] |
 
 <!-- module-docs:end -->
@@ -41,6 +45,7 @@ is gracefully represented as `None` — never causes a panic or parse error.
 | [`perf.rs`](perf.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-perf-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-perf-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-perf-coverage.json) |
 | [`run.rs`](run.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-run-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-run-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-run-coverage.json) |
 | [`summary.rs`](summary.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-summary-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-summary-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-benchmark-summary-coverage.json) |
+| [`tune/`](tune) | — | — | — |
 <!-- module-table:end -->
 
 </details>
