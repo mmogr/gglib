@@ -513,6 +513,34 @@ fn render_event(event: &BenchmarkEvent) {
                 RESET = style::RESET
             );
         }
+
+        BenchmarkEvent::TuneCandidateStarted {
+            candidate_index,
+            total,
+        } => {
+            eprintln!(
+                "\n{BOLD}[candidate {}/{total}]{RESET}",
+                candidate_index + 1,
+                BOLD = style::BOLD,
+                RESET = style::RESET
+            );
+        }
+
+        BenchmarkEvent::TuneTaskComplete { task_id, passed, .. } => {
+            let mark = if *passed { "✓" } else { "✗" };
+            eprintln!("  {mark} {task_id}");
+        }
+
+        BenchmarkEvent::TunePruned {
+            candidate_index,
+            reason,
+        } => {
+            eprintln!("  candidate {} pruned: {reason}", candidate_index + 1);
+        }
+
+        BenchmarkEvent::TuneCandidateComplete { result } => {
+            eprintln!("  composite score: {:.3}", result.composite_score);
+        }
     }
 }
 

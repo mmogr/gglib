@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::compare::ModelCompareResult;
 use super::perf::ModelPerfResult;
+use super::tune::TuneCandidateResult;
 
 /// Typed event emitted over the mpsc channel (and serialised as SSE to the
 /// browser) during a benchmark run.
@@ -37,6 +38,20 @@ pub enum BenchmarkEvent {
     RunComplete { run_id: i64 },
     /// The entire run failed (e.g. DB error, abort).
     RunFailed { error: String },
+
+    /// A tune candidate is about to be evaluated (index is 0-based).
+    TuneCandidateStarted { candidate_index: usize, total: usize },
+    /// One task finished evaluating for the current tune candidate.
+    TuneTaskComplete {
+        candidate_index: usize,
+        task_id: String,
+        passed: bool,
+    },
+    /// A tune candidate was dropped after the pre-screen round and will not
+    /// run the full task suite.
+    TunePruned { candidate_index: usize, reason: String },
+    /// A tune candidate finished evaluating (pre-screen or full suite).
+    TuneCandidateComplete { result: TuneCandidateResult },
 }
 
 /// Wraps either a compare or perf result for `BenchmarkEvent::ModelComplete`.
