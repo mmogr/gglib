@@ -11,7 +11,7 @@
 
 use anyhow::Result;
 use gglib_core::domain::inference::InferenceConfig;
-use gglib_runtime::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;

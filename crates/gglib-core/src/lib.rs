@@ -8,6 +8,7 @@ pub mod events;
 pub mod normalize;
 pub mod paths;
 pub mod ports;
+pub mod server_config;
 pub mod services;
 pub mod settings;
 pub mod sse;

@@ -4,6 +4,7 @@
 //! Domain types live in `gglib-core`; this module handles the API layer mapping.
 
 use gglib_core::ports::{ModelRuntimeError, ModelSummary};
+use gglib_core::server_config::{resolve_context_size, ServerConfigOptions};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -247,10 +248,37 @@ pub struct ModelsResponse {
 
 impl ModelsResponse {
     /// Create a new ModelsResponse from a list of model summaries.
-    pub fn from_summaries(summaries: Vec<ModelSummary>) -> Self {
+    ///
+    /// Each model's `context_window` is resolved through the canonical
+    /// [`resolve_context_size`] fallback chain (per-model server_defaults →
+    /// global default), then clamped to the GGUF metadata ceiling so we never
+    /// advertise more context than the model file supports.
+    pub fn from_summaries(summaries: Vec<ModelSummary>, global_default_ctx: u64) -> Self {
+        let data: Vec<ModelInfo> = summaries
+            .into_iter()
+            .map(|summary| {
+                let effective_cap = resolve_context_size(&ServerConfigOptions {
+                    context_size: None,
+                    model_server_ctx: summary
+                        .server_defaults
+                        .as_ref()
+                        .and_then(|sd| sd.context_length),
+                    global_default_ctx: Some(global_default_ctx),
+                    ..Default::default()
+                });
+                ModelInfo {
+                    id: summary.name.clone(),
+                    object: "model".to_string(),
+                    created: summary.created_at,
+                    owned_by: "gglib".to_string(),
+                    description: Some(summary.description()),
+                    context_window: summary.context_length.map(|ctx| ctx.min(effective_cap)),
+                }
+            })
+            .collect();
         Self {
             object: "list".to_string(),
-            data: summaries.into_iter().map(ModelInfo::from).collect(),
+            data,
         }
     }
 }
@@ -281,18 +309,7 @@ pub struct ModelInfo {
     pub context_window: Option<u64>,
 }
 
-impl From<ModelSummary> for ModelInfo {
-    fn from(summary: ModelSummary) -> Self {
-        Self {
-            id: summary.name.clone(),
-            object: "model".to_string(),
-            created: summary.created_at,
-            owned_by: "gglib".to_string(),
-            description: Some(summary.description()),
-            context_window: summary.context_length,
-        }
-    }
-}
+
 
 // =============================================================================
 // Error Response Types
@@ -412,6 +429,7 @@ impl From<ModelRuntimeError> for ErrorResponse {
 mod tests {
     use super::*;
     use gglib_core::domain::ModelCapabilities;
+    use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 
     // =========================================================================
     // ErrorResponse construction tests
@@ -543,7 +561,7 @@ mod tests {
 
     #[test]
     fn models_response_from_empty_summaries() {
-        let resp = ModelsResponse::from_summaries(vec![]);
+        let resp = ModelsResponse::from_summaries(vec![], DEFAULT_CONTEXT_SIZE);
         assert_eq!(resp.object, "list");
         assert!(resp.data.is_empty());
     }
@@ -563,6 +581,7 @@ mod tests {
                 file_size: 4_000_000_000,
                 context_length: Some(8192),
                 inference_defaults: None,
+                server_defaults: None,
             },
             ModelSummary {
                 id: 2,
@@ -576,10 +595,11 @@ mod tests {
                 file_size: 7_000_000_000,
                 context_length: None,
                 inference_defaults: None,
+                server_defaults: None,
             },
         ];
 
-        let resp = ModelsResponse::from_summaries(summaries);
+        let resp = ModelsResponse::from_summaries(summaries, DEFAULT_CONTEXT_SIZE);
         assert_eq!(resp.data.len(), 2);
         assert_eq!(resp.data[0].id, "llama-3-8b-q4");
         assert_eq!(resp.data[0].object, "model");
@@ -590,19 +610,23 @@ mod tests {
 
     #[test]
     fn models_response_serializes_to_openai_format() {
-        let resp = ModelsResponse::from_summaries(vec![ModelSummary {
-            id: 1,
-            name: "test-model".into(),
-            tags: vec![],
-            capabilities: ModelCapabilities::empty(),
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-        }]);
+        let resp = ModelsResponse::from_summaries(
+            vec![ModelSummary {
+                id: 1,
+                name: "test-model".into(),
+                tags: vec![],
+                capabilities: ModelCapabilities::empty(),
+                param_count: "7B".into(),
+                quantization: None,
+                architecture: None,
+                created_at: 0,
+                file_size: 0,
+                context_length: None,
+                inference_defaults: None,
+                server_defaults: None,
+            }],
+            DEFAULT_CONTEXT_SIZE,
+        );
 
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["object"], "list");
@@ -629,9 +653,11 @@ mod tests {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            server_defaults: None,
         };
-        let info = ModelInfo::from(summary);
-        let desc = info.description.unwrap();
+        let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
+        let info = &resp.data[0];
+        let desc = info.description.as_ref().unwrap();
         assert!(desc.contains("llama"), "description should include arch");
         assert!(desc.contains("13B"), "description should include params");
         assert!(desc.contains("Q5_K_S"), "description should include quant");
@@ -651,9 +677,11 @@ mod tests {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            server_defaults: None,
         };
-        let info = ModelInfo::from(summary);
-        let desc = info.description.unwrap();
+        let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
+        let info = &resp.data[0];
+        let desc = info.description.as_ref().unwrap();
         assert!(
             desc.contains("unknown"),
             "missing fields should show 'unknown'"
@@ -674,9 +702,12 @@ mod tests {
             file_size: 0,
             context_length: Some(32_768),
             inference_defaults: None,
+            server_defaults: None,
         };
-        let info = ModelInfo::from(summary);
-        assert_eq!(info.context_window, Some(32_768));
+        let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
+        // With no server_defaults, resolve_context_size returns global default (4096).
+        // min(32768, 4096) = 4096.
+        assert_eq!(resp.data[0].context_window, Some(4096));
     }
 
     #[test]
@@ -693,9 +724,62 @@ mod tests {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            server_defaults: None,
         };
-        let info = ModelInfo::from(summary);
-        assert_eq!(info.context_window, None);
+        let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
+        assert_eq!(resp.data[0].context_window, None);
+    }
+
+    #[test]
+    fn models_response_respects_server_defaults_context_length() {
+        use gglib_core::domain::ServerConfig;
+
+        let summary = ModelSummary {
+            id: 1,
+            name: "server-ctx-model".into(),
+            tags: vec![],
+            capabilities: ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: Some(32_768), // GGUF ceiling is large
+            inference_defaults: None,
+            server_defaults: Some(ServerConfig {
+                context_length: Some(8192),
+            }),
+        };
+        // Global default is 4096, but server_defaults (8192) wins.
+        // min(32768, 8192) = 8192.
+        let resp = ModelsResponse::from_summaries(vec![summary], 4096);
+        assert_eq!(resp.data[0].context_window, Some(8192));
+    }
+
+    #[test]
+    fn models_response_falls_through_when_server_defaults_context_length_none() {
+        use gglib_core::domain::ServerConfig;
+
+        let summary = ModelSummary {
+            id: 1,
+            name: "fallback-ctx-model".into(),
+            tags: vec![],
+            capabilities: ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: Some(32_768),
+            inference_defaults: None,
+            server_defaults: Some(ServerConfig {
+                context_length: None, // exists but context_length is None
+            }),
+        };
+        // Falls through to global default (4096).
+        // min(32768, 4096) = 4096.
+        let resp = ModelsResponse::from_summaries(vec![summary], 4096);
+        assert_eq!(resp.data[0].context_window, Some(4096));
     }
 
     // =========================================================================

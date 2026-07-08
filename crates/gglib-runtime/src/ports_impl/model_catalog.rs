@@ -38,6 +38,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         file_size,
         context_length: m.context_length,
         inference_defaults: m.inference_defaults.clone(),
+        server_defaults: m.server_defaults.clone(),
     }
 }
 

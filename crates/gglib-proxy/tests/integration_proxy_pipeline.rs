@@ -200,6 +200,7 @@ impl TaggedCatalog {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            server_defaults: None,
         }
     }
 }

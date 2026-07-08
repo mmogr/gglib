@@ -269,12 +269,13 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 
     match state.catalog_port.list_models().await {
         Ok(models) => {
-            let mut response = ModelsResponse::from_summaries(models);
+            let mut response = ModelsResponse::from_summaries(models, state.default_ctx);
 
+            // Apply safety margin to every model's context_window.
             for model in &mut response.data {
                 model.context_window = model
                     .context_window
-                    .map(|ctx| advertised_context_window(ctx.min(state.default_ctx)));
+                    .map(advertised_context_window);
             }
 
             if let Some(target) = state.runtime_port.current_model().await

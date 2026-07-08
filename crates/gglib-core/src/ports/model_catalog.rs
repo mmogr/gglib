@@ -63,6 +63,8 @@ pub struct ModelSummary {
     /// request bodies, and by the agentic loop (`gglib chat`, `gglib q`) to
     /// apply model-specific sampling parameters.
     pub inference_defaults: Option<InferenceConfig>,
+    /// Per-model server defaults (`context_length`, etc.) from the database.
+    pub server_defaults: Option<ServerConfig>,
 }
 
 /// Launch specification for running a model.
