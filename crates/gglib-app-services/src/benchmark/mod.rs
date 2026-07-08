@@ -6,6 +6,7 @@ use anyhow::Result;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::domain::benchmark::tune::config::TuneConfig;
 use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
 use gglib_core::ports::{
     BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository,
@@ -15,6 +16,7 @@ mod compare;
 pub mod guard;
 pub mod mapper;
 mod perf;
+mod tune;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Dependency bundle
@@ -115,5 +117,20 @@ impl BenchmarkOps {
         cancel: CancellationToken,
     ) -> Result<()> {
         perf::run_perf(&self.deps, config, tx, cancel).await
+    }
+
+    /// Run a tune benchmark: sweep sampling parameters for one model against
+    /// an agentic tool-calling task suite, emit [`BenchmarkEvent`]s on `tx`.
+    ///
+    /// Unlike `run_compare`/`run_perf`, the model is loaded **once** for the
+    /// whole run — every candidate only varies per-request sampling
+    /// parameters, never the loaded llama-server process.
+    pub async fn run_tune(
+        &self,
+        config: TuneConfig,
+        tx: Sender<BenchmarkEvent>,
+        cancel: CancellationToken,
+    ) -> Result<()> {
+        tune::run_tune(&self.deps, config, tx, cancel).await
     }
 }
