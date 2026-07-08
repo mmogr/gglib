@@ -484,23 +484,40 @@ pub struct AppSettings {
 }
 
 /// Request body for updating application settings.
+///
+/// Every field is `Option<Option<T>>` with `serde_with::rust::double_option`
+/// so an explicit JSON `null` (clear the setting) is distinguished from an
+/// omitted key (leave unchanged) — the same pattern used by
+/// [`UpdateModelRequest::server_defaults`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSettingsRequest {
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_download_path: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_context_size: Option<Option<u64>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_port: Option<Option<u16>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub llama_base_port: Option<Option<u16>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_download_queue_size: Option<Option<u32>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub show_memory_fit_indicators: Option<Option<bool>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_tool_iterations: Option<Option<u32>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub max_stagnation_steps: Option<Option<u32>>,
     /// Default model ID for quick commands (e.g., `gglib question`).
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
     // Setup wizard
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub setup_completed: Option<Option<bool>>,
     // Title generation
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub title_generation_prompt: Option<Option<String>>,
 }
 

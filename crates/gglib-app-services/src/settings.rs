@@ -240,4 +240,61 @@ mod tests {
         let result = ops.get_system_memory().expect("should not error");
         assert!(result.is_none(), "expected None for suspiciously small RAM");
     }
+
+    /// JSON-boundary tests for `UpdateSettingsRequest`'s double-`Option`
+    /// fields, mirroring the coverage added for
+    /// `UpdateModelRequest.server_defaults`. Deserializes raw JSON (rather
+    /// than constructing the struct in Rust) to prove
+    /// `serde_with::rust::double_option` distinguishes an omitted key from
+    /// an explicit `null` at the layer that actually matters.
+    #[test]
+    fn update_settings_request_omitted_field_is_none() {
+        let req: UpdateSettingsRequest = serde_json::from_str("{}").unwrap();
+        assert_eq!(req.default_context_size, None, "omitted key must be None");
+        assert_eq!(req.default_download_path, None, "omitted key must be None");
+    }
+
+    #[test]
+    fn update_settings_request_explicit_null_is_some_none() {
+        let req: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"defaultContextSize": null}"#).unwrap();
+        assert_eq!(
+            req.default_context_size,
+            Some(None),
+            "explicit null must clear the setting (Some(None))"
+        );
+    }
+
+    #[test]
+    fn update_settings_request_populated_value_is_some_some() {
+        let req: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"defaultContextSize": 8192}"#).unwrap();
+        assert_eq!(req.default_context_size, Some(Some(8192)));
+    }
+
+    /// End-to-end: drive `SettingsOps::update` with a real
+    /// `serde_json::from_str` payload proving an explicit JSON `null`
+    /// actually clears the setting through the full service+DB round trip,
+    /// not just at deserialization.
+    #[tokio::test]
+    async fn update_settings_json_null_clears_default_download_path() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+
+        let set_req: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"defaultDownloadPath": "/custom/path"}"#).unwrap();
+        let updated = ops.update(set_req).await.expect("update should succeed");
+        assert_eq!(
+            updated.default_download_path.as_deref(),
+            Some("/custom/path")
+        );
+
+        let clear_req: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"defaultDownloadPath": null}"#).unwrap();
+        let cleared = ops.update(clear_req).await.expect("update should succeed");
+        assert!(
+            cleared.default_download_path.is_none(),
+            "explicit JSON null must clear default_download_path"
+        );
+    }
 }
