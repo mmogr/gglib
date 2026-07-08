@@ -62,12 +62,14 @@ fn run_type_to_str(t: &BenchmarkRunType) -> &'static str {
     match t {
         BenchmarkRunType::Compare => "compare",
         BenchmarkRunType::Perf => "perf",
+        BenchmarkRunType::Tune => "tune",
     }
 }
 
 fn str_to_run_type(s: &str) -> BenchmarkRunType {
     match s {
         "perf" => BenchmarkRunType::Perf,
+        "tune" => BenchmarkRunType::Tune,
         _ => BenchmarkRunType::Compare,
     }
 }

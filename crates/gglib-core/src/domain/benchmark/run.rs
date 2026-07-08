@@ -11,6 +11,9 @@ pub enum BenchmarkRunType {
     Compare,
     /// Performance run: `llama-bench` reports raw pp/tg tokens/sec.
     Perf,
+    /// Tuning run: sweep sampling parameters for one model against an
+    /// agentic tool-calling task suite to find the best-scoring settings.
+    Tune,
 }
 
 /// Lifecycle state of a benchmark run.
@@ -30,17 +33,18 @@ pub enum BenchmarkRunStatus {
 pub struct BenchmarkRun {
     /// Database ID of the run.
     pub id: i64,
-    /// Whether this is a compare or perf run.
+    /// Whether this is a compare, perf, or tune run.
     pub run_type: BenchmarkRunType,
     /// Current lifecycle state.
     pub status: BenchmarkRunStatus,
     /// Ordered list of model IDs that were (or will be) benchmarked.
     pub model_ids: Vec<i64>,
-    /// Prompt text used for compare runs (absent for perf runs).
+    /// Prompt text used for compare runs (absent for perf/tune runs).
     pub prompt_text: Option<String>,
     /// System prompt used for compare runs.
     pub system_prompt: Option<String>,
-    /// Serialised run configuration (`CompareConfig` or `PerfConfig` JSON).
+    /// Serialised run configuration (`CompareConfig`, `PerfConfig`, or
+    /// `TuneConfig` JSON).
     pub config_json: Option<String>,
     /// Error message if the run failed.
     pub error: Option<String>,
