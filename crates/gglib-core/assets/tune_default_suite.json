@@ -1,0 +1,249 @@
+[
+  {
+    "id": "single_call_weather",
+    "category": "single_call",
+    "user_prompt": "What's the current weather in Boston, MA?",
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "City and state, e.g. 'Boston, MA'"
+            }
+          },
+          "required": ["location"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "get_weather",
+          "required_args": { "location": "Boston, MA" },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "single_call_read_file",
+    "category": "single_call",
+    "user_prompt": "What does the file named config.json contain?",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "read_file",
+          "required_args": { "path": "config.json" },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "parallel_call_two_cities",
+    "category": "parallel_call",
+    "user_prompt": "What's the weather like in both Boston and Austin right now?",
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" }
+          },
+          "required": ["location"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "get_weather",
+          "required_args": { "location": "Boston" },
+          "ordered": false
+        },
+        {
+          "name": "get_weather",
+          "required_args": { "location": "Austin" },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "multi_turn_search_then_read",
+    "category": "multi_turn",
+    "user_prompt": "Find the file that defines the `AgentLoop` struct, then show me its contents.",
+    "tools": [
+      {
+        "name": "search_files",
+        "description": "Search the workspace for files matching a query.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "search_files",
+          "required_args": {},
+          "ordered": true
+        },
+        {
+          "name": "read_file",
+          "required_args": {},
+          "ordered": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "irrelevance_general_knowledge",
+    "category": "irrelevance",
+    "user_prompt": "What is the capital of France?",
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" }
+          },
+          "required": ["location"]
+        }
+      },
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": { "kind": "no_tool_call" }
+  },
+  {
+    "id": "irrelevance_no_matching_tool",
+    "category": "irrelevance",
+    "user_prompt": "Please send an email to my manager summarizing today's standup.",
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" }
+          },
+          "required": ["location"]
+        }
+      }
+    ],
+    "expected": { "kind": "no_tool_call" }
+  },
+  {
+    "id": "single_call_ambiguous_but_clear",
+    "category": "single_call",
+    "system_prompt": "You are a helpful coding assistant with access to filesystem tools.",
+    "user_prompt": "Check whether the file named README.md exists in the current directory.",
+    "tools": [
+      {
+        "name": "file_exists",
+        "description": "Check whether a file exists at the given path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "file_exists",
+          "required_args": { "path": "README.md" },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "parallel_call_multi_file_read",
+    "category": "parallel_call",
+    "user_prompt": "Show me the contents of both package.json and Cargo.toml.",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "read_file",
+          "required_args": { "path": "package.json" },
+          "ordered": false
+        },
+        {
+          "name": "read_file",
+          "required_args": { "path": "Cargo.toml" },
+          "ordered": false
+        }
+      ]
+    }
+  }
+]

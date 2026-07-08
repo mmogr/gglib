@@ -100,6 +100,29 @@ pub enum TaskSuite {
     Custom { tasks: Vec<TuneTask> },
 }
 
+impl TaskSuite {
+    /// Embedded JSON for the built-in default suite (BFCL-style: single-call,
+    /// parallel-call, multi-turn, and irrelevance-detection scenarios).
+    const DEFAULT_SUITE_JSON: &'static str =
+        include_str!("../../../../assets/tune_default_suite.json");
+
+    /// Resolve this suite into its concrete list of tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only for [`TaskSuite::Default`], and only if the
+    /// embedded JSON asset is malformed — that would indicate a build-time
+    /// bug in gglib itself, never a user input error. [`TaskSuite::Custom`]
+    /// never errors here (its tasks were already deserialized when the
+    /// `TaskSuite` value itself was parsed).
+    pub fn resolve(&self) -> Result<Vec<TuneTask>, serde_json::Error> {
+        match self {
+            Self::Default => serde_json::from_str(Self::DEFAULT_SUITE_JSON),
+            Self::Custom { tasks } => Ok(tasks.clone()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,5 +171,33 @@ mod tests {
         let json = serde_json::to_string(&suite).expect("serializes");
         let round_tripped: TaskSuite = serde_json::from_str(&json).expect("deserializes");
         assert!(matches!(round_tripped, TaskSuite::Custom { .. }));
+    }
+
+    /// Guards the embedded default suite asset: it must always parse, and
+    /// must cover all four BFCL-style categories so the pre-screen round
+    /// (which picks one `SingleCall` + one `Irrelevance` task) always has
+    /// candidates to draw from.
+    #[test]
+    fn default_suite_parses_and_covers_all_categories() {
+        let tasks = TaskSuite::Default.resolve().expect("embedded suite parses");
+        assert!(!tasks.is_empty(), "default suite must not be empty");
+
+        for category in [
+            TaskCategory::SingleCall,
+            TaskCategory::ParallelCall,
+            TaskCategory::MultiTurn,
+            TaskCategory::Irrelevance,
+        ] {
+            assert!(
+                tasks.iter().any(|t| t.category == category),
+                "default suite missing a task in category {category:?}"
+            );
+        }
+
+        // Task IDs must be unique — the tune service keys results by ID.
+        let mut ids: Vec<&str> = tasks.iter().map(|t| t.id.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), tasks.len(), "default suite has duplicate task IDs");
     }
 }
