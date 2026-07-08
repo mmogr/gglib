@@ -40,12 +40,18 @@ mod tests {
         };
         let json = serde_json::to_string(&source).expect("serializes");
         let round_tripped: CandidateSource = serde_json::from_str(&json).expect("deserializes");
-        assert!(matches!(round_tripped, CandidateSource::FamilyPreset { .. }));
+        assert!(matches!(
+            round_tripped,
+            CandidateSource::FamilyPreset { .. }
+        ));
     }
 
     #[test]
     fn candidate_source_unit_variants_round_trip() {
-        for source in [CandidateSource::UserGrid, CandidateSource::GgufAuthorDefault] {
+        for source in [
+            CandidateSource::UserGrid,
+            CandidateSource::GgufAuthorDefault,
+        ] {
             let json = serde_json::to_string(&source).expect("serializes");
             let _: CandidateSource = serde_json::from_str(&json).expect("deserializes");
         }

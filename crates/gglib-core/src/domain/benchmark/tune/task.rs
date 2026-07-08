@@ -164,16 +164,14 @@ mod tests {
             }],
         };
         let json = serde_json::to_string(&outcome).expect("serializes");
-        let round_tripped: ExpectedOutcome =
-            serde_json::from_str(&json).expect("deserializes");
+        let round_tripped: ExpectedOutcome = serde_json::from_str(&json).expect("deserializes");
         assert!(matches!(round_tripped, ExpectedOutcome::ToolCalls { .. }));
     }
 
     #[test]
     fn expected_outcome_no_tool_call_round_trips() {
         let json = serde_json::to_string(&ExpectedOutcome::NoToolCall).expect("serializes");
-        let round_tripped: ExpectedOutcome =
-            serde_json::from_str(&json).expect("deserializes");
+        let round_tripped: ExpectedOutcome = serde_json::from_str(&json).expect("deserializes");
         assert!(matches!(round_tripped, ExpectedOutcome::NoToolCall));
     }
 
@@ -221,7 +219,11 @@ mod tests {
         let mut ids: Vec<&str> = tasks.iter().map(|t| t.id.as_str()).collect();
         ids.sort_unstable();
         ids.dedup();
-        assert_eq!(ids.len(), tasks.len(), "default suite has duplicate task IDs");
+        assert_eq!(
+            ids.len(),
+            tasks.len(),
+            "default suite has duplicate task IDs"
+        );
     }
 
     /// The long-context task must actually carry a non-trivial pre-filled
