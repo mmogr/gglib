@@ -158,30 +158,19 @@ impl AppEvent {
     /// Build a `ServerStarted` event from a `ServerSummary`.
     pub fn from_server_started(server: &ServerSummary) -> Self {
         let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        Self::ServerStarted {
-            model_id,
-            model_name: server.model_name.clone(),
-            port: server.port,
-        }
+        Self::server_started(model_id, &server.model_name, server.port)
     }
 
     /// Build a `ServerStopped` event from a `ServerSummary`.
     pub fn from_server_stopped(server: &ServerSummary) -> Self {
         let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        Self::ServerStopped {
-            model_id,
-            model_name: server.model_name.clone(),
-        }
+        Self::server_stopped(model_id, &server.model_name)
     }
 
     /// Build a `ServerError` event from a `ServerSummary`.
     pub fn from_server_error(server: &ServerSummary, error: &str) -> Self {
         let model_id = server.model_id.parse::<i64>().ok();
-        Self::ServerError {
-            model_id,
-            model_name: server.model_name.clone(),
-            error: error.to_string(),
-        }
+        Self::server_error(model_id, &server.model_name, error)
     }
 
     /// Build a `ServerSnapshot` event from a slice of `ServerSummary`.
@@ -200,6 +189,6 @@ impl AppEvent {
                 healthy: s.healthy.unwrap_or(false),
             })
             .collect();
-        Self::ServerSnapshot { servers: entries }
+        Self::server_snapshot(entries)
     }
 }
