@@ -15,6 +15,7 @@ use tokio_test as _;
 mod test_support;
 
 mod error;
+mod helpers;
 
 pub mod benchmark;
 pub mod council_approvals;
