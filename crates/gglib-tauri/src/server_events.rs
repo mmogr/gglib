@@ -25,12 +25,9 @@ impl TauriServerEvents {
     }
 }
 
-// NOTE: This adapter mirrors the Axum ServerEvents implementation (gglib-axum/src/sse.rs).
-// All server lifecycle events for Tauri MUST flow through this port implementation.
 impl ServerEvents for TauriServerEvents {
     fn started(&self, server: &ServerSummary) {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        let event = AppEvent::server_started(model_id, &server.model_name, server.port);
+        let event = AppEvent::from_server_started(server);
         emit_or_log(&self.app, event.event_name(), &event);
     }
 
@@ -44,35 +41,17 @@ impl ServerEvents for TauriServerEvents {
     }
 
     fn stopped(&self, server: &ServerSummary) {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        let event = AppEvent::server_stopped(model_id, &server.model_name);
+        let event = AppEvent::from_server_stopped(server);
         emit_or_log(&self.app, event.event_name(), &event);
     }
 
     fn snapshot(&self, servers: &[ServerSummary]) {
-        let started_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        let entries: Vec<gglib_core::events::ServerSnapshotEntry> = servers
-            .iter()
-            .map(|s| gglib_core::events::ServerSnapshotEntry {
-                model_id: s.model_id.parse::<i64>().unwrap_or(0),
-                model_name: s.model_name.clone(),
-                port: s.port,
-                started_at,
-                healthy: s.healthy.unwrap_or(false),
-            })
-            .collect();
-
-        let event = AppEvent::server_snapshot(entries);
+        let event = AppEvent::from_server_snapshot(servers);
         emit_or_log(&self.app, event.event_name(), &event);
     }
 
     fn error(&self, server: &ServerSummary, error: &str) {
-        let model_id = server.model_id.parse::<i64>().ok();
-        let event = AppEvent::server_error(model_id, &server.model_name, error);
+        let event = AppEvent::from_server_error(server, error);
         emit_or_log(&self.app, event.event_name(), &event);
     }
 }
