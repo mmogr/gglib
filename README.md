@@ -691,6 +691,23 @@ gglib bundles a managed Python helper for [hf_xet](https://github.com/huggingfac
 
 </details>
 
+## Troubleshooting & Debugging
+
+<details>
+<summary><strong>Verbose logging</strong></summary>
+
+Use `-v` / `--verbose` on any command to enable debug-level logging with file output:
+
+```bash
+gglib proxy -v
+```
+
+- **Log level:** `debug` (all targets). Override with `RUST_LOG=trace gglib proxy -v` for finer control.
+- **Log files:** Written to logs in development builds, or `<data_root>/logs/` in release builds (e.g., `~/.local/share/gglib/logs/`). Files rotate daily.
+- The `-v` flag is global — it works with any subcommand (`proxy`, `serve`, `question`, etc.).
+
+</details>
+
 ## Documentation
 
 **[View Full API Documentation →](https://mmogr.github.io/gglib)**

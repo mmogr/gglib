@@ -3,13 +3,13 @@
 //! Design:
 //! - A single layered subscriber (stdout + daily rotating file) is installed once via [`OnceLock`].
 //! - Calls to [`init_tracing`] are idempotent — subsequent calls return `Ok(())`.
-//! - Log directory: logs in debug builds, `data_root()/logs` in release.
+//! - Log directory: `./logs/` in debug builds, `data_root()/logs` in release.
 //! - Filter: `RUST_LOG` env var wins; otherwise `"debug"` if verbose, else `"info"`.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[allow(unused_imports)] // only used in release builds via cfg(not(debug_assertions))
 use crate::paths::data_root;
@@ -21,19 +21,22 @@ fn resolve_log_dir() -> PathBuf {
     let dir = PathBuf::from("./logs");
 
     #[cfg(not(debug_assertions))]
-    let dir = data_root().unwrap_or_else(|_| PathBuf::from("./logs")).join("logs");
+    let dir = data_root()
+        .unwrap_or_else(|_| PathBuf::from("./logs"))
+        .join("logs");
 
     std::fs::create_dir_all(&dir).ok();
     dir
 }
 
 fn build_env_filter(verbose: bool) -> EnvFilter {
-    if let Ok(log_env) = std::env::var("RUST_LOG") {
-        EnvFilter::try_new(log_env).unwrap_or_default()
-    } else {
-        let level = if verbose { "debug" } else { "info" };
-        EnvFilter::try_new(level).unwrap_or_default()
-    }
+    std::env::var("RUST_LOG").map_or_else(
+        |_| {
+            let level = if verbose { "debug" } else { "info" };
+            EnvFilter::try_new(level).unwrap_or_default()
+        },
+        |log_env| EnvFilter::try_new(log_env).unwrap_or_default(),
+    )
 }
 
 /// Initialize the global tracing subscriber.
