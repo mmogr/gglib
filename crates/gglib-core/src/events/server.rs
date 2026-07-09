@@ -154,4 +154,52 @@ impl AppEvent {
     pub const fn server_snapshot(servers: Vec<ServerSnapshotEntry>) -> Self {
         Self::ServerSnapshot { servers }
     }
+
+    /// Build a `ServerStarted` event from a `ServerSummary`.
+    pub fn from_server_started(server: &ServerSummary) -> Self {
+        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
+        Self::ServerStarted {
+            model_id,
+            model_name: server.model_name.clone(),
+            port: server.port,
+        }
+    }
+
+    /// Build a `ServerStopped` event from a `ServerSummary`.
+    pub fn from_server_stopped(server: &ServerSummary) -> Self {
+        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
+        Self::ServerStopped {
+            model_id,
+            model_name: server.model_name.clone(),
+        }
+    }
+
+    /// Build a `ServerError` event from a `ServerSummary`.
+    pub fn from_server_error(server: &ServerSummary, error: &str) -> Self {
+        let model_id = server.model_id.parse::<i64>().ok();
+        Self::ServerError {
+            model_id,
+            model_name: server.model_name.clone(),
+            error: error.to_string(),
+        }
+    }
+
+    /// Build a `ServerSnapshot` event from a slice of `ServerSummary`.
+    pub fn from_server_snapshot(servers: &[ServerSummary]) -> Self {
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let entries: Vec<ServerSnapshotEntry> = servers
+            .iter()
+            .map(|s| ServerSnapshotEntry {
+                model_id: s.model_id.parse::<i64>().unwrap_or(0),
+                model_name: s.model_name.clone(),
+                port: s.port,
+                started_at,
+                healthy: s.healthy.unwrap_or(false),
+            })
+            .collect();
+        Self::ServerSnapshot { servers: entries }
+    }
 }
