@@ -212,7 +212,11 @@ mod tests {
         let server = make_server("srv-1", "42", "test-model", 8080);
         let event = AppEvent::from_server_started(&server);
         match event {
-            AppEvent::ServerStarted { model_id, model_name, port } => {
+            AppEvent::ServerStarted {
+                model_id,
+                model_name,
+                port,
+            } => {
                 assert_eq!(model_id, 42);
                 assert_eq!(model_name, "test-model");
                 assert_eq!(port, 8080);
@@ -226,7 +230,10 @@ mod tests {
         let server = make_server("srv-1", "42", "test-model", 8080);
         let event = AppEvent::from_server_stopped(&server);
         match event {
-            AppEvent::ServerStopped { model_id, model_name } => {
+            AppEvent::ServerStopped {
+                model_id,
+                model_name,
+            } => {
                 assert_eq!(model_id, 42);
                 assert_eq!(model_name, "test-model");
             }
@@ -239,7 +246,11 @@ mod tests {
         let server = make_server("srv-1", "42", "test-model", 8080);
         let event = AppEvent::from_server_error(&server, "something failed");
         match event {
-            AppEvent::ServerError { model_id, model_name, error } => {
+            AppEvent::ServerError {
+                model_id,
+                model_name,
+                error,
+            } => {
                 assert_eq!(model_id, Some(42));
                 assert_eq!(model_name, "test-model");
                 assert_eq!(error, "something failed");
@@ -253,7 +264,11 @@ mod tests {
         let server = make_server("srv-1", "abc", "test-model", 8080);
         let event = AppEvent::from_server_error(&server, "something failed");
         match event {
-            AppEvent::ServerError { model_id, model_name, error } => {
+            AppEvent::ServerError {
+                model_id,
+                model_name,
+                error,
+            } => {
                 assert_eq!(model_id, None);
                 assert_eq!(model_name, "test-model");
                 assert_eq!(error, "something failed");
