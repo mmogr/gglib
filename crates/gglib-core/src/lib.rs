@@ -12,6 +12,7 @@ pub mod server_config;
 pub mod services;
 pub mod settings;
 pub mod sse;
+pub mod telemetry;
 pub mod utils;
 
 // Re-export commonly used types for convenience

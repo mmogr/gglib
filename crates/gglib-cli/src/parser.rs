@@ -38,7 +38,7 @@ pub struct Cli {
     #[arg(long = "models-dir", global = true)]
     pub models_dir: Option<String>,
 
-    /// Enable verbose/debug output
+    /// Enable verbose logging (debug level + file output to logs/)
     #[arg(short = 'v', long = "verbose", global = true)]
     pub verbose: bool,
 

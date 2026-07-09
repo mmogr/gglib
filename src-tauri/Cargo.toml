@@ -32,8 +32,6 @@ tokio.workspace = true
 # Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed
 dotenvy.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-appender = "0.2"
 open.workspace = true
 
 [features]

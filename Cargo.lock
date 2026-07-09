@@ -1951,8 +1951,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tokio",
  "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2108,6 +2106,8 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
  "uuid",
 ]
 

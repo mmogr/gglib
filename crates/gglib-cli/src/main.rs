@@ -12,10 +12,10 @@ use gglib_cli::{Cli, CliConfig, bootstrap, dispatch};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
 
     let cli = Cli::parse();
+    gglib_core::telemetry::init_tracing(cli.verbose)?;
     let config = CliConfig::with_defaults()?;
     let ctx = bootstrap(config).await?;
 
