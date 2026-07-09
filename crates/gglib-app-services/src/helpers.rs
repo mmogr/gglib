@@ -7,7 +7,7 @@ use gglib_core::services::ModelService;
 use crate::error::GuiError;
 
 /// Resolve model by ID, returning GUI error if not found.
-pub async fn resolve_model(models: &ModelService, id: i64) -> Result<Model, GuiError> {
+pub(crate) async fn resolve_model(models: &ModelService, id: i64) -> Result<Model, GuiError> {
     models
         .get_by_id(id)
         .await
@@ -19,7 +19,7 @@ pub async fn resolve_model(models: &ModelService, id: i64) -> Result<Model, GuiE
 }
 
 /// Find a running process handle for a model.
-pub async fn find_handle(runner: &dyn ProcessRunner, model_id: i64) -> Option<ProcessHandle> {
+pub(crate) async fn find_handle(runner: &dyn ProcessRunner, model_id: i64) -> Option<ProcessHandle> {
     match runner.list_running().await {
         Ok(handles) => handles.into_iter().find(|h| h.model_id == model_id),
         Err(_) => None,
