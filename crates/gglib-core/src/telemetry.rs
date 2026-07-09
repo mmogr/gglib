@@ -4,7 +4,7 @@
 //! - A single layered subscriber (stdout + daily rotating file) is installed once via [`OnceLock`].
 //! - Calls to [`init_tracing`] are idempotent — subsequent calls return `Ok(())`.
 //! - Log directory: `./logs/` in debug builds, `data_root()/logs` in release.
-//! - Filter: `RUST_LOG` env var wins; otherwise `"debug"` if verbose, else `"info"`.
+//! - Filter: `RUST_LOG` env var wins; otherwise `"debug"` if verbose, else `"warn"`.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -32,7 +32,7 @@ fn resolve_log_dir() -> PathBuf {
 fn build_env_filter(verbose: bool) -> EnvFilter {
     std::env::var("RUST_LOG").map_or_else(
         |_| {
-            let level = if verbose { "debug" } else { "info" };
+            let level = if verbose { "debug" } else { "warn" };
             EnvFilter::try_new(level).unwrap_or_default()
         },
         |log_env| EnvFilter::try_new(log_env).unwrap_or_default(),
