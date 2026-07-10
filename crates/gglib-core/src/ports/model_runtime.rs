@@ -42,7 +42,7 @@ impl RunningTarget {
 }
 
 /// Errors that can occur during model runtime operations.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ModelRuntimeError {
     /// The requested model was not found in the catalog.
     #[error("Model not found: {0}")]

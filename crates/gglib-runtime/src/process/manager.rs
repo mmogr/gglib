@@ -13,7 +13,6 @@ use gglib_core::ports::{
 };
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -44,29 +43,9 @@ pub enum ProcessStrategy {
         catalog: Arc<dyn ModelCatalogPort>,
         /// Currently running model state.
         current: RwLock<Option<CurrentModelState>>,
-        /// True if a model is currently being loaded (prevents thrashing).
-        loading: AtomicBool,
+        /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
+        loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
     },
-}
-
-/// Scope guard that clears the loading flag on drop.
-///
-/// This ensures the loading flag is always cleared, even on error paths.
-struct LoadingGuard<'a> {
-    loading: &'a AtomicBool,
-}
-
-impl<'a> LoadingGuard<'a> {
-    fn new(loading: &'a AtomicBool) -> Self {
-        loading.store(true, Ordering::SeqCst);
-        Self { loading }
-    }
-}
-
-impl Drop for LoadingGuard<'_> {
-    fn drop(&mut self) {
-        self.loading.store(false, Ordering::SeqCst);
-    }
 }
 
 /// Unified process manager for llama-server instances.
@@ -111,7 +90,7 @@ impl ProcessManager {
             strategy: ProcessStrategy::SingleSwap {
                 catalog,
                 current: RwLock::new(None),
-                loading: AtomicBool::new(false),
+                loading: Arc::new(std::sync::RwLock::new(None)),
             },
         }
     }
@@ -175,7 +154,7 @@ impl ProcessManager {
         num_ctx: Option<u64>,
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        let (catalog, current_lock, loading) = match &self.strategy {
+        let (catalog, current_lock, _loading) = match &self.strategy {
             ProcessStrategy::SingleSwap {
                 catalog,
                 current,
@@ -189,9 +168,7 @@ impl ProcessManager {
         };
 
         // 1. If already loading, return error immediately (prevents thrashing)
-        if loading.load(Ordering::SeqCst) {
-            return Err(ModelRuntimeError::ModelLoading);
-        }
+        // NOTE: This check is removed in Step 3 — replaced by watch channel waiter logic.
 
         // 2. RESOLVE MODEL FOR LAUNCH to get model_id AND file_path
         let launch_spec = catalog
@@ -262,8 +239,7 @@ impl ProcessManager {
         }
 
         // 4. Need restart: different model_id OR context mismatch
-        // Use LoadingGuard to ensure flag is cleared on any exit path
-        let _guard = LoadingGuard::new(loading);
+        // NOTE: LoadingGuard replaced by watch channel in Step 3 (driver/waiter logic).
 
         // Stop current model if running
         {
@@ -438,7 +414,9 @@ impl ProcessManager {
     #[must_use]
     pub fn is_loading(&self) -> bool {
         match &self.strategy {
-            ProcessStrategy::SingleSwap { loading, .. } => loading.load(Ordering::SeqCst),
+            ProcessStrategy::SingleSwap { loading, .. } => {
+                loading.read().ok().map(|s| s.is_some()).unwrap_or(false)
+            }
             ProcessStrategy::Concurrent { .. } => false,
         }
     }

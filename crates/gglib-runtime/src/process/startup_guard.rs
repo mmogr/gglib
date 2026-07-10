@@ -1,0 +1,181 @@
+//! Concurrent startup guard using tokio::sync::watch channels.
+//!
+//! Replaces the `AtomicBool` loading flag with a watch-channel-based mechanism
+//! so that concurrent requests during model startup WAIT for the result instead
+//! of immediately failing with a generic "model_loading" error.
+
+use std::sync::{Arc, RwLock};
+
+use gglib_core::ports::{ModelRuntimeError, RunningTarget};
+use tokio::sync::watch;
+use tokio::time::{timeout, Duration};
+
+/// Default timeout for waiters awaiting model startup (120s health check + 30s margin).
+pub const STARTUP_WAIT_TIMEOUT: Duration = Duration::from_secs(150);
+
+/// Type alias for the shared loading slot.
+pub type LoadingSlot = Arc<RwLock<Option<StartupState>>>;
+
+/// Holds the watch channel receiver for an in-progress model startup.
+/// Stored inside `ProcessStrategy::SingleSwap.loading` (behind `Arc<RwLock>`).
+pub struct StartupState {
+    receiver: watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+}
+
+impl StartupState {
+    /// Create a new startup state, guard, and an initiator receiver.
+    ///
+    /// - `state` is stored in the loading slot.
+    /// - `guard` is held by the spawned driver task.
+    /// - `initiator_rx` is for the caller that triggered the start (waits like everyone else).
+    pub fn new(
+        slot: LoadingSlot,
+    ) -> (
+        Self,
+        ModelStartupGuard,
+        watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+    ) {
+        let initial = Err(ModelRuntimeError::ModelLoading);
+        let (tx, rx) = watch::channel(initial);
+        // Subscribe BEFORE inserting into slot — initiator sees all sends.
+        let initiator_rx = tx.subscribe();
+        let state = Self { receiver: rx };
+        let guard = ModelStartupGuard {
+            sender: Some(tx),
+            slot,
+        };
+        (state, guard, initiator_rx)
+    }
+
+    /// Clone a receiver for a waiter to subscribe.
+    pub fn subscribe(&self) -> watch::Receiver<Result<RunningTarget, ModelRuntimeError>> {
+        self.receiver.clone()
+    }
+}
+
+/// Result of the atomic check-and-insert on the loading slot.
+pub enum StartupDisposition {
+    /// Another driver is active — wait for its result.
+    Waiter(watch::Receiver<Result<RunningTarget, ModelRuntimeError>>),
+    /// We claimed the slot — spawn the driver task and wait via our own receiver.
+    Initiator {
+        guard: ModelStartupGuard,
+        self_rx: watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+    },
+}
+
+impl StartupDisposition {
+    /// Perform the atomic check-and-insert on the loading slot.
+    ///
+    /// Returns `Waiter` if a driver is already active (subscribes to its channel).
+    /// Returns `Initiator` if we claimed the slot (includes guard + our own receiver).
+    pub fn check(slot: &LoadingSlot) -> Self {
+        let mut s = slot.write().unwrap_or_else(|p| p.into_inner());
+        match &*s {
+            Some(state) => StartupDisposition::Waiter(state.subscribe()),
+            None => {
+                let (state, guard, self_rx) = StartupState::new(slot.clone());
+                *s = Some(state);
+                StartupDisposition::Initiator { guard, self_rx }
+            }
+        }
+    }
+}
+
+/// Single consolidated RAII guard held by the spawned driver task.
+///
+/// - `succeed()` / `fail()` — sends Result through channel, then clears the loading slot.
+/// - `drop()` (panic/cancellation) — sends Internal error, then clears the slot.
+///
+/// Order is fixed: notify first, then clear. A new driver cannot start until the slot
+/// is cleared, so waiters always receive a result before any replacement startup begins.
+pub struct ModelStartupGuard {
+    sender: Option<watch::Sender<Result<RunningTarget, ModelRuntimeError>>>,
+    slot: LoadingSlot,
+}
+
+impl ModelStartupGuard {
+    /// Send success result, clear the slot. Consumes sender so drop is a no-op.
+    pub fn succeed(
+        mut self,
+        target: RunningTarget,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        if let Some(tx) = self.sender.take() {
+            let _ = tx.send(Ok(target.clone()));
+        }
+        // Clear the slot so future calls can start fresh.
+        let mut slot = self.slot.write().unwrap_or_else(|p| p.into_inner());
+        *slot = None;
+        Ok(target)
+    }
+
+    /// Send error result, clear the slot. Consumes sender so drop is a no-op.
+    pub fn fail(mut self, err: ModelRuntimeError) -> Result<RunningTarget, ModelRuntimeError> {
+        if let Some(tx) = self.sender.take() {
+            let _ = tx.send(Err(err.clone()));
+        }
+        let mut slot = self.slot.write().unwrap_or_else(|p| p.into_inner());
+        *slot = None;
+        Err(err)
+    }
+}
+
+impl Drop for ModelStartupGuard {
+    fn drop(&mut self) {
+        // Only clear the slot if sender was not taken (panic/cancellation path).
+        // If succeed()/fail() already ran, another driver may own the slot now — don't wipe it.
+        if let Some(tx) = self.sender.take() {
+            let _ = tx.send(Err(ModelRuntimeError::Internal(
+                "Startup driver panicked or was dropped unexpectedly".to_string(),
+            )));
+            let mut slot = self.slot.write().unwrap_or_else(|p| p.into_inner());
+            *slot = None;
+        }
+    }
+}
+
+/// Spawn the actual startup work in a detached task, wiring the guard for notification.
+///
+/// The spawned task runs `work`. On success it calls `guard.succeed()`, on error
+/// `guard.fail()`. If the task panics, `guard::drop()` sends an Internal error.
+///
+/// The caller (initiator or waiter) should then `wait_for_startup()` on its own receiver.
+pub fn drive<F>(guard: ModelStartupGuard, work: F)
+where
+    F: std::future::Future<Output = Result<RunningTarget, ModelRuntimeError>> + Send + 'static,
+    F::Output: Send + 'static,
+{
+    tokio::spawn(async move {
+        let result = work.await;
+        match result {
+            Ok(target) => {
+                let _ = guard.succeed(target);
+            }
+            Err(err) => {
+                let _ = guard.fail(err);
+            }
+        }
+    });
+}
+
+/// Wait for the startup result with a timeout.
+pub async fn wait_for_startup(
+    mut rx: watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+    timeout_duration: Duration,
+) -> Result<RunningTarget, ModelRuntimeError> {
+    match timeout(timeout_duration, rx.changed()).await {
+        Ok(Ok(())) => {
+            // Channel updated — retrieve the result.
+            rx.borrow_and_update().clone()
+        }
+        Ok(Err(_)) => {
+            // Channel closed — retrieve the last value (preserves specific errors).
+            rx.borrow_and_update().clone()
+        }
+        Err(_) => {
+            Err(ModelRuntimeError::Internal(
+                "Startup timed out — driver may be stuck".to_string(),
+            ))
+        }
+    }
+}
