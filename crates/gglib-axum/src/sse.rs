@@ -109,8 +109,7 @@ impl AxumServerEvents {
 
 impl ServerEvents for AxumServerEvents {
     fn started(&self, server: &ServerSummary) {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        let event = AppEvent::server_started(model_id, &server.model_name, server.port);
+        let event = AppEvent::from_server_started(server);
         self.broadcaster.emit(event);
     }
 
@@ -125,33 +124,17 @@ impl ServerEvents for AxumServerEvents {
     }
 
     fn stopped(&self, server: &ServerSummary) {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        let event = AppEvent::server_stopped(model_id, &server.model_name);
+        let event = AppEvent::from_server_stopped(server);
         self.broadcaster.emit(event);
     }
 
     fn snapshot(&self, servers: &[ServerSummary]) {
-        let entries: Vec<gglib_core::events::ServerSnapshotEntry> = servers
-            .iter()
-            .map(|s| gglib_core::events::ServerSnapshotEntry {
-                model_id: s.model_id.parse::<i64>().unwrap_or(0),
-                model_name: s.model_name.clone(),
-                port: s.port,
-                started_at: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                healthy: s.healthy.unwrap_or(false),
-            })
-            .collect();
-
-        let event = AppEvent::server_snapshot(entries);
+        let event = AppEvent::from_server_snapshot(servers);
         self.broadcaster.emit(event);
     }
 
     fn error(&self, server: &ServerSummary, error: &str) {
-        let model_id = server.model_id.parse::<i64>().ok();
-        let event = AppEvent::server_error(model_id, &server.model_name, error);
+        let event = AppEvent::from_server_error(server, error);
         self.broadcaster.emit(event);
     }
 }

@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gglib_core::domain::Model;
 use gglib_core::ports::{GgufParserPort, ProcessRunner};
 use gglib_core::services::AppCore;
 use gglib_core::{
@@ -34,20 +33,6 @@ impl ModelOps {
         Self { deps }
     }
 
-    /// Resolve model by ID, returning GUI error if not found.
-    async fn resolve_model(&self, id: i64) -> Result<Model, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_by_id(id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to query model: {e}")))?
-            .ok_or_else(|| GuiError::NotFound {
-                entity: "model",
-                id: id.to_string(),
-            })
-    }
-
     /// Check if a model is currently being served.
     async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
         match self.deps.runner.list_running().await {
@@ -60,14 +45,6 @@ impl ModelOps {
                 (false, None)
             }
             Err(_) => (false, None),
-        }
-    }
-
-    /// Find a running process handle for a model.
-    async fn find_handle(&self, model_id: i64) -> Option<gglib_core::ports::ProcessHandle> {
-        match self.deps.runner.list_running().await {
-            Ok(handles) => handles.into_iter().find(|h| h.model_id == model_id),
-            Err(_) => None,
         }
     }
 
@@ -117,7 +94,7 @@ impl ModelOps {
 
     /// Get a specific model by ID.
     pub async fn get(&self, id: i64) -> Result<GuiModel, GuiError> {
-        let model = self.resolve_model(id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
         Ok(GuiModel::from_model(model, is_serving, port))
     }
@@ -129,7 +106,7 @@ impl ModelOps {
     /// provenance.  This is the shared data source for the CLI
     /// `model inspect` command and the `GET /api/models/:id/detail` route.
     pub async fn get_detail(&self, id: i64) -> Result<ModelDetailDto, GuiError> {
-        let model = self.resolve_model(id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
         Ok(ModelDetailDto::from_model(model, is_serving, port))
     }
@@ -162,7 +139,7 @@ impl ModelOps {
 
     /// Update a model in the database.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
-        let mut model = self.resolve_model(id).await?;
+        let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         if let Some(name) = request.name {
             model.name = name;
@@ -194,9 +171,9 @@ impl ModelOps {
 
     /// Remove a model from the database.
     pub async fn remove(&self, id: i64, request: RemoveModelRequest) -> Result<String, GuiError> {
-        let model = self.resolve_model(id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        if let Some(handle) = self.find_handle(id).await {
+        if let Some(handle) = crate::helpers::find_handle(&*self.deps.runner, id).await {
             if !request.force {
                 return Err(GuiError::Conflict(format!(
                     "Model is currently serving on port {}. Stop the server first or use force=true",
@@ -297,7 +274,7 @@ impl ModelOps {
         id: i64,
         request: SetCapabilitiesRequest,
     ) -> Result<GuiModel, GuiError> {
-        let mut model = self.resolve_model(id).await?;
+        let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         let mut caps = model.capabilities;
 

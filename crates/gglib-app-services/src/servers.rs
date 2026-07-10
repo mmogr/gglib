@@ -143,28 +143,6 @@ impl ServerOps {
         }
     }
 
-    /// Resolve model by ID, returning error if not found.
-    async fn resolve_model(&self, id: i64) -> Result<Model, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_by_id(id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to query model: {e}")))?
-            .ok_or_else(|| GuiError::NotFound {
-                entity: "model",
-                id: id.to_string(),
-            })
-    }
-
-    /// Find a running process handle for a model.
-    async fn find_handle(&self, model_id: i64) -> Option<ProcessHandle> {
-        match self.deps.runner.list_running().await {
-            Ok(handles) => handles.into_iter().find(|h| h.model_id == model_id),
-            Err(_) => None,
-        }
-    }
-
     /// Build a [`ServerConfig`] from a model and GUI request.
     ///
     /// Delegates to [`build_server_config`] so that this path generates
@@ -210,14 +188,14 @@ impl ServerOps {
     ) -> Result<StartServerResponse, GuiError> {
         debug!(model_id = %id, "Starting server for model");
 
-        if let Some(handle) = self.find_handle(id).await {
+        if let Some(handle) = crate::helpers::find_handle(&*self.deps.runner, id).await {
             return Ok(StartServerResponse {
                 port: handle.port,
                 message: format!("Server already running on port {}", handle.port),
             });
         }
 
-        let model = self.resolve_model(id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         if !model.file_path.exists() {
             return Err(GuiError::ValidationFailed(format!(
@@ -390,8 +368,7 @@ impl ServerOps {
     pub async fn stop(&self, id: i64) -> Result<String, GuiError> {
         debug!(model_id = %id, "Stopping server");
 
-        let handle = self
-            .find_handle(id)
+        let handle = crate::helpers::find_handle(&*self.deps.runner, id)
             .await
             .ok_or_else(|| GuiError::NotFound {
                 entity: "server",
@@ -399,7 +376,7 @@ impl ServerOps {
             })?;
 
         // Get model info for event emission
-        let model = self.resolve_model(id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         // Emit stopping event
         let summary = ServerSummary {
@@ -546,7 +523,7 @@ impl ServerOps {
         use gglib_core::domain::ModelCapabilities;
         use gglib_core::ports::{ModelSource, ToolSupportDetectionInput};
 
-        let model = self.resolve_model(model_id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), model_id).await?;
 
         // Primary boolean comes from the authoritative DB capabilities bitflag.
         let supports_tool_calls = model

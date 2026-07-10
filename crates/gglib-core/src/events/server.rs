@@ -154,4 +154,145 @@ impl AppEvent {
     pub const fn server_snapshot(servers: Vec<ServerSnapshotEntry>) -> Self {
         Self::ServerSnapshot { servers }
     }
+
+    /// Build a `ServerStarted` event from a `ServerSummary`.
+    pub fn from_server_started(server: &ServerSummary) -> Self {
+        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
+        Self::server_started(model_id, &server.model_name, server.port)
+    }
+
+    /// Build a `ServerStopped` event from a `ServerSummary`.
+    pub fn from_server_stopped(server: &ServerSummary) -> Self {
+        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
+        Self::server_stopped(model_id, &server.model_name)
+    }
+
+    /// Build a `ServerError` event from a `ServerSummary`.
+    pub fn from_server_error(server: &ServerSummary, error: &str) -> Self {
+        let model_id = server.model_id.parse::<i64>().ok();
+        Self::server_error(model_id, &server.model_name, error)
+    }
+
+    /// Build a `ServerSnapshot` event from a slice of `ServerSummary`.
+    pub fn from_server_snapshot(servers: &[ServerSummary]) -> Self {
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let entries: Vec<ServerSnapshotEntry> = servers
+            .iter()
+            .map(|s| ServerSnapshotEntry {
+                model_id: s.model_id.parse::<i64>().unwrap_or(0),
+                model_name: s.model_name.clone(),
+                port: s.port,
+                started_at,
+                healthy: s.healthy.unwrap_or(false),
+            })
+            .collect();
+        Self::server_snapshot(entries)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_server(id: &str, model_id: &str, name: &str, port: u16) -> ServerSummary {
+        ServerSummary {
+            id: id.to_string(),
+            model_id: model_id.to_string(),
+            model_name: name.to_string(),
+            port,
+            healthy: Some(true),
+        }
+    }
+
+    #[test]
+    fn test_from_server_started() {
+        let server = make_server("srv-1", "42", "test-model", 8080);
+        let event = AppEvent::from_server_started(&server);
+        match event {
+            AppEvent::ServerStarted {
+                model_id,
+                model_name,
+                port,
+            } => {
+                assert_eq!(model_id, 42);
+                assert_eq!(model_name, "test-model");
+                assert_eq!(port, 8080);
+            }
+            _ => panic!("expected ServerStarted"),
+        }
+    }
+
+    #[test]
+    fn test_from_server_stopped() {
+        let server = make_server("srv-1", "42", "test-model", 8080);
+        let event = AppEvent::from_server_stopped(&server);
+        match event {
+            AppEvent::ServerStopped {
+                model_id,
+                model_name,
+            } => {
+                assert_eq!(model_id, 42);
+                assert_eq!(model_name, "test-model");
+            }
+            _ => panic!("expected ServerStopped"),
+        }
+    }
+
+    #[test]
+    fn test_from_server_error() {
+        let server = make_server("srv-1", "42", "test-model", 8080);
+        let event = AppEvent::from_server_error(&server, "something failed");
+        match event {
+            AppEvent::ServerError {
+                model_id,
+                model_name,
+                error,
+            } => {
+                assert_eq!(model_id, Some(42));
+                assert_eq!(model_name, "test-model");
+                assert_eq!(error, "something failed");
+            }
+            _ => panic!("expected ServerError"),
+        }
+    }
+
+    #[test]
+    fn test_from_server_error_invalid_model_id() {
+        let server = make_server("srv-1", "abc", "test-model", 8080);
+        let event = AppEvent::from_server_error(&server, "something failed");
+        match event {
+            AppEvent::ServerError {
+                model_id,
+                model_name,
+                error,
+            } => {
+                assert_eq!(model_id, None);
+                assert_eq!(model_name, "test-model");
+                assert_eq!(error, "something failed");
+            }
+            _ => panic!("expected ServerError"),
+        }
+    }
+
+    #[test]
+    fn test_from_server_snapshot() {
+        let servers = vec![
+            make_server("srv-a", "1", "model-a", 9001),
+            make_server("srv-b", "2", "model-b", 9002),
+        ];
+        let event = AppEvent::from_server_snapshot(&servers);
+        match event {
+            AppEvent::ServerSnapshot { servers: entries } => {
+                assert_eq!(entries.len(), 2);
+                assert_eq!(entries[0].model_id, 1);
+                assert_eq!(entries[0].port, 9001);
+                assert_eq!(entries[1].model_id, 2);
+                assert_eq!(entries[1].port, 9002);
+            }
+            _ => panic!("expected ServerSnapshot"),
+        }
+    }
 }
