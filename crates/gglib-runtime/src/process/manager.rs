@@ -38,7 +38,8 @@ pub struct CurrentModelState {
 pub enum ProcessStrategy {
     /// Allow multiple concurrent models up to max_concurrent (GUI).
     Concurrent { max_concurrent: usize },
-    /// Only allow one model at a time, auto-swap when different model requested (Proxy).
+/// Only allow one model at a time, auto-swap when different model requested (Proxy).
+    /// Concurrent requests during startup wait via watch channel instead of failing immediately.
     SingleSwap {
         /// Model catalog for resolving model names and getting launch specs.
         catalog: Arc<dyn ModelCatalogPort>,

@@ -108,6 +108,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **CLI Chat** — Direct terminal chat via llama-cli
 - **`OpenAI` Proxy** — Transparent proxy that routes to appropriate model instances
 - **Auto Model Swap** — Proxy automatically loads/unloads models based on requests
+- **Concurrent Startup Coordination** — SingleSwap strategy uses watch channels so concurrent requests during model startup wait for the result rather than failing immediately.
 - **Health Monitoring** — Polls server health endpoints for readiness
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
