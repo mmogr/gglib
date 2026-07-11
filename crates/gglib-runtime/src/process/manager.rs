@@ -169,20 +169,39 @@ impl ProcessManager {
             }
         };
 
-        // 2. Atomic check-and-insert on the loading slot
-        let disposition = StartupDisposition::check(loading_slot);
+        // 2. Retry loop with overall deadline (prevents unbounded waits through other models' swaps)
+        let deadline = tokio::time::Instant::now() + STARTUP_WAIT_TIMEOUT;
 
-        match disposition {
-            StartupDisposition::Waiter(rx) => {
-                // Another driver is active — wait for its result.
-                wait_for_startup(rx, STARTUP_WAIT_TIMEOUT).await
-            }
-            StartupDisposition::Initiator { guard, self_rx } => {
-                // 3. Clone everything needed for the 'static async block.
-                let core = self.core.clone();
-                let catalog_owned = catalog.clone();
-                let current_owned = current_lock.clone(); // Arc clone — cheap
-                let model_name_owned = model_name.to_string();
+        loop {
+            let disposition = StartupDisposition::check(loading_slot, model_name.to_string());
+
+            match disposition {
+                StartupDisposition::Waiter { rx, target_model_name } => {
+                    // Check if this startup is for our model
+                    if target_model_name == model_name {
+                        // Yes — wait for the result
+                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT).await;
+                    }
+                    // No — another model is starting. Wait for it to finish, then retry.
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                    if remaining.is_zero() {
+                        // NOTE: Under sustained contention across many different models, a waiter can be
+                        // bounced between other models' channels and time out via this deadline even though
+                        // its own model's startup was never attempted. This is an intentionally-bounded
+                        // tradeoff for SingleSwap's single-model-at-a-time design, not an oversight.
+                        return Err(ModelRuntimeError::Internal(
+                            "Startup timed out — contention with other model startups".to_string(),
+                        ));
+                    }
+                    let _ = wait_for_startup(rx, remaining).await;
+                    // Loop back and re-check the slot
+                }
+                StartupDisposition::Initiator { guard, self_rx } => {
+                    // 3. Clone everything needed for the 'static async block.
+                    let core = self.core.clone();
+                    let catalog_owned = catalog.clone();
+                    let current_owned = current_lock.clone(); // Arc clone — cheap
+                    let model_name_owned = model_name.to_string();
 
                 // 4. Spawn the driver task (detached from this request's future)
                 drive(guard, async move {
@@ -333,10 +352,11 @@ impl ProcessManager {
                 });
 
                 // 5. Wait for result — same path as every other caller
-                wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT).await
+                return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT).await;
             }
         }
     }
+} // end ensure_model_running
 
     /// Get information about the currently running model (SingleSwap only).
     pub async fn current_model(&self) -> Option<RunningTarget> {

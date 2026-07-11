@@ -20,6 +20,8 @@ pub type LoadingSlot = Arc<RwLock<Option<StartupState>>>;
 /// Stored inside `ProcessStrategy::SingleSwap.loading` (behind `Arc<RwLock>`).
 pub struct StartupState {
     receiver: watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+    /// Which model this startup is targeting (set by the initiator).
+    target_model_name: String,
 }
 
 impl StartupState {
@@ -30,6 +32,7 @@ impl StartupState {
     /// - `initiator_rx` is for the caller that triggered the start (waits like everyone else).
     pub fn new(
         slot: LoadingSlot,
+        target_model_name: String,
     ) -> (
         Self,
         ModelStartupGuard,
@@ -39,7 +42,7 @@ impl StartupState {
         let (tx, rx) = watch::channel(initial);
         // Subscribe BEFORE inserting into slot — initiator sees all sends.
         let initiator_rx = tx.subscribe();
-        let state = Self { receiver: rx };
+        let state = Self { receiver: rx, target_model_name };
         let guard = ModelStartupGuard {
             sender: Some(tx),
             slot,
@@ -51,12 +54,21 @@ impl StartupState {
     pub fn subscribe(&self) -> watch::Receiver<Result<RunningTarget, ModelRuntimeError>> {
         self.receiver.clone()
     }
+
+    /// Which model this startup is targeting.
+    pub fn target_model_name(&self) -> &str {
+        &self.target_model_name
+    }
 }
 
 /// Result of the atomic check-and-insert on the loading slot.
 pub enum StartupDisposition {
     /// Another driver is active — wait for its result.
-    Waiter(watch::Receiver<Result<RunningTarget, ModelRuntimeError>>),
+    /// The `target_model_name` tells you which model this startup is for.
+    Waiter {
+        rx: watch::Receiver<Result<RunningTarget, ModelRuntimeError>>,
+        target_model_name: String,
+    },
     /// We claimed the slot — spawn the driver task and wait via our own receiver.
     Initiator {
         guard: ModelStartupGuard,
@@ -69,12 +81,15 @@ impl StartupDisposition {
     ///
     /// Returns `Waiter` if a driver is already active (subscribes to its channel).
     /// Returns `Initiator` if we claimed the slot (includes guard + our own receiver).
-    pub fn check(slot: &LoadingSlot) -> Self {
+    pub fn check(slot: &LoadingSlot, target_model_name: String) -> Self {
         let mut s = slot.write().unwrap_or_else(|p| p.into_inner());
         match &*s {
-            Some(state) => StartupDisposition::Waiter(state.subscribe()),
+            Some(state) => StartupDisposition::Waiter {
+                rx: state.subscribe(),
+                target_model_name: state.target_model_name().to_string(),
+            },
             None => {
-                let (state, guard, self_rx) = StartupState::new(slot.clone());
+                let (state, guard, self_rx) = StartupState::new(slot.clone(), target_model_name);
                 *s = Some(state);
                 StartupDisposition::Initiator { guard, self_rx }
             }
@@ -200,9 +215,9 @@ mod tests {
         // Spawn two concurrent callers
         let (handle1, handle2) = tokio::join!(
             async {
-                let disp = StartupDisposition::check(&slot);
+                let disp = StartupDisposition::check(&slot, "test-model".to_string());
                 match disp {
-                    StartupDisposition::Waiter(rx) => {
+                    StartupDisposition::Waiter { rx, .. } => {
                         wait_for_startup(rx, Duration::from_secs(5)).await
                     }
                     StartupDisposition::Initiator { guard, self_rx } => {
@@ -218,9 +233,9 @@ mod tests {
             async {
                 // Small delay to ensure first caller has already claimed the slot
                 tokio::time::sleep(Duration::from_millis(10)).await;
-                let disp = StartupDisposition::check(&slot);
+                let disp = StartupDisposition::check(&slot, "test-model".to_string());
                 match disp {
-                    StartupDisposition::Waiter(rx) => {
+                    StartupDisposition::Waiter { rx, .. } => {
                         wait_for_startup(rx, Duration::from_secs(5)).await
                     }
                     StartupDisposition::Initiator { guard, self_rx } => {
@@ -258,7 +273,7 @@ mod tests {
         let driver_handle = tokio::spawn({
             let slot_clone = slot.clone();
             async move {
-                let disp = StartupDisposition::check(&slot_clone);
+                let disp = StartupDisposition::check(&slot_clone, "test-model".to_string());
                 match disp {
                     StartupDisposition::Initiator { guard, self_rx } => {
                         drive(guard, async move {
@@ -276,9 +291,9 @@ mod tests {
         // Waiter arrives while driver is still running (before the 200ms delay)
         tokio::time::sleep(Duration::from_millis(50)).await;
         let waiter_result = {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "test-model".to_string());
             match disp {
-                StartupDisposition::Waiter(rx) => {
+                StartupDisposition::Waiter { rx, .. } => {
                     wait_for_startup(rx, Duration::from_secs(5)).await
                 }
                 _ => unreachable!("Should be waiter"),
@@ -311,7 +326,7 @@ mod tests {
         let initiator_handle = tokio::spawn({
             let slot_clone = slot.clone();
             async move {
-                let disp = StartupDisposition::check(&slot_clone);
+                let disp = StartupDisposition::check(&slot_clone, "test-model".to_string());
                 match disp {
                     StartupDisposition::Initiator { guard, self_rx: _ } => {
                         drive(guard, async move {
@@ -334,9 +349,9 @@ mod tests {
         // A waiter should still be able to subscribe and get the result
         tokio::time::sleep(Duration::from_millis(50)).await;
         let waiter_result = {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "test-model".to_string());
             match disp {
-                StartupDisposition::Waiter(rx) => {
+                StartupDisposition::Waiter { rx, .. } => {
                     wait_for_startup(rx, Duration::from_secs(5)).await
                 }
                 _ => unreachable!("Should be waiter — driver is still running"),
@@ -358,7 +373,7 @@ mod tests {
 
         // Create a guard but drop it without calling succeed/fail (simulates panic)
         {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "test-model".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, .. } => {
                     // guard is dropped at end of this block without succeed/fail
@@ -381,7 +396,7 @@ mod tests {
         // First startup cycle
         let target1 = RunningTarget::local(8080, 1, "model-v1".to_string(), 2048);
         let result1 = {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "model-v1".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, self_rx } => {
                     drive(guard, async move {
@@ -406,7 +421,7 @@ mod tests {
         // Second startup cycle — should get Initiator again (not Waiter on stale channel)
         let target2 = RunningTarget::local(8081, 2, "model-v2".to_string(), 4096);
         let result2 = {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "model-v2".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, self_rx } => {
                     drive(guard, async move {
@@ -429,7 +444,7 @@ mod tests {
 
         // Driver that never completes (simulates hung health check)
         {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "stuck".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, self_rx: _ } => {
                     drive(guard, async move {
@@ -446,9 +461,9 @@ mod tests {
         // Waiter with short timeout should get Internal("timed out")
         tokio::time::sleep(Duration::from_millis(50)).await;
         let result = {
-            let disp = StartupDisposition::check(&slot);
+            let disp = StartupDisposition::check(&slot, "stuck".to_string());
             match disp {
-                StartupDisposition::Waiter(rx) => {
+                StartupDisposition::Waiter { rx, .. } => {
                     wait_for_startup(rx, Duration::from_millis(200)).await
                 }
                 _ => unreachable!(),
@@ -460,5 +475,73 @@ mod tests {
             "Should get timeout error, got: {:?}",
             result
         );
+    }
+
+    /// Test 7: Cross-model race condition — concurrent callers for different models each get correct result.
+    #[tokio::test]
+    async fn test_concurrent_different_models_each_get_correct_result() {
+        let slot = Arc::new(RwLock::new(None));
+
+        let target_a = RunningTarget::local(8080, 1, "model-a".to_string(), 2048);
+        let target_b = RunningTarget::local(8081, 2, "model-b".to_string(), 4096);
+
+        // Two concurrent callers for DIFFERENT models
+        let (result_a, result_b) = tokio::join!(
+            async {
+                loop {
+                    let disp = StartupDisposition::check(&slot, "model-a".to_string());
+                    match disp {
+                        StartupDisposition::Waiter { rx, target_model_name } => {
+                            if target_model_name == "model-a" {
+                                return wait_for_startup(rx, Duration::from_secs(5)).await;
+                            }
+                            // Another model is starting — wait for it to finish, then retry
+                            let _ = wait_for_startup(rx, Duration::from_secs(5)).await;
+                        }
+                        StartupDisposition::Initiator { guard, self_rx } => {
+                            drive(guard, async move {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                                Ok(target_a.clone())
+                            });
+                            return wait_for_startup(self_rx, Duration::from_secs(5)).await;
+                        }
+                    }
+                }
+            },
+            async {
+                // Small delay so model-a claims the slot first
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                loop {
+                    let disp = StartupDisposition::check(&slot, "model-b".to_string());
+                    match disp {
+                        StartupDisposition::Waiter { rx, target_model_name } => {
+                            if target_model_name == "model-b" {
+                                return wait_for_startup(rx, Duration::from_secs(5)).await;
+                            }
+                            // Another model is starting — wait for it to finish, then retry
+                            let _ = wait_for_startup(rx, Duration::from_secs(5)).await;
+                        }
+                        StartupDisposition::Initiator { guard, self_rx } => {
+                            drive(guard, async move {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                                Ok(target_b.clone())
+                            });
+                            return wait_for_startup(self_rx, Duration::from_secs(5)).await;
+                        }
+                    }
+                }
+            }
+        );
+
+        // Each should get its OWN model's target, not the other's
+        assert!(result_a.is_ok(), "Model A caller should succeed: {:?}", result_a);
+        assert!(result_b.is_ok(), "Model B caller should succeed: {:?}", result_b);
+
+        let a = result_a.unwrap();
+        let b = result_b.unwrap();
+
+        assert_eq!(a.model_name, "model-a", "Caller A should get model-a, got {}", a.model_name);
+        assert_eq!(b.model_name, "model-b", "Caller B should get model-b, got {}", b.model_name);
+        assert_ne!(a.model_name, b.model_name, "Each caller should get different models");
     }
 }
