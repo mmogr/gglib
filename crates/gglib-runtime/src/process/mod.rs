@@ -7,8 +7,8 @@ mod logs;
 mod manager;
 mod ports;
 pub mod shutdown;
-mod stream;
 mod startup_guard;
+mod stream;
 mod types;
 
 // Re-export commonly used types

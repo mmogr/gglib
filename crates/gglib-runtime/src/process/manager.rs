@@ -16,7 +16,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::process::startup_guard::{StartupDisposition, drive, wait_for_startup, STARTUP_WAIT_TIMEOUT};
+use crate::process::startup_guard::{
+    STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, wait_for_startup,
+};
 use crate::server_config::{ServerConfigOptions, build_server_config};
 
 /// Currently running model state for SingleSwap strategy.
@@ -38,7 +40,7 @@ pub struct CurrentModelState {
 pub enum ProcessStrategy {
     /// Allow multiple concurrent models up to max_concurrent (GUI).
     Concurrent { max_concurrent: usize },
-/// Only allow one model at a time, auto-swap when different model requested (Proxy).
+    /// Only allow one model at a time, auto-swap when different model requested (Proxy).
     /// Concurrent requests during startup wait via watch channel instead of failing immediately.
     SingleSwap {
         /// Model catalog for resolving model names and getting launch specs.
@@ -177,7 +179,10 @@ impl ProcessManager {
             let disposition = StartupDisposition::check(loading_slot, model_name.to_string());
 
             match disposition {
-                StartupDisposition::Waiter { rx, target_model_name } => {
+                StartupDisposition::Waiter {
+                    rx,
+                    target_model_name,
+                } => {
                     // Check if this startup is for our model
                     if target_model_name == model_name {
                         // Yes — wait for the result
@@ -204,160 +209,163 @@ impl ProcessManager {
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
 
-                // 4. Spawn the driver task (detached from this request's future)
-                drive(guard, async move {
-                    // --- Model resolution ---
-                    let launch_spec = catalog_owned
-                        .resolve_for_launch(&model_name_owned)
-                        .await
-                        .map_err(|e| match e {
-                            CatalogError::QueryFailed(msg) => ModelRuntimeError::Internal(msg),
-                            CatalogError::Internal(msg) => ModelRuntimeError::Internal(msg),
-                        })?
-                        .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name_owned.clone()))?;
+                    // 4. Spawn the driver task (detached from this request's future)
+                    drive(guard, async move {
+                        // --- Model resolution ---
+                        let launch_spec = catalog_owned
+                            .resolve_for_launch(&model_name_owned)
+                            .await
+                            .map_err(|e| match e {
+                                CatalogError::QueryFailed(msg) => ModelRuntimeError::Internal(msg),
+                                CatalogError::Internal(msg) => ModelRuntimeError::Internal(msg),
+                            })?
+                            .ok_or_else(|| {
+                                ModelRuntimeError::ModelNotFound(model_name_owned.clone())
+                            })?;
 
-                    let effective_ctx = num_ctx.unwrap_or(default_ctx);
-                    let model_path = &launch_spec.file_path;
+                        let effective_ctx = num_ctx.unwrap_or(default_ctx);
+                        let model_path = &launch_spec.file_path;
 
-                    // Check model file exists
-                    if !model_path.exists() {
-                        return Err(ModelRuntimeError::ModelFileNotFound(
-                            model_path.display().to_string(),
-                        ));
-                    }
-
-                    // --- Cached instance check (fast path: already running + healthy) ---
-                    let cached = {
-                        let current_guard = current_owned.read().await;
-                        current_guard.as_ref().and_then(|current| {
-                            (current.model_id == launch_spec.id
-                                && current.context_size == effective_ctx)
-                                .then(|| {
-                                    (
-                                        current.port,
-                                        current.model_id,
-                                        current.model_name.clone(),
-                                        current.context_size,
-                                    )
-                                })
-                        })
-                    };
-                    if let Some((port, model_id, cached_name, context_size)) = cached {
-                        if check_http_health(port).await {
-                            info!(
-                                model_id = %model_id,
-                                model_name = %cached_name,
-                                port = %port,
-                                context = %context_size,
-                                "Model already running with correct context"
-                            );
-                            return Ok(RunningTarget::local(
-                                port,
-                                model_id,
-                                cached_name,
-                                context_size,
+                        // Check model file exists
+                        if !model_path.exists() {
+                            return Err(ModelRuntimeError::ModelFileNotFound(
+                                model_path.display().to_string(),
                             ));
                         }
-                        warn!(
-                            model_id = %model_id,
-                            port = %port,
-                            "cached model failed health check; recycling degraded instance"
-                        );
-                    }
 
-                    // --- Stop current model if running ---
-                    {
-                        let mut current_guard = current_owned.write().await;
-                        if let Some(current) = current_guard.take() {
-                            info!(
-                                model_id = %current.model_id,
-                                model_name = %current.model_name,
-                                "Stopping current model for swap"
+                        // --- Cached instance check (fast path: already running + healthy) ---
+                        let cached = {
+                            let current_guard = current_owned.read().await;
+                            current_guard.as_ref().and_then(|current| {
+                                (current.model_id == launch_spec.id
+                                    && current.context_size == effective_ctx)
+                                    .then(|| {
+                                        (
+                                            current.port,
+                                            current.model_id,
+                                            current.model_name.clone(),
+                                            current.context_size,
+                                        )
+                                    })
+                            })
+                        };
+                        if let Some((port, model_id, cached_name, context_size)) = cached {
+                            if check_http_health(port).await {
+                                info!(
+                                    model_id = %model_id,
+                                    model_name = %cached_name,
+                                    port = %port,
+                                    context = %context_size,
+                                    "Model already running with correct context"
+                                );
+                                return Ok(RunningTarget::local(
+                                    port,
+                                    model_id,
+                                    cached_name,
+                                    context_size,
+                                ));
+                            }
+                            warn!(
+                                model_id = %model_id,
+                                port = %port,
+                                "cached model failed health check; recycling degraded instance"
                             );
-                            let mut core_w = core.write().await;
-                            if let Err(e) = core_w.kill(current.model_id).await {
-                                warn!(error = %e, "Failed to stop current model cleanly, continuing");
+                        }
+
+                        // --- Stop current model if running ---
+                        {
+                            let mut current_guard = current_owned.write().await;
+                            if let Some(current) = current_guard.take() {
+                                info!(
+                                    model_id = %current.model_id,
+                                    model_name = %current.model_name,
+                                    "Stopping current model for swap"
+                                );
+                                let mut core_w = core.write().await;
+                                if let Err(e) = core_w.kill(current.model_id).await {
+                                    warn!(error = %e, "Failed to stop current model cleanly, continuing");
+                                }
                             }
                         }
-                    }
 
-                    // Clean up any dead processes
-                    {
-                        let mut core_w = core.write().await;
-                        core_w.cleanup_dead().await;
-                    }
+                        // Clean up any dead processes
+                        {
+                            let mut core_w = core.write().await;
+                            core_w.cleanup_dead().await;
+                        }
 
-                    // --- Spawn new instance ---
-                    info!(
-                        model_id = %launch_spec.id,
-                        model_name = %launch_spec.name,
-                        context = %effective_ctx,
-                        "Starting model"
-                    );
+                        // --- Spawn new instance ---
+                        info!(
+                            model_id = %launch_spec.id,
+                            model_name = %launch_spec.name,
+                            context = %effective_ctx,
+                            "Starting model"
+                        );
 
-                    let config = build_server_config(
-                        launch_spec.id as i64,
-                        launch_spec.name.clone(),
-                        model_path.to_path_buf(),
-                        0, // base_port unused — GuiProcessCore resolves port internally
-                        &launch_spec.tags,
-                        ServerConfigOptions {
-                            context_size: num_ctx,
-                            model_server_ctx: launch_spec
-                                .server_defaults
-                                .as_ref()
-                                .and_then(|sc| sc.context_length),
-                            global_default_ctx: Some(default_ctx),
-                            ..Default::default()
-                        },
-                    );
+                        let config = build_server_config(
+                            launch_spec.id as i64,
+                            launch_spec.name.clone(),
+                            model_path.to_path_buf(),
+                            0, // base_port unused — GuiProcessCore resolves port internally
+                            &launch_spec.tags,
+                            ServerConfigOptions {
+                                context_size: num_ctx,
+                                model_server_ctx: launch_spec
+                                    .server_defaults
+                                    .as_ref()
+                                    .and_then(|sc| sc.context_length),
+                                global_default_ctx: Some(default_ctx),
+                                ..Default::default()
+                            },
+                        );
 
-                    let port = {
-                        let mut core_w = core.write().await;
-                        core_w.spawn(config)
-                            .await
-                            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
-                    };
+                        let port = {
+                            let mut core_w = core.write().await;
+                            core_w
+                                .spawn(config)
+                                .await
+                                .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
+                        };
 
-                    // --- Wait for health check ---
-                    if let Err(e) = wait_for_http_health(port, 120).await {
-                        return Err(ModelRuntimeError::HealthCheckFailed(e.to_string()));
-                    }
+                        // --- Wait for health check ---
+                        if let Err(e) = wait_for_http_health(port, 120).await {
+                            return Err(ModelRuntimeError::HealthCheckFailed(e.to_string()));
+                        }
 
-                    // --- SUCCESS: update current model state ---
-                    {
-                        let mut current_guard = current_owned.write().await;
-                        *current_guard = Some(CurrentModelState {
-                            model_id: launch_spec.id,
-                            model_name: launch_spec.name.clone(),
-                            context_size: effective_ctx,
+                        // --- SUCCESS: update current model state ---
+                        {
+                            let mut current_guard = current_owned.write().await;
+                            *current_guard = Some(CurrentModelState {
+                                model_id: launch_spec.id,
+                                model_name: launch_spec.name.clone(),
+                                context_size: effective_ctx,
+                                port,
+                                model_path: launch_spec.file_path.clone(),
+                            });
+                        }
+
+                        info!(
+                            model_id = %launch_spec.id,
+                            model_name = %launch_spec.name,
+                            port = %port,
+                            context = %effective_ctx,
+                            "Model started successfully"
+                        );
+
+                        Ok(RunningTarget::local(
                             port,
-                            model_path: launch_spec.file_path.clone(),
-                        });
-                    }
+                            launch_spec.id,
+                            launch_spec.name,
+                            effective_ctx,
+                        ))
+                    });
 
-                    info!(
-                        model_id = %launch_spec.id,
-                        model_name = %launch_spec.name,
-                        port = %port,
-                        context = %effective_ctx,
-                        "Model started successfully"
-                    );
-
-                    Ok(RunningTarget::local(
-                        port,
-                        launch_spec.id,
-                        launch_spec.name,
-                        effective_ctx,
-                    ))
-                });
-
-                // 5. Wait for result — same path as every other caller
-                return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT).await;
+                    // 5. Wait for result — same path as every other caller
+                    return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT).await;
+                }
             }
         }
-    }
-} // end ensure_model_running
+    } // end ensure_model_running
 
     /// Get information about the currently running model (SingleSwap only).
     pub async fn current_model(&self) -> Option<RunningTarget> {

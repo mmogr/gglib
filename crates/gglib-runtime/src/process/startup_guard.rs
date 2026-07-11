@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 
 use gglib_core::ports::{ModelRuntimeError, RunningTarget};
 use tokio::sync::watch;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 /// Default timeout for waiters awaiting model startup (120s health check + 30s margin).
 pub const STARTUP_WAIT_TIMEOUT: Duration = Duration::from_secs(150);
@@ -42,7 +42,10 @@ impl StartupState {
         let (tx, rx) = watch::channel(initial);
         // Subscribe BEFORE inserting into slot — initiator sees all sends.
         let initiator_rx = tx.subscribe();
-        let state = Self { receiver: rx, target_model_name };
+        let state = Self {
+            receiver: rx,
+            target_model_name,
+        };
         let guard = ModelStartupGuard {
             sender: Some(tx),
             slot,
@@ -111,10 +114,7 @@ pub struct ModelStartupGuard {
 
 impl ModelStartupGuard {
     /// Send success result, clear the slot. Consumes sender so drop is a no-op.
-    pub fn succeed(
-        mut self,
-        target: RunningTarget,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
+    pub fn succeed(mut self, target: RunningTarget) -> Result<RunningTarget, ModelRuntimeError> {
         if let Some(tx) = self.sender.take() {
             let _ = tx.send(Ok(target.clone()));
         }
@@ -187,11 +187,9 @@ pub async fn wait_for_startup(
             // Channel closed — retrieve the last value (preserves specific errors).
             rx.borrow_and_update().clone()
         }
-        Err(_) => {
-            Err(ModelRuntimeError::Internal(
-                "Startup timed out — driver may be stuck".to_string(),
-            ))
-        }
+        Err(_) => Err(ModelRuntimeError::Internal(
+            "Startup timed out — driver may be stuck".to_string(),
+        )),
     }
 }
 
@@ -260,7 +258,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         // Slot should be cleared after success
-        assert!(slot.read().unwrap().is_none(), "Slot should be cleared after startup completes");
+        assert!(
+            slot.read().unwrap().is_none(),
+            "Slot should be cleared after startup completes"
+        );
     }
 
     /// Test 2: Waiters receive specific error on failure (not generic "model_loading").
@@ -359,7 +360,11 @@ mod tests {
         };
 
         // Waiter should succeed despite initiator being cancelled
-        assert!(waiter_result.is_ok(), "Waiter should succeed: {:?}", waiter_result);
+        assert!(
+            waiter_result.is_ok(),
+            "Waiter should succeed: {:?}",
+            waiter_result
+        );
         assert_eq!(waiter_result.unwrap().model_name, "test-model");
 
         // Give detached task time to finish clearing the slot
@@ -415,7 +420,10 @@ mod tests {
 
         // Slot should be cleared between cycles (scoped read guard to avoid deadlock)
         {
-            assert!(slot.read().unwrap().is_none(), "Slot should be None between startup cycles");
+            assert!(
+                slot.read().unwrap().is_none(),
+                "Slot should be None between startup cycles"
+            );
         }
 
         // Second startup cycle — should get Initiator again (not Waiter on stale channel)
@@ -491,7 +499,10 @@ mod tests {
                 loop {
                     let disp = StartupDisposition::check(&slot, "model-a".to_string());
                     match disp {
-                        StartupDisposition::Waiter { rx, target_model_name } => {
+                        StartupDisposition::Waiter {
+                            rx,
+                            target_model_name,
+                        } => {
                             if target_model_name == "model-a" {
                                 return wait_for_startup(rx, Duration::from_secs(5)).await;
                             }
@@ -514,7 +525,10 @@ mod tests {
                 loop {
                     let disp = StartupDisposition::check(&slot, "model-b".to_string());
                     match disp {
-                        StartupDisposition::Waiter { rx, target_model_name } => {
+                        StartupDisposition::Waiter {
+                            rx,
+                            target_model_name,
+                        } => {
                             if target_model_name == "model-b" {
                                 return wait_for_startup(rx, Duration::from_secs(5)).await;
                             }
@@ -534,14 +548,33 @@ mod tests {
         );
 
         // Each should get its OWN model's target, not the other's
-        assert!(result_a.is_ok(), "Model A caller should succeed: {:?}", result_a);
-        assert!(result_b.is_ok(), "Model B caller should succeed: {:?}", result_b);
+        assert!(
+            result_a.is_ok(),
+            "Model A caller should succeed: {:?}",
+            result_a
+        );
+        assert!(
+            result_b.is_ok(),
+            "Model B caller should succeed: {:?}",
+            result_b
+        );
 
         let a = result_a.unwrap();
         let b = result_b.unwrap();
 
-        assert_eq!(a.model_name, "model-a", "Caller A should get model-a, got {}", a.model_name);
-        assert_eq!(b.model_name, "model-b", "Caller B should get model-b, got {}", b.model_name);
-        assert_ne!(a.model_name, b.model_name, "Each caller should get different models");
+        assert_eq!(
+            a.model_name, "model-a",
+            "Caller A should get model-a, got {}",
+            a.model_name
+        );
+        assert_eq!(
+            b.model_name, "model-b",
+            "Caller B should get model-b, got {}",
+            b.model_name
+        );
+        assert_ne!(
+            a.model_name, b.model_name,
+            "Each caller should get different models"
+        );
     }
 }
