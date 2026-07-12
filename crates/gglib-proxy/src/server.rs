@@ -489,7 +489,9 @@ async fn chat_completions(
                     .await
                 {
                     Ok(t) => break t,
-                    Err(ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_)) => {
+                    Err(
+                        ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_),
+                    ) => {
                         // Another request is already driving the restart,
                         // or we ran out of budget after waiting for another
                         // model to finish starting. Sleep briefly then re-poll

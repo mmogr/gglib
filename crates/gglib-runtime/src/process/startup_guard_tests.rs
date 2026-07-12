@@ -408,7 +408,12 @@ async fn test_driver_internal_timeout_clears_slot() {
             StartupDisposition::Initiator { guard, self_rx: _ } => {
                 drive(guard, Duration::from_millis(500), async move {
                     tokio::time::sleep(Duration::from_millis(800)).await;
-                    Ok(RunningTarget::local(8080, 1, "slow-model".to_string(), 2048))
+                    Ok(RunningTarget::local(
+                        8080,
+                        1,
+                        "slow-model".to_string(),
+                        2048,
+                    ))
                 });
                 // Don't await self_rx — let the driver timeout handle cleanup
             }

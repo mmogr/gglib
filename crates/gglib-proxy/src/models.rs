@@ -432,7 +432,6 @@ impl From<ModelRuntimeError> for ErrorResponse {
     }
 }
 
-
 #[cfg(test)]
 #[path = "models_tests.rs"]
 mod tests;

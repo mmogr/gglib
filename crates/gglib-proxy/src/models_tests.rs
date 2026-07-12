@@ -96,8 +96,7 @@ fn from_model_loading_error() {
 
 #[test]
 fn from_spawn_failed_error() {
-    let err: ErrorResponse =
-        ModelRuntimeError::SpawnFailed("port already in use".into()).into();
+    let err: ErrorResponse = ModelRuntimeError::SpawnFailed("port already in use".into()).into();
     assert!(err.error.message.contains("port already in use"));
     assert_eq!(err.error.code.as_deref(), Some("upstream_error"));
 }

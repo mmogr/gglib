@@ -206,13 +206,15 @@ impl ProcessManager {
                     // Check if this startup is for our model
                     if target_model_name == model_name {
                         // Yes — wait for the result (offset by 5s so driver always broadcasts first)
-                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5)).await;
+                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5))
+                            .await;
                     }
                     // No — another model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                     if remaining < MIN_STARTUP_BUDGET {
                         return Err(ModelRuntimeError::ContentionTimeout(
-                            "Insufficient time remaining for model startup after contention".to_string(),
+                            "Insufficient time remaining for model startup after contention"
+                                .to_string(),
                         ));
                     }
                     let _ = wait_for_startup(rx, remaining).await;
@@ -377,7 +379,11 @@ impl ProcessManager {
                     });
 
                     // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
-                    return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5)).await;
+                    return wait_for_startup(
+                        self_rx,
+                        STARTUP_WAIT_TIMEOUT + Duration::from_secs(5),
+                    )
+                    .await;
                 }
             }
         }
