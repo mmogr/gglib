@@ -53,6 +53,10 @@ pub enum ModelRuntimeError {
     #[error("Model is loading, try again")]
     ModelLoading,
 
+    /// Retryable: another caller is loading the same model, we waited too long for contention to clear.
+    #[error("Contention timeout: {0}")]
+    ContentionTimeout(String),
+
     /// Failed to spawn the model server process.
     #[error("Failed to start model: {0}")]
     SpawnFailed(String),
@@ -75,14 +79,14 @@ impl ModelRuntimeError {
     /// where retrying may succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
-        matches!(self, Self::ModelLoading)
+        matches!(self, Self::ModelLoading | Self::ContentionTimeout(_))
     }
 
     /// Returns a suggested HTTP status code for this error.
     #[must_use]
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
-            Self::ModelLoading => 503,
+            Self::ModelLoading | Self::ContentionTimeout(_) => 503,
             Self::ModelNotFound(_) | Self::ModelFileNotFound(_) => 404,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }

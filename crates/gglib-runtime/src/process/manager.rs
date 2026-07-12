@@ -192,7 +192,7 @@ impl ProcessManager {
                     // No — another model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                     if remaining < MIN_STARTUP_BUDGET {
-                        return Err(ModelRuntimeError::Internal(
+                        return Err(ModelRuntimeError::ContentionTimeout(
                             "Insufficient time remaining for model startup after contention".to_string(),
                         ));
                     }

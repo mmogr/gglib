@@ -489,10 +489,11 @@ async fn chat_completions(
                     .await
                 {
                     Ok(t) => break t,
-                    Err(ModelRuntimeError::ModelLoading) => {
-                        // Another request is already driving the restart.
-                        // Sleep briefly then re-poll rather than returning a
-                        // fatal 503 to the client.
+                    Err(ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_)) => {
+                        // Another request is already driving the restart,
+                        // or we ran out of budget after waiting for another
+                        // model to finish starting. Sleep briefly then re-poll
+                        // rather than returning a fatal 503 to the client.
                         if std::time::Instant::now() >= deadline {
                             warn!("Timed out waiting for model restart after upstream failure");
                             return handle_runtime_error(ModelRuntimeError::ModelLoading);
@@ -558,21 +559,13 @@ async fn chat_completions(
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
 fn handle_runtime_error(err: ModelRuntimeError) -> Response {
-    let (status, error_response) = match &err {
-        ModelRuntimeError::ModelLoading => {
-            // 503 with Retry-After header
-            (StatusCode::SERVICE_UNAVAILABLE, ErrorResponse::from(err))
-        }
-        ModelRuntimeError::ModelNotFound(_) => (StatusCode::NOT_FOUND, ErrorResponse::from(err)),
-        ModelRuntimeError::ModelFileNotFound(_) => {
-            (StatusCode::NOT_FOUND, ErrorResponse::from(err))
-        }
-        _ => (StatusCode::INTERNAL_SERVER_ERROR, ErrorResponse::from(err)),
-    };
+    let status = StatusCode::from_u16(err.suggested_status_code())
+        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let error_response = ErrorResponse::from(err);
 
     let mut response = (status, Json(error_response)).into_response();
 
-    // Add Retry-After header for loading state
+    // Add Retry-After header for retryable errors (503)
     if status == StatusCode::SERVICE_UNAVAILABLE
         && let Ok(value) = "5".parse()
     {
