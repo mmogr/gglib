@@ -77,13 +77,32 @@ impl ProcessManager {
         }
     }
 
-    /// Create a new `ProcessManager` with SingleSwap strategy (for Proxy)
+    /// Create a new `ProcessManager` with SingleSwap strategy (for Proxy).
+    ///
+    /// This strategy allows only one model to run at a time. When a request
+    /// arrives for a different model, the currently running server is stopped
+    /// and replaced ("swapped") with the newly requested model.
+    ///
+    /// Concurrent startup requests are coordinated via watch channels: if
+    /// multiple callers simultaneously request the same model while it is
+    /// starting up, only one drives the launch; the others subscribe to a
+    /// shared channel and receive the result when the driver completes. This
+    /// prevents port conflicts and redundant health checks.
     ///
     /// # Arguments
     ///
-    /// * `base_port` - Base port for llama-server allocation
-    /// * `llama_server_path` - Path to llama-server binary
-    /// * `catalog` - Model catalog for resolving model names and getting launch specs
+    /// * `base_port` — Base port for llama-server allocation. Ports are
+    ///   assigned sequentially starting from this value.
+    /// * `llama_server_path` — Path to the llama-server binary to execute.
+    /// * `catalog` — Model catalog used to resolve model names into launch
+    ///   specifications (file paths, context sizes, etc.).
+    ///
+    /// # When to use
+    ///
+    /// Use `new_single_swap()` when you need a single-model proxy (e.g. the
+    /// HTTP API layer). For multi-model workloads (e.g. the GUI dashboard),
+    /// prefer [`ProcessManager::new_concurrent`] which allows multiple models
+    /// to run simultaneously up to a configurable limit.
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
