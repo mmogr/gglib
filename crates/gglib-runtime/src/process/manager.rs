@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::process::startup_guard::{
-    STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, wait_for_startup,
+    MIN_STARTUP_BUDGET, STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, wait_for_startup,
 };
 use crate::server_config::{ServerConfigOptions, build_server_config};
 
@@ -191,13 +191,9 @@ impl ProcessManager {
                     }
                     // No — another model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                    if remaining.is_zero() {
-                        // NOTE: Under sustained contention across many different models, a waiter can be
-                        // bounced between other models' channels and time out via this deadline even though
-                        // its own model's startup was never attempted. This is an intentionally-bounded
-                        // tradeoff for SingleSwap's single-model-at-a-time design, not an oversight.
+                    if remaining < MIN_STARTUP_BUDGET {
                         return Err(ModelRuntimeError::Internal(
-                            "Startup timed out — contention with other model startups".to_string(),
+                            "Insufficient time remaining for model startup after contention".to_string(),
                         ));
                     }
                     let _ = wait_for_startup(rx, remaining).await;

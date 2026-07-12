@@ -13,6 +13,11 @@ use tokio::time::{Duration, timeout};
 /// Default timeout for waiters awaiting model startup (120s health check + 30s margin).
 pub const STARTUP_WAIT_TIMEOUT: Duration = Duration::from_secs(150);
 
+/// Minimum time a waiter must have remaining before attempting its own startup.
+/// Derived from STARTUP_WAIT_TIMEOUT — ensures the waiter has enough budget for
+/// model resolution + spawn + health check after bouncing off other startups.
+pub const MIN_STARTUP_BUDGET: Duration = Duration::from_secs(75);
+
 /// Type alias for the shared loading slot.
 pub type LoadingSlot = Arc<RwLock<Option<StartupState>>>;
 
