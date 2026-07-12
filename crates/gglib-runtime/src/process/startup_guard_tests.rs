@@ -23,7 +23,7 @@ async fn test_concurrent_callers_both_succeed() {
                 }
                 StartupDisposition::Initiator { guard, self_rx } => {
                     // Simulate startup work: short delay then succeed
-                    drive(guard, async move {
+                    drive(guard, Duration::from_millis(500), async move {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         Ok(target1.clone())
                     });
@@ -40,7 +40,7 @@ async fn test_concurrent_callers_both_succeed() {
                     wait_for_startup(rx, Duration::from_secs(5)).await
                 }
                 StartupDisposition::Initiator { guard, self_rx } => {
-                    drive(guard, async move {
+                    drive(guard, Duration::from_millis(500), async move {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         Ok(target2.clone())
                     });
@@ -80,7 +80,7 @@ async fn test_waiters_get_specific_error_on_failure() {
             let disp = StartupDisposition::check(&slot_clone, "test-model".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, self_rx } => {
-                    drive(guard, async move {
+                    drive(guard, Duration::from_millis(500), async move {
                         // Delay so waiter has time to subscribe before we fail
                         tokio::time::sleep(Duration::from_millis(200)).await;
                         Err(expected_err.clone())
@@ -133,7 +133,7 @@ async fn test_initiator_cancellation_does_not_affect_waiters() {
             let disp = StartupDisposition::check(&slot_clone, "test-model".to_string());
             match disp {
                 StartupDisposition::Initiator { guard, self_rx: _ } => {
-                    drive(guard, async move {
+                    drive(guard, Duration::from_millis(500), async move {
                         // Simulate a longer startup
                         tokio::time::sleep(Duration::from_millis(500)).await;
                         Ok(target.clone())
@@ -207,7 +207,7 @@ async fn test_sequential_startups_clean_up_properly() {
         let disp = StartupDisposition::check(&slot, "model-v1".to_string());
         match disp {
             StartupDisposition::Initiator { guard, self_rx } => {
-                drive(guard, async move {
+                drive(guard, Duration::from_millis(500), async move {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                     Ok(target1.clone())
                 });
@@ -235,7 +235,7 @@ async fn test_sequential_startups_clean_up_properly() {
         let disp = StartupDisposition::check(&slot, "model-v2".to_string());
         match disp {
             StartupDisposition::Initiator { guard, self_rx } => {
-                drive(guard, async move {
+                drive(guard, Duration::from_millis(500), async move {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                     Ok(target2.clone())
                 });
@@ -258,8 +258,8 @@ async fn test_waiter_timeout_fires_on_stuck_driver() {
         let disp = StartupDisposition::check(&slot, "stuck".to_string());
         match disp {
             StartupDisposition::Initiator { guard, self_rx: _ } => {
-                drive(guard, async move {
-                    // Never returns — simulates stuck driver
+                drive(guard, Duration::from_millis(200), async move {
+                    // Never returns — simulates stuck driver (but internal timeout will kill it)
                     tokio::time::sleep(Duration::from_secs(999)).await;
                     Ok(RunningTarget::local(8080, 1, "stuck".to_string(), 2048))
                 });
@@ -282,10 +282,25 @@ async fn test_waiter_timeout_fires_on_stuck_driver() {
     };
 
     assert!(
-        matches!(&result, Err(ModelRuntimeError::Internal(msg)) if msg.contains("timed out")),
-        "Should get timeout error, got: {:?}",
+        matches!(&result, Err(ModelRuntimeError::Internal(msg)) if msg.contains("timed out") || msg.contains("deadline")),
+        "Should get timeout or deadline error, got: {:?}",
         result
     );
+
+    // Driver now self-terminates on internal timeout — verify slot clears via bounded retry
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
+    loop {
+        if let Ok(guard) = slot.read()
+            && guard.is_none()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "Slot not cleared within 500ms after driver timeout"
+        );
+    }
 }
 
 /// Test 7: Cross-model race condition — concurrent callers for different models each get correct result.
@@ -313,7 +328,7 @@ async fn test_concurrent_different_models_each_get_correct_result() {
                         let _ = wait_for_startup(rx, Duration::from_secs(5)).await;
                     }
                     StartupDisposition::Initiator { guard, self_rx } => {
-                        drive(guard, async move {
+                        drive(guard, Duration::from_millis(500), async move {
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             Ok(target_a.clone())
                         });
@@ -339,7 +354,7 @@ async fn test_concurrent_different_models_each_get_correct_result() {
                         let _ = wait_for_startup(rx, Duration::from_secs(5)).await;
                     }
                     StartupDisposition::Initiator { guard, self_rx } => {
-                        drive(guard, async move {
+                        drive(guard, Duration::from_millis(500), async move {
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             Ok(target_b.clone())
                         });
@@ -379,4 +394,58 @@ async fn test_concurrent_different_models_each_get_correct_result() {
         a.model_name, b.model_name,
         "Each caller should get different models"
     );
+}
+
+/// Test 8: Driver internal timeout kills the driver and clears the slot.
+#[tokio::test]
+async fn test_driver_internal_timeout_clears_slot() {
+    let slot = Arc::new(RwLock::new(None));
+
+    // Driver sleeps 800ms but its timeout is only 500ms — it should self-terminate
+    {
+        let disp = StartupDisposition::check(&slot, "slow-model".to_string());
+        match disp {
+            StartupDisposition::Initiator { guard, self_rx: _ } => {
+                drive(guard, Duration::from_millis(500), async move {
+                    tokio::time::sleep(Duration::from_millis(800)).await;
+                    Ok(RunningTarget::local(8080, 1, "slow-model".to_string(), 2048))
+                });
+                // Don't await self_rx — let the driver timeout handle cleanup
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // Waiter should get the driver's deadline error (not a generic timeout)
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let result = {
+        let disp = StartupDisposition::check(&slot, "slow-model".to_string());
+        match disp {
+            StartupDisposition::Waiter { rx, .. } => {
+                wait_for_startup(rx, Duration::from_secs(5)).await
+            }
+            _ => unreachable!(),
+        }
+    };
+
+    assert!(
+        matches!(&result, Err(ModelRuntimeError::Internal(msg)) if msg.contains("deadline")),
+        "Should get driver deadline error, got: {:?}",
+        result
+    );
+
+    // Slot should be cleared (driver self-terminated and cleaned up)
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
+    loop {
+        if let Ok(guard) = slot.read()
+            && guard.is_none()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "Slot not cleared within 500ms after driver internal timeout"
+        );
+    }
 }

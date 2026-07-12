@@ -13,6 +13,7 @@ use gglib_core::ports::{
 };
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -185,8 +186,8 @@ impl ProcessManager {
                 } => {
                     // Check if this startup is for our model
                     if target_model_name == model_name {
-                        // Yes — wait for the result
-                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT).await;
+                        // Yes — wait for the result (offset by 5s so driver always broadcasts first)
+                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5)).await;
                     }
                     // No — another model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
@@ -210,7 +211,7 @@ impl ProcessManager {
                     let model_name_owned = model_name.to_string();
 
                     // 4. Spawn the driver task (detached from this request's future)
-                    drive(guard, async move {
+                    drive(guard, STARTUP_WAIT_TIMEOUT, async move {
                         // --- Model resolution ---
                         let launch_spec = catalog_owned
                             .resolve_for_launch(&model_name_owned)
@@ -227,7 +228,7 @@ impl ProcessManager {
                         let model_path = &launch_spec.file_path;
 
                         // Check model file exists
-                        if !model_path.exists() {
+                        if !tokio::fs::try_exists(model_path).await.unwrap_or(false) {
                             return Err(ModelRuntimeError::ModelFileNotFound(
                                 model_path.display().to_string(),
                             ));
@@ -360,8 +361,8 @@ impl ProcessManager {
                         ))
                     });
 
-                    // 5. Wait for result — same path as every other caller
-                    return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT).await;
+                    // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
+                    return wait_for_startup(self_rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5)).await;
                 }
             }
         }

@@ -151,23 +151,29 @@ impl Drop for ModelStartupGuard {
 
 /// Spawn the actual startup work in a detached task, wiring the guard for notification.
 ///
-/// The spawned task runs `work`. On success it calls `guard.succeed()`, on error
-/// `guard.fail()`. If the task panics, `guard::drop()` sends an Internal error.
+/// The spawned task runs `work` bounded by `driver_timeout`. On success it calls
+/// `guard.succeed()`, on error `guard.fail()`. If the driver exceeds its deadline,
+/// it self-terminates and broadcasts an Internal "Driver exceeded startup deadline" error.
+/// If the task panics, `guard::drop()` sends an Internal error.
 ///
 /// The caller (initiator or waiter) should then `wait_for_startup()` on its own receiver.
-pub fn drive<F>(guard: ModelStartupGuard, work: F)
+pub fn drive<F>(guard: ModelStartupGuard, driver_timeout: Duration, work: F)
 where
     F: std::future::Future<Output = Result<RunningTarget, ModelRuntimeError>> + Send + 'static,
     F::Output: Send + 'static,
 {
     tokio::spawn(async move {
-        let result = work.await;
-        match result {
-            Ok(target) => {
+        match tokio::time::timeout(driver_timeout, work).await {
+            Ok(Ok(target)) => {
                 let _ = guard.succeed(target);
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 let _ = guard.fail(err);
+            }
+            Err(_) => {
+                let _ = guard.fail(ModelRuntimeError::Internal(
+                    "Driver exceeded startup deadline".to_string(),
+                ));
             }
         }
     });
