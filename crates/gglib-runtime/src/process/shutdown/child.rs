@@ -171,4 +171,21 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("pid=999"), "error message should contain PID: {msg}");
     }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn shutdown_escalates_to_sigkill_when_sigterm_is_ignored() {
+        // Spawn a single process that ignores SIGTERM — forces escalation to SIGKILL.
+        // Uses python3 to avoid orphaning a subprocess (which bash -c 'sleep' would do).
+        let child = Command::new("python3")
+            .arg("-c")
+            .arg("import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)")
+            .spawn()
+            .expect("failed to spawn python3");
+
+        let result = shutdown_child(child).await;
+
+        // Should succeed: SIGTERM is ignored, so escalation sends SIGKILL which cannot be trapped.
+        assert!(result.is_ok(), "shutdown should succeed via SIGKILL escalation: {result:?}");
+    }
 }
