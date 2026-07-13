@@ -2,18 +2,56 @@
 
 use std::io;
 use std::process::ExitStatus;
+use std::future::Future;
 
 use tokio::process::Child;
 
-#[cfg(unix)]
 use std::time::Duration;
-#[cfg(unix)]
 use tokio::time::timeout;
 
 #[cfg(unix)]
 use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
+
+// TODO(#591): wired in Step 2 — remove #[allow(dead_code)] then
+#[allow(dead_code)]
+const SIGKILL_REAP_TIMEOUT_SECS: u64 = 2;
+
+/// Wait for a future with a bounded timeout, logging an error on expiry.
+///
+/// Used after SIGKILL to reap the child process. If the process is stuck in
+/// D-state (e.g., CUDA driver ioctl blocked in kernel), this prevents an
+/// indefinite hang by returning after `secs` with a TimedOut error.
+///
+/// Note: when this function returns due to timeout, the Tokio `Child` struct
+/// is dropped by the caller. Tokio spawns a background reaper task to await
+/// the zombie process asynchronously — the reap is not lost, just detached
+/// from the blocking shutdown path.
+// TODO(#591): wired in Step 2 — remove #[allow(dead_code)] then
+#[allow(dead_code)]
+async fn bounded_wait<F>(fut: F, secs: u64, pid: Option<u32>) -> io::Result<ExitStatus>
+where
+    F: Future<Output = io::Result<ExitStatus>>,
+{
+    match timeout(Duration::from_secs(secs), fut).await {
+        Ok(result) => result,
+        Err(_) => {
+            let pid_str = pid.map_or("unknown".to_string(), |p| p.to_string());
+            tracing::error!(
+                timeout_secs = secs,
+                pid = %pid_str,
+                "Process did not exit within bounded wait after SIGKILL; \
+                 it may be stuck in D-state (e.g., blocked CUDA driver ioctl). \
+                 Resources (port, GPU memory) may remain held. Proceeding with cleanup."
+            );
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("child did not exit within bounded wait after SIGKILL: pid={pid_str}"),
+            ))
+        }
+    }
+}
 
 /// Gracefully shut down a child process with SIGTERM, escalating to SIGKILL if needed.
 ///
@@ -117,5 +155,23 @@ mod tests {
 
         let result = shutdown_child(child).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn bounded_wait_times_out_on_pending_future() {
+        use std::future::pending;
+        use tokio::time::{advance, Duration as TokioDuration};
+
+        // Advance time past the 2-second timeout
+        advance(TokioDuration::from_secs(3)).await;
+
+        let result = bounded_wait(pending::<io::Result<ExitStatus>>(), 2, Some(999)).await;
+
+        // Should return TimedOut error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+        let msg = err.to_string();
+        assert!(msg.contains("pid=999"), "error message should contain PID: {msg}");
     }
 }
