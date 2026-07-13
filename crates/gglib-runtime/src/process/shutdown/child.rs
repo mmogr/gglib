@@ -14,8 +14,6 @@ use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
 
-// TODO(#591): wired in Step 2 — remove #[allow(dead_code)] then
-#[allow(dead_code)]
 const SIGKILL_REAP_TIMEOUT_SECS: u64 = 2;
 
 /// Wait for a future with a bounded timeout, logging an error on expiry.
@@ -28,8 +26,6 @@ const SIGKILL_REAP_TIMEOUT_SECS: u64 = 2;
 /// is dropped by the caller. Tokio spawns a background reaper task to await
 /// the zombie process asynchronously — the reap is not lost, just detached
 /// from the blocking shutdown path.
-// TODO(#591): wired in Step 2 — remove #[allow(dead_code)] then
-#[allow(dead_code)]
 async fn bounded_wait<F>(fut: F, secs: u64, pid: Option<u32>) -> io::Result<ExitStatus>
 where
     F: Future<Output = io::Result<ExitStatus>>,
@@ -112,15 +108,16 @@ async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
     // Phase 2: SIGKILL (via Child::kill which uses SIGKILL on Unix)
     child.kill().await?;
 
-    // Phase 3: Wait for reaping (should be fast after SIGKILL)
-    child.wait().await
+    // Phase 3: Bounded wait for reaping (guards against D-state hang)
+    bounded_wait(child.wait(), SIGKILL_REAP_TIMEOUT_SECS, Some(pid)).await
 }
 
 #[cfg(not(unix))]
 async fn shutdown_windows(child: &mut Child) -> io::Result<ExitStatus> {
     // Windows has no SIGTERM equivalent - terminate immediately
+    let pid = child.id();
     child.kill().await?;
-    child.wait().await
+    bounded_wait(child.wait(), SIGKILL_REAP_TIMEOUT_SECS, pid).await
 }
 
 #[cfg(test)]
