@@ -18,8 +18,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::process::startup_guard::{
-    should_bail_on_insufficient_budget, STARTUP_WAIT_TIMEOUT,
-    StartupDisposition, drive, wait_for_startup,
+    STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, should_bail_on_insufficient_budget,
+    wait_for_startup,
 };
 use crate::server_config::{ServerConfigOptions, build_server_config};
 

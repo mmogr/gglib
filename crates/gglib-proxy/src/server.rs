@@ -489,13 +489,11 @@ async fn chat_completions(
                     .await
                 {
                     Ok(t) => break t,
-                    Err(
-                        ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_),
-                    ) => {
-                        // Another request is already driving the restart,
-                        // or we ran out of budget after waiting for another
-                        // model to finish starting. Sleep briefly then re-poll
-                        // rather than returning a fatal 503 to the client.
+                    Err(ModelRuntimeError::ModelLoading) => {
+                        // NOTE: ContentionTimeout is intentionally NOT retried here — it is a
+                        // resource contention signal (not transient loading). It falls through to
+                        // Err(e) below, returning 503 + Retry-After so the client controls backoff.
+                        // (PR #587)
                         if std::time::Instant::now() >= deadline {
                             warn!("Timed out waiting for model restart after upstream failure");
                             return handle_runtime_error(ModelRuntimeError::ModelLoading);
@@ -585,5 +583,17 @@ mod tests {
     async fn test_health_check() {
         let response = health_check().await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_contention_timeout_returns_503_with_retry_after() {
+        let err = ModelRuntimeError::ContentionTimeout("test contention".to_string());
+        let response = handle_runtime_error(err);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            response
+                .headers()
+                .contains_key(axum::http::header::RETRY_AFTER)
+        );
     }
 }
