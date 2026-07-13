@@ -7,6 +7,7 @@ mod logs;
 mod manager;
 mod ports;
 pub mod shutdown;
+mod startup_guard;
 mod stream;
 mod types;
 
