@@ -18,6 +18,15 @@ pub const STARTUP_WAIT_TIMEOUT: Duration = Duration::from_secs(150);
 /// model resolution + spawn + health check after bouncing off other startups.
 pub const MIN_STARTUP_BUDGET: Duration = Duration::from_secs(75);
 
+/// Check whether the remaining time budget is too small to attempt startup.
+///
+/// Returns `true` when `remaining < MIN_STARTUP_BUDGET`, indicating that a
+/// cross-model waiter should bail with [`ModelRuntimeError::ContentionTimeout`
+/// ] instead of attempting a startup that would almost certainly time out.
+pub fn should_bail_on_insufficient_budget(remaining: Duration) -> bool {
+    remaining < MIN_STARTUP_BUDGET
+}
+
 /// Type alias for the shared loading slot.
 pub type LoadingSlot = Arc<RwLock<Option<StartupState>>>;
 

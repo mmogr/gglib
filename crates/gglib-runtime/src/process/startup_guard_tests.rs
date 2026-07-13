@@ -454,3 +454,22 @@ async fn test_driver_internal_timeout_clears_slot() {
         );
     }
 }
+
+#[test]
+fn test_cross_model_waiter_bails_on_insufficient_budget() {
+    // Below threshold — should bail
+    assert!(
+        super::should_bail_on_insufficient_budget(Duration::from_secs(74)),
+        "74s < 75s MIN_STARTUP_BUDGET → should bail"
+    );
+    // At threshold — should NOT bail (equal is OK)
+    assert!(
+        !super::should_bail_on_insufficient_budget(Duration::from_secs(75)),
+        "75s == 75s MIN_STARTUP_BUDGET → should NOT bail"
+    );
+    // Well above threshold — should NOT bail
+    assert!(
+        !super::should_bail_on_insufficient_budget(Duration::from_secs(100)),
+        "100s > 75s MIN_STARTUP_BUDGET → should NOT bail"
+    );
+}

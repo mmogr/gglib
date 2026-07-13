@@ -18,7 +18,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::process::startup_guard::{
-    MIN_STARTUP_BUDGET, STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, wait_for_startup,
+    should_bail_on_insufficient_budget, STARTUP_WAIT_TIMEOUT,
+    StartupDisposition, drive, wait_for_startup,
 };
 use crate::server_config::{ServerConfigOptions, build_server_config};
 
@@ -211,7 +212,7 @@ impl ProcessManager {
                     }
                     // No — another model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                    if remaining < MIN_STARTUP_BUDGET {
+                    if should_bail_on_insufficient_budget(remaining) {
                         return Err(ModelRuntimeError::ContentionTimeout(
                             "Insufficient time remaining for model startup after contention"
                                 .to_string(),
