@@ -1,8 +1,8 @@
 //! Graceful shutdown logic for `tokio::process::Child` with SIGTERM → SIGKILL escalation.
 
+use std::future::Future;
 use std::io;
 use std::process::ExitStatus;
-use std::future::Future;
 
 use tokio::process::Child;
 
@@ -165,7 +165,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn bounded_wait_times_out_on_pending_future() {
         use std::future::pending;
-        use tokio::time::{advance, Duration as TokioDuration};
+        use tokio::time::{Duration as TokioDuration, advance};
 
         // Advance time past the 2-second timeout
         advance(TokioDuration::from_secs(3)).await;
@@ -177,7 +177,10 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::TimedOut);
         let msg = err.to_string();
-        assert!(msg.contains("pid=999"), "error message should contain PID: {msg}");
+        assert!(
+            msg.contains("pid=999"),
+            "error message should contain PID: {msg}"
+        );
     }
 
     #[tokio::test]
@@ -194,6 +197,9 @@ mod tests {
         let result = shutdown_child(child).await;
 
         // Should succeed: SIGTERM is ignored, so escalation sends SIGKILL which cannot be trapped.
-        assert!(result.is_ok(), "shutdown should succeed via SIGKILL escalation: {result:?}");
+        assert!(
+            result.is_ok(),
+            "shutdown should succeed via SIGKILL escalation: {result:?}"
+        );
     }
 }
