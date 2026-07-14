@@ -52,16 +52,24 @@ where
 /// Gracefully shut down a child process with SIGTERM, escalating to SIGKILL if needed.
 ///
 /// # Strategy
-/// 1. Send SIGTERM and wait up to 5 seconds for graceful exit
+/// 1. Send SIGTERM and wait for graceful exit (2s on Linux, 5s on other Unix)
 /// 2. If still running, send SIGKILL
-/// 3. Wait for process reaping (required to avoid zombies)
+/// 3. Wait for process reaping with a bounded timeout (guards against D-state hang)
 ///
 /// # Platform behavior
 /// - Unix: Uses nix crate for SIGTERM, then SIGKILL via `.kill()`
 /// - Windows: Immediately calls `.kill()` (no graceful shutdown available)
 ///
+/// # Residual risk
+/// If the process enters D-state (uninterruptible sleep) after SIGKILL — e.g., due to
+/// a blocked CUDA driver ioctl — the bounded wait will expire and this function returns
+/// an error. The caller proceeds with cleanup; resources (port, GPU memory) may remain
+/// held by the stuck process. Tokio's `Child` drop handler spawns a background reaper
+/// task, so the zombie is eventually collected asynchronously.
+///
 /// # Returns
 /// - `Ok(ExitStatus)` once the process has been reaped
+/// - `Err` with `io::ErrorKind::TimedOut` if the post-SIGKILL wait exceeds the bound
 /// - `Err` if process operations fail
 pub async fn shutdown_child(mut child: Child) -> io::Result<ExitStatus> {
     #[cfg(unix)]
