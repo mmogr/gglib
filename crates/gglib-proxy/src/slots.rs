@@ -25,10 +25,16 @@
 //! probing, no risk of a partially-unknown schema causing the whole
 //! response to fail to parse.
 
+use std::cmp::Reverse;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use tokio::time as tokio_time;
+use tracing::{debug, warn};
 
 /// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
 /// any other JSON type (object, array, string, bool, `null`) as simply
@@ -653,5 +659,224 @@ mod tests {
                 "'{field}' with an unexpected type should degrade to None, not panic/error"
             );
         }
+    }
+}
+
+// =============================================================================
+// Slot I/O — save / restore / clear + background LRU eviction
+// =============================================================================
+
+#[derive(Debug, PartialEq)]
+pub enum SlotIoResult {
+    Ok,
+    NotFound,
+    Transient(String),
+    Permanent(String),
+}
+
+/// Sanitize session ID for use as a filename. Alphanumeric + hyphens/underscores, max 64 chars.
+pub fn sanitize_session_id(id: &str) -> Result<String, String> {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid session ID: {:?}", id));
+    }
+    Ok(id.to_string())
+}
+
+pub async fn save_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
+    let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
+    match tokio_time::timeout(
+        Duration::from_secs(3),
+        client
+            .post(format!("{base_url}/slots/0?action=save"))
+            .json(&payload)
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
+        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
+        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
+        Err(_) => SlotIoResult::Transient("timeout after 3s".into()),
+    }
+}
+
+pub async fn restore_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
+    let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
+    match tokio_time::timeout(
+        Duration::from_secs(5),
+        client
+            .post(format!("{base_url}/slots/0?action=restore"))
+            .json(&payload)
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
+        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
+        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
+        Err(_) => {
+            warn!("restore timed out for {session_id} — proceeding cold");
+            SlotIoResult::Transient("timeout after 5s".into())
+        }
+    }
+}
+
+/// Clear per-slot cache files from disk. Uses tokio::fs for async safety.
+pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std::io::Result<()> {
+    if let Some(id) = session_id {
+        let path = slot_dir.join(format!("{id}.bin"));
+        tokio::fs::remove_file(&path).await.ok(); // NotFound/PermissionDenied → silent skip
+        return Ok(());
+    }
+    let mut entries = match tokio::fs::read_dir(slot_dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
+            && let Err(e) = tokio::fs::remove_file(entry.path()).await
+            && e.kind() != std::io::ErrorKind::PermissionDenied
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                "failed to remove slot file {}: {}",
+                entry.path().display(),
+                e
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Shared save function — called by both streaming and non-streaming paths.
+pub async fn attempt_save(
+    client: &Client,
+    base_url: &str,
+    session_id: &str,
+    clear_all_pending: &AtomicBool,
+    per_session_cleared: &DashSet<String>,
+) {
+    if clear_all_pending.load(Ordering::SeqCst) {
+        debug!("skipping save for {session_id} — clear_all_pending");
+        return;
+    }
+    if per_session_cleared.contains(session_id) {
+        debug!("skipping save for {session_id} — cleared mid-generation");
+        return;
+    }
+    match save_slot(client, base_url, session_id).await {
+        SlotIoResult::Ok => {}
+        SlotIoResult::NotFound => warn!("save failed for {session_id}: 404 Not Found"),
+        SlotIoResult::Transient(e) => warn!("save failed for {session_id}: {e}"),
+        SlotIoResult::Permanent(e) => {
+            warn!("save failed for {session_id} (permanent): {e}")
+        }
+    }
+}
+
+/// Background LRU eviction task — spawned at server startup, runs every 60s.
+pub async fn spawn_lru_eviction_task(slot_dir: PathBuf, max_slots: usize) {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(60);
+        loop {
+            tokio::time::sleep(interval).await;
+            if let Err(e) = evict_stale_slots(&slot_dir, max_slots).await {
+                warn!("LRU eviction failed: {}", e);
+            }
+        }
+    });
+}
+
+pub async fn evict_stale_slots(slot_dir: &Path, max_slots: usize) -> std::io::Result<()> {
+    let mut entries = match tokio::fs::read_dir(slot_dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    let mut slots: Vec<(PathBuf, u64)> = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
+            && let Ok(metadata) = entry.metadata().await
+            && let Ok(mtime) = metadata.modified()
+        {
+            slots.push((entry.path(), mtime.elapsed().unwrap_or_default().as_secs()));
+        }
+    }
+
+    let excess_slots = sort_slots_for_eviction(slots, max_slots);
+    for path in excess_slots {
+        if let Err(e) = tokio::fs::remove_file(&path).await
+            && e.kind() != std::io::ErrorKind::PermissionDenied
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!("eviction failed for {}: {}", path.display(), e);
+        }
+    }
+    Ok(())
+}
+
+/// Isolated sorting logic to allow pure unit testing without relying on filesystem mtimes.
+fn sort_slots_for_eviction(mut slots: Vec<(PathBuf, u64)>, max_slots: usize) -> Vec<PathBuf> {
+    slots.sort_by_key(|(_, age)| Reverse(*age)); // Oldest (largest age) first
+    let excess = slots.len().saturating_sub(max_slots);
+    slots.into_iter().take(excess).map(|(p, _)| p).collect()
+}
+
+// =============================================================================
+// Slot I/O Tests
+// =============================================================================
+
+#[cfg(test)]
+mod slot_io_tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_session_id() {
+        assert_eq!(sanitize_session_id("planner").unwrap(), "planner");
+        assert_eq!(sanitize_session_id("valid-id_123").unwrap(), "valid-id_123");
+        assert!(sanitize_session_id("").is_err());
+        assert!(sanitize_session_id("../invalid").is_err());
+        assert!(sanitize_session_id("invalid/path").is_err());
+        assert!(sanitize_session_id(&"a".repeat(65)).is_err()); // > 64 chars
+    }
+
+    #[test]
+    fn test_lru_sort_logic() {
+        let slots = vec![
+            (PathBuf::from("A.bin"), 60),   // 60 seconds old
+            (PathBuf::from("B.bin"), 3600), // 1 hour old (oldest)
+            (PathBuf::from("C.bin"), 10),   // 10 seconds old (newest)
+        ];
+
+        let evicted = sort_slots_for_eviction(slots, 2);
+
+        // With max_slots=2, the single oldest slot (B) should be evicted
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0], PathBuf::from("B.bin"));
+    }
+
+    #[tokio::test]
+    async fn test_attempt_save_race_guard() {
+        let client = Client::new();
+        let clear_all = AtomicBool::new(false);
+        let per_session = DashSet::new();
+
+        per_session.insert("planner".to_string());
+
+        // This will return immediately due to the DashSet guard.
+        attempt_save(
+            &client,
+            "http://127.0.0.1:0",
+            "planner",
+            &clear_all,
+            &per_session,
+        )
+        .await;
     }
 }
