@@ -3,7 +3,9 @@
 //! This module provides the `serve()` function that runs the proxy server
 //! using a pre-bound TcpListener (from the supervisor).
 
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use axum::{
     Json, Router,
@@ -15,6 +17,7 @@ use axum::{
 use bytes::Bytes;
 use reqwest::Client;
 use tokio::net::TcpListener;
+use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, info, warn};
@@ -24,6 +27,7 @@ use gglib_core::ports::{
 };
 use gglib_mcp::McpService;
 
+use crate::cache_lifecycle::{StreamConfig, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::dashboard::{DashboardState, spawn_dashboard_publisher};
@@ -35,6 +39,7 @@ use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsRespons
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
+use dashmap::DashSet;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -69,6 +74,16 @@ pub(crate) struct AppState {
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
     calibration: Arc<TokenCalibration>,
+    /// Whether KV cache persistence is enabled (opt-in via --cache).
+    cache_enabled: bool,
+    /// Resolved slot directory path (Some only when cache_enabled).
+    slot_dir: Option<PathBuf>,
+    /// Semaphore gating restore→forward→save cycles to prevent interleaving.
+    slot_gate: Arc<Semaphore>,
+    /// When true, all pending saves are skipped (set on restart or explicit clear).
+    clear_all_pending: Arc<AtomicBool>,
+    /// Sessions that have been explicitly cleared (skip save for these).
+    per_session_cleared: Arc<DashSet<String>>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -99,6 +114,8 @@ pub async fn serve(
     council: CouncilDeps,
     cancel: CancellationToken,
     settings_repo: Arc<dyn SettingsRepository>,
+    cache_enabled: bool,
+    slot_dir: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -145,6 +162,12 @@ pub async fn serve(
     // recording + recycle) and the dashboard (counter surfacing).
     let upstream_health = Arc::new(UpstreamHealth::new());
 
+    // Shared cache state (constructed once, shared across all requests).
+    // Always initialized; the `cache_enabled` guard prevents acquire() when disabled.
+    let slot_gate = Arc::new(Semaphore::new(1));
+    let clear_all_pending = Arc::new(AtomicBool::new(false));
+    let per_session_cleared = Arc::new(DashSet::new());
+
     let dashboard = Arc::new(DashboardState::new(
         Arc::new(ActiveConnectionsRegistry::new()),
         slots_cache,
@@ -169,6 +192,11 @@ pub async fn serve(
         settings_repo,
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
+        cache_enabled,
+        slot_dir,
+        slot_gate,
+        clear_all_pending,
+        per_session_cleared,
     };
 
     let app = Router::new()
@@ -344,6 +372,27 @@ async fn chat_completions(
 ) -> Response {
     debug!("POST /v1/chat/completions");
 
+    // Extract and sanitize session ID from header (safety-critical: prevents path traversal)
+    let session_id_from_header = headers
+        .get("x-gglib-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+
+    let sanitized_session_id = if let Some(ref sid) = session_id_from_header {
+        match crate::slots::sanitize_session_id(sid) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                tracing::warn!("Invalid session ID in header: {}", e);
+                return Response::builder()
+                    .status(axum::http::StatusCode::BAD_REQUEST)
+                    .body(axum::body::Body::from(format!("Invalid session ID: {}", e)))
+                    .unwrap();
+            }
+        }
+    } else {
+        None
+    };
+
     // Extract the three routing fields from the request body.
     // ChatRoutingEnvelope only captures `model`, `stream`, and `num_ctx`;
     // all other fields are ignored by serde and the raw bytes are forwarded
@@ -444,27 +493,154 @@ async fn chat_completions(
     // O(1).  Needed to retry with the original payload if the upstream dies.
     let body_for_retry = body.clone();
 
-    // Forward the request
-    match forward_chat_completion(
-        &state.client,
-        &upstream_url,
-        &headers,
-        body,
-        is_streaming,
-        &model_name,
-        target.effective_ctx,
-        state.catalog_port.clone(),
-        state.dashboard.metrics.clone(),
-        global_inference_defaults,
-        connection,
-        state.upstream_health.clone(),
-        state.calibration.clone(),
-        None,
-        None,
-        None,
-    )
-    .await
-    {
+    // Build StreamConfig for this request (Some only when cache is enabled)
+    let stream_config = if state.cache_enabled {
+        state.slot_dir.as_ref().map(|dir| StreamConfig {
+            client: state.client.clone(),
+            base_url: upstream_url.to_string(),
+            slot_dir: dir.clone(),
+            clear_all_pending: state.clear_all_pending.clone(),
+            per_session_cleared: state.per_session_cleared.clone(),
+        })
+    } else {
+        None
+    };
+
+    // Forward the request, optionally wrapped in cache lifecycle
+    let response = if state.cache_enabled {
+        if let (Some(sid), Some(cfg)) = (&sanitized_session_id, &stream_config) {
+            if !is_streaming {
+                // Non-streaming with cache: wrap in run_with_cache (fail-open internally)
+                let (resp, _restore_result) = run_with_cache(cfg, &state.slot_gate, sid, || async {
+                    forward_chat_completion(
+                        &state.client,
+                        &upstream_url,
+                        &headers,
+                        body,
+                        is_streaming,
+                        &model_name,
+                        target.effective_ctx,
+                        state.catalog_port.clone(),
+                        state.dashboard.metrics.clone(),
+                        global_inference_defaults,
+                        connection,
+                        state.upstream_health.clone(),
+                        state.calibration.clone(),
+                        None,
+                        None,
+                        None,
+                    )
+                    .await
+                })
+                .await
+                .expect(
+                    "run_with_cache only returns Err on sanitization failure, which is already checked",
+                );
+                resp
+            } else {
+                // Streaming with cache: use prepare_streaming_cycle + sse_stream::spawn_and_return
+                let sid = sid.clone();
+                let cfg = cfg.clone();
+                match crate::cache_lifecycle::prepare_streaming_cycle(
+                    &cfg,
+                    state.slot_gate.clone(),
+                    &sid,
+                )
+                .await
+                {
+                    Ok((permit, _sanitized, _restore_result)) => {
+                        forward_chat_completion(
+                            &state.client,
+                            &upstream_url,
+                            &headers,
+                            body,
+                            is_streaming,
+                            &model_name,
+                            target.effective_ctx,
+                            state.catalog_port.clone(),
+                            state.dashboard.metrics.clone(),
+                            global_inference_defaults,
+                            connection,
+                            state.upstream_health.clone(),
+                            state.calibration.clone(),
+                            Some(permit),
+                            Some(cfg),
+                            Some(sid),
+                        )
+                        .await
+                    }
+                    Err(_) => {
+                        // Fail-open: proceed without cache for streaming too
+                        forward_chat_completion(
+                            &state.client,
+                            &upstream_url,
+                            &headers,
+                            body,
+                            is_streaming,
+                            &model_name,
+                            target.effective_ctx,
+                            state.catalog_port.clone(),
+                            state.dashboard.metrics.clone(),
+                            global_inference_defaults,
+                            connection,
+                            state.upstream_health.clone(),
+                            state.calibration.clone(),
+                            None,
+                            None,
+                            None,
+                        )
+                        .await
+                    }
+                }
+            }
+        } else {
+            // Cache enabled but no session ID or config: direct call
+            forward_chat_completion(
+                &state.client,
+                &upstream_url,
+                &headers,
+                body,
+                is_streaming,
+                &model_name,
+                target.effective_ctx,
+                state.catalog_port.clone(),
+                state.dashboard.metrics.clone(),
+                global_inference_defaults,
+                connection,
+                state.upstream_health.clone(),
+                state.calibration.clone(),
+                None,
+                None,
+                None,
+            )
+            .await
+        }
+    } else {
+        // Cache disabled: direct call
+        forward_chat_completion(
+            &state.client,
+            &upstream_url,
+            &headers,
+            body,
+            is_streaming,
+            &model_name,
+            target.effective_ctx,
+            state.catalog_port.clone(),
+            state.dashboard.metrics.clone(),
+            global_inference_defaults,
+            connection,
+            state.upstream_health.clone(),
+            state.calibration.clone(),
+            None,
+            None,
+            None,
+        )
+        .await
+    };
+
+    // Handle UpstreamDead from the primary forward (only possible when cache is disabled
+    // or no session ID — cache-wrapped paths return Ok(Response) internally)
+    match response {
         Ok(resp) => resp,
         Err(ForwardError::UpstreamDead) => {
             // llama-server was dead after ensure_model_running() returned a

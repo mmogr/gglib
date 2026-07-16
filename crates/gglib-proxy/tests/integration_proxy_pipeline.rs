@@ -322,6 +322,8 @@ async fn spawn_proxy(
             make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
+            false,
+            None,
         )
         .await
         .ok();

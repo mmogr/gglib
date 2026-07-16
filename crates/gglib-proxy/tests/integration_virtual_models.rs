@@ -236,6 +236,8 @@ async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, Cancel
             orchestrator,
             cancel_clone,
             Arc::new(MockSettingsRepo),
+            false,
+            None,
         )
         .await
         .ok();

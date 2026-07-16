@@ -224,6 +224,8 @@ impl ProxySupervisor {
         let cancel_clone = cancel_token.clone();
         let cancel_for_exit = cancel_token.clone();
         let default_ctx = config.default_context;
+        let cache_enabled = config.cache_enabled;
+        let slot_dir = config.slot_dir;
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -244,6 +246,8 @@ impl ProxySupervisor {
                 orchestrator,
                 cancel_clone,
                 settings_repo,
+                cache_enabled,
+                slot_dir,
             )
             .await;
 

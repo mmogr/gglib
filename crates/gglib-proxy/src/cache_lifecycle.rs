@@ -108,15 +108,15 @@ pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: 
 ///
 /// The semaphore permit is held across the ENTIRE cycle (Design Directive 1).
 /// Sanitization happens BEFORE acquire so bad session IDs never enter the gate.
-pub async fn run_with_cache<F, Fut>(
+pub async fn run_with_cache<F, Fut, T>(
     config: &StreamConfig,
     slot_gate: &Semaphore,
     session_id: &str,
     generation_work: F,
-) -> Result<SlotIoResult, SlotIoResult>
+) -> Result<(T, SlotIoResult), SlotIoResult>
 where
     F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = ()>,
+    Fut: std::future::Future<Output = T>,
 {
     // Sanitize BEFORE acquiring the semaphore — 400 Bad Request on failure
     let sanitized = match slots::sanitize_session_id(session_id) {
@@ -131,16 +131,29 @@ where
     let restore_result = restore_with_retry(config, &sanitized).await;
 
     // Generation work (semaphore held — prevents interleaving corruption)
-    generation_work().await;
+    let result = generation_work().await;
 
     // Save (awaited before permit drops) — passes known-good sanitized ID
     save_after_generation(config, &sanitized).await;
 
     // Permit dropped at end of scope — entire cycle protected
-    match restore_result {
-        SlotIoResult::Ok | SlotIoResult::NotFound => Ok(restore_result),
-        other => Err(other),
+    // Fail-open: restore failure is logged but does NOT abort generation.
+    // The response was already produced; we return it regardless of cache state.
+    match &restore_result {
+        SlotIoResult::Ok => tracing::debug!("Cache restored for session {}", sanitized),
+        SlotIoResult::NotFound => {
+            tracing::info!("No cached slot for session {} — full re-prefill", sanitized)
+        }
+        SlotIoResult::Transient(msg) => tracing::warn!(
+            "Transient cache restore failure for session {}: {}",
+            sanitized,
+            msg
+        ),
+        SlotIoResult::Permanent(msg) => {
+            tracing::warn!("Cache restore failed for session {}: {}", sanitized, msg)
+        }
     }
+    Ok((result, restore_result))
 }
 
 /// Streaming cache lifecycle: acquire permit, restore, return permit for spawn.
