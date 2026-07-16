@@ -518,6 +518,7 @@ mod tests {
                 1,
                 "test-model".to_string(),
                 4096,
+                false,
             ))
         }
 

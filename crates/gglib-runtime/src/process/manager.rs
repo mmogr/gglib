@@ -293,6 +293,7 @@ impl ProcessManager {
                                     model_id,
                                     cached_name,
                                     context_size,
+                                    false, // cached healthy — not a fresh spawn
                                 ));
                             }
                             warn!(
@@ -350,6 +351,12 @@ impl ProcessManager {
                             },
                         );
 
+                        // Purge stale slot .bin files before spawning a fresh instance.
+                        // Old slot files are incompatible with the new server process.
+                        if let Some(ref slot_dir) = slot_save_path_owned {
+                            purge_stale_slot_bin_files(slot_dir);
+                        }
+
                         let port = {
                             let mut core_w = core.write().await;
                             core_w
@@ -388,6 +395,7 @@ impl ProcessManager {
                             launch_spec.id,
                             launch_spec.name,
                             effective_ctx,
+                            true, // fresh spawn — cache slots are stale
                         ))
                     });
 
@@ -409,7 +417,13 @@ impl ProcessManager {
                 let current = current.clone();
                 let guard = current.read().await;
                 guard.as_ref().map(|c| {
-                    RunningTarget::local(c.port, c.model_id, c.model_name.clone(), c.context_size)
+                    RunningTarget::local(
+                        c.port,
+                        c.model_id,
+                        c.model_name.clone(),
+                        c.context_size,
+                        false,
+                    )
                 })
             }
             ProcessStrategy::Concurrent { .. } => None,
@@ -501,9 +515,67 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
+/// Remove stale `.bin` slot files from the cache directory.
+/// Called on llama-server restart to invalidate slots that may have been
+/// written by a previous process (different model, context size, etc.).
+fn purge_stale_slot_bin_files(slot_dir: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(slot_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+    // Silently skip if the directory doesn't exist or can't be read.
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn purge_stale_slot_bin_files_removes_bin_only() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        // Create .bin and non-.bin files
+        tokio::fs::write(dir.join("session1.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("session2.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("notes.txt"), "keep me")
+            .await
+            .unwrap();
+        // Purge
+        purge_stale_slot_bin_files(&dir).await;
+        // Verify: .bin gone, .txt remains
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
+        let mut remaining: Vec<std::ffi::OsString> = Vec::new();
+        while let Ok(Some(e)) = entries.next_entry().await {
+            remaining.push(e.file_name());
+        }
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].to_str(), Some("notes.txt"));
+        // Cleanup
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn purge_stale_slot_bin_files_noop_on_missing_dir() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-missing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        // Should not panic or error — just returns silently
+        purge_stale_slot_bin_files(&dir).await;
+    }
 
     #[tokio::test]
     async fn test_concurrent_manager_creation() {

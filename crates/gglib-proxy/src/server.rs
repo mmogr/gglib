@@ -462,6 +462,14 @@ async fn chat_completions(
         }
     };
 
+    // If the model was just restarted, invalidate all pending cache slots.
+    if target.just_started {
+        tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
+        state
+            .clear_all_pending
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
     // Build upstream URL
     let upstream_url = format!("{}/v1/chat/completions", target.base_url);
     debug!(
