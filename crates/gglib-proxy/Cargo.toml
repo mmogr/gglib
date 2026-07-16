@@ -57,7 +57,7 @@ serde_json = "1.0"
 regex = "1"
 
 # Concurrent collections
-dashmap = "5"
+dashmap = "6"
 
 # Session ID generation
 uuid = { workspace = true, features = ["v4"] }

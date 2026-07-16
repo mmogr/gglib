@@ -1077,19 +1077,6 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
-dependencies = [
- "cfg-if",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
-]
-
-[[package]]
-name = "dashmap"
 version = "6.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
@@ -1973,7 +1960,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "dashmap 6.2.1",
+ "dashmap",
  "dirs",
  "futures-core",
  "futures-util",
@@ -2225,7 +2212,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
- "dashmap 5.5.3",
+ "dashmap",
  "futures-core",
  "futures-util",
  "gglib-core",
@@ -2982,7 +2969,7 @@ version = "20.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad89218e74850f42d364ed3877c7291f0474c8533502df91bb877ecc5cb0dd40"
 dependencies = [
- "dashmap 6.2.1",
+ "dashmap",
  "gix-fs",
  "libc",
  "parking_lot",

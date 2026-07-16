@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 
+pub mod cache_lifecycle;
 pub mod canonicalization;
 pub mod connections;
 pub mod council_proxy;
