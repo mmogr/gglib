@@ -61,6 +61,9 @@ pub fn canonicalize_system_prompt(body: Bytes) -> Bytes {
 
     let original_content = messages[sys_idx]["content"].as_str().unwrap().to_string();
 
+    // Normalize line endings for cross-platform BPE prefix consistency.
+    let original_content = original_content.replace("\r\n", "\n").replace("\r", "\n");
+
     // Collect matched dynamic lines (trimmed to remove trailing newlines the
     // regex captures).
     let extracted_lines: Vec<&str> = DYNAMIC_LINE_PATTERNS
