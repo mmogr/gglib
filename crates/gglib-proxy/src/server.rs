@@ -459,6 +459,9 @@ async fn chat_completions(
         connection,
         state.upstream_health.clone(),
         state.calibration.clone(),
+        None,
+        None,
+        None,
     )
     .await
     {
@@ -535,6 +538,9 @@ async fn chat_completions(
                 retry_connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
+                None,
+                None,
+                None,
             )
             .await
             {

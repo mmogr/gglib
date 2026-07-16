@@ -174,7 +174,7 @@ const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output f
 /// deadline fires and another connection is still active the wait is extended
 /// for another cycle rather than failed (see the keepalive loop). Only an
 /// expiry with no other active request counts as degradation.
-const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
+pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
@@ -443,6 +443,13 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 ///   records each terminal outcome (empty stream or first-byte timeout is a
 ///   strike; any visible output resets it) so the handler can recycle a
 ///   degraded-but-`/health`-green upstream before the next request.
+/// * `permit` - KV cache semaphore permit (streaming path only), moved into
+///   the spawned task and held for its entire lifetime. `None` when the KV
+///   cache is disabled.
+/// * `config` - KV cache lifecycle configuration (streaming path only).
+///   `None` when the KV cache is disabled.
+/// * `session_id` - Session identifier used to key the KV cache save
+///   (streaming path only). `None` when the KV cache is disabled.
 ///
 /// # Returns
 ///
@@ -463,6 +470,9 @@ pub(crate) async fn forward_chat_completion(
     connection: ConnectionGuard,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
+    permit: Option<tokio::sync::OwnedSemaphorePermit>,
+    config: Option<crate::cache_lifecycle::StreamConfig>,
+    session_id: Option<String>,
 ) -> Result<Response, ForwardError> {
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
@@ -631,208 +641,27 @@ pub(crate) async fn forward_chat_completion(
             return Err(ForwardError::UpstreamDead);
         }
 
-        // Phase 2 — channel-backed response + keepalive background task.
+        // Phase 2 — channel-backed response + keepalive background task,
+        // relocated to `sse_stream::spawn_and_return` (Step 4).
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let model_name_owned = model_name.to_owned();
         let tags = context.tags;
 
-        // `connection` is moved into this task so it lives exactly as long
-        // as the streaming task does — dropped (unregistering from the
-        // dashboard) whether the task finishes normally, the client
-        // disconnects (the task is a detached `tokio::spawn`, but `tx` being
-        // dropped ends the response body stream, and the task itself exits
-        // once `stream_response_to_channel` observes the closed channel), or
-        // panics.
-        tokio::spawn(async move {
-            let connection = connection;
-            let mut keepalive_interval = tokio::time::interval(std::time::Duration::from_secs(15));
-            keepalive_interval.tick().await; // skip first immediate tick
-
-            // Race: llama.cpp response headers vs 15-second keepalive timer.
-            let send_future = req_builder.body(body).send();
-            tokio::pin!(send_future);
-
-            // Overall first-byte deadline: bounds pathological slot-queue
-            // waits so a wedged upstream cannot hang the client indefinitely
-            // on keepalive comments.
-            let deadline =
-                tokio::time::sleep(std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS));
-            tokio::pin!(deadline);
-
-            let upstream_response = loop {
-                tokio::select! {
-                    biased;
-                    result = &mut send_future => break result,
-                    () = &mut deadline => {
-                        // The single-slot upstream may legitimately be busy
-                        // serving another (possibly minutes-long) request, in
-                        // which case this request is correctly queued, not
-                        // wedged. Only treat a deadline expiry as degradation
-                        // when NO other connection is actively occupying the
-                        // slot; otherwise extend the deadline and keep waiting.
-                        if connection.others_active() {
-                            warn!(
-                                deadline_secs = FIRST_BYTE_DEADLINE_SECS,
-                                "slot-queue wait exceeded deadline but another request is active; extending (upstream busy, not wedged)"
-                            );
-                            deadline.as_mut().reset(
-                                tokio::time::Instant::now()
-                                    + std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
-                            );
-                            continue;
-                        }
-                        warn!(
-                            deadline_secs = FIRST_BYTE_DEADLINE_SECS,
-                            "slot-queue wait exceeded first-byte deadline with no other active request; treating upstream as degraded"
-                        );
-                        upstream_health.record_timeout();
-                        let visible = visible_content_frame(
-                            &model_name_owned,
-                            &format!(
-                                "⚠️ [proxy] upstream model server did not begin responding within {FIRST_BYTE_DEADLINE_SECS}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
-                            ),
-                        );
-                        let payload = serde_json::json!({
-                            "error": {
-                                "message": format!(
-                                    "upstream did not respond within {FIRST_BYTE_DEADLINE_SECS}s"
-                                ),
-                                "type": "server_error",
-                                "code": "upstream_timeout",
-                            }
-                        });
-                        let frame = format!("{visible}data: {payload}\n\ndata: [DONE]\n\n");
-                        let _ = tx.send(Ok(Bytes::from(frame))).await;
-                        return;
-                    }
-                    _ = keepalive_interval.tick() => {
-                        debug!("slot-queue wait: sending SSE keepalive to client");
-                        if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
-                            return; // client disconnected
-                        }
-                    }
-                }
-            };
-
-            match upstream_response {
-                Ok(resp) if resp.status().is_success() => {
-                    debug!(
-                        status = resp.status().as_u16(),
-                        "upstream accepted streaming request after slot-queue wait"
-                    );
-                    let outcome = stream_response_to_channel(
-                        resp,
-                        model_name_owned.clone(),
-                        tags,
-                        tx,
-                        &connection,
-                    )
-                    .await;
-                    // Feed the terminal outcome to the watchdog: an empty
-                    // response is a strike, visible output resets the streak.
-                    upstream_health.record_stream_outcome(outcome.saw_output);
-                    // Calibrate this model's chars-per-token ratio from the
-                    // real prompt-token count the upstream reported.
-                    if let Some(prompt_tokens) = outcome.prompt_tokens {
-                        calibration.record(&model_name_owned, forwarded_chars, prompt_tokens);
-                    }
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    let error_bytes = resp.bytes().await.unwrap_or_default();
-                    warn!(
-                        status = status.as_u16(),
-                        bytes = error_bytes.len(),
-                        "upstream returned error during slot-queue wait"
-                    );
-                    // Preserve the upstream error's `type` and `code` so the
-                    // LLM Gateway extension (and VS Code) can identify errors
-                    // like `context_length_exceeded` rather than seeing an
-                    // opaque `server_error` wrapper.  Falls back to the
-                    // generic envelope only when the body is not valid JSON.
-                    // No panic paths: every operation is Option/Result-safe.
-                    let payload = match serde_json::from_slice::<serde_json::Value>(&error_bytes) {
-                        Ok(upstream) => {
-                            let msg = upstream
-                                .pointer("/error/message")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("upstream returned an error");
-                            let typ = upstream
-                                .pointer("/error/type")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("server_error");
-                            let code = upstream
-                                .pointer("/error/code")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or("upstream_error");
-                            serde_json::json!({
-                                "error": { "message": msg, "type": typ, "code": code }
-                            })
-                        }
-                        Err(_) => {
-                            // Non-JSON body — fall back to a generic wrapper
-                            // that includes the raw bytes as context.
-                            let body_str = String::from_utf8_lossy(&error_bytes);
-                            serde_json::json!({
-                                "error": {
-                                    "message": format!(
-                                        "upstream returned {}: {}",
-                                        status, body_str
-                                    ),
-                                    "type": "server_error",
-                                    "code": "upstream_error",
-                                }
-                            })
-                        }
-                    };
-                    let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
-                    let human = payload
-                        .pointer("/error/message")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("upstream returned an error");
-                    let visible = visible_content_frame(
-                        &model_name_owned,
-                        &format!("⚠️ [proxy] upstream model server error ({status}): {human}"),
-                    );
-                    let frame = format!("{visible}{frame}");
-                    let _ = tx.send(Ok(Bytes::from(frame))).await;
-                }
-                Err(e) => {
-                    error!("upstream llama-server unreachable during slot-queue wait: {e}");
-                    let payload = serde_json::json!({
-                        "error": {
-                            "message": format!("upstream llama-server unavailable: {e}"),
-                            "type": "server_error",
-                            "code": "upstream_error",
-                        }
-                    });
-                    let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
-                    let visible = visible_content_frame(
-                        &model_name_owned,
-                        &format!("⚠️ [proxy] upstream llama-server unavailable: {e}"),
-                    );
-                    let frame = format!("{visible}{frame}");
-                    let _ = tx.send(Ok(Bytes::from(frame))).await;
-                }
-            }
-        });
-
-        // Return 200 immediately — the client sees a live SSE stream right
-        // away, keeps the connection open, and receives keepalive comments
-        // while llama.cpp assigns a slot.
-        let body = Body::from_stream(async_stream::stream! {
-            let mut rx = rx;
-            while let Some(item) = rx.recv().await {
-                yield item;
-            }
-        });
-        return Ok(Response::builder()
-            .status(StatusCode::OK)
-            .header("content-type", "text/event-stream")
-            .header("cache-control", "no-cache")
-            .header("x-accel-buffering", "no")
-            .body(body)
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()));
+        return Ok(crate::sse_stream::spawn_and_return(
+            req_builder,
+            body,
+            tx,
+            rx,
+            connection,
+            model_name_owned,
+            tags,
+            upstream_health,
+            calibration,
+            forwarded_chars,
+            permit,
+            config,
+            session_id,
+        ));
     }
 
     // ── Non-streaming path (unchanged) ────────────────────────────────────
@@ -915,7 +744,7 @@ fn host_port_from_url(url: &str) -> String {
 /// 200 stream, so an error delivered only as a structured error frame looks
 /// like an empty response. Pairing every such error with a visible content
 /// frame guarantees the cause is shown.
-fn visible_content_frame(model: &str, content: &str) -> String {
+pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -946,7 +775,7 @@ fn visible_content_frame(model: &str, content: &str) -> String {
 /// records them on `connection` (the dashboard registry entry for this
 /// request) as a side effect — the frame is still encoded and forwarded to
 /// the client unchanged; this never alters what the client receives.
-async fn stream_response_to_channel(
+pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     tags: Vec<String>,
