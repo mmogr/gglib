@@ -171,6 +171,17 @@ pub fn build_and_spawn(
         cmd.arg("--reasoning-format").arg(format);
     }
 
+    // Add KV cache slot persistence flags if a slot-save directory is set.
+    //
+    // `--cache-ram -1` disables llama-server's RAM cache size limit so the
+    // full slot can be cached without eviction pressure. `None` (the default)
+    // emits neither flag, leaving the launch identical to before this field
+    // existed.
+    if let Some(ref slot_path) = config.slot_save_path {
+        cmd.arg("--slot-save-path").arg(slot_path);
+        cmd.arg("--cache-ram").arg("-1");
+    }
+
     // Add MTP speculative decoding flags if enabled
     //
     // A global kill switch — the `GGLIB_DISABLE_MTP` environment variable set
@@ -335,6 +346,7 @@ mod tests {
             spec_draft_p_min: None,
             inference_config: None,
             extra_args: vec![],
+            slot_save_path: None,
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)
