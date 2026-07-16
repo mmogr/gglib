@@ -250,6 +250,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         config.base_port,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
+        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =

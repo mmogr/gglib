@@ -262,6 +262,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             repeat_penalty,
             presence_penalty,
             min_p,
+            cache,
+            slot_dir,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -316,6 +318,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx.mcp.clone(),
                 ctx.app.settings().repo(),
                 inference_override,
+                cache,
+                slot_dir,
             )
             .await?;
         }

@@ -51,6 +51,10 @@ pub enum ProcessStrategy {
         current: Arc<RwLock<Option<CurrentModelState>>>,
         /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
         loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
+        /// KV cache slot-save directory (`--slot-save-path`), or `None` if the
+        /// KV cache feature is disabled. Forwarded verbatim into every
+        /// `build_server_config` call made by this manager's driver.
+        slot_save_path: Option<PathBuf>,
     },
 }
 
@@ -97,6 +101,9 @@ impl ProcessManager {
     /// * `llama_server_path` — Path to the llama-server binary to execute.
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
+    /// * `slot_save_path` — KV cache slot-save directory, or `None` to
+    ///   disable the KV cache feature entirely (zero behavior change to the
+    ///   launch — no `--slot-save-path`/`--cache-ram` flags are emitted).
     ///
     /// # When to use
     ///
@@ -108,6 +115,7 @@ impl ProcessManager {
         base_port: u16,
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
+        slot_save_path: Option<PathBuf>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
@@ -116,6 +124,7 @@ impl ProcessManager {
                 catalog,
                 current: Arc::new(RwLock::new(None)),
                 loading: Arc::new(std::sync::RwLock::new(None)),
+                slot_save_path,
             },
         }
     }
@@ -180,12 +189,13 @@ impl ProcessManager {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot) = match &self.strategy {
+        let (catalog, current_lock, loading_slot, slot_save_path) = match &self.strategy {
             ProcessStrategy::SingleSwap {
                 catalog,
                 current,
                 loading,
-            } => (catalog, current, loading),
+                slot_save_path,
+            } => (catalog, current, loading, slot_save_path),
             ProcessStrategy::Concurrent { .. } => {
                 return Err(ModelRuntimeError::Internal(
                     "ensure_model_running() is only available for SingleSwap strategy".to_string(),
@@ -227,6 +237,7 @@ impl ProcessManager {
                     let catalog_owned = catalog.clone();
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
+                    let slot_save_path_owned = slot_save_path.clone();
 
                     // 4. Spawn the driver task (detached from this request's future)
                     drive(guard, STARTUP_WAIT_TIMEOUT, async move {
@@ -334,6 +345,7 @@ impl ProcessManager {
                                     .as_ref()
                                     .and_then(|sc| sc.context_length),
                                 global_default_ctx: Some(default_ctx),
+                                slot_save_path: slot_save_path_owned.clone(),
                                 ..Default::default()
                             },
                         );

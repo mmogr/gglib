@@ -462,6 +462,12 @@ pub enum Commands {
         /// Set `0.0` to disable (recommended by Qwen3).
         #[arg(long)]
         min_p: Option<f32>,
+        /// Enable KV cache session persistence (saves/restores llama-server slot state per session)
+        #[arg(long)]
+        cache: bool,
+        /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
+        #[arg(long)]
+        slot_dir: Option<std::path::PathBuf>,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,
