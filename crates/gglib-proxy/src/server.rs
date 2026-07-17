@@ -27,7 +27,7 @@ use gglib_core::ports::{
 };
 use gglib_mcp::McpService;
 
-use crate::cache_lifecycle::{StreamConfig, run_with_cache};
+use crate::cache_lifecycle::{StreamConfig, clear_cache, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::dashboard::{DashboardState, spawn_dashboard_publisher};
@@ -182,6 +182,7 @@ pub async fn serve(
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
+        cache_enabled,
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -215,6 +216,7 @@ pub async fn serve(
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
+        .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         // Permissive CORS: this proxy only ever binds to 127.0.0.1 for local
         // developer use (CLI or the Tauri GUI) and strips `Authorization`
@@ -372,6 +374,88 @@ async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoR
     let current = state.dashboard.snapshot();
     Arc::clone(&state.dashboard.broadcaster)
         .subscribe_with_hydration(current, SseOptions::default())
+}
+
+/// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
+///
+/// Optionally accepts `X-Gglib-Session-Id` header to clear a single session;
+/// without it, all slot files are cleared. Returns 200 OK with status JSON.
+async fn handle_proxy_cache_clear(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // Cache disabled → skip (idempotent no-op)
+    if !state.cache_enabled {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "skipped",
+                "message": "cache not enabled"
+            })),
+        );
+    }
+
+    // Extract optional session ID from header
+    let session_id = headers
+        .get("x-gglib-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+
+    // Sanitize if provided — 400 on invalid input (safety-critical)
+    if let Some(ref sid) = session_id
+        && let Err(e) = crate::slots::sanitize_session_id(sid)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!("invalid session id: {}", e)
+            })),
+        );
+    }
+
+    let slot_dir = match &state.slot_dir {
+        Some(d) => d.clone(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "slot_dir not configured"
+                })),
+            );
+        }
+    };
+
+    let config = StreamConfig {
+        client: state.client.clone(),
+        base_url: String::new(), // Not used by clear_cache
+        slot_dir,
+        clear_all_pending: state.clear_all_pending.clone(),
+        per_session_cleared: state.per_session_cleared.clone(),
+        server_start_time: state.server_start_time.clone(),
+    };
+
+    match clear_cache(&config, session_id.as_deref()).await {
+        Ok(()) => {
+            let msg = if session_id.is_some() {
+                "session cleared"
+            } else {
+                "all slots cleared"
+            };
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "ok",
+                    "message": msg
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": e.to_string()
+            })),
+        ),
+    }
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
