@@ -159,6 +159,20 @@ gglib proxy dashboard --host 127.0.0.1 --port 8080
 
 This is a simple redraw-in-place view (via `crossterm` cursor moves), not a full raw-mode TUI — consistent with this crate's existing terminal-handling conventions (see `handlers/model/download/interactive.rs`). Falls back to plain sequential prints on a non-TTY stdout. Press `Ctrl+C` to exit.
 
+### Proxy Cache Management
+
+| Command | Description |
+|---|---|
+| `gglib proxy start --cache --slot-dir <path>` | Start proxy with KV cache session persistence enabled |
+| `gglib proxy cache-clear` | Clear KV cache for a session or all sessions on an already-running proxy |
+
+Proxy cache-clear options:
+| Flag | Description |
+|---|---|
+| `--host` | Proxy host (default: 127.0.0.1) |
+| `-p`, `--port` | Proxy port (default: 8080) |
+| `--session-id` | Optional session ID to target (without it, clears all sessions) |
+
 ### Question Command
 
 The `question` command (alias: `q`) supports piped input or file context:

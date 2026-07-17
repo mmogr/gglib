@@ -666,6 +666,11 @@ mod tests {
 // Slot I/O — save / restore / clear + background LRU eviction
 // =============================================================================
 
+/// Result of a slot I/O operation (save/restore).
+///
+/// `NotFound` means no cached slot exists for this session (not an error —
+/// the request proceeds cold). `Transient` failures may be retried.
+/// `Permanent` failures are terminal (e.g., invalid session ID).
 #[derive(Debug, PartialEq)]
 pub enum SlotIoResult {
     Ok,
@@ -687,6 +692,10 @@ pub fn sanitize_session_id(id: &str) -> Result<String, String> {
     Ok(id.to_string())
 }
 
+/// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
+///
+/// Returns `SlotIoResult::Ok` on success, `NotFound` if the server returns 404,
+/// or `Transient` for timeout/network errors.
 pub async fn save_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
     let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
     match tokio_time::timeout(
@@ -706,6 +715,11 @@ pub async fn save_slot(client: &Client, base_url: &str, session_id: &str) -> Slo
     }
 }
 
+/// Trigger a KV cache restore for the current slot via llama-server's `/slots/0?action=restore`.
+///
+/// Returns `SlotIoResult::Ok` on success, `NotFound` if no cached file exists (404),
+/// or `Transient` for timeout/network errors. A 5-second timeout is used because
+/// restore may need to read a large file from disk.
 pub async fn restore_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
     let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
     match tokio_time::timeout(
@@ -794,6 +808,10 @@ pub async fn spawn_lru_eviction_task(slot_dir: PathBuf, max_slots: usize) {
     });
 }
 
+/// Evict least-recently-used slot files from `slot_dir` when count exceeds `max_slots`.
+///
+/// Sorts `.bin` files by mtime (oldest first), removes the excess. Errors on
+/// individual file removal are silently skipped for NotFound/PermissionDenied.
 pub async fn evict_stale_slots(slot_dir: &Path, max_slots: usize) -> std::io::Result<()> {
     let mut entries = match tokio::fs::read_dir(slot_dir).await {
         Ok(e) => e,

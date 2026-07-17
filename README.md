@@ -200,6 +200,14 @@ curl http://localhost:9887/v1/proxy/status | jq .
 gglib proxy dashboard --port 9887
 ```
 
+### KV Cache Session Persistence
+
+For sequential multi-agent workflows, enable `--cache --slot-dir <path>` to persist
+KV cache state between requests. The proxy automatically saves and restores per-session
+slot files, gated by a semaphore to prevent concurrent access. Stale caches are
+detected via mtime comparison and skipped (fail-open). Use `gglib proxy cache-clear`
+to manually clear cached state.
+
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
 ![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json)
