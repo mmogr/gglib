@@ -161,6 +161,18 @@ pub enum ProxyCommand {
         #[arg(short, long, default_value = "8080")]
         port: u16,
     },
+    /// Clear KV cache for a session or all sessions on an already-running proxy
+    CacheClear {
+        /// Host of the already-running proxy to connect to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Port of the already-running proxy to connect to
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        /// Optional session ID to target (without --session-id, clears all sessions)
+        #[arg(long)]
+        session_id: Option<String>,
+    },
 }
 
 /// Top-level commands for the GGUF library management tool.

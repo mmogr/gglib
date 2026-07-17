@@ -276,6 +276,18 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     } => {
                         handlers::proxy_dashboard::execute(dash_host, dash_port).await?;
                     }
+                    crate::commands::ProxyCommand::CacheClear {
+                        host: clear_host,
+                        port: clear_port,
+                        session_id,
+                    } => {
+                        handlers::proxy_cache_clear::execute(
+                            &clear_host,
+                            clear_port,
+                            session_id.as_deref(),
+                        )
+                        .await?;
+                    }
                 }
                 return Ok(());
             }

@@ -25,5 +25,6 @@ pub mod inference;
 pub mod mcp_cli;
 pub mod model;
 pub mod plan;
+pub mod proxy_cache_clear;
 pub mod proxy_dashboard;
 pub mod web;

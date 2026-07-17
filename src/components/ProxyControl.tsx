@@ -1,6 +1,7 @@
 import { FC, useState, useRef } from "react";
-import { ClipboardCopy, LayoutDashboard, Power, Repeat2 } from "lucide-react";
+import { ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
+import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
@@ -28,6 +29,8 @@ interface ProxyControlProps {
   buttonActiveClassName?: string;
   statusDotClassName?: string;
   statusDotActiveClassName?: string;
+  /** Whether KV cache persistence is enabled on the running proxy. */
+  cacheEnabled?: boolean;
 }
 
 const ProxyControl: FC<ProxyControlProps> = ({
@@ -35,6 +38,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   buttonActiveClassName,
   statusDotClassName,
   statusDotActiveClassName,
+  cacheEnabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const proxyState = useProxyState();
@@ -50,6 +54,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearMessage, setClearMessage] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
 
@@ -155,6 +161,36 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 leftIcon={<Icon icon={LayoutDashboard} size={14} />}
               >
                 View Dashboard
+              </Button>
+
+              {clearMessage && (
+                <div className="text-xs mb-md p-sm rounded-base bg-muted/50 text-foreground">
+                  {clearMessage}
+                </div>
+              )}
+              <Button
+                variant="secondary"
+                className="w-full p-sm mb-md rounded-base text-sm font-medium"
+                onClick={async () => {
+                  setClearing(true);
+                  setClearMessage(null);
+                  try {
+                    const result = await clearProxyCache(
+                      config.host,
+                      proxyState.port ?? config.port
+                    );
+                    setClearMessage(result.message || 'Cache cleared');
+                  } catch (err: any) {
+                    setClearMessage(`Failed: ${err.message}`);
+                  } finally {
+                    setClearing(false);
+                    setTimeout(() => setClearMessage(null), 5000);
+                  }
+                }}
+                disabled={clearing || !cacheEnabled}
+                leftIcon={<Icon icon={Trash2} size={14} />}
+              >
+                {clearing ? 'Clearing...' : 'Clear Cache'}
               </Button>
 
               <Button

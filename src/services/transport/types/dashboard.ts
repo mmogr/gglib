@@ -118,4 +118,6 @@ export interface DashboardSnapshot {
   slots_status?: string | null;
   recent_requests: ContextSnapshot[];
   total_requests: number;
+  /** Whether KV cache persistence is enabled on this proxy instance. */
+  cache_enabled?: boolean;
 }
