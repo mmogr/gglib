@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use dashmap::DashSet;
 use reqwest::Client;
@@ -35,6 +35,9 @@ pub struct StreamConfig {
     pub slot_dir: PathBuf,
     pub clear_all_pending: Arc<AtomicBool>,
     pub per_session_cleared: Arc<DashSet<String>>,
+    /// Unix timestamp (seconds) when the current llama-server process started.
+    /// Used by mtime guard to skip restoring stale slot files.
+    pub server_start_time: Arc<AtomicU64>,
 }
 
 /// Restore KV cache for a session, with retry on transient failures.
@@ -213,6 +216,7 @@ mod tests {
             slot_dir: PathBuf::from("/tmp/slots"),
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)),
         };
         let _clone = config.clone();
     }
@@ -230,6 +234,7 @@ mod tests {
             slot_dir: PathBuf::from("/tmp/test-slots"),
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)),
         };
 
         let _ = clear_cache(&config, Some("test_session")).await;
@@ -244,6 +249,7 @@ mod tests {
             slot_dir: PathBuf::from("/tmp/test-slots"),
             clear_all_pending: Arc::new(AtomicBool::new(true)), // Simulate pending global clear
             per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)), // 0 → fail-open (always proceed)
         };
 
         config
@@ -269,6 +275,7 @@ mod tests {
             slot_dir: PathBuf::from("/tmp/test-slots"),
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)),
         };
         let gate = Arc::new(Semaphore::new(1));
 

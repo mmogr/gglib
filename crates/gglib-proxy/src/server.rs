@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 
 use axum::{
     Json, Router,
@@ -84,6 +84,9 @@ pub(crate) struct AppState {
     clear_all_pending: Arc<AtomicBool>,
     /// Sessions that have been explicitly cleared (skip save for these).
     per_session_cleared: Arc<DashSet<String>>,
+    /// Unix timestamp (seconds) when the current llama-server process started.
+    /// Updated on each restart detection. Used by mtime guard to skip stale slots.
+    server_start_time: Arc<AtomicU64>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -167,6 +170,12 @@ pub async fn serve(
     let slot_gate = Arc::new(Semaphore::new(1));
     let clear_all_pending = Arc::new(AtomicBool::new(false));
     let per_session_cleared = Arc::new(DashSet::new());
+    let server_start_time = Arc::new(AtomicU64::new(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    ));
 
     let dashboard = Arc::new(DashboardState::new(
         Arc::new(ActiveConnectionsRegistry::new()),
@@ -197,6 +206,7 @@ pub async fn serve(
         slot_gate,
         clear_all_pending,
         per_session_cleared,
+        server_start_time,
     };
 
     let app = Router::new()
@@ -468,6 +478,14 @@ async fn chat_completions(
         state
             .clear_all_pending
             .store(true, std::sync::atomic::Ordering::SeqCst);
+        // Update server start time so mtime guard skips stale slot files.
+        state.server_start_time.store(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            AtomicOrdering::SeqCst,
+        );
     }
 
     // Build upstream URL
@@ -509,6 +527,7 @@ async fn chat_completions(
             slot_dir: dir.clone(),
             clear_all_pending: state.clear_all_pending.clone(),
             per_session_cleared: state.per_session_cleared.clone(),
+            server_start_time: state.server_start_time.clone(),
         })
     } else {
         None
