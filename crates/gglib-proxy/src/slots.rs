@@ -813,6 +813,23 @@ pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std:
     Ok(())
 }
 
+/// Retry budget for a transient save failure — same shape as
+/// `cache_lifecycle::restore_with_retry`'s retry loop (duplicated here
+/// rather than imported, since slots.rs sits below cache_lifecycle.rs in
+/// the module layering).
+///
+/// A stale pooled HTTP connection (llama-server closes idle keep-alive
+/// connections; a 10+ minute generation easily outlives one) produces an
+/// instant `Transient` "error sending request" failure on the very next
+/// call — indistinguishable at the transport level from any other
+/// transient error, and exactly the case `restore_slot` already retries.
+/// Without this, a save silently drops with a single WARN, leaving the
+/// on-disk `.bin` permanently stale relative to what's actually in the
+/// slot's live KV cache — a mismatch that a later restore would then load
+/// as if it were current.
+const SAVE_MAX_RETRIES: u32 = 2;
+const SAVE_RETRY_BACKOFF: Duration = Duration::from_millis(100);
+
 /// Shared save function — called by both streaming and non-streaming paths.
 pub async fn attempt_save(
     client: &Client,
@@ -829,10 +846,28 @@ pub async fn attempt_save(
         debug!("skipping save for {session_id} — cleared mid-generation");
         return;
     }
-    match save_slot(client, base_url, session_id).await {
+
+    let mut result = save_slot(client, base_url, session_id).await;
+    if matches!(result, SlotIoResult::Transient(_)) {
+        for attempt in 1..=SAVE_MAX_RETRIES {
+            debug!(
+                "retry save for {session_id} (attempt {}/{})",
+                attempt, SAVE_MAX_RETRIES
+            );
+            tokio_time::sleep(SAVE_RETRY_BACKOFF).await;
+            result = save_slot(client, base_url, session_id).await;
+            if !matches!(result, SlotIoResult::Transient(_)) {
+                break;
+            }
+        }
+    }
+
+    match result {
         SlotIoResult::Ok => {}
         SlotIoResult::NotFound => warn!("save failed for {session_id}: 404 Not Found"),
-        SlotIoResult::Transient(e) => warn!("save failed for {session_id}: {e}"),
+        SlotIoResult::Transient(e) => {
+            warn!("save failed for {session_id} after retries: {e}")
+        }
         SlotIoResult::Permanent(e) => {
             warn!("save failed for {session_id} (permanent): {e}")
         }

@@ -27,7 +27,7 @@ use gglib_core::ports::{
     ModelSummary, RunningTarget,
 };
 use gglib_proxy::cache_lifecycle::{StreamConfig, restore_with_retry};
-use gglib_proxy::slots::SlotIoResult;
+use gglib_proxy::slots::{SlotIoResult, attempt_save};
 
 // ─── Mock upstream (serves /v1/chat/completions + /slots/0) ──────────────
 
@@ -530,6 +530,83 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
     // still occur (test takes ~200ms wall time), but we don't assert on elapsed
     // duration to avoid CI flakiness. attempt_count == 3 already proves the fixed
     // backoff ran twice before success.
+
+    cancel.cancel();
+}
+
+/// Regression test: `attempt_save` must retry a transient failure the same
+/// way `restore_with_retry` already does. Without this, a stale pooled HTTP
+/// connection (llama-server closes idle keep-alive connections; a long
+/// generation easily outlives one) silently drops the save on the very next
+/// attempt with no retry, leaving the on-disk `.bin` permanently stale
+/// relative to the slot's actual live KV cache.
+#[tokio::test]
+async fn save_retry_backoff_exhausts_max_retries_then_succeeds() {
+    let cancel = CancellationToken::new();
+
+    // Mock upstream that returns 503 (transient) for the first 2 attempts,
+    // then 200 (success) on the 3rd — same shape as the restore-retry test.
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind save-retry mock");
+    let port = listener.local_addr().unwrap().port();
+
+    let attempt_count = Arc::new(AtomicU64::new(0));
+    let attempt_c = attempt_count.clone();
+
+    let cancel_spawn = cancel.clone();
+    tokio::spawn(async move {
+        let app = Router::new().route(
+            "/slots/0",
+            post(
+                move |_params: axum::extract::Query<HashMap<String, String>>| {
+                    let cnt = attempt_c.clone();
+                    async move {
+                        let n = cnt.fetch_add(1, Ordering::Relaxed);
+                        if n < 2 {
+                            Response::builder()
+                                .status(503)
+                                .body(Body::from("{}"))
+                                .unwrap()
+                        } else {
+                            Response::builder()
+                                .status(200)
+                                .body(Body::from("{}"))
+                                .unwrap()
+                        }
+                    }
+                },
+            ),
+        );
+        axum::serve(listener, app)
+            .with_graceful_shutdown(cancel_spawn.cancelled_owned())
+            .await
+            .ok();
+    });
+
+    tokio::time::sleep(Duration::from_millis(30)).await;
+
+    let client = Client::new();
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let clear_all_pending = AtomicBool::new(false);
+    let per_session_cleared = DashSet::new();
+
+    attempt_save(
+        &client,
+        &base_url,
+        "save-backoff-session",
+        &clear_all_pending,
+        &per_session_cleared,
+    )
+    .await;
+
+    // Exactly 3 attempts: 1 initial + 2 retries, ending in success — proves
+    // the retry loop ran rather than giving up after the first failure.
+    assert_eq!(
+        attempt_count.load(Ordering::Relaxed),
+        3,
+        "Expected 3 total save attempts (1 initial + 2 retries)"
+    );
 
     cancel.cancel();
 }
