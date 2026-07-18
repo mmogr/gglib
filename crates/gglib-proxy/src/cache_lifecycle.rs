@@ -191,14 +191,26 @@ pub async fn prepare_streaming_cycle(
 ///
 /// Deliberately does NOT acquire the semaphore (Design A) — clears are instant
 /// from CLI/GUI with no spinner. The cleared flag prevents subsequent saves.
+///
+/// Without a flag, a cycle already mid-generation when the clear runs (started
+/// before the clear, holding the slot permit, unaffected by Design A's no-op
+/// semaphore) would have its `save_after_generation` re-write the very file
+/// this call just deleted. Setting `clear_all_pending` for the global case
+/// closes that race: `attempt_save` checks it before writing, and the next
+/// cycle's `restore_with_retry` clears it again once it's no longer needed.
 pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std::io::Result<()> {
     // NO semaphore acquire — Design A: instant clear
     let result = slots::clear_slot_files(&config.slot_dir, session_id).await;
 
-    if let Some(id) = session_id
-        && let Ok(sanitized) = slots::sanitize_session_id(id)
-    {
-        config.per_session_cleared.insert(sanitized);
+    match session_id {
+        Some(id) => {
+            if let Ok(sanitized) = slots::sanitize_session_id(id) {
+                config.per_session_cleared.insert(sanitized);
+            }
+        }
+        None => {
+            config.clear_all_pending.store(true, Ordering::SeqCst);
+        }
     }
 
     result
@@ -239,6 +251,24 @@ mod tests {
 
         let _ = clear_cache(&config, Some("test_session")).await;
         assert!(config.per_session_cleared.contains("test_session"));
+    }
+
+    /// Regression test for the race where a global clear (no session id) set
+    /// no guard at all, letting a concurrent in-flight generation's save
+    /// silently resurrect the file the clear just deleted.
+    #[tokio::test]
+    async fn test_clear_cache_with_no_session_sets_clear_all_pending() {
+        let config = StreamConfig {
+            client: Client::new(),
+            base_url: "http://localhost:8080".to_string(),
+            slot_dir: PathBuf::from("/tmp/test-slots"),
+            clear_all_pending: Arc::new(AtomicBool::new(false)),
+            per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)),
+        };
+
+        let _ = clear_cache(&config, None).await;
+        assert!(config.clear_all_pending.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
