@@ -177,6 +177,17 @@ pub async fn serve(
             .as_secs(),
     ));
 
+    // Background LRU eviction, so cached session slot files don't accumulate
+    // without bound. Only runs when there's a slot_dir to sweep; joined below
+    // on shutdown like the other background tasks.
+    let lru_eviction = slot_dir.as_ref().map(|dir| {
+        crate::slots::spawn_lru_eviction_task(
+            dir.clone(),
+            crate::slots::DEFAULT_MAX_CACHED_SESSIONS,
+            cancel.clone(),
+        )
+    });
+
     let dashboard = Arc::new(DashboardState::new(
         Arc::new(ActiveConnectionsRegistry::new()),
         slots_cache,
@@ -251,6 +262,11 @@ pub async fn serve(
     }
     if let Err(e) = dashboard_publisher.await {
         warn!("proxy dashboard: publisher task panicked during shutdown: {e}");
+    }
+    if let Some(handle) = lru_eviction
+        && let Err(e) = handle.await
+    {
+        warn!("proxy cache: LRU eviction task panicked during shutdown: {e}");
     }
 
     info!("Proxy server shut down");

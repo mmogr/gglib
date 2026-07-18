@@ -34,6 +34,7 @@ use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::time as tokio_time;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 /// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
@@ -795,17 +796,35 @@ pub async fn attempt_save(
     }
 }
 
+/// Default cap on cached session slot files before LRU eviction kicks in.
+///
+/// No CLI knob exists for this yet — a fixed cap is strictly better than the
+/// previous behavior of never evicting at all. Revisit if usage shows the
+/// default is wrong for a given `--slot-dir` size budget.
+pub const DEFAULT_MAX_CACHED_SESSIONS: usize = 100;
+
 /// Background LRU eviction task — spawned at server startup, runs every 60s.
-pub async fn spawn_lru_eviction_task(slot_dir: PathBuf, max_slots: usize) {
+///
+/// Exits promptly on `cancel` so it never outlives the server (same shutdown
+/// contract as `spawn_slots_poller`/`spawn_dashboard_publisher`).
+pub fn spawn_lru_eviction_task(
+    slot_dir: PathBuf,
+    max_slots: usize,
+    cancel: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let interval = Duration::from_secs(60);
         loop {
-            tokio::time::sleep(interval).await;
-            if let Err(e) = evict_stale_slots(&slot_dir, max_slots).await {
-                warn!("LRU eviction failed: {}", e);
+            tokio::select! {
+                () = cancel.cancelled() => break,
+                () = tokio::time::sleep(interval) => {
+                    if let Err(e) = evict_stale_slots(&slot_dir, max_slots).await {
+                        warn!("LRU eviction failed: {}", e);
+                    }
+                }
             }
         }
-    });
+    })
 }
 
 /// Evict least-recently-used slot files from `slot_dir` when count exceeds `max_slots`.
@@ -896,5 +915,22 @@ mod slot_io_tests {
             &per_session,
         )
         .await;
+    }
+
+    /// The LRU eviction task must exit promptly on cancellation rather than
+    /// running forever detached from the server's lifecycle — otherwise it
+    /// leaks across proxy restarts within the same process (e.g. tests, or a
+    /// GUI that stops/starts the proxy repeatedly).
+    #[tokio::test]
+    async fn spawn_lru_eviction_task_exits_on_cancel() {
+        let dir = tempfile::tempdir().unwrap();
+        let cancel = CancellationToken::new();
+        let handle = spawn_lru_eviction_task(dir.path().to_path_buf(), 10, cancel.clone());
+
+        cancel.cancel();
+        tokio::time::timeout(Duration::from_secs(1), handle)
+            .await
+            .expect("eviction task should exit promptly on cancellation")
+            .expect("eviction task should not panic");
     }
 }
