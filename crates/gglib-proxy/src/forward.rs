@@ -566,6 +566,16 @@ pub(crate) async fn forward_chat_completion(
             for (k, v) in resolved.to_openai_json_patch() {
                 body_obj.insert(k, v);
             }
+            // Force-insert (not or_insert) llama-server's own `cache_prompt`
+            // flag. It defaults to true server-side, but nothing guarantees
+            // the calling client doesn't send `false` — and if it ever did,
+            // llama-server's n_past = get_common_prefix(...) reuse computation
+            // (server-context.cpp) is skipped entirely, silently discarding
+            // 100% of any restored/hot KV state and forcing a full re-prefill
+            // regardless of how well the prompt actually matches. The whole
+            // KV cache session persistence feature depends on this staying
+            // true, so pin it rather than trusting it implicitly.
+            body_obj.insert("cache_prompt".to_owned(), serde_json::Value::Bool(true));
         }
         serde_json::to_vec(&body_value)
             .map(Bytes::from)

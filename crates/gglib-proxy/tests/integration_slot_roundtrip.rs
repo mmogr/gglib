@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::{Router, body::Body, http::Response, routing::post};
+use bytes::Bytes;
 use dashmap::DashSet;
 use reqwest::Client;
 use serde_json::json;
@@ -113,11 +114,20 @@ impl ModelCatalogPort for TaggedCatalog {
 
 /// Spawn a mock upstream server that records action order.
 ///
-/// Returns `(port, action_log, save_count, restore_count)` where `action_log`
-/// is a mutex-protected byte vector: `0` = restore, `1` = generate, `2` = save.
+/// Returns `(port, action_log, save_count, restore_count, last_chat_body)`
+/// where `action_log` is a mutex-protected byte vector: `0` = restore,
+/// `1` = generate, `2` = save; `last_chat_body` captures the raw bytes of
+/// the most recent `/v1/chat/completions` request, for asserting on what
+/// the proxy actually forwarded upstream (e.g. injected fields).
 async fn spawn_mock_upstream_with_slots(
     cancel: CancellationToken,
-) -> (u16, Arc<Mutex<Vec<u8>>>, Arc<AtomicU64>, Arc<AtomicU64>) {
+) -> (
+    u16,
+    Arc<Mutex<Vec<u8>>>,
+    Arc<AtomicU64>,
+    Arc<AtomicU64>,
+    Arc<Mutex<Option<Bytes>>>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind mock upstream");
@@ -126,19 +136,24 @@ async fn spawn_mock_upstream_with_slots(
     let action_log: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let save_count = Arc::new(AtomicU64::new(0));
     let restore_count = Arc::new(AtomicU64::new(0));
+    let last_chat_body: Arc<Mutex<Option<Bytes>>> = Arc::new(Mutex::new(None));
 
     let log_c = action_log.clone();
     let save_n = save_count.clone();
     let restore_n = restore_count.clone();
+    let last_body_c = last_chat_body.clone();
 
     let app = Router::new()
-        // Chat completions handler — records action `1` (generate)
+        // Chat completions handler — records action `1` (generate) and
+        // captures the received body for inspection.
         .route("/v1/chat/completions", {
             let log_c = log_c.clone();
-            post(move || {
+            post(move |body: Bytes| {
                 let log = log_c.clone();
+                let last_body_c = last_body_c.clone();
                 async move {
                     log.lock().await.push(1);
+                    *last_body_c.lock().await = Some(body);
                     let body = json!({
                         "id": "test-123",
                         "object": "chat.completion",
@@ -197,7 +212,7 @@ async fn spawn_mock_upstream_with_slots(
 
     // Give the mock server time to start listening.
     tokio::time::sleep(Duration::from_millis(30)).await;
-    (port, action_log, save_count, restore_count)
+    (port, action_log, save_count, restore_count, last_chat_body)
 }
 
 /// Spawn a proxy server with cache enabled, pointing at the given upstream port.
@@ -250,7 +265,7 @@ async fn spawn_proxy_with_cache(
 #[tokio::test]
 async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     let upstream_cancel = CancellationToken::new();
-    let (upstream_port, action_log, save_count, restore_count) =
+    let (upstream_port, action_log, save_count, restore_count, last_chat_body) =
         spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
 
     let slot_dir =
@@ -300,6 +315,21 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
         actions
     );
 
+    // Regression test: llama-server's KV reuse (n_past = get_common_prefix(...)
+    // in server-context.cpp) is gated entirely behind the request's own
+    // `cache_prompt` flag — if it's ever false, restore/save succeeding is
+    // meaningless, since the server discards the match and fully re-prefills
+    // anyway. The client above never set this field; verify the proxy forces
+    // it to true regardless.
+    let forwarded_body = last_chat_body.lock().await.clone().expect("body captured");
+    let forwarded_json: serde_json::Value = serde_json::from_slice(&forwarded_body).unwrap();
+    assert_eq!(
+        forwarded_json["cache_prompt"],
+        serde_json::json!(true),
+        "proxy must force cache_prompt=true so llama-server's reuse path isn't silently skipped, got: {}",
+        forwarded_json
+    );
+
     // Cleanup.
     proxy_cancel.cancel();
     upstream_cancel.cancel();
@@ -314,7 +344,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
 #[tokio::test]
 async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
     let upstream_cancel = CancellationToken::new();
-    let (upstream_port, action_log, save_count, restore_count) =
+    let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
         spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
 
     let slot_dir = std::env::temp_dir().join(format!("gglib-slot-fallback-{}", std::process::id()));
@@ -361,6 +391,54 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
         vec![0, 1, 2],
         "Expected restore→generate→save order, got: {:?}",
         actions
+    );
+
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
+    let _ = std::fs::remove_dir_all(&slot_dir);
+}
+
+/// Regression test: if the calling client explicitly sends `cache_prompt:
+/// false` (some OpenAI-compatible clients do, for reasons unrelated to
+/// llama-server's KV reuse semantics), the proxy must still force it back to
+/// true before forwarding. Without this, restore/save can both succeed and
+/// llama-server will still discard the entire match and fully re-prefill —
+/// silently defeating the whole point of this feature with no visible error.
+#[tokio::test]
+async fn client_sent_cache_prompt_false_is_overridden_to_true() {
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, _action_log, _save_count, _restore_count, last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
+
+    let slot_dir =
+        std::env::temp_dir().join(format!("gglib-slot-cache-prompt-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&slot_dir);
+
+    let (proxy_base, proxy_cancel) =
+        spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy_base))
+        .header("X-Gglib-Session-Id", "cache-prompt-test")
+        .json(&json!({
+            "model": "test-model",
+            "messages": [{ "role": "user", "content": "hello" }],
+            "stream": false,
+            "cache_prompt": false
+        }))
+        .send()
+        .await
+        .expect("proxy should be running");
+
+    assert!(response.status().is_success());
+
+    let forwarded_body = last_chat_body.lock().await.clone().expect("body captured");
+    let forwarded_json: serde_json::Value = serde_json::from_slice(&forwarded_body).unwrap();
+    assert_eq!(
+        forwarded_json["cache_prompt"],
+        serde_json::json!(true),
+        "proxy must override an explicit client cache_prompt=false, got: {}",
+        forwarded_json
     );
 
     proxy_cancel.cancel();
