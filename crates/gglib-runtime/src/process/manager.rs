@@ -362,6 +362,10 @@ impl ProcessManager {
                         // Purge stale slot .bin files before spawning a fresh instance.
                         // Old slot files are incompatible with the new server process.
                         if let Some(ref slot_dir) = slot_save_path_owned {
+                            // Ensure the directory exists so llama-server doesn't crash on startup
+                            if let Err(e) = std::fs::create_dir_all(slot_dir) {
+                                tracing::warn!("Failed to create slot directory: {}", e);
+                            }
                             purge_stale_slot_bin_files(slot_dir);
                         }
 
@@ -561,7 +565,7 @@ mod tests {
             .await
             .unwrap();
         // Purge
-        purge_stale_slot_bin_files(&dir).await;
+        purge_stale_slot_bin_files(&dir);
         // Verify: .bin gone, .txt remains
         let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
         let mut remaining: Vec<std::ffi::OsString> = Vec::new();
@@ -582,7 +586,7 @@ mod tests {
             std::time::SystemTime::now().elapsed().unwrap().as_nanos()
         ));
         // Should not panic or error — just returns silently
-        purge_stale_slot_bin_files(&dir).await;
+        purge_stale_slot_bin_files(&dir);
     }
 
     #[tokio::test]
