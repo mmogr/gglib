@@ -306,6 +306,68 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     let _ = std::fs::remove_dir_all(&slot_dir);
 }
 
+/// Verify that a request with NO `X-Gglib-Session-Id` header still triggers
+/// restore→generate→save — the fallback path derives a session id from the
+/// request content itself (canonicalized system prompt + first user
+/// message), so cache persistence works even for clients (VS Code Copilot's
+/// LLM Gateway extension, curl, etc.) that have no idea the header exists.
+#[tokio::test]
+async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, action_log, save_count, restore_count) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
+
+    let slot_dir = std::env::temp_dir().join(format!("gglib-slot-fallback-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&slot_dir);
+
+    let (proxy_base, proxy_cancel) =
+        spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
+
+    // Send a non-streaming chat completion request with NO session header.
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy_base))
+        .json(&json!({
+            "model": "test-model",
+            "messages": [
+                { "role": "system", "content": "You are the Coder." },
+                { "role": "user", "content": "Implement login" }
+            ],
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("proxy should be running");
+
+    assert!(
+        response.status().is_success(),
+        "Chat completion should succeed: {}",
+        response.status()
+    );
+
+    assert_eq!(
+        restore_count.load(Ordering::Relaxed),
+        1,
+        "Expected exactly 1 restore call even without a session header"
+    );
+    assert_eq!(
+        save_count.load(Ordering::Relaxed),
+        1,
+        "Expected exactly 1 save call even without a session header"
+    );
+
+    let actions = action_log.lock().await.clone();
+    assert_eq!(
+        actions,
+        vec![0, 1, 2],
+        "Expected restore→generate→save order, got: {:?}",
+        actions
+    );
+
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
+    let _ = std::fs::remove_dir_all(&slot_dir);
+}
+
 /// Verify that `restore_with_retry` exhausts MAX_RETRIES (2) on transient
 /// failures, then succeeds on the 3rd attempt — and that backoff delays
 /// accumulate to at least 200ms.

@@ -483,9 +483,24 @@ async fn chat_completions(
                     .unwrap();
             }
         }
+    } else if state.cache_enabled {
+        // No explicit header — most clients (VS Code Copilot's LLM Gateway
+        // extension, curl, anything else speaking plain OpenAI-compatible
+        // chat completions) have no idea X-Gglib-Session-Id exists. Derive a
+        // stable fallback from the request content itself so the cache
+        // still works without any client cooperation.
+        crate::canonicalization::derive_fallback_session_id(&body)
     } else {
         None
     };
+
+    if let Some(ref sid) = sanitized_session_id {
+        debug!(
+            session_id = %sid,
+            source = if session_id_from_header.is_some() { "header" } else { "content-hash" },
+            "resolved cache session id"
+        );
+    }
 
     // Extract the three routing fields from the request body.
     // ChatRoutingEnvelope only captures `model`, `stream`, and `num_ctx`;

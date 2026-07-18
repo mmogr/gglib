@@ -56,6 +56,9 @@ serde_json = "1.0"
 # Text processing
 regex = "1"
 
+# Content-derived fallback session ID hashing (cache_lifecycle)
+sha2 = "0.10"
+
 # Concurrent collections
 dashmap = "6"
 
