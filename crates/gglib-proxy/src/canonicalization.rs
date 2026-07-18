@@ -129,13 +129,21 @@ const FALLBACK_ID_DIGEST_BYTES: usize = 16;
 /// save/restore when the caller did not supply an `X-Gglib-Session-Id`
 /// header.
 ///
-/// Hashes the canonicalized system prompt together with the first user
-/// message. Both are stable for the entire life of one agent's conversation:
-/// `truncate_history` (see `truncation.rs`) never modifies `system` messages
-/// or `user`-role content, so this fingerprint doesn't drift as history
-/// grows. Different agents (different system prompt) or different task
-/// instances of the same agent (different first user message) land in
-/// different buckets without any client cooperation.
+/// Hashes the system prompt together with the first user message. Both are
+/// stable for the entire life of one agent's conversation: `truncate_history`
+/// (see `truncation.rs`) never modifies `system` messages or `user`-role
+/// content, so this fingerprint doesn't drift as history grows. Different
+/// agents (different system prompt) or different task instances of the same
+/// agent (different first user message) land in different buckets without
+/// any client cooperation.
+///
+/// # Preconditions
+///
+/// `body` must already be canonicalized (see [`canonicalize_system_prompt`]).
+/// This function does not canonicalize its input itself — the caller
+/// (`chat_completions`) canonicalizes once up front and reuses the result
+/// both for this hash and for the forwarded request, rather than paying the
+/// parse/regex/serialize cost twice on every request.
 ///
 /// Returns `None` when the body has no usable `messages` array, or neither
 /// a system nor a first user message is present — callers should treat that
@@ -149,11 +157,9 @@ const FALLBACK_ID_DIGEST_BYTES: usize = 16;
 /// actually matches the incoming prompt, so the worst case is a wasted
 /// restore/save, never a wrong answer.
 pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
-    let canonicalized = canonicalize_system_prompt(body.clone());
-    let value: serde_json::Value = serde_json::from_slice(&canonicalized).ok()?;
-    let messages_raw = value.get("messages")?.as_array()?.clone();
-    let messages: Vec<ChatMessage> =
-        serde_json::from_value(serde_json::Value::Array(messages_raw)).ok()?;
+    let mut value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let messages_raw = value.get_mut("messages")?.take();
+    let messages: Vec<ChatMessage> = serde_json::from_value(messages_raw).ok()?;
 
     let system_text = messages
         .iter()
@@ -328,11 +334,17 @@ mod tests {
 
     #[test]
     fn fallback_session_id_ignores_dynamic_lines() {
-        let with_timestamp = body_with(
+        // derive_fallback_session_id requires pre-canonicalized input (see its
+        // doc comment) — the caller (chat_completions) canonicalizes once up
+        // front. Mirror that contract here rather than passing raw bodies.
+        let with_timestamp = canonicalize_system_prompt(body_with(
             "You are an assistant.\nCurrent date: 2026-07-15\nMore instructions.",
             "Hello",
-        );
-        let without_timestamp = body_with("You are an assistant.\nMore instructions.", "Hello");
+        ));
+        let without_timestamp = canonicalize_system_prompt(body_with(
+            "You are an assistant.\nMore instructions.",
+            "Hello",
+        ));
         assert_eq!(
             derive_fallback_session_id(&with_timestamp).unwrap(),
             derive_fallback_session_id(&without_timestamp).unwrap(),

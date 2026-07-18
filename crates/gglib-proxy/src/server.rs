@@ -482,6 +482,12 @@ async fn chat_completions(
 ) -> Response {
     debug!("POST /v1/chat/completions");
 
+    // Canonicalize once, up front, and reuse the result for both the
+    // content-hash session id fallback below and the forwarded request
+    // (forward_chat_completion no longer re-canonicalizes) — avoids paying
+    // the parse/regex/serialize cost on this ~150KB+ body twice per request.
+    let body = crate::canonicalization::canonicalize_system_prompt(body);
+
     // Extract and sanitize session ID from header (safety-critical: prevents path traversal)
     let session_id_from_header = headers
         .get("x-gglib-session-id")

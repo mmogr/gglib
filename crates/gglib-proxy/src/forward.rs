@@ -77,7 +77,6 @@ use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
-use crate::canonicalization::canonicalize_system_prompt;
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
@@ -483,10 +482,10 @@ pub(crate) async fn forward_chat_completion(
 
     // ── Request transforms (applied in order) ──────────────────────────────
     //
-    // 0. Canonicalise dynamic IDE-injected lines so the system prompt prefix
-    //    is byte-identical across requests (BPE stability for recurrent models).
-    let body = canonicalize_system_prompt(body);
-
+    // Canonicalization (dynamic IDE-injected lines stripped for system-prompt
+    // BPE stability) already happened once in `chat_completions` before this
+    // function was called, so the body arriving here doesn't need it again.
+    //
     // 1. Strip reasoning artefacts from prior assistant turns so reasoning
     //    models don't pattern-match their own past <think> traces.
     let body = strip_prior_reasoning(body);
