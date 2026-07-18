@@ -430,6 +430,7 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
                 .unwrap()
                 .as_secs(),
         )),
+        last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
     };
 
     let result = restore_with_retry(&config, "backoff-session").await;

@@ -38,6 +38,9 @@ pub struct StreamConfig {
     /// Unix timestamp (seconds) when the current llama-server process started.
     /// Used by mtime guard to skip restoring stale slot files.
     pub server_start_time: Arc<AtomicU64>,
+    /// Last session ID successfully loaded into RAM (hot in KV cache).
+    /// Used to bypass disk restore when the session is already hot.
+    pub last_loaded_session: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 /// Restore KV cache for a session, with retry on transient failures.
@@ -115,6 +118,10 @@ pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: 
         &config.per_session_cleared, // Arc<DashSet<String>> → &DashSet<String>
     )
     .await;
+
+    // Mark this session as hot in RAM — next request for the same session
+    // can skip the disk restore.
+    *config.last_loaded_session.write().await = Some(sanitized_session_id.to_string());
 }
 
 /// Non-streaming cache lifecycle: acquire permit, restore→generate→save, release.
@@ -140,8 +147,21 @@ where
     // Acquire permit — held for entire cycle (no release until save completes)
     let _permit = slot_gate.acquire().await.unwrap();
 
-    // Restore
-    let restore_result = restore_with_retry(config, &sanitized).await;
+    // Hot cache bypass: skip disk restore if session is already in RAM
+    let is_hot = {
+        let last = config.last_loaded_session.read().await;
+        last.as_deref() == Some(sanitized.as_str())
+    };
+
+    let restore_result = if is_hot {
+        debug!(
+            "Session {} is already hot in RAM — skipping disk restore",
+            sanitized
+        );
+        SlotIoResult::Ok
+    } else {
+        restore_with_retry(config, &sanitized).await
+    };
 
     // Generation work (semaphore held — prevents interleaving corruption)
     let result = generation_work().await;
@@ -191,8 +211,21 @@ pub async fn prepare_streaming_cycle(
     // `acquire_owned` takes `self`, so we consume the Arc<Semaphore> here.
     let permit = slot_gate.acquire_owned().await.unwrap();
 
-    // Restore (permit held)
-    let restore_result = restore_with_retry(config, &sanitized).await;
+    // Hot cache bypass: skip disk restore if session is already in RAM
+    let is_hot = {
+        let last = config.last_loaded_session.read().await;
+        last.as_deref() == Some(sanitized.as_str())
+    };
+
+    let restore_result = if is_hot {
+        debug!(
+            "Session {} is already hot in RAM — skipping disk restore",
+            sanitized
+        );
+        SlotIoResult::Ok
+    } else {
+        restore_with_retry(config, &sanitized).await
+    };
 
     Ok((permit, sanitized, restore_result))
 }
@@ -215,11 +248,18 @@ pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std
     match session_id {
         Some(id) => {
             if let Ok(sanitized) = slots::sanitize_session_id(id) {
-                config.per_session_cleared.insert(sanitized);
+                config.per_session_cleared.insert(sanitized.clone());
+                // Invalidate hot cache if the cleared session was the one in RAM
+                let mut last = config.last_loaded_session.write().await;
+                if last.as_deref() == Some(sanitized.as_str()) {
+                    *last = None;
+                }
             }
         }
         None => {
             config.clear_all_pending.store(true, Ordering::SeqCst);
+            // Global clear invalidates the hot cache entirely
+            *config.last_loaded_session.write().await = None;
         }
     }
 
@@ -239,6 +279,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
         let _clone = config.clone();
     }
@@ -257,6 +298,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
 
         let _ = clear_cache(&config, Some("test_session")).await;
@@ -275,6 +317,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
 
         let _ = clear_cache(&config, None).await;
@@ -290,6 +333,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(true)), // Simulate pending global clear
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)), // 0 → fail-open (always proceed)
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
 
         config
@@ -336,6 +380,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
 
         let started = tokio::time::Instant::now();
@@ -378,6 +423,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
 
         let result = restore_with_retry(&config, session_id).await;
@@ -400,6 +446,7 @@ mod tests {
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
         };
         let gate = Arc::new(Semaphore::new(1));
 

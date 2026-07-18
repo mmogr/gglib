@@ -87,6 +87,9 @@ pub(crate) struct AppState {
     /// Unix timestamp (seconds) when the current llama-server process started.
     /// Updated on each restart detection. Used by mtime guard to skip stale slots.
     server_start_time: Arc<AtomicU64>,
+    /// Last session ID successfully loaded into RAM (hot in KV cache).
+    /// Used to bypass disk restore when the session is already hot.
+    last_loaded_session: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -176,6 +179,7 @@ pub async fn serve(
             .unwrap_or_default()
             .as_secs(),
     ));
+    let last_loaded_session = Arc::new(tokio::sync::RwLock::new(None));
 
     // Background LRU eviction, so cached session slot files don't accumulate
     // without bound. Only runs when there's a slot_dir to sweep; joined below
@@ -219,6 +223,7 @@ pub async fn serve(
         clear_all_pending,
         per_session_cleared,
         server_start_time,
+        last_loaded_session,
     };
 
     let app = Router::new()
@@ -448,6 +453,7 @@ async fn handle_proxy_cache_clear(
         clear_all_pending: state.clear_all_pending.clone(),
         per_session_cleared: state.per_session_cleared.clone(),
         server_start_time: state.server_start_time.clone(),
+        last_loaded_session: state.last_loaded_session.clone(),
     };
 
     match clear_cache(&config, session_id.as_deref()).await {
@@ -607,6 +613,8 @@ async fn chat_completions(
                 .as_secs(),
             AtomicOrdering::SeqCst,
         );
+        // Invalidate hot cache — the server state is fresh, nothing is loaded.
+        *state.last_loaded_session.write().await = None;
     }
 
     // Build upstream URL
@@ -649,6 +657,7 @@ async fn chat_completions(
             clear_all_pending: state.clear_all_pending.clone(),
             per_session_cleared: state.per_session_cleared.clone(),
             server_start_time: state.server_start_time.clone(),
+            last_loaded_session: state.last_loaded_session.clone(),
         })
     } else {
         None
