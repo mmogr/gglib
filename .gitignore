@@ -23,6 +23,9 @@
 # PID files (runtime state)
 /pids
 
+# KV cache slot files (--cache/--slot-dir runtime state)
+/slots
+
 # llama.cpp local installation
 /.llama
 /downloads
