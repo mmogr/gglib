@@ -607,7 +607,7 @@ async fn chat_completions(
     let stream_config = if state.cache_enabled {
         state.slot_dir.as_ref().map(|dir| StreamConfig {
             client: state.client.clone(),
-            base_url: upstream_url.to_string(),
+            base_url: target.base_url.clone(),
             slot_dir: dir.clone(),
             clear_all_pending: state.clear_all_pending.clone(),
             per_session_cleared: state.per_session_cleared.clone(),
