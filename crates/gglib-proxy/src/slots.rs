@@ -722,6 +722,43 @@ pub async fn save_slot(client: &Client, base_url: &str, session_id: &str) -> Slo
     }
 }
 
+/// Check whether a session's `.bin` slot file predates `server_start_secs`.
+///
+/// A slot file older than the current llama-server process's start time was
+/// written by a *prior* process instance and is not safe to restore into
+/// this one (spawn-time purge is the primary defense — see
+/// `purge_stale_slot_bin_files` in `gglib-runtime` — this is a second,
+/// independent layer in case that purge is ever bypassed, e.g. a mismatched
+/// `--slot-save-path`).
+///
+/// Fail-open on every uncertain case — a missing file, an unreadable mtime,
+/// or `server_start_secs == 0` (guard not yet initialized) all return
+/// `false` ("not stale"), so the normal restore attempt proceeds and either
+/// succeeds or hits its own 404. This function only ever prevents a restore
+/// it can positively prove is stale; it never blocks one it can't evaluate.
+pub(crate) async fn slot_file_is_stale(
+    slot_dir: &Path,
+    session_id: &str,
+    server_start_secs: u64,
+) -> bool {
+    if server_start_secs == 0 {
+        return false;
+    }
+    let Ok(metadata) = tokio::fs::metadata(slot_dir.join(format!("{session_id}.bin"))).await else {
+        return false;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(mtime_secs) = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+    else {
+        return false;
+    };
+    mtime_secs < server_start_secs
+}
+
 /// Trigger a KV cache restore for the current slot via llama-server's `/slots/0?action=restore`.
 ///
 /// Returns `SlotIoResult::Ok` on success, `NotFound` if no cached file exists (404),
@@ -950,5 +987,45 @@ mod slot_io_tests {
             .await
             .expect("eviction task should exit promptly on cancellation")
             .expect("eviction task should not panic");
+    }
+
+    fn unix_secs_now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_true_when_file_predates_server_start() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+
+        let server_start = unix_secs_now() + 3600; // "started" after the file was written
+        assert!(slot_file_is_stale(dir.path(), "s", server_start).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_file_is_newer_than_server_start() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+
+        let server_start = unix_secs_now().saturating_sub(3600); // started well before the file
+        assert!(!slot_file_is_stale(dir.path(), "s", server_start).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        // no file written for "s"
+        assert!(!slot_file_is_stale(dir.path(), "s", unix_secs_now() + 3600).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_guard_uninitialized() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+        // server_start_secs == 0 means the guard hasn't been initialized yet — fail-open.
+        assert!(!slot_file_is_stale(dir.path(), "s", 0).await);
     }
 }

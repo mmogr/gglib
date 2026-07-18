@@ -52,7 +52,17 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
         Err(e) => return SlotIoResult::Permanent(e),
     };
 
-    let mut result = slots::restore_slot(&config.client, &config.base_url, &sanitized).await;
+    // mtime guard: skip restoring a slot file written by a prior llama-server
+    // instance (see `slots::slot_file_is_stale` for the fail-open contract).
+    let server_start_secs = config.server_start_time.load(Ordering::SeqCst);
+    let is_stale = slots::slot_file_is_stale(&config.slot_dir, &sanitized, server_start_secs).await;
+
+    let mut result = if is_stale {
+        debug!("skipping restore for {session_id} — slot file predates current server instance");
+        SlotIoResult::NotFound
+    } else {
+        slots::restore_slot(&config.client, &config.base_url, &sanitized).await
+    };
 
     // Retry only transient failures (UpstreamDead / timeout / network error)
     if matches!(result, SlotIoResult::Transient(_)) {
@@ -295,6 +305,90 @@ mod tests {
         assert!(!config.per_session_cleared.contains("test_session"));
         // Global clear flag reset — prevents deadlock
         assert!(!config.clear_all_pending.load(Ordering::SeqCst));
+    }
+
+    /// Regression test for the mtime guard: a slot file written before the
+    /// current llama-server instance started must never reach the network
+    /// restore call. Proven by timing — a real call to a refused port would
+    /// retry MAX_RETRIES times with RETRY_BACKOFF between them (200ms+); the
+    /// guard short-circuits to `NotFound` immediately instead.
+    #[tokio::test]
+    async fn test_restore_with_retry_skips_stale_slot_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let session_id = "stale-session";
+        std::fs::write(
+            dir.path().join(format!("{session_id}.bin")),
+            b"old kv state",
+        )
+        .unwrap();
+
+        // Any timestamp after the file's real mtime marks it stale.
+        let server_start_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 3600;
+
+        let config = StreamConfig {
+            client: Client::new(),
+            base_url: "http://127.0.0.1:0".to_string(), // refused if ever called
+            slot_dir: dir.path().to_path_buf(),
+            clear_all_pending: Arc::new(AtomicBool::new(false)),
+            per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
+        };
+
+        let started = tokio::time::Instant::now();
+        let result = restore_with_retry(&config, session_id).await;
+        let elapsed = started.elapsed();
+
+        assert!(
+            matches!(result, SlotIoResult::NotFound),
+            "stale slot file should be treated as NotFound, got {:?}",
+            result
+        );
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "guard should short-circuit before any network retry loop, took {:?}",
+            elapsed
+        );
+    }
+
+    /// A fresh slot file (mtime after server start) must NOT be skipped by
+    /// the guard — this exercises the "not stale" branch specifically, as
+    /// opposed to the `server_start_secs == 0` fail-open branch already
+    /// covered by `test_restore_removes_flags_unconditionally`.
+    #[tokio::test]
+    async fn test_restore_with_retry_does_not_skip_fresh_slot_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let session_id = "fresh-session";
+        std::fs::write(dir.path().join(format!("{session_id}.bin")), b"kv state").unwrap();
+
+        // Server "started" long before the file was written.
+        let server_start_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .saturating_sub(3600);
+
+        let config = StreamConfig {
+            client: Client::new(),
+            base_url: "http://127.0.0.1:0".to_string(), // refused — proves the call was attempted
+            slot_dir: dir.path().to_path_buf(),
+            clear_all_pending: Arc::new(AtomicBool::new(false)),
+            per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
+        };
+
+        let result = restore_with_retry(&config, session_id).await;
+
+        // Not skipped by the guard — the real (failing, connection-refused)
+        // network path was taken, which surfaces as Transient after retries.
+        assert!(
+            matches!(result, SlotIoResult::Transient(_)),
+            "fresh slot file should reach the real restore call, got {:?}",
+            result
+        );
     }
 
     #[tokio::test]
