@@ -199,6 +199,6 @@ runner.stop(&handle).await?;
 ## Design Decisions
 
 1. **Process Isolation** — Each llama-server runs as a separate process
-2. **Graceful Shutdown** — Sends SIGTERM before SIGKILL with timeout
+2. **Graceful Shutdown** — Sends SIGTERM before SIGKILL with bounded timeout (guards against D-state hang)
 3. **Port Management** — Auto-allocates ports to avoid conflicts
 4. **Proxy Architecture** — Single proxy endpoint routes to multiple backends

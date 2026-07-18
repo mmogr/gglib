@@ -182,6 +182,14 @@ impl ProcessManager {
     /// # Errors
     ///
     /// Returns `ModelRuntimeError` if the model cannot be started.
+    ///
+    /// # Known limitations
+    ///
+    /// If a previous model's shutdown timed out (D-state process), the subsequent spawn
+    /// may fail with a port-in-use or CUDA OOM error. There is no automatic retry — the
+    /// caller receives the error and must retry manually. GPU memory availability is not
+    /// checked before spawn; failures surface as generic CUDA OOM rather than an
+    /// actionable "previous process may still hold resources" message.
     pub async fn ensure_model_running(
         &self,
         model_name: &str,
