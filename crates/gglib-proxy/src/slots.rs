@@ -681,6 +681,12 @@ pub enum SlotIoResult {
 }
 
 /// Sanitize session ID for use as a filename. Alphanumeric + hyphens/underscores, max 64 chars.
+///
+/// Lowercased on return: the ID becomes a `.bin` filename, and the default
+/// filesystem on this project's primary dev/deploy platform (macOS/APFS) is
+/// case-insensitive-but-preserving, so `"Planner"` and `"planner"` would
+/// otherwise silently collide onto one file and cross-contaminate two
+/// distinct sessions' KV caches.
 pub fn sanitize_session_id(id: &str) -> Result<String, String> {
     if id.is_empty()
         || id.len() > 64
@@ -690,7 +696,7 @@ pub fn sanitize_session_id(id: &str) -> Result<String, String> {
     {
         return Err(format!("invalid session ID: {:?}", id));
     }
-    Ok(id.to_string())
+    Ok(id.to_lowercase())
 }
 
 /// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
@@ -881,6 +887,18 @@ mod slot_io_tests {
         assert!(sanitize_session_id("../invalid").is_err());
         assert!(sanitize_session_id("invalid/path").is_err());
         assert!(sanitize_session_id(&"a".repeat(65)).is_err()); // > 64 chars
+    }
+
+    /// Regression test: mixed-case IDs must not collide on case-insensitive
+    /// filesystems (macOS/APFS default) once used as `.bin` filenames.
+    #[test]
+    fn test_sanitize_session_id_lowercases() {
+        assert_eq!(sanitize_session_id("Planner").unwrap(), "planner");
+        assert_eq!(
+            sanitize_session_id("Planner").unwrap(),
+            sanitize_session_id("planner").unwrap(),
+            "differently-cased headers must resolve to the same session bucket"
+        );
     }
 
     #[test]
