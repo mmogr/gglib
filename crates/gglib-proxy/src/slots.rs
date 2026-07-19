@@ -706,24 +706,43 @@ pub fn slot_bin_path(slot_dir: &Path, model_id: u32, session_id: &str) -> PathBu
     gglib_core::paths::slot_bin_path(slot_dir, model_id, session_id)
 }
 
-/// Classify a slot save/restore HTTP response into a [`SlotIoResult`].
+/// Pure classification of a slot save/restore result from its status + body.
 ///
-/// Shared by [`save_slot`] and [`restore_slot`], which differ only in the
-/// endpoint they hit. On a non-2xx, non-404 status the response **body** is
-/// read and included in the error message — llama-server puts the actual
-/// reason there (e.g. `"Invalid filename"`, `"Unable to restore slot ..."`),
-/// which is otherwise invisible and left both cache-bug investigations
-/// guessing at a bare "HTTP 400".
-async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
-    let status = resp.status();
+/// - 2xx → `Ok`
+/// - 404 → `NotFound` (no cached file — proceed cold, not an error)
+/// - other 4xx → `Permanent`: a client error will never succeed on retry
+///   (e.g. `"Invalid filename"`, or a corrupt/incompatible `"invalid slot
+///   save file"`). Retrying just burns the slot semaphore for ~200ms and
+///   re-logs; these must be terminal.
+/// - 5xx → `Transient`: a server-side/transient condition worth retrying.
+///
+/// The response `body` is included in the message either way — llama-server
+/// puts the actual reason there, otherwise invisible behind a bare status.
+fn classify_slot_status(status: StatusCode, body: &str) -> SlotIoResult {
     if status.is_success() {
         return SlotIoResult::Ok;
     }
     if status.as_u16() == 404 {
         return SlotIoResult::NotFound;
     }
+    let msg = format!("HTTP {status}: {}", body.trim());
+    if status.is_client_error() {
+        SlotIoResult::Permanent(msg)
+    } else {
+        SlotIoResult::Transient(msg)
+    }
+}
+
+/// Read a slot save/restore HTTP response and classify it. Shared by
+/// [`save_slot`] and [`restore_slot`], which differ only in the endpoint hit.
+async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
+    let status = resp.status();
+    // Only pay for the body read on a non-success status.
+    if status.is_success() {
+        return SlotIoResult::Ok;
+    }
     let body = resp.text().await.unwrap_or_default();
-    SlotIoResult::Transient(format!("HTTP {status}: {}", body.trim()))
+    classify_slot_status(status, &body)
 }
 
 /// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
@@ -1114,6 +1133,47 @@ mod slot_io_tests {
             slot_bin_path(d, 2, "coder").exists(),
             "other session untouched"
         );
+    }
+
+    #[test]
+    fn classify_2xx_is_ok() {
+        assert_eq!(classify_slot_status(StatusCode::OK, ""), SlotIoResult::Ok);
+    }
+
+    #[test]
+    fn classify_404_is_not_found() {
+        assert_eq!(
+            classify_slot_status(StatusCode::NOT_FOUND, "no such file"),
+            SlotIoResult::NotFound
+        );
+    }
+
+    /// A 400 (e.g. "Invalid filename") must be terminal — retrying it just
+    /// burns the slot semaphore and re-logs. The body must be surfaced.
+    #[test]
+    fn classify_400_is_permanent_with_body() {
+        match classify_slot_status(StatusCode::BAD_REQUEST, "Invalid filename") {
+            SlotIoResult::Permanent(msg) => {
+                assert!(
+                    msg.contains("400"),
+                    "message should carry the status: {msg}"
+                );
+                assert!(
+                    msg.contains("Invalid filename"),
+                    "message should carry the body: {msg}"
+                );
+            }
+            other => panic!("expected Permanent, got {other:?}"),
+        }
+    }
+
+    /// A 5xx is a plausibly-transient server condition and stays retryable.
+    #[test]
+    fn classify_5xx_is_transient() {
+        assert!(matches!(
+            classify_slot_status(StatusCode::INTERNAL_SERVER_ERROR, "boom"),
+            SlotIoResult::Transient(_)
+        ));
     }
 
     /// Clearing all sessions (`None`) must remove every `.bin` file regardless
