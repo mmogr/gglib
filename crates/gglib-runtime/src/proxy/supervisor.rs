@@ -12,6 +12,7 @@
 
 use std::fmt;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -90,6 +91,13 @@ pub struct ProxyConfig {
     pub port: u16,
     /// Default context size for models.
     pub default_context: u64,
+    /// Whether KV cache session persistence is enabled for this proxy run.
+    /// `false` (the default) means zero behavior change — no
+    /// `--slot-save-path`/`--cache-ram` flags are ever passed to llama-server.
+    pub cache_enabled: bool,
+    /// Directory for KV cache slot files. Only consulted when `cache_enabled`
+    /// is `true`; `None` falls back to `<app-data-dir>/slots`.
+    pub slot_dir: Option<PathBuf>,
 }
 
 impl Default for ProxyConfig {
@@ -98,6 +106,8 @@ impl Default for ProxyConfig {
             host: "127.0.0.1".to_string(),
             port: DEFAULT_PROXY_PORT,
             default_context: DEFAULT_CONTEXT_SIZE,
+            cache_enabled: false,
+            slot_dir: None,
         }
     }
 }
@@ -214,6 +224,8 @@ impl ProxySupervisor {
         let cancel_clone = cancel_token.clone();
         let cancel_for_exit = cancel_token.clone();
         let default_ctx = config.default_context;
+        let cache_enabled = config.cache_enabled;
+        let slot_dir = config.slot_dir;
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -234,6 +246,8 @@ impl ProxySupervisor {
                 orchestrator,
                 cancel_clone,
                 settings_repo,
+                cache_enabled,
+                slot_dir,
             )
             .await;
 
@@ -504,6 +518,7 @@ mod tests {
                 1,
                 "test-model".to_string(),
                 4096,
+                false,
             ))
         }
 
@@ -577,6 +592,8 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 0, // Random port
             default_context: 4096,
+            cache_enabled: false,
+            slot_dir: None,
         };
         let (runtime, catalog) = make_ports();
         let mcp = make_mcp();
@@ -636,6 +653,8 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 0,
             default_context: 4096,
+            cache_enabled: false,
+            slot_dir: None,
         };
 
         // Start

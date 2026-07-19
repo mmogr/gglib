@@ -116,7 +116,13 @@ impl ModelRuntimePort for MockRuntimePort {
         _num_ctx: Option<u64>,
         _default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(9999, 1, "test-model".into(), 4096))
+        Ok(RunningTarget::local(
+            9999,
+            1,
+            "test-model".into(),
+            4096,
+            false,
+        ))
     }
     async fn current_model(&self) -> Option<RunningTarget> {
         None
@@ -200,6 +206,8 @@ async fn start_proxy() -> (String, CancellationToken) {
             make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
+            false,
+            None,
         )
         .await
         .ok();

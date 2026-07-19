@@ -25,18 +25,27 @@ pub struct RunningTarget {
     pub model_name: String,
     /// Actual context size being used.
     pub effective_ctx: u64,
+    /// True when this instance was freshly spawned (restart or cold start).
+    pub just_started: bool,
 }
 
 impl RunningTarget {
     /// Create a new `RunningTarget` for a local server.
     #[must_use]
-    pub fn local(port: u16, model_id: u32, model_name: String, effective_ctx: u64) -> Self {
+    pub fn local(
+        port: u16,
+        model_id: u32,
+        model_name: String,
+        effective_ctx: u64,
+        just_started: bool,
+    ) -> Self {
         Self {
             base_url: format!("http://127.0.0.1:{port}"),
             port,
             model_id,
             model_name,
             effective_ctx,
+            just_started,
         }
     }
 }

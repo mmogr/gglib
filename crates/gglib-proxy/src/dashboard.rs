@@ -87,6 +87,8 @@ pub struct DashboardSnapshot {
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.
     pub upstream_health: UpstreamHealthSnapshot,
+    /// Whether KV cache persistence is enabled on this proxy instance.
+    pub cache_enabled: bool,
 }
 
 impl DashboardSnapshot {
@@ -99,6 +101,7 @@ impl DashboardSnapshot {
         slots: &SlotsCache,
         metrics: &ContextMetricsStore,
         upstream_health: &UpstreamHealth,
+        cache_enabled: bool,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -118,6 +121,7 @@ impl DashboardSnapshot {
             recent_requests: metrics.recent(RECENT_REQUEST_LIMIT),
             total_requests: metrics.total_requests(),
             upstream_health: upstream_health.snapshot(),
+            cache_enabled,
         }
     }
 }
@@ -138,6 +142,8 @@ pub struct DashboardState {
     pub metrics: Arc<ContextMetricsStore>,
     pub upstream_health: Arc<UpstreamHealth>,
     pub broadcaster: Arc<Broadcaster<DashboardSnapshot>>,
+    /// Whether KV cache persistence is enabled.
+    pub cache_enabled: bool,
 }
 
 impl DashboardState {
@@ -149,6 +155,7 @@ impl DashboardState {
         slots: Arc<SlotsCache>,
         metrics: Arc<ContextMetricsStore>,
         upstream_health: Arc<UpstreamHealth>,
+        cache_enabled: bool,
     ) -> Self {
         Self {
             connections,
@@ -156,6 +163,7 @@ impl DashboardState {
             metrics,
             upstream_health,
             broadcaster: Arc::new(Broadcaster::new(BROADCAST_CAPACITY)),
+            cache_enabled,
         }
     }
 
@@ -168,6 +176,7 @@ impl DashboardState {
             &self.slots,
             &self.metrics,
             &self.upstream_health,
+            self.cache_enabled,
         )
     }
 }
@@ -217,6 +226,7 @@ mod tests {
             Arc::new(SlotsCache::new()),
             Arc::new(ContextMetricsStore::new()),
             Arc::new(UpstreamHealth::new()),
+            false,
         ))
     }
 
@@ -227,7 +237,8 @@ mod tests {
         let metrics = ContextMetricsStore::new();
         let upstream_health = UpstreamHealth::new();
 
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
+        let snapshot =
+            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, false);
 
         assert!(snapshot.active_connections.is_empty());
         assert!(!snapshot.slots_available);
@@ -253,7 +264,8 @@ mod tests {
         });
 
         let upstream_health = UpstreamHealth::new();
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
+        let snapshot =
+            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, false);
 
         assert_eq!(snapshot.active_connections.len(), 1);
         assert_eq!(snapshot.active_connections[0].model_name, "qwen-3b");
@@ -269,7 +281,8 @@ mod tests {
         let metrics = ContextMetricsStore::new();
         let upstream_health = UpstreamHealth::new();
 
-        let snapshot = DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
+        let snapshot =
+            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, false);
 
         assert!(snapshot.slots_available);
         assert!(snapshot.slots_status.is_none());
@@ -293,7 +306,7 @@ mod tests {
             let metrics = ContextMetricsStore::new();
             let upstream_health = UpstreamHealth::new();
             let snapshot =
-                DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health);
+                DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, false);
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
         }

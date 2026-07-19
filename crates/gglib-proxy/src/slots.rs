@@ -25,10 +25,17 @@
 //! probing, no risk of a partially-unknown schema causing the whole
 //! response to fail to parse.
 
+use std::cmp::Reverse;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use tokio::time as tokio_time;
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, warn};
 
 /// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
 /// any other JSON type (object, array, string, bool, `null`) as simply
@@ -653,5 +660,407 @@ mod tests {
                 "'{field}' with an unexpected type should degrade to None, not panic/error"
             );
         }
+    }
+}
+
+// =============================================================================
+// Slot I/O — save / restore / clear + background LRU eviction
+// =============================================================================
+
+/// Result of a slot I/O operation (save/restore).
+///
+/// `NotFound` means no cached slot exists for this session (not an error —
+/// the request proceeds cold). `Transient` failures may be retried.
+/// `Permanent` failures are terminal (e.g., invalid session ID).
+#[derive(Debug, PartialEq)]
+pub enum SlotIoResult {
+    Ok,
+    NotFound,
+    Transient(String),
+    Permanent(String),
+}
+
+/// Sanitize session ID for use as a filename. Alphanumeric + hyphens/underscores, max 64 chars.
+///
+/// Lowercased on return: the ID becomes a `.bin` filename, and the default
+/// filesystem on this project's primary dev/deploy platform (macOS/APFS) is
+/// case-insensitive-but-preserving, so `"Planner"` and `"planner"` would
+/// otherwise silently collide onto one file and cross-contaminate two
+/// distinct sessions' KV caches.
+pub fn sanitize_session_id(id: &str) -> Result<String, String> {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid session ID: {:?}", id));
+    }
+    Ok(id.to_lowercase())
+}
+
+/// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
+///
+/// Returns `SlotIoResult::Ok` on success, `NotFound` if the server returns 404,
+/// or `Transient` for timeout/network errors.
+pub async fn save_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
+    let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
+    match tokio_time::timeout(
+        Duration::from_secs(3),
+        client
+            .post(format!("{base_url}/slots/0?action=save"))
+            .json(&payload)
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
+        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
+        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
+        Err(_) => SlotIoResult::Transient("timeout after 3s".into()),
+    }
+}
+
+/// Check whether a session's `.bin` slot file predates `server_start_secs`.
+///
+/// A slot file older than the current llama-server process's start time was
+/// written by a *prior* process instance and is not safe to restore into
+/// this one (spawn-time purge is the primary defense — see
+/// `purge_stale_slot_bin_files` in `gglib-runtime` — this is a second,
+/// independent layer in case that purge is ever bypassed, e.g. a mismatched
+/// `--slot-save-path`).
+///
+/// Fail-open on every uncertain case — a missing file, an unreadable mtime,
+/// or `server_start_secs == 0` (guard not yet initialized) all return
+/// `false` ("not stale"), so the normal restore attempt proceeds and either
+/// succeeds or hits its own 404. This function only ever prevents a restore
+/// it can positively prove is stale; it never blocks one it can't evaluate.
+pub(crate) async fn slot_file_is_stale(
+    slot_dir: &Path,
+    session_id: &str,
+    server_start_secs: u64,
+) -> bool {
+    if server_start_secs == 0 {
+        return false;
+    }
+    let Ok(metadata) = tokio::fs::metadata(slot_dir.join(format!("{session_id}.bin"))).await else {
+        return false;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let Ok(mtime_secs) = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+    else {
+        return false;
+    };
+    mtime_secs < server_start_secs
+}
+
+/// Trigger a KV cache restore for the current slot via llama-server's `/slots/0?action=restore`.
+///
+/// Returns `SlotIoResult::Ok` on success, `NotFound` if no cached file exists (404),
+/// or `Transient` for timeout/network errors. A 5-second timeout is used because
+/// restore may need to read a large file from disk.
+pub async fn restore_slot(client: &Client, base_url: &str, session_id: &str) -> SlotIoResult {
+    let payload = serde_json::json!({"filename": format!("{session_id}.bin")});
+    match tokio_time::timeout(
+        Duration::from_secs(5),
+        client
+            .post(format!("{base_url}/slots/0?action=restore"))
+            .json(&payload)
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
+        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
+        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
+        Err(_) => {
+            warn!("restore timed out for {session_id} — proceeding cold");
+            SlotIoResult::Transient("timeout after 5s".into())
+        }
+    }
+}
+
+/// Clear per-slot cache files from disk. Uses tokio::fs for async safety.
+pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std::io::Result<()> {
+    if let Some(id) = session_id {
+        let path = slot_dir.join(format!("{id}.bin"));
+        tokio::fs::remove_file(&path).await.ok(); // NotFound/PermissionDenied → silent skip
+        return Ok(());
+    }
+    let mut entries = match tokio::fs::read_dir(slot_dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
+            && let Err(e) = tokio::fs::remove_file(entry.path()).await
+            && e.kind() != std::io::ErrorKind::PermissionDenied
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                "failed to remove slot file {}: {}",
+                entry.path().display(),
+                e
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Retry budget for a transient save failure — same shape as
+/// `cache_lifecycle::restore_with_retry`'s retry loop (duplicated here
+/// rather than imported, since slots.rs sits below cache_lifecycle.rs in
+/// the module layering).
+///
+/// A stale pooled HTTP connection (llama-server closes idle keep-alive
+/// connections; a 10+ minute generation easily outlives one) produces an
+/// instant `Transient` "error sending request" failure on the very next
+/// call — indistinguishable at the transport level from any other
+/// transient error, and exactly the case `restore_slot` already retries.
+/// Without this, a save silently drops with a single WARN, leaving the
+/// on-disk `.bin` permanently stale relative to what's actually in the
+/// slot's live KV cache — a mismatch that a later restore would then load
+/// as if it were current.
+const SAVE_MAX_RETRIES: u32 = 2;
+const SAVE_RETRY_BACKOFF: Duration = Duration::from_millis(100);
+
+/// Shared save function — called by both streaming and non-streaming paths.
+pub async fn attempt_save(
+    client: &Client,
+    base_url: &str,
+    session_id: &str,
+    clear_all_pending: &AtomicBool,
+    per_session_cleared: &DashSet<String>,
+) {
+    if clear_all_pending.load(Ordering::SeqCst) {
+        debug!("skipping save for {session_id} — clear_all_pending");
+        return;
+    }
+    if per_session_cleared.contains(session_id) {
+        debug!("skipping save for {session_id} — cleared mid-generation");
+        return;
+    }
+
+    let mut result = save_slot(client, base_url, session_id).await;
+    if matches!(result, SlotIoResult::Transient(_)) {
+        for attempt in 1..=SAVE_MAX_RETRIES {
+            debug!(
+                "retry save for {session_id} (attempt {}/{})",
+                attempt, SAVE_MAX_RETRIES
+            );
+            tokio_time::sleep(SAVE_RETRY_BACKOFF).await;
+            result = save_slot(client, base_url, session_id).await;
+            if !matches!(result, SlotIoResult::Transient(_)) {
+                break;
+            }
+        }
+    }
+
+    match result {
+        SlotIoResult::Ok => {}
+        SlotIoResult::NotFound => warn!("save failed for {session_id}: 404 Not Found"),
+        SlotIoResult::Transient(e) => {
+            warn!("save failed for {session_id} after retries: {e}")
+        }
+        SlotIoResult::Permanent(e) => {
+            warn!("save failed for {session_id} (permanent): {e}")
+        }
+    }
+}
+
+/// Default cap on cached session slot files before LRU eviction kicks in.
+///
+/// No CLI knob exists for this yet — a fixed cap is strictly better than the
+/// previous behavior of never evicting at all. Revisit if usage shows the
+/// default is wrong for a given `--slot-dir` size budget.
+pub const DEFAULT_MAX_CACHED_SESSIONS: usize = 100;
+
+/// Background LRU eviction task — spawned at server startup, runs every 60s.
+///
+/// Exits promptly on `cancel` so it never outlives the server (same shutdown
+/// contract as `spawn_slots_poller`/`spawn_dashboard_publisher`).
+pub fn spawn_lru_eviction_task(
+    slot_dir: PathBuf,
+    max_slots: usize,
+    cancel: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(60);
+        loop {
+            tokio::select! {
+                () = cancel.cancelled() => break,
+                () = tokio::time::sleep(interval) => {
+                    if let Err(e) = evict_stale_slots(&slot_dir, max_slots).await {
+                        warn!("LRU eviction failed: {}", e);
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Evict least-recently-used slot files from `slot_dir` when count exceeds `max_slots`.
+///
+/// Sorts `.bin` files by mtime (oldest first), removes the excess. Errors on
+/// individual file removal are silently skipped for NotFound/PermissionDenied.
+pub async fn evict_stale_slots(slot_dir: &Path, max_slots: usize) -> std::io::Result<()> {
+    let mut entries = match tokio::fs::read_dir(slot_dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    let mut slots: Vec<(PathBuf, u64)> = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
+            && let Ok(metadata) = entry.metadata().await
+            && let Ok(mtime) = metadata.modified()
+        {
+            slots.push((entry.path(), mtime.elapsed().unwrap_or_default().as_secs()));
+        }
+    }
+
+    let excess_slots = sort_slots_for_eviction(slots, max_slots);
+    for path in excess_slots {
+        if let Err(e) = tokio::fs::remove_file(&path).await
+            && e.kind() != std::io::ErrorKind::PermissionDenied
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!("eviction failed for {}: {}", path.display(), e);
+        }
+    }
+    Ok(())
+}
+
+/// Isolated sorting logic to allow pure unit testing without relying on filesystem mtimes.
+fn sort_slots_for_eviction(mut slots: Vec<(PathBuf, u64)>, max_slots: usize) -> Vec<PathBuf> {
+    slots.sort_by_key(|(_, age)| Reverse(*age)); // Oldest (largest age) first
+    let excess = slots.len().saturating_sub(max_slots);
+    slots.into_iter().take(excess).map(|(p, _)| p).collect()
+}
+
+// =============================================================================
+// Slot I/O Tests
+// =============================================================================
+
+#[cfg(test)]
+mod slot_io_tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_session_id() {
+        assert_eq!(sanitize_session_id("planner").unwrap(), "planner");
+        assert_eq!(sanitize_session_id("valid-id_123").unwrap(), "valid-id_123");
+        assert!(sanitize_session_id("").is_err());
+        assert!(sanitize_session_id("../invalid").is_err());
+        assert!(sanitize_session_id("invalid/path").is_err());
+        assert!(sanitize_session_id(&"a".repeat(65)).is_err()); // > 64 chars
+    }
+
+    /// Regression test: mixed-case IDs must not collide on case-insensitive
+    /// filesystems (macOS/APFS default) once used as `.bin` filenames.
+    #[test]
+    fn test_sanitize_session_id_lowercases() {
+        assert_eq!(sanitize_session_id("Planner").unwrap(), "planner");
+        assert_eq!(
+            sanitize_session_id("Planner").unwrap(),
+            sanitize_session_id("planner").unwrap(),
+            "differently-cased headers must resolve to the same session bucket"
+        );
+    }
+
+    #[test]
+    fn test_lru_sort_logic() {
+        let slots = vec![
+            (PathBuf::from("A.bin"), 60),   // 60 seconds old
+            (PathBuf::from("B.bin"), 3600), // 1 hour old (oldest)
+            (PathBuf::from("C.bin"), 10),   // 10 seconds old (newest)
+        ];
+
+        let evicted = sort_slots_for_eviction(slots, 2);
+
+        // With max_slots=2, the single oldest slot (B) should be evicted
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0], PathBuf::from("B.bin"));
+    }
+
+    #[tokio::test]
+    async fn test_attempt_save_race_guard() {
+        let client = Client::new();
+        let clear_all = AtomicBool::new(false);
+        let per_session = DashSet::new();
+
+        per_session.insert("planner".to_string());
+
+        // This will return immediately due to the DashSet guard.
+        attempt_save(
+            &client,
+            "http://127.0.0.1:0",
+            "planner",
+            &clear_all,
+            &per_session,
+        )
+        .await;
+    }
+
+    /// The LRU eviction task must exit promptly on cancellation rather than
+    /// running forever detached from the server's lifecycle — otherwise it
+    /// leaks across proxy restarts within the same process (e.g. tests, or a
+    /// GUI that stops/starts the proxy repeatedly).
+    #[tokio::test]
+    async fn spawn_lru_eviction_task_exits_on_cancel() {
+        let dir = tempfile::tempdir().unwrap();
+        let cancel = CancellationToken::new();
+        let handle = spawn_lru_eviction_task(dir.path().to_path_buf(), 10, cancel.clone());
+
+        cancel.cancel();
+        tokio::time::timeout(Duration::from_secs(1), handle)
+            .await
+            .expect("eviction task should exit promptly on cancellation")
+            .expect("eviction task should not panic");
+    }
+
+    fn unix_secs_now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_true_when_file_predates_server_start() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+
+        let server_start = unix_secs_now() + 3600; // "started" after the file was written
+        assert!(slot_file_is_stale(dir.path(), "s", server_start).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_file_is_newer_than_server_start() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+
+        let server_start = unix_secs_now().saturating_sub(3600); // started well before the file
+        assert!(!slot_file_is_stale(dir.path(), "s", server_start).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        // no file written for "s"
+        assert!(!slot_file_is_stale(dir.path(), "s", unix_secs_now() + 3600).await);
+    }
+
+    #[tokio::test]
+    async fn slot_file_is_stale_false_when_guard_uninitialized() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("s.bin"), b"x").unwrap();
+        // server_start_secs == 0 means the guard hasn't been initialized yet — fail-open.
+        assert!(!slot_file_is_stale(dir.path(), "s", 0).await);
     }
 }

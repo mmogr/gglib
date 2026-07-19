@@ -51,6 +51,10 @@ pub enum ProcessStrategy {
         current: Arc<RwLock<Option<CurrentModelState>>>,
         /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
         loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
+        /// KV cache slot-save directory (`--slot-save-path`), or `None` if the
+        /// KV cache feature is disabled. Forwarded verbatim into every
+        /// `build_server_config` call made by this manager's driver.
+        slot_save_path: Option<PathBuf>,
     },
 }
 
@@ -97,6 +101,9 @@ impl ProcessManager {
     /// * `llama_server_path` — Path to the llama-server binary to execute.
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
+    /// * `slot_save_path` — KV cache slot-save directory, or `None` to
+    ///   disable the KV cache feature entirely (zero behavior change to the
+    ///   launch — no `--slot-save-path`/`--cache-ram` flags are emitted).
     ///
     /// # When to use
     ///
@@ -108,6 +115,7 @@ impl ProcessManager {
         base_port: u16,
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
+        slot_save_path: Option<PathBuf>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
@@ -116,6 +124,7 @@ impl ProcessManager {
                 catalog,
                 current: Arc::new(RwLock::new(None)),
                 loading: Arc::new(std::sync::RwLock::new(None)),
+                slot_save_path,
             },
         }
     }
@@ -188,12 +197,13 @@ impl ProcessManager {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot) = match &self.strategy {
+        let (catalog, current_lock, loading_slot, slot_save_path) = match &self.strategy {
             ProcessStrategy::SingleSwap {
                 catalog,
                 current,
                 loading,
-            } => (catalog, current, loading),
+                slot_save_path,
+            } => (catalog, current, loading, slot_save_path),
             ProcessStrategy::Concurrent { .. } => {
                 return Err(ModelRuntimeError::Internal(
                     "ensure_model_running() is only available for SingleSwap strategy".to_string(),
@@ -235,6 +245,7 @@ impl ProcessManager {
                     let catalog_owned = catalog.clone();
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
+                    let slot_save_path_owned = slot_save_path.clone();
 
                     // 4. Spawn the driver task (detached from this request's future)
                     drive(guard, STARTUP_WAIT_TIMEOUT, async move {
@@ -290,6 +301,7 @@ impl ProcessManager {
                                     model_id,
                                     cached_name,
                                     context_size,
+                                    false, // cached healthy — not a fresh spawn
                                 ));
                             }
                             warn!(
@@ -342,9 +354,20 @@ impl ProcessManager {
                                     .as_ref()
                                     .and_then(|sc| sc.context_length),
                                 global_default_ctx: Some(default_ctx),
+                                slot_save_path: slot_save_path_owned.clone(),
                                 ..Default::default()
                             },
                         );
+
+                        // Purge stale slot .bin files before spawning a fresh instance.
+                        // Old slot files are incompatible with the new server process.
+                        if let Some(ref slot_dir) = slot_save_path_owned {
+                            // Ensure the directory exists so llama-server doesn't crash on startup
+                            if let Err(e) = std::fs::create_dir_all(slot_dir) {
+                                tracing::warn!("Failed to create slot directory: {}", e);
+                            }
+                            purge_stale_slot_bin_files(slot_dir);
+                        }
 
                         let port = {
                             let mut core_w = core.write().await;
@@ -384,6 +407,7 @@ impl ProcessManager {
                             launch_spec.id,
                             launch_spec.name,
                             effective_ctx,
+                            true, // fresh spawn — cache slots are stale
                         ))
                     });
 
@@ -405,7 +429,13 @@ impl ProcessManager {
                 let current = current.clone();
                 let guard = current.read().await;
                 guard.as_ref().map(|c| {
-                    RunningTarget::local(c.port, c.model_id, c.model_name.clone(), c.context_size)
+                    RunningTarget::local(
+                        c.port,
+                        c.model_id,
+                        c.model_name.clone(),
+                        c.context_size,
+                        false,
+                    )
                 })
             }
             ProcessStrategy::Concurrent { .. } => None,
@@ -497,9 +527,67 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
+/// Remove stale `.bin` slot files from the cache directory.
+/// Called on llama-server restart to invalidate slots that may have been
+/// written by a previous process (different model, context size, etc.).
+fn purge_stale_slot_bin_files(slot_dir: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(slot_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+    // Silently skip if the directory doesn't exist or can't be read.
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn purge_stale_slot_bin_files_removes_bin_only() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        // Create .bin and non-.bin files
+        tokio::fs::write(dir.join("session1.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("session2.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("notes.txt"), "keep me")
+            .await
+            .unwrap();
+        // Purge
+        purge_stale_slot_bin_files(&dir);
+        // Verify: .bin gone, .txt remains
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
+        let mut remaining: Vec<std::ffi::OsString> = Vec::new();
+        while let Ok(Some(e)) = entries.next_entry().await {
+            remaining.push(e.file_name());
+        }
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].to_str(), Some("notes.txt"));
+        // Cleanup
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn purge_stale_slot_bin_files_noop_on_missing_dir() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-missing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        // Should not panic or error — just returns silently
+        purge_stale_slot_bin_files(&dir);
+    }
 
     #[tokio::test]
     async fn test_concurrent_manager_creation() {

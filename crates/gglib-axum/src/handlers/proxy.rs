@@ -73,6 +73,9 @@ fn to_runtime_config(
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
         port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
         default_context,
+        // GUI cache toggle is out of scope until Step 7 — always disabled here.
+        cache_enabled: false,
+        slot_dir: None,
     })
 }
 

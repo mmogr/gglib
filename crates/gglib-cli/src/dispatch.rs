@@ -262,6 +262,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             repeat_penalty,
             presence_penalty,
             min_p,
+            cache,
+            slot_dir,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -273,6 +275,18 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         port: dash_port,
                     } => {
                         handlers::proxy_dashboard::execute(dash_host, dash_port).await?;
+                    }
+                    crate::commands::ProxyCommand::CacheClear {
+                        host: clear_host,
+                        port: clear_port,
+                        session_id,
+                    } => {
+                        handlers::proxy_cache_clear::execute(
+                            &clear_host,
+                            clear_port,
+                            session_id.as_deref(),
+                        )
+                        .await?;
                     }
                 }
                 return Ok(());
@@ -316,6 +330,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx.mcp.clone(),
                 ctx.app.settings().repo(),
                 inference_override,
+                cache,
+                slot_dir,
             )
             .await?;
         }

@@ -161,6 +161,18 @@ pub enum ProxyCommand {
         #[arg(short, long, default_value = "8080")]
         port: u16,
     },
+    /// Clear KV cache for a session or all sessions on an already-running proxy
+    CacheClear {
+        /// Host of the already-running proxy to connect to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Port of the already-running proxy to connect to
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        /// Optional session ID to target (without --session-id, clears all sessions)
+        #[arg(long)]
+        session_id: Option<String>,
+    },
 }
 
 /// Top-level commands for the GGUF library management tool.
@@ -462,6 +474,12 @@ pub enum Commands {
         /// Set `0.0` to disable (recommended by Qwen3).
         #[arg(long)]
         min_p: Option<f32>,
+        /// Enable KV cache session persistence (saves/restores llama-server slot state per session)
+        #[arg(long)]
+        cache: bool,
+        /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
+        #[arg(long)]
+        slot_dir: Option<std::path::PathBuf>,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,

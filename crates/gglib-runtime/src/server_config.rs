@@ -114,6 +114,12 @@ pub fn build_server_config(
         config = config.with_inference_config(params);
     }
 
+    // --- KV cache slot persistence ----------------------------------------------
+    // Direct pass-through, no tag-based auto-detection: `None` here means the
+    // feature is disabled and `build_and_spawn` emits zero cache-related flags,
+    // leaving every existing model launch byte-for-byte unchanged.
+    config = config.with_slot_save_path(opts.slot_save_path);
+
     // --- MTP speculative decoding ----------------------------------------------
     let mtp = resolve_mtp_args(opts.mtp_draft_n_max, opts.mtp_draft_p_min, tags);
     if mtp.enabled {

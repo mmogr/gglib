@@ -5,6 +5,7 @@
 //! logic for idle-model advertisements in `/v1/models`.
 
 use anyhow::{Result, anyhow};
+use std::path::PathBuf;
 
 use crate::domain::InferenceConfig;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
@@ -118,6 +119,12 @@ pub struct ServerConfigOptions {
     /// Override the MTP acceptance probability threshold.
     /// Only meaningful when MTP is enabled. `None` uses the default (`0.75`).
     pub mtp_draft_p_min: Option<f32>,
+
+    /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
+    /// - `None` — KV cache disabled, zero behavior change to the launch.
+    /// - `Some(dir)` — enables slot save/restore with unlimited RAM cache.
+    ///   Direct pass-through, no tag-based auto-detection (unlike jinja/MTP/reasoning).
+    pub slot_save_path: Option<PathBuf>,
 
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.

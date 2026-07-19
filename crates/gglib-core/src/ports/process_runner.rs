@@ -52,6 +52,13 @@ pub struct ServerConfig {
     pub inference_config: Option<InferenceConfig>,
     /// Additional server-specific options (escape hatch).
     pub extra_args: Vec<String>,
+    /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
+    ///
+    /// `None` means the KV cache feature is disabled — no `--slot-save-path`
+    /// or `--cache-ram` flags are passed, and llama-server behaves exactly as
+    /// it did before this field existed. `Some(dir)` enables slot save/restore
+    /// with unlimited RAM cache (`--cache-ram -1`).
+    pub slot_save_path: Option<PathBuf>,
 }
 
 impl ServerConfig {
@@ -77,6 +84,7 @@ impl ServerConfig {
             spec_draft_p_min: None,
             inference_config: None,
             extra_args: Vec::new(),
+            slot_save_path: None,
         }
     }
 
@@ -147,6 +155,15 @@ impl ServerConfig {
     #[must_use]
     pub fn with_extra_args(mut self, args: Vec<String>) -> Self {
         self.extra_args = args;
+        self
+    }
+
+    /// Set the KV cache slot-save directory (`--slot-save-path`).
+    ///
+    /// `None` disables the KV cache feature entirely (no flags emitted).
+    #[must_use]
+    pub fn with_slot_save_path(mut self, path: Option<PathBuf>) -> Self {
+        self.slot_save_path = path;
         self
     }
 }

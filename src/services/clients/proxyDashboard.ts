@@ -67,3 +67,28 @@ export function subscribeProxyDashboard(
 
   return () => eventSource.close();
 }
+
+/**
+ * Clear KV cache via `POST /v1/proxy/cache/clear`.
+ *
+ * @param host   Proxy host (typically `127.0.0.1`).
+ * @param port   Proxy port.
+ * @param sessionId Optional session ID to target; omit to clear all sessions.
+ * @returns The JSON response body from the proxy.
+ */
+export async function clearProxyCache(
+  host: string,
+  port: number,
+  sessionId?: string
+): Promise<{ status: string; message: string }> {
+  const url = `http://${host}:${port}/v1/proxy/cache/clear`;
+  const headers: Record<string, string> = {};
+  if (sessionId) {
+    headers['X-Gglib-Session-Id'] = sessionId;
+  }
+  const res = await fetch(url, { method: 'POST', headers });
+  if (!res.ok) {
+    throw new Error(`Cache clear failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}

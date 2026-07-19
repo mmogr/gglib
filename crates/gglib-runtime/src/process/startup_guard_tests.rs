@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 async fn test_concurrent_callers_both_succeed() {
     let slot = Arc::new(RwLock::new(None));
-    let target = RunningTarget::local(8080, 1, "test-model".to_string(), 2048);
+    let target = RunningTarget::local(8080, 1, "test-model".to_string(), 2048, false);
 
     // Clone target for each async block (they both move into the closure)
     let target1 = target.clone();
@@ -124,7 +124,7 @@ async fn test_waiters_get_specific_error_on_failure() {
 #[tokio::test]
 async fn test_initiator_cancellation_does_not_affect_waiters() {
     let slot = Arc::new(RwLock::new(None));
-    let target = RunningTarget::local(8080, 1, "test-model".to_string(), 2048);
+    let target = RunningTarget::local(8080, 1, "test-model".to_string(), 2048, false);
 
     // Initiator spawns the driver task but then gets cancelled (future dropped)
     let initiator_handle = tokio::spawn({
@@ -202,7 +202,7 @@ async fn test_sequential_startups_clean_up_properly() {
     let slot = Arc::new(RwLock::new(None));
 
     // First startup cycle
-    let target1 = RunningTarget::local(8080, 1, "model-v1".to_string(), 2048);
+    let target1 = RunningTarget::local(8080, 1, "model-v1".to_string(), 2048, false);
     let result1 = {
         let disp = StartupDisposition::check(&slot, "model-v1".to_string());
         match disp {
@@ -230,7 +230,7 @@ async fn test_sequential_startups_clean_up_properly() {
     }
 
     // Second startup cycle — should get Initiator again (not Waiter on stale channel)
-    let target2 = RunningTarget::local(8081, 2, "model-v2".to_string(), 4096);
+    let target2 = RunningTarget::local(8081, 2, "model-v2".to_string(), 4096, false);
     let result2 = {
         let disp = StartupDisposition::check(&slot, "model-v2".to_string());
         match disp {
@@ -261,7 +261,13 @@ async fn test_waiter_timeout_fires_on_stuck_driver() {
                 drive(guard, Duration::from_millis(200), async move {
                     // Never returns — simulates stuck driver (but internal timeout will kill it)
                     tokio::time::sleep(Duration::from_secs(999)).await;
-                    Ok(RunningTarget::local(8080, 1, "stuck".to_string(), 2048))
+                    Ok(RunningTarget::local(
+                        8080,
+                        1,
+                        "stuck".to_string(),
+                        2048,
+                        false,
+                    ))
                 });
                 // Don't await self_rx — just let the driver hang
             }
@@ -308,8 +314,8 @@ async fn test_waiter_timeout_fires_on_stuck_driver() {
 async fn test_concurrent_different_models_each_get_correct_result() {
     let slot = Arc::new(RwLock::new(None));
 
-    let target_a = RunningTarget::local(8080, 1, "model-a".to_string(), 2048);
-    let target_b = RunningTarget::local(8081, 2, "model-b".to_string(), 4096);
+    let target_a = RunningTarget::local(8080, 1, "model-a".to_string(), 2048, false);
+    let target_b = RunningTarget::local(8081, 2, "model-b".to_string(), 2048, false);
 
     // Two concurrent callers for DIFFERENT models
     let (result_a, result_b) = tokio::join!(
@@ -413,6 +419,7 @@ async fn test_driver_internal_timeout_clears_slot() {
                         1,
                         "slow-model".to_string(),
                         2048,
+                        false,
                     ))
                 });
                 // Don't await self_rx — let the driver timeout handle cleanup

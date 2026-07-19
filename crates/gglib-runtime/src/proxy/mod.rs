@@ -235,6 +235,11 @@ impl SettingsRepository for CliOverrideSettingsRepo {
 /// * `settings_repo` - Settings repository for global inference defaults
 /// * `inference_override` - Optional once-off inference parameter overrides
 ///   (applied on top of persisted global defaults; not saved to disk)
+/// * `cache_enabled` - Whether to enable KV cache session persistence.
+///   `false` means zero behavior change (no `--slot-save-path`/`--cache-ram`
+///   flags are ever passed to llama-server).
+/// * `slot_dir` - Directory for KV cache slot files. Only consulted when
+///   `cache_enabled` is `true`; `None` falls back to `<app-data-dir>/slots`.
 #[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
@@ -246,7 +251,22 @@ pub async fn start_proxy_standalone(
     mcp: Arc<McpService>,
     settings_repo: Arc<dyn SettingsRepository>,
     inference_override: Option<InferenceConfig>,
+    cache_enabled: bool,
+    slot_dir: Option<PathBuf>,
 ) -> Result<()> {
+    // Resolve the actual KV cache slot-save directory. `None` when the
+    // feature is disabled, regardless of what `slot_dir` was passed — this
+    // guarantees `--cache` off means zero cache-related flags downstream.
+    let slot_save_path: Option<PathBuf> = if cache_enabled {
+        Some(slot_dir.unwrap_or_else(|| {
+            gglib_core::paths::data_root()
+                .map(|d| d.join("slots"))
+                .unwrap_or_else(|_| PathBuf::from("slots"))
+        }))
+    } else {
+        None
+    };
+
     // Create catalog port from model repository
     let catalog_port: Arc<dyn ModelCatalogPort> =
         Arc::new(CatalogPortImpl::new(Arc::clone(&model_repo)));
@@ -257,6 +277,7 @@ pub async fn start_proxy_standalone(
         llama_base_port,
         llama_server_path.to_string_lossy(),
         Arc::clone(&catalog_port),
+        slot_save_path.clone(),
     ));
 
     // Create runtime port
@@ -301,6 +322,8 @@ pub async fn start_proxy_standalone(
         host: host.clone(),
         port,
         default_context,
+        cache_enabled,
+        slot_dir: slot_save_path,
     };
 
     // Initialize MCP service (validates servers and auto-starts enabled ones)

@@ -149,6 +149,7 @@ impl ModelRuntimePort for FixedUpstream {
             1,
             self.model_name.clone(),
             4096,
+            false,
         ))
     }
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -322,6 +323,8 @@ async fn spawn_proxy(
             make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
+            false,
+            None,
         )
         .await
         .ok();
