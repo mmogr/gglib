@@ -865,30 +865,33 @@ async fn chat_completions(
             // Compute cache-aware permit/config/session_id for the retry.
             // Mirrors the normal-path pattern: acquire permit via
             // prepare_streaming_cycle, fail-open on error.
-            let (retry_permit, retry_cfg, retry_session) = if state.cache_enabled
-                && sanitized_session_id.is_some()
-                && state.slot_dir.is_some()
-            {
-                let sid = sanitized_session_id.clone().unwrap();
-                let cfg = StreamConfig {
-                    client: state.client.clone(),
-                    base_url: new_target.base_url.clone(),
-                    slot_dir: state.slot_dir.as_ref().unwrap().clone(),
-                    model_id: new_target.model_id,
-                    clear_all_pending: state.clear_all_pending.clone(),
-                    per_session_cleared: state.per_session_cleared.clone(),
-                    server_start_time: state.server_start_time.clone(),
-                    last_loaded_session: state.last_loaded_session.clone(),
-                };
-                match crate::cache_lifecycle::prepare_streaming_cycle(
-                    &cfg,
-                    state.slot_gate.clone(),
-                    &sid,
-                )
-                .await
-                {
-                    Ok((permit, _sanitized, _restore)) => (Some(permit), Some(cfg), Some(sid)),
-                    Err(_) => (None, None, None), // fail-open
+            let (retry_permit, retry_cfg, retry_session) = if state.cache_enabled {
+                if let (Some(sid), Some(slot_dir)) = (&sanitized_session_id, &state.slot_dir) {
+                    let cfg = StreamConfig {
+                        client: state.client.clone(),
+                        base_url: new_target.base_url.clone(),
+                        slot_dir: slot_dir.clone(),
+                        model_id: new_target.model_id,
+                        clear_all_pending: state.clear_all_pending.clone(),
+                        per_session_cleared: state.per_session_cleared.clone(),
+                        server_start_time: state.server_start_time.clone(),
+                        last_loaded_session: state.last_loaded_session.clone(),
+                    };
+
+                    match crate::cache_lifecycle::prepare_streaming_cycle(
+                        &cfg,
+                        state.slot_gate.clone(),
+                        sid,
+                    )
+                    .await
+                    {
+                        Ok((permit, _sanitized, _restore)) => {
+                            (Some(permit), Some(cfg), Some(sid.clone()))
+                        }
+                        Err(_) => (None, None, None), // fail-open
+                    }
+                } else {
+                    (None, None, None)
                 }
             } else {
                 (None, None, None)
