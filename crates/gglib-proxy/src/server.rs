@@ -87,11 +87,9 @@ pub(crate) struct AppState {
     /// Unix timestamp (seconds) when the current llama-server process started.
     /// Updated on each restart detection. Used by mtime guard to skip stale slots.
     server_start_time: Arc<AtomicU64>,
-    /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (model_id + session_id) used to bypass disk restore
-    /// when the same model+session is already hot.
-    last_loaded_session:
-        Arc<tokio::sync::RwLock<Option<crate::cache_lifecycle::LastLoadedSession>>>,
+    /// Last session ID successfully loaded into RAM (hot in KV cache).
+    /// Used to bypass disk restore when the session is already hot.
+    last_loaded_session: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -452,7 +450,6 @@ async fn handle_proxy_cache_clear(
         client: state.client.clone(),
         base_url: String::new(), // Not used by clear_cache
         slot_dir,
-        model_id: 0, // Sentinel — clear_cache only uses flags and hot-cache invalidation
         clear_all_pending: state.clear_all_pending.clone(),
         per_session_cleared: state.per_session_cleared.clone(),
         server_start_time: state.server_start_time.clone(),
@@ -658,7 +655,6 @@ async fn chat_completions(
             client: state.client.clone(),
             base_url: target.base_url.clone(),
             slot_dir: dir.clone(),
-            model_id: target.model_id,
             clear_all_pending: state.clear_all_pending.clone(),
             per_session_cleared: state.per_session_cleared.clone(),
             server_start_time: state.server_start_time.clone(),
@@ -862,38 +858,6 @@ async fn chat_completions(
                 Some(new_target.effective_ctx),
             );
 
-            // Compute cache-aware permit/config/session_id for the retry.
-            // Mirrors the normal-path pattern: acquire permit via
-            // prepare_streaming_cycle, fail-open on error.
-            let (retry_permit, retry_cfg, retry_session) = if state.cache_enabled
-                && sanitized_session_id.is_some()
-                && state.slot_dir.is_some()
-            {
-                let sid = sanitized_session_id.clone().unwrap();
-                let cfg = StreamConfig {
-                    client: state.client.clone(),
-                    base_url: new_target.base_url.clone(),
-                    slot_dir: state.slot_dir.as_ref().unwrap().clone(),
-                    model_id: new_target.model_id,
-                    clear_all_pending: state.clear_all_pending.clone(),
-                    per_session_cleared: state.per_session_cleared.clone(),
-                    server_start_time: state.server_start_time.clone(),
-                    last_loaded_session: state.last_loaded_session.clone(),
-                };
-                match crate::cache_lifecycle::prepare_streaming_cycle(
-                    &cfg,
-                    state.slot_gate.clone(),
-                    &sid,
-                )
-                .await
-                {
-                    Ok((permit, _sanitized, _restore)) => (Some(permit), Some(cfg), Some(sid)),
-                    Err(_) => (None, None, None), // fail-open
-                }
-            } else {
-                (None, None, None)
-            };
-
             match forward_chat_completion(
                 &state.client,
                 &retry_url,
@@ -908,9 +872,9 @@ async fn chat_completions(
                 retry_connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
-                retry_permit,
-                retry_cfg,
-                retry_session,
+                None,
+                None,
+                None,
             )
             .await
             {

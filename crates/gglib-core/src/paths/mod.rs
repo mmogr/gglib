@@ -8,7 +8,6 @@ mod models;
 mod pids;
 mod platform;
 mod resolver;
-mod slots;
 
 #[cfg(test)]
 mod test_utils;
@@ -45,6 +44,3 @@ pub use config::{env_file_path, persist_env_value, persist_models_dir};
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;
-
-// Slot cache paths
-pub use slots::slot_model_dir;

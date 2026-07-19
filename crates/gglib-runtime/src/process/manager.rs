@@ -11,7 +11,6 @@ use anyhow::{Result, anyhow};
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
-use gglib_core::slot_model_dir;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -367,7 +366,7 @@ impl ProcessManager {
                             if let Err(e) = std::fs::create_dir_all(slot_dir) {
                                 tracing::warn!("Failed to create slot directory: {}", e);
                             }
-                            purge_stale_slot_bin_files(slot_dir, launch_spec.id as u32);
+                            purge_stale_slot_bin_files(slot_dir);
                         }
 
                         let port = {
@@ -528,11 +527,11 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
-/// Remove stale `.bin` slot files for the given model from `{slot_dir}/{model_id}/`.
-/// Called on llama-server restart when the model or context size changes.
-fn purge_stale_slot_bin_files(slot_dir: &std::path::Path, model_id: u32) {
-    let model_subdir = slot_model_dir(slot_dir, model_id);
-    if let Ok(entries) = std::fs::read_dir(&model_subdir) {
+/// Remove stale `.bin` slot files from the cache directory.
+/// Called on llama-server restart to invalidate slots that may have been
+/// written by a previous process (different model, context size, etc.).
+fn purge_stale_slot_bin_files(slot_dir: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(slot_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("bin") {
@@ -540,7 +539,7 @@ fn purge_stale_slot_bin_files(slot_dir: &std::path::Path, model_id: u32) {
             }
         }
     }
-    // Silently skip if the model subdirectory doesn't exist or can't be read.
+    // Silently skip if the directory doesn't exist or can't be read.
 }
 
 #[cfg(test)]
@@ -554,50 +553,27 @@ mod tests {
             std::process::id(),
             std::time::SystemTime::now().elapsed().unwrap().as_nanos()
         ));
-        let model_id: u32 = 42;
-        // Create model-specific subdirectory with .bin files
-        let model_subdir = dir.join(model_id.to_string());
-        tokio::fs::create_dir_all(&model_subdir).await.unwrap();
-        tokio::fs::write(model_subdir.join("session1.bin"), &[0u8; 8])
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        // Create .bin and non-.bin files
+        tokio::fs::write(dir.join("session1.bin"), &[0u8; 8])
             .await
             .unwrap();
-        tokio::fs::write(model_subdir.join("session2.bin"), &[0u8; 8])
+        tokio::fs::write(dir.join("session2.bin"), &[0u8; 8])
             .await
             .unwrap();
-        // Create a .txt file in the model subdir (should survive)
-        tokio::fs::write(model_subdir.join("notes.txt"), "keep me")
+        tokio::fs::write(dir.join("notes.txt"), "keep me")
             .await
             .unwrap();
-        // Create a .bin file in the flat dir (should survive — not our model)
-        tokio::fs::write(dir.join("orphan.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // Create another model's subdir with a .bin (should survive)
-        let other_model_subdir = dir.join("99");
-        tokio::fs::create_dir_all(&other_model_subdir)
-            .await
-            .unwrap();
-        tokio::fs::write(other_model_subdir.join("session3.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // Purge only model 42's slot files
-        purge_stale_slot_bin_files(&dir, model_id);
-        // Verify: model 42 subdir has only notes.txt
-        let mut entries = tokio::fs::read_dir(&model_subdir).await.unwrap();
+        // Purge
+        purge_stale_slot_bin_files(&dir);
+        // Verify: .bin gone, .txt remains
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
         let mut remaining: Vec<std::ffi::OsString> = Vec::new();
         while let Ok(Some(e)) = entries.next_entry().await {
             remaining.push(e.file_name());
         }
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].to_str(), Some("notes.txt"));
-        // Verify: orphan.bin in flat dir still exists
-        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
-        // Verify: other model's .bin still exists
-        assert!(
-            tokio::fs::try_exists(other_model_subdir.join("session3.bin"))
-                .await
-                .unwrap()
-        );
         // Cleanup
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
@@ -609,8 +585,8 @@ mod tests {
             std::process::id(),
             std::time::SystemTime::now().elapsed().unwrap().as_nanos()
         ));
-        // Should not panic or error — just returns silently (dir doesn't exist)
-        purge_stale_slot_bin_files(&dir, 999);
+        // Should not panic or error — just returns silently
+        purge_stale_slot_bin_files(&dir);
     }
 
     #[tokio::test]

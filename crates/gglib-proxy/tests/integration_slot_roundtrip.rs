@@ -500,7 +500,6 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
         client: Client::new(),
         base_url: format!("http://127.0.0.1:{}", port),
         slot_dir: std::env::temp_dir().join("backoff-test"),
-        model_id: 0,
         clear_all_pending: Arc::new(AtomicBool::new(false)),
         per_session_cleared: Arc::new(DashSet::new()),
         server_start_time: Arc::new(AtomicU64::new(
@@ -595,8 +594,6 @@ async fn save_retry_backoff_exhausts_max_retries_then_succeeds() {
     attempt_save(
         &client,
         &base_url,
-        std::path::Path::new("/tmp"), // slot_dir (not used — DashSet guard fires first)
-        0,                            // model_id
         "save-backoff-session",
         &clear_all_pending,
         &per_session_cleared,

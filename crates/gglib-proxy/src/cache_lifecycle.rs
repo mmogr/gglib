@@ -16,14 +16,6 @@ use tracing::{debug, warn};
 
 use crate::slots::{self, SlotIoResult};
 
-/// Composite key for the hot-cache bypass: (model_id, session_id).
-/// Both fields must match to consider a session "hot" in RAM.
-#[derive(Clone, Debug)]
-pub struct LastLoadedSession {
-    pub model_id: u32,
-    pub session_id: String,
-}
-
 /// Maximum number of retry attempts for pre-generation restore failures.
 /// Total attempts = 1 (initial) + MAX_RETRIES = 3.
 const MAX_RETRIES: u32 = 2;
@@ -41,18 +33,14 @@ pub struct StreamConfig {
     pub client: Client,
     pub base_url: String,
     pub slot_dir: PathBuf,
-    /// Database ID of the model whose slots are being cached.
-    /// Used to namespace slot files under `{slot_dir}/{model_id}/`.
-    pub model_id: u32,
     pub clear_all_pending: Arc<AtomicBool>,
     pub per_session_cleared: Arc<DashSet<String>>,
     /// Unix timestamp (seconds) when the current llama-server process started.
     /// Used by mtime guard to skip restoring stale slot files.
     pub server_start_time: Arc<AtomicU64>,
-    /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (model_id + session_id) used to bypass disk restore
-    /// when the same model+session is already hot.
-    pub last_loaded_session: Arc<tokio::sync::RwLock<Option<LastLoadedSession>>>,
+    /// Last session ID successfully loaded into RAM (hot in KV cache).
+    /// Used to bypass disk restore when the session is already hot.
+    pub last_loaded_session: Arc<tokio::sync::RwLock<Option<String>>>,
 }
 
 /// Restore KV cache for a session, with retry on transient failures.
@@ -70,26 +58,13 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
     // mtime guard: skip restoring a slot file written by a prior llama-server
     // instance (see `slots::slot_file_is_stale` for the fail-open contract).
     let server_start_secs = config.server_start_time.load(Ordering::SeqCst);
-    let is_stale = slots::slot_file_is_stale(
-        &config.slot_dir,
-        config.model_id,
-        &sanitized,
-        server_start_secs,
-    )
-    .await;
+    let is_stale = slots::slot_file_is_stale(&config.slot_dir, &sanitized, server_start_secs).await;
 
     let mut result = if is_stale {
         debug!("skipping restore for {session_id} — slot file predates current server instance");
         SlotIoResult::NotFound
     } else {
-        slots::restore_slot(
-            &config.client,
-            &config.base_url,
-            &config.slot_dir,
-            config.model_id,
-            &sanitized,
-        )
-        .await
+        slots::restore_slot(&config.client, &config.base_url, &sanitized).await
     };
 
     // Retry only transient failures (UpstreamDead / timeout / network error)
@@ -100,14 +75,7 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
                 attempt, MAX_RETRIES
             );
             sleep(RETRY_BACKOFF).await;
-            result = slots::restore_slot(
-                &config.client,
-                &config.base_url,
-                &config.slot_dir,
-                config.model_id,
-                &sanitized,
-            )
-            .await;
+            result = slots::restore_slot(&config.client, &config.base_url, &sanitized).await;
             if !matches!(result, SlotIoResult::Transient(_)) {
                 break;
             }
@@ -145,8 +113,6 @@ pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: 
     slots::attempt_save(
         &config.client,
         &config.base_url,
-        &config.slot_dir,
-        config.model_id,
         sanitized_session_id,
         &config.clear_all_pending,   // Arc<AtomicBool> → &AtomicBool
         &config.per_session_cleared, // Arc<DashSet<String>> → &DashSet<String>
@@ -155,10 +121,7 @@ pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: 
 
     // Mark this session as hot in RAM — next request for the same session
     // can skip the disk restore.
-    *config.last_loaded_session.write().await = Some(LastLoadedSession {
-        model_id: config.model_id,
-        session_id: sanitized_session_id.to_string(),
-    });
+    *config.last_loaded_session.write().await = Some(sanitized_session_id.to_string());
 }
 
 /// Non-streaming cache lifecycle: acquire permit, restore→generate→save, release.
@@ -187,8 +150,7 @@ where
     // Hot cache bypass: skip disk restore if session is already in RAM
     let is_hot = {
         let last = config.last_loaded_session.read().await;
-        last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-            == Some((config.model_id, sanitized.as_str()))
+        last.as_deref() == Some(sanitized.as_str())
     };
 
     let restore_result = if is_hot {
@@ -252,8 +214,7 @@ pub async fn prepare_streaming_cycle(
     // Hot cache bypass: skip disk restore if session is already in RAM
     let is_hot = {
         let last = config.last_loaded_session.read().await;
-        last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-            == Some((config.model_id, sanitized.as_str()))
+        last.as_deref() == Some(sanitized.as_str())
     };
 
     let restore_result = if is_hot {
@@ -290,9 +251,7 @@ pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std
                 config.per_session_cleared.insert(sanitized.clone());
                 // Invalidate hot cache if the cleared session was the one in RAM
                 let mut last = config.last_loaded_session.write().await;
-                if last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-                    == Some((config.model_id, sanitized.as_str()))
-                {
+                if last.as_deref() == Some(sanitized.as_str()) {
                     *last = None;
                 }
             }
@@ -317,7 +276,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://localhost:8080".to_string(),
             slot_dir: PathBuf::from("/tmp/slots"),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
@@ -337,7 +295,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://localhost:8080".to_string(),
             slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
@@ -357,7 +314,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://localhost:8080".to_string(),
             slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
@@ -374,7 +330,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://127.0.0.1:0".to_string(), // Non-existent server
             slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(true)), // Simulate pending global clear
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)), // 0 → fail-open (always proceed)
@@ -405,11 +360,8 @@ mod tests {
     async fn test_restore_with_retry_skips_stale_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "stale-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
         std::fs::write(
-            model_subdir.join(format!("{session_id}.bin")),
+            dir.path().join(format!("{session_id}.bin")),
             b"old kv state",
         )
         .unwrap();
@@ -425,7 +377,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://127.0.0.1:0".to_string(), // refused if ever called
             slot_dir: dir.path().to_path_buf(),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
@@ -456,10 +407,7 @@ mod tests {
     async fn test_restore_with_retry_does_not_skip_fresh_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "fresh-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
-        std::fs::write(model_subdir.join(format!("{session_id}.bin")), b"kv state").unwrap();
+        std::fs::write(dir.path().join(format!("{session_id}.bin")), b"kv state").unwrap();
 
         // Server "started" long before the file was written.
         let server_start_secs = std::time::SystemTime::now()
@@ -472,7 +420,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://127.0.0.1:0".to_string(), // refused — proves the call was attempted
             slot_dir: dir.path().to_path_buf(),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
@@ -496,7 +443,6 @@ mod tests {
             client: Client::new(),
             base_url: "http://localhost:8080".to_string(),
             slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
             clear_all_pending: Arc::new(AtomicBool::new(false)),
             per_session_cleared: Arc::new(DashSet::new()),
             server_start_time: Arc::new(AtomicU64::new(0)),
