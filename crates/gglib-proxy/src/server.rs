@@ -604,21 +604,31 @@ async fn chat_completions(
     };
 
     // If the model was just restarted, invalidate all pending cache slots.
+    //
+    // A single fresh spawn can satisfy several requests that were queued
+    // waiting on it, and each carries `just_started = true`. Dedup so exactly
+    // one performs the invalidation: CAS the stored server-start time from the
+    // value we observed to `now`. Only the first request wins the swap; the
+    // rest see the already-updated value and skip (no repeated WARN, no
+    // redundant re-invalidation). The stored start time doubles as the mtime
+    // guard's cutoff, so the winning swap sets it in the same step.
     if target.just_started {
-        tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
-        state
-            .clear_all_pending
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        // Update server start time so mtime guard skips stale slot files.
-        state.server_start_time.store(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            AtomicOrdering::SeqCst,
-        );
-        // Invalidate hot cache — the server state is fresh, nothing is loaded.
-        *state.last_loaded_session.write().await = None;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let prev = state.server_start_time.load(AtomicOrdering::SeqCst);
+        if now > prev
+            && state
+                .server_start_time
+                .compare_exchange(prev, now, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
+                .is_ok()
+        {
+            tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
+            state.clear_all_pending.store(true, AtomicOrdering::SeqCst);
+            // Invalidate hot cache — the server state is fresh, nothing is loaded.
+            *state.last_loaded_session.write().await = None;
+        }
     }
 
     // Build upstream URL
