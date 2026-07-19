@@ -824,27 +824,29 @@ pub async fn restore_slot(
 }
 
 /// Clear per-slot cache files from disk. Uses tokio::fs for async safety.
+///
+/// Walks the namespaced `{slot_dir}/{model_id}/*.bin` layout via
+/// [`iter_all_slot_files`] rather than assuming a flat `slot_dir` — a plain
+/// `slot_dir.join(format!("{id}.bin"))` no longer matches where files
+/// actually live post-namespacing.
+///
+/// `session_id: Some(id)` removes every `.bin` file across all model
+/// subdirectories whose stem is `id` (a session could in principle have been
+/// cached under more than one model over its lifetime, so this doesn't
+/// assume a single owning subdirectory). `None` clears everything.
 pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std::io::Result<()> {
-    if let Some(id) = session_id {
-        let path = slot_dir.join(format!("{id}.bin"));
-        tokio::fs::remove_file(&path).await.ok(); // NotFound/PermissionDenied → silent skip
-        return Ok(());
-    }
-    let mut entries = match tokio::fs::read_dir(slot_dir).await {
-        Ok(e) => e,
-        Err(_) => return Ok(()),
-    };
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
-            && let Err(e) = tokio::fs::remove_file(entry.path()).await
+    let candidates = iter_all_slot_files(slot_dir).await;
+    for path in candidates {
+        let matches = match session_id {
+            Some(id) => path.file_stem().and_then(|s| s.to_str()) == Some(id),
+            None => true,
+        };
+        if matches
+            && let Err(e) = tokio::fs::remove_file(&path).await
             && e.kind() != std::io::ErrorKind::PermissionDenied
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            warn!(
-                "failed to remove slot file {}: {}",
-                entry.path().display(),
-                e
-            );
+            warn!("failed to remove slot file {}: {}", path.display(), e);
         }
     }
     Ok(())
@@ -982,18 +984,18 @@ pub fn spawn_lru_eviction_task(
 ///
 /// Sorts `.bin` files by mtime (oldest first), removes the excess. Errors on
 /// individual file removal are silently skipped for NotFound/PermissionDenied.
+///
+/// Walks the namespaced `{slot_dir}/{model_id}/*.bin` layout via
+/// [`iter_all_slot_files`] — the cap is deliberately global across every
+/// model's subdirectory (a single size budget for the whole cache directory,
+/// not per-model).
 pub async fn evict_stale_slots(slot_dir: &Path, max_slots: usize) -> std::io::Result<()> {
-    let mut entries = match tokio::fs::read_dir(slot_dir).await {
-        Ok(e) => e,
-        Err(_) => return Ok(()),
-    };
     let mut slots: Vec<(PathBuf, u64)> = Vec::new();
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        if entry.path().extension().and_then(|e| e.to_str()) == Some("bin")
-            && let Ok(metadata) = entry.metadata().await
+    for path in iter_all_slot_files(slot_dir).await {
+        if let Ok(metadata) = tokio::fs::metadata(&path).await
             && let Ok(mtime) = metadata.modified()
         {
-            slots.push((entry.path(), mtime.elapsed().unwrap_or_default().as_secs()));
+            slots.push((path, mtime.elapsed().unwrap_or_default().as_secs()));
         }
     }
 
@@ -1059,6 +1061,74 @@ mod slot_io_tests {
         // With max_slots=2, the single oldest slot (B) should be evicted
         assert_eq!(evicted.len(), 1);
         assert_eq!(evicted[0], PathBuf::from("B.bin"));
+    }
+
+    /// Regression test for the namespacing gap: `evict_stale_slots` must see
+    /// files across every model subdirectory, not just a flat `slot_dir`.
+    #[tokio::test]
+    async fn evict_stale_slots_sees_files_across_model_subdirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_a = dir.path().join("1");
+        let model_b = dir.path().join("2");
+        std::fs::create_dir_all(&model_a).unwrap();
+        std::fs::create_dir_all(&model_b).unwrap();
+
+        // Three files total across two model subdirectories, oldest first.
+        std::fs::write(model_a.join("oldest.bin"), b"x").unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        std::fs::write(model_b.join("middle.bin"), b"x").unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        std::fs::write(model_a.join("newest.bin"), b"x").unwrap();
+
+        evict_stale_slots(dir.path(), 2).await.unwrap();
+
+        // The single oldest file (model_a/oldest.bin) should have been evicted;
+        // the other two, across both subdirectories, must survive.
+        assert!(!model_a.join("oldest.bin").exists());
+        assert!(model_b.join("middle.bin").exists());
+        assert!(model_a.join("newest.bin").exists());
+    }
+
+    /// Regression test for the namespacing gap: clearing a specific session
+    /// must find its file regardless of which model subdirectory it lives
+    /// under, and must not touch other sessions or other models.
+    #[tokio::test]
+    async fn clear_slot_files_finds_session_across_model_subdirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_a = dir.path().join("1");
+        let model_b = dir.path().join("2");
+        std::fs::create_dir_all(&model_a).unwrap();
+        std::fs::create_dir_all(&model_b).unwrap();
+
+        std::fs::write(model_a.join("planner.bin"), b"x").unwrap();
+        std::fs::write(model_b.join("coder.bin"), b"x").unwrap();
+
+        clear_slot_files(dir.path(), Some("planner")).await.unwrap();
+
+        assert!(!model_a.join("planner.bin").exists());
+        assert!(
+            model_b.join("coder.bin").exists(),
+            "other session untouched"
+        );
+    }
+
+    /// Clearing all sessions (`None`) must remove every `.bin` file across
+    /// every model subdirectory, not just a flat `slot_dir`.
+    #[tokio::test]
+    async fn clear_slot_files_none_clears_every_model_subdir() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_a = dir.path().join("1");
+        let model_b = dir.path().join("2");
+        std::fs::create_dir_all(&model_a).unwrap();
+        std::fs::create_dir_all(&model_b).unwrap();
+
+        std::fs::write(model_a.join("planner.bin"), b"x").unwrap();
+        std::fs::write(model_b.join("coder.bin"), b"x").unwrap();
+
+        clear_slot_files(dir.path(), None).await.unwrap();
+
+        assert!(!model_a.join("planner.bin").exists());
+        assert!(!model_b.join("coder.bin").exists());
     }
 
     #[tokio::test]
