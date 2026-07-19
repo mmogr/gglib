@@ -706,6 +706,26 @@ pub fn slot_bin_path(slot_dir: &Path, model_id: u32, session_id: &str) -> PathBu
     gglib_core::paths::slot_bin_path(slot_dir, model_id, session_id)
 }
 
+/// Classify a slot save/restore HTTP response into a [`SlotIoResult`].
+///
+/// Shared by [`save_slot`] and [`restore_slot`], which differ only in the
+/// endpoint they hit. On a non-2xx, non-404 status the response **body** is
+/// read and included in the error message — llama-server puts the actual
+/// reason there (e.g. `"Invalid filename"`, `"Unable to restore slot ..."`),
+/// which is otherwise invisible and left both cache-bug investigations
+/// guessing at a bare "HTTP 400".
+async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
+    let status = resp.status();
+    if status.is_success() {
+        return SlotIoResult::Ok;
+    }
+    if status.as_u16() == 404 {
+        return SlotIoResult::NotFound;
+    }
+    let body = resp.text().await.unwrap_or_default();
+    SlotIoResult::Transient(format!("HTTP {status}: {}", body.trim()))
+}
+
 /// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
 ///
 /// The `filename` sent to llama-server is relative to its `--slot-save-path`, so we
@@ -741,9 +761,7 @@ pub async fn save_slot(
     )
     .await
     {
-        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
-        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
-        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Ok(resp)) => classify_slot_response(resp).await,
         Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
         Err(_) => SlotIoResult::Transient("timeout after 3s".into()),
     }
@@ -812,9 +830,7 @@ pub async fn restore_slot(
     )
     .await
     {
-        Ok(Ok(resp)) if resp.status().is_success() => SlotIoResult::Ok,
-        Ok(Ok(resp)) if resp.status().as_u16() == 404 => SlotIoResult::NotFound,
-        Ok(Ok(resp)) => SlotIoResult::Transient(format!("HTTP {}", resp.status())),
+        Ok(Ok(resp)) => classify_slot_response(resp).await,
         Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
         Err(_) => {
             warn!("restore timed out for {session_id} — proceeding cold");
