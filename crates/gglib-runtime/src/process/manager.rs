@@ -8,10 +8,10 @@ use super::core::GuiProcessCore;
 use super::health::{check_http_health, wait_for_http_health};
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
+use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
-use gglib_core::slot_model_dir;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -562,19 +562,28 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
-/// Remove stale `.bin` slot files for the given model from `{slot_dir}/{model_id}/`.
-/// Called on llama-server restart when the model or context size changes.
+/// Remove stale slot files for the given model from `slot_dir`.
+///
+/// Slot files are flat as `{slot_dir}/{model_id}__{session}.bin`; this removes
+/// only files whose name starts with the model's `{model_id}__` prefix, so a
+/// model/context swap leaves other models' caches untouched. Called on
+/// llama-server restart when the model or context size changes.
 fn purge_stale_slot_bin_files(slot_dir: &std::path::Path, model_id: u32) {
-    let model_subdir = slot_model_dir(slot_dir, model_id);
-    if let Ok(entries) = std::fs::read_dir(&model_subdir) {
+    let prefix = slot_model_prefix(model_id);
+    if let Ok(entries) = std::fs::read_dir(slot_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+            let is_bin = path.extension().and_then(|e| e.to_str()) == Some("bin");
+            let matches_model = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&prefix));
+            if is_bin && matches_model {
                 let _ = std::fs::remove_file(&path);
             }
         }
     }
-    // Silently skip if the model subdirectory doesn't exist or can't be read.
+    // Silently skip if slot_dir doesn't exist or can't be read.
 }
 
 #[cfg(test)]
@@ -589,50 +598,83 @@ mod tests {
             std::time::SystemTime::now().elapsed().unwrap().as_nanos()
         ));
         let model_id: u32 = 42;
-        // Create model-specific subdirectory with .bin files
-        let model_subdir = dir.join(model_id.to_string());
-        tokio::fs::create_dir_all(&model_subdir).await.unwrap();
-        tokio::fs::write(model_subdir.join("session1.bin"), &[0u8; 8])
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        // Flat `{model_id}__{session}.bin` files for model 42 (should be purged).
+        tokio::fs::write(dir.join("42__session1.bin"), &[0u8; 8])
             .await
             .unwrap();
-        tokio::fs::write(model_subdir.join("session2.bin"), &[0u8; 8])
+        tokio::fs::write(dir.join("42__session2.bin"), &[0u8; 8])
             .await
             .unwrap();
-        // Create a .txt file in the model subdir (should survive)
-        tokio::fs::write(model_subdir.join("notes.txt"), "keep me")
+        // A non-.bin file with the model prefix (should survive — wrong extension).
+        tokio::fs::write(dir.join("42__notes.txt"), "keep me")
             .await
             .unwrap();
-        // Create a .bin file in the flat dir (should survive — not our model)
+        // A legacy pre-namespacing flat .bin without any prefix (should survive).
         tokio::fs::write(dir.join("orphan.bin"), &[0u8; 8])
             .await
             .unwrap();
-        // Create another model's subdir with a .bin (should survive)
-        let other_model_subdir = dir.join("99");
-        tokio::fs::create_dir_all(&other_model_subdir)
+        // Another model's .bin (should survive). The `__` delimiter means the
+        // `4__` prefix of some model would not match, and 42's prefix must not
+        // match model 99's file either.
+        tokio::fs::write(dir.join("99__session3.bin"), &[0u8; 8])
             .await
             .unwrap();
-        tokio::fs::write(other_model_subdir.join("session3.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // Purge only model 42's slot files
+
+        // Purge only model 42's slot files.
         purge_stale_slot_bin_files(&dir, model_id);
-        // Verify: model 42 subdir has only notes.txt
-        let mut entries = tokio::fs::read_dir(&model_subdir).await.unwrap();
-        let mut remaining: Vec<std::ffi::OsString> = Vec::new();
-        while let Ok(Some(e)) = entries.next_entry().await {
-            remaining.push(e.file_name());
-        }
-        assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].to_str(), Some("notes.txt"));
-        // Verify: orphan.bin in flat dir still exists
-        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
-        // Verify: other model's .bin still exists
+
         assert!(
-            tokio::fs::try_exists(other_model_subdir.join("session3.bin"))
+            !tokio::fs::try_exists(dir.join("42__session1.bin"))
                 .await
                 .unwrap()
         );
+        assert!(
+            !tokio::fs::try_exists(dir.join("42__session2.bin"))
+                .await
+                .unwrap()
+        );
+        assert!(
+            tokio::fs::try_exists(dir.join("42__notes.txt"))
+                .await
+                .unwrap()
+        );
+        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
+        assert!(
+            tokio::fs::try_exists(dir.join("99__session3.bin"))
+                .await
+                .unwrap()
+        );
+
         // Cleanup
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    /// Regression: model `1`'s purge prefix (`1__`) must not delete model
+    /// `11`'s files (`11__…`) — the `__` delimiter is what prevents this.
+    #[tokio::test]
+    async fn purge_prefix_does_not_match_longer_model_id() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-prefix-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        tokio::fs::write(dir.join("1__a.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("11__b.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+
+        purge_stale_slot_bin_files(&dir, 1);
+
+        assert!(!tokio::fs::try_exists(dir.join("1__a.bin")).await.unwrap());
+        assert!(
+            tokio::fs::try_exists(dir.join("11__b.bin")).await.unwrap(),
+            "model 11's file must survive a purge of model 1"
+        );
+
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 

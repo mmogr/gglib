@@ -47,4 +47,4 @@ pub use config::{env_file_path, persist_env_value, persist_models_dir};
 pub use resolver::ResolvedPaths;
 
 // Slot cache paths
-pub use slots::slot_model_dir;
+pub use slots::{slot_bin_path, slot_file_name, slot_model_prefix, slot_session_from_stem};

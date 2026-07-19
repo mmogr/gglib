@@ -1,14 +1,53 @@
 //! Slot cache path helpers.
 //!
-//! Shared utilities for constructing per-model KV cache slot paths,
+//! Shared utilities for constructing per-model KV cache slot filenames,
 //! used by both gglib-runtime (purge) and gglib-proxy (save/restore).
+//!
+//! ## Why a flat `{model_id}__{session}.bin` name, not a subdirectory
+//!
+//! llama-server's `/slots/{id}?action=save|restore` endpoint validates the
+//! `filename` field with `fs_validate_filename`, which rejects any path
+//! separator ("Invalid filename", HTTP 400) as a path-traversal defense. A
+//! `{model_id}/{session}.bin` name (an earlier subdirectory-based layout) is
+//! therefore rejected outright, silently breaking every save/restore. Encoding
+//! the model id as a filename *prefix* instead keeps per-model scoping (purge
+//! removes only one model's files, matched by prefix) while sending llama-server
+//! a separator-free name it accepts.
 
 use std::path::{Path, PathBuf};
 
-/// Return the per-model subdirectory path `{slot_dir}/{model_id}/`
-/// used by both gglib-runtime (purge) and gglib-proxy (save/restore).
-pub fn slot_model_dir(slot_dir: &Path, model_id: u32) -> PathBuf {
-    slot_dir.join(model_id.to_string())
+/// Filename for a model+session slot cache file: `{model_id}__{session_id}.bin`.
+///
+/// This is both the on-disk name (directly under `slot_dir`) and the
+/// `filename` value sent to llama-server's save/restore endpoint — they must
+/// match, and both must be free of path separators (see the module docs).
+pub fn slot_file_name(model_id: u32, session_id: &str) -> String {
+    format!("{model_id}__{session_id}.bin")
+}
+
+/// Full on-disk path for a model+session slot cache file (flat under `slot_dir`).
+pub fn slot_bin_path(slot_dir: &Path, model_id: u32, session_id: &str) -> PathBuf {
+    slot_dir.join(slot_file_name(model_id, session_id))
+}
+
+/// Filename prefix identifying all of one model's slot files: `{model_id}__`.
+///
+/// Used by purge to remove only the swapped-out model's files. The trailing
+/// `__` delimiter is load-bearing: it prevents model `1`'s prefix (`1__`) from
+/// matching model `11`'s files (`11__…`).
+pub fn slot_model_prefix(model_id: u32) -> String {
+    format!("{model_id}__")
+}
+
+/// Recover the session id from a slot file stem (`{model_id}__{session}`).
+///
+/// Splits on the **first** `__`. Model ids are numeric and contain no `__`, so
+/// the first `__` is always the model/session delimiter — this correctly
+/// recovers the session even when the session id itself contains `__`.
+/// Returns `None` for a stem with no `__` (e.g. a legacy pre-namespacing file),
+/// which callers treat as "not one of our namespaced files".
+pub fn slot_session_from_stem(stem: &str) -> Option<&str> {
+    stem.split_once("__").map(|(_, session)| session)
 }
 
 #[cfg(test)]
@@ -16,19 +55,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn slot_model_dir_appends_model_id() {
-        let base = Path::new("/tmp/slots");
-        let result = slot_model_dir(base, 42);
-        assert_eq!(result, PathBuf::from("/tmp/slots/42"));
+    fn slot_file_name_encodes_model_and_session() {
+        assert_eq!(slot_file_name(42, "planner"), "42__planner.bin");
     }
 
     #[test]
-    fn slot_model_dir_with_nested_path() {
-        let base = Path::new("/home/user/.local/share/gglib/cache");
-        let result = slot_model_dir(base, 7);
+    fn slot_bin_path_is_flat_under_slot_dir() {
+        let base = Path::new("/tmp/slots");
         assert_eq!(
-            result,
-            PathBuf::from("/home/user/.local/share/gglib/cache/7")
+            slot_bin_path(base, 7, "abc"),
+            PathBuf::from("/tmp/slots/7__abc.bin")
         );
+    }
+
+    #[test]
+    fn slot_model_prefix_includes_delimiter() {
+        assert_eq!(slot_model_prefix(1), "1__");
+        // The delimiter guards against 1__ matching 11__.
+        assert!(!"11__x.bin".starts_with(&slot_model_prefix(1)));
+        assert!("1__x.bin".starts_with(&slot_model_prefix(1)));
+    }
+
+    #[test]
+    fn slot_session_from_stem_recovers_session() {
+        assert_eq!(slot_session_from_stem("42__planner"), Some("planner"));
+    }
+
+    #[test]
+    fn slot_session_from_stem_handles_session_with_double_underscore() {
+        // Session ids may themselves contain `__`; only the first split counts.
+        assert_eq!(slot_session_from_stem("3__a__b"), Some("a__b"));
+    }
+
+    #[test]
+    fn slot_session_from_stem_none_for_legacy_flat_name() {
+        assert_eq!(slot_session_from_stem("auto-deadbeef"), None);
     }
 }

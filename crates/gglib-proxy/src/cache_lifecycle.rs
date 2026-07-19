@@ -462,11 +462,8 @@ mod tests {
     async fn test_restore_with_retry_skips_stale_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "stale-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
         std::fs::write(
-            model_subdir.join(format!("{session_id}.bin")),
+            slots::slot_bin_path(dir.path(), 0, session_id),
             b"old kv state",
         )
         .unwrap();
@@ -513,10 +510,7 @@ mod tests {
     async fn test_restore_with_retry_does_not_skip_fresh_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "fresh-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
-        std::fs::write(model_subdir.join(format!("{session_id}.bin")), b"kv state").unwrap();
+        std::fs::write(slots::slot_bin_path(dir.path(), 0, session_id), b"kv state").unwrap();
 
         // Server "started" long before the file was written.
         let server_start_secs = std::time::SystemTime::now()
