@@ -528,6 +528,7 @@ async fn chat_completions(
             source = if session_id_from_header.is_some() { "header" } else { "content-hash" },
             "resolved cache session id"
         );
+        crate::canonicalization::log_tool_names_for_diagnostics(&body, sid);
     }
 
     // Extract the three routing fields from the request body.

@@ -193,6 +193,51 @@ pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
     Some(format!("auto-{hex}"))
 }
 
+/// Diagnostic only: log the request's `tools` array — function names in
+/// their original order — tagged with the resolved cache session id.
+///
+/// KV cache restores land near the front of the prompt (tool/function
+/// schemas are typically enumerated early), so when a restore's LCP
+/// similarity comes back low for a session that should be stable, the
+/// question is whether the *client* changed the tool list shape between
+/// turns (different membership or order) rather than anything gglib did.
+/// Comparing two consecutive log lines for the same session_id answers
+/// that directly: identical list → not the cause; same names, different
+/// order → fixable by canonicalizing the order; different names → a real
+/// client-side change, outside the proxy's control.
+///
+/// A no-op (skips the parse entirely) unless DEBUG-level tracing is
+/// actually enabled, so this costs nothing outside `-v` investigations.
+/// Fail-open: any parse failure or missing `tools` field is simply not
+/// logged, never an error.
+pub fn log_tool_names_for_diagnostics(body: &Bytes, session_id: &str) {
+    if !tracing::enabled!(tracing::Level::DEBUG) {
+        return;
+    }
+    let Some(names) = extract_tool_names(body) else {
+        return;
+    };
+    debug!(
+        session_id,
+        tool_count = names.len(),
+        tools = ?names,
+        "tool list for cache diagnostics"
+    );
+}
+
+/// Extract `tools[].function.name` from a request body, in original order.
+/// `None` if the body doesn't parse as JSON or carries no `tools` array.
+fn extract_tool_names(body: &Bytes) -> Option<Vec<String>> {
+    let value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let tools = value.get("tools")?.as_array()?;
+    Some(
+        tools
+            .iter()
+            .filter_map(|t| t.get("function")?.get("name")?.as_str().map(String::from))
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +433,54 @@ mod tests {
         let body = body_with("You are the Coder.", "Implement login");
         let id = derive_fallback_session_id(&body).unwrap();
         crate::slots::sanitize_session_id(&id).expect("derived id must pass sanitize_session_id");
+    }
+
+    #[test]
+    fn extract_tool_names_preserves_original_order() {
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "messages": [],
+                "tools": [
+                    {"type": "function", "function": {"name": "create_branch"}},
+                    {"type": "function", "function": {"name": "create_pull_request"}},
+                    {"type": "function", "function": {"name": "read_file"}}
+                ]
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            extract_tool_names(&body).unwrap(),
+            vec!["create_branch", "create_pull_request", "read_file"]
+        );
+    }
+
+    #[test]
+    fn extract_tool_names_none_without_tools_array() {
+        let body = Bytes::from(serde_json::to_vec(&serde_json::json!({"messages": []})).unwrap());
+        assert!(extract_tool_names(&body).is_none());
+    }
+
+    #[test]
+    fn extract_tool_names_none_on_invalid_json() {
+        let body = Bytes::from(b"not json".to_vec());
+        assert!(extract_tool_names(&body).is_none());
+    }
+
+    #[test]
+    fn extract_tool_names_skips_malformed_entries_without_panicking() {
+        // A tool missing `function.name` (or `function` entirely) must be
+        // skipped, not crash the whole extraction.
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [
+                    {"type": "function", "function": {"name": "read_file"}},
+                    {"type": "function", "function": {}},
+                    {"type": "function"},
+                    "not even an object"
+                ]
+            }))
+            .unwrap(),
+        );
+        assert_eq!(extract_tool_names(&body).unwrap(), vec!["read_file"]);
     }
 }
