@@ -23,6 +23,20 @@ fn mtp_disabled_via_env() -> bool {
         .is_some_and(|v| is_truthy_flag(&v))
 }
 
+/// Whether the `GGLIB_DISABLE_CACHE_REUSE` environment variable requests that
+/// `--cache-reuse` be suppressed, even when `config.cache_reuse` is set.
+///
+/// Mirrors [`mtp_disabled_via_env`] exactly: a global kill switch so
+/// `--cache-reuse` (numerically not bit-identical to full recompute — it
+/// RoPE-shifts cached keys into new positions) can be A/B tested as a
+/// suspect without editing whatever launch profile/script set it, e.g.
+/// `GGLIB_DISABLE_CACHE_REUSE=1 gglib proxy --cache-reuse 256`.
+fn cache_reuse_disabled_via_env() -> bool {
+    std::env::var("GGLIB_DISABLE_CACHE_REUSE")
+        .ok()
+        .is_some_and(|v| is_truthy_flag(&v))
+}
+
 /// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
 fn is_truthy_flag(v: &str) -> bool {
     matches!(
@@ -126,6 +140,38 @@ pub fn build_and_spawn(
             }
         })?;
 
+    let cmd = build_command(&validated_path, config, port);
+
+    // Log the full invocation. std::process::Command exposes get_program/get_args,
+    // so we log before converting to tokio::process::Command.
+    info!(
+        "spawning llama-server: {} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    // Convert to async command and attach piped stdio for log streaming.
+    let mut cmd = tokio::process::Command::from(cmd);
+    cmd.stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {}", e))?;
+
+    Ok(child)
+}
+
+/// Build the `llama-server` invocation's argument list from a [`ServerConfig`].
+///
+/// Pure and side-effect-free (never spawns anything), so cache/MTP/reasoning
+/// flag-emission logic can be tested directly against the resulting
+/// [`std::process::Command`]'s `get_args()` without needing a real or fake
+/// binary on disk.
+fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std::process::Command {
     let mut cmd = cmd(validated_path);
     cmd.arg("-m")
         .arg(&config.model_path)
@@ -171,15 +217,37 @@ pub fn build_and_spawn(
         cmd.arg("--reasoning-format").arg(format);
     }
 
-    // Add KV cache slot persistence flags if a slot-save directory is set.
-    //
-    // `--cache-ram -1` disables llama-server's RAM cache size limit so the
-    // full slot can be cached without eviction pressure. `None` (the default)
-    // emits neither flag, leaving the launch identical to before this field
-    // existed.
+    // Add the KV cache disk slot-persistence flag if a slot-save directory is set.
     if let Some(ref slot_path) = config.slot_save_path {
         cmd.arg("--slot-save-path").arg(slot_path);
-        cmd.arg("--cache-ram").arg("-1");
+    }
+
+    // `--cache-ram`: llama-server's own host-RAM prompt cache. Deliberately
+    // independent of `--slot-save-path` above — the native RAM cache is
+    // useful on its own even when disk persistence is off.
+    match config.cache_ram_mb {
+        Some(mb) => {
+            cmd.arg("--cache-ram").arg(mb.to_string());
+        }
+        None if config.slot_save_path.is_some() => {
+            // Back-compat: launches that set slot_save_path but don't set
+            // cache_ram_mb explicitly keep the unlimited RAM cache they got
+            // before this field existed.
+            cmd.arg("--cache-ram").arg("-1");
+        }
+        None => {} // llama-server's own built-in default (8192 MiB) applies
+    }
+
+    // `--cache-reuse`: min chunk size (tokens) for KV-shift cache reuse past
+    // the first prefix divergence — helps a follow-up prompt whose earlier
+    // messages were edited or summarized, which plain prefix matching can't
+    // reuse at all. See `cache_reuse_disabled_via_env` for the kill switch.
+    if let Some(n) = config.cache_reuse {
+        if cache_reuse_disabled_via_env() {
+            info!("cache-reuse suppressed via GGLIB_DISABLE_CACHE_REUSE");
+        } else {
+            cmd.arg("--cache-reuse").arg(n.to_string());
+        }
     }
 
     // Add MTP speculative decoding flags if enabled
@@ -214,27 +282,7 @@ pub fn build_and_spawn(
         cmd.arg(arg);
     }
 
-    // Log the full invocation. std::process::Command exposes get_program/get_args,
-    // so we log before converting to tokio::process::Command.
-    info!(
-        "spawning llama-server: {} {}",
-        cmd.get_program().to_string_lossy(),
-        cmd.get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-
-    // Convert to async command and attach piped stdio for log streaming.
-    let mut cmd = tokio::process::Command::from(cmd);
-    cmd.stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-
-    let child = cmd
-        .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {}", e))?;
-
-    Ok(child)
+    cmd
 }
 
 /// Spawn background tasks to stream stdout/stderr logs asynchronously.
@@ -285,6 +333,110 @@ mod tests {
         for v in ["0", "false", "no", "off", "", "2", "disable"] {
             assert!(!is_truthy_flag(v), "{v:?} should be falsy");
         }
+    }
+
+    /// Minimal `ServerConfig` for `build_command` arg-emission tests — every
+    /// cache-related field defaults off so each test only sets what it cares
+    /// about.
+    fn minimal_config() -> ServerConfig {
+        ServerConfig {
+            model_id: 1,
+            model_name: "test-model".to_string(),
+            model_path: PathBuf::from("/tmp/test.gguf"),
+            base_port: 9000,
+            port: None,
+            context_size: None,
+            gpu_layers: None,
+            jinja: false,
+            reasoning_format: None,
+            spec_draft_n_max: None,
+            spec_draft_p_min: None,
+            inference_config: None,
+            extra_args: vec![],
+            slot_save_path: None,
+            cache_ram_mb: None,
+            cache_reuse: None,
+        }
+    }
+
+    /// Flattened `get_args()` output, for substring/adjacency assertions
+    /// without depending on exact positional indices.
+    fn args_of(cmd: &std::process::Command) -> Vec<String> {
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn cache_ram_and_cache_reuse_omitted_by_default() {
+        let config = minimal_config();
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        assert!(!args.contains(&"--cache-ram".to_string()));
+        assert!(!args.contains(&"--cache-reuse".to_string()));
+        assert!(!args.contains(&"--slot-save-path".to_string()));
+    }
+
+    #[test]
+    fn cache_ram_mb_emits_flag_without_slot_save_path() {
+        let config = ServerConfig {
+            cache_ram_mb: Some(16384),
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        assert!(!args.contains(&"--slot-save-path".to_string()));
+        let idx = args
+            .iter()
+            .position(|a| a == "--cache-ram")
+            .expect("--cache-ram should be present");
+        assert_eq!(args[idx + 1], "16384");
+    }
+
+    #[test]
+    fn slot_save_path_without_cache_ram_mb_keeps_legacy_unlimited_default() {
+        let config = ServerConfig {
+            slot_save_path: Some(PathBuf::from("/tmp/slots")),
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        let idx = args
+            .iter()
+            .position(|a| a == "--cache-ram")
+            .expect("--cache-ram should be present for back-compat");
+        assert_eq!(args[idx + 1], "-1");
+    }
+
+    #[test]
+    fn cache_ram_mb_overrides_legacy_default_even_with_slot_save_path_set() {
+        let config = ServerConfig {
+            slot_save_path: Some(PathBuf::from("/tmp/slots")),
+            cache_ram_mb: Some(8000),
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        let idx = args
+            .iter()
+            .position(|a| a == "--cache-ram")
+            .expect("--cache-ram should be present");
+        assert_eq!(args[idx + 1], "8000");
+    }
+
+    #[test]
+    fn cache_reuse_emits_flag_when_set() {
+        let config = ServerConfig {
+            cache_reuse: Some(256),
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        let idx = args
+            .iter()
+            .position(|a| a == "--cache-reuse")
+            .expect("--cache-reuse should be present");
+        assert_eq!(args[idx + 1], "256");
     }
 
     /// Test that a valid bootstrap path is used directly.
@@ -347,6 +499,8 @@ mod tests {
             inference_config: None,
             extra_args: vec![],
             slot_save_path: None,
+            cache_ram_mb: None,
+            cache_reuse: None,
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)

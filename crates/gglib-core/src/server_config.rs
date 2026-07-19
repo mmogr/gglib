@@ -121,10 +121,22 @@ pub struct ServerConfigOptions {
     pub mtp_draft_p_min: Option<f32>,
 
     /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
-    /// - `None` — KV cache disabled, zero behavior change to the launch.
-    /// - `Some(dir)` — enables slot save/restore with unlimited RAM cache.
+    /// - `None` — disk slot persistence disabled, no `--slot-save-path` flag.
+    /// - `Some(dir)` — enables slot save/restore.
     ///   Direct pass-through, no tag-based auto-detection (unlike jinja/MTP/reasoning).
+    ///   Independent of `cache_ram_mb`/`cache_reuse` below.
     pub slot_save_path: Option<PathBuf>,
+
+    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+    /// (`--cache-ram`). `None` leaves llama-server's built-in default (or,
+    /// for back-compat, `-1` when `slot_save_path` is set). Direct
+    /// pass-through, no tag-based auto-detection.
+    pub cache_ram_mb: Option<i64>,
+
+    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+    /// prefix divergence point (`--cache-reuse`). `None` leaves the feature
+    /// off. Direct pass-through, no tag-based auto-detection.
+    pub cache_reuse: Option<u32>,
 
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.

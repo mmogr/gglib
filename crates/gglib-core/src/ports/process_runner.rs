@@ -54,11 +54,30 @@ pub struct ServerConfig {
     pub extra_args: Vec<String>,
     /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
     ///
-    /// `None` means the KV cache feature is disabled — no `--slot-save-path`
-    /// or `--cache-ram` flags are passed, and llama-server behaves exactly as
-    /// it did before this field existed. `Some(dir)` enables slot save/restore
-    /// with unlimited RAM cache (`--cache-ram -1`).
+    /// `None` means the disk slot-persistence feature is disabled — no
+    /// `--slot-save-path` flag is passed. Independent of [`Self::cache_ram_mb`]
+    /// / [`Self::cache_reuse`]: llama-server's own host-RAM prompt cache can be
+    /// tuned (or left at its built-in default) regardless of whether disk
+    /// persistence is on.
     pub slot_save_path: Option<PathBuf>,
+    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+    /// (`--cache-ram`).
+    ///
+    /// `None` means no explicit flag is passed — llama-server's own built-in
+    /// default (8192 MiB) applies, *unless* [`Self::slot_save_path`] is
+    /// `Some`, in which case `--cache-ram -1` (unlimited) is emitted for
+    /// backward compatibility with launches that predate this field.
+    /// `Some(n)` passes `--cache-ram n` directly, accepting llama-server's
+    /// own sentinels (`-1` unlimited, `0` disabled).
+    pub cache_ram_mb: Option<i64>,
+    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+    /// prefix divergence point (`--cache-reuse`).
+    ///
+    /// `None` means no flag is passed (`--cache-reuse` off, llama-server
+    /// default `0`). `Some(n)` passes `--cache-reuse n`, letting llama-server
+    /// salvage matching KV chunks after an edited/summarized earlier message
+    /// instead of only reusing an unbroken prefix from token 0.
+    pub cache_reuse: Option<u32>,
 }
 
 impl ServerConfig {
@@ -85,6 +104,8 @@ impl ServerConfig {
             inference_config: None,
             extra_args: Vec::new(),
             slot_save_path: None,
+            cache_ram_mb: None,
+            cache_reuse: None,
         }
     }
 
@@ -160,10 +181,28 @@ impl ServerConfig {
 
     /// Set the KV cache slot-save directory (`--slot-save-path`).
     ///
-    /// `None` disables the KV cache feature entirely (no flags emitted).
+    /// `None` disables the disk slot-persistence feature (no
+    /// `--slot-save-path` flag emitted). Independent of
+    /// [`Self::with_cache_ram_mb`] / [`Self::with_cache_reuse`].
     #[must_use]
     pub fn with_slot_save_path(mut self, path: Option<PathBuf>) -> Self {
         self.slot_save_path = path;
+        self
+    }
+
+    /// Set the RAM budget (in MiB) for llama-server's own host-RAM prompt
+    /// cache (`--cache-ram`). `None` leaves llama-server's built-in default.
+    #[must_use]
+    pub const fn with_cache_ram_mb(mut self, mb: i64) -> Self {
+        self.cache_ram_mb = Some(mb);
+        self
+    }
+
+    /// Set the minimum chunk size (in tokens) for KV-shift cache reuse
+    /// (`--cache-reuse`). `None` leaves the feature off.
+    #[must_use]
+    pub const fn with_cache_reuse(mut self, n: u32) -> Self {
+        self.cache_reuse = Some(n);
         self
     }
 }

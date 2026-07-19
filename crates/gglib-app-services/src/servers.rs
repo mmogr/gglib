@@ -177,6 +177,8 @@ impl ServerOps {
                 mtp_draft_p_min: request.mtp_draft_p_min,
                 inference_params: request.inference_params.clone(),
                 slot_save_path: None,
+                cache_ram_mb: None,
+                cache_reuse: None,
             },
         )
     }

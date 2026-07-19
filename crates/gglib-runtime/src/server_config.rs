@@ -120,6 +120,16 @@ pub fn build_server_config(
     // leaving every existing model launch byte-for-byte unchanged.
     config = config.with_slot_save_path(opts.slot_save_path);
 
+    // --- Native RAM cache tuning (--cache-ram / --cache-reuse) ------------------
+    // Direct pass-through, no tag-based auto-detection, and deliberately
+    // independent of slot persistence above — see ServerConfig's field docs.
+    if let Some(mb) = opts.cache_ram_mb {
+        config = config.with_cache_ram_mb(mb);
+    }
+    if let Some(n) = opts.cache_reuse {
+        config = config.with_cache_reuse(n);
+    }
+
     // --- MTP speculative decoding ----------------------------------------------
     let mtp = resolve_mtp_args(opts.mtp_draft_n_max, opts.mtp_draft_p_min, tags);
     if mtp.enabled {
