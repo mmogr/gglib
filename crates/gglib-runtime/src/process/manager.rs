@@ -53,9 +53,17 @@ pub enum ProcessStrategy {
         /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
         loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
         /// KV cache slot-save directory (`--slot-save-path`), or `None` if the
-        /// KV cache feature is disabled. Forwarded verbatim into every
-        /// `build_server_config` call made by this manager's driver.
+        /// disk slot-persistence feature is disabled. Forwarded verbatim into
+        /// every `build_server_config` call made by this manager's driver.
         slot_save_path: Option<PathBuf>,
+        /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+        /// (`--cache-ram`). Independent of `slot_save_path` — forwarded
+        /// verbatim into every `build_server_config` call.
+        cache_ram_mb: Option<i64>,
+        /// Minimum chunk size in tokens for KV-shift cache reuse
+        /// (`--cache-reuse`). Forwarded verbatim into every
+        /// `build_server_config` call.
+        cache_reuse: Option<u32>,
     },
 }
 
@@ -103,8 +111,15 @@ impl ProcessManager {
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
     /// * `slot_save_path` — KV cache slot-save directory, or `None` to
-    ///   disable the KV cache feature entirely (zero behavior change to the
-    ///   launch — no `--slot-save-path`/`--cache-ram` flags are emitted).
+    ///   disable disk slot persistence entirely (no `--slot-save-path` flag
+    ///   emitted).
+    /// * `cache_ram_mb` — RAM budget in MiB for llama-server's own host-RAM
+    ///   prompt cache (`--cache-ram`), independent of `slot_save_path`.
+    ///   `None` leaves llama-server's built-in default (or, for back-compat,
+    ///   `-1` when `slot_save_path` is `Some`).
+    /// * `cache_reuse` — Minimum chunk size in tokens for KV-shift cache
+    ///   reuse past the first prefix divergence (`--cache-reuse`). `None`
+    ///   disables it.
     ///
     /// # When to use
     ///
@@ -117,6 +132,8 @@ impl ProcessManager {
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
         slot_save_path: Option<PathBuf>,
+        cache_ram_mb: Option<i64>,
+        cache_reuse: Option<u32>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
@@ -126,6 +143,8 @@ impl ProcessManager {
                 current: Arc::new(RwLock::new(None)),
                 loading: Arc::new(std::sync::RwLock::new(None)),
                 slot_save_path,
+                cache_ram_mb,
+                cache_reuse,
             },
         }
     }
@@ -198,19 +217,30 @@ impl ProcessManager {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot, slot_save_path) = match &self.strategy {
-            ProcessStrategy::SingleSwap {
-                catalog,
-                current,
-                loading,
-                slot_save_path,
-            } => (catalog, current, loading, slot_save_path),
-            ProcessStrategy::Concurrent { .. } => {
-                return Err(ModelRuntimeError::Internal(
-                    "ensure_model_running() is only available for SingleSwap strategy".to_string(),
-                ));
-            }
-        };
+        let (catalog, current_lock, loading_slot, slot_save_path, cache_ram_mb, cache_reuse) =
+            match &self.strategy {
+                ProcessStrategy::SingleSwap {
+                    catalog,
+                    current,
+                    loading,
+                    slot_save_path,
+                    cache_ram_mb,
+                    cache_reuse,
+                } => (
+                    catalog,
+                    current,
+                    loading,
+                    slot_save_path,
+                    *cache_ram_mb,
+                    *cache_reuse,
+                ),
+                ProcessStrategy::Concurrent { .. } => {
+                    return Err(ModelRuntimeError::Internal(
+                        "ensure_model_running() is only available for SingleSwap strategy"
+                            .to_string(),
+                    ));
+                }
+            };
 
         // 2. Retry loop with overall deadline (prevents unbounded waits through other models' swaps)
         let deadline = tokio::time::Instant::now() + STARTUP_WAIT_TIMEOUT;
@@ -247,6 +277,8 @@ impl ProcessManager {
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
                     let slot_save_path_owned = slot_save_path.clone();
+                    let cache_ram_mb_owned = cache_ram_mb;
+                    let cache_reuse_owned = cache_reuse;
 
                     // 4. Spawn the driver task (detached from this request's future)
                     drive(guard, STARTUP_WAIT_TIMEOUT, async move {
@@ -356,6 +388,8 @@ impl ProcessManager {
                                     .and_then(|sc| sc.context_length),
                                 global_default_ctx: Some(default_ctx),
                                 slot_save_path: slot_save_path_owned.clone(),
+                                cache_ram_mb: cache_ram_mb_owned,
+                                cache_reuse: cache_reuse_owned,
                                 ..Default::default()
                             },
                         );

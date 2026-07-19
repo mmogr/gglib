@@ -480,6 +480,21 @@ pub enum Commands {
         /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
         #[arg(long)]
         slot_dir: Option<std::path::PathBuf>,
+        /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+        /// (`--cache-ram`). Independent of `--cache`/`--slot-dir` — llama-server
+        /// keeps this cache in RAM for the life of the process regardless of
+        /// whether disk slot persistence is enabled. Omit to use llama-server's
+        /// built-in default (8192 MiB, or unlimited if `--cache` is also set).
+        #[arg(long)]
+        cache_ram_mb: Option<i64>,
+        /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+        /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
+        /// whose earlier messages were edited or summarized (e.g. a Copilot
+        /// history compaction), which plain prefix matching can't reuse at all.
+        /// Omit to disable. Can be suppressed at runtime without editing this
+        /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
+        #[arg(long)]
+        cache_reuse: Option<u32>,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,

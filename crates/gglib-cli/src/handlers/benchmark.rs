@@ -199,6 +199,8 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         ctx.llama_server_path.to_string_lossy().into_owned(),
         catalog,
         None,
+        None,
+        None,
     ));
     let runtime = Arc::new(RuntimePortImpl::new(process_mgr));
     let http_client =

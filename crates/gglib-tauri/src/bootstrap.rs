@@ -196,6 +196,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
+        None,
+        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
@@ -306,6 +308,8 @@ pub fn bootstrap_with(
         DEFAULT_LLAMA_BASE_PORT,
         String::from("llama-server"),
         catalog_for_runtime,
+        None,
+        None,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -455,6 +459,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         DEFAULT_LLAMA_BASE_PORT,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
+        None,
+        None,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));

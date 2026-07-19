@@ -240,6 +240,12 @@ impl SettingsRepository for CliOverrideSettingsRepo {
 ///   flags are ever passed to llama-server).
 /// * `slot_dir` - Directory for KV cache slot files. Only consulted when
 ///   `cache_enabled` is `true`; `None` falls back to `<app-data-dir>/slots`.
+/// * `cache_ram_mb` - RAM budget in MiB for llama-server's own host-RAM
+///   prompt cache (`--cache-ram`). Independent of `cache_enabled`/`slot_dir` —
+///   `None` leaves llama-server's built-in default (or, for back-compat, `-1`
+///   when `cache_enabled` is `true`).
+/// * `cache_reuse` - Minimum chunk size in tokens for KV-shift cache reuse
+///   past the first prefix divergence (`--cache-reuse`). `None` disables it.
 #[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
@@ -253,6 +259,8 @@ pub async fn start_proxy_standalone(
     inference_override: Option<InferenceConfig>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
+    cache_ram_mb: Option<i64>,
+    cache_reuse: Option<u32>,
 ) -> Result<()> {
     // Resolve the actual KV cache slot-save directory. `None` when the
     // feature is disabled, regardless of what `slot_dir` was passed — this
@@ -278,6 +286,8 @@ pub async fn start_proxy_standalone(
         llama_server_path.to_string_lossy(),
         Arc::clone(&catalog_port),
         slot_save_path.clone(),
+        cache_ram_mb,
+        cache_reuse,
     ));
 
     // Create runtime port
