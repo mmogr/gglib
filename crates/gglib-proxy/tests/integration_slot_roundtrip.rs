@@ -27,7 +27,7 @@ use gglib_core::ports::{
     ModelSummary, RunningTarget,
 };
 use gglib_proxy::cache_lifecycle::{StreamConfig, restore_with_retry};
-use gglib_proxy::slots::{SlotIoResult, attempt_save};
+use gglib_proxy::slots::{SlotIoResult, attempt_save, slot_bin_path};
 
 // ─── Mock upstream (serves /v1/chat/completions + /slots/0) ──────────────
 
@@ -272,13 +272,24 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
         std::env::temp_dir().join(format!("gglib-slot-roundtrip-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
 
+    // Pre-create a slot file so the restore call actually reaches the mock
+    // upstream — the existence precheck in `restore_with_retry` skips the
+    // network call entirely when nothing is cached yet, which is correct in
+    // production but means this round-trip test needs a real file to
+    // exercise the restore leg. FixedUpstream::ensure_model_running always
+    // returns model_id 1.
+    let session_id = "roundtrip-test";
+    let bin_path = slot_bin_path(&slot_dir, 1, session_id);
+    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
+    std::fs::write(&bin_path, b"fake kv state").unwrap();
+
     let (proxy_base, proxy_cancel) =
         spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
 
     // Send a non-streaming chat completion request.
     let response = Client::new()
         .post(format!("{}/v1/chat/completions", proxy_base))
-        .header("X-Gglib-Session-Id", "roundtrip-test")
+        .header("X-Gglib-Session-Id", session_id)
         .json(&json!({
             "model": "test-model",
             "messages": [{ "role": "user", "content": "hello" }],
@@ -336,11 +347,15 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     let _ = std::fs::remove_dir_all(&slot_dir);
 }
 
-/// Verify that a request with NO `X-Gglib-Session-Id` header still triggers
-/// restore→generate→save — the fallback path derives a session id from the
-/// request content itself (canonicalized system prompt + first user
-/// message), so cache persistence works even for clients (VS Code Copilot's
-/// LLM Gateway extension, curl, etc.) that have no idea the header exists.
+/// Verify that a request with NO `X-Gglib-Session-Id` header still derives a
+/// session id from the request content itself (canonicalized system prompt +
+/// first user message) and saves under it — so cache persistence works even
+/// for clients (VS Code Copilot's LLM Gateway extension, curl, etc.) that
+/// have no idea the header exists. No slot file is pre-created, so restore
+/// is correctly skipped (nothing cached yet for a brand-new derived id — the
+/// existence precheck in `restore_with_retry` never reaches the network for
+/// this case); the save call proves the derivation actually plumbed through
+/// to disk.
 #[tokio::test]
 async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
     let upstream_cancel = CancellationToken::new();
@@ -376,8 +391,8 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
 
     assert_eq!(
         restore_count.load(Ordering::Relaxed),
-        1,
-        "Expected exactly 1 restore call even without a session header"
+        0,
+        "No slot file exists yet for the derived id — restore should be skipped, not attempted"
     );
     assert_eq!(
         save_count.load(Ordering::Relaxed),
@@ -388,8 +403,8 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
     let actions = action_log.lock().await.clone();
     assert_eq!(
         actions,
-        vec![0, 1, 2],
-        "Expected restore→generate→save order, got: {:?}",
+        vec![1, 2],
+        "Expected generate→save order (no restore — nothing cached yet), got: {:?}",
         actions
     );
 
@@ -496,10 +511,18 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
 
     tokio::time::sleep(Duration::from_millis(30)).await;
 
+    let slot_dir = std::env::temp_dir().join(format!("gglib-backoff-test-{}", std::process::id()));
+    // Pre-create a slot file so the existence precheck in `restore_with_retry`
+    // lets this reach the mock's 503-then-200 sequence — otherwise "nothing
+    // cached yet" would short-circuit to NotFound before any network call.
+    let bin_path = slot_bin_path(&slot_dir, 0, "backoff-session");
+    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
+    std::fs::write(&bin_path, b"fake kv state").unwrap();
+
     let config = StreamConfig {
         client: Client::new(),
         base_url: format!("http://127.0.0.1:{}", port),
-        slot_dir: std::env::temp_dir().join("backoff-test"),
+        slot_dir,
         model_id: 0,
         clear_all_pending: Arc::new(AtomicBool::new(false)),
         per_session_cleared: Arc::new(DashSet::new()),
@@ -533,6 +556,7 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
     // backoff ran twice before success.
 
     cancel.cancel();
+    let _ = std::fs::remove_dir_all(&config.slot_dir);
 }
 
 /// Regression test: `attempt_save` must retry a transient failure the same
