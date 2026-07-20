@@ -474,17 +474,27 @@ pub enum Commands {
         /// Set `0.0` to disable (recommended by Qwen3).
         #[arg(long)]
         min_p: Option<f32>,
-        /// Enable KV cache session persistence (saves/restores llama-server slot state per session)
+        /// Enable KV cache session persistence, saving/restoring llama-server
+        /// slot state to disk per session.
+        ///
+        /// Independent of the host-RAM prompt cache, which is auto-sized on
+        /// every launch whether or not this flag is set (see `--cache-ram-mb`).
         #[arg(long)]
         cache: bool,
         /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
         #[arg(long)]
         slot_dir: Option<std::path::PathBuf>,
         /// RAM budget in MiB for llama-server's own host-RAM prompt cache
-        /// (`--cache-ram`). Independent of `--cache`/`--slot-dir` — llama-server
-        /// keeps this cache in RAM for the life of the process regardless of
-        /// whether disk slot persistence is enabled. Omit to use llama-server's
-        /// built-in default (8192 MiB, or unlimited if `--cache` is also set).
+        /// (`--cache-ram`) — what makes switching between conversations fast.
+        ///
+        /// Omit to auto-size it from total system RAM, the model's weights, and
+        /// its KV footprint at the launch context size (capped at 25% of RAM);
+        /// the chosen budget and its arithmetic are logged at startup.
+        ///
+        /// Pass a value to override, including llama-server's own sentinels:
+        /// `-1` unlimited, `0` disabled. Set `GGLIB_DISABLE_CACHE_AUTOSIZE=1`
+        /// to skip auto-sizing entirely and use llama-server's built-in
+        /// default. Independent of `--cache`/`--slot-dir`.
         #[arg(long)]
         cache_ram_mb: Option<i64>,
         /// Minimum chunk size in tokens for KV-shift cache reuse past the first
