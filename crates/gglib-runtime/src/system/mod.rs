@@ -46,6 +46,17 @@ pub(crate) fn total_system_ram_bytes() -> u64 {
     get_system_memory_info().total_ram_bytes
 }
 
+/// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
+///
+/// Used by `GGLIB_DISABLE_<FEATURE>` environment variable checks throughout
+/// the crate. Truthy values: `1`, `true`, `yes`, `on`.
+pub(crate) fn is_truthy_flag(v: &str) -> bool {
+    matches!(
+        v.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 pub struct DefaultSystemProbe;
 
 impl DefaultSystemProbe {

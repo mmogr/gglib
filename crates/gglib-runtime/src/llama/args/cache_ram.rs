@@ -10,6 +10,7 @@
 //! budget from the machine's actual RAM, the model's weights, and its KV
 //! footprint at the launch context size.
 
+use crate::system::is_truthy_flag;
 use gglib_core::server_config::{
     CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, CacheRamSetting, compute_auto_cache_ram_mb,
 };
@@ -50,17 +51,6 @@ pub struct CacheRamResolution {
     pub kv_estimated: bool,
     /// Context size the KV figure was computed for.
     pub context_size: u64,
-}
-
-/// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
-///
-/// Mirrors the parser used for the other `GGLIB_DISABLE_<FEATURE>` switches in
-/// `crate::command`.
-fn is_truthy_flag(v: &str) -> bool {
-    matches!(
-        v.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
 }
 
 /// Whether `GGLIB_DISABLE_CACHE_AUTOSIZE` requests that auto-sizing be
@@ -364,10 +354,10 @@ mod tests {
     #[test]
     fn truthy_flag_parsing_matches_the_other_kill_switches() {
         for v in ["1", "true", "TRUE", " yes ", "On"] {
-            assert!(is_truthy_flag(v), "{v:?} should be truthy");
+            assert!(crate::system::is_truthy_flag(v), "{v:?} should be truthy");
         }
         for v in ["0", "false", "no", "off", "", "2"] {
-            assert!(!is_truthy_flag(v), "{v:?} should be falsy");
+            assert!(!crate::system::is_truthy_flag(v), "{v:?} should be falsy");
         }
     }
 }

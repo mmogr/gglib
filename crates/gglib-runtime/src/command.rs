@@ -5,6 +5,7 @@
 
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
+use crate::system::is_truthy_flag;
 use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
 use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
@@ -35,14 +36,6 @@ fn cache_reuse_disabled_via_env() -> bool {
     std::env::var("GGLIB_DISABLE_CACHE_REUSE")
         .ok()
         .is_some_and(|v| is_truthy_flag(&v))
-}
-
-/// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
-fn is_truthy_flag(v: &str) -> bool {
-    matches!(
-        v.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
 }
 
 /// Select the llama-server path to use.
@@ -225,18 +218,10 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
     // `--cache-ram`: llama-server's own host-RAM prompt cache. Deliberately
     // independent of `--slot-save-path` above — the native RAM cache is
     // useful on its own even when disk persistence is off.
-    match config.cache_ram_mb {
-        Some(mb) => {
-            cmd.arg("--cache-ram").arg(mb.to_string());
-        }
-        None if config.slot_save_path.is_some() => {
-            // Back-compat: launches that set slot_save_path but don't set
-            // cache_ram_mb explicitly keep the unlimited RAM cache they got
-            // before this field existed.
-            cmd.arg("--cache-ram").arg("-1");
-        }
-        None => {} // llama-server's own built-in default (8192 MiB) applies
+    if let Some(mb) = config.cache_ram_mb {
+        cmd.arg("--cache-ram").arg(mb.to_string());
     }
+    // else: llama-server's own built-in default (8192 MiB) applies
 
     // `--cache-reuse`: min chunk size (tokens) for KV-shift cache reuse past
     // the first prefix divergence — helps a follow-up prompt whose earlier
@@ -328,10 +313,10 @@ mod tests {
     #[test]
     fn is_truthy_flag_recognises_on_values() {
         for v in ["1", "true", "TRUE", " yes ", "On", "  on"] {
-            assert!(is_truthy_flag(v), "{v:?} should be truthy");
+            assert!(crate::system::is_truthy_flag(v), "{v:?} should be truthy");
         }
         for v in ["0", "false", "no", "off", "", "2", "disable"] {
-            assert!(!is_truthy_flag(v), "{v:?} should be falsy");
+            assert!(!crate::system::is_truthy_flag(v), "{v:?} should be falsy");
         }
     }
 
@@ -394,18 +379,17 @@ mod tests {
     }
 
     #[test]
-    fn slot_save_path_without_cache_ram_mb_keeps_legacy_unlimited_default() {
+    fn slot_save_path_without_cache_ram_mb_omits_flag() {
         let config = ServerConfig {
             slot_save_path: Some(PathBuf::from("/tmp/slots")),
             ..minimal_config()
         };
         let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
         let args = args_of(&cmd);
-        let idx = args
-            .iter()
-            .position(|a| a == "--cache-ram")
-            .expect("--cache-ram should be present for back-compat");
-        assert_eq!(args[idx + 1], "-1");
+        assert!(
+            !args.contains(&"--cache-ram".to_string()),
+            "--cache-ram should be omitted when cache_ram_mb is None (llama-server default applies)"
+        );
     }
 
     #[test]
