@@ -159,6 +159,85 @@ pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
         .unwrap_or(DEFAULT_CONTEXT_SIZE)
 }
 
+// =============================================================================
+// Host-RAM prompt cache budget (`--cache-ram`)
+// =============================================================================
+
+/// How to determine the host-RAM prompt cache budget (`--cache-ram`).
+///
+/// Deliberately a three-state enum rather than `Option<i64>`: "no explicit
+/// value" is genuinely ambiguous between *auto-size me* (what the proxy wants)
+/// and *emit nothing, leave llama-server's own default* (what benchmark
+/// launches want — a large prompt cache would perturb throughput measurements
+/// and RAM footprint).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CacheRamSetting {
+    /// Compute a budget from system RAM, model size, and the KV estimate.
+    Auto,
+    /// Use exactly this MiB value. llama-server's own sentinels pass through:
+    /// `-1` unlimited, `0` disabled.
+    Explicit(i64),
+    /// Emit no `--cache-ram` flag at all; llama-server applies its built-in
+    /// default (8192 MiB). The default variant, so existing callers that
+    /// previously passed `None` keep byte-identical behaviour.
+    #[default]
+    LlamaDefault,
+}
+
+/// RAM reserved for the OS, other applications, and llama.cpp's own
+/// compute/scratch buffers — never handed to the prompt cache.
+pub const CACHE_RAM_HEADROOM_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+
+/// Below this, a prompt cache holds too little to be worth the memory
+/// pressure, so the budget collapses to `0` (explicitly disabled).
+pub const CACHE_RAM_FLOOR_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// Caps the auto budget at `total_ram / CACHE_RAM_MAX_FRACTION_DIVISOR` (25%).
+///
+/// This cap, not the subtraction, is what binds on large machines, and it is
+/// the primary safety margin against under-counted model weights (e.g. a
+/// multi-part GGUF whose siblings weren't found).
+pub const CACHE_RAM_MAX_FRACTION_DIVISOR: u64 = 4;
+
+/// KV allowance assumed when the model's metadata doesn't permit an estimate.
+/// Deliberately generous: over-reserving shrinks the cache (safe), whereas
+/// under-reserving risks memory pressure.
+pub const CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
+/// Compute the auto `--cache-ram` budget, in MiB.
+///
+/// ```text
+/// usable  = total_ram − model_weights − kv_bytes − HEADROOM
+/// budget  = min(usable, total_ram / 4)
+/// result  = if budget < FLOOR { 0 } else { budget }
+/// ```
+///
+/// Saturating throughout: a model larger than RAM yields `0` (cache disabled)
+/// rather than wrapping into a huge budget.
+///
+/// # Arguments
+///
+/// * `total_ram_bytes` — total physical system RAM.
+/// * `model_bytes` — on-disk size of the model weights (all shards).
+/// * `kv_bytes` — estimated KV cache at the launch context size; pass
+///   [`CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES`] when unknown.
+#[must_use]
+pub fn compute_auto_cache_ram_mb(total_ram_bytes: u64, model_bytes: u64, kv_bytes: u64) -> i64 {
+    let reserved = model_bytes
+        .saturating_add(kv_bytes)
+        .saturating_add(CACHE_RAM_HEADROOM_BYTES);
+    let usable = total_ram_bytes.saturating_sub(reserved);
+    let cap = total_ram_bytes / CACHE_RAM_MAX_FRACTION_DIVISOR;
+
+    let budget = usable.min(cap);
+    if budget < CACHE_RAM_FLOOR_BYTES {
+        return 0;
+    }
+    // Saturating rather than casting: `-1`/`0` are llama-server sentinels, so a
+    // wrapped negative here would silently mean "unlimited".
+    i64::try_from(budget / (1024 * 1024)).unwrap_or(i64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::server_config::{ServerConfigOptions, resolve_context_size};
@@ -168,6 +247,65 @@ mod tests {
     fn test_resolve_context_size_default_when_all_none() {
         let opts = ServerConfigOptions::default();
         assert_eq!(resolve_context_size(&opts), DEFAULT_CONTEXT_SIZE);
+    }
+
+    // ── Auto cache-ram budget ────────────────────────────────────────────
+
+    use crate::server_config::{
+        CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, CacheRamSetting, compute_auto_cache_ram_mb,
+    };
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// The reference case: 128 GiB machine, 27 GiB weights, ~9 GiB KV.
+    /// Subtraction leaves ~76 GiB, so the 25% cap (32 GiB) binds.
+    #[test]
+    fn auto_budget_is_capped_at_a_quarter_of_ram() {
+        let got = compute_auto_cache_ram_mb(128 * GIB, 27 * GIB, 9 * GIB);
+        assert_eq!(got, 32 * 1024, "expected the 25% cap (32 GiB) to bind");
+    }
+
+    /// When free RAM is the binding constraint the subtraction wins, not the cap.
+    #[test]
+    fn auto_budget_uses_remaining_ram_when_below_the_cap() {
+        // 64 - 30 - 4 - 16 = 14 GiB usable; cap would be 16 GiB.
+        let got = compute_auto_cache_ram_mb(64 * GIB, 30 * GIB, 4 * GIB);
+        assert_eq!(got, 14 * 1024);
+    }
+
+    /// A model that leaves under the 1 GiB floor disables the cache outright
+    /// rather than letting llama-server apply its 8 GiB default.
+    #[test]
+    fn auto_budget_collapses_to_zero_under_the_floor() {
+        // 36 - 20 - 4 - 16 = saturates to 0.
+        assert_eq!(compute_auto_cache_ram_mb(36 * GIB, 20 * GIB, 4 * GIB), 0);
+    }
+
+    /// A model larger than total RAM must saturate to 0, never wrap around
+    /// into an enormous budget.
+    #[test]
+    fn auto_budget_saturates_when_model_exceeds_ram() {
+        assert_eq!(compute_auto_cache_ram_mb(16 * GIB, 64 * GIB, 8 * GIB), 0);
+    }
+
+    /// The unknown-KV allowance is generous enough to shrink, never inflate,
+    /// the budget relative to a known small KV.
+    #[test]
+    fn unknown_kv_allowance_is_conservative() {
+        let known_small = compute_auto_cache_ram_mb(64 * GIB, 10 * GIB, GIB);
+        let unknown =
+            compute_auto_cache_ram_mb(64 * GIB, 10 * GIB, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES);
+        assert!(
+            unknown <= known_small,
+            "unknown-KV budget {unknown} should not exceed known-KV {known_small}"
+        );
+    }
+
+    /// Existing callers that previously passed `None` must keep emitting no
+    /// flag at all, so `LlamaDefault` has to be the `Default` variant.
+    #[test]
+    fn cache_ram_setting_defaults_to_llama_default() {
+        assert_eq!(CacheRamSetting::default(), CacheRamSetting::LlamaDefault);
     }
 
     #[test]
