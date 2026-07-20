@@ -424,7 +424,7 @@ impl ProcessManager {
                             if let Err(e) = std::fs::create_dir_all(slot_dir) {
                                 tracing::warn!("Failed to create slot directory: {}", e);
                             }
-                            purge_stale_slot_bin_files(slot_dir, launch_spec.id as u32);
+                            purge_stale_slot_bin_files(slot_dir, launch_spec.id);
                         }
 
                         let port = {
