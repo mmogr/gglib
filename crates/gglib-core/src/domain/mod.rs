@@ -6,6 +6,7 @@ pub mod chat;
 pub mod council;
 pub mod gguf;
 pub mod inference;
+pub mod kv_estimate;
 pub mod mcp;
 mod model;
 pub mod query;
@@ -30,6 +31,9 @@ pub use benchmark::{
 
 // Re-export inference types at the domain level for convenience
 pub use inference::InferenceConfig;
+
+// Re-export KV estimation helpers at the domain level for convenience
+pub use kv_estimate::{estimate_kv_bytes_for_context, estimate_kv_bytes_per_token};
 pub use server_config::ServerConfig;
 
 // Re-export MCP types at the domain level for convenience
