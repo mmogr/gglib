@@ -11,6 +11,7 @@ pub mod mcp;
 mod model;
 pub mod query;
 mod server_config;
+pub mod slot_eviction;
 
 // Re-export model types at the domain level for convenience
 pub use model::{
@@ -35,6 +36,11 @@ pub use inference::InferenceConfig;
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{estimate_kv_bytes_for_context, estimate_kv_bytes_per_token};
 pub use server_config::ServerConfig;
+
+// Re-export slot eviction helpers at the domain level for convenience
+pub use slot_eviction::{
+    DISK_BUDGET_FRACTION_DIVISOR, SlotFileMeta, compute_auto_disk_budget_bytes, select_evictions,
+};
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{
