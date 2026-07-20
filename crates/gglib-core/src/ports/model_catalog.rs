@@ -88,6 +88,21 @@ pub struct ModelLaunchSpec {
     pub context_length: Option<u64>,
     /// Per-model server defaults (e.g., `context_length` for launch).
     pub server_defaults: Option<ServerConfig>,
+    /// Total on-disk size of the model weights in bytes, summed across all
+    /// shards for multi-part GGUFs.
+    ///
+    /// Used to budget host memory at launch (see
+    /// [`crate::server_config::compute_auto_cache_ram_mb`]). `0` when the
+    /// size could not be determined — callers must treat that as "unknown"
+    /// rather than "free".
+    pub file_size_bytes: u64,
+    /// Estimated KV cache bytes consumed per token of context, derived from
+    /// the model's GGUF metadata (see
+    /// [`crate::domain::estimate_kv_bytes_per_token`]).
+    ///
+    /// `None` when the metadata doesn't carry the layer/head counts needed;
+    /// callers substitute a conservative allowance.
+    pub kv_bytes_per_token: Option<u64>,
 }
 
 impl ModelSummary {
