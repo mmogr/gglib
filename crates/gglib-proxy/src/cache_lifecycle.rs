@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use dashmap::DashSet;
 use reqwest::Client;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tokio::time::{Duration, sleep};
+use tokio::time::sleep;
 use tracing::{debug, warn};
 
 use crate::slots::{self, SlotIoResult};
@@ -24,12 +24,10 @@ pub struct LastLoadedSession {
     pub session_id: String,
 }
 
-/// Maximum number of retry attempts for pre-generation restore failures.
-/// Total attempts = 1 (initial) + MAX_RETRIES = 3.
-const MAX_RETRIES: u32 = 2;
-
-/// Backoff between retry attempts (100ms).
-const RETRY_BACKOFF: Duration = Duration::from_millis(100);
+// Retry budget for pre-generation restore failures — shared with
+// `slots::attempt_save`'s retry loop; see `slots::MAX_RETRIES` for why.
+// Total attempts = 1 (initial) + MAX_RETRIES = 3.
+use slots::{MAX_RETRIES, RETRY_BACKOFF};
 
 /// Owned configuration bundle for cache lifecycle operations.
 ///
@@ -42,7 +40,8 @@ pub struct StreamConfig {
     pub base_url: String,
     pub slot_dir: PathBuf,
     /// Database ID of the model whose slots are being cached.
-    /// Used to namespace slot files under `{slot_dir}/{model_id}/`.
+    /// Used to namespace slot files via the flat `{model_id}__{session}.bin`
+    /// filename prefix (see `gglib_core::paths::slot_file_name`).
     pub model_id: u32,
     pub clear_all_pending: Arc<AtomicBool>,
     pub per_session_cleared: Arc<DashSet<String>>,
@@ -327,6 +326,7 @@ pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::Duration;
 
     #[test]
     fn test_stream_config_is_clone() {

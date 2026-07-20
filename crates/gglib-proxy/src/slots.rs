@@ -27,15 +27,15 @@
 
 use std::cmp::Reverse;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::time as tokio_time;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
 /// any other JSON type (object, array, string, bool, `null`) as simply
@@ -745,13 +745,43 @@ async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
     classify_slot_status(status, &body)
 }
 
+/// Generous timeout for a slot save. Live slot files run 2-6.4 GB, so the
+/// previous 3s budget was never enough to complete a write; a save that hit
+/// it did not stop llama-server's write, it just stopped *waiting* for it,
+/// so a retry could race a still-writing prior attempt onto the same file.
+/// That race is now impossible: [`save_slot`] asks the server to write a
+/// per-attempt temp name and only renames it onto the real `.bin` name after
+/// a confirmed-complete write, so a generous timeout here costs nothing but
+/// time.
+const SAVE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Generous timeout for a slot restore — reading a multi-GB file back from
+/// disk (cold cache, slow storage) can take a while.
+const RESTORE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Per-attempt nonce for temp save filenames, so a timed-out-but-still-writing
+/// previous attempt can never collide with a retry's temp file.
+static SAVE_NONCE: AtomicU64 = AtomicU64::new(0);
+
+/// Rename a completed temp save onto its final `.bin` name and return its
+/// size in bytes. Split out from [`save_slot`] so the rename step is unit
+/// testable without an HTTP server.
+async fn finalize_slot_save(tmp_path: &Path, dest_path: &Path) -> std::io::Result<u64> {
+    tokio::fs::rename(tmp_path, dest_path).await?;
+    Ok(tokio::fs::metadata(dest_path).await?.len())
+}
+
 /// Trigger a KV cache save for the current slot via llama-server's `/slots/0?action=save`.
 ///
-/// The `filename` sent to llama-server is relative to its `--slot-save-path`, so we
-/// pass the flat `{model_id}__{session_id}.bin` name (matching the on-disk layout).
-/// It must be separator-free — llama-server rejects a `/` with HTTP 400 "Invalid
-/// filename". Returns `SlotIoResult::Ok` on success, `NotFound` if the server
-/// returns 404, or `Transient` for timeout/network errors.
+/// llama-server is asked to write to a per-attempt temp filename (relative to
+/// its `--slot-save-path`, flat and separator-free — it rejects a `/` with
+/// HTTP 400 "Invalid filename"); on success this renames the temp file onto
+/// the real `{model_id}__{session_id}.bin` name so restore/eviction, which
+/// only ever look at `*.bin`, never see a partially-written file. Returns
+/// `SlotIoResult::Ok` on success, `NotFound` if the server returns 404, or
+/// `Transient` for timeout/network/rename errors. On any non-`Ok` outcome the
+/// temp file is left behind (the server may still be writing it); the
+/// eviction sweep reaps orphaned temp files older than its staleness window.
 pub async fn save_slot(
     client: &Client,
     base_url: &str,
@@ -768,21 +798,41 @@ pub async fn save_slot(
         );
         return SlotIoResult::Transient(format!("failed to create slot directory: {e}"));
     }
-    // Filename is relative to --slot-save-path; flat, separator-free.
-    let filename = gglib_core::paths::slot_file_name(model_id, session_id);
-    let payload = serde_json::json!({"filename": &filename});
-    match tokio_time::timeout(
-        Duration::from_secs(3),
+    let nonce = SAVE_NONCE.fetch_add(1, Ordering::Relaxed);
+    let tmp_name = gglib_core::paths::slot_tmp_file_name(model_id, session_id, nonce);
+    let payload = serde_json::json!({"filename": &tmp_name});
+    let started = Instant::now();
+    let result = tokio_time::timeout(
+        SAVE_TIMEOUT,
         client
             .post(format!("{base_url}/slots/0?action=save"))
             .json(&payload)
             .send(),
     )
-    .await
-    {
+    .await;
+
+    let classified = match result {
         Ok(Ok(resp)) => classify_slot_response(resp).await,
         Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
-        Err(_) => SlotIoResult::Transient("timeout after 3s".into()),
+        Err(_) => SlotIoResult::Transient(format!("timeout after {}s", SAVE_TIMEOUT.as_secs())),
+    };
+
+    if !matches!(classified, SlotIoResult::Ok) {
+        return classified;
+    }
+
+    let tmp_path = slot_dir.join(&tmp_name);
+    let dest_path = slot_bin_path(slot_dir, model_id, session_id);
+    match finalize_slot_save(&tmp_path, &dest_path).await {
+        Ok(bytes) => {
+            info!(
+                "saved slot for {session_id}: {:.2} GiB in {:.1}s",
+                bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                started.elapsed().as_secs_f64()
+            );
+            SlotIoResult::Ok
+        }
+        Err(e) => SlotIoResult::Transient(format!("failed to finalize slot save: {e}")),
     }
 }
 
@@ -828,8 +878,8 @@ pub(crate) async fn slot_file_is_stale(
 /// Trigger a KV cache restore for the current slot via llama-server's `/slots/0?action=restore`.
 ///
 /// Returns `SlotIoResult::Ok` on success, `NotFound` if no cached file exists (404),
-/// or `Transient` for timeout/network errors. A 5-second timeout is used because
-/// restore may need to read a large file from disk.
+/// or `Transient` for timeout/network errors. [`RESTORE_TIMEOUT`] is generous
+/// because restore may need to read a multi-GB file from disk.
 pub async fn restore_slot(
     client: &Client,
     base_url: &str,
@@ -841,7 +891,7 @@ pub async fn restore_slot(
     let filename = gglib_core::paths::slot_file_name(model_id, session_id);
     let payload = serde_json::json!({"filename": &filename});
     match tokio_time::timeout(
-        Duration::from_secs(5),
+        RESTORE_TIMEOUT,
         client
             .post(format!("{base_url}/slots/0?action=restore"))
             .json(&payload)
@@ -853,7 +903,7 @@ pub async fn restore_slot(
         Ok(Err(e)) => SlotIoResult::Transient(e.to_string()),
         Err(_) => {
             warn!("restore timed out for {session_id} — proceeding cold");
-            SlotIoResult::Transient("timeout after 5s".into())
+            SlotIoResult::Transient(format!("timeout after {}s", RESTORE_TIMEOUT.as_secs()))
         }
     }
 }
@@ -889,10 +939,10 @@ pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std:
     Ok(())
 }
 
-/// Retry budget for a transient save failure — same shape as
-/// `cache_lifecycle::restore_with_retry`'s retry loop (duplicated here
-/// rather than imported, since slots.rs sits below cache_lifecycle.rs in
-/// the module layering).
+/// Retry budget for a transient slot I/O failure — shared with
+/// `cache_lifecycle::restore_with_retry`'s retry loop (`slots.rs` sits below
+/// `cache_lifecycle.rs` in the module layering, so the constants live here
+/// and `cache_lifecycle` imports them).
 ///
 /// A stale pooled HTTP connection (llama-server closes idle keep-alive
 /// connections; a 10+ minute generation easily outlives one) produces an
@@ -903,8 +953,8 @@ pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std:
 /// on-disk `.bin` permanently stale relative to what's actually in the
 /// slot's live KV cache — a mismatch that a later restore would then load
 /// as if it were current.
-const SAVE_MAX_RETRIES: u32 = 2;
-const SAVE_RETRY_BACKOFF: Duration = Duration::from_millis(100);
+pub(crate) const MAX_RETRIES: u32 = 2;
+pub(crate) const RETRY_BACKOFF: Duration = Duration::from_millis(100);
 
 /// Shared save function — called by both streaming and non-streaming paths.
 pub async fn attempt_save(
@@ -927,12 +977,12 @@ pub async fn attempt_save(
 
     let mut result = save_slot(client, base_url, slot_dir, model_id, session_id).await;
     if matches!(result, SlotIoResult::Transient(_)) {
-        for attempt in 1..=SAVE_MAX_RETRIES {
+        for attempt in 1..=MAX_RETRIES {
             debug!(
                 "retry save for {session_id} (attempt {}/{})",
-                attempt, SAVE_MAX_RETRIES
+                attempt, MAX_RETRIES
             );
-            tokio_time::sleep(SAVE_RETRY_BACKOFF).await;
+            tokio_time::sleep(RETRY_BACKOFF).await;
             result = save_slot(client, base_url, slot_dir, model_id, session_id).await;
             if !matches!(result, SlotIoResult::Transient(_)) {
                 break;
@@ -1076,6 +1126,43 @@ mod slot_io_tests {
             sanitize_session_id("planner").unwrap(),
             "differently-cased headers must resolve to the same session bucket"
         );
+    }
+
+    #[tokio::test]
+    async fn finalize_slot_save_renames_tmp_to_final_and_returns_byte_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp_path = dir.path().join("1__planner.0.tmp");
+        let dest_path = slot_bin_path(dir.path(), 1, "planner");
+        let content = b"fake kv state, sixteen bytes!!!";
+        std::fs::write(&tmp_path, content).unwrap();
+
+        let bytes = finalize_slot_save(&tmp_path, &dest_path).await.unwrap();
+
+        assert_eq!(bytes, content.len() as u64);
+        assert!(!tmp_path.exists(), "tmp file should be gone after rename");
+        assert!(dest_path.exists(), "final .bin should exist after rename");
+    }
+
+    #[tokio::test]
+    async fn finalize_slot_save_visible_to_iter_all_slot_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp_path = dir.path().join("1__planner.0.tmp");
+        let dest_path = slot_bin_path(dir.path(), 1, "planner");
+        std::fs::write(&tmp_path, b"x").unwrap();
+
+        finalize_slot_save(&tmp_path, &dest_path).await.unwrap();
+
+        let files = iter_all_slot_files(dir.path()).await;
+        assert_eq!(files, vec![dest_path]);
+    }
+
+    #[tokio::test]
+    async fn finalize_slot_save_errors_when_tmp_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp_path = dir.path().join("1__ghost.0.tmp");
+        let dest_path = slot_bin_path(dir.path(), 1, "ghost");
+
+        assert!(finalize_slot_save(&tmp_path, &dest_path).await.is_err());
     }
 
     #[test]

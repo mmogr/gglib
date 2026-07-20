@@ -39,6 +39,19 @@ pub fn slot_model_prefix(model_id: u32) -> String {
     format!("{model_id}__")
 }
 
+/// Filename for an in-flight save: `{model_id}__{session_id}.{nonce}.tmp`.
+///
+/// llama-server is asked to write here instead of directly to the final
+/// `.bin` name, so a save that times out or is retried while the server is
+/// still writing can never produce a torn file at the name restore/eviction
+/// actually read — those only ever see `*.bin` (see [`slot_file_name`]). The
+/// caller renames this to the final name only after a confirmed-complete
+/// write; `nonce` (a per-attempt counter) keeps concurrent attempts for the
+/// same session from writing the same temp file.
+pub fn slot_tmp_file_name(model_id: u32, session_id: &str, nonce: u64) -> String {
+    format!("{model_id}__{session_id}.{nonce}.tmp")
+}
+
 /// Recover the session id from a slot file stem (`{model_id}__{session}`).
 ///
 /// Splits on the **first** `__`. Model ids are numeric and contain no `__`, so
@@ -90,5 +103,24 @@ mod tests {
     #[test]
     fn slot_session_from_stem_none_for_legacy_flat_name() {
         assert_eq!(slot_session_from_stem("auto-deadbeef"), None);
+    }
+
+    #[test]
+    fn slot_tmp_file_name_encodes_model_session_and_nonce() {
+        assert_eq!(
+            slot_tmp_file_name(42, "planner", 7),
+            "42__planner.7.tmp"
+        );
+    }
+
+    #[test]
+    fn slot_tmp_file_name_never_has_bin_extension() {
+        let name = slot_tmp_file_name(1, "s", 0);
+        assert_eq!(Path::new(&name).extension(), Some(std::ffi::OsStr::new("tmp")));
+    }
+
+    #[test]
+    fn slot_tmp_file_name_is_unique_per_nonce() {
+        assert_ne!(slot_tmp_file_name(1, "s", 0), slot_tmp_file_name(1, "s", 1));
     }
 }

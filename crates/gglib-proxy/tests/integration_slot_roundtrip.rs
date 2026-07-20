@@ -119,8 +119,16 @@ impl ModelCatalogPort for TaggedCatalog {
 /// `1` = generate, `2` = save; `last_chat_body` captures the raw bytes of
 /// the most recent `/v1/chat/completions` request, for asserting on what
 /// the proxy actually forwarded upstream (e.g. injected fields).
+///
+/// On a save action, this actually writes the requested `filename` (gglib
+/// now sends a per-attempt temp name, see `slots::save_slot`) under
+/// `slot_dir` — real llama-server does the equivalent, writing into its
+/// `--slot-save-path`. Without this, gglib's post-save `rename(tmp, final)`
+/// would always fail (nothing was ever written), turning every "successful"
+/// save into a `Transient` failure and retry storm.
 async fn spawn_mock_upstream_with_slots(
     cancel: CancellationToken,
+    slot_dir: std::path::PathBuf,
 ) -> (
     u16,
     Arc<Mutex<Vec<u8>>>,
@@ -176,10 +184,11 @@ async fn spawn_mock_upstream_with_slots(
         .route(
             "/slots/0",
             post(
-                move |params: axum::extract::Query<HashMap<String, String>>| {
+                move |params: axum::extract::Query<HashMap<String, String>>, body: Bytes| {
                     let log = log_c.clone();
                     let save_n = save_n.clone();
                     let restore_n = restore_n.clone();
+                    let slot_dir = slot_dir.clone();
                     async move {
                         if let Some(action) = params.get("action") {
                             match action.as_str() {
@@ -188,6 +197,19 @@ async fn spawn_mock_upstream_with_slots(
                                     restore_n.fetch_add(1, Ordering::Relaxed);
                                 }
                                 "save" => {
+                                    // Mirror real llama-server: write the requested
+                                    // filename under the slot-save path so gglib's
+                                    // post-save rename(tmp, final) has something to
+                                    // find.
+                                    if let Ok(payload) =
+                                        serde_json::from_slice::<serde_json::Value>(&body)
+                                        && let Some(filename) =
+                                            payload.get("filename").and_then(|v| v.as_str())
+                                    {
+                                        let _ = std::fs::create_dir_all(&slot_dir);
+                                        let _ =
+                                            std::fs::write(slot_dir.join(filename), b"fake kv state");
+                                    }
                                     log.lock().await.push(2);
                                     save_n.fetch_add(1, Ordering::Relaxed);
                                 }
@@ -264,13 +286,13 @@ async fn spawn_proxy_with_cache(
 /// in the correct order, with exactly one call each.
 #[tokio::test]
 async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
-    let upstream_cancel = CancellationToken::new();
-    let (upstream_port, action_log, save_count, restore_count, last_chat_body) =
-        spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
-
     let slot_dir =
         std::env::temp_dir().join(format!("gglib-slot-roundtrip-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
+
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, action_log, save_count, restore_count, last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
 
     // Pre-create a slot file so the restore call actually reaches the mock
     // upstream — the existence precheck in `restore_with_retry` skips the
@@ -341,6 +363,28 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
         forwarded_json
     );
 
+    // Atomic save regression: the final `.bin` must exist post-save (the mock
+    // upstream "wrote" the temp file gglib requested, so the post-save
+    // rename(tmp, final) succeeded), and no leftover `.tmp` file should
+    // remain — a successful save always finishes with exactly the canonical
+    // name on disk, never the per-attempt temp name.
+    let final_bin = slot_bin_path(&slot_dir, 1, session_id);
+    assert!(
+        final_bin.exists(),
+        "final .bin should exist after a successful save: {}",
+        final_bin.display()
+    );
+    let leftover_tmp: Vec<_> = std::fs::read_dir(&slot_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("tmp"))
+        .collect();
+    assert!(
+        leftover_tmp.is_empty(),
+        "no .tmp file should remain after a successful save, found: {:?}",
+        leftover_tmp.iter().map(|e| e.path()).collect::<Vec<_>>()
+    );
+
     // Cleanup.
     proxy_cancel.cancel();
     upstream_cancel.cancel();
@@ -358,12 +402,12 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
 /// to disk.
 #[tokio::test]
 async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
-    let upstream_cancel = CancellationToken::new();
-    let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
-        spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
-
     let slot_dir = std::env::temp_dir().join(format!("gglib-slot-fallback-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
+
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
 
     let (proxy_base, proxy_cancel) =
         spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
@@ -421,13 +465,13 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
 /// silently defeating the whole point of this feature with no visible error.
 #[tokio::test]
 async fn client_sent_cache_prompt_false_is_overridden_to_true() {
-    let upstream_cancel = CancellationToken::new();
-    let (upstream_port, _action_log, _save_count, _restore_count, last_chat_body) =
-        spawn_mock_upstream_with_slots(upstream_cancel.clone()).await;
-
     let slot_dir =
         std::env::temp_dir().join(format!("gglib-slot-cache-prompt-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
+
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, _action_log, _save_count, _restore_count, last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
 
     let (proxy_base, proxy_cancel) =
         spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
