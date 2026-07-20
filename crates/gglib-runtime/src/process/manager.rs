@@ -12,6 +12,7 @@ use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
+use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -56,10 +57,12 @@ pub enum ProcessStrategy {
         /// disk slot-persistence feature is disabled. Forwarded verbatim into
         /// every `build_server_config` call made by this manager's driver.
         slot_save_path: Option<PathBuf>,
-        /// RAM budget in MiB for llama-server's own host-RAM prompt cache
-        /// (`--cache-ram`). Independent of `slot_save_path` — forwarded
-        /// verbatim into every `build_server_config` call.
-        cache_ram_mb: Option<i64>,
+        /// How to size llama-server's own host-RAM prompt cache
+        /// (`--cache-ram`). Independent of `slot_save_path`. `Auto` derives a
+        /// budget per launch from system RAM, the model's weights, and its KV
+        /// footprint; `LlamaDefault` emits no flag (what benchmark launches
+        /// want, so a prompt cache never perturbs their measurements).
+        cache_ram: CacheRamSetting,
         /// Minimum chunk size in tokens for KV-shift cache reuse
         /// (`--cache-reuse`). Forwarded verbatim into every
         /// `build_server_config` call.
@@ -113,10 +116,10 @@ impl ProcessManager {
     /// * `slot_save_path` — KV cache slot-save directory, or `None` to
     ///   disable disk slot persistence entirely (no `--slot-save-path` flag
     ///   emitted).
-    /// * `cache_ram_mb` — RAM budget in MiB for llama-server's own host-RAM
-    ///   prompt cache (`--cache-ram`), independent of `slot_save_path`.
-    ///   `None` leaves llama-server's built-in default (or, for back-compat,
-    ///   `-1` when `slot_save_path` is `Some`).
+    /// * `cache_ram` — how to size llama-server's own host-RAM prompt cache
+    ///   (`--cache-ram`), independent of `slot_save_path`.
+    ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
+    ///   benchmark launches, where a large prompt cache would perturb results.
     /// * `cache_reuse` — Minimum chunk size in tokens for KV-shift cache
     ///   reuse past the first prefix divergence (`--cache-reuse`). `None`
     ///   disables it.
@@ -132,7 +135,7 @@ impl ProcessManager {
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
         slot_save_path: Option<PathBuf>,
-        cache_ram_mb: Option<i64>,
+        cache_ram: CacheRamSetting,
         cache_reuse: Option<u32>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
@@ -143,7 +146,7 @@ impl ProcessManager {
                 current: Arc::new(RwLock::new(None)),
                 loading: Arc::new(std::sync::RwLock::new(None)),
                 slot_save_path,
-                cache_ram_mb,
+                cache_ram,
                 cache_reuse,
             },
         }
@@ -217,21 +220,21 @@ impl ProcessManager {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot, slot_save_path, cache_ram_mb, cache_reuse) =
+        let (catalog, current_lock, loading_slot, slot_save_path, cache_ram, cache_reuse) =
             match &self.strategy {
                 ProcessStrategy::SingleSwap {
                     catalog,
                     current,
                     loading,
                     slot_save_path,
-                    cache_ram_mb,
+                    cache_ram,
                     cache_reuse,
                 } => (
                     catalog,
                     current,
                     loading,
                     slot_save_path,
-                    *cache_ram_mb,
+                    *cache_ram,
                     *cache_reuse,
                 ),
                 ProcessStrategy::Concurrent { .. } => {
@@ -277,7 +280,7 @@ impl ProcessManager {
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
                     let slot_save_path_owned = slot_save_path.clone();
-                    let cache_ram_mb_owned = cache_ram_mb;
+                    let cache_ram_owned = cache_ram;
                     let cache_reuse_owned = cache_reuse;
 
                     // 4. Spawn the driver task (detached from this request's future)
@@ -374,24 +377,44 @@ impl ProcessManager {
                             "Starting model"
                         );
 
+                        let mut opts = ServerConfigOptions {
+                            context_size: num_ctx,
+                            model_server_ctx: launch_spec
+                                .server_defaults
+                                .as_ref()
+                                .and_then(|sc| sc.context_length),
+                            global_default_ctx: Some(default_ctx),
+                            slot_save_path: slot_save_path_owned.clone(),
+                            cache_reuse: cache_reuse_owned,
+                            ..Default::default()
+                        };
+
+                        // Size the host-RAM prompt cache. Deliberately uses
+                        // `resolve_context_size` (the same 4-tier chain
+                        // `build_server_config` applies, including the
+                        // per-model tier) rather than `effective_ctx`, so the
+                        // KV estimate matches the context the server actually
+                        // launches with.
+                        let launch_ctx = resolve_context_size(&opts);
+                        let cache_ram = crate::llama::args::resolve_cache_ram(
+                            cache_ram_owned,
+                            crate::system::total_system_ram_bytes(),
+                            launch_spec.file_size_bytes,
+                            launch_spec.kv_bytes_per_token,
+                            launch_ctx,
+                        );
+                        if let Some(explanation) = cache_ram.explain() {
+                            info!("{explanation}");
+                        }
+                        opts.cache_ram_mb = cache_ram.cache_ram_mb;
+
                         let config = build_server_config(
                             launch_spec.id as i64,
                             launch_spec.name.clone(),
                             model_path.to_path_buf(),
                             0, // base_port unused — GuiProcessCore resolves port internally
                             &launch_spec.tags,
-                            ServerConfigOptions {
-                                context_size: num_ctx,
-                                model_server_ctx: launch_spec
-                                    .server_defaults
-                                    .as_ref()
-                                    .and_then(|sc| sc.context_length),
-                                global_default_ctx: Some(default_ctx),
-                                slot_save_path: slot_save_path_owned.clone(),
-                                cache_ram_mb: cache_ram_mb_owned,
-                                cache_reuse: cache_reuse_owned,
-                                ..Default::default()
-                            },
+                            opts,
                         );
 
                         // Purge stale slot .bin files before spawning a fresh instance.

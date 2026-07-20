@@ -22,6 +22,7 @@ use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::repositories::SqliteCouncilRepository;
@@ -196,7 +197,9 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
-        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint.
+        CacheRamSetting::LlamaDefault,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -309,7 +312,9 @@ pub fn bootstrap_with(
         String::from("llama-server"),
         catalog_for_runtime,
         None,
-        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint.
+        CacheRamSetting::LlamaDefault,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -460,7 +465,9 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
-        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint.
+        CacheRamSetting::LlamaDefault,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));

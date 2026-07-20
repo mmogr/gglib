@@ -1,9 +1,11 @@
 #![doc = include_str!("README.md")]
+pub mod cache_ram;
 pub mod jinja;
 pub mod mtp;
 pub mod reasoning;
 
 // Re-export public API
+pub use cache_ram::{CacheRamResolution, CacheRamSource, resolve_cache_ram};
 pub use jinja::{JinjaResolution, JinjaResolutionSource, resolve_jinja_flag};
 pub use mtp::{
     DEFAULT_DRAFT_N_MAX, DEFAULT_DRAFT_P_MIN, MtpResolution, MtpResolutionSource, resolve_mtp_args,

@@ -22,6 +22,7 @@ use gglib_core::ports::{
     AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, ProcessRunner,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_core::services::AppCore;
 use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
@@ -251,7 +252,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
-        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint.
+        CacheRamSetting::LlamaDefault,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));

@@ -36,6 +36,16 @@ use gpu::{detect_gpu_info, get_system_memory_info};
 /// let probe = DefaultSystemProbe::new();
 /// let deps = probe.check_all_dependencies();
 /// ```
+/// Total physical system RAM in bytes.
+///
+/// A direct accessor for the one figure the launch path needs to size
+/// llama-server's host-RAM prompt cache, without constructing or threading a
+/// full [`SystemProbePort`] through `ProcessManager`. Returns `0` if the
+/// platform query fails, which callers treat as "unknown".
+pub(crate) fn total_system_ram_bytes() -> u64 {
+    get_system_memory_info().total_ram_bytes
+}
+
 pub struct DefaultSystemProbe;
 
 impl DefaultSystemProbe {

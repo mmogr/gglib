@@ -27,6 +27,7 @@ use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
     PerfConfig,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_runtime::process::ProcessManager;
 use gglib_runtime::{CatalogPortImpl, RuntimePortImpl};
 
@@ -199,7 +200,9 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         ctx.llama_server_path.to_string_lossy().into_owned(),
         catalog,
         None,
-        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint.
+        CacheRamSetting::LlamaDefault,
         None,
     ));
     let runtime = Arc::new(RuntimePortImpl::new(process_mgr));
