@@ -11,6 +11,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod models;
 pub mod server;
+pub mod slot_eviction;
 pub mod slots;
 pub mod slots_poller;
 pub mod sse_stream;

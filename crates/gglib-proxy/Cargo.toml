@@ -68,6 +68,9 @@ uuid = { workspace = true, features = ["v4"] }
 # Async trait support
 async-trait = "0.1"
 
+# Free-disk-space probing for auto-sized slot cache eviction
+sysinfo = { workspace = true }
+
 [dev-dependencies]
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }

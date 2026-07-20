@@ -108,6 +108,8 @@ pub(crate) struct AppState {
 /// * `council` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
 /// * `settings_repo` - Settings repository for loading global inference defaults
+/// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
+///   Only consulted when `slot_dir` is `Some`.
 ///
 /// # Returns
 ///
@@ -124,6 +126,7 @@ pub async fn serve(
     settings_repo: Arc<dyn SettingsRepository>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
+    disk_budget: crate::slot_eviction::DiskBudget,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -183,15 +186,11 @@ pub async fn serve(
     ));
     let last_loaded_session = Arc::new(tokio::sync::RwLock::new(None));
 
-    // Background LRU eviction, so cached session slot files don't accumulate
-    // without bound. Only runs when there's a slot_dir to sweep; joined below
-    // on shutdown like the other background tasks.
+    // Background byte-budget eviction, so cached session slot files don't
+    // accumulate without bound. Only runs when there's a slot_dir to sweep;
+    // joined below on shutdown like the other background tasks.
     let lru_eviction = slot_dir.as_ref().map(|dir| {
-        crate::slots::spawn_lru_eviction_task(
-            dir.clone(),
-            crate::slots::DEFAULT_MAX_CACHED_SESSIONS,
-            cancel.clone(),
-        )
+        crate::slot_eviction::spawn_eviction_task(dir.clone(), disk_budget, cancel.clone())
     });
 
     let dashboard = Arc::new(DashboardState::new(

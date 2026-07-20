@@ -270,6 +270,7 @@ async fn spawn_proxy_with_cache(
             Arc::new(fixtures::common::MockSettingsRepo),
             true, // cache_enabled
             Some(slot_dir),
+            gglib_proxy::slot_eviction::DiskBudget::Auto,
         )
         .await
         .ok();

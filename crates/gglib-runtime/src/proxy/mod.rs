@@ -341,6 +341,7 @@ pub async fn start_proxy_standalone(
         default_context,
         cache_enabled,
         slot_dir: slot_save_path,
+        ..Default::default()
     };
 
     // Initialize MCP service (validates servers and auto-starts enabled ones)

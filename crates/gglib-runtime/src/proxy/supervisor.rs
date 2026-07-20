@@ -27,6 +27,7 @@ use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
+use gglib_proxy::slot_eviction::DiskBudget;
 
 /// Handle to a running proxy server.
 struct ProxyHandle {
@@ -98,6 +99,9 @@ pub struct ProxyConfig {
     /// Directory for KV cache slot files. Only consulted when `cache_enabled`
     /// is `true`; `None` falls back to `<app-data-dir>/slots`.
     pub slot_dir: Option<PathBuf>,
+    /// Byte budget for the on-disk slot cache eviction sweep. Only consulted
+    /// when `cache_enabled` is `true`.
+    pub disk_budget: DiskBudget,
 }
 
 impl Default for ProxyConfig {
@@ -108,6 +112,7 @@ impl Default for ProxyConfig {
             default_context: DEFAULT_CONTEXT_SIZE,
             cache_enabled: false,
             slot_dir: None,
+            disk_budget: DiskBudget::Auto,
         }
     }
 }
@@ -226,6 +231,7 @@ impl ProxySupervisor {
         let default_ctx = config.default_context;
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
+        let disk_budget = config.disk_budget;
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -248,6 +254,7 @@ impl ProxySupervisor {
                 settings_repo,
                 cache_enabled,
                 slot_dir,
+                disk_budget,
             )
             .await;
 
@@ -594,6 +601,7 @@ mod tests {
             default_context: 4096,
             cache_enabled: false,
             slot_dir: None,
+            ..ProxyConfig::default()
         };
         let (runtime, catalog) = make_ports();
         let mcp = make_mcp();
@@ -655,6 +663,7 @@ mod tests {
             default_context: 4096,
             cache_enabled: false,
             slot_dir: None,
+            ..ProxyConfig::default()
         };
 
         // Start
