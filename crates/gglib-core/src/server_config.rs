@@ -288,6 +288,30 @@ mod tests {
         assert_eq!(compute_auto_cache_ram_mb(16 * GIB, 64 * GIB, 8 * GIB), 0);
     }
 
+    /// 8 GiB laptop: headroom (16 GiB) alone exceeds total RAM, so reserved
+    /// saturates past the machine's capacity → budget collapses to 0.
+    #[test]
+    fn auto_budget_is_zero_on_small_ram_laptop() {
+        // reserved = 3 + 0 + 16 = 19 > 8 → usable = 0
+        assert_eq!(compute_auto_cache_ram_mb(8 * GIB, 3 * GIB, 0), 0);
+    }
+
+    /// 24 GiB machine: subtraction lands exactly on the 1 GiB floor.
+    #[test]
+    fn auto_budget_hits_floor_boundary_at_24_gib() {
+        // reserved = 7 + 0 + 16 = 23; usable = 24 - 23 = 1 GiB
+        // cap = 24/4 = 6 GiB; budget = min(1, 6) = 1 GiB → 1024 MiB
+        assert_eq!(compute_auto_cache_ram_mb(24 * GIB, 7 * GIB, 0), 1024);
+    }
+
+    /// 32 GiB machine: subtraction binds (not the cap).
+    #[test]
+    fn auto_budget_subtraction_binds_on_32_gib_machine() {
+        // reserved = 10 + 0 + 16 = 26; usable = 32 - 26 = 6 GiB
+        // cap = 32/4 = 8 GiB; budget = min(6, 8) = 6 GiB → 6144 MiB
+        assert_eq!(compute_auto_cache_ram_mb(32 * GIB, 10 * GIB, 0), 6144);
+    }
+
     /// The unknown-KV allowance is generous enough to shrink, never inflate,
     /// the budget relative to a known small KV.
     #[test]
