@@ -2,7 +2,7 @@
 //!
 //! The truncation budget converts a **token** context size (`effective_ctx`)
 //! into a **character** budget by multiplying by a chars-per-token factor. The
-//! static default ([`crate::truncation::CHARS_PER_TOKEN_APPROX`] = 4) is
+//! static default ([`CHARS_PER_TOKEN_APPROX`] = 4) is
 //! deliberately matched to the VS Code LLM Gateway's own estimate, but real
 //! code/markup content tokenizes closer to ~3.3 chars/token, so the static
 //! factor *overestimates* the character budget and can let an over-long prompt
@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::truncation::CHARS_PER_TOKEN_APPROX;
+use gglib_core::request_pipeline::CHARS_PER_TOKEN_APPROX;
 
 /// EWMA smoothing factor applied to each new observation (`0.0..=1.0`). Higher
 /// reacts faster; lower is steadier. 0.2 blends ~5 recent requests.
