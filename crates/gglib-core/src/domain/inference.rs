@@ -12,8 +12,10 @@
 //! - `gglib chat` / `gglib q` — hierarchy resolution for the agentic loop
 //!
 //! All surfaces resolve inference parameters through
-//! [`InferenceConfig::resolve_with_defaults`], which is the single source of
-//! truth for the 4-level hierarchy.
+//! [`InferenceConfig::resolve_with_profile`], which is the single source of
+//! truth for the hierarchy. [`InferenceConfig::resolve_with_defaults`] is the
+//! same resolution with no profile selected, for surfaces that have no notion
+//! of one.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,9 +28,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// When making an inference request, parameters are resolved in this order:
 /// 1. Request-level override (user specified for this request)
-/// 2. Per-model defaults (stored in `Model.inference_defaults`)
-/// 3. Global settings (stored in `Settings.inference_defaults`)
-/// 4. Hardcoded fallback (e.g., temperature = 0.7)
+/// 2. Selected profile (`Settings.inference_profiles`, chosen as
+///    `{model}:{profile}`; absent on surfaces without profiles)
+/// 3. Per-model defaults (stored in `Model.inference_defaults`)
+/// 4. Global settings (stored in `Settings.inference_defaults`)
+/// 5. Hardcoded fallback (e.g., temperature = 0.7)
 ///
 /// # Examples
 ///
@@ -309,17 +313,10 @@ impl InferenceConfig {
 
     /// Resolve inference parameters using the 4-level hierarchy.
     ///
-    /// Applies fallback layers in order, with each layer filling only `None`
-    /// fields from `self` — explicit values are never overwritten:
-    ///
-    /// 1. `self` — caller-supplied overrides (request params, CLI flags, etc.)
-    /// 2. `model` — per-model stored defaults
-    /// 3. `global` — global settings defaults
-    /// 4. [`with_hardcoded_defaults`] — compile-time fallback values
-    ///
-    /// This is the single source of truth for inference parameter resolution,
-    /// used by every gglib surface: `gglib serve`, `gglib chat`, `gglib q`,
-    /// `gglib proxy`, and the internal Web UI chat API.
+    /// Equivalent to [`resolve_with_profile`] with no profile selected — see
+    /// there for the merge order. This is the entry point for surfaces that
+    /// have no notion of a named profile (`gglib serve`, `gglib chat`,
+    /// `gglib q`, the Web UI chat API).
     ///
     /// # Example
     ///
@@ -335,13 +332,70 @@ impl InferenceConfig {
     /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
     /// ```
     ///
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    /// [`resolve_with_profile`]: Self::resolve_with_profile
     #[must_use]
-    pub const fn resolve_with_defaults(
+    pub const fn resolve_with_defaults(self, model: Option<&Self>, global: Option<&Self>) -> Self {
+        self.resolve_with_profile(None, model, global)
+    }
+
+    /// Resolve inference parameters using the full 5-level hierarchy.
+    ///
+    /// Applies fallback layers in order, with each layer filling only `None`
+    /// fields from `self` — explicit values are never overwritten:
+    ///
+    /// 1. `self` — caller-supplied overrides (request params, CLI flags, etc.)
+    /// 2. `profile` — the named profile the request selected, if any
+    /// 3. `model` — per-model stored defaults
+    /// 4. `global` — global settings defaults
+    /// 5. [`with_hardcoded_defaults`] — compile-time fallback values
+    ///
+    /// This is the single source of truth for inference parameter resolution
+    /// across every gglib surface; [`resolve_with_defaults`] delegates here so
+    /// there is exactly one merge order to reason about and to test.
+    ///
+    /// # Why the profile sits above the model
+    ///
+    /// Selecting `model:coding` is an explicit act by the caller, so it has to
+    /// beat the model's stored defaults or it would appear to do nothing on any
+    /// model that has them. Because profiles are *sparse* (see
+    /// [`crate::domain::inference_profile`]), outranking the model layer costs
+    /// nothing for parameters the profile does not set — those still resolve
+    /// from the model, which is what keeps one global profile safe to apply
+    /// across differing architectures.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::InferenceConfig;
+    ///
+    /// // A sparse profile: sets temperature, says nothing about anything else.
+    /// let profile = InferenceConfig { temperature: Some(0.2), ..Default::default() };
+    /// // A thinking model's stored defaults.
+    /// let model = InferenceConfig {
+    ///     temperature: Some(1.0),
+    ///     presence_penalty: Some(1.5),
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let resolved = InferenceConfig::default()
+    ///     .resolve_with_profile(Some(&profile), Some(&model), None);
+    ///
+    /// assert_eq!(resolved.temperature,      Some(0.2)); // profile beats model
+    /// assert_eq!(resolved.presence_penalty, Some(1.5)); // model still fills in
+    /// ```
+    ///
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    /// [`resolve_with_defaults`]: Self::resolve_with_defaults
+    #[must_use]
+    pub const fn resolve_with_profile(
         mut self,
+        profile: Option<&Self>,
         model: Option<&Self>,
         global: Option<&Self>,
     ) -> Self {
+        if let Some(p) = profile {
+            self.merge_with(p);
+        }
         if let Some(m) = model {
             self.merge_with(m);
         }
@@ -531,6 +585,84 @@ mod tests {
         let resolved = base.resolve_with_defaults(None, None);
         // Should equal hardcoded defaults
         assert_eq!(resolved, InferenceConfig::with_hardcoded_defaults());
+    }
+
+    /// Every layer contributes exactly one distinguishable parameter, so a
+    /// single assertion set pins the whole precedence ladder.
+    #[test]
+    fn test_resolve_with_profile_full_precedence_ladder() {
+        let request = InferenceConfig {
+            temperature: Some(0.9),
+            ..Default::default()
+        };
+        let profile = InferenceConfig {
+            temperature: Some(0.2),
+            top_p: Some(0.85),
+            ..Default::default()
+        };
+        let model = InferenceConfig {
+            temperature: Some(0.5),
+            top_p: Some(0.8),
+            presence_penalty: Some(1.5),
+            ..Default::default()
+        };
+        let global = InferenceConfig {
+            top_k: Some(10),
+            ..Default::default()
+        };
+
+        let resolved = request.resolve_with_profile(Some(&profile), Some(&model), Some(&global));
+
+        assert_eq!(resolved.temperature, Some(0.9)); // request beats profile
+        assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
+        assert_eq!(resolved.presence_penalty, Some(1.5)); // model fills in
+        assert_eq!(resolved.top_k, Some(10)); // global fills in
+        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+    }
+
+    /// The invariant that makes one global profile safe across differing
+    /// architectures: parameters the profile leaves `None` still resolve from
+    /// the model, so selecting a profile cannot erase per-model tuning.
+    #[test]
+    fn test_sparse_profile_does_not_erase_model_defaults() {
+        let profile = InferenceConfig {
+            temperature: Some(0.2),
+            ..Default::default()
+        };
+        let model = InferenceConfig::reasoning_profile();
+
+        let resolved =
+            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+
+        assert_eq!(resolved.temperature, Some(0.2)); // the profile's one opinion
+        // Everything the profile stayed silent about comes from the model.
+        assert_eq!(resolved.presence_penalty, model.presence_penalty);
+        assert_eq!(resolved.top_k, model.top_k);
+        assert_eq!(resolved.top_p, model.top_p);
+        assert_eq!(resolved.max_tokens, model.max_tokens);
+        assert_eq!(resolved.min_p, model.min_p);
+    }
+
+    /// `resolve_with_defaults` delegates to `resolve_with_profile`, so the two
+    /// must stay observably identical when no profile is selected.
+    #[test]
+    fn test_resolve_with_defaults_matches_profile_form_with_no_profile() {
+        let request = InferenceConfig {
+            temperature: Some(0.9),
+            ..Default::default()
+        };
+        let model = InferenceConfig::reasoning_profile();
+        let global = InferenceConfig {
+            top_k: Some(10),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            request
+                .clone()
+                .resolve_with_defaults(Some(&model), Some(&global)),
+            request.resolve_with_profile(None, Some(&model), Some(&global)),
+        );
     }
 
     #[test]
