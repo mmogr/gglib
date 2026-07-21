@@ -186,6 +186,18 @@ impl Harness {
             .expect("request reaches the proxy")
     }
 
+    /// GET the model list as JSON.
+    async fn models(&self) -> Value {
+        Client::new()
+            .get(format!("{}/v1/models", self.proxy_url))
+            .send()
+            .await
+            .expect("request reaches the proxy")
+            .json()
+            .await
+            .expect("model list is JSON")
+    }
+
     /// The single body the upstream received. Panics if it saw none.
     fn only_forwarded(&self) -> Value {
         let bodies = self.forwarded.lock().unwrap();
@@ -451,5 +463,74 @@ async fn no_max_tokens_is_forwarded_when_nothing_sets_one() {
     assert!(
         body.get("max_tokens").is_none_or(Value::is_null),
         "unexpected max_tokens in forwarded body: {body}"
+    );
+}
+
+/// A profile the user opted into listing shows up as its own picker entry,
+/// alongside — not instead of — the bare model.
+#[tokio::test]
+async fn opted_in_profiles_are_listed_alongside_the_bare_model() {
+    let mut listed = coding_profile();
+    listed.list_in_models = true;
+    let h = spawn(vec![listed], &[MODEL], None).await;
+
+    let body = h.models().await;
+    let ids: Vec<&str> = body["data"]
+        .as_array()
+        .expect("data array")
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+
+    assert!(ids.contains(&MODEL), "bare model missing from {ids:?}");
+    assert!(ids.contains(&"qwen:coding"), "variant missing from {ids:?}");
+    assert_eq!(
+        ids.iter().filter(|id| **id == MODEL).count(),
+        1,
+        "bare model must still be listed exactly once: {ids:?}"
+    );
+}
+
+/// An advertised variant must actually work when a client selects it — the
+/// listing and the routing have to agree.
+#[tokio::test]
+async fn an_advertised_variant_can_be_selected_and_used() {
+    let mut listed = coding_profile();
+    listed.list_in_models = true;
+    let h = spawn(vec![listed], &[MODEL], None).await;
+
+    let ids: Vec<String> = h.models().await["data"]
+        .as_array()
+        .expect("data array")
+        .iter()
+        .filter_map(|m| m["id"].as_str().map(str::to_owned))
+        .collect();
+    let advertised = ids
+        .iter()
+        .find(|id| id.contains(':') && !id.starts_with("gglib-council"))
+        .expect("a variant is advertised");
+
+    let resp = h.post(chat_request(advertised)).await;
+    assert_eq!(resp.status(), 200, "advertised id {advertised} must work");
+    assert_param(&h.only_forwarded(), "temperature", 0.2);
+}
+
+/// With no profile opted in, the listing is exactly what it was before this
+/// feature existed.
+#[tokio::test]
+async fn unlisted_profiles_do_not_appear_in_the_model_list() {
+    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+
+    let body = h.models().await;
+    let ids: Vec<&str> = body["data"]
+        .as_array()
+        .expect("data array")
+        .iter()
+        .filter_map(|m| m["id"].as_str())
+        .collect();
+
+    assert!(
+        !ids.contains(&"qwen:coding"),
+        "unlisted profile leaked into {ids:?}"
     );
 }
