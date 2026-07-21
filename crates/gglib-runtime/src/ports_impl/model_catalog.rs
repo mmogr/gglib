@@ -95,6 +95,8 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = total_model_bytes(&m.file_path);
     let kv_elems_per_token =
         gglib_core::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
+    let kv_memory_is_partial =
+        gglib_core::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
 
     ModelLaunchSpec {
         id: m.id as u32,
@@ -106,6 +108,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         server_defaults: m.server_defaults,
         file_size_bytes,
         kv_elems_per_token,
+        kv_memory_is_partial,
     }
 }
 

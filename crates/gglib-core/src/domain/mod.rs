@@ -8,6 +8,7 @@ pub mod council;
 pub mod gguf;
 pub mod inference;
 pub mod kv_estimate;
+pub mod kv_memory;
 pub mod mcp;
 mod model;
 pub mod query;
@@ -38,6 +39,9 @@ pub use inference::InferenceConfig;
 pub use kv_estimate::{
     KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
 };
+
+// Re-export KV memory-shape detection at the domain level for convenience
+pub use kv_memory::kv_memory_is_partial;
 pub use server_config::ServerConfig;
 
 // Re-export cache-RAM budget math at the domain level for convenience

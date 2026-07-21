@@ -106,6 +106,16 @@ pub struct ModelLaunchSpec {
     /// `None` when the metadata doesn't carry the layer/head counts needed;
     /// callers substitute a conservative allowance.
     pub kv_elems_per_token: Option<KvElemsPerToken>,
+    /// True when the model's KV memory retains only part of the token history
+    /// — sliding-window, hybrid, or recurrent attention (see
+    /// [`crate::domain::kv_memory_is_partial`]).
+    ///
+    /// Such models cannot be resumed from llama-server's disk slot files: the
+    /// save/restore path does not carry the context checkpoints they need, so
+    /// a "successful" restore still forces a full prompt re-prefill. Callers
+    /// disable the disk slot layer for these models and rely on the in-RAM
+    /// prompt cache, which does preserve checkpoints.
+    pub kv_memory_is_partial: bool,
 }
 
 impl ModelSummary {

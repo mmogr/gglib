@@ -27,10 +27,25 @@ pub struct RunningTarget {
     pub effective_ctx: u64,
     /// True when this instance was freshly spawned (restart or cold start).
     pub just_started: bool,
+    /// Whether llama-server's disk slot save/restore can actually resume this
+    /// model, i.e. its KV memory retains the full token history.
+    ///
+    /// False for sliding-window, hybrid, and recurrent architectures (see
+    /// [`crate::domain::kv_memory_is_partial`]): the slot file carries KV
+    /// state and tokens but not the server's context checkpoints, so a
+    /// restore leaves the slot unable to resume and llama-server re-prefills
+    /// the whole prompt. Callers skip the disk slot layer when this is false
+    /// and let the in-RAM prompt cache — which does keep checkpoints — handle
+    /// conversation switching.
+    pub slot_restore_supported: bool,
 }
 
 impl RunningTarget {
     /// Create a new `RunningTarget` for a local server.
+    ///
+    /// `slot_restore_supported` defaults to `true` (the full-attention case);
+    /// callers that know the model's KV memory shape narrow it with
+    /// [`Self::with_slot_restore_supported`].
     #[must_use]
     pub fn local(
         port: u16,
@@ -46,7 +61,15 @@ impl RunningTarget {
             model_name,
             effective_ctx,
             just_started,
+            slot_restore_supported: true,
         }
+    }
+
+    /// Set whether disk slot restore can resume this model.
+    #[must_use]
+    pub const fn with_slot_restore_supported(mut self, supported: bool) -> Self {
+        self.slot_restore_supported = supported;
+        self
     }
 }
 
