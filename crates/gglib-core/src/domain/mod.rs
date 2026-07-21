@@ -46,7 +46,8 @@ pub use server_config::ServerConfig;
 
 // Re-export cache-RAM budget math at the domain level for convenience
 pub use cache_budget::{
-    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES,
+    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_LOW_WATERMARK_BYTES,
+    CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, CacheRamHealth, classify_cache_ram,
     compute_auto_cache_ram_mb,
 };
 
