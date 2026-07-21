@@ -203,13 +203,33 @@ impl InferenceConfig {
     ///
     /// These are the hardcoded fallback values used when no other
     /// defaults are configured.
+    ///
+    /// # `max_tokens` has no fallback
+    ///
+    /// It is deliberately `None`. Resolution force-writes every `Some` field
+    /// into the outgoing request, so a value here would cap *every* request
+    /// that did not name its own — silently truncating long answers. Left
+    /// unset, no `max_tokens` key is emitted and llama-server applies its own
+    /// `n_predict` default of `-1`, generating until a stop token or the
+    /// context limit.
+    ///
+    /// Omitting the key is exactly equivalent to sending `-1` (llama.cpp's
+    /// `has_budget()` treats `-1` as limitless) and is the better of the two:
+    /// `max_tokens: -1` is invalid under the `OpenAI` schema, which requires a
+    /// positive integer, so a strict client or intermediary proxy may reject
+    /// it. Omission keeps the forwarded body `OpenAI`-legal.
+    ///
+    /// Explicit per-request, per-profile, and per-model values are unaffected —
+    /// [`reasoning_profile`] still sets its own ceiling.
+    ///
+    /// [`reasoning_profile`]: Self::reasoning_profile
     #[must_use]
     pub const fn with_hardcoded_defaults() -> Self {
         Self {
             temperature: Some(0.7),
             top_p: Some(0.95),
             top_k: Some(40),
-            max_tokens: Some(2048),
+            max_tokens: None,
             repeat_penalty: Some(1.0),
             presence_penalty: Some(0.0),
             min_p: Some(0.0),
@@ -496,10 +516,51 @@ mod tests {
         assert_eq!(config.temperature, Some(0.7));
         assert_eq!(config.top_p, Some(0.95));
         assert_eq!(config.top_k, Some(40));
-        assert_eq!(config.max_tokens, Some(2048));
+        // Deliberately absent: a fallback here would cap every request that
+        // did not name its own. See `with_hardcoded_defaults`.
+        assert_eq!(config.max_tokens, None);
         assert_eq!(config.repeat_penalty, Some(1.0));
         assert_eq!(config.presence_penalty, Some(0.0));
         assert_eq!(config.min_p, Some(0.0));
+    }
+
+    /// The two ways an unset `max_tokens` could still reach llama-server and
+    /// cap generation: as a `max_tokens` key in the forwarded request body, or
+    /// as a `-n` flag on the launch command line. `-n` is the more dangerous of
+    /// the two — it sets `global_params.n_predict`, a server-wide ceiling that
+    /// overrides even a per-request `-1`.
+    #[test]
+    fn test_unset_max_tokens_reaches_llama_server_by_neither_route() {
+        let resolved = InferenceConfig::default().resolve_with_defaults(None, None);
+
+        assert!(
+            !resolved.to_openai_json_patch().contains_key("max_tokens"),
+            "an unset max_tokens must not be written into the request body"
+        );
+        assert!(
+            !resolved.to_cli_args().contains(&"-n".to_string()),
+            "an unset max_tokens must not become a server-wide -n ceiling"
+        );
+    }
+
+    /// An explicit value must still travel by both routes — this change removes
+    /// the *fallback*, not the parameter.
+    #[test]
+    fn test_explicit_max_tokens_is_still_forwarded() {
+        let resolved = InferenceConfig {
+            max_tokens: Some(512),
+            ..Default::default()
+        }
+        .resolve_with_defaults(None, None);
+
+        assert_eq!(resolved.max_tokens, Some(512));
+        assert_eq!(
+            resolved.to_openai_json_patch().get("max_tokens"),
+            Some(&serde_json::json!(512))
+        );
+        let args = resolved.to_cli_args();
+        let n_index = args.iter().position(|a| a == "-n").expect("-n emitted");
+        assert_eq!(args[n_index + 1], "512");
     }
 
     #[test]
@@ -575,7 +636,7 @@ mod tests {
         assert_eq!(resolved.temperature, Some(0.9)); // request wins
         assert_eq!(resolved.top_p, Some(0.8)); // model fills in
         assert_eq!(resolved.top_k, Some(10)); // global fills in
-        assert_eq!(resolved.max_tokens, Some(2048)); // hardcoded fallback
+        assert_eq!(resolved.max_tokens, None); // no layer sets it; stays unset
         assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
     }
 
