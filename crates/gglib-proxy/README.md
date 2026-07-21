@@ -122,11 +122,12 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`dashboard.rs`](src/dashboard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-coverage.json) |
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
-| [`models_tests.rs`](src/models_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
+| [`models_tests.rs`](src/models_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-coverage.json) |
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
-| [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
+| [`slot_eviction.rs`](src/slot_eviction.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-coverage.json) |
 | [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
+| [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
 | [`sse_stream.rs`](src/sse_stream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-coverage.json) |
 | [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
 | [`truncation.rs`](src/truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-coverage.json) |
@@ -165,20 +166,32 @@ When enabled via `--cache` and `--slot-dir`, the proxy saves per-session KV cach
 state to disk between requests, enabling sequential multi-agent workflows to
 resume from prior context without re-computation.
 
-- **Save/restore cycle:** After each `/v1/chat/completions` request, slot state is
-  saved to `{slot_dir}/{session_id}/`. Before the next request, it is restored.
+- **Flat on-disk layout:** slot files are stored directly under `--slot-dir` as
+  `{model_id}__{session_id}.bin` (no per-session subdirectories — llama-server's
+  save/restore endpoint rejects filenames containing a path separator).
+- **Atomic saves:** a save asks llama-server to write to a per-attempt temp name
+  (`{model_id}__{session_id}.{nonce}.tmp`) and only renames it onto the final
+  `.bin` name after a confirmed-complete write. Restore/eviction only ever see
+  `*.bin`, so a save that times out or is retried mid-write can never produce a
+  torn or partially-written file at the name anything else reads. Save/restore
+  use generous timeouts (120s/60s) matching multi-GB slot files.
 - **Semaphore gating:** A `Semaphore(1)` ensures only one save→forward→save cycle
   runs at a time (single-slot llama-server constraint).
-- **Fail-open mtime guard:** If a cached slot file is newer than the server start
-  time (indicating a stale cache from a prior server instance), restore is skipped.
-- **LRU eviction:** When `--slot-dir` contains more sessions than the configured
-  limit, least-recently-used session directories are evicted.
+- **Fail-open mtime guard:** If a cached slot file predates the current
+  llama-server process's start time (indicating a stale cache from a prior
+  server instance), restore is skipped.
+- **Disk-aware byte-budget eviction:** a background sweep evicts the
+  least-recently-used `.bin` files once the cache exceeds a byte budget — by
+  default a quarter of (free disk space + the cache's own footprint),
+  recomputed on every sweep; override with `--cache-disk-gb` or
+  `GGLIB_CACHE_DISK_GB`. The same sweep also reaps orphaned `.tmp` files left
+  behind by an interrupted save.
 - **Clear endpoint:** `POST /v1/proxy/cache/clear` (with optional `X-Gglib-Session-Id`
   header) clears cached slot files for a session or all sessions.
 
 CLI usage:
 ```bash
-gglib proxy start --cache --slot-dir ~/.cache/gglib/slots
+gglib proxy start --cache --slot-dir ~/.cache/gglib/slots --cache-disk-gb 100
 gglib proxy cache-clear --host 127.0.0.1 --port 8080 --session-id my-session
 ```
 

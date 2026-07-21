@@ -204,9 +204,19 @@ gglib proxy dashboard --port 9887
 
 For sequential multi-agent workflows, enable `--cache --slot-dir <path>` to persist
 KV cache state between requests. The proxy automatically saves and restores per-session
-slot files, gated by a semaphore to prevent concurrent access. Stale caches are
-detected via mtime comparison and skipped (fail-open). Use `gglib proxy cache-clear`
-to manually clear cached state.
+slot files (saved atomically via a temp-then-rename), gated by a semaphore to prevent
+concurrent access. Stale caches are detected via mtime comparison and skipped
+(fail-open). A background sweep evicts the least-recently-used slot files once the
+on-disk cache exceeds a byte budget — by default auto-sized from free disk space,
+override with `--cache-disk-gb`. Use `gglib proxy cache-clear` to manually clear
+cached state.
+
+Independently of disk persistence, every launch auto-sizes llama-server's own
+host-RAM prompt cache (`--cache-ram`) from system RAM, the model's weights, and its
+KV footprint — override with `--cache-ram-mb`. The KV cache itself defaults to
+`q8_0` quantization on both K and V (`--cache-type-k`/`--cache-type-v`), roughly
+halving KV memory versus llama-server's own `f16` default; override per-axis or set
+`GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`.
 
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
