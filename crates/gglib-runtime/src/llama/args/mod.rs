@@ -4,6 +4,7 @@ pub mod jinja;
 pub mod kv_cache_type;
 pub mod mtp;
 pub mod reasoning;
+pub mod slot_restore;
 
 // Re-export public API
 pub use cache_ram::{CacheRamResolution, CacheRamSource, resolve_cache_ram};
@@ -16,3 +17,4 @@ pub use reasoning::{
     ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource, resolve_reasoning_format,
     resolve_reasoning_format_with_detection,
 };
+pub use slot_restore::{SlotRestoreResolution, SlotRestoreSource, resolve_slot_restore};

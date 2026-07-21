@@ -402,7 +402,10 @@ impl ProcessManager {
                                 // metadata answers this without re-reading
                                 // the cached state.
                                 .with_slot_restore_supported(
-                                    !launch_spec.kv_memory_is_partial,
+                                    crate::llama::args::resolve_slot_restore(
+                                        launch_spec.kv_memory_is_partial,
+                                    )
+                                    .enabled,
                                 ));
                             }
                             warn!(
@@ -493,6 +496,17 @@ impl ProcessManager {
                         }
                         opts.cache_ram_mb = cache_ram.cache_ram_mb;
 
+                        // Whether the disk slot layer can resume this model at
+                        // all. Resolved once per spawn (alongside the other
+                        // launch decisions above) and carried on the target,
+                        // so the proxy never re-derives it per request.
+                        let slot_restore = crate::llama::args::resolve_slot_restore(
+                            launch_spec.kv_memory_is_partial,
+                        );
+                        if let Some(explanation) = slot_restore.explain() {
+                            info!("{explanation}");
+                        }
+
                         let config = build_server_config(
                             launch_spec.id as i64,
                             launch_spec.name.clone(),
@@ -534,7 +548,7 @@ impl ProcessManager {
                                 context_size: effective_ctx,
                                 port,
                                 model_path: launch_spec.file_path.clone(),
-                                slot_restore_supported: !launch_spec.kv_memory_is_partial,
+                                slot_restore_supported: slot_restore.enabled,
                             });
                         }
 
@@ -553,7 +567,7 @@ impl ProcessManager {
                             effective_ctx,
                             true, // fresh spawn — cache slots are stale
                         )
-                        .with_slot_restore_supported(!launch_spec.kv_memory_is_partial))
+                        .with_slot_restore_supported(slot_restore.enabled))
                     });
 
                     // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)

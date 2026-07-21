@@ -36,6 +36,10 @@ use gglib_proxy::slots::{SlotIoResult, attempt_save, slot_bin_path};
 struct FixedUpstream {
     port: u16,
     model_name: String,
+    /// Mirrors `RunningTarget::slot_restore_supported`. False models a
+    /// sliding-window/hybrid/recurrent model, where the proxy must bypass the
+    /// disk slot layer entirely.
+    slot_restore_supported: bool,
 }
 
 #[async_trait]
@@ -46,13 +50,10 @@ impl ModelRuntimePort for FixedUpstream {
         _num_ctx: Option<u64>,
         _default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(
-            self.port,
-            1,
-            self.model_name.clone(),
-            4096,
-            false,
-        ))
+        Ok(
+            RunningTarget::local(self.port, 1, self.model_name.clone(), 4096, false)
+                .with_slot_restore_supported(self.slot_restore_supported),
+        )
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -245,12 +246,24 @@ async fn spawn_proxy_with_cache(
     model_name: &str,
     slot_dir: std::path::PathBuf,
 ) -> (String, CancellationToken) {
+    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true).await
+}
+
+/// [`spawn_proxy_with_cache`] with control over whether the upstream model
+/// supports disk slot restore.
+async fn spawn_proxy_with_cache_for_model(
+    upstream_port: u16,
+    model_name: &str,
+    slot_dir: std::path::PathBuf,
+    slot_restore_supported: bool,
+) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
         port: upstream_port,
         model_name: model_name.into(),
+        slot_restore_supported,
     });
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
@@ -683,4 +696,87 @@ async fn save_retry_backoff_exhausts_max_retries_then_succeeds() {
     );
 
     cancel.cancel();
+}
+
+/// A model whose KV memory keeps only part of the token history
+/// (sliding-window/hybrid/recurrent) must bypass the disk slot layer
+/// completely — no restore, no save — even with the cache enabled and a
+/// matching slot file already on disk.
+///
+/// llama-server's slot files omit the context checkpoints these models need to
+/// resume, so a restore both fails to help *and* suppresses the in-RAM prompt
+/// cache that would have. See `gglib_runtime::llama::args::slot_restore`.
+#[tokio::test]
+async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
+    let slot_dir = std::env::temp_dir().join(format!(
+        "gglib-slot-partial-kv-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::create_dir_all(&slot_dir);
+
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
+
+    // Pre-create a slot file. On a supported model this is exactly what makes
+    // the restore leg fire (see the round-trip test above), so its presence
+    // here proves the bypass is driven by the model flag and not merely by a
+    // cache miss.
+    let session_id = "partial-kv-session";
+    let bin_path = slot_bin_path(&slot_dir, 1, session_id);
+    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
+    std::fs::write(&bin_path, b"fake kv state").unwrap();
+
+    let (proxy_base, proxy_cancel) = spawn_proxy_with_cache_for_model(
+        upstream_port,
+        "test-model",
+        slot_dir.clone(),
+        false, // partial KV memory — disk layer must be skipped
+    )
+    .await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy_base))
+        .header("X-Gglib-Session-Id", session_id)
+        .json(&json!({
+            "model": "test-model",
+            "messages": [{ "role": "user", "content": "hello" }],
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("proxy should be running");
+
+    // The request must still succeed — disabling the disk layer is a caching
+    // decision, not a degradation of the request path.
+    assert!(
+        response.status().is_success(),
+        "Chat completion should succeed without the disk cache: {}",
+        response.status()
+    );
+
+    assert_eq!(
+        restore_count.load(Ordering::Relaxed),
+        0,
+        "partial-KV model must not trigger a slot restore"
+    );
+    assert_eq!(
+        save_count.load(Ordering::Relaxed),
+        0,
+        "partial-KV model must not trigger a slot save"
+    );
+
+    // Only the generate call (1) should appear — no restore (0), no save (2).
+    let actions = action_log.lock().await.clone();
+    assert_eq!(
+        actions,
+        vec![1],
+        "Expected generate only, got: {:?}",
+        actions
+    );
+
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
+    let _ = std::fs::remove_dir_all(&slot_dir);
 }

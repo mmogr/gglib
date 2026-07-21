@@ -661,8 +661,15 @@ async fn chat_completions(
     // O(1).  Needed to retry with the original payload if the upstream dies.
     let body_for_retry = body.clone();
 
-    // Build StreamConfig for this request (Some only when cache is enabled)
-    let stream_config = if state.cache_enabled {
+    // Build StreamConfig for this request (Some only when cache is enabled).
+    //
+    // `slot_restore_supported` is false for sliding-window/hybrid/recurrent
+    // models, where a disk restore cannot resume the prompt and actively
+    // suppresses the in-RAM prompt cache that would have (see
+    // `gglib_runtime::llama::args::slot_restore`). Leaving the config `None`
+    // takes every disk save/restore call out of the request path; the
+    // host-RAM cache handles conversation switching by itself.
+    let stream_config = if state.cache_enabled && target.slot_restore_supported {
         state.slot_dir.as_ref().map(|dir| StreamConfig {
             client: state.client.clone(),
             base_url: target.base_url.clone(),
@@ -874,37 +881,41 @@ async fn chat_completions(
             // Compute cache-aware permit/config/session_id for the retry.
             // Mirrors the normal-path pattern: acquire permit via
             // prepare_streaming_cycle, fail-open on error.
-            let (retry_permit, retry_cfg, retry_session) = if state.cache_enabled {
-                if let (Some(sid), Some(slot_dir)) = (&sanitized_session_id, &state.slot_dir) {
-                    let cfg = StreamConfig {
-                        client: state.client.clone(),
-                        base_url: new_target.base_url.clone(),
-                        slot_dir: slot_dir.clone(),
-                        model_id: new_target.model_id,
-                        clear_all_pending: state.clear_all_pending.clone(),
-                        per_session_cleared: state.per_session_cleared.clone(),
-                        server_start_time: state.server_start_time.clone(),
-                        last_loaded_session: state.last_loaded_session.clone(),
-                    };
+            // Same disk-layer gate as the initial attempt — the retry targets a
+            // freshly spawned instance of the same model, so a partial-KV
+            // model stays on the RAM-cache-only path here too.
+            let (retry_permit, retry_cfg, retry_session) =
+                if state.cache_enabled && new_target.slot_restore_supported {
+                    if let (Some(sid), Some(slot_dir)) = (&sanitized_session_id, &state.slot_dir) {
+                        let cfg = StreamConfig {
+                            client: state.client.clone(),
+                            base_url: new_target.base_url.clone(),
+                            slot_dir: slot_dir.clone(),
+                            model_id: new_target.model_id,
+                            clear_all_pending: state.clear_all_pending.clone(),
+                            per_session_cleared: state.per_session_cleared.clone(),
+                            server_start_time: state.server_start_time.clone(),
+                            last_loaded_session: state.last_loaded_session.clone(),
+                        };
 
-                    match crate::cache_lifecycle::prepare_streaming_cycle(
-                        &cfg,
-                        state.slot_gate.clone(),
-                        sid,
-                    )
-                    .await
-                    {
-                        Ok((permit, _sanitized, _restore)) => {
-                            (Some(permit), Some(cfg), Some(sid.clone()))
+                        match crate::cache_lifecycle::prepare_streaming_cycle(
+                            &cfg,
+                            state.slot_gate.clone(),
+                            sid,
+                        )
+                        .await
+                        {
+                            Ok((permit, _sanitized, _restore)) => {
+                                (Some(permit), Some(cfg), Some(sid.clone()))
+                            }
+                            Err(_) => (None, None, None), // fail-open
                         }
-                        Err(_) => (None, None, None), // fail-open
+                    } else {
+                        (None, None, None)
                     }
                 } else {
                     (None, None, None)
-                }
-            } else {
-                (None, None, None)
-            };
+                };
 
             match forward_chat_completion(
                 &state.client,
