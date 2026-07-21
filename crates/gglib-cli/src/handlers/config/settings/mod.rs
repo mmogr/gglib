@@ -192,6 +192,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 max_stagnation_steps: max_stagnation_steps.map(Some),
                 default_model_id: None,
                 inference_defaults: None,
+                inference_profiles: None,
                 setup_completed: None,
                 title_generation_prompt: None,
             };

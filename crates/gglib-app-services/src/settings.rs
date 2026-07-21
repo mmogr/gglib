@@ -132,6 +132,11 @@ impl SettingsOps {
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
             inference_defaults: request.inference_defaults,
+            // Not yet carried by the HTTP API — wired up when
+            // `UpdateSettingsRequest` gains the field. `None` means "leave
+            // whatever is stored alone", so profiles set by other surfaces
+            // survive a settings update from this one.
+            inference_profiles: None,
             setup_completed: request.setup_completed,
             title_generation_prompt: request.title_generation_prompt,
         };
