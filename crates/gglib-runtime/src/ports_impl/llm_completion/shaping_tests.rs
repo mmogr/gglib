@@ -30,7 +30,7 @@ fn user(text: &str) -> AgentMessage {
 }
 
 fn body_of(adapter: &LlmCompletionAdapter, messages: &[AgentMessage]) -> Value {
-    adapter.shaped_body(messages, &[], None)
+    adapter.shaped_body(messages, &[], None).unwrap()
 }
 
 // ── Stage 1: reasoning strip ──────────────────────────────────────────────
@@ -156,6 +156,100 @@ fn caller_sampling_beats_model_defaults_without_erasing_them() {
 fn cache_prompt_is_pinned() {
     let body = body_of(&adapter(ModelContext::passthrough(), None), &[user("hi")]);
     assert_eq!(body["cache_prompt"], true);
+}
+
+// ── Stage 3: history truncation ───────────────────────────────────────────
+
+/// Sized so the leading tool results sit outside the protected tail.
+fn long_conversation(tool_result_chars: usize) -> Vec<AgentMessage> {
+    let mut messages = vec![
+        AgentMessage::Tool {
+            tool_call_id: "call_1".to_owned(),
+            content: "x".repeat(tool_result_chars),
+        },
+        AgentMessage::Tool {
+            tool_call_id: "call_2".to_owned(),
+            content: "x".repeat(tool_result_chars),
+        },
+    ];
+    for _ in 0..8 {
+        messages.push(user("ok"));
+    }
+    messages
+}
+
+fn ctx_with_context_length(tokens: u64) -> ModelContext {
+    ModelContext {
+        context_length: Some(tokens),
+        ..ModelContext::passthrough()
+    }
+}
+
+/// The thing the agent path never had: an oversized conversation is trimmed
+/// before it is sent, rather than being handed whole to llama-server.
+#[test]
+fn an_oversized_conversation_is_truncated_on_the_agent_path() {
+    // 4096 tokens ≈ a 16,384-char budget; ~60k chars of tool output.
+    let body = body_of(
+        &adapter(ctx_with_context_length(4_096), None),
+        &long_conversation(30_000),
+    );
+
+    let first = body["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        first.starts_with("[Raw tool output truncated"),
+        "the oldest tool result should have been elided, got {first:.40}"
+    );
+    // The protected tail is untouched.
+    assert_eq!(body["messages"].as_array().unwrap().len(), 10);
+    assert_eq!(body["messages"][9]["content"], "ok");
+}
+
+/// The same conversation on a large-context model is left completely alone —
+/// the budget follows the model, with no shared floor between them.
+#[test]
+fn the_same_conversation_is_untouched_on_a_large_context_model() {
+    let body = body_of(
+        &adapter(ctx_with_context_length(262_144), None),
+        &long_conversation(30_000),
+    );
+
+    assert_eq!(
+        body["messages"][0]["content"].as_str().unwrap().len(),
+        30_000
+    );
+}
+
+/// An unresolvable model has no budget, and a missing budget must mean "do not
+/// truncate" rather than "truncate at zero".
+#[test]
+fn a_passthrough_context_truncates_nothing() {
+    let body = body_of(
+        &adapter(ModelContext::passthrough(), None),
+        &long_conversation(30_000),
+    );
+
+    assert_eq!(
+        body["messages"][0]["content"].as_str().unwrap().len(),
+        30_000
+    );
+}
+
+/// A conversation that cannot be trimmed to fit fails here rather than being
+/// sent upstream to fail there.
+#[test]
+fn an_untrimmable_conversation_is_rejected() {
+    let adapter = adapter(ctx_with_context_length(1_024), None);
+    // A single system prompt: protected, and the only message there is.
+    let messages = [AgentMessage::System {
+        content: "x".repeat(100_000),
+    }];
+
+    let err = adapter.shaped_body(&messages, &[], None).unwrap_err();
+    assert!(
+        err.to_string().contains("context budget"),
+        "unexpected error: {err}"
+    );
 }
 
 // ── Transport fields ──────────────────────────────────────────────────────
