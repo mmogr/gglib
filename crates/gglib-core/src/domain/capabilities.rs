@@ -715,13 +715,34 @@ impl From<&str> for MessageContent {
 /// `content` uses [`MessageContent`] which accepts both a plain JSON string
 /// and a JSON array of content-part objects during deserialization, preserving
 /// the original form during serialization.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// # Lossless round-trip
+///
+/// [`transform_messages_for_capabilities`] is reached by deserializing a
+/// client's `messages` array into this type and re-serializing the result, so
+/// any field this struct does not model would be **deleted** on the way
+/// through.  Three fields are named because the transform reads them;
+/// everything else — `tool_call_id`, `name`, vendor extensions — is carried
+/// verbatim in [`extra`](Self::extra) and never interpreted.
+///
+/// This is not hypothetical tidiness.  `tool_call_id` is required by the Jinja
+/// templates of exactly the models that set
+/// [`REQUIRES_STRICT_TURNS`](ModelCapabilities::REQUIRES_STRICT_TURNS) — the
+/// Mistral family — so dropping it would break tool calling on the models the
+/// transform exists to serve.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<MessageContent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<serde_json::Value>,
+    /// Every other key the message carried, passed through untouched.
+    ///
+    /// Flattened, so these sit at the message's top level on the wire exactly
+    /// where they came from.  An empty map serializes to nothing.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl ChatMessage {
@@ -730,6 +751,13 @@ impl ChatMessage {
     /// Used during strict-turn coalescing to combine consecutive same-role
     /// messages.  Content is merged via [`MessageContent::merge_with`]; tool
     /// calls are concatenated as JSON arrays.
+    ///
+    /// For [`extra`](Self::extra) the surviving message's keys win and only
+    /// absent ones are adopted from `other`.  Only `user` / `assistant`
+    /// messages are ever merged and those rarely carry extras, so this is a
+    /// tie-break rule rather than a load-bearing one — but silently preferring
+    /// the *later* message's `name` over the one already in the merged text
+    /// would be the surprising choice.
     fn merge_into(&mut self, other: Self) {
         self.content = match (self.content.take(), other.content) {
             (None, b) => b,
@@ -744,6 +772,9 @@ impl ChatMessage {
                     la.extend_from_slice(ma);
                 }
             }
+        }
+        for (key, value) in other.extra {
+            self.extra.entry(key).or_insert(value);
         }
     }
 }
@@ -871,11 +902,13 @@ mod transform_tests {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Hi there".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let original = messages.clone();
@@ -893,6 +926,7 @@ mod transform_tests {
                     "You are a helpful assistant.".to_string(),
                 )),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "system".to_string(),
@@ -900,11 +934,13 @@ mod transform_tests {
                     "WORKING_MEMORY:\n- task1 (ok): done".to_string(),
                 )),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
@@ -925,16 +961,19 @@ mod transform_tests {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("First.".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("Second.".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("Third.".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
@@ -953,11 +992,13 @@ mod transform_tests {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text(String::new())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("Actual content".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
@@ -976,11 +1017,13 @@ mod transform_tests {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("You are helpful".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Hello".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         // Use REQUIRES_STRICT_TURNS which doesn't support system but doesn't merge different roles
@@ -1000,6 +1043,7 @@ mod transform_tests {
             role: "system".to_string(),
             content: Some(MessageContent::Text("You are helpful".to_string())),
             tool_calls: None,
+            ..Default::default()
         }];
         let caps = ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
         let result = transform_messages_for_capabilities(messages, caps);
@@ -1017,11 +1061,13 @@ mod transform_tests {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
@@ -1040,11 +1086,13 @@ mod transform_tests {
                 role: "tool".to_string(),
                 content: Some(MessageContent::Text("Result 1".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "tool".to_string(),
                 content: Some(MessageContent::Text("Result 2".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
@@ -1059,16 +1107,19 @@ mod transform_tests {
                 role: "system".to_string(),
                 content: Some(MessageContent::Text("Be helpful".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS; // No system support + strict turns
@@ -1111,16 +1162,19 @@ mod transform_tests {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("What's the weather?".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Let me check...".to_string())),
                 tool_calls: Some(tool_call_1),
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("And the time...".to_string())),
                 tool_calls: Some(tool_call_2),
+                ..Default::default()
             },
         ];
 
@@ -1167,11 +1221,13 @@ mod transform_tests {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Let me check...".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
                 tool_calls: Some(tool_call),
+                ..Default::default()
             },
         ];
 
@@ -1205,11 +1261,13 @@ mod transform_tests {
                 role: "assistant".to_string(),
                 content: None,
                 tool_calls: Some(tool_call),
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Result received".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
 
@@ -1247,11 +1305,13 @@ mod transform_tests {
                 role: "assistant".to_string(),
                 content: None,
                 tool_calls: Some(tool_call_1),
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
                 tool_calls: Some(tool_call_2),
+                ..Default::default()
             },
         ];
 
@@ -1274,11 +1334,13 @@ mod transform_tests {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("First".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Second".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
 
@@ -1305,16 +1367,19 @@ mod transform_tests {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Question".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some(MessageContent::Text("Answer".to_string())),
                 tool_calls: Some(tool_call),
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Follow-up".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
 
@@ -1358,11 +1423,13 @@ mod transform_tests {
                     serde_json::json!({"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}),
                 ])),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("What do you see?".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
@@ -1382,6 +1449,7 @@ mod transform_tests {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Run the tool".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "tool".to_string(),
@@ -1389,11 +1457,13 @@ mod transform_tests {
                     serde_json::json!({"type": "text", "text": "tool result here"}),
                 ])),
                 tool_calls: None,
+                ..Default::default()
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: Some(MessageContent::Text("Thanks".to_string())),
                 tool_calls: None,
+                ..Default::default()
             },
         ];
         let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
@@ -1404,5 +1474,121 @@ mod transform_tests {
         assert_eq!(result.len(), 3);
         assert_eq!(result[1].role, "tool");
         assert!(matches!(&result[1].content, Some(MessageContent::Parts(_))));
+    }
+}
+
+/// The JSON round-trip callers actually perform.
+///
+/// [`transform_messages_for_capabilities`] is reached by deserializing a
+/// client's `messages` array into [`ChatMessage`] and re-serializing the
+/// result, so anything the struct fails to model is deleted in transit. These
+/// tests pin the round-trip itself rather than the transform, because that is
+/// where fields go missing.
+#[cfg(test)]
+mod round_trip_tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    /// Deserialize → transform → serialize, exactly as the proxy and the
+    /// adapter do.
+    fn round_trip(messages: Value, capabilities: ModelCapabilities) -> Vec<Value> {
+        let parsed: Vec<ChatMessage> = serde_json::from_value(messages).expect("valid messages");
+        let transformed = transform_messages_for_capabilities(parsed, capabilities);
+        serde_json::to_value(&transformed)
+            .expect("serializable")
+            .as_array()
+            .expect("array")
+            .clone()
+    }
+
+    /// The regression this catch-all exists for.
+    ///
+    /// Mistral-family templates require `tool_call_id` on tool results and are
+    /// exactly the models that set `REQUIRES_STRICT_TURNS`, so a transform that
+    /// dropped it would break tool calling on the only models that need the
+    /// transform at all.
+    #[test]
+    fn tool_call_id_survives_strict_turn_coalescing() {
+        let out = round_trip(
+            json!([
+                {"role": "user", "content": "run it"},
+                {"role": "assistant", "tool_calls": [
+                    {"id": "call_1", "type": "function",
+                     "function": {"name": "f", "arguments": "{}"}}
+                ]},
+                {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+            ]),
+            ModelCapabilities::REQUIRES_STRICT_TURNS,
+        );
+
+        let tool = out
+            .iter()
+            .find(|m| m["role"] == "tool")
+            .expect("tool message");
+        assert_eq!(
+            tool["tool_call_id"], "call_1",
+            "tool_call_id must survive the transform"
+        );
+    }
+
+    /// Every unmodelled key, not just the one that motivated the field.
+    #[test]
+    fn arbitrary_unknown_message_keys_are_preserved() {
+        let out = round_trip(
+            json!([{
+                "role": "user",
+                "content": "hi",
+                "name": "alice",
+                "x_vendor_extension": {"nested": [1, 2]},
+            }]),
+            ModelCapabilities::REQUIRES_STRICT_TURNS,
+        );
+
+        assert_eq!(out[0]["name"], "alice");
+        assert_eq!(out[0]["x_vendor_extension"], json!({"nested": [1, 2]}));
+    }
+
+    /// `#[serde(flatten)]` routes the whole struct through serde's buffered
+    /// content representation, and `MessageContent` is an untagged enum — the
+    /// combination that most often silently degrades. Both content forms must
+    /// still deserialize to the right variant and serialize back unchanged.
+    #[test]
+    fn flatten_does_not_disturb_untagged_content_forms() {
+        let out = round_trip(
+            json!([
+                {"role": "user", "content": "plain string"},
+                {"role": "assistant", "content": [{"type": "text", "text": "part"}]},
+            ]),
+            ModelCapabilities::empty(),
+        );
+
+        assert_eq!(out[0]["content"], json!("plain string"));
+        assert_eq!(out[1]["content"], json!([{"type": "text", "text": "part"}]));
+    }
+
+    /// A merged message keeps its own extras and adopts only what it lacks.
+    #[test]
+    fn merging_prefers_the_surviving_message_extras() {
+        let out = round_trip(
+            json!([
+                {"role": "user", "content": "one", "name": "first"},
+                {"role": "user", "content": "two", "name": "second", "only_on_later": true},
+            ]),
+            ModelCapabilities::REQUIRES_STRICT_TURNS,
+        );
+
+        assert_eq!(out.len(), 1, "consecutive user messages merge");
+        assert_eq!(out[0]["name"], "first", "the surviving message's key wins");
+        assert_eq!(out[0]["only_on_later"], true, "absent keys are adopted");
+    }
+
+    /// The catch-all must not invent keys for messages that had none.
+    #[test]
+    fn messages_without_extras_serialize_unchanged() {
+        let out = round_trip(
+            json!([{"role": "user", "content": "hi"}]),
+            ModelCapabilities::empty(),
+        );
+        assert_eq!(out[0], json!({"role": "user", "content": "hi"}));
     }
 }
