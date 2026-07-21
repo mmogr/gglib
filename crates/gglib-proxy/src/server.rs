@@ -31,11 +31,12 @@ use crate::cache_lifecycle::{StreamConfig, clear_cache, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
-use crate::forward::{ForwardError, forward_chat_completion};
+use crate::forward::{ForwardError, SamplingLayers, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
+use crate::profiles::{ModelRoute, configured_names, resolve_route};
 use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
@@ -568,6 +569,10 @@ async fn chat_completions(
     );
 
     // Intercept virtual council model names before forwarding.
+    //
+    // This must stay ahead of profile routing: `gglib-council:interactive` is
+    // matched whole here, and letting the router see it first would split it
+    // into a base plus an `interactive` suffix.
     if VIRTUAL_MODELS.contains(&model_name.as_str()) {
         return handle_virtual_model(
             &state.council,
@@ -577,6 +582,37 @@ async fn chat_completions(
         )
         .await;
     }
+
+    // One settings view for the whole request: the profile list read here and
+    // the global defaults read further down come from the same snapshot, so a
+    // concurrent settings edit cannot apply to half a request.
+    let settings = state.settings.get().await;
+    let configured_profiles = settings.inference_profiles.as_deref().unwrap_or_default();
+
+    // Resolve any `{model}:{profile}` suffix. Everything downstream — the
+    // model launch, dashboard registration, metrics, cache keys — uses the
+    // base name, so a profile never causes a second model to be launched.
+    let (model_name, request_profile) = match resolve_route(
+        &model_name,
+        configured_profiles,
+        state.catalog_port.as_ref(),
+    )
+    .await
+    {
+        ModelRoute::Bare(model) => (model.to_owned(), None),
+        ModelRoute::Profiled { model, profile } => (model.to_owned(), Some(profile.config.clone())),
+        ModelRoute::ProfileNotFound { requested, suffix } => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse::profile_not_found(
+                    requested,
+                    suffix,
+                    configured_names(configured_profiles).as_deref(),
+                )),
+            )
+                .into_response();
+        }
+    };
 
     // Watchdog: if the upstream tripped the consecutive-failure threshold on
     // prior requests (empty responses / first-byte timeouts while still
@@ -664,8 +700,11 @@ async fn chat_completions(
         Some(target.effective_ctx),
     );
 
-    // Global inference defaults for this request, from the settings snapshot.
-    let global_inference_defaults = state.settings.get().await.inference_defaults.clone();
+    // Global defaults come from the same snapshot the profile list did.
+    let sampling = SamplingLayers {
+        profile: request_profile.clone(),
+        global: settings.inference_defaults.clone(),
+    };
 
     // Clone body before forwarding — Bytes is reference-counted so this is
     // O(1).  Needed to retry with the original payload if the upstream dies.
@@ -710,7 +749,7 @@ async fn chat_completions(
                         target.effective_ctx,
                         state.catalog_port.clone(),
                         state.dashboard.metrics.clone(),
-                        global_inference_defaults,
+                        sampling,
                         connection,
                         state.upstream_health.clone(),
                         state.calibration.clone(),
@@ -748,7 +787,7 @@ async fn chat_completions(
                             target.effective_ctx,
                             state.catalog_port.clone(),
                             state.dashboard.metrics.clone(),
-                            global_inference_defaults,
+                            sampling,
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
@@ -771,7 +810,7 @@ async fn chat_completions(
                             target.effective_ctx,
                             state.catalog_port.clone(),
                             state.dashboard.metrics.clone(),
-                            global_inference_defaults,
+                            sampling,
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
@@ -796,7 +835,7 @@ async fn chat_completions(
                 target.effective_ctx,
                 state.catalog_port.clone(),
                 state.dashboard.metrics.clone(),
-                global_inference_defaults,
+                sampling,
                 connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
@@ -819,7 +858,7 @@ async fn chat_completions(
             target.effective_ctx,
             state.catalog_port.clone(),
             state.dashboard.metrics.clone(),
-            global_inference_defaults,
+            sampling,
             connection,
             state.upstream_health.clone(),
             state.calibration.clone(),
@@ -877,7 +916,13 @@ async fn chat_completions(
             };
 
             let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
-            let retry_defaults = state.settings.get().await.inference_defaults.clone();
+            // Re-read settings for the retry: the model was just relaunched,
+            // so this is a fresh point in time. The profile is deliberately
+            // not re-resolved — the client asked for a specific one.
+            let retry_sampling = SamplingLayers {
+                profile: request_profile.clone(),
+                global: state.settings.get().await.inference_defaults.clone(),
+            };
 
             // Fresh connection for the retried attempt — the original guard
             // (moved into the first `forward_chat_completion` call above)
@@ -935,7 +980,7 @@ async fn chat_completions(
                 new_target.effective_ctx,
                 state.catalog_port.clone(),
                 state.dashboard.metrics.clone(),
-                retry_defaults,
+                retry_sampling,
                 retry_connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
