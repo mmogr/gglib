@@ -37,12 +37,12 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::cache_metrics::{CacheMetricsStore, CacheUsage};
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
 use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
+use gglib_core::cache_metrics::{CacheMetricsStore, CacheUsage};
 
 /// Number of recent request snapshots included in each [`DashboardSnapshot`].
 const RECENT_REQUEST_LIMIT: usize = 20;
@@ -179,7 +179,7 @@ impl CacheStatus {
 /// Holds the **configuration** half only — every stored value carries a
 /// default [`CacheUsage`]. Reuse totals move on every request and would defeat
 /// the unchanged-write skip below, so they are read live from
-/// [`crate::cache_metrics::CacheMetricsStore`] and attached in
+/// [`gglib_core::cache_metrics::CacheMetricsStore`] and attached in
 /// [`DashboardSnapshot::build`] via [`CacheStatus::with_usage`].
 #[derive(Debug, Default)]
 pub struct CacheStatusCache {

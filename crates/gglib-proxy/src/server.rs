@@ -204,7 +204,7 @@ pub async fn serve(
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
         Arc::new(CacheStatusCache::new()),
-        Arc::new(crate::cache_metrics::CacheMetricsStore::new()),
+        Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
