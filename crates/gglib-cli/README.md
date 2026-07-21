@@ -178,7 +178,7 @@ Cache tuning flags (`gglib proxy start`):
 |---|---|
 | `--cache-ram-mb <mb>` | Host-RAM prompt cache budget (`--cache-ram`). Omit to auto-size from RAM/weights/KV; `0` disables it. `GGLIB_DISABLE_CACHE_AUTOSIZE=1` skips auto-sizing entirely. Independent of `--cache`/`--slot-dir`. |
 | `--cache-reuse <n>` | Min chunk size (tokens) for KV-shift cache reuse (`--cache-reuse`). Omit to disable; `GGLIB_DISABLE_CACHE_REUSE=1` suppresses it. |
-| `--cache-disk-gb <gb>` | Byte budget for on-disk slot cache eviction. Omit to auto-size from free disk space; also settable via `GGLIB_CACHE_DISK_GB`. |
+| `--cache-disk-gb <gb>` | Byte budget for on-disk slot cache eviction. Omit to auto-size from free disk space; also settable via `GGLIB_CACHE_DISK_GB`. Ignored for sliding-window/hybrid/recurrent models, where the disk layer is disabled automatically — `GGLIB_FORCE_HYBRID_DISK_CACHE=1` re-enables it. |
 | `--cache-type-k <type>` / `--cache-type-v <type>` | KV cache element type (`f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`). Defaults to `q8_0` on both axes; `GGLIB_DISABLE_KV_QUANT=1` falls back to `f16`. Quantizing V requires Flash Attention to be active. |
 
 ### Question Command

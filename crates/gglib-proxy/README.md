@@ -180,6 +180,17 @@ resume from prior context without re-computation.
 - **Fail-open mtime guard:** If a cached slot file predates the current
   llama-server process's start time (indicating a stale cache from a prior
   server instance), restore is skipped.
+- **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
+  recurrent/SSM architectures keep only part of the token history in KV memory.
+  llama-server's slot files omit the context checkpoints those models need to
+  resume, so a restore re-prefills the whole prompt — and, by pre-filling the
+  slot, stops llama-server from consulting its host-RAM prompt cache, which
+  *does* carry checkpoints and would have resumed cheaply. The proxy therefore
+  makes no save or restore calls for these models and leaves conversation
+  switching to the RAM cache. Detected from GGUF metadata by
+  `gglib_core::domain::kv_memory_is_partial`, resolved per launch by
+  `gglib_runtime::llama::args::resolve_slot_restore` (which logs its reasoning),
+  and overridable with `GGLIB_FORCE_HYBRID_DISK_CACHE=1`.
 - **Disk-aware byte-budget eviction:** a background sweep evicts the
   least-recently-used `.bin` files once the cache exceeds a byte budget — by
   default a quarter of (free disk space + the cache's own footprint),

@@ -211,6 +211,16 @@ on-disk cache exceeds a byte budget — by default auto-sized from free disk spa
 override with `--cache-disk-gb`. Use `gglib proxy cache-clear` to manually clear
 cached state.
 
+Disk persistence is skipped automatically for models whose attention keeps only
+part of the token history — sliding-window, hybrid (e.g. a GGUF declaring
+`full_attention_interval`), and recurrent/SSM architectures. llama-server's slot
+files carry KV state and tokens but not the context checkpoints those models need
+to resume, so a restore cannot pick up where it left off and instead re-prefills
+the whole prompt, while also crowding out the host-RAM prompt cache that *would*
+have resumed cheaply. Such models rely on the RAM cache alone; the proxy logs the
+decision at startup. Set `GGLIB_FORCE_HYBRID_DISK_CACHE=1` to re-enable the disk
+layer anyway (intended for testing an upstream llama.cpp fix).
+
 Independently of disk persistence, every launch auto-sizes llama-server's own
 host-RAM prompt cache (`--cache-ram`) from system RAM, the model's weights, and its
 KV footprint — override with `--cache-ram-mb`. The KV cache itself defaults to
