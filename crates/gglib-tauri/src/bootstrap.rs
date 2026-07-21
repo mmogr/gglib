@@ -87,6 +87,11 @@ pub struct TauriContext {
     pub proxy_supervisor: Arc<ProxySupervisor>,
     /// Model repository for catalog access.
     pub model_repo: Arc<dyn ModelRepository>,
+    /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
+    ///
+    /// Handed to the embedded Axum context so the desktop app's agent and
+    /// council loops resolve per-model context exactly as the CLI and web UI do.
+    pub catalog: Arc<dyn ModelCatalogPort>,
     // 7 domain ops
     pub models: Arc<ModelOps>,
     pub servers: Arc<ServerOps>,
@@ -190,8 +195,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     // 4. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
-        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog_for_runtime = Arc::clone(&catalog);
     let process_manager = Arc::new(ProcessManager::new_single_swap(
         DEFAULT_LLAMA_BASE_PORT,
         config.llama_server_path.to_string_lossy().into_owned(),
@@ -283,6 +288,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         event_emitter: tauri_emitter,
         proxy_supervisor,
         model_repo,
+        catalog,
         models,
         servers,
         downloads: download_ops,
@@ -316,8 +322,8 @@ pub fn bootstrap_with(
     // Create proxy infrastructure for tests
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
-        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog_for_runtime = Arc::clone(&catalog);
     let process_manager = Arc::new(ProcessManager::new_single_swap(
         DEFAULT_LLAMA_BASE_PORT,
         String::from("llama-server"),
@@ -404,6 +410,7 @@ pub fn bootstrap_with(
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
         model_repo,
+        catalog,
         models: models_ops,
         servers: servers_ops,
         downloads: download_ops,
@@ -474,8 +481,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     // 3. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
-        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog_for_runtime = Arc::clone(&catalog);
     let process_manager = Arc::new(ProcessManager::new_single_swap(
         DEFAULT_LLAMA_BASE_PORT,
         config.llama_server_path.to_string_lossy().into_owned(),
@@ -567,6 +574,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
         model_repo,
+        catalog,
         models,
         servers,
         downloads: download_ops,

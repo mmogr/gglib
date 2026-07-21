@@ -26,9 +26,11 @@
 //!    messages and all `role: "system"` messages are always preserved.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
-//! (via [`resolve_model_context`]) that yields both the `ModelCapabilities`
-//! bitfield (used for request preprocessing) and the `format:*` tags (used
-//! for response-stream parser selection).  No second lookup is made.
+//! (via [`gglib_core::request_pipeline::resolve`]) that yields both the
+//! `ModelCapabilities` bitfield (used for request preprocessing) and the
+//! `format:*` tags (used for response-stream parser selection).  No second
+//! lookup is made.  That resolution is shared with every non-proxy surface,
+//! so the proxy and the agent path cannot drift apart on what a model is.
 //!
 //! ## Response pipeline
 //!
@@ -75,6 +77,7 @@ use gglib_core::ModelCapabilities;
 use gglib_core::domain::{ChatMessage, InferenceConfig, transform_messages_for_capabilities};
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
+use gglib_core::request_pipeline;
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
 use crate::cache_metrics::CacheMetricsStore;
@@ -229,59 +232,14 @@ fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
 /// growing.
 ///
 /// The per-model layer is not here: it comes from the catalog lookup this
-/// function already performs, as [`ModelContext::inference_defaults`].
+/// function already performs, as
+/// [`ModelContext::inference_defaults`](gglib_core::request_pipeline::ModelContext::inference_defaults).
 pub(crate) struct SamplingLayers {
     /// The profile the request selected via `{model}:{profile}`, if any.
     /// Sparse — see `gglib_core::domain::inference_profile`.
     pub profile: Option<InferenceConfig>,
     /// Global defaults from settings.
     pub global: Option<InferenceConfig>,
-}
-
-/// Resolved per-request model context: capabilities for request preprocessing
-/// and tags for response-stream parser selection.
-///
-/// Both values come from a **single** catalog lookup, eliminating the
-/// previous split-brain where `resolve_tags` and capability lookups were
-/// separate concerns served by different code paths.
-struct ModelContext {
-    /// Stored capability bitfield — drives request-side transforms.
-    capabilities: ModelCapabilities,
-    /// `format:*` tags — drives response-stream parser selection.
-    tags: Vec<String>,
-    /// Per-model inference defaults to merge into each request.
-    inference_defaults: Option<InferenceConfig>,
-}
-
-/// Resolve the [`ModelContext`] for a model in a single catalog round-trip.
-///
-/// On any failure (catalog unavailable, model unknown) returns a zeroed
-/// context: empty capabilities → all transforms are no-ops, empty tags →
-/// identity-passthrough parser.  This is the safe, conservative fallback.
-async fn resolve_model_context(catalog: &dyn ModelCatalogPort, model_name: &str) -> ModelContext {
-    match catalog.resolve_model(model_name).await {
-        Ok(Some(summary)) => ModelContext {
-            capabilities: summary.capabilities,
-            tags: summary.tags,
-            inference_defaults: summary.inference_defaults,
-        },
-        Ok(None) => {
-            debug!(model = %model_name, "model not found in catalog; using pass-through context");
-            ModelContext {
-                capabilities: ModelCapabilities::empty(),
-                tags: Vec::new(),
-                inference_defaults: None,
-            }
-        }
-        Err(e) => {
-            warn!(model = %model_name, error = %e, "failed to resolve model context; using pass-through context");
-            ModelContext {
-                capabilities: ModelCapabilities::empty(),
-                tags: Vec::new(),
-                inference_defaults: None,
-            }
-        }
-    }
 }
 
 /// Strip prior reasoning artifacts from assistant messages in the request body.
@@ -503,7 +461,7 @@ pub(crate) async fn forward_chat_completion(
     // Single catalog lookup — yields both capabilities (request preprocessing)
     // and tags (response-stream parser).  Failures return a zero context so
     // all transforms become no-ops rather than blocking the request.
-    let context = resolve_model_context(catalog.as_ref(), model_name).await;
+    let context = request_pipeline::resolve(catalog.as_ref(), Some(model_name)).await;
 
     // ── Request transforms (applied in order) ──────────────────────────────
     //

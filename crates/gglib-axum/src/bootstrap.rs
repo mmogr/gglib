@@ -157,6 +157,12 @@ pub struct AxumContext {
     /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that exactly
     /// one llama-server can run at a time system-wide, preventing VRAM contention.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
+    ///
+    /// Handlers that compose an agent or council loop need the target model's
+    /// capabilities, tags and inference defaults; resolving them through this
+    /// port is what keeps those surfaces in step with the proxy.
+    pub catalog: Arc<dyn ModelCatalogPort>,
     /// Per-run queues for conversational steering notes (keyed by run_id).
     #[allow(clippy::type_complexity)]
     pub steering_note_queues:
@@ -245,8 +251,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // composition root. Injecting this into both ProxyOps and (later)
     // BenchmarkOps ensures that only one llama-server can run at a time
     // system-wide — enforced by SingleSwap — preventing VRAM contention.
-    let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
-        Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
+    let catalog_for_runtime = Arc::clone(&catalog);
     // `Auto` is the manager's default (used by ProxyOps and this composition
     // root's public `runtime` field, parity with the CLI proxy). BenchmarkOps
     // below overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
@@ -385,6 +391,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         bench_repo,
         benchmark,
         runtime,
+        catalog,
         steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }

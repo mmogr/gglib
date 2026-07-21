@@ -13,13 +13,14 @@ use anyhow::Result;
 use gglib_app_services::CouncilApprovalRegistry;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelRegistrarPort, ModelRepository,
-    NoopEmitter, ProcessRunner, Repos, SettingsRepository,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
+    ModelRepository, NoopEmitter, ProcessRunner, Repos, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_download::CliDownloadEventEmitter;
 use gglib_mcp::McpService;
+use gglib_runtime::CatalogPortImpl;
 
 use gglib_core::settings::DEFAULT_LLAMA_BASE_PORT;
 
@@ -65,6 +66,12 @@ pub struct CliContext {
     pub gguf_parser: Arc<dyn GgufParserPort>,
     /// Model repository for proxy catalog access.
     pub model_repo: Arc<dyn ModelRepository>,
+    /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
+    ///
+    /// Commands that compose an agent or council loop need the target model's
+    /// capabilities, tags and inference defaults; resolving them through this
+    /// port is what keeps the CLI in step with the proxy.
+    pub catalog: Arc<dyn ModelCatalogPort>,
     /// Path to llama-server binary.
     pub llama_server_path: PathBuf,
     /// Base port for allocating llama-server instances (from CLI `--base-port`).
@@ -150,6 +157,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         mcp,
         downloads,
         gguf_parser,
+        catalog: Arc::new(CatalogPortImpl::new(Arc::clone(&repos.models))),
         model_repo: repos.models,
         model_registrar,
         llama_server_path: config.llama_server_path,
@@ -187,6 +195,7 @@ pub fn bootstrap_with(
         mcp,
         downloads,
         gguf_parser,
+        catalog: Arc::new(CatalogPortImpl::new(Arc::clone(&model_repo))),
         model_repo,
         model_registrar,
         llama_server_path,

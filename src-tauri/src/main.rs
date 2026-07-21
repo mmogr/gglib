@@ -65,6 +65,7 @@ fn main() {
                 benchmark: ctx.benchmark.clone(),
                 steering_note_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
                 runtime: ctx.runtime.clone(),
+                catalog: ctx.catalog.clone(),
             };
 
             // Start embedded API server with auth and ephemeral port

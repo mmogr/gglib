@@ -21,6 +21,7 @@ use crate::state::AppState;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
 use gglib_core::ports::AgentError;
+use gglib_core::request_pipeline;
 use gglib_runtime::compose_agent_loop;
 
 use guard::AgentTaskGuard;
@@ -78,15 +79,13 @@ pub async fn chat(
     validate_port(&state, req.port).await?;
 
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
-    let tags = match req.model.as_deref() {
-        Some(name) => state.core.models().tags_for(name).await,
-        None => Vec::new(),
-    };
+    let model_context =
+        request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
     let agent_loop = compose_agent_loop(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
-        tags,
+        model_context,
         state.mcp.clone(),
         tool_filter,
     );

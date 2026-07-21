@@ -3,14 +3,21 @@
 //! This adapter wraps the ModelRepository to implement the ModelCatalogPort
 //! interface from gglib-core. It queries the database for model information
 //! and maps the results to domain types.
+//!
+//! Identifier resolution is **not** decided here — both `resolve_*` methods go
+//! through [`ModelRepository::get_by_identifier`], the workspace's single
+//! lookup-key policy, so this port and `ModelService` always agree on what a
+//! given string means.
 
 use async_trait::async_trait;
 use gglib_core::domain::Model;
 use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRepository, ModelSummary, RepositoryError,
+    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRepository, ModelSummary,
 };
 use std::fmt;
 use std::sync::Arc;
+
+use super::model_shards::total_model_bytes;
 
 /// Format param count (in billions) as a human-readable string.
 fn format_param_count(param_b: f64) -> String {
@@ -40,54 +47,6 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         inference_defaults: m.inference_defaults.clone(),
         server_defaults: m.server_defaults.clone(),
     }
-}
-
-/// Split a GGUF shard filename into its `(prefix, total_shards)` parts.
-///
-/// Multi-part GGUFs follow the upstream convention
-/// `{prefix}-{index:05}-of-{total:05}.gguf`. Returns `None` for single-file
-/// models (the overwhelmingly common case).
-fn parse_shard_name(file_name: &str) -> Option<(&str, u32)> {
-    let stem = file_name.strip_suffix(".gguf")?;
-    // …-00001-of-00004  →  split off "00004", then "of", then "00001".
-    let (rest, total) = stem.rsplit_once("-of-")?;
-    let total: u32 = total.parse().ok()?;
-    let (prefix, index) = rest.rsplit_once('-')?;
-    // Index must be numeric for this to be a shard name rather than a model
-    // whose own name happens to contain "-of-".
-    index.parse::<u32>().ok()?;
-    (total > 0).then_some((prefix, total))
-}
-
-/// Total on-disk size of a model's weights in bytes.
-///
-/// For a multi-part GGUF this sums every shard, since llama-server loads them
-/// all — counting only the first shard would badly under-report the memory the
-/// weights occupy and inflate any budget derived from it. Returns `0` when the
-/// size can't be read, which callers treat as "unknown".
-///
-/// Public so other launch surfaces that need the same figure for cache-RAM
-/// auto-sizing (e.g. `gglib-app-services`' direct model-serve path) don't
-/// have to reimplement multi-shard summing.
-pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
-    let single = || file_path.metadata().map(|md| md.len()).unwrap_or(0);
-
-    let (Some(dir), Some(file_name)) = (
-        file_path.parent(),
-        file_path.file_name().and_then(|n| n.to_str()),
-    ) else {
-        return single();
-    };
-    let Some((prefix, total)) = parse_shard_name(file_name) else {
-        return single();
-    };
-
-    (1..=total)
-        .map(|i| {
-            let shard = dir.join(format!("{prefix}-{i:05}-of-{total:05}.gguf"));
-            shard.metadata().map(|md| md.len()).unwrap_or(0)
-        })
-        .sum()
 }
 
 /// Helper to convert Model to ModelLaunchSpec (for launching).
@@ -129,6 +88,18 @@ impl CatalogPortImpl {
     pub fn new(repo: Arc<dyn ModelRepository>) -> Self {
         Self { repo }
     }
+
+    /// Resolve `name` through the shared identifier policy (numeric id, then
+    /// exact name), mapping storage failures into [`CatalogError`].
+    ///
+    /// Both `resolve_*` methods go through here so the port cannot end up
+    /// resolving the same string two different ways.
+    async fn lookup(&self, name: &str) -> Result<Option<Model>, CatalogError> {
+        self.repo
+            .get_by_identifier(name)
+            .await
+            .map_err(|e| CatalogError::QueryFailed(e.to_string()))
+    }
 }
 
 impl fmt::Debug for CatalogPortImpl {
@@ -150,90 +121,122 @@ impl ModelCatalogPort for CatalogPortImpl {
     }
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        match self.repo.get_by_name(name).await {
-            Ok(model) => Ok(Some(model_to_summary(&model))),
-            Err(RepositoryError::NotFound(_)) => Ok(None),
-            Err(e) => Err(CatalogError::QueryFailed(e.to_string())),
-        }
+        Ok(self.lookup(name).await?.as_ref().map(model_to_summary))
     }
 
     async fn resolve_for_launch(
         &self,
         name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        match self.repo.get_by_name(name).await {
-            Ok(model) => Ok(Some(model_to_launch_spec(model))),
-            Err(RepositoryError::NotFound(_)) => Ok(None),
-            Err(e) => Err(CatalogError::QueryFailed(e.to_string())),
-        }
+        Ok(self.lookup(name).await?.map(model_to_launch_spec))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use gglib_core::domain::{ModelCapabilities, NewModel};
+    use gglib_core::ports::RepositoryError;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
-    // ── Shard-name parsing ───────────────────────────────────────────────
+    /// Serves one model: id 7, name "qwen3", tagged `format:qwen`.
+    struct OneModelRepo;
 
-    #[test]
-    fn parses_a_multipart_shard_name() {
-        assert_eq!(
-            parse_shard_name("Qwen3-27B-Q8_0-00001-of-00004.gguf"),
-            Some(("Qwen3-27B-Q8_0", 4))
-        );
-    }
-
-    #[test]
-    fn single_file_model_is_not_a_shard() {
-        assert_eq!(parse_shard_name("Qwen3.6-27B-Q8_0.gguf"), None);
-    }
-
-    /// A model whose own name contains "-of-" must not be mistaken for a shard.
-    #[test]
-    fn non_numeric_shard_index_is_rejected() {
-        assert_eq!(parse_shard_name("tale-of-two-models.gguf"), None);
-    }
-
-    #[test]
-    fn non_gguf_extension_is_rejected() {
-        assert_eq!(parse_shard_name("model-00001-of-00002.bin"), None);
-    }
-
-    // ── Size summing ─────────────────────────────────────────────────────
-
-    #[test]
-    fn total_model_bytes_reads_a_single_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("model.gguf");
-        std::fs::write(&path, vec![0u8; 2048]).unwrap();
-        assert_eq!(total_model_bytes(&path), 2048);
-    }
-
-    /// The whole point of the shard logic: all parts count toward the weight
-    /// footprint, not just the one we were pointed at.
-    #[test]
-    fn total_model_bytes_sums_every_shard() {
-        let dir = tempfile::tempdir().unwrap();
-        for i in 1..=3u32 {
-            let p = dir.path().join(format!("m-{i:05}-of-00003.gguf"));
-            std::fs::write(&p, vec![0u8; 1000]).unwrap();
+    impl OneModelRepo {
+        fn model() -> Model {
+            Model {
+                id: 7,
+                name: "qwen3".to_string(),
+                model_key: String::new(),
+                file_path: PathBuf::from("/models/qwen3.gguf"),
+                param_count_b: 7.0,
+                architecture: None,
+                quantization: None,
+                context_length: None,
+                expert_count: None,
+                expert_used_count: None,
+                expert_shared_count: None,
+                metadata: HashMap::new(),
+                added_at: Utc::now(),
+                hf_repo_id: None,
+                hf_commit_sha: None,
+                hf_filename: None,
+                download_date: None,
+                last_update_check: None,
+                tags: vec!["format:qwen".to_string()],
+                capabilities: ModelCapabilities::default(),
+                inference_defaults: None,
+                server_defaults: None,
+                benchmark_summary: None,
+            }
         }
-        let first = dir.path().join("m-00001-of-00003.gguf");
-        assert_eq!(total_model_bytes(&first), 3000);
     }
 
-    /// A missing sibling shard contributes 0 rather than aborting the sum.
-    #[test]
-    fn total_model_bytes_tolerates_a_missing_shard() {
-        let dir = tempfile::tempdir().unwrap();
-        let first = dir.path().join("m-00001-of-00002.gguf");
-        std::fs::write(&first, vec![0u8; 1500]).unwrap();
-        assert_eq!(total_model_bytes(&first), 1500);
+    #[async_trait]
+    impl ModelRepository for OneModelRepo {
+        async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+            Ok(vec![Self::model()])
+        }
+
+        async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
+            if id == 7 {
+                Ok(Self::model())
+            } else {
+                Err(RepositoryError::NotFound(format!("id={id}")))
+            }
+        }
+
+        async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
+            if name == "qwen3" {
+                Ok(Self::model())
+            } else {
+                Err(RepositoryError::NotFound(format!("name={name}")))
+            }
+        }
+
+        async fn insert(&self, _m: &NewModel) -> Result<Model, RepositoryError> {
+            unimplemented!("not exercised by these tests")
+        }
+
+        async fn update(&self, _m: &Model) -> Result<(), RepositoryError> {
+            unimplemented!("not exercised by these tests")
+        }
+
+        async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
+            unimplemented!("not exercised by these tests")
+        }
     }
 
-    #[test]
-    fn total_model_bytes_is_zero_for_a_missing_file() {
-        let dir = tempfile::tempdir().unwrap();
-        assert_eq!(total_model_bytes(&dir.path().join("nope.gguf")), 0);
+    fn port() -> CatalogPortImpl {
+        CatalogPortImpl::new(Arc::new(OneModelRepo))
+    }
+
+    #[tokio::test]
+    async fn resolve_model_finds_by_name() {
+        let found = port().resolve_model("qwen3").await.unwrap().unwrap();
+        assert_eq!(found.tags, vec!["format:qwen".to_string()]);
+    }
+
+    /// The catalog port used to be name-only, so a numeric identifier resolved
+    /// to nothing here while `ModelService` resolved it fine. Both now share
+    /// `ModelRepository::get_by_identifier`; this asserts the port really does
+    /// delegate rather than keeping its own key.
+    #[tokio::test]
+    async fn resolve_model_finds_by_numeric_id() {
+        let found = port().resolve_model("7").await.unwrap().unwrap();
+        assert_eq!(found.name, "qwen3");
+    }
+
+    #[tokio::test]
+    async fn resolve_for_launch_finds_by_numeric_id() {
+        let spec = port().resolve_for_launch("7").await.unwrap().unwrap();
+        assert_eq!(spec.name, "qwen3");
+    }
+
+    #[tokio::test]
+    async fn unknown_model_resolves_to_none() {
+        assert!(port().resolve_model("ghost").await.unwrap().is_none());
     }
 }

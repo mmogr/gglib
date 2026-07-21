@@ -42,22 +42,16 @@ impl ModelService {
         self.repo.list().await.map_err(CoreError::from)
     }
 
-    /// Get a model by its identifier (id, name, or HF ID).
+    /// Get a model by its identifier (numeric database id, then exact name).
+    ///
+    /// Thin wrapper over [`ModelRepository::get_by_identifier`], which owns the
+    /// lookup-key policy so this service and the `ModelCatalogPort` adapter
+    /// cannot disagree about what a given string resolves to.
     pub async fn get(&self, identifier: &str) -> Result<Option<Model>, CoreError> {
-        // Try by ID first
-        if let Ok(id) = identifier.parse::<i64>() {
-            match self.repo.get_by_id(id).await {
-                Ok(model) => return Ok(Some(model)),
-                Err(RepositoryError::NotFound(_)) => {}
-                Err(e) => return Err(CoreError::from(e)),
-            }
-        }
-        // Try by name
-        match self.repo.get_by_name(identifier).await {
-            Ok(model) => Ok(Some(model)),
-            Err(RepositoryError::NotFound(_)) => Ok(None),
-            Err(e) => Err(CoreError::from(e)),
-        }
+        self.repo
+            .get_by_identifier(identifier)
+            .await
+            .map_err(CoreError::from)
     }
 
     /// Get a model by its database ID.
@@ -84,19 +78,6 @@ impl ModelService {
         self.get(identifier)
             .await?
             .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
-    }
-
-    /// Resolve a model identifier to its tag list.
-    ///
-    /// Returns an empty `Vec` when the identifier is unknown or the lookup
-    /// fails — callers use this for read-only side-channel inputs (e.g.
-    /// dialect selection at compose time) where a missing model should
-    /// fall back to default behaviour rather than abort the request.
-    pub async fn tags_for(&self, identifier: &str) -> Vec<String> {
-        match self.get(identifier).await {
-            Ok(Some(m)) => m.tags,
-            _ => Vec::new(),
-        }
     }
 
     /// Find a model by name. Returns error if not found.

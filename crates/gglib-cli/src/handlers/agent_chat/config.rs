@@ -13,6 +13,7 @@ use anyhow::{Context as _, Result};
 use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::request_pipeline;
 use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::compose_agent_loop_with_sampling;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
@@ -135,12 +136,13 @@ pub async fn compose(
         Some(params.tools.iter().cloned().collect())
     };
     let base_url = format!("http://127.0.0.1:{port}");
-    let tags = ctx.app.models().tags_for(&params.model_identifier).await;
+    let model_context =
+        request_pipeline::resolve(ctx.catalog.as_ref(), Some(&params.model_identifier)).await;
     let agent = compose_agent_loop_with_sampling(
         base_url,
         ctx.http_client.clone(),
         params.model_name.clone(),
-        tags,
+        model_context,
         Arc::clone(&ctx.mcp),
         tool_filter,
         sandbox_root,
