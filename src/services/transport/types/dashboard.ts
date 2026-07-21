@@ -119,7 +119,7 @@ export type CacheRamState =
   | 'llama_default';
 
 /**
- * Mirrors `gglib_proxy::cache_metrics::CacheUsage` — measured prompt-cache
+ * Mirrors `gglib_core::cache_metrics::CacheUsage` — measured prompt-cache
  * reuse since the proxy started.
  *
  * Raw counts only. Nothing here is derived or estimated: reuse is exact, but
@@ -189,4 +189,11 @@ export interface DashboardSnapshot {
    * never read; `cache.disk_enabled` carries the same information.
    */
   cache?: CacheStatus | null;
+  /**
+   * Prompt-cache reuse for the in-process agent path (council + GUI chat),
+   * reported alongside `cache.usage` and never merged into it. Top-level and
+   * always present, since it does not depend on a resolved model; may be absent
+   * on a proxy older than this field.
+   */
+  agent_usage?: CacheUsage | null;
 }

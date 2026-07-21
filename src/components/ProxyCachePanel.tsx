@@ -7,7 +7,7 @@
  * Every figure shown is one the upstream actually reported. Nothing is
  * derived — in particular there is no "time saved", because reuse counts are
  * exact while what that reuse saved depends on a prefill that never ran. See
- * `gglib_proxy::cache_metrics` for the same reasoning on the backend.
+ * `gglib_core::cache_metrics` for the same reasoning on the backend.
  *
  * Extracted from `ProxyDashboardModal` to keep both files small and to make
  * the formatting logic testable without mounting the modal's `EventSource`
@@ -17,7 +17,7 @@
  */
 
 import type { FC } from 'react';
-import type { CacheStatus } from '../services/transport/types/dashboard';
+import type { CacheStatus, CacheUsage } from '../services/transport/types/dashboard';
 
 export interface ProxyCachePanelProps {
   /** `null`/`undefined` before the first request resolves a model. */
@@ -38,6 +38,45 @@ function Row({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/**
+ * The measured-reuse rows for one cache population, shared by the proxied
+ * figure and the agent-path figure.
+ *
+ * `hasMeasurements` distinguishes "nothing measured yet" from "measured, and it
+ * was zero" — the backend keeps those apart, so the UI must not merge them.
+ */
+export const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
+  const hasMeasurements = (usage?.reporting_requests ?? 0) > 0;
+
+  return (
+    <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
+      {usage && hasMeasurements ? (
+        <>
+          <Row label="Used from cache" value={`${formatCount(usage.cached_tokens)} tokens`} />
+          <Row label="Prompt tokens processed" value={`${formatCount(usage.prompt_tokens)} tokens`} />
+          <Row label="Requests measured" value={formatCount(usage.reporting_requests)} />
+          {usage.last_cached_tokens != null && usage.last_prompt_tokens != null && (
+            <Row
+              label="Last request"
+              value={`${formatCount(usage.last_cached_tokens)} of ${formatCount(usage.last_prompt_tokens)} tokens from cache`}
+            />
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-text-muted">No cache activity recorded yet.</p>
+      )}
+
+      {/*
+        Only shown when some requests went unmeasured, since on a current
+        llama.cpp this is always zero and a permanent "0" row would be noise.
+      */}
+      {usage && usage.unreported_requests > 0 && (
+        <Row label="Requests without cache data" value={formatCount(usage.unreported_requests)} />
+      )}
+    </div>
+  );
+};
 
 /**
  * Human-readable summary of how the RAM budget resolved.
@@ -64,11 +103,7 @@ export const ProxyCachePanel: FC<ProxyCachePanelProps> = ({ cache }) => {
     return <p className="text-sm text-text-muted">No model resolved yet.</p>;
   }
 
-  const { usage } = cache;
   const budget = ramBudgetLabel(cache);
-  // Distinguishes "nothing measured yet" from "measured, and it was zero" —
-  // the backend keeps those apart, so the UI must not merge them.
-  const hasMeasurements = usage.reporting_requests > 0;
 
   return (
     <div className="flex flex-col gap-sm">
@@ -82,34 +117,7 @@ export const ProxyCachePanel: FC<ProxyCachePanelProps> = ({ cache }) => {
         </div>
       )}
 
-      <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
-        {hasMeasurements ? (
-          <>
-            <Row label="Used from cache" value={`${formatCount(usage.cached_tokens)} tokens`} />
-            <Row label="Prompt tokens processed" value={`${formatCount(usage.prompt_tokens)} tokens`} />
-            <Row label="Requests measured" value={formatCount(usage.reporting_requests)} />
-            {usage.last_cached_tokens != null && usage.last_prompt_tokens != null && (
-              <Row
-                label="Last request"
-                value={`${formatCount(usage.last_cached_tokens)} of ${formatCount(usage.last_prompt_tokens)} tokens from cache`}
-              />
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-text-muted">No cache activity recorded yet.</p>
-        )}
-
-        {/*
-          Only shown when some requests went unmeasured, since on a current
-          llama.cpp this is always zero and a permanent "0" row would be noise.
-        */}
-        {usage.unreported_requests > 0 && (
-          <Row
-            label="Requests without cache data"
-            value={formatCount(usage.unreported_requests)}
-          />
-        )}
-      </div>
+      <CacheUsageRows usage={cache.usage} />
 
       <div className="flex flex-wrap gap-md text-xs text-text-muted">
         {budget && <span>RAM budget: {budget}</span>}
