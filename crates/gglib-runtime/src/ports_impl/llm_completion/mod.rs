@@ -6,15 +6,16 @@ use async_trait::async_trait;
 use futures_core::Stream;
 use futures_util::StreamExt as _;
 use reqwest::Client;
-use serde_json::{Value, json};
 
 use gglib_core::{
     domain::InferenceConfig,
-    domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
+    domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
     normalize::{NormalizingStream, get_parser},
     ports::{LlmCompletionPort, ResponseFormat},
     sse::SseStreamDecoder,
 };
+
+mod body;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
@@ -136,82 +137,6 @@ impl LlmCompletionAdapter {
 }
 
 // =============================================================================
-// Wire-format helpers
-// =============================================================================
-
-/// Map a domain [`AgentMessage`] to the OpenAI `messages` array element.
-fn message_to_openai(msg: &AgentMessage) -> Value {
-    match msg {
-        AgentMessage::System { content } => {
-            json!({ "role": "system", "content": content })
-        }
-        AgentMessage::User { content } => {
-            json!({ "role": "user", "content": content })
-        }
-        AgentMessage::Assistant { content } => {
-            // When tool_calls are present but text is None, omit the
-            // "content" field entirely rather than sending `"content": null`.
-            // Some LLM backends do not handle an explicit null well when
-            // tool_calls is populated.  When there are no tool_calls and
-            // text is None, we still send null to signal an empty reply.
-            let has_tool_calls = !content.tool_calls.is_empty();
-            let mut obj = if content.text.is_none() && has_tool_calls {
-                json!({ "role": "assistant" })
-            } else {
-                json!({
-                    "role": "assistant",
-                    "content": content.text.as_deref().map_or(Value::Null, |s| Value::String(s.to_owned())),
-                })
-            };
-            if has_tool_calls {
-                let calls: Vec<Value> =
-                    content.tool_calls.iter().map(tool_call_to_openai).collect();
-                obj["tool_calls"] = Value::Array(calls);
-            }
-            obj
-        }
-        AgentMessage::Tool {
-            tool_call_id,
-            content,
-        } => {
-            json!({ "role": "tool", "tool_call_id": tool_call_id, "content": content })
-        }
-    }
-}
-
-/// Map a domain [`ToolCall`] to the OpenAI `tool_calls` array element.
-///
-/// The OpenAI API requires `arguments` to be a **JSON string**, not an object.
-fn tool_call_to_openai(tc: &ToolCall) -> Value {
-    json!({
-        "id": tc.id,
-        "type": "function",
-        "function": {
-            "name": tc.name,
-            // arguments must be a JSON *string* per OpenAI spec
-            "arguments": tc.arguments.to_string(),
-        },
-    })
-}
-
-/// Map a domain [`ToolDefinition`] to the OpenAI `tools` array element.
-fn tool_def_to_openai(def: &ToolDefinition) -> Value {
-    let parameters = def
-        .input_schema
-        .clone()
-        .unwrap_or_else(|| json!({ "type": "object", "properties": {} }));
-
-    json!({
-        "type": "function",
-        "function": {
-            "name": def.name,
-            "description": def.description,
-            "parameters": parameters,
-        },
-    })
-}
-
-// =============================================================================
 // LlmCompletionPort implementation
 // =============================================================================
 
@@ -223,58 +148,13 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         tools: &[ToolDefinition],
         response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
-        let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
-        let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
-
-        // Scrub prior-turn reasoning artifacts before the model sees them.
-        // Shared with the proxy via gglib-core so the in-process agent loop
-        // (CLI / Tauri direct path) gets identical protection against the
-        // small-reasoning-model multi-turn `<think>` loop bug.
-        let mut openai_messages = openai_messages;
-        gglib_core::normalize::strip_thinking_debt(&mut openai_messages);
-
-        let mut body = json!({
-            "model": self.model,
-            "messages": openai_messages,
-            "stream": true,
-            "return_progress": true,
-        });
-        if !openai_tools.is_empty() {
-            body["tools"] = json!(openai_tools);
-            body["tool_choice"] = json!("auto");
-        }
-        if let Some(ref s) = self.sampling {
-            if let Some(t) = s.temperature {
-                body["temperature"] = json!(t);
-            }
-            if let Some(p) = s.top_p {
-                body["top_p"] = json!(p);
-            }
-            if let Some(k) = s.top_k {
-                body["top_k"] = json!(k);
-            }
-            if let Some(m) = s.max_tokens {
-                body["max_tokens"] = json!(m);
-            }
-            if let Some(r) = s.repeat_penalty {
-                body["repeat_penalty"] = json!(r);
-            }
-        }
-
-        // Inject structured-output constraints when requested.
-        if let Some(fmt) = response_format {
-            match fmt {
-                ResponseFormat::JsonSchema { schema, strict } => {
-                    body["response_format"] = json!({
-                        "type": "json_schema",
-                        "json_schema": { "schema": schema, "strict": strict }
-                    });
-                }
-                ResponseFormat::Grammar { gbnf } => {
-                    body["grammar"] = json!(gbnf);
-                }
-            }
-        }
+        let body = body::build_chat_body(
+            &self.model,
+            messages,
+            tools,
+            self.sampling.as_ref(),
+            response_format,
+        );
 
         // Gate the connect + first-byte phase with a hard timeout so a
         // stalled or unresponsive llama-server doesn't hang the agent task
