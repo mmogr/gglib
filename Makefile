@@ -11,7 +11,17 @@ endif
 # Define cargo command that sources Rust environment if needed (for non-interactive shells like VS Code tasks)
 # This is a portable solution that works on Linux/macOS/Windows
 CARGO_ENV := $(shell if [ -f "$$HOME/.cargo/env" ]; then echo ". $$HOME/.cargo/env &&"; fi)
-CARGO := $(CARGO_ENV) cargo
+# Name rustup's shim explicitly rather than relying on PATH order.
+#
+# Sourcing ~/.cargo/env is not sufficient on its own: that script only prepends
+# ~/.cargo/bin when it is *absent* from PATH, so if it is present but ranked
+# below a standalone toolchain (Homebrew's `rust` formula installs one at
+# /opt/homebrew/bin), the script is a silent no-op and the standalone compiler
+# wins. Those do not honour rust-toolchain.toml, so the build quietly runs on
+# an unpinned rustc — and only in the shells that skip ~/.zshrc, which is
+# exactly the non-interactive case this block exists to handle.
+CARGO_BIN := $(shell if [ -x "$$HOME/.cargo/bin/cargo" ]; then echo "$$HOME/.cargo/bin/cargo"; else echo cargo; fi)
+CARGO := $(CARGO_ENV) $(CARGO_BIN)
 
 # Cargo Optimization Flags
 export CARGO_PROFILE_RELEASE_LTO := thin
