@@ -65,7 +65,11 @@ fn parse_shard_name(file_name: &str) -> Option<(&str, u32)> {
 /// all — counting only the first shard would badly under-report the memory the
 /// weights occupy and inflate any budget derived from it. Returns `0` when the
 /// size can't be read, which callers treat as "unknown".
-fn total_model_bytes(file_path: &std::path::Path) -> u64 {
+///
+/// Public so other launch surfaces that need the same figure for cache-RAM
+/// auto-sizing (e.g. `gglib-app-services`' direct model-serve path) don't
+/// have to reimplement multi-shard summing.
+pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
     let single = || file_path.metadata().map(|md| md.len()).unwrap_or(0);
 
     let (Some(dir), Some(file_name)) = (

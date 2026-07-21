@@ -247,21 +247,28 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // system-wide — enforced by SingleSwap — preventing VRAM contention.
     let catalog_for_runtime: Arc<dyn ModelCatalogPort> =
         Arc::new(CatalogPortImpl::new(model_repo.clone()));
-    // Benchmarks must never gain a host-RAM prompt cache: it would perturb
-    // prefill timings and RAM footprint. Explicitly disabled rather than
-    // left unset — an unset flag would leave llama-server's own 8192 MiB
-    // default cache active, which is exactly what this must avoid.
+    // `Auto` is the manager's default (used by ProxyOps and this composition
+    // root's public `runtime` field, parity with the CLI proxy). BenchmarkOps
+    // below overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
+    // — it must never gain a prompt cache, which would perturb prefill timings
+    // and RAM footprint — while still sharing this same SingleSwap manager, so
+    // only one llama-server ever runs system-wide.
     let process_manager = Arc::new(ProcessManager::new_single_swap(
         config.base_port,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
-        CacheRamSetting::ExplicitMb(0),
+        CacheRamSetting::Auto,
         None,
         None,
         None,
     ));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+    let runtime: Arc<dyn ModelRuntimePort> =
+        Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
+        process_manager,
+        CacheRamSetting::ExplicitMb(0),
+    ));
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
     let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
@@ -308,7 +315,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let benchmark_http_client = BenchmarkDeps::build_http_client()?;
     let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
         model_repo: repos.models.clone(),
-        runtime: Arc::clone(&runtime),
+        runtime: benchmark_runtime,
         bench_repo: bench_repo.clone(),
         http_client: benchmark_http_client,
         settings_repo: repos.settings.clone(),

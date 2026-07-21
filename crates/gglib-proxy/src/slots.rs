@@ -25,7 +25,6 @@
 //! probing, no risk of a partially-unknown schema causing the whole
 //! response to fail to parse.
 
-use std::cmp::Reverse;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -34,7 +33,6 @@ use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::time as tokio_time;
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 /// Tolerant `u64` deserializer: decodes a JSON number as usual, but treats
@@ -664,7 +662,8 @@ mod tests {
 }
 
 // =============================================================================
-// Slot I/O — save / restore / clear + background LRU eviction
+// Slot I/O — save / restore / clear (byte-budget LRU eviction lives in
+// `crate::slot_eviction`, which uses `iter_all_slot_files` below)
 // =============================================================================
 
 /// Result of a slot I/O operation (save/restore).
@@ -1029,75 +1028,6 @@ pub async fn iter_all_slot_files(slot_dir: &Path) -> Vec<PathBuf> {
     slots
 }
 
-/// Default cap on cached session slot files before LRU eviction kicks in.
-///
-/// No CLI knob exists for this yet — a fixed cap is strictly better than the
-/// previous behavior of never evicting at all. Revisit if usage shows the
-/// default is wrong for a given `--slot-dir` size budget.
-pub const DEFAULT_MAX_CACHED_SESSIONS: usize = 100;
-
-/// Background LRU eviction task — spawned at server startup, runs every 60s.
-///
-/// Exits promptly on `cancel` so it never outlives the server (same shutdown
-/// contract as `spawn_slots_poller`/`spawn_dashboard_publisher`).
-pub fn spawn_lru_eviction_task(
-    slot_dir: PathBuf,
-    max_slots: usize,
-    cancel: CancellationToken,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let interval = Duration::from_secs(60);
-        loop {
-            tokio::select! {
-                () = cancel.cancelled() => break,
-                () = tokio::time::sleep(interval) => {
-                    if let Err(e) = evict_stale_slots(&slot_dir, max_slots).await {
-                        warn!("LRU eviction failed: {}", e);
-                    }
-                }
-            }
-        }
-    })
-}
-
-/// Evict least-recently-used slot files from `slot_dir` when count exceeds `max_slots`.
-///
-/// Sorts `.bin` files by mtime (oldest first), removes the excess. Errors on
-/// individual file removal are silently skipped for NotFound/PermissionDenied.
-///
-/// Walks the namespaced `{slot_dir}/{model_id}/*.bin` layout via
-/// [`iter_all_slot_files`] — the cap is deliberately global across every
-/// model's subdirectory (a single size budget for the whole cache directory,
-/// not per-model).
-pub async fn evict_stale_slots(slot_dir: &Path, max_slots: usize) -> std::io::Result<()> {
-    let mut slots: Vec<(PathBuf, u64)> = Vec::new();
-    for path in iter_all_slot_files(slot_dir).await {
-        if let Ok(metadata) = tokio::fs::metadata(&path).await
-            && let Ok(mtime) = metadata.modified()
-        {
-            slots.push((path, mtime.elapsed().unwrap_or_default().as_secs()));
-        }
-    }
-
-    let excess_slots = sort_slots_for_eviction(slots, max_slots);
-    for path in excess_slots {
-        if let Err(e) = tokio::fs::remove_file(&path).await
-            && e.kind() != std::io::ErrorKind::PermissionDenied
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            warn!("eviction failed for {}: {}", path.display(), e);
-        }
-    }
-    Ok(())
-}
-
-/// Isolated sorting logic to allow pure unit testing without relying on filesystem mtimes.
-fn sort_slots_for_eviction(mut slots: Vec<(PathBuf, u64)>, max_slots: usize) -> Vec<PathBuf> {
-    slots.sort_by_key(|(_, age)| Reverse(*age)); // Oldest (largest age) first
-    let excess = slots.len().saturating_sub(max_slots);
-    slots.into_iter().take(excess).map(|(p, _)| p).collect()
-}
-
 // =============================================================================
 // Slot I/O Tests
 // =============================================================================
@@ -1163,44 +1093,6 @@ mod slot_io_tests {
         let dest_path = slot_bin_path(dir.path(), 1, "ghost");
 
         assert!(finalize_slot_save(&tmp_path, &dest_path).await.is_err());
-    }
-
-    #[test]
-    fn test_lru_sort_logic() {
-        let slots = vec![
-            (PathBuf::from("A.bin"), 60),   // 60 seconds old
-            (PathBuf::from("B.bin"), 3600), // 1 hour old (oldest)
-            (PathBuf::from("C.bin"), 10),   // 10 seconds old (newest)
-        ];
-
-        let evicted = sort_slots_for_eviction(slots, 2);
-
-        // With max_slots=2, the single oldest slot (B) should be evicted
-        assert_eq!(evicted.len(), 1);
-        assert_eq!(evicted[0], PathBuf::from("B.bin"));
-    }
-
-    /// `evict_stale_slots` must see all flat `{model}__{session}.bin` files
-    /// regardless of which model prefixed them.
-    #[tokio::test]
-    async fn evict_stale_slots_sees_files_across_models() {
-        let dir = tempfile::tempdir().unwrap();
-        let d = dir.path();
-
-        // Three files total across two models, oldest first.
-        std::fs::write(slot_bin_path(d, 1, "oldest"), b"x").unwrap();
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        std::fs::write(slot_bin_path(d, 2, "middle"), b"x").unwrap();
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        std::fs::write(slot_bin_path(d, 1, "newest"), b"x").unwrap();
-
-        evict_stale_slots(d, 2).await.unwrap();
-
-        // The single oldest file (1__oldest.bin) should have been evicted;
-        // the other two, across both models, must survive.
-        assert!(!slot_bin_path(d, 1, "oldest").exists());
-        assert!(slot_bin_path(d, 2, "middle").exists());
-        assert!(slot_bin_path(d, 1, "newest").exists());
     }
 
     /// Clearing a specific session must find its file regardless of which
@@ -1298,23 +1190,6 @@ mod slot_io_tests {
             &per_session,
         )
         .await;
-    }
-
-    /// The LRU eviction task must exit promptly on cancellation rather than
-    /// running forever detached from the server's lifecycle — otherwise it
-    /// leaks across proxy restarts within the same process (e.g. tests, or a
-    /// GUI that stops/starts the proxy repeatedly).
-    #[tokio::test]
-    async fn spawn_lru_eviction_task_exits_on_cancel() {
-        let dir = tempfile::tempdir().unwrap();
-        let cancel = CancellationToken::new();
-        let handle = spawn_lru_eviction_task(dir.path().to_path_buf(), 10, cancel.clone());
-
-        cancel.cancel();
-        tokio::time::timeout(Duration::from_secs(1), handle)
-            .await
-            .expect("eviction task should exit promptly on cancellation")
-            .expect("eviction task should not panic");
     }
 
     fn unix_secs_now() -> u64 {

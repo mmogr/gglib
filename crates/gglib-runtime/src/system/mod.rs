@@ -42,7 +42,11 @@ use gpu::{detect_gpu_info, get_system_memory_info};
 /// llama-server's host-RAM prompt cache, without constructing or threading a
 /// full [`SystemProbePort`] through `ProcessManager`. Returns `0` if the
 /// platform query fails, which callers treat as "unknown".
-pub(crate) fn total_system_ram_bytes() -> u64 {
+///
+/// Public (not `pub(crate)`) so launch surfaces outside this crate that need
+/// the same cache-RAM auto-sizing math (e.g. `gglib-app-services`' direct
+/// model-serve path) can call it without going through `ProcessManager`.
+pub fn total_system_ram_bytes() -> u64 {
     get_system_memory_info().total_ram_bytes
 }
 

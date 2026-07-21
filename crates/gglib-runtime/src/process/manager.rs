@@ -236,6 +236,30 @@ impl ProcessManager {
         num_ctx: Option<u64>,
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
+        self.ensure_model_running_with(model_name, num_ctx, default_ctx, None)
+            .await
+    }
+
+    /// Same as [`Self::ensure_model_running`], but with an optional per-call
+    /// override for the host-RAM prompt cache setting.
+    ///
+    /// Lets a single shared `ProcessManager` serve callers with different
+    /// cache-RAM needs (e.g. a GUI's proxy — which should auto-size like the
+    /// CLI proxy — and its benchmark runner — which must never gain a
+    /// prompt cache) without constructing a second manager. `None` falls
+    /// back to the setting the manager was constructed with (see
+    /// [`Self::new_single_swap`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the model cannot be started.
+    pub async fn ensure_model_running_with(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: u64,
+        cache_ram_override: Option<CacheRamSetting>,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
         let (
             catalog,
@@ -308,7 +332,7 @@ impl ProcessManager {
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
                     let slot_save_path_owned = slot_save_path.clone();
-                    let cache_ram_owned = cache_ram;
+                    let cache_ram_owned = cache_ram_override.unwrap_or(cache_ram);
                     let cache_reuse_owned = cache_reuse;
                     let cache_type_k_owned = cache_type_k;
                     let cache_type_v_owned = cache_type_v;
