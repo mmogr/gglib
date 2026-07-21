@@ -485,7 +485,17 @@ explicitly documented as a not-yet-consumed "future" contract).
       "recorded_at_secs": 1749283200
     }
   ],
-  "total_requests": 42
+  "total_requests": 42,
+  "cache": {
+    "disk_enabled": true,
+    "disk_suppressed_for_model": true,
+    "ram_budget_mb": 70008,
+    "ram_state": "healthy",
+    "needs_attention": true,
+    "warnings": [
+      "Disk cache offloading is disabled for this model — its attention keeps only part of the token history, which llama-server's slot files can't restore."
+    ]
+  }
 }
 ```
 
@@ -499,6 +509,25 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `slots_status` | `string \| null` | Reason `slots` is empty (disabled via `--no-slots`, or the poller's last connect/timeout/parse error); `null` when `slots_available` |
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
+| `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
+
+#### `cache` (`CacheStatus`)
+
+Configuration state only — resolved when a model launches, changing only on a
+model swap. Per-request cache telemetry (tokens reused, TTFT saved) will
+extend this object rather than sitting beside it.
+
+Replaces the former top-level `cache_enabled` boolean; `cache.disk_enabled`
+carries the same information.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `disk_enabled` | `bool` | Whether disk KV slot persistence is enabled on this proxy instance (`--cache` + `--slot-dir`) |
+| `disk_suppressed_for_model` | `bool` | Disk layer enabled proxy-wide but skipped for this model (sliding-window/hybrid/recurrent attention). Always `false` when `disk_enabled` is `false` |
+| `ram_budget_mb` | `u64 \| null` | Resolved `--cache-ram` budget; `null` when no flag was emitted and llama-server's own default applies |
+| `ram_state` | `"healthy" \| "low" \| "disabled_insufficient_ram" \| "disabled_by_user" \| "llama_default"` | Budget health, for styling |
+| `needs_attention` | `bool` | Whether anything here warrants surfacing. `false` for healthy budgets *and* for a cache the user deliberately disabled |
+| `warnings` | `string[]` | Ready-to-render lines; empty when nothing is wrong. A low budget on a suppressed-disk model yields both warnings, since fixing one still leaves the other |
 
 #### `active_connections[]` (`ActiveConnectionSnapshot`)
 

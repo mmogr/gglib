@@ -110,6 +110,41 @@ export interface ContextSnapshot {
   recorded_at_secs: number;
 }
 
+/** Health of the resolved `--cache-ram` budget. Mirrors `CacheStatus.ram_state`. */
+export type CacheRamState =
+  | 'healthy'
+  | 'low'
+  | 'disabled_insufficient_ram'
+  | 'disabled_by_user'
+  | 'llama_default';
+
+/**
+ * Mirrors `gglib_proxy::dashboard::CacheStatus` — how prompt caching is
+ * configured for the running model.
+ *
+ * Configuration state only: resolved when a model launches and changing only
+ * on a model swap. Per-request cache telemetry will extend this object rather
+ * than sitting alongside it.
+ */
+export interface CacheStatus {
+  /** Whether disk KV slot persistence is enabled on this proxy instance. */
+  disk_enabled: boolean;
+  /**
+   * Disk layer enabled proxy-wide but suppressed for this model, whose
+   * attention keeps only part of the token history. Always `false` when
+   * `disk_enabled` is `false`.
+   */
+  disk_suppressed_for_model: boolean;
+  /** Resolved `--cache-ram` budget in MiB; `null` when llama-server's own default applies. */
+  ram_budget_mb?: number | null;
+  /** Machine-readable budget health, for styling. */
+  ram_state: CacheRamState;
+  /** Whether anything here warrants surfacing to the user. */
+  needs_attention: boolean;
+  /** Ready-to-render warning lines; empty when nothing is wrong. */
+  warnings: string[];
+}
+
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
 export interface DashboardSnapshot {
   active_connections: ActiveConnectionSnapshot[];
@@ -118,6 +153,12 @@ export interface DashboardSnapshot {
   slots_status?: string | null;
   recent_requests: ContextSnapshot[];
   total_requests: number;
-  /** Whether KV cache persistence is enabled on this proxy instance. */
-  cache_enabled?: boolean;
+  /**
+   * Prompt-cache configuration for the running model. `null` until the first
+   * request resolves one, since the RAM budget isn't known until launch.
+   *
+   * Replaces the former `cache_enabled` boolean, which was declared here but
+   * never read; `cache.disk_enabled` carries the same information.
+   */
+  cache?: CacheStatus | null;
 }
