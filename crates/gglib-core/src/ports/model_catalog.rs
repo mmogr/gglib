@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::domain::InferenceConfig;
+use crate::domain::KvElemsPerToken;
 use crate::domain::ModelCapabilities;
 use crate::domain::ServerConfig;
 
@@ -88,6 +89,33 @@ pub struct ModelLaunchSpec {
     pub context_length: Option<u64>,
     /// Per-model server defaults (e.g., `context_length` for launch).
     pub server_defaults: Option<ServerConfig>,
+    /// Total on-disk size of the model weights in bytes, summed across all
+    /// shards for multi-part GGUFs.
+    ///
+    /// Used to budget host memory at launch (see
+    /// [`crate::server_config::compute_auto_cache_ram_mb`]). `0` when the
+    /// size could not be determined — callers must treat that as "unknown"
+    /// rather than "free".
+    pub file_size_bytes: u64,
+    /// Estimated K/V element counts consumed per token of context, derived
+    /// from the model's GGUF metadata (see
+    /// [`crate::domain::estimate_kv_elems_per_token`]). Type-agnostic —
+    /// callers convert to bytes via [`crate::domain::kv_bytes_per_token`]
+    /// once the launch's resolved K/V cache types are known.
+    ///
+    /// `None` when the metadata doesn't carry the layer/head counts needed;
+    /// callers substitute a conservative allowance.
+    pub kv_elems_per_token: Option<KvElemsPerToken>,
+    /// True when the model's KV memory retains only part of the token history
+    /// — sliding-window, hybrid, or recurrent attention (see
+    /// [`crate::domain::kv_memory_is_partial`]).
+    ///
+    /// Such models cannot be resumed from llama-server's disk slot files: the
+    /// save/restore path does not carry the context checkpoints they need, so
+    /// a "successful" restore still forces a full prompt re-prefill. Callers
+    /// disable the disk slot layer for these models and rely on the in-RAM
+    /// prompt cache, which does preserve checkpoints.
+    pub kv_memory_is_partial: bool,
 }
 
 impl ModelSummary {

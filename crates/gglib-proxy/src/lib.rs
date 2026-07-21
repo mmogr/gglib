@@ -2,6 +2,7 @@
 #![deny(unsafe_code)]
 
 pub mod cache_lifecycle;
+pub mod cache_metrics;
 pub mod canonicalization;
 pub mod connections;
 pub mod council_proxy;
@@ -11,6 +12,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod models;
 pub mod server;
+pub mod slot_eviction;
 pub mod slots;
 pub mod slots_poller;
 pub mod sse_stream;

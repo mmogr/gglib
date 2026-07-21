@@ -19,6 +19,7 @@ import type { FC } from 'react';
 import { Modal } from './ui/Modal';
 import { ContextUsageDonut } from './ContextUsageDonut';
 import { PromptProgressBar } from './PromptProgressBar';
+import { ProxyCachePanel } from './ProxyCachePanel';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
 import { tokensInUse, type ActiveConnectionSnapshot, type ConnectionPhase, type SlotSnapshot } from '../services/transport/types/dashboard';
 
@@ -86,6 +87,11 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({ isOpen, onCl
           ) : (
             <p className="text-sm text-text-muted">No active connections.</p>
           )}
+        </section>
+
+        <section>
+          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">Prompt Cache</h3>
+          <ProxyCachePanel cache={snapshot?.cache} />
         </section>
 
         <section>

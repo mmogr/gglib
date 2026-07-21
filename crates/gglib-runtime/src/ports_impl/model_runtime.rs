@@ -4,6 +4,7 @@
 //! the ModelRuntimePort interface from gglib-core.
 
 use async_trait::async_trait;
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
 use std::fmt;
 use std::sync::Arc;
@@ -23,6 +24,11 @@ use crate::process::ProcessManager;
 pub struct RuntimePortImpl {
     /// The underlying process manager (must be SingleSwap strategy).
     mgr: Arc<ProcessManager>,
+    /// Per-instance override for the host-RAM prompt cache setting, passed
+    /// to every `ensure_model_running` call via
+    /// `ProcessManager::ensure_model_running_with`. `None` defers to
+    /// whatever the shared `mgr` was constructed with.
+    cache_ram_override: Option<CacheRamSetting>,
 }
 
 impl RuntimePortImpl {
@@ -32,7 +38,27 @@ impl RuntimePortImpl {
     ///
     /// * `mgr` - ProcessManager configured with SingleSwap strategy
     pub fn new(mgr: Arc<ProcessManager>) -> Self {
-        Self { mgr }
+        Self {
+            mgr,
+            cache_ram_override: None,
+        }
+    }
+
+    /// Create a `RuntimePortImpl` that overrides the host-RAM prompt cache
+    /// setting on every launch, independent of what `mgr` was constructed
+    /// with.
+    ///
+    /// Lets one shared `ProcessManager` (single-model-at-a-time, so only one
+    /// llama-server ever runs) serve callers with different cache-RAM needs
+    /// — e.g. a GUI's proxy (`CacheRamSetting::Auto`, parity with the CLI
+    /// proxy) and its benchmark runner (`CacheRamSetting::ExplicitMb(0)`,
+    /// which must never gain a prompt cache) — without splitting the
+    /// manager and losing the single-process guarantee.
+    pub fn with_cache_ram(mgr: Arc<ProcessManager>, setting: CacheRamSetting) -> Self {
+        Self {
+            mgr,
+            cache_ram_override: Some(setting),
+        }
     }
 }
 
@@ -51,7 +77,7 @@ impl ModelRuntimePort for RuntimePortImpl {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         self.mgr
-            .ensure_model_running(model_name, num_ctx, default_ctx)
+            .ensure_model_running_with(model_name, num_ctx, default_ctx, self.cache_ram_override)
             .await
     }
 

@@ -16,12 +16,14 @@ use tokio::sync::oneshot;
 use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
+use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, RepositoryError, SettingsRepository,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_core::settings::Settings;
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
@@ -240,6 +242,24 @@ impl SettingsRepository for CliOverrideSettingsRepo {
 ///   flags are ever passed to llama-server).
 /// * `slot_dir` - Directory for KV cache slot files. Only consulted when
 ///   `cache_enabled` is `true`; `None` falls back to `<app-data-dir>/slots`.
+/// * `cache_ram_mb` - RAM budget in MiB for llama-server's own host-RAM
+///   prompt cache (`--cache-ram`). Independent of `cache_enabled`/`slot_dir`.
+///   `None` auto-sizes the budget from system RAM, the model's weights, and
+///   its KV footprint at the launch context size (see
+///   `gglib_runtime::llama::args::resolve_cache_ram`); pass an explicit value
+///   to override, or set `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to fall back to
+///   llama-server's own default.
+/// * `cache_reuse` - Minimum chunk size in tokens for KV-shift cache reuse
+///   past the first prefix divergence (`--cache-reuse`). `None` disables it.
+/// * `cache_disk_gb` - Explicit byte budget (in GiB) for the on-disk slot
+///   cache eviction sweep (`--cache-disk-gb`). `None` auto-sizes from free
+///   disk space at `slot_dir` (see
+///   `gglib_proxy::slot_eviction::resolve_disk_budget`), unless
+///   `GGLIB_CACHE_DISK_GB` is set.
+/// * `cache_type_k` / `cache_type_v` - Explicit overrides for the K/V cache
+///   element types (`--cache-type-k`/`--cache-type-v`). `None` resolves to
+///   the `q8_0` default per axis, unless `GGLIB_DISABLE_KV_QUANT=1` is set
+///   (see `gglib_runtime::llama::args::resolve_kv_cache_types`).
 #[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
@@ -253,6 +273,11 @@ pub async fn start_proxy_standalone(
     inference_override: Option<InferenceConfig>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
+    cache_ram_mb: Option<u64>,
+    cache_reuse: Option<u32>,
+    cache_disk_gb: Option<u64>,
+    cache_type_k: Option<KvCacheType>,
+    cache_type_v: Option<KvCacheType>,
 ) -> Result<()> {
     // Resolve the actual KV cache slot-save directory. `None` when the
     // feature is disabled, regardless of what `slot_dir` was passed — this
@@ -278,6 +303,13 @@ pub async fn start_proxy_standalone(
         llama_server_path.to_string_lossy(),
         Arc::clone(&catalog_port),
         slot_save_path.clone(),
+        // No explicit value from the caller means auto-size, not "leave the
+        // llama-server default" — the proxy is the one launch surface where a
+        // right-sized prompt cache is the whole point.
+        cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb),
+        cache_reuse,
+        cache_type_k,
+        cache_type_v,
     ));
 
     // Create runtime port
@@ -324,6 +356,7 @@ pub async fn start_proxy_standalone(
         default_context,
         cache_enabled,
         slot_dir: slot_save_path,
+        disk_budget: gglib_proxy::slot_eviction::resolve_disk_budget(cache_disk_gb),
     };
 
     // Initialize MCP service (validates servers and auto-starts enabled ones)

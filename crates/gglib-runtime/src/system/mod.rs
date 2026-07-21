@@ -36,6 +36,31 @@ use gpu::{detect_gpu_info, get_system_memory_info};
 /// let probe = DefaultSystemProbe::new();
 /// let deps = probe.check_all_dependencies();
 /// ```
+/// Total physical system RAM in bytes.
+///
+/// A direct accessor for the one figure the launch path needs to size
+/// llama-server's host-RAM prompt cache, without constructing or threading a
+/// full [`SystemProbePort`] through `ProcessManager`. Returns `0` if the
+/// platform query fails, which callers treat as "unknown".
+///
+/// Public (not `pub(crate)`) so launch surfaces outside this crate that need
+/// the same cache-RAM auto-sizing math (e.g. `gglib-app-services`' direct
+/// model-serve path) can call it without going through `ProcessManager`.
+pub fn total_system_ram_bytes() -> u64 {
+    get_system_memory_info().total_ram_bytes
+}
+
+/// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
+///
+/// Used by `GGLIB_DISABLE_<FEATURE>` environment variable checks throughout
+/// the crate. Truthy values: `1`, `true`, `yes`, `on`.
+pub(crate) fn is_truthy_flag(v: &str) -> bool {
+    matches!(
+        v.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 pub struct DefaultSystemProbe;
 
 impl DefaultSystemProbe {

@@ -325,6 +325,7 @@ async fn spawn_proxy(
             Arc::new(MockSettingsRepo),
             false,
             None,
+            gglib_proxy::slot_eviction::DiskBudget::Auto,
         )
         .await
         .ok();

@@ -340,6 +340,7 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 5,
                 total_tokens: 15,
+                cached_tokens: None,
             },
             LlmStreamEvent::Done {
                 finish_reason: "stop".into(),
@@ -366,6 +367,7 @@ mod tests {
                 prompt_tokens: 10,
                 completion_tokens: 5,
                 total_tokens: 15,
+                cached_tokens: None,
             },
         ];
         let out = drain(wrap(events.clone(), false));
@@ -390,6 +392,7 @@ mod tests {
                 prompt_tokens: 1,
                 completion_tokens: 1,
                 total_tokens: 2,
+                cached_tokens: None,
             },
         ];
         let out = drain(wrap(events, false));
@@ -403,6 +406,7 @@ mod tests {
                     prompt_tokens: 1,
                     completion_tokens: 1,
                     total_tokens: 2,
+                    cached_tokens: None,
                 },
             ],
             "stray TextDelta after Done must be dropped, Usage still forwarded"

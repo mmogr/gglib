@@ -121,10 +121,33 @@ pub struct ServerConfigOptions {
     pub mtp_draft_p_min: Option<f32>,
 
     /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
-    /// - `None` — KV cache disabled, zero behavior change to the launch.
-    /// - `Some(dir)` — enables slot save/restore with unlimited RAM cache.
+    /// - `None` — disk slot persistence disabled, no `--slot-save-path` flag.
+    /// - `Some(dir)` — enables slot save/restore.
     ///   Direct pass-through, no tag-based auto-detection (unlike jinja/MTP/reasoning).
+    ///   Independent of `cache_ram_mb`/`cache_reuse` below.
     pub slot_save_path: Option<PathBuf>,
+
+    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+    /// (`--cache-ram`). `None` leaves llama-server's built-in default. `Some(0)`
+    /// disables the cache. Direct pass-through, no tag-based auto-detection.
+    pub cache_ram_mb: Option<u64>,
+
+    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+    /// prefix divergence point (`--cache-reuse`). `None` leaves the feature
+    /// off. Direct pass-through, no tag-based auto-detection.
+    pub cache_reuse: Option<u32>,
+
+    /// Explicit override for the K cache element type (`--cache-type-k`).
+    /// `None` resolves to the `q8_0` default (see
+    /// `gglib_runtime::llama::args::resolve_kv_cache_types`), unless
+    /// `GGLIB_DISABLE_KV_QUANT=1` is set.
+    pub cache_type_k: Option<crate::cache_config::KvCacheType>,
+
+    /// Explicit override for the V cache element type (`--cache-type-v`).
+    /// Same resolution as [`Self::cache_type_k`]. Quantizing V additionally
+    /// requires Flash Attention to be active — see
+    /// `gglib_runtime::llama::args::kv_cache_type` module docs.
+    pub cache_type_v: Option<crate::cache_config::KvCacheType>,
 
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.
@@ -147,6 +170,24 @@ pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
         .unwrap_or(DEFAULT_CONTEXT_SIZE)
 }
 
+// =============================================================================
+// Host-RAM prompt cache budget (`--cache-ram`)
+// =============================================================================
+
+// `CacheRamSetting` now lives in `crate::cache_config`, alongside
+// `KvCacheType` — cache-related config resolution has one home. Re-exported
+// here so existing `gglib_core::server_config::CacheRamSetting` call sites
+// keep working.
+pub use crate::cache_config::CacheRamSetting;
+
+// Cache-RAM budget constants and [`compute_auto_cache_ram_mb`] now live in
+// `crate::domain::cache_budget` (re-exported from `crate::domain`), alongside
+// the rest of the domain's pure calculations.
+pub use crate::domain::cache_budget::{
+    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES,
+    compute_auto_cache_ram_mb,
+};
+
 #[cfg(test)]
 mod tests {
     use crate::server_config::{ServerConfigOptions, resolve_context_size};
@@ -156,6 +197,17 @@ mod tests {
     fn test_resolve_context_size_default_when_all_none() {
         let opts = ServerConfigOptions::default();
         assert_eq!(resolve_context_size(&opts), DEFAULT_CONTEXT_SIZE);
+    }
+
+    // Cache-RAM budget math tests now live in
+    // `crate::domain::cache_budget::tests`, alongside the function itself.
+    use crate::server_config::CacheRamSetting;
+
+    /// Every launch surface should auto-size unless it opts out, so `Auto`
+    /// has to be the `Default` variant.
+    #[test]
+    fn cache_ram_setting_defaults_to_auto() {
+        assert_eq!(CacheRamSetting::default(), CacheRamSetting::Auto);
     }
 
     #[test]

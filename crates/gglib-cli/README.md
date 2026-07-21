@@ -116,7 +116,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question --agent <text>` | Agentic question with filesystem tools |
 | `chat history` | List past conversations with message counts |
 | `proxy` | Start the OpenAI-compatible proxy (context defaults to settings `default_context_size`) |
-| `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, and request history |
+| `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
@@ -146,7 +146,9 @@ Supported shells: `bash`, `zsh`, `fish`, `elvish`, `powershell`.
 
 ### Proxy Dashboard
 
-`gglib proxy dashboard` connects to an already-running proxy's `GET /v1/proxy/status/stream` SSE endpoint (see [`gglib-proxy`'s Proxy Dashboard docs](../gglib-proxy/README.md#proxy-dashboard) for the full `DashboardSnapshot` data contract) and redraws a live terminal view in place on every update — active connections (model, phase, prompt progress), per-slot context-usage gauges, and total request counts.
+`gglib proxy dashboard` connects to an already-running proxy's `GET /v1/proxy/status/stream` SSE endpoint (see [`gglib-proxy`'s Proxy Dashboard docs](../gglib-proxy/README.md#proxy-dashboard) for the full `DashboardSnapshot` data contract) and redraws a live terminal view in place on every update — active connections (model, phase, prompt progress), per-slot context-usage gauges, prompt-cache health and measured reuse, and total request counts.
+
+The prompt-cache section shows any warnings the proxy raised (a cramped RAM budget, or a disk layer disabled because the model's attention keeps only part of the token history) followed by measured reuse: prompt tokens served from cache versus processed, in total and for the most recent request. These are raw counts from the upstream's own `usage` reporting — there is no estimated "time saved", since reuse is measured exactly but what it saved depends on a prefill that never ran.
 
 ```bash
 # In one terminal
@@ -172,6 +174,14 @@ Proxy cache-clear options:
 | `--host` | Proxy host (default: 127.0.0.1) |
 | `-p`, `--port` | Proxy port (default: 8080) |
 | `--session-id` | Optional session ID to target (without it, clears all sessions) |
+
+Cache tuning flags (`gglib proxy start`):
+| Flag | Description |
+|---|---|
+| `--cache-ram-mb <mb>` | Host-RAM prompt cache budget (`--cache-ram`). Omit to auto-size from RAM/weights/KV; `0` disables it. `GGLIB_DISABLE_CACHE_AUTOSIZE=1` skips auto-sizing entirely. Independent of `--cache`/`--slot-dir`. |
+| `--cache-reuse <n>` | Min chunk size (tokens) for KV-shift cache reuse (`--cache-reuse`). Omit to disable; `GGLIB_DISABLE_CACHE_REUSE=1` suppresses it. |
+| `--cache-disk-gb <gb>` | Byte budget for on-disk slot cache eviction. Omit to auto-size from free disk space; also settable via `GGLIB_CACHE_DISK_GB`. Ignored for sliding-window/hybrid/recurrent models, where the disk layer is disabled automatically — `GGLIB_FORCE_HYBRID_DISK_CACHE=1` re-enables it. |
+| `--cache-type-k <type>` / `--cache-type-v <type>` | KV cache element type (`f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`). Defaults to `q8_0` on both axes; `GGLIB_DISABLE_KV_QUANT=1` falls back to `f16`. Quantizing V requires Flash Attention to be active. |
 
 ### Question Command
 

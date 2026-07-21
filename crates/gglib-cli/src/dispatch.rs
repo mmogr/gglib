@@ -264,6 +264,11 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             min_p,
             cache,
             slot_dir,
+            cache_ram_mb,
+            cache_reuse,
+            cache_disk_gb,
+            cache_type_k,
+            cache_type_v,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -332,6 +337,11 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 inference_override,
                 cache,
                 slot_dir,
+                cache_ram_mb,
+                cache_reuse,
+                cache_disk_gb,
+                cache_type_k,
+                cache_type_v,
             )
             .await?;
         }

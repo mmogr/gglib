@@ -22,6 +22,7 @@ use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::repositories::SqliteCouncilRepository;
@@ -196,15 +197,30 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
+        // `Auto` is the manager's default (used by ProxyOps and the public
+        // `runtime` field, parity with the CLI proxy). BenchmarkOps below
+        // overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
+        // — it must never gain a prompt cache, which would perturb prefill
+        // timings and RAM footprint — while still sharing this same
+        // SingleSwap manager, so only one llama-server ever runs.
+        CacheRamSetting::Auto,
+        None,
+        None,
+        None,
     ));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+    let runtime: Arc<dyn ModelRuntimePort> =
+        Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
+        process_manager,
+        CacheRamSetting::ExplicitMb(0),
+    ));
 
     // Benchmark ops — constructed after runtime to share SingleSwap semantics.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool));
     let benchmark_http = BenchmarkDeps::build_http_client()?;
     let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
         model_repo: repos.models.clone(),
-        runtime: Arc::clone(&runtime),
+        runtime: benchmark_runtime,
         bench_repo: bench_repo.clone(),
         http_client: benchmark_http,
         settings_repo: repos.settings.clone(),
@@ -307,8 +323,17 @@ pub fn bootstrap_with(
         String::from("llama-server"),
         catalog_for_runtime,
         None,
+        CacheRamSetting::Auto,
+        None,
+        None,
+        None,
     ));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+    let runtime: Arc<dyn ModelRuntimePort> =
+        Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
+        process_manager,
+        CacheRamSetting::ExplicitMb(0),
+    ));
 
     // Build 7 domain ops (Noop for tests — no server events, no hardware probing)
     let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
@@ -350,7 +375,7 @@ pub fn bootstrap_with(
     let bench_repo_w = Arc::new(SqliteBenchmarkRepository::new_in_memory_blocking());
     let benchmark_w = Arc::new(BenchmarkOps::new(BenchmarkDeps {
         model_repo: model_repo.clone(),
-        runtime: Arc::clone(&runtime),
+        runtime: benchmark_runtime,
         bench_repo: bench_repo_w.clone(),
         http_client: BenchmarkDeps::build_http_client().expect("benchmark http client"),
         settings_repo: repos.settings.clone(),
@@ -456,15 +481,30 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
         None,
+        // `Auto` is the manager's default (used by ProxyOps and the public
+        // `runtime` field, parity with the CLI proxy). BenchmarkOps below
+        // overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
+        // — it must never gain a prompt cache, which would perturb prefill
+        // timings and RAM footprint — while still sharing this same
+        // SingleSwap manager, so only one llama-server ever runs.
+        CacheRamSetting::Auto,
+        None,
+        None,
+        None,
     ));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
+    let runtime: Arc<dyn ModelRuntimePort> =
+        Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
+        process_manager,
+        CacheRamSetting::ExplicitMb(0),
+    ));
 
     // Benchmark ops — constructed after runtime to share SingleSwap semantics.
     let bench_repo_e = Arc::new(SqliteBenchmarkRepository::new(pool));
     let benchmark_e_http = BenchmarkDeps::build_http_client()?;
     let benchmark_e = Arc::new(BenchmarkOps::new(BenchmarkDeps {
         model_repo: repos.models.clone(),
-        runtime: Arc::clone(&runtime),
+        runtime: benchmark_runtime,
         bench_repo: bench_repo_e.clone(),
         http_client: benchmark_e_http,
         settings_repo: repos.settings.clone(),

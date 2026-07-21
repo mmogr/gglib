@@ -49,7 +49,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, and recent request history — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
+6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 
@@ -116,17 +116,19 @@ This crate provides an OpenAI-compatible HTTP server that:
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`cache_lifecycle.rs`](src/cache_lifecycle.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-coverage.json) |
+| [`cache_metrics.rs`](src/cache_metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-coverage.json) |
 | [`canonicalization.rs`](src/canonicalization.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-coverage.json) |
 | [`connections.rs`](src/connections.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-coverage.json) |
 | [`council_proxy.rs`](src/council_proxy.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-coverage.json) |
 | [`dashboard.rs`](src/dashboard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-coverage.json) |
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
-| [`models_tests.rs`](src/models_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
+| [`models_tests.rs`](src/models_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-coverage.json) |
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
-| [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
+| [`slot_eviction.rs`](src/slot_eviction.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-coverage.json) |
 | [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
+| [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
 | [`sse_stream.rs`](src/sse_stream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-coverage.json) |
 | [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
 | [`truncation.rs`](src/truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-coverage.json) |
@@ -165,20 +167,43 @@ When enabled via `--cache` and `--slot-dir`, the proxy saves per-session KV cach
 state to disk between requests, enabling sequential multi-agent workflows to
 resume from prior context without re-computation.
 
-- **Save/restore cycle:** After each `/v1/chat/completions` request, slot state is
-  saved to `{slot_dir}/{session_id}/`. Before the next request, it is restored.
+- **Flat on-disk layout:** slot files are stored directly under `--slot-dir` as
+  `{model_id}__{session_id}.bin` (no per-session subdirectories — llama-server's
+  save/restore endpoint rejects filenames containing a path separator).
+- **Atomic saves:** a save asks llama-server to write to a per-attempt temp name
+  (`{model_id}__{session_id}.{nonce}.tmp`) and only renames it onto the final
+  `.bin` name after a confirmed-complete write. Restore/eviction only ever see
+  `*.bin`, so a save that times out or is retried mid-write can never produce a
+  torn or partially-written file at the name anything else reads. Save/restore
+  use generous timeouts (120s/60s) matching multi-GB slot files.
 - **Semaphore gating:** A `Semaphore(1)` ensures only one save→forward→save cycle
   runs at a time (single-slot llama-server constraint).
-- **Fail-open mtime guard:** If a cached slot file is newer than the server start
-  time (indicating a stale cache from a prior server instance), restore is skipped.
-- **LRU eviction:** When `--slot-dir` contains more sessions than the configured
-  limit, least-recently-used session directories are evicted.
+- **Fail-open mtime guard:** If a cached slot file predates the current
+  llama-server process's start time (indicating a stale cache from a prior
+  server instance), restore is skipped.
+- **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
+  recurrent/SSM architectures keep only part of the token history in KV memory.
+  llama-server's slot files omit the context checkpoints those models need to
+  resume, so a restore re-prefills the whole prompt — and, by pre-filling the
+  slot, stops llama-server from consulting its host-RAM prompt cache, which
+  *does* carry checkpoints and would have resumed cheaply. The proxy therefore
+  makes no save or restore calls for these models and leaves conversation
+  switching to the RAM cache. Detected from GGUF metadata by
+  `gglib_core::domain::kv_memory_is_partial`, resolved per launch by
+  `gglib_runtime::llama::args::resolve_slot_restore` (which logs its reasoning),
+  and overridable with `GGLIB_FORCE_HYBRID_DISK_CACHE=1`.
+- **Disk-aware byte-budget eviction:** a background sweep evicts the
+  least-recently-used `.bin` files once the cache exceeds a byte budget — by
+  default a quarter of (free disk space + the cache's own footprint),
+  recomputed on every sweep; override with `--cache-disk-gb` or
+  `GGLIB_CACHE_DISK_GB`. The same sweep also reaps orphaned `.tmp` files left
+  behind by an interrupted save.
 - **Clear endpoint:** `POST /v1/proxy/cache/clear` (with optional `X-Gglib-Session-Id`
   header) clears cached slot files for a session or all sessions.
 
 CLI usage:
 ```bash
-gglib proxy start --cache --slot-dir ~/.cache/gglib/slots
+gglib proxy start --cache --slot-dir ~/.cache/gglib/slots --cache-disk-gb 100
 gglib proxy cache-clear --host 127.0.0.1 --port 8080 --session-id my-session
 ```
 
@@ -461,7 +486,25 @@ explicitly documented as a not-yet-consumed "future" contract).
       "recorded_at_secs": 1749283200
     }
   ],
-  "total_requests": 42
+  "total_requests": 42,
+  "cache": {
+    "disk_enabled": true,
+    "disk_suppressed_for_model": true,
+    "ram_budget_mb": 70008,
+    "ram_state": "healthy",
+    "needs_attention": true,
+    "warnings": [
+      "Disk cache offloading is disabled for this model — its attention keeps only part of the token history, which llama-server's slot files can't restore."
+    ],
+    "usage": {
+      "reporting_requests": 3,
+      "unreported_requests": 0,
+      "prompt_tokens": 30342,
+      "cached_tokens": 29450,
+      "last_prompt_tokens": 10000,
+      "last_cached_tokens": 9500
+    }
+  }
 }
 ```
 
@@ -475,6 +518,58 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `slots_status` | `string \| null` | Reason `slots` is empty (disabled via `--no-slots`, or the poller's last connect/timeout/parse error); `null` when `slots_available` |
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
+| `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
+
+#### `cache` (`CacheStatus`)
+
+The fields directly on this object are configuration — resolved when a model
+launches, changing only on a model swap. Measured per-request reuse lives
+under [`cache.usage`](#cacheusage-cacheusage).
+
+Replaces the former top-level `cache_enabled` boolean; `cache.disk_enabled`
+carries the same information.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `disk_enabled` | `bool` | Whether disk KV slot persistence is enabled on this proxy instance (`--cache` + `--slot-dir`) |
+| `disk_suppressed_for_model` | `bool` | Disk layer enabled proxy-wide but skipped for this model (sliding-window/hybrid/recurrent attention). Always `false` when `disk_enabled` is `false` |
+| `ram_budget_mb` | `u64 \| null` | Resolved `--cache-ram` budget; `null` when no flag was emitted and llama-server's own default applies |
+| `ram_state` | `"healthy" \| "low" \| "disabled_insufficient_ram" \| "disabled_by_user" \| "llama_default"` | Budget health, for styling |
+| `needs_attention` | `bool` | Whether anything here warrants surfacing. `false` for healthy budgets *and* for a cache the user deliberately disabled |
+| `warnings` | `string[]` | Ready-to-render lines; empty when nothing is wrong. A low budget on a suppressed-disk model yields both warnings, since fixing one still leaves the other |
+| `usage` | `object` | Measured prompt-cache reuse — see below |
+
+#### `cache.usage` (`CacheUsage`)
+
+Prompt-cache reuse measured since the proxy started, sourced from
+`usage.prompt_tokens_details.cached_tokens` (llama.cpp's
+`n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
+report, so neither is silently missing from the totals.
+
+**Scope: proxied `/v1/chat/completions` requests only.** Council and other
+virtual-model runs are *not* counted. `council_runner` composes its LLM
+adapter directly against the model's `base_url`, so those calls never pass
+through this crate's forward path. That is deliberate on both counts —
+routing internal agent loops back through the user-facing proxy purely to
+collect telemetry would be a U-turn for no benefit, and a council run issues
+many small sub-agent calls whose reuse characteristics are nothing like a
+user's conversation. Averaging the two together would make the figure harder
+to interpret, not more complete. Tracked separately for future council-side
+metrics.
+
+Raw counts only. Nothing is derived or extrapolated — in particular there is
+no "time saved" figure: reuse is measured exactly, but what it saved depends
+on a prefill that never ran. A consumer wanting a hit rate can divide two
+numbers that are both real.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reporting_requests` | `u64` | Completed requests whose upstream reported a cached-token count — the denominator for the token totals below |
+| `unreported_requests` | `u64` | Completed requests whose upstream omitted the field. Excluded from every other figure, so a server that never reports can't look like a cache that never hits |
+| `prompt_tokens` | `u64` | Total prompt tokens across `reporting_requests` |
+| `cached_tokens` | `u64` | Total prompt tokens served from cache. Always `<= prompt_tokens` (an upstream figure above it is clamped) |
+| `last_prompt_tokens` | `u32 \| null` | Prompt tokens in the most recent reporting request; `null` before any |
+| `last_cached_tokens` | `u32 \| null` | Tokens reused in that same request. A `0` here is a measured full re-prefill, not missing data |
 
 #### `active_connections[]` (`ActiveConnectionSnapshot`)
 

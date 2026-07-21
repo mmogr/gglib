@@ -44,6 +44,7 @@ async fn spawn_proxy(
             Arc::new(fixtures::common::MockSettingsRepo),
             cache_enabled,
             slot_dir,
+            gglib_proxy::slot_eviction::DiskBudget::Auto,
         )
         .await
         .ok();

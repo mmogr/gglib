@@ -33,7 +33,9 @@ use gglib_core::ports::ServerConfig;
 pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use tracing::debug;
 
-use crate::llama::args::{resolve_jinja_flag, resolve_mtp_args, resolve_reasoning_format};
+use crate::llama::args::{
+    resolve_jinja_flag, resolve_kv_cache_types, resolve_mtp_args, resolve_reasoning_format,
+};
 
 // =============================================================================
 // Builder
@@ -119,6 +121,28 @@ pub fn build_server_config(
     // feature is disabled and `build_and_spawn` emits zero cache-related flags,
     // leaving every existing model launch byte-for-byte unchanged.
     config = config.with_slot_save_path(opts.slot_save_path);
+
+    // --- Native RAM cache tuning (--cache-ram / --cache-reuse) ------------------
+    // Direct pass-through, no tag-based auto-detection, and deliberately
+    // independent of slot persistence above — see ServerConfig's field docs.
+    if let Some(mb) = opts.cache_ram_mb {
+        config = config.with_cache_ram_mb(mb);
+    }
+    if let Some(n) = opts.cache_reuse {
+        config = config.with_cache_reuse(n);
+    }
+
+    // --- KV cache quantization (--cache-type-k / --cache-type-v) ---------------
+    // Resolved here (not left as a raw pass-through like cache_ram_mb above) so
+    // every launch surface gets the same q8_0 default without each caller
+    // re-implementing the resolution — see `resolve_kv_cache_types`.
+    let kv_types = resolve_kv_cache_types(opts.cache_type_k, opts.cache_type_v);
+    if let Some(explanation) = kv_types.explain() {
+        debug!("{explanation}");
+    }
+    config = config
+        .with_cache_type_k(kv_types.k)
+        .with_cache_type_v(kv_types.v);
 
     // --- MTP speculative decoding ----------------------------------------------
     let mtp = resolve_mtp_args(opts.mtp_draft_n_max, opts.mtp_draft_p_min, tags);

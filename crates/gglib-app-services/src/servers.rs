@@ -17,8 +17,12 @@ use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
     AppEventEmitter, ProcessHandle, ProcessRunner, ServerHealthStatus, ToolSupportDetectorPort,
 };
+use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
 use gglib_core::services::AppCore;
+use gglib_runtime::llama::args::{resolve_cache_ram, resolve_kv_cache_types};
+use gglib_runtime::ports_impl::total_model_bytes;
 use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
+use gglib_runtime::system::total_system_ram_bytes;
 
 use crate::error::GuiError;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
@@ -146,7 +150,9 @@ impl ServerOps {
     /// Build a [`ServerConfig`] from a model and GUI request.
     ///
     /// Delegates to [`build_server_config`] so that this path generates
-    /// identical llama-server arguments to every other launch surface.
+    /// identical llama-server arguments to every other launch surface,
+    /// including host-RAM prompt cache auto-sizing (parity with the CLI
+    /// proxy — see `resolve_cache_ram`) and KV cache quantization defaults.
     ///
     /// Context size precedence (4-level fallback chain): explicit request
     /// field → per-model `server_defaults.context_length` → global settings
@@ -157,27 +163,58 @@ impl ServerOps {
         base_port: u16,
         default_context_size: Option<u64>,
     ) -> gglib_core::ports::ServerConfig {
+        let mut opts = ServerConfigOptions {
+            context_size: request.context_length,
+            model_server_ctx: model
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
+            global_default_ctx: default_context_size,
+            port: request.port,
+            jinja: request.jinja,
+            reasoning_format: request.reasoning_format.clone(),
+            mtp_draft_n_max: request.mtp_draft_n_max,
+            mtp_draft_p_min: request.mtp_draft_p_min,
+            inference_params: request.inference_params.clone(),
+            slot_save_path: None,
+            cache_ram_mb: None,
+            cache_reuse: None,
+            cache_type_k: None,
+            cache_type_v: None,
+        };
+
+        // Resolve KV cache types once so the RAM budget below reflects the
+        // actual quantized footprint (see `process::manager` for the same
+        // pattern on the proxy launch path).
+        let kv_types = resolve_kv_cache_types(opts.cache_type_k, opts.cache_type_v);
+        opts.cache_type_k = Some(kv_types.k);
+        opts.cache_type_v = Some(kv_types.v);
+
+        let launch_ctx = resolve_context_size(&opts);
+        let kv_bytes_per_token = gglib_core::domain::estimate_kv_elems_per_token(
+            &model.metadata,
+            model.architecture.as_deref(),
+        )
+        .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
+        let cache_ram = resolve_cache_ram(
+            CacheRamSetting::Auto,
+            total_system_ram_bytes(),
+            total_model_bytes(&model.file_path),
+            kv_bytes_per_token,
+            launch_ctx,
+        );
+        if let Some(explanation) = cache_ram.explain() {
+            debug!("{explanation}");
+        }
+        opts.cache_ram_mb = cache_ram.cache_ram_mb;
+
         build_server_config(
             model.id,
             model.name.clone(),
             model.file_path.clone(),
             base_port,
             &model.tags,
-            ServerConfigOptions {
-                context_size: request.context_length,
-                model_server_ctx: model
-                    .server_defaults
-                    .as_ref()
-                    .and_then(|s| s.context_length),
-                global_default_ctx: default_context_size,
-                port: request.port,
-                jinja: request.jinja,
-                reasoning_format: request.reasoning_format.clone(),
-                mtp_draft_n_max: request.mtp_draft_n_max,
-                mtp_draft_p_min: request.mtp_draft_p_min,
-                inference_params: request.inference_params.clone(),
-                slot_save_path: None,
-            },
+            opts,
         )
     }
 

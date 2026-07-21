@@ -77,6 +77,7 @@ use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
+use crate::cache_metrics::CacheMetricsStore;
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
@@ -110,6 +111,11 @@ pub(crate) struct StreamOutcome {
     /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
     /// arrived. Feeds the per-model chars-per-token calibration.
     pub prompt_tokens: Option<u32>,
+    /// How many of `prompt_tokens` the upstream served from its KV cache.
+    /// `None` when no Usage frame arrived *or* when it omitted the field —
+    /// see [`gglib_core::LlmStreamEvent::Usage`] on why absent and zero must
+    /// stay distinct. Feeds [`crate::cache_metrics::CacheMetricsStore`].
+    pub cached_tokens: Option<u32>,
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -469,6 +475,7 @@ pub(crate) async fn forward_chat_completion(
     connection: ConnectionGuard,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
+    cache_metrics: Arc<CacheMetricsStore>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<crate::cache_lifecycle::StreamConfig>,
     session_id: Option<String>,
@@ -666,6 +673,7 @@ pub(crate) async fn forward_chat_completion(
             tags,
             upstream_health,
             calibration,
+            cache_metrics,
             forwarded_chars,
             permit,
             config,
@@ -720,7 +728,7 @@ pub(crate) async fn forward_chat_completion(
     // non-streaming responses is intentionally deferred — the wire
     // formats we currently rewrite (Qwen XML tool calls, bare <think>
     // tags) only manifest in streaming clients today.
-    Ok(forward_non_streaming_response(response).await)
+    Ok(forward_non_streaming_response(response, &cache_metrics).await)
 }
 
 /// Extract the `host:port` authority from an HTTP/HTTPS URL string.
@@ -868,11 +876,17 @@ pub(crate) async fn stream_response_to_channel(
                     outcome.finish_reason = Some(finish_reason.clone());
                     encoder.encode(&ev).map(Bytes::from)
                 }
-                LlmStreamEvent::Usage { prompt_tokens, .. } => {
+                LlmStreamEvent::Usage {
+                    prompt_tokens,
+                    cached_tokens,
+                    ..
+                } => {
                     // Trailing usage frame — capture the real prompt-token
-                    // count for chars-per-token calibration. Not counted as
+                    // count for chars-per-token calibration, and the cached
+                    // count for prompt-cache telemetry. Not counted as
                     // visible output (it carries an empty `choices` array).
                     outcome.prompt_tokens = Some(*prompt_tokens);
+                    outcome.cached_tokens = *cached_tokens;
                     encoder.encode(&ev).map(Bytes::from)
                 }
             },
@@ -930,8 +944,33 @@ pub(crate) async fn stream_response_to_channel(
     outcome
 }
 
+/// Extract `(prompt_tokens, cached_tokens)` from a non-streaming response body.
+///
+/// The streaming path gets these from a typed `Usage` event; a non-streaming
+/// response carries the same figures in its terminal JSON instead, so they are
+/// read here rather than leaving this path silently absent from the telemetry.
+///
+/// Returns `None` when the body isn't JSON or carries no `usage.prompt_tokens`
+/// — nothing is recorded in that case, rather than recording a zero that would
+/// dilute the totals. The inner `cached_tokens` stays `Option` for the reason
+/// given on [`gglib_core::LlmStreamEvent::Usage`]: absent and zero differ.
+fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
+    let parsed: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let usage = parsed.get("usage")?;
+    let prompt_tokens = u32::try_from(usage.get("prompt_tokens")?.as_u64()?).ok()?;
+    let cached_tokens = usage
+        .get("prompt_tokens_details")
+        .and_then(|d| d.get("cached_tokens"))
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX));
+    Some((prompt_tokens, cached_tokens))
+}
+
 /// Forward a non-streaming JSON response from llama-server.
-async fn forward_non_streaming_response(response: reqwest::Response) -> Response {
+async fn forward_non_streaming_response(
+    response: reqwest::Response,
+    cache_metrics: &CacheMetricsStore,
+) -> Response {
     // Collect upstream headers we want to preserve
     let content_type = response
         .headers()
@@ -941,11 +980,20 @@ async fn forward_non_streaming_response(response: reqwest::Response) -> Response
 
     // Read the full body
     match response.bytes().await {
-        Ok(body_bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header("content-type", content_type)
-            .body(Body::from(body_bytes))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Ok(body_bytes) => {
+            // Body is already fully buffered, so this is a parse of bytes we
+            // hold rather than extra I/O. Failure is silent by design: an
+            // unparseable body still forwards verbatim, since telemetry must
+            // never change what the client receives.
+            if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
+                cache_metrics.record(prompt_tokens, cached_tokens);
+            }
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", content_type)
+                .body(Body::from(body_bytes))
+                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        }
         Err(e) => {
             error!("Failed to read upstream response: {e}");
             (

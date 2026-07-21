@@ -8,10 +8,13 @@ use super::core::GuiProcessCore;
 use super::health::{check_http_health, wait_for_http_health};
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
+use gglib_core::cache_config::KvCacheType;
+use gglib_core::domain::{CacheRamHealth, classify_cache_ram};
+use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
-use gglib_core::slot_model_dir;
+use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +40,16 @@ pub struct CurrentModelState {
     pub port: u16,
     /// Path to the model file.
     pub model_path: PathBuf,
+    /// Whether disk slot restore can resume this model (see
+    /// [`gglib_core::ports::RunningTarget::slot_restore_supported`]). Derived
+    /// from the launch spec at spawn and cached here so the already-running
+    /// fast path can answer without a second catalog lookup.
+    pub slot_restore_supported: bool,
+    /// Health of the `--cache-ram` budget this instance launched with (see
+    /// [`gglib_core::ports::RunningTarget::cache_ram_health`]). Cached for the
+    /// same reason: the budget arithmetic only happens at spawn, so a later
+    /// `current_model()` call has no way to recompute it.
+    pub cache_ram_health: CacheRamHealth,
 }
 
 /// Strategy for managing llama-server processes.
@@ -53,9 +66,26 @@ pub enum ProcessStrategy {
         /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
         loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
         /// KV cache slot-save directory (`--slot-save-path`), or `None` if the
-        /// KV cache feature is disabled. Forwarded verbatim into every
-        /// `build_server_config` call made by this manager's driver.
+        /// disk slot-persistence feature is disabled. Forwarded verbatim into
+        /// every `build_server_config` call made by this manager's driver.
         slot_save_path: Option<PathBuf>,
+        /// How to size llama-server's own host-RAM prompt cache
+        /// (`--cache-ram`). Independent of `slot_save_path`. `Auto` derives a
+        /// budget per launch from system RAM, the model's weights, and its KV
+        /// footprint; `LlamaDefault` emits no flag (what benchmark launches
+        /// want, so a prompt cache never perturbs their measurements).
+        cache_ram: CacheRamSetting,
+        /// Minimum chunk size in tokens for KV-shift cache reuse
+        /// (`--cache-reuse`). Forwarded verbatim into every
+        /// `build_server_config` call.
+        cache_reuse: Option<u32>,
+        /// Explicit override for the K cache element type
+        /// (`--cache-type-k`). `None` resolves to the `q8_0` default (see
+        /// `resolve_kv_cache_types`).
+        cache_type_k: Option<KvCacheType>,
+        /// Explicit override for the V cache element type
+        /// (`--cache-type-v`). Same resolution as `cache_type_k`.
+        cache_type_v: Option<KvCacheType>,
     },
 }
 
@@ -103,8 +133,19 @@ impl ProcessManager {
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
     /// * `slot_save_path` — KV cache slot-save directory, or `None` to
-    ///   disable the KV cache feature entirely (zero behavior change to the
-    ///   launch — no `--slot-save-path`/`--cache-ram` flags are emitted).
+    ///   disable disk slot persistence entirely (no `--slot-save-path` flag
+    ///   emitted).
+    /// * `cache_ram` — how to size llama-server's own host-RAM prompt cache
+    ///   (`--cache-ram`), independent of `slot_save_path`.
+    ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
+    ///   benchmark launches, where a large prompt cache would perturb results.
+    /// * `cache_reuse` — Minimum chunk size in tokens for KV-shift cache
+    ///   reuse past the first prefix divergence (`--cache-reuse`). `None`
+    ///   disables it.
+    /// * `cache_type_k` / `cache_type_v` — Explicit overrides for the K/V
+    ///   cache element types (`--cache-type-k`/`--cache-type-v`). `None`
+    ///   resolves to the `q8_0` default per axis (see
+    ///   `crate::llama::args::resolve_kv_cache_types`).
     ///
     /// # When to use
     ///
@@ -112,11 +153,16 @@ impl ProcessManager {
     /// HTTP API layer). For multi-model workloads (e.g. the GUI dashboard),
     /// prefer [`ProcessManager::new_concurrent`] which allows multiple models
     /// to run simultaneously up to a configurable limit.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
         slot_save_path: Option<PathBuf>,
+        cache_ram: CacheRamSetting,
+        cache_reuse: Option<u32>,
+        cache_type_k: Option<KvCacheType>,
+        cache_type_v: Option<KvCacheType>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
@@ -126,6 +172,10 @@ impl ProcessManager {
                 current: Arc::new(RwLock::new(None)),
                 loading: Arc::new(std::sync::RwLock::new(None)),
                 slot_save_path,
+                cache_ram,
+                cache_reuse,
+                cache_type_k,
+                cache_type_v,
             },
         }
     }
@@ -197,14 +247,60 @@ impl ProcessManager {
         num_ctx: Option<u64>,
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
+        self.ensure_model_running_with(model_name, num_ctx, default_ctx, None)
+            .await
+    }
+
+    /// Same as [`Self::ensure_model_running`], but with an optional per-call
+    /// override for the host-RAM prompt cache setting.
+    ///
+    /// Lets a single shared `ProcessManager` serve callers with different
+    /// cache-RAM needs (e.g. a GUI's proxy — which should auto-size like the
+    /// CLI proxy — and its benchmark runner — which must never gain a
+    /// prompt cache) without constructing a second manager. `None` falls
+    /// back to the setting the manager was constructed with (see
+    /// [`Self::new_single_swap`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the model cannot be started.
+    pub async fn ensure_model_running_with(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: u64,
+        cache_ram_override: Option<CacheRamSetting>,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot, slot_save_path) = match &self.strategy {
+        let (
+            catalog,
+            current_lock,
+            loading_slot,
+            slot_save_path,
+            cache_ram,
+            cache_reuse,
+            cache_type_k,
+            cache_type_v,
+        ) = match &self.strategy {
             ProcessStrategy::SingleSwap {
                 catalog,
                 current,
                 loading,
                 slot_save_path,
-            } => (catalog, current, loading, slot_save_path),
+                cache_ram,
+                cache_reuse,
+                cache_type_k,
+                cache_type_v,
+            } => (
+                catalog,
+                current,
+                loading,
+                slot_save_path,
+                *cache_ram,
+                *cache_reuse,
+                *cache_type_k,
+                *cache_type_v,
+            ),
             ProcessStrategy::Concurrent { .. } => {
                 return Err(ModelRuntimeError::Internal(
                     "ensure_model_running() is only available for SingleSwap strategy".to_string(),
@@ -247,6 +343,10 @@ impl ProcessManager {
                     let current_owned = current_lock.clone(); // Arc clone — cheap
                     let model_name_owned = model_name.to_string();
                     let slot_save_path_owned = slot_save_path.clone();
+                    let cache_ram_owned = cache_ram_override.unwrap_or(cache_ram);
+                    let cache_reuse_owned = cache_reuse;
+                    let cache_type_k_owned = cache_type_k;
+                    let cache_type_v_owned = cache_type_v;
 
                     // 4. Spawn the driver task (detached from this request's future)
                     drive(guard, STARTUP_WAIT_TIMEOUT, async move {
@@ -303,6 +403,15 @@ impl ProcessManager {
                                     cached_name,
                                     context_size,
                                     false, // cached healthy — not a fresh spawn
+                                )
+                                // Same model id as `launch_spec`, so its
+                                // metadata answers this without re-reading
+                                // the cached state.
+                                .with_slot_restore_supported(
+                                    crate::llama::args::resolve_slot_restore(
+                                        launch_spec.kv_memory_is_partial,
+                                    )
+                                    .enabled,
                                 ));
                             }
                             warn!(
@@ -342,22 +451,84 @@ impl ProcessManager {
                             "Starting model"
                         );
 
+                        let mut opts = ServerConfigOptions {
+                            context_size: num_ctx,
+                            model_server_ctx: launch_spec
+                                .server_defaults
+                                .as_ref()
+                                .and_then(|sc| sc.context_length),
+                            global_default_ctx: Some(default_ctx),
+                            slot_save_path: slot_save_path_owned.clone(),
+                            cache_reuse: cache_reuse_owned,
+                            ..Default::default()
+                        };
+
+                        // Resolve K/V cache types once here (not left to
+                        // `build_server_config`'s own internal resolution) so
+                        // the RAM budget below reflects the *actual*
+                        // quantized footprint the launch will use. The
+                        // resolved values are baked into `opts` as if
+                        // explicit, so `build_server_config`'s own resolution
+                        // just passes them through unchanged.
+                        let kv_types = crate::llama::args::resolve_kv_cache_types(
+                            cache_type_k_owned,
+                            cache_type_v_owned,
+                        );
+                        if let Some(explanation) = kv_types.explain() {
+                            info!("{explanation}");
+                        }
+                        opts.cache_type_k = Some(kv_types.k);
+                        opts.cache_type_v = Some(kv_types.v);
+
+                        // Size the host-RAM prompt cache. Deliberately uses
+                        // `resolve_context_size` (the same 4-tier chain
+                        // `build_server_config` applies, including the
+                        // per-model tier) rather than `effective_ctx`, so the
+                        // KV estimate matches the context the server actually
+                        // launches with.
+                        let launch_ctx = resolve_context_size(&opts);
+                        let kv_bytes_per_token = launch_spec.kv_elems_per_token.map(|elems| {
+                            gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v)
+                        });
+                        let cache_ram = crate::llama::args::resolve_cache_ram(
+                            cache_ram_owned,
+                            crate::system::total_system_ram_bytes(),
+                            launch_spec.file_size_bytes,
+                            kv_bytes_per_token,
+                            launch_ctx,
+                        );
+                        if let Some(explanation) = cache_ram.explain() {
+                            info!("{explanation}");
+                        }
+                        opts.cache_ram_mb = cache_ram.cache_ram_mb;
+
+                        // Classify the budget while the auto-vs-explicit
+                        // distinction is still in scope — downstream only sees
+                        // the number, which can't distinguish a zero the user
+                        // asked for from one the machine forced.
+                        let cache_ram_health = classify_cache_ram(
+                            cache_ram.cache_ram_mb,
+                            cache_ram.source == crate::llama::args::CacheRamSource::Explicit,
+                        );
+
+                        // Whether the disk slot layer can resume this model at
+                        // all. Resolved once per spawn (alongside the other
+                        // launch decisions above) and carried on the target,
+                        // so the proxy never re-derives it per request.
+                        let slot_restore = crate::llama::args::resolve_slot_restore(
+                            launch_spec.kv_memory_is_partial,
+                        );
+                        if let Some(explanation) = slot_restore.explain() {
+                            info!("{explanation}");
+                        }
+
                         let config = build_server_config(
                             launch_spec.id as i64,
                             launch_spec.name.clone(),
                             model_path.to_path_buf(),
                             0, // base_port unused — GuiProcessCore resolves port internally
                             &launch_spec.tags,
-                            ServerConfigOptions {
-                                context_size: num_ctx,
-                                model_server_ctx: launch_spec
-                                    .server_defaults
-                                    .as_ref()
-                                    .and_then(|sc| sc.context_length),
-                                global_default_ctx: Some(default_ctx),
-                                slot_save_path: slot_save_path_owned.clone(),
-                                ..Default::default()
-                            },
+                            opts,
                         );
 
                         // Purge stale slot .bin files before spawning a fresh instance.
@@ -367,7 +538,7 @@ impl ProcessManager {
                             if let Err(e) = std::fs::create_dir_all(slot_dir) {
                                 tracing::warn!("Failed to create slot directory: {}", e);
                             }
-                            purge_stale_slot_bin_files(slot_dir, launch_spec.id as u32);
+                            purge_stale_slot_bin_files(slot_dir, launch_spec.id);
                         }
 
                         let port = {
@@ -392,6 +563,8 @@ impl ProcessManager {
                                 context_size: effective_ctx,
                                 port,
                                 model_path: launch_spec.file_path.clone(),
+                                slot_restore_supported: slot_restore.enabled,
+                                cache_ram_health,
                             });
                         }
 
@@ -409,7 +582,9 @@ impl ProcessManager {
                             launch_spec.name,
                             effective_ctx,
                             true, // fresh spawn — cache slots are stale
-                        ))
+                        )
+                        .with_slot_restore_supported(slot_restore.enabled)
+                        .with_cache_ram_health(cache_ram_health))
                     });
 
                     // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
@@ -437,6 +612,8 @@ impl ProcessManager {
                         c.context_size,
                         false,
                     )
+                    .with_slot_restore_supported(c.slot_restore_supported)
+                    .with_cache_ram_health(c.cache_ram_health)
                 })
             }
             ProcessStrategy::Concurrent { .. } => None,
@@ -528,19 +705,28 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
-/// Remove stale `.bin` slot files for the given model from `{slot_dir}/{model_id}/`.
-/// Called on llama-server restart when the model or context size changes.
+/// Remove stale slot files for the given model from `slot_dir`.
+///
+/// Slot files are flat as `{slot_dir}/{model_id}__{session}.bin`; this removes
+/// only files whose name starts with the model's `{model_id}__` prefix, so a
+/// model/context swap leaves other models' caches untouched. Called on
+/// llama-server restart when the model or context size changes.
 fn purge_stale_slot_bin_files(slot_dir: &std::path::Path, model_id: u32) {
-    let model_subdir = slot_model_dir(slot_dir, model_id);
-    if let Ok(entries) = std::fs::read_dir(&model_subdir) {
+    let prefix = slot_model_prefix(model_id);
+    if let Ok(entries) = std::fs::read_dir(slot_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("bin") {
+            let is_bin = path.extension().and_then(|e| e.to_str()) == Some("bin");
+            let matches_model = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&prefix));
+            if is_bin && matches_model {
                 let _ = std::fs::remove_file(&path);
             }
         }
     }
-    // Silently skip if the model subdirectory doesn't exist or can't be read.
+    // Silently skip if slot_dir doesn't exist or can't be read.
 }
 
 #[cfg(test)]
@@ -555,50 +741,83 @@ mod tests {
             std::time::SystemTime::now().elapsed().unwrap().as_nanos()
         ));
         let model_id: u32 = 42;
-        // Create model-specific subdirectory with .bin files
-        let model_subdir = dir.join(model_id.to_string());
-        tokio::fs::create_dir_all(&model_subdir).await.unwrap();
-        tokio::fs::write(model_subdir.join("session1.bin"), &[0u8; 8])
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        // Flat `{model_id}__{session}.bin` files for model 42 (should be purged).
+        tokio::fs::write(dir.join("42__session1.bin"), &[0u8; 8])
             .await
             .unwrap();
-        tokio::fs::write(model_subdir.join("session2.bin"), &[0u8; 8])
+        tokio::fs::write(dir.join("42__session2.bin"), &[0u8; 8])
             .await
             .unwrap();
-        // Create a .txt file in the model subdir (should survive)
-        tokio::fs::write(model_subdir.join("notes.txt"), "keep me")
+        // A non-.bin file with the model prefix (should survive — wrong extension).
+        tokio::fs::write(dir.join("42__notes.txt"), "keep me")
             .await
             .unwrap();
-        // Create a .bin file in the flat dir (should survive — not our model)
+        // A legacy pre-namespacing flat .bin without any prefix (should survive).
         tokio::fs::write(dir.join("orphan.bin"), &[0u8; 8])
             .await
             .unwrap();
-        // Create another model's subdir with a .bin (should survive)
-        let other_model_subdir = dir.join("99");
-        tokio::fs::create_dir_all(&other_model_subdir)
+        // Another model's .bin (should survive). The `__` delimiter means the
+        // `4__` prefix of some model would not match, and 42's prefix must not
+        // match model 99's file either.
+        tokio::fs::write(dir.join("99__session3.bin"), &[0u8; 8])
             .await
             .unwrap();
-        tokio::fs::write(other_model_subdir.join("session3.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // Purge only model 42's slot files
+
+        // Purge only model 42's slot files.
         purge_stale_slot_bin_files(&dir, model_id);
-        // Verify: model 42 subdir has only notes.txt
-        let mut entries = tokio::fs::read_dir(&model_subdir).await.unwrap();
-        let mut remaining: Vec<std::ffi::OsString> = Vec::new();
-        while let Ok(Some(e)) = entries.next_entry().await {
-            remaining.push(e.file_name());
-        }
-        assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].to_str(), Some("notes.txt"));
-        // Verify: orphan.bin in flat dir still exists
-        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
-        // Verify: other model's .bin still exists
+
         assert!(
-            tokio::fs::try_exists(other_model_subdir.join("session3.bin"))
+            !tokio::fs::try_exists(dir.join("42__session1.bin"))
                 .await
                 .unwrap()
         );
+        assert!(
+            !tokio::fs::try_exists(dir.join("42__session2.bin"))
+                .await
+                .unwrap()
+        );
+        assert!(
+            tokio::fs::try_exists(dir.join("42__notes.txt"))
+                .await
+                .unwrap()
+        );
+        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
+        assert!(
+            tokio::fs::try_exists(dir.join("99__session3.bin"))
+                .await
+                .unwrap()
+        );
+
         // Cleanup
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    /// Regression: model `1`'s purge prefix (`1__`) must not delete model
+    /// `11`'s files (`11__…`) — the `__` delimiter is what prevents this.
+    #[tokio::test]
+    async fn purge_prefix_does_not_match_longer_model_id() {
+        let dir = std::env::temp_dir().join(format!(
+            "gglib-purge-prefix-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        tokio::fs::write(dir.join("1__a.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.join("11__b.bin"), &[0u8; 8])
+            .await
+            .unwrap();
+
+        purge_stale_slot_bin_files(&dir, 1);
+
+        assert!(!tokio::fs::try_exists(dir.join("1__a.bin")).await.unwrap());
+        assert!(
+            tokio::fs::try_exists(dir.join("11__b.bin")).await.unwrap(),
+            "model 11's file must survive a purge of model 1"
+        );
+
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 

@@ -8,6 +8,8 @@ use async_trait::async_trait;
 use std::fmt;
 use thiserror::Error;
 
+use crate::domain::CacheRamHealth;
+
 /// Target information for a running model instance.
 ///
 /// This struct contains all information needed to route requests
@@ -27,10 +29,35 @@ pub struct RunningTarget {
     pub effective_ctx: u64,
     /// True when this instance was freshly spawned (restart or cold start).
     pub just_started: bool,
+    /// Whether llama-server's disk slot save/restore can actually resume this
+    /// model, i.e. its KV memory retains the full token history.
+    ///
+    /// False for sliding-window, hybrid, and recurrent architectures (see
+    /// [`crate::domain::kv_memory_is_partial`]): the slot file carries KV
+    /// state and tokens but not the server's context checkpoints, so a
+    /// restore leaves the slot unable to resume and llama-server re-prefills
+    /// the whole prompt. Callers skip the disk slot layer when this is false
+    /// and let the in-RAM prompt cache — which does keep checkpoints — handle
+    /// conversation switching.
+    pub slot_restore_supported: bool,
+    /// How healthy the host-RAM prompt cache budget (`--cache-ram`) resolved
+    /// for this launch is.
+    ///
+    /// Classified once at spawn (where the budget arithmetic and the
+    /// auto-vs-explicit distinction are both in scope) and carried here so
+    /// user-facing surfaces can report it without re-deriving thresholds. See
+    /// [`crate::domain::classify_cache_ram`].
+    pub cache_ram_health: CacheRamHealth,
 }
 
 impl RunningTarget {
     /// Create a new `RunningTarget` for a local server.
+    ///
+    /// `slot_restore_supported` defaults to `true` (the full-attention case)
+    /// and `cache_ram_health` to [`CacheRamHealth::LlamaDefault`] (no flag
+    /// emitted); callers that know the launch's actual resolution narrow them
+    /// with [`Self::with_slot_restore_supported`] and
+    /// [`Self::with_cache_ram_health`].
     #[must_use]
     pub fn local(
         port: u16,
@@ -46,7 +73,23 @@ impl RunningTarget {
             model_name,
             effective_ctx,
             just_started,
+            slot_restore_supported: true,
+            cache_ram_health: CacheRamHealth::LlamaDefault,
         }
+    }
+
+    /// Set whether disk slot restore can resume this model.
+    #[must_use]
+    pub const fn with_slot_restore_supported(mut self, supported: bool) -> Self {
+        self.slot_restore_supported = supported;
+        self
+    }
+
+    /// Set the resolved host-RAM prompt cache health for this launch.
+    #[must_use]
+    pub const fn with_cache_ram_health(mut self, health: CacheRamHealth) -> Self {
+        self.cache_ram_health = health;
+        self
     }
 }
 

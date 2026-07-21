@@ -30,7 +30,7 @@ use gglib_mcp::McpService;
 use crate::cache_lifecycle::{StreamConfig, clear_cache, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
-use crate::dashboard::{DashboardState, spawn_dashboard_publisher};
+use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
@@ -108,6 +108,8 @@ pub(crate) struct AppState {
 /// * `council` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
 /// * `settings_repo` - Settings repository for loading global inference defaults
+/// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
+///   Only consulted when `slot_dir` is `Some`.
 ///
 /// # Returns
 ///
@@ -124,6 +126,7 @@ pub async fn serve(
     settings_repo: Arc<dyn SettingsRepository>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
+    disk_budget: crate::slot_eviction::DiskBudget,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -183,15 +186,11 @@ pub async fn serve(
     ));
     let last_loaded_session = Arc::new(tokio::sync::RwLock::new(None));
 
-    // Background LRU eviction, so cached session slot files don't accumulate
-    // without bound. Only runs when there's a slot_dir to sweep; joined below
-    // on shutdown like the other background tasks.
+    // Background byte-budget eviction, so cached session slot files don't
+    // accumulate without bound. Only runs when there's a slot_dir to sweep;
+    // joined below on shutdown like the other background tasks.
     let lru_eviction = slot_dir.as_ref().map(|dir| {
-        crate::slots::spawn_lru_eviction_task(
-            dir.clone(),
-            crate::slots::DEFAULT_MAX_CACHED_SESSIONS,
-            cancel.clone(),
-        )
+        crate::slot_eviction::spawn_eviction_task(dir.clone(), disk_budget, cancel.clone())
     });
 
     let dashboard = Arc::new(DashboardState::new(
@@ -199,7 +198,8 @@ pub async fn serve(
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
-        cache_enabled,
+        Arc::new(CacheStatusCache::new()),
+        Arc::new(crate::cache_metrics::CacheMetricsStore::new()),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -604,21 +604,31 @@ async fn chat_completions(
     };
 
     // If the model was just restarted, invalidate all pending cache slots.
+    //
+    // A single fresh spawn can satisfy several requests that were queued
+    // waiting on it, and each carries `just_started = true`. Dedup so exactly
+    // one performs the invalidation: CAS the stored server-start time from the
+    // value we observed to `now`. Only the first request wins the swap; the
+    // rest see the already-updated value and skip (no repeated WARN, no
+    // redundant re-invalidation). The stored start time doubles as the mtime
+    // guard's cutoff, so the winning swap sets it in the same step.
     if target.just_started {
-        tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
-        state
-            .clear_all_pending
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        // Update server start time so mtime guard skips stale slot files.
-        state.server_start_time.store(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            AtomicOrdering::SeqCst,
-        );
-        // Invalidate hot cache — the server state is fresh, nothing is loaded.
-        *state.last_loaded_session.write().await = None;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let prev = state.server_start_time.load(AtomicOrdering::SeqCst);
+        if now > prev
+            && state
+                .server_start_time
+                .compare_exchange(prev, now, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
+                .is_ok()
+        {
+            tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
+            state.clear_all_pending.store(true, AtomicOrdering::SeqCst);
+            // Invalidate hot cache — the server state is fresh, nothing is loaded.
+            *state.last_loaded_session.write().await = None;
+        }
     }
 
     // Build upstream URL
@@ -629,6 +639,17 @@ async fn chat_completions(
         model_name = %target.model_name,
         "Routing to llama-server"
     );
+
+    // Record how caching resolved for this model. Written here rather than at
+    // launch because the dashboard lives in this crate and the launch decision
+    // lives in the runtime — the target is where the two meet. Cheap and
+    // idempotent: `set` skips the write when nothing changed, which is every
+    // request after the first for a given model.
+    state.dashboard.cache.set(CacheStatus::build(
+        state.cache_enabled && state.slot_dir.is_some(),
+        target.slot_restore_supported,
+        target.cache_ram_health,
+    ));
 
     // Register this request in the active-connections dashboard registry.
     // The returned guard unregisters on drop (see `connections` module docs)
@@ -652,8 +673,15 @@ async fn chat_completions(
     // O(1).  Needed to retry with the original payload if the upstream dies.
     let body_for_retry = body.clone();
 
-    // Build StreamConfig for this request (Some only when cache is enabled)
-    let stream_config = if state.cache_enabled {
+    // Build StreamConfig for this request (Some only when cache is enabled).
+    //
+    // `slot_restore_supported` is false for sliding-window/hybrid/recurrent
+    // models, where a disk restore cannot resume the prompt and actively
+    // suppresses the in-RAM prompt cache that would have (see
+    // `gglib_runtime::llama::args::slot_restore`). Leaving the config `None`
+    // takes every disk save/restore call out of the request path; the
+    // host-RAM cache handles conversation switching by itself.
+    let stream_config = if state.cache_enabled && target.slot_restore_supported {
         state.slot_dir.as_ref().map(|dir| StreamConfig {
             client: state.client.clone(),
             base_url: target.base_url.clone(),
@@ -688,6 +716,7 @@ async fn chat_completions(
                         connection,
                         state.upstream_health.clone(),
                         state.calibration.clone(),
+                        state.dashboard.cache_metrics.clone(),
                         None,
                         None,
                         None,
@@ -725,6 +754,7 @@ async fn chat_completions(
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
+                            state.dashboard.cache_metrics.clone(),
                             Some(permit),
                             Some(cfg),
                             Some(sid),
@@ -747,6 +777,7 @@ async fn chat_completions(
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
+                            state.dashboard.cache_metrics.clone(),
                             None,
                             None,
                             None,
@@ -771,6 +802,7 @@ async fn chat_completions(
                 connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
+                state.dashboard.cache_metrics.clone(),
                 None,
                 None,
                 None,
@@ -793,6 +825,7 @@ async fn chat_completions(
             connection,
             state.upstream_health.clone(),
             state.calibration.clone(),
+            state.dashboard.cache_metrics.clone(),
             None,
             None,
             None,
@@ -865,9 +898,12 @@ async fn chat_completions(
             // Compute cache-aware permit/config/session_id for the retry.
             // Mirrors the normal-path pattern: acquire permit via
             // prepare_streaming_cycle, fail-open on error.
+            // The disk-layer gate also applies here: the retry targets a freshly
+            // spawned instance of the same model, so a partial-KV model stays on
+            // the RAM-cache-only path (see the initial attempt above).
             let (retry_permit, retry_cfg, retry_session) =
                 if let (true, Some(sid), Some(slot_dir)) = (
-                    state.cache_enabled,
+                    state.cache_enabled && new_target.slot_restore_supported,
                     sanitized_session_id.as_ref(),
                     state.slot_dir.as_ref(),
                 ) {
@@ -910,6 +946,7 @@ async fn chat_completions(
                 retry_connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
+                state.dashboard.cache_metrics.clone(),
                 retry_permit,
                 retry_cfg,
                 retry_session,

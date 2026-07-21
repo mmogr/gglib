@@ -27,6 +27,7 @@ use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
     PerfConfig,
 };
+use gglib_core::server_config::CacheRamSetting;
 use gglib_runtime::process::ProcessManager;
 use gglib_runtime::{CatalogPortImpl, RuntimePortImpl};
 
@@ -198,6 +199,14 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         ctx.base_port,
         ctx.llama_server_path.to_string_lossy().into_owned(),
         catalog,
+        None,
+        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
+        // prefill timings and RAM footprint. Explicitly disabled rather than
+        // left unset — an unset flag would leave llama-server's own 8192 MiB
+        // default cache active, which is exactly what this must avoid.
+        CacheRamSetting::ExplicitMb(0),
+        None,
+        None,
         None,
     ));
     let runtime = Arc::new(RuntimePortImpl::new(process_mgr));

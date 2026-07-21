@@ -76,6 +76,7 @@ fn to_runtime_config(
         // GUI cache toggle is out of scope until Step 7 — always disabled here.
         cache_enabled: false,
         slot_dir: None,
+        ..Default::default()
     })
 }
 

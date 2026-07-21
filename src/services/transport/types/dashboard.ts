@@ -110,6 +110,69 @@ export interface ContextSnapshot {
   recorded_at_secs: number;
 }
 
+/** Health of the resolved `--cache-ram` budget. Mirrors `CacheStatus.ram_state`. */
+export type CacheRamState =
+  | 'healthy'
+  | 'low'
+  | 'disabled_insufficient_ram'
+  | 'disabled_by_user'
+  | 'llama_default';
+
+/**
+ * Mirrors `gglib_proxy::cache_metrics::CacheUsage` — measured prompt-cache
+ * reuse since the proxy started.
+ *
+ * Raw counts only. Nothing here is derived or estimated: reuse is exact, but
+ * what it saved depends on a prefill that never ran, so no "time saved" figure
+ * exists to display.
+ */
+export interface CacheUsage {
+  /** Completed requests whose upstream reported a cached-token count. */
+  reporting_requests: number;
+  /**
+   * Completed requests whose upstream omitted the field, excluded from every
+   * other figure here. Lets a consumer tell "no reuse" from "no data".
+   */
+  unreported_requests: number;
+  /** Total prompt tokens across `reporting_requests`. */
+  prompt_tokens: number;
+  /** Total prompt tokens served from cache. Always `<= prompt_tokens`. */
+  cached_tokens: number;
+  /** Prompt tokens in the most recent reporting request. */
+  last_prompt_tokens?: number | null;
+  /** Tokens reused from cache in the most recent reporting request. */
+  last_cached_tokens?: number | null;
+}
+
+/**
+ * Mirrors `gglib_proxy::dashboard::CacheStatus` — how prompt caching is
+ * configured for the running model.
+ *
+ * The fields directly on this interface are configuration: resolved when a
+ * model launches and changing only on a model swap. Per-request measurements
+ * live under `usage`.
+ */
+export interface CacheStatus {
+  /** Whether disk KV slot persistence is enabled on this proxy instance. */
+  disk_enabled: boolean;
+  /**
+   * Disk layer enabled proxy-wide but suppressed for this model, whose
+   * attention keeps only part of the token history. Always `false` when
+   * `disk_enabled` is `false`.
+   */
+  disk_suppressed_for_model: boolean;
+  /** Resolved `--cache-ram` budget in MiB; `null` when llama-server's own default applies. */
+  ram_budget_mb?: number | null;
+  /** Machine-readable budget health, for styling. */
+  ram_state: CacheRamState;
+  /** Whether anything here warrants surfacing to the user. */
+  needs_attention: boolean;
+  /** Ready-to-render warning lines; empty when nothing is wrong. */
+  warnings: string[];
+  /** Measured reuse since proxy start. Unlike the fields above, moves per request. */
+  usage: CacheUsage;
+}
+
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
 export interface DashboardSnapshot {
   active_connections: ActiveConnectionSnapshot[];
@@ -118,6 +181,12 @@ export interface DashboardSnapshot {
   slots_status?: string | null;
   recent_requests: ContextSnapshot[];
   total_requests: number;
-  /** Whether KV cache persistence is enabled on this proxy instance. */
-  cache_enabled?: boolean;
+  /**
+   * Prompt-cache configuration for the running model. `null` until the first
+   * request resolves one, since the RAM budget isn't known until launch.
+   *
+   * Replaces the former `cache_enabled` boolean, which was declared here but
+   * never read; `cache.disk_enabled` carries the same information.
+   */
+  cache?: CacheStatus | null;
 }

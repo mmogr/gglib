@@ -71,6 +71,47 @@ struct DashboardSnapshot {
     #[serde(default)]
     slots_status: Option<String>,
     total_requests: u64,
+    /// Prompt-cache configuration and reuse. `None` until the first request
+    /// resolves a model, and on a proxy older than this field.
+    #[serde(default)]
+    cache: Option<CacheStatus>,
+}
+
+/// Mirror of `gglib_proxy::dashboard::CacheStatus`.
+#[derive(Debug, Deserialize)]
+struct CacheStatus {
+    #[serde(default)]
+    disk_enabled: bool,
+    #[serde(default)]
+    disk_suppressed_for_model: bool,
+    #[serde(default)]
+    ram_budget_mb: Option<u64>,
+    #[serde(default)]
+    ram_state: String,
+    #[serde(default)]
+    warnings: Vec<String>,
+    #[serde(default)]
+    usage: CacheUsage,
+}
+
+/// Mirror of `gglib_proxy::cache_metrics::CacheUsage`.
+///
+/// Raw counts only — the server publishes no derived "time saved" figure, so
+/// there is none to render here either.
+#[derive(Debug, Default, Deserialize)]
+struct CacheUsage {
+    #[serde(default)]
+    reporting_requests: u64,
+    #[serde(default)]
+    unreported_requests: u64,
+    #[serde(default)]
+    prompt_tokens: u64,
+    #[serde(default)]
+    cached_tokens: u64,
+    #[serde(default)]
+    last_prompt_tokens: Option<u32>,
+    #[serde(default)]
+    last_cached_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -284,10 +325,111 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
     }
 
     out.push('\n');
+    out.push_str("Prompt cache\n");
+    match &snapshot.cache {
+        None => out.push_str("  (no model resolved yet)\n"),
+        Some(cache) => out.push_str(&render_cache_section(cache, term_width)),
+    }
+
+    out.push('\n');
     out.push_str(&format!(
         "Total requests served: {}\n",
         snapshot.total_requests
     ));
+    out
+}
+
+/// Render the body of the prompt-cache section (rows only, no header).
+///
+/// Every figure is one the upstream measured. There is deliberately no
+/// "time saved" line: reuse is exact, but what it saved depends on a prefill
+/// that never ran — see `gglib_proxy::cache_metrics` for the same reasoning
+/// on the server side.
+fn render_cache_section(cache: &CacheStatus, term_width: u16) -> String {
+    let mut out = String::new();
+
+    // Warnings are pre-phrased for display by the server; clip each to one
+    // physical row, matching how `slots_status` is handled above.
+    let max_warning_chars = usize::from(term_width.saturating_sub(4));
+    for warning in &cache.warnings {
+        out.push_str(&format!("  ! {}\n", truncate(warning, max_warning_chars)));
+    }
+
+    let usage = &cache.usage;
+    if usage.reporting_requests == 0 {
+        out.push_str("  (no cache activity recorded yet)\n");
+    } else {
+        out.push_str(&format!(
+            "  {:<14} {} of {} prompt tokens ({} requests)\n",
+            "Reused",
+            thousands(usage.cached_tokens),
+            thousands(usage.prompt_tokens),
+            thousands(usage.reporting_requests),
+        ));
+        if let (Some(last_cached), Some(last_prompt)) =
+            (usage.last_cached_tokens, usage.last_prompt_tokens)
+        {
+            out.push_str(&format!(
+                "  {:<14} {} of {} tokens from cache\n",
+                "Last request",
+                thousands(u64::from(last_cached)),
+                thousands(u64::from(last_prompt)),
+            ));
+        }
+    }
+
+    // Only shown when it's non-zero: on a current llama.cpp every request
+    // reports, so a permanent "0" row would be noise.
+    if usage.unreported_requests > 0 {
+        out.push_str(&format!(
+            "  {:<14} {}\n",
+            "No cache data",
+            thousands(usage.unreported_requests),
+        ));
+    }
+
+    let disk = if !cache.disk_enabled {
+        "off"
+    } else if cache.disk_suppressed_for_model {
+        "off for this model"
+    } else {
+        "on"
+    };
+    match ram_budget_label(cache) {
+        Some(budget) => out.push_str(&format!("  RAM budget: {budget} · disk: {disk}\n")),
+        None => out.push_str(&format!("  disk: {disk}\n")),
+    }
+
+    out
+}
+
+/// Human-readable summary of how the `--cache-ram` budget resolved.
+///
+/// `None` for `llama_default`, where gglib emitted no flag and so has no
+/// figure of its own to report.
+fn ram_budget_label(cache: &CacheStatus) -> Option<String> {
+    match cache.ram_state.as_str() {
+        "healthy" | "low" => cache
+            .ram_budget_mb
+            .map(|mb| format!("{} MiB", thousands(mb))),
+        "disabled_by_user" => Some("disabled".to_string()),
+        "disabled_insufficient_ram" => Some("unavailable (not enough memory)".to_string()),
+        // Covers `llama_default` and any state a newer server adds.
+        _ => None,
+    }
+}
+
+/// Format an integer with `,` thousands separators, so six-figure token
+/// counts stay readable in a dense terminal frame.
+fn thousands(value: u64) -> String {
+    let digits = value.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(ch);
+    }
     out
 }
 
@@ -539,6 +681,7 @@ mod tests {
             slots: vec![],
             slots_status: Some("disabled upstream (--no-slots)".to_string()),
             total_requests: 0,
+            cache: None,
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -576,6 +719,7 @@ mod tests {
             }],
             slots_status: None,
             total_requests: 3,
+            cache: None,
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -661,6 +805,7 @@ mod tests {
             slots: vec![],
             slots_status: Some(long_reason.clone()),
             total_requests: 0,
+            cache: None,
         };
         let width = 80u16;
         let frame = render_frame(
@@ -684,5 +829,174 @@ mod tests {
             frame.contains('\u{2026}'),
             "long reason should be truncated with an ellipsis"
         );
+    }
+
+    // ── Prompt cache section ─────────────────────────────────────────────
+
+    fn cache_status(usage: CacheUsage) -> CacheStatus {
+        CacheStatus {
+            disk_enabled: true,
+            disk_suppressed_for_model: false,
+            ram_budget_mb: Some(70_008),
+            ram_state: "healthy".to_string(),
+            warnings: vec![],
+            usage,
+        }
+    }
+
+    fn frame_with_cache(cache: Option<CacheStatus>) -> String {
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 3,
+            cache,
+        };
+        render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    }
+
+    #[test]
+    fn cache_section_reports_when_no_model_has_resolved() {
+        let frame = frame_with_cache(None);
+        assert!(frame.contains("Prompt cache"));
+        assert!(frame.contains("(no model resolved yet)"), "{frame}");
+    }
+
+    #[test]
+    fn cache_section_shows_reuse_totals_with_separators() {
+        let frame = frame_with_cache(Some(cache_status(CacheUsage {
+            reporting_requests: 3,
+            prompt_tokens: 30_342,
+            cached_tokens: 29_450,
+            last_prompt_tokens: Some(10_000),
+            last_cached_tokens: Some(9_500),
+            ..CacheUsage::default()
+        })));
+        assert!(frame.contains("29,450 of 30,342 prompt tokens"), "{frame}");
+        assert!(
+            frame.contains("9,500 of 10,000 tokens from cache"),
+            "{frame}"
+        );
+        assert!(frame.contains("RAM budget: 70,008 MiB"), "{frame}");
+        assert!(frame.contains("disk: on"), "{frame}");
+    }
+
+    /// "Nothing measured yet" and "measured, and it was zero" are different
+    /// facts; the server keeps them apart, so the frame must too.
+    #[test]
+    fn cache_section_distinguishes_no_activity_from_a_measured_zero() {
+        let idle = frame_with_cache(Some(cache_status(CacheUsage::default())));
+        assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
+
+        let measured_zero = frame_with_cache(Some(cache_status(CacheUsage {
+            reporting_requests: 1,
+            prompt_tokens: 5_000,
+            cached_tokens: 0,
+            last_prompt_tokens: Some(5_000),
+            last_cached_tokens: Some(0),
+            ..CacheUsage::default()
+        })));
+        assert!(
+            !measured_zero.contains("no cache activity"),
+            "{measured_zero}"
+        );
+        assert!(
+            measured_zero.contains("0 of 5,000 prompt tokens"),
+            "{measured_zero}"
+        );
+    }
+
+    #[test]
+    fn cache_section_renders_server_warnings() {
+        let mut cache = cache_status(CacheUsage::default());
+        cache.warnings = vec!["Low memory available for prompt caching.".to_string()];
+        let frame = frame_with_cache(Some(cache));
+        assert!(frame.contains("! Low memory available"), "{frame}");
+    }
+
+    /// Warnings are server-phrased and can be long; they must not wrap the
+    /// frame onto extra physical rows, which would corrupt the redraw's
+    /// line-count arithmetic.
+    #[test]
+    fn cache_section_truncates_a_long_warning_to_one_row() {
+        let mut cache = cache_status(CacheUsage::default());
+        cache.warnings = vec!["w".repeat(500)];
+        let frame = frame_with_cache(Some(cache));
+        let longest = frame.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+        assert!(
+            longest <= usize::from(DEFAULT_TERM_WIDTH),
+            "longest line was {longest} columns"
+        );
+    }
+
+    #[test]
+    fn cache_section_names_a_model_suppressed_disk_layer() {
+        let mut cache = cache_status(CacheUsage::default());
+        cache.disk_suppressed_for_model = true;
+        let frame = frame_with_cache(Some(cache));
+        assert!(frame.contains("disk: off for this model"), "{frame}");
+    }
+
+    #[test]
+    fn cache_section_omits_the_budget_when_llama_default_applies() {
+        let mut cache = cache_status(CacheUsage::default());
+        cache.ram_state = "llama_default".to_string();
+        cache.ram_budget_mb = None;
+        let frame = frame_with_cache(Some(cache));
+        assert!(!frame.contains("RAM budget"), "{frame}");
+        assert!(frame.contains("disk: on"), "{frame}");
+    }
+
+    #[test]
+    fn cache_section_explains_a_budget_the_machine_cannot_afford() {
+        let mut cache = cache_status(CacheUsage::default());
+        cache.ram_state = "disabled_insufficient_ram".to_string();
+        cache.ram_budget_mb = Some(0);
+        let frame = frame_with_cache(Some(cache));
+        assert!(frame.contains("not enough memory"), "{frame}");
+    }
+
+    /// A permanent "0" row would be noise on any current llama.cpp.
+    #[test]
+    fn cache_section_hides_the_no_data_row_unless_it_is_non_zero() {
+        let none_missing = frame_with_cache(Some(cache_status(CacheUsage {
+            reporting_requests: 1,
+            ..CacheUsage::default()
+        })));
+        assert!(!none_missing.contains("No cache data"), "{none_missing}");
+
+        let some_missing = frame_with_cache(Some(cache_status(CacheUsage {
+            reporting_requests: 1,
+            unreported_requests: 2,
+            ..CacheUsage::default()
+        })));
+        assert!(some_missing.contains("No cache data"), "{some_missing}");
+    }
+
+    #[test]
+    fn thousands_inserts_separators_at_the_right_boundaries() {
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
+        assert_eq!(thousands(1_000), "1,000");
+        assert_eq!(thousands(70_008), "70,008");
+        assert_eq!(thousands(1_234_567), "1,234,567");
+        assert_eq!(thousands(u64::MAX), "18,446,744,073,709,551,615");
+    }
+
+    /// A field the server may add later must not break deserialization —
+    /// the mirror deliberately has no `deny_unknown_fields`.
+    #[test]
+    fn cache_status_tolerates_unknown_and_missing_fields() {
+        let json = serde_json::json!({
+            "disk_enabled": true,
+            "ram_state": "healthy",
+            "some_future_field": 42
+        })
+        .to_string();
+        let got: CacheStatus = serde_json::from_str(&json).expect("should deserialize");
+        assert!(got.disk_enabled);
+        assert_eq!(got.usage.reporting_requests, 0);
+        assert_eq!(got.ram_budget_mb, None);
     }
 }

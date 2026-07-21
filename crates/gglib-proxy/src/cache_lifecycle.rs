@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use dashmap::DashSet;
 use reqwest::Client;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tokio::time::{Duration, sleep};
+use tokio::time::sleep;
 use tracing::{debug, warn};
 
 use crate::slots::{self, SlotIoResult};
@@ -24,12 +24,10 @@ pub struct LastLoadedSession {
     pub session_id: String,
 }
 
-/// Maximum number of retry attempts for pre-generation restore failures.
-/// Total attempts = 1 (initial) + MAX_RETRIES = 3.
-const MAX_RETRIES: u32 = 2;
-
-/// Backoff between retry attempts (100ms).
-const RETRY_BACKOFF: Duration = Duration::from_millis(100);
+// Retry budget for pre-generation restore failures — shared with
+// `slots::attempt_save`'s retry loop; see `slots::MAX_RETRIES` for why.
+// Total attempts = 1 (initial) + MAX_RETRIES = 3.
+use slots::{MAX_RETRIES, RETRY_BACKOFF};
 
 /// Owned configuration bundle for cache lifecycle operations.
 ///
@@ -42,7 +40,8 @@ pub struct StreamConfig {
     pub base_url: String,
     pub slot_dir: PathBuf,
     /// Database ID of the model whose slots are being cached.
-    /// Used to namespace slot files under `{slot_dir}/{model_id}/`.
+    /// Used to namespace slot files via the flat `{model_id}__{session}.bin`
+    /// filename prefix (see `gglib_core::paths::slot_file_name`).
     pub model_id: u32,
     pub clear_all_pending: Arc<AtomicBool>,
     pub per_session_cleared: Arc<DashSet<String>>,
@@ -67,29 +66,46 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
         Err(e) => return SlotIoResult::Permanent(e),
     };
 
+    // Existence precheck: if no slot file exists at all, skip the network
+    // restore call entirely. llama-server returns HTTP 400 (not 404) for a
+    // missing/invalid slot file, which `restore_slot` classifies as
+    // `Transient` — without this check, every first-ever restore for a
+    // session (first turn of a conversation, or the first request after a
+    // restart) would be retried `MAX_RETRIES` times and logged as a failure
+    // for what is actually the expected "nothing cached yet" case.
+    let path = slots::slot_bin_path(&config.slot_dir, config.model_id, &sanitized);
+    let file_exists = tokio::fs::metadata(&path).await.is_ok();
+
     // mtime guard: skip restoring a slot file written by a prior llama-server
     // instance (see `slots::slot_file_is_stale` for the fail-open contract).
     let server_start_secs = config.server_start_time.load(Ordering::SeqCst);
-    let is_stale = slots::slot_file_is_stale(
-        &config.slot_dir,
-        config.model_id,
-        &sanitized,
-        server_start_secs,
-    )
-    .await;
 
-    let mut result = if is_stale {
-        debug!("skipping restore for {session_id} — slot file predates current server instance");
+    let mut result = if !file_exists {
         SlotIoResult::NotFound
     } else {
-        slots::restore_slot(
-            &config.client,
-            &config.base_url,
+        let is_stale = slots::slot_file_is_stale(
             &config.slot_dir,
             config.model_id,
             &sanitized,
+            server_start_secs,
         )
-        .await
+        .await;
+
+        if is_stale {
+            debug!(
+                "skipping restore for {session_id} — slot file predates current server instance"
+            );
+            SlotIoResult::NotFound
+        } else {
+            slots::restore_slot(
+                &config.client,
+                &config.base_url,
+                &config.slot_dir,
+                config.model_id,
+                &sanitized,
+            )
+            .await
+        }
     };
 
     // Retry only transient failures (UpstreamDead / timeout / network error)
@@ -310,6 +326,7 @@ pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::Duration;
 
     #[test]
     fn test_stream_config_is_clone() {
@@ -396,6 +413,46 @@ mod tests {
         assert!(!config.clear_all_pending.load(Ordering::SeqCst));
     }
 
+    /// Regression test for the existence precheck: a session with no slot
+    /// file at all (first turn of a conversation, or first request after a
+    /// restart) must never reach the network restore call. Proven by
+    /// timing, same as the staleness-guard test below — a real call to a
+    /// refused port would retry `MAX_RETRIES` times with `RETRY_BACKOFF`
+    /// between them (200ms+); the existence check short-circuits to
+    /// `NotFound` immediately instead, avoiding llama-server's HTTP 400
+    /// "missing slot file" response being misclassified as `Transient` and
+    /// retried for what is actually the expected cold-start case.
+    #[tokio::test]
+    async fn test_restore_with_retry_skips_missing_slot_file() {
+        let dir = tempfile::tempdir().unwrap();
+        // No file ever written for this session — dir doesn't even exist yet.
+        let config = StreamConfig {
+            client: Client::new(),
+            base_url: "http://127.0.0.1:0".to_string(), // refused if ever called
+            slot_dir: dir.path().to_path_buf(),
+            model_id: 0,
+            clear_all_pending: Arc::new(AtomicBool::new(false)),
+            per_session_cleared: Arc::new(DashSet::new()),
+            server_start_time: Arc::new(AtomicU64::new(0)),
+            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
+        };
+
+        let started = tokio::time::Instant::now();
+        let result = restore_with_retry(&config, "never-cached-session").await;
+        let elapsed = started.elapsed();
+
+        assert!(
+            matches!(result, SlotIoResult::NotFound),
+            "missing slot file should be treated as NotFound, got {:?}",
+            result
+        );
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "existence check should short-circuit before any network retry loop, took {:?}",
+            elapsed
+        );
+    }
+
     /// Regression test for the mtime guard: a slot file written before the
     /// current llama-server instance started must never reach the network
     /// restore call. Proven by timing — a real call to a refused port would
@@ -405,11 +462,8 @@ mod tests {
     async fn test_restore_with_retry_skips_stale_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "stale-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
         std::fs::write(
-            model_subdir.join(format!("{session_id}.bin")),
+            slots::slot_bin_path(dir.path(), 0, session_id),
             b"old kv state",
         )
         .unwrap();
@@ -456,10 +510,7 @@ mod tests {
     async fn test_restore_with_retry_does_not_skip_fresh_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         let session_id = "fresh-session";
-        // Create file in model subdirectory (matching namespaced layout)
-        let model_subdir = dir.path().join("0");
-        std::fs::create_dir_all(&model_subdir).unwrap();
-        std::fs::write(model_subdir.join(format!("{session_id}.bin")), b"kv state").unwrap();
+        std::fs::write(slots::slot_bin_path(dir.path(), 0, session_id), b"kv state").unwrap();
 
         // Server "started" long before the file was written.
         let server_start_secs = std::time::SystemTime::now()
