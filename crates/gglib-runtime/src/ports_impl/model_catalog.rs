@@ -89,8 +89,8 @@ fn total_model_bytes(file_path: &std::path::Path) -> u64 {
 /// Helper to convert Model to ModelLaunchSpec (for launching).
 fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = total_model_bytes(&m.file_path);
-    let kv_bytes_per_token =
-        gglib_core::domain::estimate_kv_bytes_per_token(&m.metadata, m.architecture.as_deref());
+    let kv_elems_per_token =
+        gglib_core::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
 
     ModelLaunchSpec {
         id: m.id as u32,
@@ -101,7 +101,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         context_length: m.context_length,
         server_defaults: m.server_defaults,
         file_size_bytes,
-        kv_bytes_per_token,
+        kv_elems_per_token,
     }
 }
 

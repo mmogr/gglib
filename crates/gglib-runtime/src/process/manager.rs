@@ -396,11 +396,22 @@ impl ProcessManager {
                         // KV estimate matches the context the server actually
                         // launches with.
                         let launch_ctx = resolve_context_size(&opts);
+                        // TODO(commit 7): use the launch's resolved K/V cache
+                        // types instead of hardcoding f16 here — this keeps
+                        // the budget byte-identical to the pre-quantization
+                        // estimate until `resolve_kv_cache_types` lands.
+                        let kv_bytes_per_token = launch_spec.kv_elems_per_token.map(|elems| {
+                            gglib_core::domain::kv_bytes_per_token(
+                                elems,
+                                gglib_core::cache_config::KvCacheType::F16,
+                                gglib_core::cache_config::KvCacheType::F16,
+                            )
+                        });
                         let cache_ram = crate::llama::args::resolve_cache_ram(
                             cache_ram_owned,
                             crate::system::total_system_ram_bytes(),
                             launch_spec.file_size_bytes,
-                            launch_spec.kv_bytes_per_token,
+                            kv_bytes_per_token,
                             launch_ctx,
                         );
                         if let Some(explanation) = cache_ram.explain() {

@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
 
+pub mod cache_config;
 pub mod contracts;
 pub mod domain;
 pub mod download;

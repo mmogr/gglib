@@ -162,23 +162,11 @@ pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
 // Host-RAM prompt cache budget (`--cache-ram`)
 // =============================================================================
 
-/// How to determine the host-RAM prompt cache budget (`--cache-ram`).
-///
-/// Deliberately a two-state enum rather than `Option<u64>`: benchmark
-/// launches (which must never gain a prompt cache — it would perturb
-/// throughput measurements and RAM footprint) pass `ExplicitMb(0)`, which
-/// unambiguously disables the cache rather than leaving it to an implicit
-/// "no value" state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CacheRamSetting {
-    /// Compute a budget from system RAM, model size, and the KV estimate.
-    /// The default variant — every launch surface auto-sizes unless it
-    /// opts out.
-    #[default]
-    Auto,
-    /// Use exactly this MiB value. `0` disables the cache.
-    ExplicitMb(u64),
-}
+// `CacheRamSetting` now lives in `crate::cache_config`, alongside
+// `KvCacheType` — cache-related config resolution has one home. Re-exported
+// here so existing `gglib_core::server_config::CacheRamSetting` call sites
+// keep working.
+pub use crate::cache_config::CacheRamSetting;
 
 // Cache-RAM budget constants and [`compute_auto_cache_ram_mb`] now live in
 // `crate::domain::cache_budget` (re-exported from `crate::domain`), alongside

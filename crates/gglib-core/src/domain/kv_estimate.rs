@@ -1,8 +1,12 @@
 //! KV-cache size estimation from GGUF metadata.
 //!
-//! Estimates how many bytes of KV cache a model consumes *per token* of
-//! context, which callers multiply by a context size to size memory budgets
-//! (see `crate::server_config::compute_auto_cache_ram_mb`).
+//! Estimates how many *elements* of KV cache a model consumes per token of
+//! context. Element counts are type-agnostic (derived purely from model
+//! architecture); converting to bytes happens separately, once the launch's
+//! resolved K/V cache types are known (`--cache-type-k`/`--cache-type-v` may
+//! quantize K and V differently — see [`crate::cache_config::KvCacheType`]).
+//! Callers multiply the resulting bytes-per-token by a context size to size
+//! memory budgets (see `crate::domain::cache_budget::compute_auto_cache_ram_mb`).
 //!
 //! Inputs come from the raw GGUF key/value map that `gglib-gguf` copies
 //! verbatim into [`crate::domain::Model::metadata`], so no re-parse of the
@@ -18,10 +22,19 @@
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
-/// Bytes per KV cache element. llama.cpp defaults both the K and V cache to
-/// `f16` (2 bytes); quantized KV caches (`--cache-type-k q8_0` etc.) would use
-/// less, so assuming `f16` keeps the estimate on the conservative (larger) side.
-const BYTES_PER_KV_ELEMENT: u64 = 2;
+use crate::cache_config::KvCacheType;
+
+/// Per-token K and V element counts, type-agnostic.
+///
+/// K and V element counts are tracked separately (not just summed) because
+/// callers may quantize K and V to different types (e.g. `q8_0` K with `f16`
+/// V to sidestep the Flash Attention requirement on quantized V), so the byte
+/// cost of each side must be computed independently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KvElemsPerToken {
+    pub k: u64,
+    pub v: u64,
+}
 
 /// Look up an architecture-prefixed GGUF key (`{arch}.{suffix}`), falling back
 /// to the bare suffix for the occasional file that omits the prefix.
@@ -36,12 +49,13 @@ fn lookup<S: BuildHasher>(
         .and_then(|v| v.trim().parse::<u64>().ok())
 }
 
-/// Estimate KV cache bytes consumed per token of context.
+/// Estimate K and V element counts consumed per token of context.
 ///
 /// Formula (standard transformer KV cache):
 ///
 /// ```text
-/// bytes/token = block_count × head_count_kv × (key_length + value_length) × 2 bytes
+/// k_elems/token = block_count × head_count_kv × key_length
+/// v_elems/token = block_count × head_count_kv × value_length
 /// ```
 ///
 /// `key_length`/`value_length` are the per-head dimensions. When absent, both
@@ -62,10 +76,10 @@ fn lookup<S: BuildHasher>(
 /// that as "unknown" and substitute their own conservative allowance rather
 /// than assuming zero.
 #[must_use]
-pub fn estimate_kv_bytes_per_token<S: BuildHasher>(
+pub fn estimate_kv_elems_per_token<S: BuildHasher>(
     metadata: &HashMap<String, String, S>,
     architecture: Option<&str>,
-) -> Option<u64> {
+) -> Option<KvElemsPerToken> {
     let arch = architecture
         .map(str::to_owned)
         .or_else(|| metadata.get("general.architecture").cloned())?;
@@ -91,19 +105,24 @@ pub fn estimate_kv_bytes_per_token<S: BuildHasher>(
         return None;
     }
 
-    Some(
-        block_count
-            .saturating_mul(head_count_kv)
-            .saturating_mul(key_length.saturating_add(value_length))
-            .saturating_mul(BYTES_PER_KV_ELEMENT),
-    )
+    let per_head = block_count.saturating_mul(head_count_kv);
+    Some(KvElemsPerToken {
+        k: per_head.saturating_mul(key_length),
+        v: per_head.saturating_mul(value_length),
+    })
+}
+
+/// Convert per-token K/V element counts to bytes at the given cache types.
+#[must_use]
+pub const fn kv_bytes_per_token(elems: KvElemsPerToken, k: KvCacheType, v: KvCacheType) -> u64 {
+    k.bytes_for_elems(elems.k) + v.bytes_for_elems(elems.v)
 }
 
 /// Estimate total KV cache bytes for a given context size.
 ///
-/// Convenience wrapper over [`estimate_kv_bytes_per_token`]; saturating so an
-/// absurd context size can never overflow into a small (and therefore
-/// dangerously permissive) budget.
+/// Convenience wrapper taking an already-computed bytes-per-token figure
+/// (see [`kv_bytes_per_token`]); saturating so an absurd context size can
+/// never overflow into a small (and therefore dangerously permissive) budget.
 #[must_use]
 pub const fn estimate_kv_bytes_for_context(kv_bytes_per_token: u64, context_size: u64) -> u64 {
     kv_bytes_per_token.saturating_mul(context_size)
@@ -129,24 +148,44 @@ mod tests {
         ])
     }
 
+    /// Qwen3 fixture: 64 layers × 8 kv heads × 128 head dim = 65536 elems/side.
+    const QWEN_ELEMS: u64 = 64 * 8 * 128;
+
     #[test]
     fn computes_from_explicit_head_dims() {
-        // 64 layers × 8 kv heads × (128 + 128) × 2 bytes = 262144 bytes/token
-        let got = estimate_kv_bytes_per_token(&qwen_metadata(), Some("qwen3"));
-        assert_eq!(got, Some(64 * 8 * (128 + 128) * 2));
+        let got = estimate_kv_elems_per_token(&qwen_metadata(), Some("qwen3"));
+        assert_eq!(
+            got,
+            Some(KvElemsPerToken {
+                k: QWEN_ELEMS,
+                v: QWEN_ELEMS
+            })
+        );
     }
 
     #[test]
     fn architecture_falls_back_to_general_architecture_key() {
         // No explicit architecture passed — read it from the metadata itself.
-        let got = estimate_kv_bytes_per_token(&qwen_metadata(), None);
-        assert_eq!(got, Some(64 * 8 * (128 + 128) * 2));
+        let got = estimate_kv_elems_per_token(&qwen_metadata(), None);
+        assert_eq!(
+            got,
+            Some(KvElemsPerToken {
+                k: QWEN_ELEMS,
+                v: QWEN_ELEMS
+            })
+        );
     }
 
     #[test]
     fn architecture_lookup_is_case_insensitive() {
-        let got = estimate_kv_bytes_per_token(&qwen_metadata(), Some("QWEN3"));
-        assert_eq!(got, Some(64 * 8 * (128 + 128) * 2));
+        let got = estimate_kv_elems_per_token(&qwen_metadata(), Some("QWEN3"));
+        assert_eq!(
+            got,
+            Some(KvElemsPerToken {
+                k: QWEN_ELEMS,
+                v: QWEN_ELEMS
+            })
+        );
     }
 
     #[test]
@@ -155,8 +194,14 @@ mod tests {
         md.remove("qwen3.attention.key_length");
         md.remove("qwen3.attention.value_length");
         // head_dim = 5120 / 40 = 128, so the result matches the explicit case.
-        let got = estimate_kv_bytes_per_token(&md, Some("qwen3"));
-        assert_eq!(got, Some(64 * 8 * (128 + 128) * 2));
+        let got = estimate_kv_elems_per_token(&md, Some("qwen3"));
+        assert_eq!(
+            got,
+            Some(KvElemsPerToken {
+                k: QWEN_ELEMS,
+                v: QWEN_ELEMS
+            })
+        );
     }
 
     /// Without GQA metadata the full head count is the KV head count — a much
@@ -165,15 +210,22 @@ mod tests {
     fn falls_back_to_head_count_without_gqa() {
         let mut md = qwen_metadata();
         md.remove("qwen3.attention.head_count_kv");
-        let got = estimate_kv_bytes_per_token(&md, Some("qwen3"));
-        assert_eq!(got, Some(64 * 40 * (128 + 128) * 2));
+        let got = estimate_kv_elems_per_token(&md, Some("qwen3"));
+        let expected = 64 * 40 * 128;
+        assert_eq!(
+            got,
+            Some(KvElemsPerToken {
+                k: expected,
+                v: expected
+            })
+        );
     }
 
     #[test]
     fn none_when_block_count_missing() {
         let mut md = qwen_metadata();
         md.remove("qwen3.block_count");
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
     }
 
     #[test]
@@ -181,7 +233,7 @@ mod tests {
         let mut md = qwen_metadata();
         md.remove("qwen3.attention.head_count");
         md.remove("qwen3.attention.head_count_kv");
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
     }
 
     /// Head dims are neither explicit nor derivable without `embedding_length`.
@@ -191,36 +243,36 @@ mod tests {
         md.remove("qwen3.attention.key_length");
         md.remove("qwen3.attention.value_length");
         md.remove("qwen3.embedding_length");
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
     }
 
     #[test]
     fn none_on_non_numeric_values() {
         let mut md = qwen_metadata();
         md.insert("qwen3.block_count".to_string(), "sixty-four".to_string());
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
     }
 
     #[test]
     fn none_when_metadata_empty() {
         assert_eq!(
-            estimate_kv_bytes_per_token(&HashMap::new(), Some("llama")),
+            estimate_kv_elems_per_token(&HashMap::new(), Some("llama")),
             None
         );
-        assert_eq!(estimate_kv_bytes_per_token(&HashMap::new(), None), None);
+        assert_eq!(estimate_kv_elems_per_token(&HashMap::new(), None), None);
     }
 
-    /// A zero layer/head count would produce a nonsense zero-byte estimate,
+    /// A zero layer/head count would produce a nonsense zero-elem estimate,
     /// which downstream would read as "KV is free" — reject it instead.
     #[test]
     fn none_on_degenerate_zero_counts() {
         let mut md = qwen_metadata();
         md.insert("qwen3.block_count".to_string(), "0".to_string());
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
 
         let mut md = qwen_metadata();
         md.insert("qwen3.attention.head_count_kv".to_string(), "0".to_string());
-        assert_eq!(estimate_kv_bytes_per_token(&md, Some("qwen3")), None);
+        assert_eq!(estimate_kv_elems_per_token(&md, Some("qwen3")), None);
     }
 
     #[test]
@@ -232,10 +284,53 @@ mod tests {
             ("embedding_length".to_string(), "4096".to_string()),
         ]);
         // head_dim = 4096 / 32 = 128
+        let expected = 32 * 8 * 128;
         assert_eq!(
-            estimate_kv_bytes_per_token(&md, Some("llama")),
-            Some(32 * 8 * (128 + 128) * 2)
+            estimate_kv_elems_per_token(&md, Some("llama")),
+            Some(KvElemsPerToken {
+                k: expected,
+                v: expected
+            })
         );
+    }
+
+    // ── Elems -> bytes conversion ────────────────────────────────────────
+
+    #[test]
+    fn kv_bytes_per_token_at_f16_matches_the_old_formula() {
+        // f16 = 2 bytes/elem, both sides: (k + v) * 2, matching the original
+        // single-type formula this function replaced.
+        let elems = KvElemsPerToken {
+            k: QWEN_ELEMS,
+            v: QWEN_ELEMS,
+        };
+        let got = kv_bytes_per_token(elems, KvCacheType::F16, KvCacheType::F16);
+        assert_eq!(got, (QWEN_ELEMS + QWEN_ELEMS) * 2);
+    }
+
+    #[test]
+    fn kv_bytes_per_token_at_q8_0_is_smaller_than_f16() {
+        let elems = KvElemsPerToken {
+            k: QWEN_ELEMS,
+            v: QWEN_ELEMS,
+        };
+        let f16 = kv_bytes_per_token(elems, KvCacheType::F16, KvCacheType::F16);
+        let q8_0 = kv_bytes_per_token(elems, KvCacheType::Q8_0, KvCacheType::Q8_0);
+        assert!(q8_0 < f16);
+    }
+
+    #[test]
+    fn kv_bytes_per_token_supports_asymmetric_k_v_types() {
+        // q8_0 K with f16 V (sidesteps the Flash Attention requirement on
+        // quantized V) must sum each side's own type independently.
+        let elems = KvElemsPerToken {
+            k: QWEN_ELEMS,
+            v: QWEN_ELEMS,
+        };
+        let mixed = kv_bytes_per_token(elems, KvCacheType::Q8_0, KvCacheType::F16);
+        let expected =
+            KvCacheType::Q8_0.bytes_for_elems(QWEN_ELEMS) + KvCacheType::F16.bytes_for_elems(QWEN_ELEMS);
+        assert_eq!(mixed, expected);
     }
 
     #[test]

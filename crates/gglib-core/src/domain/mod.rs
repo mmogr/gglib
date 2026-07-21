@@ -35,7 +35,10 @@ pub use benchmark::{
 pub use inference::InferenceConfig;
 
 // Re-export KV estimation helpers at the domain level for convenience
-pub use kv_estimate::{estimate_kv_bytes_for_context, estimate_kv_bytes_per_token};
+pub use kv_estimate::{
+    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token,
+    kv_bytes_per_token,
+};
 pub use server_config::ServerConfig;
 
 // Re-export cache-RAM budget math at the domain level for convenience
