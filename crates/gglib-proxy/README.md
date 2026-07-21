@@ -49,7 +49,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, and recent request history — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
+6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 
@@ -495,7 +495,15 @@ explicitly documented as a not-yet-consumed "future" contract).
     "needs_attention": true,
     "warnings": [
       "Disk cache offloading is disabled for this model — its attention keeps only part of the token history, which llama-server's slot files can't restore."
-    ]
+    ],
+    "usage": {
+      "reporting_requests": 3,
+      "unreported_requests": 0,
+      "prompt_tokens": 30342,
+      "cached_tokens": 29450,
+      "last_prompt_tokens": 10000,
+      "last_cached_tokens": 9500
+    }
   }
 }
 ```
@@ -514,9 +522,9 @@ explicitly documented as a not-yet-consumed "future" contract).
 
 #### `cache` (`CacheStatus`)
 
-Configuration state only — resolved when a model launches, changing only on a
-model swap. Per-request cache telemetry (tokens reused, TTFT saved) will
-extend this object rather than sitting beside it.
+The fields directly on this object are configuration — resolved when a model
+launches, changing only on a model swap. Measured per-request reuse lives
+under [`cache.usage`](#cacheusage-cacheusage).
 
 Replaces the former top-level `cache_enabled` boolean; `cache.disk_enabled`
 carries the same information.
@@ -529,6 +537,28 @@ carries the same information.
 | `ram_state` | `"healthy" \| "low" \| "disabled_insufficient_ram" \| "disabled_by_user" \| "llama_default"` | Budget health, for styling |
 | `needs_attention` | `bool` | Whether anything here warrants surfacing. `false` for healthy budgets *and* for a cache the user deliberately disabled |
 | `warnings` | `string[]` | Ready-to-render lines; empty when nothing is wrong. A low budget on a suppressed-disk model yields both warnings, since fixing one still leaves the other |
+| `usage` | `object` | Measured prompt-cache reuse — see below |
+
+#### `cache.usage` (`CacheUsage`)
+
+Prompt-cache reuse measured since the proxy started, sourced from
+`usage.prompt_tokens_details.cached_tokens` (llama.cpp's
+`n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
+report, so these totals cover all traffic rather than one path.
+
+Raw counts only. Nothing is derived or extrapolated — in particular there is
+no "time saved" figure: reuse is measured exactly, but what it saved depends
+on a prefill that never ran. A consumer wanting a hit rate can divide two
+numbers that are both real.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reporting_requests` | `u64` | Completed requests whose upstream reported a cached-token count — the denominator for the token totals below |
+| `unreported_requests` | `u64` | Completed requests whose upstream omitted the field. Excluded from every other figure, so a server that never reports can't look like a cache that never hits |
+| `prompt_tokens` | `u64` | Total prompt tokens across `reporting_requests` |
+| `cached_tokens` | `u64` | Total prompt tokens served from cache. Always `<= prompt_tokens` (an upstream figure above it is clamped) |
+| `last_prompt_tokens` | `u32 \| null` | Prompt tokens in the most recent reporting request; `null` before any |
+| `last_cached_tokens` | `u32 \| null` | Tokens reused in that same request. A `0` here is a measured full re-prefill, not missing data |
 
 #### `active_connections[]` (`ActiveConnectionSnapshot`)
 

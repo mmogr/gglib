@@ -228,6 +228,13 @@ KV footprint — override with `--cache-ram-mb`. The KV cache itself defaults to
 halving KV memory versus llama-server's own `f16` default; override per-axis or set
 `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`.
 
+The proxy dashboard reports how the cache resolved and how much it is actually
+doing: the RAM budget, whether either tier is degraded, and measured reuse
+(prompt tokens served from cache vs. re-processed, per request and in total).
+These are raw counts taken from the upstream's own `usage` reporting — there is
+no estimated "time saved", since reuse is measured exactly but what it saved
+depends on a prefill that never ran.
+
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
 ![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json)
