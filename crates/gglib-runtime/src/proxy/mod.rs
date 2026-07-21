@@ -22,6 +22,7 @@ use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, RepositoryError, SettingsRepository,
 };
+use gglib_core::cache_config::KvCacheType;
 use gglib_core::server_config::CacheRamSetting;
 use gglib_core::settings::Settings;
 use gglib_mcp::McpService;
@@ -250,6 +251,15 @@ impl SettingsRepository for CliOverrideSettingsRepo {
 ///   llama-server's own default.
 /// * `cache_reuse` - Minimum chunk size in tokens for KV-shift cache reuse
 ///   past the first prefix divergence (`--cache-reuse`). `None` disables it.
+/// * `cache_disk_gb` - Explicit byte budget (in GiB) for the on-disk slot
+///   cache eviction sweep (`--cache-disk-gb`). `None` auto-sizes from free
+///   disk space at `slot_dir` (see
+///   `gglib_proxy::slot_eviction::resolve_disk_budget`), unless
+///   `GGLIB_CACHE_DISK_GB` is set.
+/// * `cache_type_k` / `cache_type_v` - Explicit overrides for the K/V cache
+///   element types (`--cache-type-k`/`--cache-type-v`). `None` resolves to
+///   the `q8_0` default per axis, unless `GGLIB_DISABLE_KV_QUANT=1` is set
+///   (see `gglib_runtime::llama::args::resolve_kv_cache_types`).
 #[allow(clippy::too_many_arguments)]
 pub async fn start_proxy_standalone(
     host: String,
@@ -265,6 +275,9 @@ pub async fn start_proxy_standalone(
     slot_dir: Option<PathBuf>,
     cache_ram_mb: Option<u64>,
     cache_reuse: Option<u32>,
+    cache_disk_gb: Option<u64>,
+    cache_type_k: Option<KvCacheType>,
+    cache_type_v: Option<KvCacheType>,
 ) -> Result<()> {
     // Resolve the actual KV cache slot-save directory. `None` when the
     // feature is disabled, regardless of what `slot_dir` was passed — this
@@ -295,6 +308,8 @@ pub async fn start_proxy_standalone(
         // right-sized prompt cache is the whole point.
         cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb),
         cache_reuse,
+        cache_type_k,
+        cache_type_v,
     ));
 
     // Create runtime port
@@ -341,7 +356,7 @@ pub async fn start_proxy_standalone(
         default_context,
         cache_enabled,
         slot_dir: slot_save_path,
-        ..Default::default()
+        disk_budget: gglib_proxy::slot_eviction::resolve_disk_budget(cache_disk_gb),
     };
 
     // Initialize MCP service (validates servers and auto-starts enabled ones)

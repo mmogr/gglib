@@ -12,6 +12,7 @@ use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
+use gglib_core::cache_config::KvCacheType;
 use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -67,6 +68,13 @@ pub enum ProcessStrategy {
         /// (`--cache-reuse`). Forwarded verbatim into every
         /// `build_server_config` call.
         cache_reuse: Option<u32>,
+        /// Explicit override for the K cache element type
+        /// (`--cache-type-k`). `None` resolves to the `q8_0` default (see
+        /// `resolve_kv_cache_types`).
+        cache_type_k: Option<KvCacheType>,
+        /// Explicit override for the V cache element type
+        /// (`--cache-type-v`). Same resolution as `cache_type_k`.
+        cache_type_v: Option<KvCacheType>,
     },
 }
 
@@ -123,6 +131,10 @@ impl ProcessManager {
     /// * `cache_reuse` — Minimum chunk size in tokens for KV-shift cache
     ///   reuse past the first prefix divergence (`--cache-reuse`). `None`
     ///   disables it.
+    /// * `cache_type_k` / `cache_type_v` — Explicit overrides for the K/V
+    ///   cache element types (`--cache-type-k`/`--cache-type-v`). `None`
+    ///   resolves to the `q8_0` default per axis (see
+    ///   `crate::llama::args::resolve_kv_cache_types`).
     ///
     /// # When to use
     ///
@@ -130,6 +142,7 @@ impl ProcessManager {
     /// HTTP API layer). For multi-model workloads (e.g. the GUI dashboard),
     /// prefer [`ProcessManager::new_concurrent`] which allows multiple models
     /// to run simultaneously up to a configurable limit.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
@@ -137,6 +150,8 @@ impl ProcessManager {
         slot_save_path: Option<PathBuf>,
         cache_ram: CacheRamSetting,
         cache_reuse: Option<u32>,
+        cache_type_k: Option<KvCacheType>,
+        cache_type_v: Option<KvCacheType>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
@@ -148,6 +163,8 @@ impl ProcessManager {
                 slot_save_path,
                 cache_ram,
                 cache_reuse,
+                cache_type_k,
+                cache_type_v,
             },
         }
     }
@@ -220,30 +237,41 @@ impl ProcessManager {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
         // 1. Extract refs from strategy
-        let (catalog, current_lock, loading_slot, slot_save_path, cache_ram, cache_reuse) =
-            match &self.strategy {
-                ProcessStrategy::SingleSwap {
-                    catalog,
-                    current,
-                    loading,
-                    slot_save_path,
-                    cache_ram,
-                    cache_reuse,
-                } => (
-                    catalog,
-                    current,
-                    loading,
-                    slot_save_path,
-                    *cache_ram,
-                    *cache_reuse,
-                ),
-                ProcessStrategy::Concurrent { .. } => {
-                    return Err(ModelRuntimeError::Internal(
-                        "ensure_model_running() is only available for SingleSwap strategy"
-                            .to_string(),
-                    ));
-                }
-            };
+        let (
+            catalog,
+            current_lock,
+            loading_slot,
+            slot_save_path,
+            cache_ram,
+            cache_reuse,
+            cache_type_k,
+            cache_type_v,
+        ) = match &self.strategy {
+            ProcessStrategy::SingleSwap {
+                catalog,
+                current,
+                loading,
+                slot_save_path,
+                cache_ram,
+                cache_reuse,
+                cache_type_k,
+                cache_type_v,
+            } => (
+                catalog,
+                current,
+                loading,
+                slot_save_path,
+                *cache_ram,
+                *cache_reuse,
+                *cache_type_k,
+                *cache_type_v,
+            ),
+            ProcessStrategy::Concurrent { .. } => {
+                return Err(ModelRuntimeError::Internal(
+                    "ensure_model_running() is only available for SingleSwap strategy".to_string(),
+                ));
+            }
+        };
 
         // 2. Retry loop with overall deadline (prevents unbounded waits through other models' swaps)
         let deadline = tokio::time::Instant::now() + STARTUP_WAIT_TIMEOUT;
@@ -282,6 +310,8 @@ impl ProcessManager {
                     let slot_save_path_owned = slot_save_path.clone();
                     let cache_ram_owned = cache_ram;
                     let cache_reuse_owned = cache_reuse;
+                    let cache_type_k_owned = cache_type_k;
+                    let cache_type_v_owned = cache_type_v;
 
                     // 4. Spawn the driver task (detached from this request's future)
                     drive(guard, STARTUP_WAIT_TIMEOUT, async move {
@@ -389,6 +419,23 @@ impl ProcessManager {
                             ..Default::default()
                         };
 
+                        // Resolve K/V cache types once here (not left to
+                        // `build_server_config`'s own internal resolution) so
+                        // the RAM budget below reflects the *actual*
+                        // quantized footprint the launch will use. The
+                        // resolved values are baked into `opts` as if
+                        // explicit, so `build_server_config`'s own resolution
+                        // just passes them through unchanged.
+                        let kv_types = crate::llama::args::resolve_kv_cache_types(
+                            cache_type_k_owned,
+                            cache_type_v_owned,
+                        );
+                        if let Some(explanation) = kv_types.explain() {
+                            info!("{explanation}");
+                        }
+                        opts.cache_type_k = Some(kv_types.k);
+                        opts.cache_type_v = Some(kv_types.v);
+
                         // Size the host-RAM prompt cache. Deliberately uses
                         // `resolve_context_size` (the same 4-tier chain
                         // `build_server_config` applies, including the
@@ -396,16 +443,8 @@ impl ProcessManager {
                         // KV estimate matches the context the server actually
                         // launches with.
                         let launch_ctx = resolve_context_size(&opts);
-                        // TODO(commit 7): use the launch's resolved K/V cache
-                        // types instead of hardcoding f16 here — this keeps
-                        // the budget byte-identical to the pre-quantization
-                        // estimate until `resolve_kv_cache_types` lands.
                         let kv_bytes_per_token = launch_spec.kv_elems_per_token.map(|elems| {
-                            gglib_core::domain::kv_bytes_per_token(
-                                elems,
-                                gglib_core::cache_config::KvCacheType::F16,
-                                gglib_core::cache_config::KvCacheType::F16,
-                            )
+                            gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v)
                         });
                         let cache_ram = crate::llama::args::resolve_cache_ram(
                             cache_ram_owned,

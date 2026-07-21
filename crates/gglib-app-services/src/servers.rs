@@ -179,6 +179,8 @@ impl ServerOps {
                 slot_save_path: None,
                 cache_ram_mb: None,
                 cache_reuse: None,
+                cache_type_k: None,
+                cache_type_v: None,
             },
         )
     }

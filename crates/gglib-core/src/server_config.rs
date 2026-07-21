@@ -137,6 +137,18 @@ pub struct ServerConfigOptions {
     /// off. Direct pass-through, no tag-based auto-detection.
     pub cache_reuse: Option<u32>,
 
+    /// Explicit override for the K cache element type (`--cache-type-k`).
+    /// `None` resolves to the `q8_0` default (see
+    /// `gglib_runtime::llama::args::resolve_kv_cache_types`), unless
+    /// `GGLIB_DISABLE_KV_QUANT=1` is set.
+    pub cache_type_k: Option<crate::cache_config::KvCacheType>,
+
+    /// Explicit override for the V cache element type (`--cache-type-v`).
+    /// Same resolution as [`Self::cache_type_k`]. Quantizing V additionally
+    /// requires Flash Attention to be active — see
+    /// `gglib_runtime::llama::args::kv_cache_type` module docs.
+    pub cache_type_v: Option<crate::cache_config::KvCacheType>,
+
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.
     pub inference_params: Option<InferenceConfig>,

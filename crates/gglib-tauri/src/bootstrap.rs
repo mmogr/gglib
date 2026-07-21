@@ -203,6 +203,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         // default cache active, which is exactly what this must avoid.
         CacheRamSetting::ExplicitMb(0),
         None,
+        None,
+        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
@@ -319,6 +321,8 @@ pub fn bootstrap_with(
         // left unset — an unset flag would leave llama-server's own 8192 MiB
         // default cache active, which is exactly what this must avoid.
         CacheRamSetting::ExplicitMb(0),
+        None,
+        None,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -474,6 +478,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         // left unset — an unset flag would leave llama-server's own 8192 MiB
         // default cache active, which is exactly what this must avoid.
         CacheRamSetting::ExplicitMb(0),
+        None,
+        None,
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));

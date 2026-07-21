@@ -206,6 +206,8 @@ fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
         // default cache active, which is exactly what this must avoid.
         CacheRamSetting::ExplicitMb(0),
         None,
+        None,
+        None,
     ));
     let runtime = Arc::new(RuntimePortImpl::new(process_mgr));
     let http_client =

@@ -7,6 +7,7 @@
 
 use clap::Subcommand;
 use clap_complete::Shell;
+use gglib_core::cache_config::KvCacheType;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
@@ -505,6 +506,35 @@ pub enum Commands {
         /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
         #[arg(long)]
         cache_reuse: Option<u32>,
+        /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
+        /// sweep. Only meaningful with `--cache`.
+        ///
+        /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
+        /// of free space + the cache's own current footprint, recomputed on
+        /// every sweep so it tracks disk pressure from other applications).
+        /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
+        /// without editing this flag; the flag wins if both are set.
+        #[arg(long)]
+        cache_disk_gb: Option<u64>,
+        /// Override the K cache element type (`--cache-type-k`). One of:
+        /// `f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`.
+        ///
+        /// Omit to use the `q8_0` default, which roughly halves KV cache
+        /// bytes-per-token versus llama-server's own `f16` default. Set
+        /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
+        /// axis not explicitly overridden here.
+        #[arg(long)]
+        cache_type_k: Option<KvCacheType>,
+        /// Override the V cache element type (`--cache-type-v`). Same values
+        /// as `--cache-type-k`.
+        ///
+        /// Quantizing V additionally requires Flash Attention to be active —
+        /// llama-server hard-errors at startup otherwise. gglib leaves
+        /// `--flash-attn` at llama-server's own `auto`; if that resolves off
+        /// for your model/backend, override this to `f16` or set
+        /// `GGLIB_DISABLE_KV_QUANT=1`.
+        #[arg(long)]
+        cache_type_v: Option<KvCacheType>,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,

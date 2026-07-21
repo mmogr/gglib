@@ -75,6 +75,12 @@ pub struct ServerConfig {
     /// salvage matching KV chunks after an edited/summarized earlier message
     /// instead of only reusing an unbroken prefix from token 0.
     pub cache_reuse: Option<u32>,
+    /// K cache element type (`--cache-type-k`). `None` means no flag is
+    /// passed — llama-server's own `f16` default applies.
+    pub cache_type_k: Option<crate::cache_config::KvCacheType>,
+    /// V cache element type (`--cache-type-v`). Same semantics as
+    /// [`Self::cache_type_k`].
+    pub cache_type_v: Option<crate::cache_config::KvCacheType>,
 }
 
 impl ServerConfig {
@@ -103,6 +109,8 @@ impl ServerConfig {
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
+            cache_type_k: None,
+            cache_type_v: None,
         }
     }
 
@@ -200,6 +208,20 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_cache_reuse(mut self, n: u32) -> Self {
         self.cache_reuse = Some(n);
+        self
+    }
+
+    /// Set the K cache element type (`--cache-type-k`).
+    #[must_use]
+    pub const fn with_cache_type_k(mut self, t: crate::cache_config::KvCacheType) -> Self {
+        self.cache_type_k = Some(t);
+        self
+    }
+
+    /// Set the V cache element type (`--cache-type-v`).
+    #[must_use]
+    pub const fn with_cache_type_v(mut self, t: crate::cache_config::KvCacheType) -> Self {
+        self.cache_type_v = Some(t);
         self
     }
 }

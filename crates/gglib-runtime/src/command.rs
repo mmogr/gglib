@@ -235,6 +235,16 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         }
     }
 
+    // `--cache-type-k` / `--cache-type-v`: KV cache element type. Resolved
+    // (default q8_0) by `build_server_config` before this point, so these
+    // are set on every launch that goes through the canonical builder.
+    if let Some(t) = config.cache_type_k {
+        cmd.arg("--cache-type-k").arg(t.as_llama_arg());
+    }
+    if let Some(t) = config.cache_type_v {
+        cmd.arg("--cache-type-v").arg(t.as_llama_arg());
+    }
+
     // Add MTP speculative decoding flags if enabled
     //
     // A global kill switch — the `GGLIB_DISABLE_MTP` environment variable set
@@ -341,6 +351,8 @@ mod tests {
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
+            cache_type_k: None,
+            cache_type_v: None,
         }
     }
 
@@ -423,6 +435,36 @@ mod tests {
         assert_eq!(args[idx + 1], "256");
     }
 
+    #[test]
+    fn cache_type_k_and_v_omitted_by_default() {
+        let config = minimal_config();
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        assert!(!args.contains(&"--cache-type-k".to_string()));
+        assert!(!args.contains(&"--cache-type-v".to_string()));
+    }
+
+    #[test]
+    fn cache_type_k_and_v_emit_their_llama_arg_names() {
+        let config = ServerConfig {
+            cache_type_k: Some(gglib_core::cache_config::KvCacheType::Q8_0),
+            cache_type_v: Some(gglib_core::cache_config::KvCacheType::F16),
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        let k_idx = args
+            .iter()
+            .position(|a| a == "--cache-type-k")
+            .expect("--cache-type-k should be present");
+        assert_eq!(args[k_idx + 1], "q8_0");
+        let v_idx = args
+            .iter()
+            .position(|a| a == "--cache-type-v")
+            .expect("--cache-type-v should be present");
+        assert_eq!(args[v_idx + 1], "f16");
+    }
+
     /// Test that a valid bootstrap path is used directly.
     #[test]
     #[cfg(unix)]
@@ -485,6 +527,8 @@ mod tests {
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
+            cache_type_k: None,
+            cache_type_v: None,
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)
