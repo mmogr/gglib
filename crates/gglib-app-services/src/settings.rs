@@ -114,6 +114,7 @@ impl SettingsOps {
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
             inference_defaults: settings.inference_defaults,
+            inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
             title_generation_prompt: settings.title_generation_prompt,
         })
@@ -132,11 +133,7 @@ impl SettingsOps {
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
             inference_defaults: request.inference_defaults,
-            // Not yet carried by the HTTP API — wired up when
-            // `UpdateSettingsRequest` gains the field. `None` means "leave
-            // whatever is stored alone", so profiles set by other surfaces
-            // survive a settings update from this one.
-            inference_profiles: None,
+            inference_profiles: request.inference_profiles,
             setup_completed: request.setup_completed,
             title_generation_prompt: request.title_generation_prompt,
         };
@@ -164,6 +161,7 @@ impl SettingsOps {
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
             inference_defaults: settings.inference_defaults,
+            inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
             title_generation_prompt: settings.title_generation_prompt,
         })
@@ -213,6 +211,136 @@ mod tests {
         let settings = ops.get().await.expect("get should succeed");
         // Fresh DB: no custom settings – all optional fields are None
         assert!(settings.default_download_path.is_none());
+    }
+
+    fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
+        gglib_core::domain::InferenceProfile {
+            name: name.to_owned(),
+            description: None,
+            config: gglib_core::domain::InferenceConfig {
+                temperature: Some(temperature),
+                ..Default::default()
+            },
+            list_in_models: true,
+        }
+    }
+
+    /// Profiles must survive the full API round trip: request -> core -> store
+    /// -> read back. They are only useful to the proxy once persisted.
+    #[tokio::test]
+    async fn profiles_round_trip_through_the_settings_api() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+
+        let updated = ops
+            .update(UpdateSettingsRequest {
+                inference_profiles: Some(Some(vec![profile("coding", 0.2)])),
+                ..Default::default()
+            })
+            .await
+            .expect("update should succeed");
+        assert_eq!(updated.inference_profiles.as_deref().unwrap().len(), 1);
+
+        let read_back = ops.get().await.expect("get should succeed");
+        let stored = read_back.inference_profiles.expect("profiles persisted");
+        assert_eq!(stored[0].name, "coding");
+        assert_eq!(stored[0].config.temperature, Some(0.2));
+    }
+
+    /// An omitted key must leave stored profiles alone, so a client updating
+    /// an unrelated setting cannot drop profiles it never knew about.
+    #[tokio::test]
+    async fn an_unrelated_update_leaves_profiles_untouched() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+
+        ops.update(UpdateSettingsRequest {
+            inference_profiles: Some(Some(vec![profile("coding", 0.2)])),
+            ..Default::default()
+        })
+        .await
+        .expect("seed should succeed");
+
+        ops.update(UpdateSettingsRequest {
+            default_context_size: Some(Some(8192)),
+            ..Default::default()
+        })
+        .await
+        .expect("unrelated update should succeed");
+
+        let read_back = ops.get().await.expect("get should succeed");
+        assert_eq!(
+            read_back.inference_profiles.as_deref().unwrap().len(),
+            1,
+            "profiles must survive an unrelated update"
+        );
+    }
+
+    /// Validation is not bypassed by coming in over the API.
+    #[tokio::test]
+    async fn an_invalid_profile_is_rejected_by_the_api() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+
+        let result = ops
+            .update(UpdateSettingsRequest {
+                // Uppercase is not a valid slug.
+                inference_profiles: Some(Some(vec![profile("Coding", 0.2)])),
+                ..Default::default()
+            })
+            .await;
+        assert!(result.is_err(), "expected rejection, got {result:?}");
+
+        let read_back = ops.get().await.expect("get should succeed");
+        assert!(
+            read_back.inference_profiles.is_none(),
+            "a rejected update must not persist anything"
+        );
+    }
+
+    /// The HTTP handlers pass these DTOs through verbatim, so their serde
+    /// shape *is* the wire contract the frontend codes against. Pin it here
+    /// rather than discovering a rename in the browser.
+    #[test]
+    fn profiles_use_camel_case_on_the_wire() {
+        let settings = AppSettings {
+            default_download_path: None,
+            default_context_size: None,
+            proxy_port: None,
+            llama_base_port: None,
+            max_download_queue_size: None,
+            show_memory_fit_indicators: None,
+            max_tool_iterations: None,
+            max_stagnation_steps: None,
+            default_model_id: None,
+            inference_defaults: None,
+            inference_profiles: Some(vec![profile("coding", 0.2)]),
+            setup_completed: None,
+            title_generation_prompt: None,
+        };
+
+        let json = serde_json::to_value(&settings).expect("serializes");
+        let entry = &json["inferenceProfiles"][0];
+        assert_eq!(entry["name"], "coding");
+        assert_eq!(entry["listInModels"], true);
+        // Value equality is not the point here — the key name is. `f32` widens
+        // to `f64` in JSON, so an exact float compare tests the widening, not
+        // the contract.
+        assert!(entry["config"]["temperature"].is_number());
+
+        // And the update request accepts the same shape back.
+        let request: UpdateSettingsRequest = serde_json::from_value(serde_json::json!({
+            "inferenceProfiles": [{
+                "name": "chat",
+                "description": null,
+                "config": {"temperature": 0.7},
+                "listInModels": false
+            }]
+        }))
+        .expect("deserializes");
+        let parsed = request.inference_profiles.flatten().expect("present");
+        assert_eq!(parsed[0].name, "chat");
+        assert!(!parsed[0].list_in_models);
     }
 
     #[tokio::test]
