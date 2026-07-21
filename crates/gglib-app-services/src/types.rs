@@ -477,6 +477,8 @@ pub struct AppSettings {
     /// Default model ID for quick commands (e.g., `gglib question`).
     pub default_model_id: Option<i64>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Named sampling profiles, selectable per request as `{model}:{profile}`.
+    pub inference_profiles: Option<Vec<gglib_core::domain::InferenceProfile>>,
     // Setup wizard
     pub setup_completed: Option<bool>,
     // Title generation
@@ -513,6 +515,11 @@ pub struct UpdateSettingsRequest {
     pub default_model_id: Option<Option<i64>>,
     #[serde(default, with = "serde_with::rust::double_option")]
     pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
+    /// Replaces the whole profile list. `null` clears it; an omitted key leaves
+    /// it untouched, so a client updating an unrelated setting cannot drop
+    /// profiles it never knew about.
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub inference_profiles: Option<Option<Vec<gglib_core::domain::InferenceProfile>>>,
     // Setup wizard
     #[serde(default, with = "serde_with::rust::double_option")]
     pub setup_completed: Option<Option<bool>>,

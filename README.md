@@ -405,10 +405,10 @@ These tags are **auto-detected at import time** by `gglib-gguf::capabilities::de
 
 #### Inference parameter defaults
 
-Sampling parameters are resolved through a **4-level merge hierarchy** on every request. Each level fills in only the fields left unset by the previous level:
+Sampling parameters are resolved through a **5-level merge hierarchy** on every request. Each level fills in only the fields left unset by the previous level:
 
 ```
-Request override  →  Per-model defaults  →  Global settings  →  Hardcoded fallback
+Request override  →  Inference profile  →  Per-model defaults  →  Global settings  →  Hardcoded fallback
 ```
 
 The full set of configurable parameters:
@@ -418,10 +418,17 @@ The full set of configurable parameters:
 | `temperature` | `--temperature` | 0.0 – 2.0 | 0.7 | |
 | `top_p` | `--top-p` | 0.0 – 1.0 | 0.95 | |
 | `top_k` | `--top-k` | int | 40 | |
-| `max_tokens` | `--max-tokens` | int | 2048 | |
+| `max_tokens` | `--max-tokens` | int | *(none)* | Deliberately unset — see below |
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
 | `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0 (disabled) | Recommended 1.5 for reasoning models |
 | `min_p` | `--min-p` | 0.0 – 1.0 | 0.0 (disabled) | 0.05 is llama.cpp built-in default when omitted |
+
+**`max_tokens` has no fallback, by design.** Resolution force-writes every set
+parameter into the outgoing request, so a fallback here would cap *every* request
+that did not name its own — silently truncating long answers. Left unset, no
+`max_tokens` key is sent and llama-server applies its own `n_predict` default of
+`-1`, generating until a stop token or the context limit. Explicit per-request,
+per-profile and per-model values are unaffected.
 
 **Reasoning model auto-defaults.** Models tagged `reasoning` at import time (Qwen3.6,
 DeepSeek R1, QwQ, etc.) automatically receive a pre-tuned `InferenceConfig` profile as
@@ -447,6 +454,64 @@ gglib model update <id> --clear-inference-defaults
 
 All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
 per-invocation overrides that sit at the top of the hierarchy.
+
+#### Inference profiles (`<model>:<profile>`)
+
+One proxy often serves clients that want incompatible sampling: a coding agent
+wants low-variance output while a chat UI wants something warmer. Both hit the
+same model name, so per-model defaults alone cannot tell them apart.
+
+**Inference profiles** are named sampling overrides selected per request by
+suffixing the model:
+
+```bash
+# Install the starter profiles (coding, chat, creative), then edit to taste
+gglib config profile install-templates
+gglib config profile list
+
+# Create or adjust one — only the flags you pass are set
+gglib config profile set coding --temperature 0.15 --top-p 0.9
+gglib config profile set coding --unset top-p        # back to the model default
+gglib config profile show coding
+```
+
+A client then selects it as part of the model name:
+
+```jsonc
+{ "model": "qwen3.6:coding", "messages": [...] }
+```
+
+Profiles are **global** — one `coding` profile applies to every model — and
+deliberately **sparse**: only the parameters you set override anything, and the
+rest fall through to that model's own defaults. That is what makes a single
+profile safe across models with different architectures; a `coding` profile
+setting only `temperature` still lets a thinking model contribute its own
+`presence_penalty`.
+
+Key behaviours:
+
+- **Bare model names are unchanged.** `qwen3.6` resolves exactly as it always
+  did. Nothing is applied unless a profile is named.
+- **A real model always wins.** If a model is literally named `qwen3.6:27b`, it
+  resolves as that model — adding a profile can never shadow an existing one.
+- **An unknown profile is a 404, not a fallback.** If `coding` is renamed or
+  deleted, requests naming it fail loudly rather than quietly sampling at the
+  wrong temperature.
+- **No model reload.** A profile changes only the request body, so switching
+  between `qwen3.6:coding` and `qwen3.6` does not restart llama-server or
+  invalidate the KV cache.
+
+Set `--list-in-models` on a profile to advertise `<model>:<profile>` in
+`/v1/models`, which makes it directly selectable in clients like OpenWebUI:
+
+```bash
+gglib config profile set chat --list-in-models
+```
+
+Listing is opt-in per profile because the full cross product of models and
+profiles would swamp a client's model picker. Unlisted profiles remain fully
+usable by name. Profiles can also be managed from the GUI under
+**Settings → Inference Profiles**.
 
 #### Server launch defaults
 

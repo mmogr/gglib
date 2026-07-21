@@ -33,6 +33,25 @@ export interface InferenceConfig {
   minP?: number;
 }
 
+/**
+ * A named sampling profile, selectable per request as `<model>:<profile>`.
+ *
+ * Profiles are global: one `coding` profile applies to every model. They are
+ * deliberately *sparse* — only the fields set here override, and everything
+ * left undefined falls through to the model's own defaults, which is what
+ * makes one profile safe to apply across differing model architectures.
+ */
+export interface InferenceProfile {
+  /** Slug: lowercase letters, digits and '-', 1-32 chars. */
+  name: string;
+  /** Human-readable summary, shown in the model picker. */
+  description?: string | null;
+  /** The sampling overrides. Sparse — see above. */
+  config: InferenceConfig;
+  /** Advertise `<model>:<name>` in /v1/models so clients can select it. */
+  listInModels: boolean;
+}
+
 // ============================================================================
 // Server Configuration
 // ============================================================================
@@ -145,6 +164,8 @@ export interface AppSettings {
   defaultModelId?: number | null;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null;
+  /** Named sampling profiles, selectable per request as `<model>:<profile>` */
+  inferenceProfiles?: InferenceProfile[] | null;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null;
 }
@@ -163,6 +184,12 @@ export interface UpdateSettingsRequest {
   defaultModelId?: number | null | undefined;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null | undefined;
+  /**
+   * Replaces the whole profile list. `null` clears it; omitting the key
+   * leaves it untouched, so an unrelated settings update cannot drop
+   * profiles it never knew about.
+   */
+  inferenceProfiles?: InferenceProfile[] | null | undefined;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null | undefined;
 }

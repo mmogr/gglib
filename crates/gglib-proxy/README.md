@@ -125,7 +125,9 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
 | [`models_tests.rs`](src/models_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_tests-coverage.json) |
+| [`profiles.rs`](src/profiles.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-coverage.json) |
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
+| [`settings_cache.rs`](src/settings_cache.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-coverage.json) |
 | [`slot_eviction.rs`](src/slot_eviction.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-coverage.json) |
 | [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
 | [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
@@ -262,25 +264,78 @@ identically when auto-started by the proxy.
 ### Inference Defaults Auto-Injection
 
 On every `POST /v1/chat/completions` request the proxy resolves sampling
-parameters through the same 4-level hierarchy used by every other surface:
+parameters through the same 5-level hierarchy used by every other surface:
 
 ```text
-request params  →  model defaults  →  global settings  →  hardcoded fallback
+request params  →  profile  →  model defaults  →  global settings  →  hardcoded
 ```
 
 1. **Request params** — whatever `temperature`, `top_p`, `top_k`, `max_tokens`,
    `repeat_penalty`, `presence_penalty`, and `min_p` the client sent.
-2. **Model defaults** — per-model `inference_defaults` stored in the model
+2. **Profile** — the named profile the request selected via `{model}:{profile}`,
+   if any. See *Inference Profiles* below.
+3. **Model defaults** — per-model `inference_defaults` stored in the model
    catalog (`ModelSummary::inference_defaults`).
-3. **Global settings** — `Settings::inference_defaults` loaded from the
-   settings repository on every request.
-4. **Hardcoded fallback** — `temperature=0.7`, `top_p=0.95`, `top_k=40`,
-   `max_tokens=2048`, `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.0`.
+4. **Global settings** — `Settings::inference_defaults`, read from the
+   per-request settings snapshot (`settings_cache`).
+5. **Hardcoded fallback** — `temperature=0.7`, `top_p=0.95`, `top_k=40`,
+   `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.0`. **`max_tokens`
+   has no fallback**: because resolution force-writes every set parameter, one
+   here would cap every request that did not name its own. Left unset, no
+   `max_tokens` key is sent and llama-server generates until a stop token or the
+   context limit.
 
-The resolved values are aggressively written into the forwarded request body
-(via `body_obj.insert`) so llama-server always receives fully-specified
-parameters rather than relying on its own defaults.  Client-supplied values
-are always preserved because they form the base of the resolution hierarchy.
+Resolution runs through `InferenceConfig::resolve_with_profile`, the single
+source of truth for the merge order.  The resolved values are aggressively
+written into the forwarded request body (via `body_obj.insert`) so llama-server
+receives fully-specified parameters rather than relying on its own defaults.
+Client-supplied values are always preserved because they form the base of the
+hierarchy.
+
+### Inference Profiles
+
+A client selects a named sampling profile by suffixing the model it asks for —
+`qwen3.6:coding`.  Profiles are global (one `coding` profile applies to every
+model) and sparse (unset parameters fall through to the model's own defaults).
+They are stored in `Settings::inference_profiles` and edited via
+`gglib config profile` or the GUI settings panel.
+
+`profiles::resolve_route` decides what a requested id means, first match wins:
+
+1. No `:` in the id → **bare model**, without touching the catalog. This is
+   every request from a client that does not use profiles, so they pay nothing.
+2. The full id resolves in the catalog → **bare model**. A real model whose name
+   contains a colon (Ollama-style `name:tag`) always beats a profile reading, so
+   adding a profile can never shadow an existing model.
+3. The suffix after the last `:` matches a configured profile → **profiled**.
+4. The base resolves in the catalog → **404 `profile_not_found`**.
+5. Otherwise → bare, leaving the existing model-not-found path to report it.
+
+Step 4 is deliberate: silently falling back to the bare model would let a coding
+agent whose profile was renamed keep working while quietly sampling at the wrong
+temperature.  That branch cannot distinguish a deleted profile from a model tag
+that was never in the catalog, so the error names both readings and lists the
+profiles that do exist.
+
+Routing runs **after** the council virtual-model interception, since
+`gglib-council:interactive` must be matched whole before anything splits it.
+Everything downstream — the model launch, dashboard registration, metrics, cache
+keys — uses the base name, so a profile never launches a second llama-server or
+invalidates the KV cache.
+
+Profiles with `list_in_models` set are advertised in `/v1/models` as
+`{model}:{profile}`, inheriting the base model's `context_window`.  Listing is
+opt-in per profile because the full cross product would swamp a client's model
+picker; unlisted profiles remain usable by name.
+
+### Settings Snapshot
+
+Settings are read once per request from `settings_cache::SettingsCache`, a
+snapshot refreshed at most once every 5 seconds, rather than queried per
+request.  A TTL rather than invalidation-on-write because the CLI writes the
+same SQLite file from a separate process, which an in-process hook could never
+observe.  A failed load never fails a request: it serves the last good snapshot,
+or defaults if there is none.
 
 ## Usage
 

@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::InferenceConfig;
+use crate::domain::{InferenceConfig, InferenceProfile};
 
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
@@ -57,6 +57,15 @@ pub struct Settings {
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
 
+    /// Named sampling profiles, selectable per request as `{model}:{profile}`.
+    ///
+    /// Global rather than per-model: one `coding` profile applies to every
+    /// model, and its sparse fields fall through to that model's own
+    /// `inference_defaults` for anything it does not set. See
+    /// [`crate::domain::inference_profile`].
+    #[serde(default)]
+    pub inference_profiles: Option<Vec<InferenceProfile>>,
+
     // ── Setup wizard ────────────────────────────────────────────────
     /// Whether the first-run setup wizard has been completed.
     pub setup_completed: Option<bool>,
@@ -82,6 +91,7 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             default_model_id: None,
             inference_defaults: None,
+            inference_profiles: None,
             setup_completed: None,
             title_generation_prompt: None,
         }
@@ -137,6 +147,9 @@ impl Settings {
         if let Some(ref inference_defaults) = other.inference_defaults {
             self.inference_defaults.clone_from(inference_defaults);
         }
+        if let Some(ref inference_profiles) = other.inference_profiles {
+            self.inference_profiles.clone_from(inference_profiles);
+        }
         if let Some(ref v) = other.setup_completed {
             self.setup_completed = *v;
         }
@@ -164,6 +177,7 @@ pub struct SettingsUpdate {
     pub max_stagnation_steps: Option<Option<u32>>,
     pub default_model_id: Option<Option<i64>>,
     pub inference_defaults: Option<Option<InferenceConfig>>,
+    pub inference_profiles: Option<Option<Vec<InferenceProfile>>>,
     pub setup_completed: Option<Option<bool>>,
     pub title_generation_prompt: Option<Option<String>>,
 }
@@ -185,6 +199,9 @@ pub enum SettingsError {
 
     #[error("Invalid inference parameter: {0}")]
     InvalidInferenceConfig(String),
+
+    #[error("Invalid inference profile: {0}")]
+    InvalidInferenceProfile(String),
 }
 
 /// Validate settings values.
@@ -230,6 +247,39 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
     if let Some(ref inference_config) = settings.inference_defaults {
         validate_inference_config(inference_config)
             .map_err(SettingsError::InvalidInferenceConfig)?;
+    }
+
+    // Validate inference profiles if specified
+    if let Some(ref profiles) = settings.inference_profiles {
+        validate_inference_profiles(profiles).map_err(SettingsError::InvalidInferenceProfile)?;
+    }
+
+    Ok(())
+}
+
+/// Validate a set of inference profiles.
+///
+/// Checks each profile's name against [`crate::domain::validate_name`], rejects
+/// duplicate names (they would make `{model}:{profile}` ambiguous), and reuses
+/// [`validate_inference_config`] for the numeric ranges so profile parameters
+/// and global defaults can never drift apart on what counts as valid.
+///
+/// # Errors
+///
+/// Returns a human-readable description of the first problem found.
+pub fn validate_inference_profiles(profiles: &[InferenceProfile]) -> Result<(), String> {
+    let mut seen: Vec<&str> = Vec::with_capacity(profiles.len());
+
+    for profile in profiles {
+        profile.validate().map_err(|e| e.to_string())?;
+
+        if seen.contains(&profile.name.as_str()) {
+            return Err(format!("duplicate profile name '{}'", profile.name));
+        }
+        seen.push(&profile.name);
+
+        validate_inference_config(&profile.config)
+            .map_err(|e| format!("profile '{}': {e}", profile.name))?;
     }
 
     Ok(())
@@ -504,5 +554,111 @@ mod tests {
             settings_none.effective_llama_base_port(),
             DEFAULT_LLAMA_BASE_PORT
         );
+    }
+
+    // ── Inference profiles ──────────────────────────────────────────────
+
+    fn profile(name: &str, temperature: f32) -> InferenceProfile {
+        InferenceProfile {
+            name: name.to_owned(),
+            description: None,
+            config: InferenceConfig {
+                temperature: Some(temperature),
+                ..Default::default()
+            },
+            list_in_models: false,
+        }
+    }
+
+    #[test]
+    fn test_builtin_templates_pass_settings_validation() {
+        let settings = Settings {
+            inference_profiles: Some(crate::domain::builtin_templates()),
+            ..Settings::with_defaults()
+        };
+        assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn test_validate_profiles_rejects_duplicate_names() {
+        let err = validate_inference_profiles(&[profile("coding", 0.2), profile("coding", 0.9)])
+            .expect_err("duplicates must be rejected");
+        assert!(err.contains("duplicate"), "unexpected message: {err}");
+        assert!(err.contains("coding"), "message should name the profile");
+    }
+
+    #[test]
+    fn test_validate_profiles_rejects_invalid_name() {
+        let err = validate_inference_profiles(&[profile("Not_A_Slug", 0.5)])
+            .expect_err("invalid slug must be rejected");
+        assert!(err.contains("Not_A_Slug"), "unexpected message: {err}");
+    }
+
+    /// Profile parameters go through the same range checks as global
+    /// defaults, and the failure names which profile was at fault.
+    #[test]
+    fn test_validate_profiles_reuses_inference_config_ranges() {
+        let err = validate_inference_profiles(&[profile("coding", 5.0)])
+            .expect_err("out-of-range temperature must be rejected");
+        assert!(err.contains("coding"), "message should name the profile");
+        assert!(err.contains("Temperature"), "unexpected message: {err}");
+    }
+
+    #[test]
+    fn test_settings_with_invalid_profile_fails_validation() {
+        let settings = Settings {
+            inference_profiles: Some(vec![profile("coding", 5.0)]),
+            ..Settings::with_defaults()
+        };
+        assert!(matches!(
+            validate_settings(&settings),
+            Err(SettingsError::InvalidInferenceProfile(_))
+        ));
+    }
+
+    #[test]
+    fn test_merge_replaces_and_clears_profiles() {
+        let mut settings = Settings {
+            inference_profiles: Some(vec![profile("coding", 0.2)]),
+            ..Settings::with_defaults()
+        };
+
+        settings.merge(&SettingsUpdate {
+            inference_profiles: Some(Some(vec![profile("chat", 0.7)])),
+            ..Default::default()
+        });
+        let profiles = settings.inference_profiles.as_ref().expect("still set");
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].name, "chat");
+
+        settings.merge(&SettingsUpdate {
+            inference_profiles: Some(None),
+            ..Default::default()
+        });
+        assert_eq!(settings.inference_profiles, None);
+
+        // An absent field must leave the current value alone.
+        settings.inference_profiles = Some(vec![profile("coding", 0.2)]);
+        settings.merge(&SettingsUpdate::default());
+        assert!(settings.inference_profiles.is_some());
+    }
+
+    /// The repository stores one KV row per serde field and rebuilds
+    /// `Settings` from whatever rows exist, so an older row set (no profiles
+    /// row) must still deserialize.
+    #[test]
+    fn test_profiles_round_trip_through_json_and_default_when_absent() {
+        let settings = Settings {
+            inference_profiles: Some(vec![profile("coding", 0.2)]),
+            ..Settings::with_defaults()
+        };
+        let value = serde_json::to_value(&settings).expect("serializes");
+        assert!(value.get("inference_profiles").is_some());
+
+        let restored: Settings = serde_json::from_value(value).expect("round-trips");
+        assert_eq!(restored.inference_profiles, settings.inference_profiles);
+
+        let absent: Settings = serde_json::from_str("{}").expect("deserializes without the field");
+        assert_eq!(absent.inference_profiles, None);
     }
 }

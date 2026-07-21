@@ -121,6 +121,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id>` | Set/show/clear the default model |
+| `config profile list` | List named sampling profiles |
+| `config profile show <name>` | Show one profile's parameters |
+| `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |
+| `config profile rm <name>` | Delete a profile |
+| `config profile install-templates` | Install the starter profiles (coding, chat, creative) |
 | `council run "<goal>"` | Plan and execute a DAG task graph |
 | `council list [--status]` | List past orchestrator runs |
 | `council show <id>` | Show run details + event timeline |

@@ -221,6 +221,23 @@ fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
     }
 }
 
+/// The sampling layers that sit *below* the client's own request parameters.
+///
+/// Grouped because they are only ever used together, at the single point where
+/// [`InferenceConfig::resolve_with_profile`] runs. Passing them as one argument
+/// also keeps [`forward_chat_completion`]'s already-long parameter list from
+/// growing.
+///
+/// The per-model layer is not here: it comes from the catalog lookup this
+/// function already performs, as [`ModelContext::inference_defaults`].
+pub(crate) struct SamplingLayers {
+    /// The profile the request selected via `{model}:{profile}`, if any.
+    /// Sparse — see `gglib_core::domain::inference_profile`.
+    pub profile: Option<InferenceConfig>,
+    /// Global defaults from settings.
+    pub global: Option<InferenceConfig>,
+}
+
 /// Resolved per-request model context: capabilities for request preprocessing
 /// and tags for response-stream parser selection.
 ///
@@ -438,7 +455,8 @@ fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> By
 ///   floored at the historical default inside [`truncate_history`].
 /// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
 /// * `metrics` - Metrics store for recording per-request context snapshots
-/// * `global_inference_defaults` - Global inference defaults from settings
+/// * `sampling` - The profile and global sampling layers to resolve beneath
+///   the client's own request parameters
 /// * `connection` - RAII dashboard-registry guard for this request. Moved
 ///   into the spawned streaming task for the streaming path (so it lives
 ///   exactly as long as that task); held for the duration of this function
@@ -471,7 +489,7 @@ pub(crate) async fn forward_chat_completion(
     effective_ctx: u64,
     catalog: Arc<dyn ModelCatalogPort>,
     metrics: Arc<ContextMetricsStore>,
-    global_inference_defaults: Option<InferenceConfig>,
+    sampling: SamplingLayers,
     connection: ConnectionGuard,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
@@ -565,9 +583,10 @@ pub(crate) async fn forward_chat_completion(
     // param in the final config is forwarded to llama-server.
     let body = if let Ok(mut body_value) = serde_json::from_slice::<serde_json::Value>(&body) {
         let client_params = InferenceConfig::from_openai_json(&body_value);
-        let resolved = client_params.resolve_with_defaults(
+        let resolved = client_params.resolve_with_profile(
+            sampling.profile.as_ref(),
             context.inference_defaults.as_ref(),
-            global_inference_defaults.as_ref(),
+            sampling.global.as_ref(),
         );
         if let Some(body_obj) = body_value.as_object_mut() {
             for (k, v) in resolved.to_openai_json_patch() {

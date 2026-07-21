@@ -9,10 +9,11 @@ import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
+import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
 import { Modal } from "./ui/Modal";
 import { cn } from '../utils/cn';
 
-type SettingsTab = "general" | "mcp";
+type SettingsTab = "general" | "profiles" | "mcp";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -194,6 +195,16 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             type="button"
             className={cn(
               'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
+              activeTab === "profiles" && 'text-primary border-b-primary',
+            )}
+            onClick={() => setActiveTab("profiles")}
+          >
+            Inference Profiles
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
               activeTab === "mcp" && 'text-primary border-b-primary',
             )}
             onClick={() => setActiveTab("mcp")}
@@ -241,6 +252,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             successMessage={successMessage}
           />
         )}
+
+        {/* Inference Profiles Tab */}
+        {activeTab === "profiles" && <InferenceProfiles />}
 
         {/* MCP Servers Tab */}
         {activeTab === "mcp" && (

@@ -20,6 +20,7 @@ pub async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
         }
         ConfigCommand::ModelsDir { command } => settings::handle_models_dir(command),
         ConfigCommand::Settings { command } => settings::handle_settings(ctx, command).await,
+        ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
         ConfigCommand::Llama { command } => llama::dispatch(command).await,
         ConfigCommand::AssistantUi { command } => assistant_ui::dispatch(command),
         ConfigCommand::CheckDeps => {

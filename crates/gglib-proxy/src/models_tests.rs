@@ -38,6 +38,32 @@ fn error_response_model_not_found_includes_name() {
     assert_eq!(err.error.r#type, "invalid_request_error");
 }
 
+/// The message has to carry enough for a user to diagnose either reading of
+/// the suffix — a renamed profile or a model tag that was never in the
+/// catalog — so it names both and lists what does exist.
+#[test]
+fn error_response_profile_not_found_names_both_readings() {
+    let err = ErrorResponse::profile_not_found("qwen:codeing", "codeing", Some("coding, chat"));
+    assert!(err.error.message.contains("qwen:codeing"));
+    assert!(err.error.message.contains("codeing"));
+    assert!(err.error.message.contains("coding, chat"));
+    assert_eq!(err.error.code.as_deref(), Some("profile_not_found"));
+    assert_eq!(err.error.r#type, "invalid_request_error");
+}
+
+/// With nothing configured, say so rather than printing an empty list.
+#[test]
+fn error_response_profile_not_found_handles_no_configured_profiles() {
+    let err = ErrorResponse::profile_not_found("qwen:coding", "coding", None);
+    assert!(
+        err.error
+            .message
+            .contains("no inference profiles are configured"),
+        "unexpected message: {}",
+        err.error.message
+    );
+}
+
 #[test]
 fn error_response_upstream_error_includes_reason() {
     let err = ErrorResponse::upstream_error("connection refused");
