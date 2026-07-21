@@ -381,6 +381,28 @@ impl ErrorResponse {
         )
     }
 
+    /// Create an error response for a model id whose `:{suffix}` matches no
+    /// configured inference profile.
+    ///
+    /// The suffix is ambiguous by nature — it may be a profile that was
+    /// renamed or deleted, or a model tag that was never in the catalog — so
+    /// the message covers both readings instead of guessing, and lists the
+    /// profiles that do exist. `available` is `None` when none are configured.
+    pub fn profile_not_found(requested: &str, suffix: &str, available: Option<&str>) -> Self {
+        let profiles = available.map_or_else(
+            || "no inference profiles are configured".to_owned(),
+            |names| format!("configured profiles are: {names}"),
+        );
+        Self::with_code(
+            format!(
+                "Model '{requested}' not found, and '{suffix}' is not an inference profile \
+                 ({profiles})"
+            ),
+            "invalid_request_error",
+            "profile_not_found",
+        )
+    }
+
     /// Create an error response for upstream connection failure.
     pub fn upstream_error(reason: &str) -> Self {
         Self::with_code(

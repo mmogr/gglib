@@ -11,6 +11,7 @@ pub mod forward;
 pub mod mcp;
 pub mod metrics;
 pub mod models;
+pub mod profiles;
 pub mod server;
 pub mod slot_eviction;
 pub mod slots;
