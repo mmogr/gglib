@@ -5,6 +5,13 @@
 //! [`super`] so the resulting body can be asserted on directly in tests
 //! without an HTTP round trip.
 //!
+//! **Translation only.** Every transform that *reshapes* a request — the
+//! reasoning strip, capability coalescing, resolving the sampling hierarchy —
+//! belongs to [`gglib_core::request_pipeline`] and runs on the finished body in
+//! [`super::LlmCompletionAdapter::chat_stream`], so the agent path and the proxy
+//! apply the same ones in the same order. What this module writes is only what
+//! the *caller* asked for.
+//!
 //! [`LlmCompletionAdapter`]: super::LlmCompletionAdapter
 
 use serde_json::{Value, json};
@@ -107,14 +114,8 @@ pub(super) fn build_chat_body(
     sampling: Option<&InferenceConfig>,
     response_format: Option<&ResponseFormat>,
 ) -> Value {
-    let mut openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
+    let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
     let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
-
-    // Scrub prior-turn reasoning artifacts before the model sees them.
-    // Shared with the proxy via gglib-core so the in-process agent loop
-    // (CLI / Tauri direct path) gets identical protection against the
-    // small-reasoning-model multi-turn `<think>` loop bug.
-    gglib_core::normalize::strip_thinking_debt(&mut openai_messages);
 
     let mut body = json!({
         "model": model,
@@ -126,11 +127,15 @@ pub(super) fn build_chat_body(
         body["tools"] = json!(openai_tools);
         body["tool_choice"] = json!("auto");
     }
-    // Apply sampling through the same serde-driven helper the proxy uses
-    // (`forward_chat_completion`), so the two request paths cannot drift.  A
-    // hand-rolled field-by-field copy here is what silently dropped
-    // `presence_penalty` and `min_p` when they were added to InferenceConfig.
-    // `to_openai_json_patch` emits only `Some` fields, already snake_cased.
+    // Write the caller's own sampling parameters — the top layer of the
+    // hierarchy, in the same place an external client would put them, so the
+    // shared pipeline can read them back and resolve the rest beneath them.
+    //
+    // Applied through the same serde-driven helper the proxy uses, so the two
+    // request paths cannot drift.  A hand-rolled field-by-field copy here is
+    // what silently dropped `presence_penalty` and `min_p` when they were added
+    // to InferenceConfig.  `to_openai_json_patch` emits only `Some` fields,
+    // already snake_cased.
     if let Some(s) = sampling
         && let Some(obj) = body.as_object_mut()
     {

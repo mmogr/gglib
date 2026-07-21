@@ -15,9 +15,11 @@
 //!
 //! Every entry point hands in a [`ModelContext`] resolved by
 //! [`gglib_core::request_pipeline::resolve`] rather than a bare tag list, so
-//! the agent path carries the same per-model facts the proxy does. Only `tags`
-//! is read here so far; capabilities and inference defaults are along for the
-//! ride until the request-shaping step consumes them.
+//! the agent path carries the same per-model facts the proxy does — and now
+//! acts on all of them: capabilities drive request-side message coalescing,
+//! inference defaults are a layer of the sampling hierarchy, and `format:*`
+//! tags select the response parser. The context is handed to the adapter whole
+//! rather than being taken apart here.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -40,11 +42,10 @@ use crate::LlmCompletionAdapter;
 /// * `http_client` — shared `reqwest::Client` (connection-pooled).
 /// * `model` — optional model-name override forwarded to llama-server.
 /// * `model_context` — resolved per-model facts from
-///   [`gglib_core::request_pipeline::resolve`]. Only `tags` is consumed today
-///   (to select a dialect-specific normalization parser at adapter
-///   construction time); capabilities and inference defaults ride along for
-///   the request-shaping step that follows. Pass
-///   [`ModelContext::passthrough`] for the identity parser.
+///   [`gglib_core::request_pipeline::resolve`], driving both request shaping
+///   and response-parser selection. Pass [`ModelContext::passthrough`] when the
+///   model is unknown: every transform becomes a no-op and the identity parser
+///   is selected.
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
@@ -126,7 +127,7 @@ pub fn compose_council_ports(
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
-            .with_tags(model_context.tags),
+            .with_model_context(model_context),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
@@ -149,7 +150,7 @@ fn compose_agent_loop_inner(
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
-            .with_tags(model_context.tags),
+            .with_model_context(model_context),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),

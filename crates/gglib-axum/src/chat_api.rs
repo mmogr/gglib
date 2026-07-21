@@ -491,13 +491,25 @@ pub async fn proxy_chat(
         ));
     }
 
-    // Convert to ChatMessage format and apply capability-aware transformations
+    // Convert to ChatMessage format and apply capability-aware transformations.
+    //
+    // `tool_call_id` travels in the core type's catch-all rather than being
+    // dropped and re-synthesized: it is required by the chat templates of the
+    // strict-turn models this transform exists for, so losing it here would
+    // break tool calling on exactly those models.
     let core_messages: Vec<gglib_core::ChatMessage> = valid_messages
         .into_iter()
-        .map(|m| gglib_core::ChatMessage {
-            role: m.role,
-            content: m.content.map(gglib_core::MessageContent::Text),
-            tool_calls: m.tool_calls.map(serde_json::Value::Array),
+        .map(|m| {
+            let mut extra = serde_json::Map::new();
+            if let Some(id) = m.tool_call_id {
+                extra.insert("tool_call_id".to_owned(), serde_json::Value::String(id));
+            }
+            gglib_core::ChatMessage {
+                role: m.role,
+                content: m.content.map(gglib_core::MessageContent::Text),
+                tool_calls: m.tool_calls.map(serde_json::Value::Array),
+                extra,
+            }
         })
         .collect();
 
@@ -506,7 +518,7 @@ pub async fn proxy_chat(
     // Convert back to ChatMessage
     let final_messages: Vec<ChatMessage> = transformed
         .into_iter()
-        .map(|m| ChatMessage {
+        .map(|mut m| ChatMessage {
             role: m.role,
             content: m.content.map(|c| c.into_string()),
             tool_calls: m.tool_calls.and_then(|v| {
@@ -516,7 +528,10 @@ pub async fn proxy_chat(
                     None
                 }
             }),
-            tool_call_id: None,
+            tool_call_id: m
+                .extra
+                .remove("tool_call_id")
+                .and_then(|v| v.as_str().map(str::to_owned)),
         })
         .collect();
 

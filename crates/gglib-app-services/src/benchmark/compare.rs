@@ -343,6 +343,13 @@ fn build_messages(config: &CompareConfig) -> serde_json::Value {
 ///   → hardcoded fallback (`InferenceConfig::with_hardcoded_defaults`).
 ///
 /// This mirrors the resolution the proxy performs for every routed request.
+///
+/// Serialization goes through [`InferenceConfig::to_openai_json_patch`] — the
+/// workspace's one sampling serializer — rather than a field-by-field copy.
+/// The copy that used to live here was complete, but it was the same shape that
+/// silently dropped `presence_penalty` and `min_p` from the LLM adapter when
+/// those fields were added (#611): a benchmark comparing sampling parameters
+/// while quietly omitting one of them is worse than useless.
 fn build_compare_request_body(
     config: &CompareConfig,
     model: &gglib_core::domain::Model,
@@ -360,26 +367,10 @@ fn build_compare_request_body(
         "stream": true
     });
 
-    if let Some(v) = resolved.temperature {
-        body["temperature"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.max_tokens {
-        body["max_tokens"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.top_p {
-        body["top_p"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.top_k {
-        body["top_k"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.repeat_penalty {
-        body["repeat_penalty"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.presence_penalty {
-        body["presence_penalty"] = serde_json::json!(v);
-    }
-    if let Some(v) = resolved.min_p {
-        body["min_p"] = serde_json::json!(v);
+    if let Some(obj) = body.as_object_mut() {
+        for (key, value) in resolved.to_openai_json_patch() {
+            obj.insert(key, value);
+        }
     }
 
     body

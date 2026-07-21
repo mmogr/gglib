@@ -12,6 +12,7 @@ use gglib_core::{
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
     normalize::{NormalizingStream, get_parser},
     ports::{LlmCompletionPort, ResponseFormat},
+    request_pipeline::{self, ModelContext, SamplingLayers},
     sse::SseStreamDecoder,
 };
 
@@ -46,15 +47,20 @@ pub struct LlmCompletionAdapter {
     /// by model name.
     model: String,
     client: Client,
-    /// Optional sampling overrides injected into every request body.
+    /// The caller's own sampling parameters — the top layer of the hierarchy,
+    /// equivalent to what an external client sends the proxy. Written into the
+    /// body by [`body::build_chat_body`] and read back out by
+    /// [`request_pipeline::apply`], which resolves the layers beneath them.
     sampling: Option<InferenceConfig>,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
-    /// Model `format:*` tags consulted by [`gglib_core::normalize::get_parser`]
-    /// when wrapping the SSE-derived stream in a [`NormalizingStream`].
-    /// Empty (the default) selects the identity-passthrough parser.
-    tags: Vec<String>,
+    /// The resolved per-model facts, from
+    /// [`gglib_core::request_pipeline::resolve`].  Drives request shaping
+    /// (capabilities, inference defaults) and response-parser selection
+    /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
+    /// makes every transform a no-op and selects the identity parser.
+    model_context: ModelContext,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -103,11 +109,15 @@ impl LlmCompletionAdapter {
             client,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
-            tags: Vec::new(),
+            model_context: ModelContext::passthrough(),
         }
     }
 
-    /// Set optional sampling parameters injected into every request body.
+    /// Set the caller's own sampling parameters.
+    ///
+    /// These are the *highest* layer of the hierarchy, not the final word: the
+    /// model's stored defaults and the hardcoded fallbacks still fill in every
+    /// field left unset. Pass `None` to resolve entirely from those layers.
     #[must_use]
     pub fn with_sampling(mut self, sampling: Option<InferenceConfig>) -> Self {
         self.sampling = sampling;
@@ -122,17 +132,53 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Set the model's `format:*` tags so the adapter can pick a
-    /// dialect-specific parser when wrapping the SSE-derived stream in a
-    /// [`NormalizingStream`].
+    /// Set the resolved per-model context, from
+    /// [`gglib_core::request_pipeline::resolve`].
     ///
-    /// Pass an empty `Vec` (the default) to select the identity-passthrough
-    /// parser, which is the right choice for any model that already speaks
-    /// strict OpenAI tool-calling.
+    /// This is what gives the in-process agent path the same per-model handling
+    /// the proxy has always had: capability-aware message coalescing, the
+    /// per-model layer of the sampling hierarchy, and a dialect-specific
+    /// response parser. Pass [`ModelContext::passthrough`] (the default) when
+    /// the model is unknown — every transform becomes a no-op and the identity
+    /// parser is selected, which is the right choice for any model that already
+    /// speaks strict `OpenAI` tool-calling.
     #[must_use]
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
+    pub fn with_model_context(mut self, model_context: ModelContext) -> Self {
+        self.model_context = model_context;
         self
+    }
+
+    /// Build the request body and run the shared request-shaping pipeline over
+    /// it — everything that happens before the bytes leave this process.
+    ///
+    /// Separate from [`chat_stream`](LlmCompletionPort::chat_stream) so the
+    /// outgoing body can be asserted on directly, without an HTTP round trip.
+    fn shaped_body(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        response_format: Option<&ResponseFormat>,
+    ) -> serde_json::Value {
+        let mut body = body::build_chat_body(
+            &self.model,
+            messages,
+            tools,
+            self.sampling.as_ref(),
+            response_format,
+        );
+
+        // The same pipeline, in the same order, that the proxy runs.
+        // `build_chat_body` has already written the caller's sampling
+        // parameters into the body, which is exactly where an external client's
+        // would be, so `apply` reads them back as the top layer and resolves
+        // the model and hardcoded layers beneath them.
+        //
+        // Neither remaining layer applies in-process: there is no
+        // `{model}:{profile}` suffix to select a profile, and the global
+        // settings layer is already folded into `sampling` by the callers that
+        // have one.
+        request_pipeline::apply(&mut body, &self.model_context, &SamplingLayers::default());
+        body
     }
 }
 
@@ -148,13 +194,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         tools: &[ToolDefinition],
         response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
-        let body = body::build_chat_body(
-            &self.model,
-            messages,
-            tools,
-            self.sampling.as_ref(),
-            response_format,
-        );
+        let body = self.shaped_body(messages, tools, response_format);
 
         // Gate the connect + first-byte phase with a hard timeout so a
         // stalled or unresponsive llama-server doesn't hang the agent task
@@ -212,8 +252,12 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         // Wrap the raw SSE-derived stream in the universal normalization
         // layer.  Empty `tags` selects the identity-passthrough parser so
         // models that already emit strict OpenAI tool calls are unaffected.
-        let parser = get_parser(&self.tags);
+        let parser = get_parser(&self.model_context.tags);
         let normalized = NormalizingStream::new(Box::pin(stream), parser);
         Ok(Box::pin(normalized))
     }
 }
+
+#[cfg(test)]
+#[path = "shaping_tests.rs"]
+mod shaping_tests;

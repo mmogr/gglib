@@ -3,18 +3,16 @@
 //!
 //! ## Request pipeline
 //!
-//! Before the upstream call the proxy applies three stateless transforms to the
-//! request body, in order:
+//! The request-shaping transforms themselves live in
+//! [`gglib_core::request_pipeline`], which owns their order and its rationale
+//! — they are shared verbatim with the in-process agent path so the two cannot
+//! drift.  What is proxy-specific, and therefore still here, is the `Bytes` ⇄
+//! `Value` conversion at the HTTP boundary ([`edit_json_body`]) and one stage
+//! that cannot live in `gglib-core` at all:
 //!
-//! 1. [`strip_prior_reasoning`] — scrubs `<think>` / `reasoning_content`
-//!    artefacts from prior assistant turns so reasoning models don't
-//!    pattern-match their own past traces.
-//! 2. [`coalesce_for_capabilities`] — when a model's stored
-//!    [`ModelCapabilities`] includes [`REQUIRES_STRICT_TURNS`], merges
-//!    consecutive same-role user/assistant messages before they reach the
-//!    Jinja template.  Mistral-family models raise a hard 500 exception
-//!    without this.
-//! 3. [`truncate_history`] — defends against client-side context compaction
+//! 1. [`shape_messages`](gglib_core::request_pipeline::shape_messages) — the
+//!    reasoning strip and capability coalescing.
+//! 2. [`truncate_history`] — defends against client-side context compaction
 //!    failures.  While the request fits within the model's live context
 //!    budget it is forwarded **unchanged**; only when the payload exceeds the
 //!    budget are the **oldest** unprotected `role: "tool"` / `role:
@@ -24,6 +22,14 @@
 //!    the budget after every eligible message is trimmed, the request is
 //!    rejected with HTTP 400 / `context_length_exceeded`.  The last eight
 //!    messages and all `role: "system"` messages are always preserved.
+//! 3. [`resolve_sampling`](gglib_core::request_pipeline::resolve_sampling) —
+//!    the sampling hierarchy and the `cache_prompt` pin.
+//!
+//! Truncation is what keeps this a three-call sequence rather than a single
+//! [`apply`](gglib_core::request_pipeline::apply): it gates on the payload's
+//! size in **wire bytes** and can reject the request with an HTTP response, so
+//! it can neither move into `gglib-core` nor be reordered around the sampling
+//! stage without changing the number it measures.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`gglib_core::request_pipeline::resolve`]) that yields both the
@@ -56,8 +62,6 @@
 //! Non-streaming responses are forwarded verbatim for now — the dialects
 //! we currently rewrite (Qwen XML tool calls, bare `<think>` tags) only
 //! manifest in streaming clients today.
-//!
-//! [`REQUIRES_STRICT_TURNS`]: gglib_core::ModelCapabilities
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -73,11 +77,9 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::ModelCapabilities;
-use gglib_core::domain::{ChatMessage, InferenceConfig, transform_messages_for_capabilities};
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
-use gglib_core::request_pipeline;
+use gglib_core::request_pipeline::{self, SamplingLayers};
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
 use crate::cache_metrics::CacheMetricsStore;
@@ -224,174 +226,33 @@ fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
     }
 }
 
-/// The sampling layers that sit *below* the client's own request parameters.
+/// Run one `gglib-core` request-shaping stage over a body held as `Bytes`.
 ///
-/// Grouped because they are only ever used together, at the single point where
-/// [`InferenceConfig::resolve_with_profile`] runs. Passing them as one argument
-/// also keeps [`forward_chat_completion`]'s already-long parameter list from
-/// growing.
+/// The shared stages operate on a `&mut serde_json::Value` — the seam that
+/// preserves unknown client fields, which a typed request struct would silently
+/// drop.  This is the whole of what the proxy adds on top: the conversion at
+/// the HTTP boundary, with zero blast radius at each step.
 ///
-/// The per-model layer is not here: it comes from the catalog lookup this
-/// function already performs, as
-/// [`ModelContext::inference_defaults`](gglib_core::request_pipeline::ModelContext::inference_defaults).
-pub(crate) struct SamplingLayers {
-    /// The profile the request selected via `{model}:{profile}`, if any.
-    /// Sparse — see `gglib_core::domain::inference_profile`.
-    pub profile: Option<InferenceConfig>,
-    /// Global defaults from settings.
-    pub global: Option<InferenceConfig>,
-}
-
-/// Strip prior reasoning artifacts from assistant messages in the request body.
-///
-/// Thin adapter over [`gglib_core::normalize::history::strip_thinking_debt`]
-/// — that module is the single source of truth for the scrub rules.  This
-/// function exists only to handle the bytes ⇄ JSON conversion at the proxy
-/// boundary:
-///
-/// * On parse failure, the original `Bytes` are returned unchanged (zero
-///   blast radius for non-JSON or unexpected request shapes).
-/// * When the shared scrubber reports zero changes, the original `Bytes`
-///   are returned to avoid a needless re-serialization.
-fn strip_prior_reasoning(body: Bytes) -> Bytes {
+/// * A body that is not JSON is forwarded byte-for-byte.
+/// * `edit` reports whether it changed anything; when it did not, the original
+///   `Bytes` are returned rather than a re-encoding of the same value.  That
+///   matters beyond saving a serialization — [`truncate_history`] sizes its
+///   budget from `body.len()`, so re-encoding an untouched body would have it
+///   measure something the client never sent.
+/// * A re-serialization failure forwards the original and logs.
+fn edit_json_body(body: Bytes, edit: impl FnOnce(&mut serde_json::Value) -> bool) -> Bytes {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return body;
     };
 
-    let Some(messages) = value.get_mut("messages").and_then(|v| v.as_array_mut()) else {
-        return body;
-    };
-
-    let touched = gglib_core::normalize::strip_thinking_debt(messages);
-    if touched == 0 {
+    if !edit(&mut value) {
         return body;
     }
 
     match serde_json::to_vec(&value) {
-        Ok(v) => {
-            debug!(touched, "stripped prior reasoning from assistant messages");
-            Bytes::from(v)
-        }
+        Ok(v) => Bytes::from(v),
         Err(e) => {
-            warn!(error = %e, "failed to re-serialize request after reasoning strip; forwarding original");
-            body
-        }
-    }
-}
-
-/// Coalesce consecutive same-role messages when the model requires strict
-/// turn alternation.
-///
-/// Mistral-family models (and any architecture with
-/// [`ModelCapabilities::REQUIRES_STRICT_TURNS`]) enforce user/assistant
-/// alternation inside their Jinja chat templates and raise a hard 500
-/// exception when consecutive same-role messages are present.  IDEs and
-/// gateway extensions (e.g. the VSCode LLM Gateway) routinely send
-/// multi-turn context that violates this — coalescing here is the correct
-/// fix rather than constraining callers.
-///
-/// Uses [`transform_messages_for_capabilities`] from `gglib-core` as the
-/// single source of truth for the merging rules, exactly as the internal
-/// `chat_api` path does.  When capabilities are empty (unknown model) this
-/// function is a zero-cost no-op.
-///
-/// On parse failure the original bytes are returned unchanged.
-fn coalesce_for_capabilities(body: Bytes, capabilities: ModelCapabilities) -> Bytes {
-    // Fast path: no preprocessing needed for this model.
-    if !capabilities.requires_strict_turns() && capabilities.supports_system_role() {
-        return body;
-    }
-    // Also fast path when capabilities are completely unknown.
-    if capabilities.is_empty() {
-        return body;
-    }
-
-    debug!(
-        requires_strict_turns = capabilities.requires_strict_turns(),
-        supports_system_role = capabilities.supports_system_role(),
-        "coalesce: entering message transformation"
-    );
-
-    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        warn!("coalesce: failed to parse request body as JSON; forwarding original");
-        return body;
-    };
-
-    let Some(messages_raw) = value.get("messages").and_then(|v| v.as_array()) else {
-        debug!("coalesce: no messages array found in request body");
-        return body;
-    };
-
-    let before_count = messages_raw.len();
-
-    // Log size of non-message top-level fields to identify what's inflating the body.
-    for (key, val) in value.as_object().into_iter().flatten() {
-        if key != "messages" {
-            let approx_bytes = serde_json::to_vec(val).map(|v| v.len()).unwrap_or(0);
-            debug!(key, approx_bytes, "coalesce: top-level field size");
-        }
-    }
-
-    // Deserialise only the fields `transform_messages_for_capabilities` needs.
-    // `ChatMessage.content` accepts both a plain JSON string and a JSON array of
-    // content-part objects (e.g. VSCode LLM Gateway sends array-form content per
-    // the OpenAI spec).  Using `MessageContent` ensures we can always round-trip.
-    let messages: Vec<ChatMessage> =
-        match serde_json::from_value(serde_json::Value::Array(messages_raw.clone())) {
-            Ok(m) => m,
-            Err(e) => {
-                warn!(
-                    error = %e,
-                    before = before_count,
-                    "coalesce: failed to deserialise messages as Vec<ChatMessage>; \
-                     forwarding original body unchanged. \
-                     This usually means a message field has an unexpected type."
-                );
-                return body;
-            }
-        };
-
-    debug!(
-        before = before_count,
-        roles = ?messages.iter().map(|m| m.role.as_str()).collect::<Vec<_>>(),
-        "coalesce: parsed messages for transformation"
-    );
-    for (i, m) in messages.iter().enumerate() {
-        let content_bytes = m
-            .content
-            .as_ref()
-            .map(|c| {
-                c.as_str()
-                    .map(|s| s.len())
-                    .unwrap_or_else(|| format!("{:?}", c).len())
-            })
-            .unwrap_or(0);
-        debug!(i, role = %m.role, content_bytes, "coalesce: message sizes");
-    }
-
-    let transformed = transform_messages_for_capabilities(messages, capabilities);
-    let after_count = transformed.len();
-
-    debug!(
-        before = before_count,
-        after = after_count,
-        merged = before_count.saturating_sub(after_count),
-        "coalesce: transformation complete"
-    );
-
-    match serde_json::to_value(&transformed) {
-        Ok(new_messages) => {
-            value["messages"] = new_messages;
-            match serde_json::to_vec(&value) {
-                Ok(v) => Bytes::from(v),
-                Err(e) => {
-                    warn!(error = %e, "coalesce: failed to re-serialize; forwarding original");
-                    body
-                }
-            }
-        }
-        Err(e) => {
-            warn!(error = %e, "coalesce: failed to serialise transformed messages; forwarding original");
+            warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
             body
         }
     }
@@ -469,15 +330,12 @@ pub(crate) async fn forward_chat_completion(
     // BPE stability) already happened once in `chat_completions` before this
     // function was called, so the body arriving here doesn't need it again.
     //
-    // 1. Strip reasoning artefacts from prior assistant turns so reasoning
-    //    models don't pattern-match their own past <think> traces.
-    let body = strip_prior_reasoning(body);
+    // 1. Message-level shaping: strip prior-turn reasoning artefacts, then
+    //    coalesce consecutive same-role messages for strict-turn models.
+    //    Shared with the agent path — see `gglib_core::request_pipeline`.
+    let body = edit_json_body(body, |v| request_pipeline::shape_messages(v, &context));
 
-    // 2. Coalesce consecutive same-role messages for strict-turn models
-    //    (e.g. Mistral/Devstral).  No-op when capabilities are empty/unknown.
-    let body = coalesce_for_capabilities(body, context.capabilities);
-
-    // 3. Truncate stale tool/large-assistant history to prevent local model
+    // 2. Truncate stale tool/large-assistant history to prevent local model
     //    context-window overflow caused by broken client-side compaction.
     //    The budget scales with the live serving context so clients that
     //    plan against the advertised context window are never rejected by a
@@ -533,40 +391,13 @@ pub(crate) async fn forward_chat_completion(
         "sending request to upstream (post-transform)"
     );
 
-    // 4. Inject resolved inference defaults.
-    //
-    // Extract any params the client already sent, then merge model-level and
-    // global defaults behind them via the 4-level hierarchy.  The resolved
-    // values are aggressively inserted (not `or_insert`) so that every
-    // param in the final config is forwarded to llama-server.
-    let body = if let Ok(mut body_value) = serde_json::from_slice::<serde_json::Value>(&body) {
-        let client_params = InferenceConfig::from_openai_json(&body_value);
-        let resolved = client_params.resolve_with_profile(
-            sampling.profile.as_ref(),
-            context.inference_defaults.as_ref(),
-            sampling.global.as_ref(),
-        );
-        if let Some(body_obj) = body_value.as_object_mut() {
-            for (k, v) in resolved.to_openai_json_patch() {
-                body_obj.insert(k, v);
-            }
-            // Force-insert (not or_insert) llama-server's own `cache_prompt`
-            // flag. It defaults to true server-side, but nothing guarantees
-            // the calling client doesn't send `false` — and if it ever did,
-            // llama-server's n_past = get_common_prefix(...) reuse computation
-            // (server-context.cpp) is skipped entirely, silently discarding
-            // 100% of any restored/hot KV state and forcing a full re-prefill
-            // regardless of how well the prompt actually matches. The whole
-            // KV cache session persistence feature depends on this staying
-            // true, so pin it rather than trusting it implicitly.
-            body_obj.insert("cache_prompt".to_owned(), serde_json::Value::Bool(true));
-        }
-        serde_json::to_vec(&body_value)
-            .map(Bytes::from)
-            .unwrap_or(body)
-    } else {
-        body
-    };
+    // 3. Resolve the sampling hierarchy into the body and pin `cache_prompt`.
+    //    Both are force-inserts, and both must stay that way — see
+    //    `gglib_core::request_pipeline::resolve_sampling`.
+    let body = edit_json_body(body, |v| {
+        request_pipeline::resolve_sampling(v, &context, &sampling);
+        true
+    });
 
     // Build the request builder with all forwarded headers.
     let mut req_builder = client
@@ -1068,46 +899,42 @@ mod tests {
         assert_eq!(out, body, "non-JSON bodies must pass through unchanged");
     }
 
-    fn parse(b: &Bytes) -> serde_json::Value {
-        serde_json::from_slice(b).expect("valid json")
-    }
-
-    // The full scrub-rule matrix lives in `gglib_core::normalize::history`
-    // tests.  These tests cover only the bytes ⇄ JSON adapter behaviour
-    // that is unique to the proxy boundary.
+    // The transforms themselves are tested in `gglib_core::request_pipeline`.
+    // What is left here is the bytes ⇄ JSON conversion unique to the proxy
+    // boundary — specifically, the conditions under which the client's
+    // original payload must be forwarded rather than a re-encoding of it.
 
     #[test]
-    fn strip_delegates_and_reserializes_when_changes_made() {
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"assistant","content":"hello","reasoning_content":"long ramble..."}
-            ]}"#,
-        );
-        let out = parse(&strip_prior_reasoning(body));
-        assert!(out["messages"][0].get("reasoning_content").is_none());
-        assert_eq!(out["messages"][0]["content"], "hello");
+    fn edit_json_body_reserializes_when_the_stage_reports_a_change() {
+        let body = Bytes::from(r#"{"model":"m","keep":1}"#);
+        let out = edit_json_body(body, |v| {
+            v["added"] = serde_json::Value::Bool(true);
+            true
+        });
+        let parsed: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
+        assert_eq!(parsed["added"], true);
+        assert_eq!(parsed["keep"], 1, "untouched fields survive");
+    }
+
+    /// A stage reporting no change must cost the body nothing — not even a
+    /// re-encoding, which would reorder keys and change `body.len()` under
+    /// `truncate_history`.
+    #[test]
+    fn edit_json_body_returns_the_original_bytes_when_nothing_changed() {
+        // Deliberately not in the canonical form `serde_json` would emit:
+        // whitespace and key order both differ from a round-trip.
+        let body = Bytes::from(r#"{ "zeta": 1,  "alpha": 2 }"#);
+        let out = edit_json_body(body.clone(), |_| false);
+        assert_eq!(out, body, "must be the same bytes, not the same value");
     }
 
     #[test]
-    fn strip_returns_original_bytes_on_invalid_json() {
+    fn edit_json_body_leaves_non_json_bodies_alone() {
         let body = Bytes::from_static(b"not json");
-        let out = strip_prior_reasoning(body.clone());
-        assert_eq!(out, body);
-    }
-
-    #[test]
-    fn strip_returns_original_bytes_when_messages_missing() {
-        let body = Bytes::from(r#"{"model":"m"}"#);
-        let out = strip_prior_reasoning(body.clone());
-        assert_eq!(out, body);
-    }
-
-    #[test]
-    fn strip_returns_original_bytes_when_no_changes_needed() {
-        // When no reasoning content is present the body should pass through
-        // byte-for-byte unchanged.
-        let body = Bytes::from(r#"{"model":"m","messages":[{"role":"user","content":"hi"}]}"#);
-        let out = strip_prior_reasoning(body.clone());
+        let out = edit_json_body(body.clone(), |v| {
+            *v = serde_json::json!({"should": "never happen"});
+            true
+        });
         assert_eq!(out, body);
     }
 }
