@@ -37,6 +37,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+use crate::cache_metrics::{CacheMetricsStore, CacheUsage};
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
@@ -57,9 +58,10 @@ const RECENT_REQUEST_LIMIT: usize = 20;
 /// extension point for per-request cache telemetry (tokens reused, TTFT
 /// saved), which would otherwise accumulate as unrelated top-level fields.
 ///
-/// Everything here is *configuration* state — resolved once when a model is
-/// launched and changing only on a model swap. It carries no per-request
-/// measurements.
+/// The fields directly on this struct are *configuration* — resolved once when
+/// a model is launched and changing only on a model swap. Per-request
+/// measurements live under [`Self::usage`] rather than being mixed in, so a
+/// consumer can tell "how the cache is set up" from "what it actually did".
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct CacheStatus {
     /// Whether disk KV slot persistence is enabled on this proxy instance
@@ -84,6 +86,9 @@ pub struct CacheStatus {
     /// display rather than parsing — consumers should branch on
     /// [`Self::ram_state`] and [`Self::disk_suppressed_for_model`].
     pub warnings: Vec<String>,
+    /// Measured prompt-cache reuse since the proxy started. Unlike the fields
+    /// above, this changes on every request.
+    pub usage: CacheUsage,
 }
 
 impl CacheStatus {
@@ -149,7 +154,17 @@ impl CacheStatus {
             ram_state,
             needs_attention: ram_health.needs_attention() || disk_suppressed_for_model,
             warnings,
+            // Config-only at construction; the live figure is attached at
+            // snapshot time via `with_usage`. See `CacheStatusCache`.
+            usage: CacheUsage::default(),
         }
+    }
+
+    /// Attach measured reuse totals to an otherwise config-only status.
+    #[must_use]
+    pub fn with_usage(mut self, usage: CacheUsage) -> Self {
+        self.usage = usage;
+        self
     }
 }
 
@@ -160,6 +175,12 @@ impl CacheStatus {
 /// shared between a writer that learns the value incidentally and a reader
 /// that needs it on its own schedule. `None` until the first request resolves
 /// a model, since the RAM budget isn't known until something is launched.
+///
+/// Holds the **configuration** half only — every stored value carries a
+/// default [`CacheUsage`]. Reuse totals move on every request and would defeat
+/// the unchanged-write skip below, so they are read live from
+/// [`crate::cache_metrics::CacheMetricsStore`] and attached in
+/// [`DashboardSnapshot::build`] via [`CacheStatus::with_usage`].
 #[derive(Debug, Default)]
 pub struct CacheStatusCache {
     latest: std::sync::Mutex<Option<CacheStatus>>,
@@ -252,6 +273,7 @@ impl DashboardSnapshot {
         metrics: &ContextMetricsStore,
         upstream_health: &UpstreamHealth,
         cache: &CacheStatusCache,
+        cache_metrics: &CacheMetricsStore,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -271,7 +293,10 @@ impl DashboardSnapshot {
             recent_requests: metrics.recent(RECENT_REQUEST_LIMIT),
             total_requests: metrics.total_requests(),
             upstream_health: upstream_health.snapshot(),
-            cache: cache.get(),
+            // Stored config plus live reuse totals — see `CacheStatusCache`.
+            cache: cache
+                .get()
+                .map(|status| status.with_usage(cache_metrics.snapshot())),
         }
     }
 }
@@ -295,6 +320,8 @@ pub struct DashboardState {
     /// Latest observed prompt-cache configuration, populated by the request
     /// path as models resolve.
     pub cache: Arc<CacheStatusCache>,
+    /// Running prompt-cache reuse totals, recorded by the forward paths.
+    pub cache_metrics: Arc<CacheMetricsStore>,
 }
 
 impl DashboardState {
@@ -307,6 +334,7 @@ impl DashboardState {
         metrics: Arc<ContextMetricsStore>,
         upstream_health: Arc<UpstreamHealth>,
         cache: Arc<CacheStatusCache>,
+        cache_metrics: Arc<CacheMetricsStore>,
     ) -> Self {
         Self {
             connections,
@@ -315,6 +343,7 @@ impl DashboardState {
             upstream_health,
             broadcaster: Arc::new(Broadcaster::new(BROADCAST_CAPACITY)),
             cache,
+            cache_metrics,
         }
     }
 
@@ -328,6 +357,7 @@ impl DashboardState {
             &self.metrics,
             &self.upstream_health,
             &self.cache,
+            &self.cache_metrics,
         )
     }
 }
@@ -378,6 +408,7 @@ mod tests {
             Arc::new(ContextMetricsStore::new()),
             Arc::new(UpstreamHealth::new()),
             Arc::new(CacheStatusCache::new()),
+            Arc::new(CacheMetricsStore::new()),
         ))
     }
 
@@ -394,6 +425,7 @@ mod tests {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
+            &CacheMetricsStore::new(),
         );
 
         assert!(snapshot.active_connections.is_empty());
@@ -426,6 +458,7 @@ mod tests {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
+            &CacheMetricsStore::new(),
         );
 
         assert_eq!(snapshot.active_connections.len(), 1);
@@ -448,6 +481,7 @@ mod tests {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
+            &CacheMetricsStore::new(),
         );
 
         assert!(snapshot.slots_available);
@@ -477,6 +511,7 @@ mod tests {
                 &metrics,
                 &upstream_health,
                 &CacheStatusCache::new(),
+                &CacheMetricsStore::new(),
             );
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
@@ -623,9 +658,16 @@ mod tests {
         let metrics = ContextMetricsStore::new();
         let upstream_health = UpstreamHealth::new();
         let cache = CacheStatusCache::new();
+        let cache_metrics = CacheMetricsStore::new();
 
-        let before =
-            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, &cache);
+        let before = DashboardSnapshot::build(
+            &connections,
+            &slots,
+            &metrics,
+            &upstream_health,
+            &cache,
+            &cache_metrics,
+        );
         assert_eq!(before.cache, None);
 
         cache.set(CacheStatus::build(
@@ -633,10 +675,60 @@ mod tests {
             false,
             CacheRamHealth::Low { mb: 1024 },
         ));
-        let after =
-            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, &cache);
+        let after = DashboardSnapshot::build(
+            &connections,
+            &slots,
+            &metrics,
+            &upstream_health,
+            &cache,
+            &cache_metrics,
+        );
         let status = after.cache.expect("cache status present after set");
         assert!(status.needs_attention);
         assert_eq!(status.warnings.len(), 2);
+    }
+
+    /// Reuse totals must come from the live store at snapshot time, not from
+    /// whatever was frozen into the cached config — otherwise the figure would
+    /// only move when a model swapped.
+    #[test]
+    fn snapshot_reads_usage_live_rather_than_from_the_cached_config() {
+        let connections = ActiveConnectionsRegistry::new();
+        let slots = SlotsCache::new();
+        let metrics = ContextMetricsStore::new();
+        let upstream_health = UpstreamHealth::new();
+        let cache = CacheStatusCache::new();
+        let cache_metrics = CacheMetricsStore::new();
+
+        // Config recorded once, as the request path does on model resolution.
+        cache.set(CacheStatus::build(
+            true,
+            true,
+            CacheRamHealth::Healthy { mb: 70_008 },
+        ));
+
+        let build = |cm: &CacheMetricsStore| {
+            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, &cache, cm)
+                .cache
+                .expect("cache status present")
+        };
+
+        assert_eq!(build(&cache_metrics).usage, CacheUsage::default());
+
+        // Requests land *after* the config was cached; the snapshot must
+        // still pick them up.
+        cache_metrics.record(10_000, Some(9_500));
+        let got = build(&cache_metrics);
+        assert_eq!(got.usage.reporting_requests, 1);
+        assert_eq!(got.usage.cached_tokens, 9_500);
+        assert_eq!(got.usage.last_prompt_tokens, Some(10_000));
+
+        // And the stored config is untouched by that — it still compares
+        // equal to a freshly built one, which is what lets `set` skip
+        // redundant writes on every subsequent request.
+        assert_eq!(
+            cache.get().expect("config cached"),
+            CacheStatus::build(true, true, CacheRamHealth::Healthy { mb: 70_008 }),
+        );
     }
 }

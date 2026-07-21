@@ -11,6 +11,7 @@ use bytes::Bytes;
 use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
+use crate::cache_metrics::CacheMetricsStore;
 use crate::connections::ConnectionGuard;
 use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visible_content_frame};
 use crate::token_calibration::TokenCalibration;
@@ -50,6 +51,7 @@ pub fn spawn_and_return(
     tags: Vec<String>,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
+    cache_metrics: Arc<CacheMetricsStore>,
     forwarded_chars: usize,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
@@ -186,6 +188,11 @@ pub fn spawn_and_return(
                 // real prompt-token count the upstream reported.
                 if let Some(prompt_tokens) = outcome.prompt_tokens {
                     calibration.record(&model_name_owned, forwarded_chars, prompt_tokens);
+                    // Prompt-cache telemetry. Recorded only alongside a real
+                    // prompt-token count, so a request that never produced a
+                    // usage frame is absent from the totals rather than
+                    // counted as zero reuse.
+                    cache_metrics.record(prompt_tokens, outcome.cached_tokens);
                 }
                 // KV cache save (opt-in): awaited, never detached, happens
                 // after stream exhaustion and before the permit drops.
