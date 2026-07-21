@@ -256,8 +256,15 @@ mod tests {
 
         let mut stream = Box::pin(monitor.monitor());
 
-        // Should get an initial status on first tick
-        let first_status = tokio::time::timeout(Duration::from_millis(500), stream.next()).await;
+        // Should get an initial status on first tick.
+        //
+        // The budget is deliberately far larger than the 10 ms poll interval:
+        // this asserts *liveness* (the stream emits at all), not latency. Under
+        // `cargo test --workspace` every crate's test binary runs concurrently,
+        // and this test's `current_thread` runtime can wait a long time to be
+        // scheduled — a tight budget here fails on contention rather than on
+        // anything the monitor did wrong.
+        let first_status = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
 
         cancel_token.cancel();
 
