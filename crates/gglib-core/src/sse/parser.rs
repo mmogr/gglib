@@ -49,10 +49,19 @@ fn parse_usage_event(parsed: &serde_json::Value) -> Option<LlmStreamEvent> {
         u32::try_from(usage["completion_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
     let total_tokens =
         u32::try_from(usage["total_tokens"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+    // Unlike the counts above, a missing `cached_tokens` stays `None` rather
+    // than defaulting to 0 — see the field docs on `LlmStreamEvent::Usage`.
+    // llama.cpp nests it under `prompt_tokens_details`, matching OpenAI.
+    let cached_tokens = usage
+        .get("prompt_tokens_details")
+        .and_then(|d| d.get("cached_tokens"))
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX));
     Some(LlmStreamEvent::Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens,
+        cached_tokens,
     })
 }
 
@@ -568,7 +577,64 @@ mod tests {
             LlmStreamEvent::Usage {
                 prompt_tokens: 123,
                 completion_tokens: 45,
-                total_tokens: 168
+                total_tokens: 168,
+                cached_tokens: None
+            }
+        ));
+    }
+
+    /// llama.cpp reports reused prompt tokens under the OpenAI-standard
+    /// `prompt_tokens_details` nesting (its `n_prompt_tokens_cache`).
+    #[test]
+    fn usage_frame_parses_nested_cached_token_count() {
+        let frame = serde_json::json!({
+            "id": "chatcmpl-1",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "test-model",
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 30342,
+                "completion_tokens": 893,
+                "total_tokens": 31235,
+                "prompt_tokens_details": { "cached_tokens": 892 }
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                cached_tokens: Some(892),
+                ..
+            }
+        ));
+    }
+
+    /// Zero reused tokens is a genuine measurement — a full re-prefill — and
+    /// must not collapse into the same `None` used for "server didn't say".
+    #[test]
+    fn usage_frame_distinguishes_zero_cached_tokens_from_a_missing_field() {
+        let with_zero = serde_json::json!({
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11,
+                "prompt_tokens_details": { "cached_tokens": 0 }
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&with_zero) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Usage {
+                cached_tokens: Some(0),
+                ..
             }
         ));
     }
@@ -616,7 +682,8 @@ mod tests {
             LlmStreamEvent::Usage {
                 prompt_tokens: 4181,
                 completion_tokens: 12,
-                total_tokens: 4193
+                total_tokens: 4193,
+                cached_tokens: None
             }
         ));
         assert!(matches!(

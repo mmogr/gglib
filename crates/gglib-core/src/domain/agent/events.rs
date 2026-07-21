@@ -207,6 +207,17 @@ pub enum LlmStreamEvent {
         completion_tokens: u32,
         /// Total tokens (`prompt_tokens + completion_tokens`).
         total_tokens: u32,
+        /// How many of `prompt_tokens` were served from the KV cache rather
+        /// than re-processed, from `usage.prompt_tokens_details.cached_tokens`
+        /// (llama.cpp's `n_prompt_tokens_cache`; the same figure it reports as
+        /// `timings.cache_n`).
+        ///
+        /// `None` when the upstream omits the field — an older llama.cpp, or
+        /// any other OpenAI-compatible server that doesn't report it. Absent
+        /// and zero are deliberately distinct: zero means "nothing was
+        /// reused", which is a real measurement, while `None` means "not
+        /// reported" and must not be counted as a cache miss.
+        cached_tokens: Option<u32>,
     },
 
     /// Signals the end of the stream.

@@ -150,7 +150,13 @@ impl SseEncoder {
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
-            } => Some(self.usage_frame(*prompt_tokens, *completion_tokens, *total_tokens)),
+                cached_tokens,
+            } => Some(self.usage_frame(
+                *prompt_tokens,
+                *completion_tokens,
+                *total_tokens,
+                *cached_tokens,
+            )),
             LlmStreamEvent::NormalizationError { .. } => None,
             LlmStreamEvent::UpstreamError {
                 message,
@@ -166,18 +172,31 @@ impl SseEncoder {
     /// usage-totals chunk carries an empty `choices` array (not omitted —
     /// see [`crate::LlmStreamEvent::Usage`] doc) and a top-level `usage`
     /// object.
-    fn usage_frame(&self, prompt_tokens: u32, completion_tokens: u32, total_tokens: u32) -> String {
+    fn usage_frame(
+        &self,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        total_tokens: u32,
+        cached_tokens: Option<u32>,
+    ) -> String {
+        let mut usage = json!({
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        });
+        // Re-emitted only when the upstream reported it, so the frame stays
+        // byte-identical to before for servers that don't. Clients such as the
+        // Copilot LLM Gateway extension surface this as `promptTokenDetails`.
+        if let Some(cached) = cached_tokens {
+            usage["prompt_tokens_details"] = json!({ "cached_tokens": cached });
+        }
         let value = json!({
             "id": self.id,
             "object": "chat.completion.chunk",
             "created": self.created,
             "model": self.model,
             "choices": [],
-            "usage": {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            },
+            "usage": usage,
         });
         format!("data: {value}\n\n")
     }
@@ -328,6 +347,7 @@ mod tests {
                 prompt_tokens: 123,
                 completion_tokens: 45,
                 total_tokens: 168,
+                cached_tokens: None,
             })
             .expect("frame");
         let v = parse_data_frame(&out);
@@ -341,6 +361,43 @@ mod tests {
         assert_eq!(v["usage"]["prompt_tokens"], 123);
         assert_eq!(v["usage"]["completion_tokens"], 45);
         assert_eq!(v["usage"]["total_tokens"], 168);
+        assert!(
+            v["usage"].get("prompt_tokens_details").is_none(),
+            "an unreported cached-token count must not synthesize the details object"
+        );
+    }
+
+    /// A reported count is re-emitted under the OpenAI-standard nesting, so
+    /// clients (e.g. the Copilot LLM Gateway extension's `promptTokenDetails`)
+    /// see it exactly where they expect.
+    #[test]
+    fn usage_event_re_emits_a_reported_cached_token_count() {
+        let out = enc()
+            .encode(&LlmStreamEvent::Usage {
+                prompt_tokens: 123,
+                completion_tokens: 45,
+                total_tokens: 168,
+                cached_tokens: Some(100),
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        assert_eq!(v["usage"]["prompt_tokens_details"]["cached_tokens"], 100);
+    }
+
+    /// Zero reused tokens is a real measurement, not a missing one, so it must
+    /// survive encoding rather than being elided like `None`.
+    #[test]
+    fn usage_event_distinguishes_zero_cached_tokens_from_absent() {
+        let out = enc()
+            .encode(&LlmStreamEvent::Usage {
+                prompt_tokens: 123,
+                completion_tokens: 45,
+                total_tokens: 168,
+                cached_tokens: Some(0),
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        assert_eq!(v["usage"]["prompt_tokens_details"]["cached_tokens"], 0);
     }
 
     #[test]
