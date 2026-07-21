@@ -19,11 +19,12 @@ use async_trait::async_trait;
 use reqwest::Client;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use gglib_agent::council::{CouncilConfig, execute};
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::request_pipeline;
 use gglib_mcp::McpService;
 use gglib_proxy::{CouncilRunParams, CouncilRunnerPort};
 
@@ -95,25 +96,16 @@ impl CouncilRunnerPort for CouncilRunnerAdapter {
             "CouncilRunnerAdapter: starting run"
         );
 
-        // Fetch model tags for normalisation (best-effort; empty on error).
-        let tags = match self.catalog_port.resolve_model(&target.model_name).await {
-            Ok(Some(summary)) => summary.tags,
-            Ok(None) => {
-                warn!(model = %target.model_name, "orchestrator runner: model not in catalog; using empty tags");
-                Vec::new()
-            }
-            Err(e) => {
-                warn!(model = %target.model_name, error = %e, "orchestrator runner: failed to resolve model tags");
-                Vec::new()
-            }
-        };
+        // Resolve per-model context (best-effort; passthrough on miss/error).
+        let model_context =
+            request_pipeline::resolve(self.catalog_port.as_ref(), Some(&target.model_name)).await;
 
         // Compose infrastructure ports.
         let ports = compose_council_ports(
             target.base_url.clone(),
             self.http_client.clone(),
             None, // use whatever model is loaded
-            tags,
+            model_context,
             self.mcp.clone(),
             None, // no sandbox for orchestrator proxy calls
             None, // no sampling override

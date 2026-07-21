@@ -28,8 +28,8 @@ use gglib_core::domain::benchmark::{
     PerfConfig,
 };
 use gglib_core::server_config::CacheRamSetting;
+use gglib_runtime::RuntimePortImpl;
 use gglib_runtime::process::ProcessManager;
-use gglib_runtime::{CatalogPortImpl, RuntimePortImpl};
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
@@ -194,7 +194,7 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
 
 /// Build `BenchmarkOps` for the local path.
 fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
-    let catalog = Arc::new(CatalogPortImpl::new(ctx.model_repo.clone()));
+    let catalog = Arc::clone(&ctx.catalog);
     let process_mgr = Arc::new(ProcessManager::new_single_swap(
         ctx.base_port,
         ctx.llama_server_path.to_string_lossy().into_owned(),

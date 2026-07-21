@@ -31,6 +31,7 @@ use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, Counci
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
+use gglib_core::request_pipeline;
 use gglib_runtime::compose_council_ports;
 use std::sync::Arc;
 
@@ -97,15 +98,13 @@ pub async fn run_sse(
 
     validate_port(&state, req.port).await?;
 
-    let tags = match req.model.as_deref() {
-        Some(name) => state.core.models().tags_for(name).await,
-        None => Vec::new(),
-    };
+    let model_context =
+        request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
-        tags,
+        model_context,
         state.mcp.clone(),
         None,
         None,

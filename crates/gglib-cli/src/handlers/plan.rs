@@ -13,6 +13,7 @@ use anyhow::{Context as _, Result, anyhow};
 use gglib_agent::council::plan;
 use gglib_core::ProcessHandle;
 use gglib_core::domain::council::task_graph::HitlMode;
+use gglib_core::request_pipeline;
 use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
@@ -68,15 +69,12 @@ async fn init_session(
 
     let cwd = std::env::current_dir().ok();
 
-    let tags = match model.as_deref() {
-        Some(name) => ctx.app.models().tags_for(name).await,
-        None => Vec::new(),
-    };
+    let model_context = request_pipeline::resolve(ctx.catalog.as_ref(), model.as_deref()).await;
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{resolved_port}"),
         ctx.http_client.clone(),
         model,
-        tags,
+        model_context,
         Arc::clone(&ctx.mcp),
         cwd,
         None,

@@ -9,6 +9,7 @@ pub mod events;
 pub mod normalize;
 pub mod paths;
 pub mod ports;
+pub mod request_pipeline;
 pub mod server_config;
 pub mod services;
 pub mod settings;
