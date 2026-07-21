@@ -109,6 +109,7 @@ impl CouncilRunnerPort for CouncilRunnerAdapter {
             self.mcp.clone(),
             None, // no sandbox for orchestrator proxy calls
             None, // no sampling override
+            None, // agent-path cache sink wired in a later step
         );
 
         // Build executor config from injected params.

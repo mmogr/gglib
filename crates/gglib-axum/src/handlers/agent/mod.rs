@@ -88,6 +88,7 @@ pub async fn chat(
         model_context,
         state.mcp.clone(),
         tool_filter,
+        None,
     );
 
     let messages = req.messages;

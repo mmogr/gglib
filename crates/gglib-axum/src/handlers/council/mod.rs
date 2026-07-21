@@ -83,6 +83,7 @@ pub async fn plan_sse(
         state.mcp.clone(),
         None,
         None,
+        None,
     );
 
     let (tx, rx) = mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);

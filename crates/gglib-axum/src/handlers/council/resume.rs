@@ -117,6 +117,7 @@ pub async fn resume_run(
         state.mcp.clone(),
         None,
         None,
+        None,
     );
 
     let config = CouncilConfig {

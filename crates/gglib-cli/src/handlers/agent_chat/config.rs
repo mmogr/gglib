@@ -147,6 +147,8 @@ pub async fn compose(
         tool_filter,
         sandbox_root,
         resolved_sampling,
+        // No proxy dashboard in the CLI process — nowhere to report reuse.
+        None,
     );
 
     Ok((agent, maybe_handle))

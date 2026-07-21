@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::ports::{AgentLoopPort, CacheMetricsSink, LlmCompletionPort, ToolExecutorPort};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
@@ -49,6 +49,9 @@ use crate::LlmCompletionAdapter;
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
+/// * `cache_metrics` — `Some(sink)` reports this loop's prompt-cache reuse
+///   (e.g. the proxy process's agent-path store, for GUI chat); `None` when
+///   there is no dashboard to report to.
 pub fn compose_agent_loop(
     base_url: String,
     http_client: Client,
@@ -56,6 +59,7 @@ pub fn compose_agent_loop(
     model_context: ModelContext,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
+    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -66,6 +70,7 @@ pub fn compose_agent_loop(
         tool_filter,
         None,
         None,
+        cache_metrics,
     )
 }
 
@@ -80,6 +85,7 @@ pub fn compose_agent_loop_with_sampling(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -90,6 +96,7 @@ pub fn compose_agent_loop_with_sampling(
         tool_filter,
         sandbox_root,
         sampling,
+        cache_metrics,
     )
 }
 
@@ -115,6 +122,10 @@ pub struct CouncilPorts {
 ///
 /// When `sandbox_root` is `Some`, filesystem tools (`read_file`,
 /// `list_directory`, `grep_search`) are enabled and scoped to that path.
+///
+/// `cache_metrics` reports every LLM call's prompt-cache reuse to a sink when
+/// the council runs in the proxy process; `None` when there is no dashboard.
+#[allow(clippy::too_many_arguments)]
 pub fn compose_council_ports(
     base_url: String,
     http_client: Client,
@@ -123,11 +134,13 @@ pub fn compose_council_ports(
     mcp: Arc<McpService>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
 ) -> CouncilPorts {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
-            .with_model_context(model_context),
+            .with_model_context(model_context)
+            .with_cache_metrics_sink(cache_metrics),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
@@ -146,11 +159,13 @@ fn compose_agent_loop_inner(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
-            .with_model_context(model_context),
+            .with_model_context(model_context)
+            .with_cache_metrics_sink(cache_metrics),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
