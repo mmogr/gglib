@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod profiles;
 mod settings_display;
 
 use std::collections::BTreeSet;
@@ -17,6 +18,8 @@ use gglib_core::{Settings, SettingsUpdate, validate_settings};
 use settings_display::{
     print_display_rows, print_sections, settings_display_rows, settings_to_sections,
 };
+
+pub use profiles::handle_profile;
 
 /// Resolve the display string for `default-model-id`, performing a DB lookup when set.
 ///
