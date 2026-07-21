@@ -7,6 +7,7 @@ pub mod chat;
 pub mod council;
 pub mod gguf;
 pub mod inference;
+pub mod inference_profile;
 pub mod kv_estimate;
 pub mod kv_memory;
 pub mod mcp;
@@ -34,6 +35,10 @@ pub use benchmark::{
 
 // Re-export inference types at the domain level for convenience
 pub use inference::InferenceConfig;
+pub use inference_profile::{
+    InferenceProfile, MAX_PROFILE_NAME_LEN, ProfileNameError, RESERVED_PROFILE_NAMES,
+    builtin_templates, validate_name,
+};
 
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{
