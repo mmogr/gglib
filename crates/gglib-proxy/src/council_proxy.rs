@@ -59,7 +59,7 @@ use uuid::Uuid;
 use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_core::domain::council::run::CouncilRunStatus;
 use gglib_core::domain::council::task_graph::{HitlMode, NodeStatus, TaskGraph};
-use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
+use gglib_core::ports::{CacheMetricsSink, CouncilApprovalRegistryPort, CouncilRepositoryPort};
 
 use crate::connections::{ActiveConnectionsRegistry, ConnectionGuard};
 use crate::models::{ChatChunkChoice, ChatCompletionChunk, ChatDelta, ErrorResponse, ModelInfo};
@@ -100,6 +100,10 @@ pub struct CouncilRunParams {
     pub run_id: Option<String>,
     /// Pre-existing graph override (used when resuming).
     pub graph_override: Option<TaskGraph>,
+    /// Where the run's per-call prompt-cache reuse is reported. The virtual-model
+    /// handler passes the proxy process's agent-path store, so council reuse
+    /// lands on the dashboard's `agent_usage` — separate from the proxied figure.
+    pub agent_metrics: Arc<dyn CacheMetricsSink>,
 }
 
 /// Port for executing the orchestrator, injected at proxy startup.
@@ -187,11 +191,12 @@ pub(crate) async fn handle_virtual_model(
     connections: &Arc<ActiveConnectionsRegistry>,
     model_name: &str,
     body: &Bytes,
+    agent_metrics: Arc<dyn CacheMetricsSink>,
 ) -> Response {
     match model_name {
         VIRTUAL_MODEL_NATIVE => handle_native_mode(),
         VIRTUAL_MODEL_AUTO => match serde_json::from_slice::<OrchestratorRequest>(body) {
-            Ok(req) => handle_auto_mode(deps, connections, req).await,
+            Ok(req) => handle_auto_mode(deps, connections, req, agent_metrics).await,
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 axum::Json(ErrorResponse::new(
@@ -202,7 +207,7 @@ pub(crate) async fn handle_virtual_model(
                 .into_response(),
         },
         VIRTUAL_MODEL_INTERACTIVE => match serde_json::from_slice::<OrchestratorRequest>(body) {
-            Ok(req) => handle_interactive_mode(deps, connections, req).await,
+            Ok(req) => handle_interactive_mode(deps, connections, req, agent_metrics).await,
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 axum::Json(ErrorResponse::new(
@@ -247,6 +252,7 @@ async fn handle_auto_mode(
     deps: &CouncilDeps,
     connections: &Arc<ActiveConnectionsRegistry>,
     req: OrchestratorRequest,
+    agent_metrics: Arc<dyn CacheMetricsSink>,
 ) -> Response {
     let goal = match extract_last_user_message(&req.messages) {
         Some(g) => g,
@@ -275,6 +281,7 @@ async fn handle_auto_mode(
         council_repo: Some(Arc::clone(&deps.council_repo)),
         run_id: Some(run_id.clone()),
         graph_override: None,
+        agent_metrics,
     };
 
     let runner = Arc::clone(&deps.runner);
@@ -298,10 +305,12 @@ async fn handle_interactive_mode(
     deps: &CouncilDeps,
     connections: &Arc<ActiveConnectionsRegistry>,
     req: OrchestratorRequest,
+    agent_metrics: Arc<dyn CacheMetricsSink>,
 ) -> Response {
     // --- Check for a sentinel in the previous assistant turn ---
     if let Some((run_id, approval_id)) = extract_sentinel(&req.messages) {
-        return resume_interactive_run(deps, connections, req, run_id, approval_id).await;
+        return resume_interactive_run(deps, connections, req, run_id, approval_id, agent_metrics)
+            .await;
     }
 
     // --- First turn: start a new plan-approval run ---
@@ -332,6 +341,7 @@ async fn handle_interactive_mode(
         council_repo: Some(Arc::clone(&deps.council_repo)),
         run_id: Some(run_id.clone()),
         graph_override: None,
+        agent_metrics,
     };
 
     let runner = Arc::clone(&deps.runner);
@@ -353,6 +363,7 @@ async fn resume_interactive_run(
     req: OrchestratorRequest,
     run_id: String,
     _approval_id: String,
+    agent_metrics: Arc<dyn CacheMetricsSink>,
 ) -> Response {
     let intent = extract_approval_intent(&req.messages);
     info!(
@@ -449,6 +460,7 @@ async fn resume_interactive_run(
                 council_repo: Some(Arc::clone(&deps.council_repo)),
                 run_id: Some(run_id.clone()),
                 graph_override: Some(graph),
+                agent_metrics,
             };
 
             let runner = Arc::clone(&deps.runner);

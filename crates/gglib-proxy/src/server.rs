@@ -599,11 +599,14 @@ async fn chat_completions(
     // matched whole here, and letting the router see it first would split it
     // into a base plus an `interactive` suffix.
     if VIRTUAL_MODELS.contains(&model_name.as_str()) {
+        let agent_metrics: Arc<dyn gglib_core::ports::CacheMetricsSink> =
+            state.dashboard.agent_metrics.clone();
         return handle_virtual_model(
             &state.council,
             &state.dashboard.connections,
             &model_name,
             &body,
+            agent_metrics,
         )
         .await;
     }
