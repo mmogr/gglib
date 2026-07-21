@@ -21,7 +21,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.97.1
           components: rustfmt
 
       - name: Check formatting
@@ -94,7 +94,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.97.1
 
       - name: Lockfile guard
         run: |
@@ -229,7 +229,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.97.1
           components: clippy
 
       - name: Cache Cargo registry and target directory
@@ -278,7 +278,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.91.0
+          toolchain: 1.97.1
 
       - name: Cache Cargo registry and target directory
         uses: actions/cache@v6

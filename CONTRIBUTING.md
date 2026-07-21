@@ -498,7 +498,7 @@ To pre-generate badge structure for a new crate or update module tables, use `sc
 
 ### Prerequisites
 
-- Rust 1.91.0 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
+- Rust 1.97.1 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
 - Node.js 22.12+ (see below)
 - Platform system libraries (see `scripts/check-deps.sh` for a live dependency check)
 

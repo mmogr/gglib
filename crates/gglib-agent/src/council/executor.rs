@@ -1013,7 +1013,7 @@ async fn run_wave_loop(
             let child_summary_line = format!(
                 "{} nodes for goal: {}",
                 child_graph.nodes.len(),
-                &spawn_req.goal
+                spawn_req.goal
             );
 
             // Emit SubteamSpawned event.
