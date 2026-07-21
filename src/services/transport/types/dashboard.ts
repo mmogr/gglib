@@ -119,12 +119,38 @@ export type CacheRamState =
   | 'llama_default';
 
 /**
+ * Mirrors `gglib_proxy::cache_metrics::CacheUsage` — measured prompt-cache
+ * reuse since the proxy started.
+ *
+ * Raw counts only. Nothing here is derived or estimated: reuse is exact, but
+ * what it saved depends on a prefill that never ran, so no "time saved" figure
+ * exists to display.
+ */
+export interface CacheUsage {
+  /** Completed requests whose upstream reported a cached-token count. */
+  reporting_requests: number;
+  /**
+   * Completed requests whose upstream omitted the field, excluded from every
+   * other figure here. Lets a consumer tell "no reuse" from "no data".
+   */
+  unreported_requests: number;
+  /** Total prompt tokens across `reporting_requests`. */
+  prompt_tokens: number;
+  /** Total prompt tokens served from cache. Always `<= prompt_tokens`. */
+  cached_tokens: number;
+  /** Prompt tokens in the most recent reporting request. */
+  last_prompt_tokens?: number | null;
+  /** Tokens reused from cache in the most recent reporting request. */
+  last_cached_tokens?: number | null;
+}
+
+/**
  * Mirrors `gglib_proxy::dashboard::CacheStatus` — how prompt caching is
  * configured for the running model.
  *
- * Configuration state only: resolved when a model launches and changing only
- * on a model swap. Per-request cache telemetry will extend this object rather
- * than sitting alongside it.
+ * The fields directly on this interface are configuration: resolved when a
+ * model launches and changing only on a model swap. Per-request measurements
+ * live under `usage`.
  */
 export interface CacheStatus {
   /** Whether disk KV slot persistence is enabled on this proxy instance. */
@@ -143,6 +169,8 @@ export interface CacheStatus {
   needs_attention: boolean;
   /** Ready-to-render warning lines; empty when nothing is wrong. */
   warnings: string[];
+  /** Measured reuse since proxy start. Unlike the fields above, moves per request. */
+  usage: CacheUsage;
 }
 
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
