@@ -146,7 +146,7 @@ fn resolve_cache_ram_inner(
                 total_ram_bytes,
                 model_bytes,
                 kv_bytes,
-            ) as u64),
+            )),
             source: CacheRamSource::Auto,
             ..base
         },
@@ -185,7 +185,7 @@ impl CacheRamResolution {
             ));
         }
         Some(format!(
-            "auto-sized llama-server RAM cache: {mb} MiB (total {} − model {} − {} {} at {} ctx − headroom, capped at 25% of RAM) — override with --cache-ram-mb, disable with GGLIB_DISABLE_CACHE_AUTOSIZE=1",
+            "auto-sized llama-server RAM cache: {mb} MiB (total {} − model {} − {} {} at {} ctx − headroom) — override with --cache-ram-mb, disable with GGLIB_DISABLE_CACHE_AUTOSIZE=1",
             gib(self.total_ram_bytes),
             gib(self.model_bytes),
             kv_label,
@@ -202,12 +202,14 @@ mod tests {
     const GIB: u64 = 1024 * 1024 * 1024;
 
     /// Reference machine: 128 GiB RAM, 27 GiB weights, 131k ctx.
+    /// KV: 64 KiB/token × 131072 ctx = exactly 8 GiB.
+    /// budget = 128 − 27 − 8 − 16 (headroom) = 77 GiB = 78848 MiB.
     fn auto_on_reference_machine() -> CacheRamResolution {
         resolve_cache_ram(
             CacheRamSetting::Auto,
             128 * GIB,
             27 * GIB,
-            Some(65_536), // 64 KiB/token → ~8.6 GiB at 131072 ctx
+            Some(65_536),
             131_072,
         )
     }
@@ -241,11 +243,11 @@ mod tests {
     }
 
     #[test]
-    fn auto_computes_a_capped_budget() {
+    fn auto_computes_the_full_available_budget() {
         let got = auto_on_reference_machine();
         assert_eq!(got.source, CacheRamSource::Auto);
-        // 25% of 128 GiB binds.
-        assert_eq!(got.cache_ram_mb, Some(32 * 1024));
+        // 128 − 27 − 8 − 16 (headroom) = 77 GiB, uncapped.
+        assert_eq!(got.cache_ram_mb, Some(77 * 1024));
     }
 
     #[test]
@@ -276,7 +278,7 @@ mod tests {
     #[test]
     fn explain_shows_the_arithmetic() {
         let msg = auto_on_reference_machine().explain().unwrap();
-        assert!(msg.contains("32768 MiB"), "{msg}");
+        assert!(msg.contains("78848 MiB"), "{msg}");
         assert!(msg.contains("128.0 GiB"), "{msg}");
         assert!(msg.contains("27.0 GiB"), "{msg}");
         assert!(msg.contains("131072 ctx"), "{msg}");

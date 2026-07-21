@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub mod agent;
 pub mod benchmark;
+pub mod cache_budget;
 pub mod capabilities;
 pub mod chat;
 pub mod council;
@@ -36,6 +37,12 @@ pub use inference::InferenceConfig;
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{estimate_kv_bytes_for_context, estimate_kv_bytes_per_token};
 pub use server_config::ServerConfig;
+
+// Re-export cache-RAM budget math at the domain level for convenience
+pub use cache_budget::{
+    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES,
+    compute_auto_cache_ram_mb,
+};
 
 // Re-export slot eviction helpers at the domain level for convenience
 pub use slot_eviction::{
