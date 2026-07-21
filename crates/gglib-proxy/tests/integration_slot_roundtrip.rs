@@ -310,19 +310,27 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     let (upstream_port, action_log, save_count, restore_count, last_chat_body) =
         spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
 
-    // Pre-create a slot file so the restore call actually reaches the mock
+    let session_id = "roundtrip-test";
+
+    let (proxy_base, proxy_cancel) =
+        spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
+
+    // Create the slot file so the restore call actually reaches the mock
     // upstream — the existence precheck in `restore_with_retry` skips the
     // network call entirely when nothing is cached yet, which is correct in
     // production but means this round-trip test needs a real file to
     // exercise the restore leg. FixedUpstream::ensure_model_running always
     // returns model_id 1.
-    let session_id = "roundtrip-test";
+    //
+    // Written *after* the proxy starts, deliberately. `serve()` stamps
+    // `server_start_time` with `now()`, and the mtime guard compares whole
+    // seconds (`mtime_secs < server_start_secs` in
+    // `slots::slot_file_is_stale`). Creating the file first leaves it one
+    // second-boundary away from reading as stale, which silently skips the
+    // restore and fails this test under parallel load.
     let bin_path = slot_bin_path(&slot_dir, 1, session_id);
     std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
     std::fs::write(&bin_path, b"fake kv state").unwrap();
-
-    let (proxy_base, proxy_cancel) =
-        spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
 
     // Send a non-streaming chat completion request.
     let response = Client::new()
@@ -728,14 +736,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
     let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
         spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
 
-    // Pre-create a slot file. On a supported model this is exactly what makes
-    // the restore leg fire (see the round-trip test above), so its presence
-    // here proves the bypass is driven by the model flag and not merely by a
-    // cache miss.
     let session_id = "partial-kv-session";
-    let bin_path = slot_bin_path(&slot_dir, 1, session_id);
-    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
-    std::fs::write(&bin_path, b"fake kv state").unwrap();
 
     let (proxy_base, proxy_cancel) = spawn_proxy_with_cache_for_model(
         upstream_port,
@@ -744,6 +745,19 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
         false, // partial KV memory — disk layer must be skipped
     )
     .await;
+
+    // Create the slot file. On a supported model this is exactly what makes
+    // the restore leg fire (see the round-trip test above), so its presence
+    // here proves the bypass is driven by the model flag and not merely by a
+    // cache miss.
+    //
+    // Written after the proxy starts for the same reason as that test: a file
+    // predating `server_start_time` is skipped by the mtime guard, which would
+    // drive the restore count to zero on its own and let this test pass
+    // vacuously without ever exercising the gate.
+    let bin_path = slot_bin_path(&slot_dir, 1, session_id);
+    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
+    std::fs::write(&bin_path, b"fake kv state").unwrap();
 
     let response = Client::new()
         .post(format!("{}/v1/chat/completions", proxy_base))
