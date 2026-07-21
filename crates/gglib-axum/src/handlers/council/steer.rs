@@ -65,7 +65,7 @@ pub async fn steer(
         state.mcp.clone(),
         None,
         None,
-        None,
+        Some(state.proxy.agent_metrics()),
     );
 
     let diff = steering_call(&req.graph, &req.instruction, &Arc::clone(&ports.llm))

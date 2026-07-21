@@ -12,8 +12,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ports::{
-    CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort,
+    CacheMetricsSink, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
+    ModelRepository, ModelRuntimePort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
@@ -184,6 +184,17 @@ impl ProxyOps {
     /// Get the current proxy status.
     pub async fn status(&self) -> ProxyStatus {
         self.supervisor.status().await
+    }
+
+    /// The agent-path prompt-cache reuse sink shared with the proxy dashboard.
+    ///
+    /// Handlers that run agent or council loops in this process (GUI chat, GUI
+    /// council) record their reuse here so it lands on the proxy's `agent_usage`.
+    /// Always available: the store lives on the supervisor for the process
+    /// lifetime, whether or not the proxy is currently running.
+    #[must_use]
+    pub fn agent_metrics(&self) -> Arc<dyn CacheMetricsSink> {
+        self.supervisor.agent_metrics()
     }
 
     /// Get a watch receiver for proxy exit events.

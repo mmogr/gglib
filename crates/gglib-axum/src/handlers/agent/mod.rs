@@ -88,7 +88,9 @@ pub async fn chat(
         model_context,
         state.mcp.clone(),
         tool_filter,
-        None,
+        // GUI chat runs in the same process as the embedded proxy; report its
+        // reuse to the shared agent-path store behind `agent_usage`.
+        Some(state.proxy.agent_metrics()),
     );
 
     let messages = req.messages;

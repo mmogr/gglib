@@ -117,7 +117,7 @@ pub async fn resume_run(
         state.mcp.clone(),
         None,
         None,
-        None,
+        Some(state.proxy.agent_metrics()),
     );
 
     let config = CouncilConfig {
