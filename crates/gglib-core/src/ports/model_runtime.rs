@@ -8,6 +8,8 @@ use async_trait::async_trait;
 use std::fmt;
 use thiserror::Error;
 
+use crate::domain::CacheRamHealth;
+
 /// Target information for a running model instance.
 ///
 /// This struct contains all information needed to route requests
@@ -38,14 +40,24 @@ pub struct RunningTarget {
     /// and let the in-RAM prompt cache — which does keep checkpoints — handle
     /// conversation switching.
     pub slot_restore_supported: bool,
+    /// How healthy the host-RAM prompt cache budget (`--cache-ram`) resolved
+    /// for this launch is.
+    ///
+    /// Classified once at spawn (where the budget arithmetic and the
+    /// auto-vs-explicit distinction are both in scope) and carried here so
+    /// user-facing surfaces can report it without re-deriving thresholds. See
+    /// [`crate::domain::classify_cache_ram`].
+    pub cache_ram_health: CacheRamHealth,
 }
 
 impl RunningTarget {
     /// Create a new `RunningTarget` for a local server.
     ///
-    /// `slot_restore_supported` defaults to `true` (the full-attention case);
-    /// callers that know the model's KV memory shape narrow it with
-    /// [`Self::with_slot_restore_supported`].
+    /// `slot_restore_supported` defaults to `true` (the full-attention case)
+    /// and `cache_ram_health` to [`CacheRamHealth::LlamaDefault`] (no flag
+    /// emitted); callers that know the launch's actual resolution narrow them
+    /// with [`Self::with_slot_restore_supported`] and
+    /// [`Self::with_cache_ram_health`].
     #[must_use]
     pub fn local(
         port: u16,
@@ -62,6 +74,7 @@ impl RunningTarget {
             effective_ctx,
             just_started,
             slot_restore_supported: true,
+            cache_ram_health: CacheRamHealth::LlamaDefault,
         }
     }
 
@@ -69,6 +82,13 @@ impl RunningTarget {
     #[must_use]
     pub const fn with_slot_restore_supported(mut self, supported: bool) -> Self {
         self.slot_restore_supported = supported;
+        self
+    }
+
+    /// Set the resolved host-RAM prompt cache health for this launch.
+    #[must_use]
+    pub const fn with_cache_ram_health(mut self, health: CacheRamHealth) -> Self {
+        self.cache_ram_health = health;
         self
     }
 }

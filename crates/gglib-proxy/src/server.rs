@@ -30,7 +30,7 @@ use gglib_mcp::McpService;
 use crate::cache_lifecycle::{StreamConfig, clear_cache, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
-use crate::dashboard::{DashboardState, spawn_dashboard_publisher};
+use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, forward_chat_completion};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
@@ -198,7 +198,7 @@ pub async fn serve(
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
-        cache_enabled,
+        Arc::new(CacheStatusCache::new()),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -638,6 +638,17 @@ async fn chat_completions(
         model_name = %target.model_name,
         "Routing to llama-server"
     );
+
+    // Record how caching resolved for this model. Written here rather than at
+    // launch because the dashboard lives in this crate and the launch decision
+    // lives in the runtime — the target is where the two meet. Cheap and
+    // idempotent: `set` skips the write when nothing changed, which is every
+    // request after the first for a given model.
+    state.dashboard.cache.set(CacheStatus::build(
+        state.cache_enabled && state.slot_dir.is_some(),
+        target.slot_restore_supported,
+        target.cache_ram_health,
+    ));
 
     // Register this request in the active-connections dashboard registry.
     // The returned guard unregisters on drop (see `connections` module docs)

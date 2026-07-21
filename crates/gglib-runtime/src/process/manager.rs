@@ -9,6 +9,7 @@ use super::health::{check_http_health, wait_for_http_health};
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
 use gglib_core::cache_config::KvCacheType;
+use gglib_core::domain::{CacheRamHealth, classify_cache_ram};
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
@@ -44,6 +45,11 @@ pub struct CurrentModelState {
     /// from the launch spec at spawn and cached here so the already-running
     /// fast path can answer without a second catalog lookup.
     pub slot_restore_supported: bool,
+    /// Health of the `--cache-ram` budget this instance launched with (see
+    /// [`gglib_core::ports::RunningTarget::cache_ram_health`]). Cached for the
+    /// same reason: the budget arithmetic only happens at spawn, so a later
+    /// `current_model()` call has no way to recompute it.
+    pub cache_ram_health: CacheRamHealth,
 }
 
 /// Strategy for managing llama-server processes.
@@ -496,6 +502,15 @@ impl ProcessManager {
                         }
                         opts.cache_ram_mb = cache_ram.cache_ram_mb;
 
+                        // Classify the budget while the auto-vs-explicit
+                        // distinction is still in scope — downstream only sees
+                        // the number, which can't distinguish a zero the user
+                        // asked for from one the machine forced.
+                        let cache_ram_health = classify_cache_ram(
+                            cache_ram.cache_ram_mb,
+                            cache_ram.source == crate::llama::args::CacheRamSource::Explicit,
+                        );
+
                         // Whether the disk slot layer can resume this model at
                         // all. Resolved once per spawn (alongside the other
                         // launch decisions above) and carried on the target,
@@ -549,6 +564,7 @@ impl ProcessManager {
                                 port,
                                 model_path: launch_spec.file_path.clone(),
                                 slot_restore_supported: slot_restore.enabled,
+                                cache_ram_health,
                             });
                         }
 
@@ -567,7 +583,8 @@ impl ProcessManager {
                             effective_ctx,
                             true, // fresh spawn — cache slots are stale
                         )
-                        .with_slot_restore_supported(slot_restore.enabled))
+                        .with_slot_restore_supported(slot_restore.enabled)
+                        .with_cache_ram_health(cache_ram_health))
                     });
 
                     // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
@@ -596,6 +613,7 @@ impl ProcessManager {
                         false,
                     )
                     .with_slot_restore_supported(c.slot_restore_supported)
+                    .with_cache_ram_health(c.cache_ram_health)
                 })
             }
             ProcessStrategy::Concurrent { .. } => None,
