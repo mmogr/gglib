@@ -36,6 +36,7 @@ use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
+use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
@@ -65,8 +66,9 @@ pub(crate) struct AppState {
     /// previously three separate `AppState` fields (`metrics`, `connections`,
     /// `slots`) — see `dashboard` module docs for the consolidation rationale.
     pub(crate) dashboard: Arc<DashboardState>,
-    /// Settings repository for loading global inference defaults per-request.
-    settings_repo: Arc<dyn SettingsRepository>,
+    /// Application settings, snapshotted so the per-request read does not hit
+    /// the database every time. See `settings_cache` module docs.
+    pub(crate) settings: Arc<SettingsCache>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -107,7 +109,8 @@ pub(crate) struct AppState {
 /// * `mcp` - MCP service for tool gateway
 /// * `council` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
-/// * `settings_repo` - Settings repository for loading global inference defaults
+/// * `settings_repo` - Settings repository, wrapped in a `SettingsCache` so the
+///   per-request read is served from a short-lived snapshot rather than a query
 /// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
 ///   Only consulted when `slot_dir` is `Some`.
 ///
@@ -216,7 +219,7 @@ pub async fn serve(
         default_ctx,
         council,
         dashboard,
-        settings_repo,
+        settings: Arc::new(SettingsCache::new(settings_repo)),
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
         cache_enabled,
@@ -661,13 +664,8 @@ async fn chat_completions(
         Some(target.effective_ctx),
     );
 
-    // Load global inference defaults for this request.
-    let global_inference_defaults = state
-        .settings_repo
-        .load()
-        .await
-        .ok()
-        .and_then(|s| s.inference_defaults);
+    // Global inference defaults for this request, from the settings snapshot.
+    let global_inference_defaults = state.settings.get().await.inference_defaults.clone();
 
     // Clone body before forwarding — Bytes is reference-counted so this is
     // O(1).  Needed to retry with the original payload if the upstream dies.
@@ -879,12 +877,7 @@ async fn chat_completions(
             };
 
             let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
-            let retry_defaults = state
-                .settings_repo
-                .load()
-                .await
-                .ok()
-                .and_then(|s| s.inference_defaults);
+            let retry_defaults = state.settings.get().await.inference_defaults.clone();
 
             // Fresh connection for the retried attempt — the original guard
             // (moved into the first `forward_chat_completion` call above)

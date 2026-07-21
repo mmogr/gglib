@@ -13,6 +13,7 @@ pub mod metrics;
 pub mod models;
 pub mod profiles;
 pub mod server;
+pub mod settings_cache;
 pub mod slot_eviction;
 pub mod slots;
 pub mod slots_poller;
