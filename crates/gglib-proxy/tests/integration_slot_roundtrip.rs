@@ -586,11 +586,20 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
         model_id: 0,
         clear_all_pending: Arc::new(AtomicBool::new(false)),
         per_session_cleared: Arc::new(DashSet::new()),
+        // Server "started" well before the file was written, so the mtime
+        // guard cannot classify it as stale. Using a bare `now()` here races
+        // the guard's whole-second comparison (`mtime_secs <
+        // server_start_secs` in `slots::slot_file_is_stale`): the write above
+        // and this timestamp normally land in the same second, but when a
+        // second boundary falls between them the file reads as stale and the
+        // restore short-circuits to `NotFound` before any retry happens.
+        // Matches `test_restore_with_retry_does_not_skip_fresh_slot_file`.
         server_start_time: Arc::new(AtomicU64::new(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_secs()
+                .saturating_sub(3600),
         )),
         last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
     };
