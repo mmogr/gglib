@@ -151,7 +151,7 @@ jobs:
           
           # gglib-core modules
           CORE_TEST="$(find artifacts -name 'rust-test-gglib-core.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in domain ports services events paths download utils; do
+          for MODULE in domain ports services events paths download utils request_pipeline; do
             extract_module_tests "$CORE_TEST" "$MODULE" "gglib-core-$MODULE"
           done
           
@@ -494,7 +494,7 @@ jobs:
           
           # gglib-core modules
           CORE_LCOV="$(find artifacts -name 'gglib-core-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in domain ports services events paths download utils; do
+          for MODULE in domain ports services events paths download utils request_pipeline; do
             extract_module_cov "$CORE_LCOV" "src/$MODULE/" "gglib-core-$MODULE"
           done
           
@@ -789,7 +789,7 @@ jobs:
           # =============================================================================
           # Per-module badges for gglib-core
           # =============================================================================
-          for MODULE in domain ports services events paths download utils; do
+          for MODULE in domain ports services events paths download utils request_pipeline; do
             if [ -d "crates/gglib-core/src/$MODULE" ]; then
               SCC_DATA=$(scc "crates/gglib-core/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
               LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
