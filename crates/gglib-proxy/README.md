@@ -133,7 +133,6 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
 | [`sse_stream.rs`](src/sse_stream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-coverage.json) |
 | [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
-| [`truncation.rs`](src/truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-truncation-coverage.json) |
 | [`upstream_health.rs`](src/upstream_health.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-coverage.json) |
 | [`mcp/`](src/mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-coverage.json) |
 <!-- module-table:end -->
@@ -433,19 +432,31 @@ repetition or logic loops.
 ### Defence
 
 On every `/v1/chat/completions` request, the proxy applies a stateless
-truncation pass **before** forwarding to llama-server:
+truncation pass **before** forwarding to llama-server. The pass itself is
+stage 3 of `gglib_core::request_pipeline` and is shared with the in-process
+agent path; what is proxy-specific is the budget it is given and the HTTP
+status it maps its failure to.
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
 | `TOOL_CONTENT_THRESHOLD_CHARS` | **2,000** chars | Minimum per-message content length eligible for replacement |
-| `TOTAL_PAYLOAD_LIMIT_CHARS` | **240,000** chars | Floor for the request body budget (≈ 60,000 tokens) |
 | `PROTECTED_TAIL_COUNT` | **8** messages | Most-recent messages always preserved |
+| `CHARS_PER_TOKEN_APPROX` | **4** | Static token→char factor, used until a model has been calibrated |
 
-The budget itself is dynamic: `effective_ctx × chars_per_token`, floored at
-`TOTAL_PAYLOAD_LIMIT_CHARS`. The `chars_per_token` factor is a per-model value
-calibrated from real `usage.prompt_tokens` counts (see
+The budget is `effective_ctx × chars_per_token` — **the model's capacity and
+nothing else**. There is no floor: a 4,096-context model gets a ~16,000-char
+budget and a 262,144-context model gets a ~1,000,000-char one. (A 240,000-char
+floor used to be applied here. It was proxy policy dating from when
+`/v1/models` advertised a fixed 60,000-token window, and it silently handed
+small-context models a budget many times their real capacity.)
+
+The `chars_per_token` factor is a per-model value calibrated from real
+`usage.prompt_tokens` counts (see
 [`token_calibration.rs`](src/token_calibration.rs)), falling back to the static
-default of 4 until a model has been observed.
+default of 4 until a model has been observed. This is the one input where the
+proxy knows better than the shared pipeline's default: in-process callers have
+no live serving context and no usage frames to learn from, so they use the
+model's nominal `context_length` instead.
 
 **Algorithm:**
 

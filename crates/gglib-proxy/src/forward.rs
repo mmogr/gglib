@@ -3,33 +3,21 @@
 //!
 //! ## Request pipeline
 //!
-//! The request-shaping transforms themselves live in
-//! [`gglib_core::request_pipeline`], which owns their order and its rationale
-//! — they are shared verbatim with the in-process agent path so the two cannot
-//! drift.  What is proxy-specific, and therefore still here, is the `Bytes` ⇄
-//! `Value` conversion at the HTTP boundary ([`edit_json_body`]) and one stage
-//! that cannot live in `gglib-core` at all:
+//! The request-shaping transforms live in [`gglib_core::request_pipeline`],
+//! which owns their order and its rationale, and the proxy runs the whole of
+//! it with a single [`apply`](gglib_core::request_pipeline::apply) call — the
+//! same call the in-process agent path makes, so the two cannot drift.  What
+//! is proxy-specific, and therefore still here, is exactly two things:
+//! the `Bytes` ⇄ `Value` conversion at the HTTP boundary
+//! ([`shape_request_body`]), and mapping the pipeline's one failure mode onto
+//! this surface's wire contract — HTTP 400 / `context_length_exceeded`.
 //!
-//! 1. [`shape_messages`](gglib_core::request_pipeline::shape_messages) — the
-//!    reasoning strip and capability coalescing.
-//! 2. [`truncate_history`] — defends against client-side context compaction
-//!    failures.  While the request fits within the model's live context
-//!    budget it is forwarded **unchanged**; only when the payload exceeds the
-//!    budget are the **oldest** unprotected `role: "tool"` / `role:
-//!    "assistant"` messages whose string `content` exceeds **2,000
-//!    characters** replaced with a short placeholder — just enough of them,
-//!    oldest-first, to drop back under budget.  If the payload still exceeds
-//!    the budget after every eligible message is trimmed, the request is
-//!    rejected with HTTP 400 / `context_length_exceeded`.  The last eight
-//!    messages and all `role: "system"` messages are always preserved.
-//! 3. [`resolve_sampling`](gglib_core::request_pipeline::resolve_sampling) —
-//!    the sampling hierarchy and the `cache_prompt` pin.
-//!
-//! Truncation is what keeps this a three-call sequence rather than a single
-//! [`apply`](gglib_core::request_pipeline::apply): it gates on the payload's
-//! size in **wire bytes** and can reject the request with an HTTP response, so
-//! it can neither move into `gglib-core` nor be reordered around the sampling
-//! stage without changing the number it measures.
+//! The proxy differs from the agent path in one input: its truncation budget
+//! comes from the **live** serving context of the running llama-server, scaled
+//! by a per-model chars-per-token ratio learned from observed usage frames
+//! ([`crate::token_calibration`]), rather than from the model's nominal
+//! context length.  Both numbers describe the same thing; the proxy simply has
+//! a better one available.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
 //! (via [`gglib_core::request_pipeline::resolve`]) that yields both the
@@ -79,7 +67,9 @@ use tracing::{debug, error, info, warn};
 use gglib_core::LlmStreamEvent;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::ports::ModelCatalogPort;
-use gglib_core::request_pipeline::{self, SamplingLayers};
+use gglib_core::request_pipeline::{
+    self, ModelContext, SamplingLayers, TruncationError, TruncationReport,
+};
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
 use crate::cache_metrics::CacheMetricsStore;
@@ -87,7 +77,6 @@ use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::token_calibration::TokenCalibration;
-use crate::truncation::truncate_history;
 use crate::upstream_health::UpstreamHealth;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
@@ -226,34 +215,54 @@ fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
     }
 }
 
-/// Run one `gglib-core` request-shaping stage over a body held as `Bytes`.
+/// The wire contract for a conversation that cannot be trimmed to fit.
 ///
-/// The shared stages operate on a `&mut serde_json::Value` — the seam that
+/// HTTP 400 with both `error.type` and `error.code` set to
+/// `context_length_exceeded`.  Clients — the GitHub Copilot LLM Gateway
+/// extension among them — branch on this, so the status, the two codes and the
+/// message are a public interface of the proxy and not an implementation
+/// detail of [`shape_request_body`].
+fn context_length_exceeded_response() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        axum::Json(ErrorResponse::context_length_exceeded()),
+    )
+        .into_response()
+}
+
+/// Run the shared request-shaping pipeline over a body held as `Bytes`.
+///
+/// The pipeline operates on a `&mut serde_json::Value` — the seam that
 /// preserves unknown client fields, which a typed request struct would silently
 /// drop.  This is the whole of what the proxy adds on top: the conversion at
-/// the HTTP boundary, with zero blast radius at each step.
+/// the HTTP boundary, with zero blast radius.
 ///
-/// * A body that is not JSON is forwarded byte-for-byte.
-/// * `edit` reports whether it changed anything; when it did not, the original
-///   `Bytes` are returned rather than a re-encoding of the same value.  That
-///   matters beyond saving a serialization — [`truncate_history`] sizes its
-///   budget from `body.len()`, so re-encoding an untouched body would have it
-///   measure something the client never sent.
-/// * A re-serialization failure forwards the original and logs.
-fn edit_json_body(body: Bytes, edit: impl FnOnce(&mut serde_json::Value) -> bool) -> Bytes {
+/// A body that is not JSON is forwarded byte-for-byte and reported as
+/// unmeasured — the upstream can produce its own diagnostic for it.  A
+/// re-serialization failure likewise forwards the original and logs; `Value`
+/// serialization has no reachable failure mode, but forwarding beats dropping.
+///
+/// # Errors
+///
+/// [`TruncationError`] when the conversation cannot be made to fit
+/// `budget_chars`.  The caller maps it to the wire contract.
+fn shape_request_body(
+    body: Bytes,
+    ctx: &ModelContext,
+    layers: &SamplingLayers,
+    budget_chars: Option<usize>,
+) -> Result<(Bytes, TruncationReport), TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        return body;
+        return Ok((body, TruncationReport::default()));
     };
 
-    if !edit(&mut value) {
-        return body;
-    }
+    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars)?;
 
     match serde_json::to_vec(&value) {
-        Ok(v) => Bytes::from(v),
+        Ok(v) => Ok((Bytes::from(v), report)),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
-            body
+            Ok((body, TruncationReport::default()))
         }
     }
 }
@@ -324,53 +333,29 @@ pub(crate) async fn forward_chat_completion(
     // all transforms become no-ops rather than blocking the request.
     let context = request_pipeline::resolve(catalog.as_ref(), Some(model_name)).await;
 
-    // ── Request transforms (applied in order) ──────────────────────────────
+    // ── Request shaping ────────────────────────────────────────────────────
     //
     // Canonicalization (dynamic IDE-injected lines stripped for system-prompt
     // BPE stability) already happened once in `chat_completions` before this
     // function was called, so the body arriving here doesn't need it again.
     //
-    // 1. Message-level shaping: strip prior-turn reasoning artefacts, then
-    //    coalesce consecutive same-role messages for strict-turn models.
-    //    Shared with the agent path — see `gglib_core::request_pipeline`.
-    let body = edit_json_body(body, |v| request_pipeline::shape_messages(v, &context));
-
-    // 2. Truncate stale tool/large-assistant history to prevent local model
-    //    context-window overflow caused by broken client-side compaction.
-    //    The budget scales with the live serving context so clients that
-    //    plan against the advertised context window are never rejected by a
-    //    smaller hidden ceiling (truncate_history floors it at the default).
-    //    The chars-per-token factor is the model's calibrated ratio (learned
-    //    from prior usage frames), falling back to the static default until
-    //    the first observation lands.
+    // Everything else is one call into the shared pipeline. Its budget is the
+    // live serving context scaled by this model's calibrated chars-per-token
+    // ratio, learned from prior usage frames and falling back to the static
+    // approximation until the first observation lands. That is strictly better
+    // information than `ModelContext::context_budget_chars()` — which is what
+    // the agent path uses — so the proxy passes its own.
     let chars_per_token = calibration.chars_per_token(model_name);
-    let limit_chars = (effective_ctx as f64 * chars_per_token) as usize;
-    let body = match truncate_history(body, limit_chars) {
-        Ok((b, report)) => {
-            if report.messages_truncated > 0 {
-                info!(
-                    messages_truncated = report.messages_truncated,
-                    payload_chars_before = report.payload_chars_before,
-                    payload_chars_after = report.payload_chars_after,
-                    "history truncated: reduced payload before upstream forwarding"
-                );
-            }
-            metrics.record(ContextSnapshot {
-                model_name: model_name.to_owned(),
-                payload_chars_before: report.payload_chars_before,
-                payload_chars_after: report.payload_chars_after,
-                messages_truncated: report.messages_truncated,
-                was_clamped: false,
-                recorded_at_secs: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            });
-            b
-        }
-        Err(response) => {
-            // Hard abort: payload still exceeds budget after truncation.
-            // Record a clamped snapshot before returning the error response.
+    let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
+
+    let (body, report) = match shape_request_body(body, &context, &sampling, budget_chars) {
+        Ok(shaped) => shaped,
+        Err(e) => {
+            // Hard abort: the conversation cannot be trimmed to fit. Record a
+            // clamped snapshot — the zeroed char counts are how the dashboard
+            // tells a clamped request from a measured one — then reject with
+            // the wire contract clients already handle.
+            debug!(error = %e, "rejecting request that exceeds the context budget");
             metrics.record(ContextSnapshot {
                 model_name: model_name.to_owned(),
                 payload_chars_before: 0,
@@ -382,22 +367,36 @@ pub(crate) async fn forward_chat_completion(
                     .unwrap_or_default()
                     .as_secs(),
             });
-            return Ok(*response);
+            return Ok(context_length_exceeded_response());
         }
     };
+
+    // Deliberate noise control: history truncation is routine enough that
+    // logging every no-op would drown the interesting case.
+    if report.messages_truncated > 0 {
+        info!(
+            messages_truncated = report.messages_truncated,
+            payload_chars_before = report.payload_chars_before,
+            payload_chars_after = report.payload_chars_after,
+            "history truncated: reduced payload before upstream forwarding"
+        );
+    }
+    metrics.record(ContextSnapshot {
+        model_name: model_name.to_owned(),
+        payload_chars_before: report.payload_chars_before,
+        payload_chars_after: report.payload_chars_after,
+        messages_truncated: report.messages_truncated,
+        was_clamped: false,
+        recorded_at_secs: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    });
 
     debug!(
         body_bytes = body.len(),
         "sending request to upstream (post-transform)"
     );
-
-    // 3. Resolve the sampling hierarchy into the body and pin `cache_prompt`.
-    //    Both are force-inserts, and both must stay that way — see
-    //    `gglib_core::request_pipeline::resolve_sampling`.
-    let body = edit_json_body(body, |v| {
-        request_pipeline::resolve_sampling(v, &context, &sampling);
-        true
-    });
 
     // Build the request builder with all forwarded headers.
     let mut req_builder = client
@@ -901,40 +900,103 @@ mod tests {
 
     // The transforms themselves are tested in `gglib_core::request_pipeline`.
     // What is left here is the bytes ⇄ JSON conversion unique to the proxy
-    // boundary — specifically, the conditions under which the client's
-    // original payload must be forwarded rather than a re-encoding of it.
+    // boundary, and the wire contract this surface puts on the pipeline's one
+    // failure mode.
+
+    fn oversized_body() -> Bytes {
+        let mut messages = vec![serde_json::json!({
+            "role": "tool", "tool_call_id": "c1", "content": "x".repeat(50_000)
+        })];
+        for _ in 0..8 {
+            messages.push(serde_json::json!({"role": "user", "content": "ok"}));
+        }
+        Bytes::from(
+            serde_json::to_vec(&serde_json::json!({"model": "m", "messages": messages})).unwrap(),
+        )
+    }
 
     #[test]
-    fn edit_json_body_reserializes_when_the_stage_reports_a_change() {
-        let body = Bytes::from(r#"{"model":"m","keep":1}"#);
-        let out = edit_json_body(body, |v| {
-            v["added"] = serde_json::Value::Bool(true);
-            true
-        });
+    fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
+        let body = Bytes::from(r#"{"model":"m","messages":[],"totally_made_up":{"a":1}}"#);
+        let (out, report) = shape_request_body(
+            body,
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            None,
+        )
+        .expect("no budget, so nothing to reject");
+
         let parsed: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
-        assert_eq!(parsed["added"], true);
-        assert_eq!(parsed["keep"], 1, "untouched fields survive");
+        assert_eq!(parsed["cache_prompt"], true, "the pipeline ran");
+        assert!(parsed["temperature"].is_number());
+        assert_eq!(parsed["totally_made_up"], serde_json::json!({"a": 1}));
+        assert_eq!(report, TruncationReport::default(), "unmeasured, no budget");
     }
 
-    /// A stage reporting no change must cost the body nothing — not even a
-    /// re-encoding, which would reorder keys and change `body.len()` under
-    /// `truncate_history`.
     #[test]
-    fn edit_json_body_returns_the_original_bytes_when_nothing_changed() {
-        // Deliberately not in the canonical form `serde_json` would emit:
-        // whitespace and key order both differ from a round-trip.
-        let body = Bytes::from(r#"{ "zeta": 1,  "alpha": 2 }"#);
-        let out = edit_json_body(body.clone(), |_| false);
+    fn shaping_leaves_non_json_bodies_alone() {
+        let body = Bytes::from_static(b"not json at all");
+        let (out, report) = shape_request_body(
+            body.clone(),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(10),
+        )
+        .expect("a body we cannot read is forwarded, not rejected");
+
         assert_eq!(out, body, "must be the same bytes, not the same value");
+        assert_eq!(report, TruncationReport::default());
     }
 
     #[test]
-    fn edit_json_body_leaves_non_json_bodies_alone() {
-        let body = Bytes::from_static(b"not json");
-        let out = edit_json_body(body.clone(), |v| {
-            *v = serde_json::json!({"should": "never happen"});
-            true
-        });
-        assert_eq!(out, body);
+    fn shaping_truncates_when_the_budget_binds() {
+        let (out, report) = shape_request_body(
+            oversized_body(),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(20_000),
+        )
+        .expect("trimming the one oversized tool result is enough");
+
+        assert_eq!(report.messages_truncated, 1);
+        assert!(report.payload_chars_after <= 20_000);
+        assert!(out.len() <= 20_000);
+    }
+
+    #[test]
+    fn shaping_reports_the_error_when_the_budget_cannot_be_met() {
+        let err = shape_request_body(
+            oversized_body(),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(200),
+        )
+        .expect_err("nothing left to trim, still over");
+
+        assert!(matches!(
+            err,
+            TruncationError::ExceedsBudgetAfterTruncation { .. }
+        ));
+    }
+
+    /// The wire contract clients branch on. Asserted field by field because
+    /// this is a public interface of the proxy, not an internal detail: the
+    /// status, both codes and the message are all load-bearing.
+    #[tokio::test]
+    async fn the_context_length_contract_is_400_with_both_codes_set() {
+        let response = context_length_exceeded_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body reads");
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).expect("valid json");
+
+        assert_eq!(parsed["error"]["type"], "context_length_exceeded");
+        assert_eq!(parsed["error"]["code"], "context_length_exceeded");
+        assert_eq!(
+            parsed["error"]["message"],
+            "Context window limit reached. Please start a new conversation."
+        );
     }
 }

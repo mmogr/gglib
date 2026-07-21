@@ -20,8 +20,8 @@ does either.
 **Resolution — what the model is**
 
 - [`model_context`] — [`ModelContext`], the resolved per-model facts
-  (capabilities, `format:*` tags, inference defaults) that the request and
-  response stages are built from, plus the inert
+  (capabilities, `format:*` tags, inference defaults, context length) that the
+  request and response stages are built from, plus the inert
   [`ModelContext::passthrough`] fallback.
 - [`resolve`] — [`resolve()`], the single catalog round-trip that produces one.
 
@@ -31,23 +31,46 @@ does either.
   place the stage order and its rationale are written down. **Read this first.**
 - [`messages`] — [`shape_messages()`], stages 1–2: reasoning strip and
   capability coalescing. Everything that rewrites the `messages` array.
+- [`truncation`] — [`truncate_history()`], stage 3: trimming stale tool results
+  and oversized assistant turns to fit the model's context budget, and
+  rejecting the request when it cannot be made to fit.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stages 4–5: the
   sampling hierarchy and the `cache_prompt` pin. Everything that touches
   top-level keys.
 
-Stage 3, history truncation, is still `gglib-proxy`-local — it gates on the
-payload's size in wire bytes and can reject the request with an HTTP response,
-neither of which fits this crate. The proxy therefore calls
-[`shape_messages()`] and [`resolve_sampling()`] with its own truncation pass
-between them, rather than calling [`apply()`]; a test in [`apply`] pins the two
-routes to the same result.
+Every request path calls [`apply()`]. The proxy used to run the stages by hand
+with its own truncation pass spliced between them, because that pass gated on
+the payload's size in wire bytes and could reject the request with an `axum`
+response — neither of which fits here. Measuring the serialized `Value` and
+returning a domain error removed both obstacles, so there is one implementation
+of the order and no second route to keep in sync.
 
-## Why the three fields travel together
+## The truncation budget
 
-They feed three different stages — capabilities drive request-side transforms,
+Stage 3 needs a character budget, and it comes from the model:
+[`ModelContext::context_budget_chars`] converts the model's context length at
+[`CHARS_PER_TOKEN_APPROX`]. There is no floor — a 4,096-token model gets a
+~16,000-character budget and a 262,144-token model gets a ~1,000,000-character
+one — so the same conversation is treated differently on different models,
+which is the point.
+
+Callers holding better information pass their own number instead. Only one
+does: `gglib-proxy` knows the **live** serving context of the running
+llama-server and learns a per-model chars-per-token ratio from observed usage
+frames. That calibration is stateful and tied to the proxy's request lifecycle,
+so it stays there.
+
+`None` means *do not truncate*, not *truncate at zero*. An unresolvable model
+has no context length, and guessing one would risk rejecting a request over a
+number nobody knows.
+
+## Why the fields travel together
+
+They feed four different stages — capabilities drive request-side transforms,
 tags drive response-parser selection, defaults are the per-model layer of the
-sampling hierarchy — but they all come from one catalog row. Resolving them
-separately is what produced the split-brain this module exists to close.
+sampling hierarchy, context length is the truncation budget — but they all come
+from one catalog row. Resolving them separately is what produced the
+split-brain this module exists to close.
 
 Identifier resolution itself is not decided here: [`resolve()`] goes through
 [`crate::ports::ModelCatalogPort`], whose implementations delegate to
@@ -79,6 +102,8 @@ costs the request itself.
 | [`model_context.rs`](model_context.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-coverage.json) |
 | [`resolve.rs`](resolve.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-coverage.json) |
 | [`sampling.rs`](sampling.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-coverage.json) |
+| [`truncation.rs`](truncation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation-coverage.json) |
+| [`truncation_tests.rs`](truncation_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-truncation_tests-coverage.json) |
 <!-- module-table:end -->
 
 </details>

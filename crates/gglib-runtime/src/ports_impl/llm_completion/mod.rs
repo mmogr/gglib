@@ -153,12 +153,19 @@ impl LlmCompletionAdapter {
     ///
     /// Separate from [`chat_stream`](LlmCompletionPort::chat_stream) so the
     /// outgoing body can be asserted on directly, without an HTTP round trip.
+    ///
+    /// # Errors
+    ///
+    /// When the conversation cannot be made to fit the model's context budget.
+    /// Failing here is the point: the alternative is sending a prompt that is
+    /// already known to overflow and reading the failure back out of
+    /// llama-server, with worse diagnostics and a wasted pre-fill.
     fn shaped_body(
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
         response_format: Option<&ResponseFormat>,
-    ) -> serde_json::Value {
+    ) -> Result<serde_json::Value> {
         let mut body = body::build_chat_body(
             &self.model,
             messages,
@@ -177,8 +184,29 @@ impl LlmCompletionAdapter {
         // `{model}:{profile}` suffix to select a profile, and the global
         // settings layer is already folded into `sampling` by the callers that
         // have one.
-        request_pipeline::apply(&mut body, &self.model_context, &SamplingLayers::default());
-        body
+        //
+        // The truncation budget comes from the model itself. There is no live
+        // serving context to measure here and no learned chars-per-token ratio
+        // — those belong to the proxy, which observes usage frames — so an
+        // unknown model yields no budget and the stage is skipped.
+        let report = request_pipeline::apply(
+            &mut body,
+            &self.model_context,
+            &SamplingLayers::default(),
+            self.model_context.context_budget_chars(),
+        )
+        .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
+
+        if report.messages_truncated > 0 {
+            tracing::info!(
+                messages_truncated = report.messages_truncated,
+                payload_chars_before = report.payload_chars_before,
+                payload_chars_after = report.payload_chars_after,
+                "history truncated: reduced payload before sending upstream"
+            );
+        }
+
+        Ok(body)
     }
 }
 
@@ -194,7 +222,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         tools: &[ToolDefinition],
         response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
-        let body = self.shaped_body(messages, tools, response_format);
+        let body = self.shaped_body(messages, tools, response_format)?;
 
         // Gate the connect + first-byte phase with a hard timeout so a
         // stalled or unresponsive llama-server doesn't hang the agent task

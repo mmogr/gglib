@@ -4,12 +4,14 @@ pub mod messages;
 pub mod model_context;
 pub mod resolve;
 pub mod sampling;
+pub mod truncation;
 
 pub use apply::apply;
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use resolve::resolve;
 pub use sampling::{SamplingLayers, resolve_sampling};
+pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};
 
 #[cfg(test)]
 mod tests_support {
