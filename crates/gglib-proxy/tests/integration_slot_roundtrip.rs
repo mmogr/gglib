@@ -207,8 +207,10 @@ async fn spawn_mock_upstream_with_slots(
                                             payload.get("filename").and_then(|v| v.as_str())
                                     {
                                         let _ = std::fs::create_dir_all(&slot_dir);
-                                        let _ =
-                                            std::fs::write(slot_dir.join(filename), b"fake kv state");
+                                        let _ = std::fs::write(
+                                            slot_dir.join(filename),
+                                            b"fake kv state",
+                                        );
                                     }
                                     log.lock().await.push(2);
                                     save_n.fetch_add(1, Ordering::Relaxed);

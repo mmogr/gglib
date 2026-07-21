@@ -158,7 +158,8 @@ mod tests {
 
     #[test]
     fn explicit_both_axes_honored() {
-        let got = resolve_kv_cache_types_inner(Some(KvCacheType::Q4_0), Some(KvCacheType::F16), false);
+        let got =
+            resolve_kv_cache_types_inner(Some(KvCacheType::Q4_0), Some(KvCacheType::F16), false);
         assert_eq!(got.k, KvCacheType::Q4_0);
         assert_eq!(got.v, KvCacheType::F16);
     }
@@ -185,12 +186,18 @@ mod tests {
 
     #[test]
     fn explain_is_none_for_plain_default() {
-        assert!(resolve_kv_cache_types_inner(None, None, false).explain().is_none());
+        assert!(
+            resolve_kv_cache_types_inner(None, None, false)
+                .explain()
+                .is_none()
+        );
     }
 
     #[test]
     fn explain_reports_the_kill_switch() {
-        let msg = resolve_kv_cache_types_inner(None, None, true).explain().unwrap();
+        let msg = resolve_kv_cache_types_inner(None, None, true)
+            .explain()
+            .unwrap();
         assert!(msg.contains("GGLIB_DISABLE_KV_QUANT"), "{msg}");
         assert!(msg.contains("f16"), "{msg}");
     }

@@ -107,16 +107,16 @@ mod tests {
 
     #[test]
     fn slot_tmp_file_name_encodes_model_session_and_nonce() {
-        assert_eq!(
-            slot_tmp_file_name(42, "planner", 7),
-            "42__planner.7.tmp"
-        );
+        assert_eq!(slot_tmp_file_name(42, "planner", 7), "42__planner.7.tmp");
     }
 
     #[test]
     fn slot_tmp_file_name_never_has_bin_extension() {
         let name = slot_tmp_file_name(1, "s", 0);
-        assert_eq!(Path::new(&name).extension(), Some(std::ffi::OsStr::new("tmp")));
+        assert_eq!(
+            Path::new(&name).extension(),
+            Some(std::ffi::OsStr::new("tmp"))
+        );
     }
 
     #[test]

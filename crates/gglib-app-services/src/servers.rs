@@ -191,9 +191,11 @@ impl ServerOps {
         opts.cache_type_v = Some(kv_types.v);
 
         let launch_ctx = resolve_context_size(&opts);
-        let kv_bytes_per_token =
-            gglib_core::domain::estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref())
-                .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
+        let kv_bytes_per_token = gglib_core::domain::estimate_kv_elems_per_token(
+            &model.metadata,
+            model.architecture.as_deref(),
+        )
+        .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
         let cache_ram = resolve_cache_ram(
             CacheRamSetting::Auto,
             total_system_ram_bytes(),

@@ -15,7 +15,9 @@ use sysinfo::Disks;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use gglib_core::domain::slot_eviction::{SlotFileMeta, compute_auto_disk_budget_bytes, select_evictions};
+use gglib_core::domain::slot_eviction::{
+    SlotFileMeta, compute_auto_disk_budget_bytes, select_evictions,
+};
 
 /// Disk budget for cached slot files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,7 +160,9 @@ async fn reap_stale_tmp_files(slot_dir: &Path) -> std::io::Result<()> {
         let Ok(metadata) = entry.metadata().await else {
             continue;
         };
-        let Ok(age) = metadata.modified().and_then(|m| m.elapsed().map_err(std::io::Error::other))
+        let Ok(age) = metadata
+            .modified()
+            .and_then(|m| m.elapsed().map_err(std::io::Error::other))
         else {
             continue;
         };
@@ -271,7 +275,8 @@ mod tests {
     async fn spawn_eviction_task_exits_on_cancel() {
         let dir = tempfile::tempdir().unwrap();
         let cancel = CancellationToken::new();
-        let handle = spawn_eviction_task(dir.path().to_path_buf(), DiskBudget::Auto, cancel.clone());
+        let handle =
+            spawn_eviction_task(dir.path().to_path_buf(), DiskBudget::Auto, cancel.clone());
 
         cancel.cancel();
         tokio::time::timeout(Duration::from_secs(1), handle)

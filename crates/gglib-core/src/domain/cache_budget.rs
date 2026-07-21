@@ -35,7 +35,11 @@ pub const CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 /// * `kv_bytes` — estimated KV cache at the launch context size; pass
 ///   [`CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES`] when unknown.
 #[must_use]
-pub const fn compute_auto_cache_ram_mb(total_ram_bytes: u64, model_bytes: u64, kv_bytes: u64) -> u64 {
+pub const fn compute_auto_cache_ram_mb(
+    total_ram_bytes: u64,
+    model_bytes: u64,
+    kv_bytes: u64,
+) -> u64 {
     let reserved = model_bytes
         .saturating_add(kv_bytes)
         .saturating_add(CACHE_RAM_HEADROOM_BYTES);

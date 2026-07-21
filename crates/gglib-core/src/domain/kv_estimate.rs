@@ -328,8 +328,8 @@ mod tests {
             v: QWEN_ELEMS,
         };
         let mixed = kv_bytes_per_token(elems, KvCacheType::Q8_0, KvCacheType::F16);
-        let expected =
-            KvCacheType::Q8_0.bytes_for_elems(QWEN_ELEMS) + KvCacheType::F16.bytes_for_elems(QWEN_ELEMS);
+        let expected = KvCacheType::Q8_0.bytes_for_elems(QWEN_ELEMS)
+            + KvCacheType::F16.bytes_for_elems(QWEN_ELEMS);
         assert_eq!(mixed, expected);
     }
 

@@ -16,13 +16,13 @@ use tokio::sync::oneshot;
 use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
+use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, RepositoryError, SettingsRepository,
 };
-use gglib_core::cache_config::KvCacheType;
 use gglib_core::server_config::CacheRamSetting;
 use gglib_core::settings::Settings;
 use gglib_mcp::McpService;

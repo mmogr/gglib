@@ -8,11 +8,11 @@ use super::core::GuiProcessCore;
 use super::health::{check_http_health, wait_for_http_health};
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
+use gglib_core::cache_config::KvCacheType;
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
 };
-use gglib_core::cache_config::KvCacheType;
 use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
 use std::path::PathBuf;
 use std::sync::Arc;

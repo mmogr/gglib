@@ -112,7 +112,10 @@ mod tests {
     #[test]
     fn single_file_larger_than_budget_is_evicted() {
         let files = vec![meta("huge.bin", 1, 10_000)];
-        assert_eq!(select_evictions(files, 100), vec![PathBuf::from("huge.bin")]);
+        assert_eq!(
+            select_evictions(files, 100),
+            vec![PathBuf::from("huge.bin")]
+        );
     }
 
     #[test]
@@ -124,7 +127,10 @@ mod tests {
         ];
         // all same mtime, budget forces evicting two -> lexicographically first two
         let evicted = select_evictions(files, 100);
-        assert_eq!(evicted, vec![PathBuf::from("a.bin"), PathBuf::from("m.bin")]);
+        assert_eq!(
+            evicted,
+            vec![PathBuf::from("a.bin"), PathBuf::from("m.bin")]
+        );
     }
 
     #[test]
