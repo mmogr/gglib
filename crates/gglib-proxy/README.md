@@ -544,7 +544,18 @@ carries the same information.
 Prompt-cache reuse measured since the proxy started, sourced from
 `usage.prompt_tokens_details.cached_tokens` (llama.cpp's
 `n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
-report, so these totals cover all traffic rather than one path.
+report, so neither is silently missing from the totals.
+
+**Scope: proxied `/v1/chat/completions` requests only.** Council and other
+virtual-model runs are *not* counted. `council_runner` composes its LLM
+adapter directly against the model's `base_url`, so those calls never pass
+through this crate's forward path. That is deliberate on both counts —
+routing internal agent loops back through the user-facing proxy purely to
+collect telemetry would be a U-turn for no benefit, and a council run issues
+many small sub-agent calls whose reuse characteristics are nothing like a
+user's conversation. Averaging the two together would make the figure harder
+to interpret, not more complete. Tracked separately for future council-side
+metrics.
 
 Raw counts only. Nothing is derived or extrapolated — in particular there is
 no "time saved" figure: reuse is measured exactly, but what it saved depends

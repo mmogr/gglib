@@ -4,8 +4,25 @@
 //! llama-server's KV cache instead of re-processing, sourced from
 //! `usage.prompt_tokens_details.cached_tokens` (see
 //! [`gglib_core::LlmStreamEvent::Usage`]). Both the streaming and
-//! non-streaming forward paths report here, so the totals cover every request
-//! rather than silently describing only one path.
+//! non-streaming forward paths report here, so neither is silently missing
+//! from the totals.
+//!
+//! # Scope: proxied requests only
+//!
+//! These counters cover `/v1/chat/completions` traffic through this crate.
+//! Council and other virtual-model runs are **not** included:
+//! `gglib_runtime`'s `council_runner` composes its LLM adapter directly
+//! against the model's `base_url`, so those calls never reach
+//! [`crate::forward`].
+//!
+//! That separation is intentional in both directions. Routing internal agent
+//! loops back through the user-facing proxy purely to collect telemetry would
+//! be a U-turn for no benefit; and a council run issues many small sub-agent
+//! calls whose reuse profile is nothing like a user's conversation, so
+//! averaging the two would make this figure harder to read rather than more
+//! complete. If council-side metrics are wanted later, the DRY route is to
+//! lift this store somewhere both callers can reach — not to change how the
+//! council talks to the model.
 //!
 //! Deliberately raw counters. Everything exposed is something the upstream
 //! actually measured; nothing is derived, extrapolated, or turned into a
