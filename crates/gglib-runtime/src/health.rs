@@ -10,15 +10,42 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, info};
 
+/// Shared client for health polling.
+///
+/// Built once and reused. `reqwest::Client` construction is not cheap — it
+/// initializes a TLS backend and loads the system root certificate store —
+/// and health checks are the most frequently repeated request in the process
+/// (`ServerHealthMonitor` polls on an interval, and `wait_for_http_health`
+/// polls in a loop during every model start). Constructing one per call
+/// discarded the connection pool each time and, under load, could take longer
+/// than the request it was built for.
+static HEALTH_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+
+/// The shared health-check client, or an error if it could not be built.
+///
+/// Deliberately keeps the fallible signature rather than panicking: client
+/// construction can fail on a misconfigured TLS backend, and a health check is
+/// exactly the code path that should report that rather than abort the process.
+fn health_client() -> Result<&'static Client> {
+    if let Some(client) = HEALTH_CLIENT.get() {
+        return Ok(client);
+    }
+    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
+    // A concurrent caller may have won the race; either instance is equivalent.
+    let _ = HEALTH_CLIENT.set(client);
+    Ok(HEALTH_CLIENT
+        .get()
+        .expect("HEALTH_CLIENT set above or by a concurrent caller"))
+}
+
 /// Check HTTP health of a server at the given port.
 ///
 /// Makes a single request to the health endpoint and returns
 /// whether the server responded successfully.
 pub async fn check_http_health(port: u16) -> Result<bool> {
     let health_url = format!("http://127.0.0.1:{}/health", port);
-    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
 
-    match client.get(&health_url).send().await {
+    match health_client()?.get(&health_url).send().await {
         Ok(response) if response.status().is_success() => Ok(true),
         Ok(_) => Ok(false),
         Err(_) => Ok(false),

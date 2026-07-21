@@ -98,11 +98,24 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 /// non-2xx) is reported as `false` so callers can treat "not healthy" and
 /// "unreachable" identically.
 pub async fn check_http_health(port: u16) -> bool {
+    /// Shared client, built once. See `crate::health::HEALTH_CLIENT` for why
+    /// this isn't constructed per call — this path is hotter still, running on
+    /// the already-running fast path of every proxied request.
+    static CLIENT: std::sync::OnceLock<Option<reqwest::Client>> = std::sync::OnceLock::new();
+
     let health_url = format!("http://127.0.0.1:{port}/health");
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
+    let Some(client) = CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(2))
+                .build()
+                .ok()
+        })
+        .as_ref()
     else {
+        // Client construction failed — indistinguishable from an unhealthy
+        // server as far as callers are concerned, matching this function's
+        // "never returns an error" contract.
         return false;
     };
 
