@@ -263,7 +263,7 @@ pub async fn start_proxy_standalone(
     inference_override: Option<InferenceConfig>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
-    cache_ram_mb: Option<i64>,
+    cache_ram_mb: Option<u64>,
     cache_reuse: Option<u32>,
 ) -> Result<()> {
     // Resolve the actual KV cache slot-save directory. `None` when the
@@ -293,7 +293,7 @@ pub async fn start_proxy_standalone(
         // No explicit value from the caller means auto-size, not "leave the
         // llama-server default" — the proxy is the one launch surface where a
         // right-sized prompt cache is the whole point.
-        cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::Explicit),
+        cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb),
         cache_reuse,
     ));
 

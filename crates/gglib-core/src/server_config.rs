@@ -128,10 +128,9 @@ pub struct ServerConfigOptions {
     pub slot_save_path: Option<PathBuf>,
 
     /// RAM budget in MiB for llama-server's own host-RAM prompt cache
-    /// (`--cache-ram`). `None` leaves llama-server's built-in default (or,
-    /// for back-compat, `-1` when `slot_save_path` is set). Direct
-    /// pass-through, no tag-based auto-detection.
-    pub cache_ram_mb: Option<i64>,
+    /// (`--cache-ram`). `None` leaves llama-server's built-in default. `Some(0)`
+    /// disables the cache. Direct pass-through, no tag-based auto-detection.
+    pub cache_ram_mb: Option<u64>,
 
     /// Minimum chunk size in tokens for KV-shift cache reuse past the first
     /// prefix divergence point (`--cache-reuse`). `None` leaves the feature
@@ -165,23 +164,20 @@ pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
 
 /// How to determine the host-RAM prompt cache budget (`--cache-ram`).
 ///
-/// Deliberately a three-state enum rather than `Option<i64>`: "no explicit
-/// value" is genuinely ambiguous between *auto-size me* (what the proxy wants)
-/// and *emit nothing, leave llama-server's own default* (what benchmark
-/// launches want — a large prompt cache would perturb throughput measurements
-/// and RAM footprint).
+/// Deliberately a two-state enum rather than `Option<u64>`: benchmark
+/// launches (which must never gain a prompt cache — it would perturb
+/// throughput measurements and RAM footprint) pass `ExplicitMb(0)`, which
+/// unambiguously disables the cache rather than leaving it to an implicit
+/// "no value" state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CacheRamSetting {
     /// Compute a budget from system RAM, model size, and the KV estimate.
-    Auto,
-    /// Use exactly this MiB value. llama-server's own sentinels pass through:
-    /// `-1` unlimited, `0` disabled.
-    Explicit(i64),
-    /// Emit no `--cache-ram` flag at all; llama-server applies its built-in
-    /// default (8192 MiB). The default variant, so existing callers that
-    /// previously passed `None` keep byte-identical behaviour.
+    /// The default variant — every launch surface auto-sizes unless it
+    /// opts out.
     #[default]
-    LlamaDefault,
+    Auto,
+    /// Use exactly this MiB value. `0` disables the cache.
+    ExplicitMb(u64),
 }
 
 /// RAM reserved for the OS, other applications, and llama.cpp's own
@@ -325,11 +321,11 @@ mod tests {
         );
     }
 
-    /// Existing callers that previously passed `None` must keep emitting no
-    /// flag at all, so `LlamaDefault` has to be the `Default` variant.
+    /// Every launch surface should auto-size unless it opts out, so `Auto`
+    /// has to be the `Default` variant.
     #[test]
-    fn cache_ram_setting_defaults_to_llama_default() {
-        assert_eq!(CacheRamSetting::default(), CacheRamSetting::LlamaDefault);
+    fn cache_ram_setting_defaults_to_auto() {
+        assert_eq!(CacheRamSetting::default(), CacheRamSetting::Auto);
     }
 
     #[test]

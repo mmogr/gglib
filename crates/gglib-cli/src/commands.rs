@@ -488,15 +488,15 @@ pub enum Commands {
         /// (`--cache-ram`) — what makes switching between conversations fast.
         ///
         /// Omit to auto-size it from total system RAM, the model's weights, and
-        /// its KV footprint at the launch context size (capped at 25% of RAM);
-        /// the chosen budget and its arithmetic are logged at startup.
+        /// its KV footprint at the launch context size; the chosen budget and
+        /// its arithmetic are logged at startup.
         ///
-        /// Pass a value to override, including llama-server's own sentinels:
-        /// `-1` unlimited, `0` disabled. Set `GGLIB_DISABLE_CACHE_AUTOSIZE=1`
-        /// to skip auto-sizing entirely and use llama-server's built-in
-        /// default. Independent of `--cache`/`--slot-dir`.
+        /// Pass a value to override — `0` disables the cache. Set
+        /// `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to skip auto-sizing entirely and
+        /// use llama-server's built-in default. Independent of
+        /// `--cache`/`--slot-dir`.
         #[arg(long)]
-        cache_ram_mb: Option<i64>,
+        cache_ram_mb: Option<u64>,
         /// Minimum chunk size in tokens for KV-shift cache reuse past the first
         /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
         /// whose earlier messages were edited or summarized (e.g. a Copilot

@@ -198,8 +198,10 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         catalog_for_runtime,
         None,
         // Benchmarks must never gain a host-RAM prompt cache: it would perturb
-        // prefill timings and RAM footprint.
-        CacheRamSetting::LlamaDefault,
+        // prefill timings and RAM footprint. Explicitly disabled rather than
+        // left unset — an unset flag would leave llama-server's own 8192 MiB
+        // default cache active, which is exactly what this must avoid.
+        CacheRamSetting::ExplicitMb(0),
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -313,8 +315,10 @@ pub fn bootstrap_with(
         catalog_for_runtime,
         None,
         // Benchmarks must never gain a host-RAM prompt cache: it would perturb
-        // prefill timings and RAM footprint.
-        CacheRamSetting::LlamaDefault,
+        // prefill timings and RAM footprint. Explicitly disabled rather than
+        // left unset — an unset flag would leave llama-server's own 8192 MiB
+        // default cache active, which is exactly what this must avoid.
+        CacheRamSetting::ExplicitMb(0),
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
@@ -466,8 +470,10 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         catalog_for_runtime,
         None,
         // Benchmarks must never gain a host-RAM prompt cache: it would perturb
-        // prefill timings and RAM footprint.
-        CacheRamSetting::LlamaDefault,
+        // prefill timings and RAM footprint. Explicitly disabled rather than
+        // left unset — an unset flag would leave llama-server's own 8192 MiB
+        // default cache active, which is exactly what this must avoid.
+        CacheRamSetting::ExplicitMb(0),
         None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));

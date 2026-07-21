@@ -64,12 +64,9 @@ pub struct ServerConfig {
     /// (`--cache-ram`).
     ///
     /// `None` means no explicit flag is passed — llama-server's own built-in
-    /// default (8192 MiB) applies, *unless* [`Self::slot_save_path`] is
-    /// `Some`, in which case `--cache-ram -1` (unlimited) is emitted for
-    /// backward compatibility with launches that predate this field.
-    /// `Some(n)` passes `--cache-ram n` directly, accepting llama-server's
-    /// own sentinels (`-1` unlimited, `0` disabled).
-    pub cache_ram_mb: Option<i64>,
+    /// default (8192 MiB) applies. `Some(n)` passes `--cache-ram n` directly;
+    /// `Some(0)` disables the cache.
+    pub cache_ram_mb: Option<u64>,
     /// Minimum chunk size in tokens for KV-shift cache reuse past the first
     /// prefix divergence point (`--cache-reuse`).
     ///
@@ -193,7 +190,7 @@ impl ServerConfig {
     /// Set the RAM budget (in MiB) for llama-server's own host-RAM prompt
     /// cache (`--cache-ram`). `None` leaves llama-server's built-in default.
     #[must_use]
-    pub const fn with_cache_ram_mb(mut self, mb: i64) -> Self {
+    pub const fn with_cache_ram_mb(mut self, mb: u64) -> Self {
         self.cache_ram_mb = Some(mb);
         self
     }

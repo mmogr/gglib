@@ -19,15 +19,15 @@ use gglib_core::server_config::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheRamSource {
     /// User explicitly supplied a value (`--cache-ram-mb`); passed through
-    /// verbatim, including llama-server's `-1`/`0` sentinels.
+    /// verbatim, including `0` (disabled).
     Explicit,
     /// Computed from system RAM, model size, and the KV estimate.
     Auto,
     /// Auto-sizing was requested but suppressed via
-    /// `GGLIB_DISABLE_CACHE_AUTOSIZE`; behaves as [`CacheRamSetting::LlamaDefault`].
+    /// `GGLIB_DISABLE_CACHE_AUTOSIZE` — no flag emitted, so llama-server's
+    /// built-in default (8192 MiB) applies. The only way to reach "no flag"
+    /// now that callers can't request it directly (see [`CacheRamSetting`]).
     AutoSuppressedByEnv,
-    /// No flag emitted — llama-server's built-in default applies.
-    LlamaDefault,
 }
 
 /// Inputs and outcome of resolving the host-RAM prompt cache budget.
@@ -37,8 +37,9 @@ pub enum CacheRamSource {
 /// without explanation is impossible for a user to trust or debug.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CacheRamResolution {
-    /// Value for `--cache-ram`, or `None` to emit no flag.
-    pub cache_ram_mb: Option<i64>,
+    /// Value for `--cache-ram`, or `None` to emit no flag (only reachable via
+    /// the `GGLIB_DISABLE_CACHE_AUTOSIZE` kill switch).
+    pub cache_ram_mb: Option<u64>,
     /// Why this value was chosen.
     pub source: CacheRamSource,
     /// Total system RAM in bytes (0 when not probed).
@@ -69,11 +70,10 @@ fn autosize_disabled_via_env() -> bool {
 ///
 /// Resolution order (highest priority first):
 ///
-/// 1. **Explicit** — the user's value wins unconditionally.
-/// 2. **`GGLIB_DISABLE_CACHE_AUTOSIZE`** — degrades `Auto` to no flag.
-/// 3. **Auto** — computed budget (see
-///    [`compute_auto_cache_ram_mb`]).
-/// 4. **`LlamaDefault`** — no flag emitted.
+/// 1. **`ExplicitMb`** — the user's value wins unconditionally.
+/// 2. **`GGLIB_DISABLE_CACHE_AUTOSIZE`** — degrades `Auto` to no flag, so
+///    llama-server's own built-in default applies.
+/// 3. **`Auto`** — computed budget (see [`compute_auto_cache_ram_mb`]).
 ///
 /// # Arguments
 ///
@@ -119,7 +119,8 @@ fn resolve_cache_ram_inner(
 
     let base = CacheRamResolution {
         cache_ram_mb: None,
-        source: CacheRamSource::LlamaDefault,
+        // Placeholder — every match arm below overrides `source` explicitly.
+        source: CacheRamSource::AutoSuppressedByEnv,
         total_ram_bytes,
         model_bytes,
         kv_bytes,
@@ -128,13 +129,13 @@ fn resolve_cache_ram_inner(
     };
 
     match setting {
-        // 1. Explicit always wins, sentinels included.
-        CacheRamSetting::Explicit(mb) => CacheRamResolution {
+        // 1. Explicit always wins.
+        CacheRamSetting::ExplicitMb(mb) => CacheRamResolution {
             cache_ram_mb: Some(mb),
             source: CacheRamSource::Explicit,
             ..base
         },
-        // 2. Kill switch: behave exactly as before auto-sizing existed.
+        // 2. Kill switch: emit nothing, so llama-server's own default applies.
         CacheRamSetting::Auto if autosize_suppressed => CacheRamResolution {
             source: CacheRamSource::AutoSuppressedByEnv,
             ..base
@@ -145,12 +146,10 @@ fn resolve_cache_ram_inner(
                 total_ram_bytes,
                 model_bytes,
                 kv_bytes,
-            )),
+            ) as u64),
             source: CacheRamSource::Auto,
             ..base
         },
-        // 4. Emit nothing.
-        CacheRamSetting::LlamaDefault => base,
     }
 }
 
@@ -216,7 +215,7 @@ mod tests {
     #[test]
     fn explicit_value_wins_and_passes_through() {
         let got = resolve_cache_ram(
-            CacheRamSetting::Explicit(4096),
+            CacheRamSetting::ExplicitMb(4096),
             128 * GIB,
             27 * GIB,
             None,
@@ -226,33 +225,19 @@ mod tests {
         assert_eq!(got.source, CacheRamSource::Explicit);
     }
 
-    /// `-1` (unlimited) and `0` (disabled) are llama-server sentinels and must
-    /// survive resolution untouched.
+    /// `0` (disabled) must survive resolution untouched — it's a meaningful
+    /// explicit choice, not a missing value.
     #[test]
-    fn explicit_sentinels_are_preserved() {
-        for sentinel in [-1, 0] {
-            let got = resolve_cache_ram(
-                CacheRamSetting::Explicit(sentinel),
-                128 * GIB,
-                27 * GIB,
-                None,
-                4096,
-            );
-            assert_eq!(got.cache_ram_mb, Some(sentinel));
-        }
-    }
-
-    #[test]
-    fn llama_default_emits_no_flag() {
+    fn explicit_zero_disables_the_cache() {
         let got = resolve_cache_ram(
-            CacheRamSetting::LlamaDefault,
+            CacheRamSetting::ExplicitMb(0),
             128 * GIB,
             27 * GIB,
             None,
             4096,
         );
-        assert_eq!(got.cache_ram_mb, None);
-        assert_eq!(got.source, CacheRamSource::LlamaDefault);
+        assert_eq!(got.cache_ram_mb, Some(0));
+        assert_eq!(got.source, CacheRamSource::Explicit);
     }
 
     #[test]
@@ -282,12 +267,7 @@ mod tests {
     fn explain_is_some_only_for_auto() {
         assert!(auto_on_reference_machine().explain().is_some());
         assert!(
-            resolve_cache_ram(CacheRamSetting::Explicit(1), 0, 0, None, 0)
-                .explain()
-                .is_none()
-        );
-        assert!(
-            resolve_cache_ram(CacheRamSetting::LlamaDefault, 0, 0, None, 0)
+            resolve_cache_ram(CacheRamSetting::ExplicitMb(1), 0, 0, None, 0)
                 .explain()
                 .is_none()
         );
@@ -319,8 +299,7 @@ mod tests {
         assert!(msg.contains("disabled"), "{msg}");
     }
 
-    /// The kill switch must produce byte-identical behaviour to
-    /// `LlamaDefault` (no flag at all), not merely a smaller budget.
+    /// The kill switch must emit no flag at all, not merely a smaller budget.
     #[test]
     fn kill_switch_suppresses_auto_sizing() {
         let got = resolve_cache_ram_inner(
@@ -340,7 +319,7 @@ mod tests {
     #[test]
     fn kill_switch_does_not_override_an_explicit_value() {
         let got = resolve_cache_ram_inner(
-            CacheRamSetting::Explicit(2048),
+            CacheRamSetting::ExplicitMb(2048),
             128 * GIB,
             27 * GIB,
             None,
