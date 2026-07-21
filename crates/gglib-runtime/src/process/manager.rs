@@ -39,6 +39,11 @@ pub struct CurrentModelState {
     pub port: u16,
     /// Path to the model file.
     pub model_path: PathBuf,
+    /// Whether disk slot restore can resume this model (see
+    /// [`gglib_core::ports::RunningTarget::slot_restore_supported`]). Derived
+    /// from the launch spec at spawn and cached here so the already-running
+    /// fast path can answer without a second catalog lookup.
+    pub slot_restore_supported: bool,
 }
 
 /// Strategy for managing llama-server processes.
@@ -392,6 +397,12 @@ impl ProcessManager {
                                     cached_name,
                                     context_size,
                                     false, // cached healthy — not a fresh spawn
+                                )
+                                // Same model id as `launch_spec`, so its
+                                // metadata answers this without re-reading
+                                // the cached state.
+                                .with_slot_restore_supported(
+                                    !launch_spec.kv_memory_is_partial,
                                 ));
                             }
                             warn!(
@@ -523,6 +534,7 @@ impl ProcessManager {
                                 context_size: effective_ctx,
                                 port,
                                 model_path: launch_spec.file_path.clone(),
+                                slot_restore_supported: !launch_spec.kv_memory_is_partial,
                             });
                         }
 
@@ -540,7 +552,8 @@ impl ProcessManager {
                             launch_spec.name,
                             effective_ctx,
                             true, // fresh spawn — cache slots are stale
-                        ))
+                        )
+                        .with_slot_restore_supported(!launch_spec.kv_memory_is_partial))
                     });
 
                     // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
@@ -568,6 +581,7 @@ impl ProcessManager {
                         c.context_size,
                         false,
                     )
+                    .with_slot_restore_supported(c.slot_restore_supported)
                 })
             }
             ProcessStrategy::Concurrent { .. } => None,
