@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
+use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
@@ -115,6 +116,8 @@ pub(crate) struct AppState {
 ///   per-request read is served from a short-lived snapshot rather than a query
 /// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
 ///   Only consulted when `slot_dir` is `Some`.
+/// * `agent_metrics` - Agent-path prompt-cache reuse store (council + GUI chat),
+///   surfaced on the dashboard as `agent_usage` alongside the proxied figure.
 ///
 /// # Returns
 ///
@@ -132,6 +135,11 @@ pub async fn serve(
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
     disk_budget: crate::slot_eviction::DiskBudget,
+    // Agent-path prompt-cache reuse store, owned by the supervisor so it can
+    // also be shared with the embedded axum server (GUI chat) and outlives a
+    // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
+    // the proxied figure.
+    agent_metrics: Arc<CacheMetricsStore>,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -204,7 +212,8 @@ pub async fn serve(
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
         Arc::new(CacheStatusCache::new()),
-        Arc::new(crate::cache_metrics::CacheMetricsStore::new()),
+        Arc::new(CacheMetricsStore::new()),
+        agent_metrics,
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -590,11 +599,14 @@ async fn chat_completions(
     // matched whole here, and letting the router see it first would split it
     // into a base plus an `interactive` suffix.
     if VIRTUAL_MODELS.contains(&model_name.as_str()) {
+        let agent_metrics: Arc<dyn gglib_core::ports::CacheMetricsSink> =
+            state.dashboard.agent_metrics.clone();
         return handle_virtual_model(
             &state.council,
             &state.dashboard.connections,
             &model_name,
             &body,
+            agent_metrics,
         )
         .await;
     }

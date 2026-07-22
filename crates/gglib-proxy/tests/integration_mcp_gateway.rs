@@ -209,6 +209,7 @@ async fn start_proxy() -> (String, CancellationToken) {
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
+            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
         )
         .await
         .ok();

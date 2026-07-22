@@ -1,22 +1,21 @@
 #![doc = include_str!("README.md")]
 use std::pin::Pin;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use futures_core::Stream;
-use futures_util::StreamExt as _;
 use reqwest::Client;
 
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    normalize::{NormalizingStream, get_parser},
-    ports::{LlmCompletionPort, ResponseFormat},
+    ports::{CacheMetricsSink, LlmCompletionPort, ResponseFormat},
     request_pipeline::{self, ModelContext, SamplingLayers},
-    sse::SseStreamDecoder,
 };
 
 mod body;
+mod stream;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
@@ -61,6 +60,14 @@ pub struct LlmCompletionAdapter {
     /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
     /// makes every transform a no-op and selects the identity parser.
     model_context: ModelContext,
+    /// Optional destination for this request's prompt-cache reuse figures.
+    ///
+    /// When set, the completed response's trailing `usage` is recorded into
+    /// this sink — the single point that covers every agent-path consumer of
+    /// the stream (both `stream_collector` and `structured_output`). `None`
+    /// (the default) means nowhere to report, so recording is skipped: the
+    /// case for CLI `gglib chat`/`q`, which run in a process with no dashboard.
+    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -110,6 +117,7 @@ impl LlmCompletionAdapter {
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             model_context: ModelContext::passthrough(),
+            cache_metrics: None,
         }
     }
 
@@ -145,6 +153,20 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_model_context(mut self, model_context: ModelContext) -> Self {
         self.model_context = model_context;
+        self
+    }
+
+    /// Report this adapter's prompt-cache reuse to `sink`.
+    ///
+    /// Pass the process's agent-path [`CacheMetricsStore`] when the caller runs
+    /// in the proxy process (council, GUI chat) so reuse lands on the dashboard
+    /// alongside the proxied figure. Pass `None` (the default) when there is no
+    /// dashboard to report to — recording then costs nothing.
+    ///
+    /// [`CacheMetricsStore`]: gglib_core::cache_metrics::CacheMetricsStore
+    #[must_use]
+    pub fn with_cache_metrics_sink(mut self, sink: Option<Arc<dyn CacheMetricsSink>>) -> Self {
+        self.cache_metrics = sink;
         self
     }
 
@@ -247,42 +269,12 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             return Err(anyhow!("llama-server returned {status}: {text}"));
         }
 
-        let byte_stream = response.bytes_stream();
-
-        // Build the typed event stream from the raw SSE byte stream.
-        let stream = async_stream::stream! {
-            let mut decoder = SseStreamDecoder::default();
-            let mut byte_stream = std::pin::pin!(byte_stream);
-
-            'outer: while let Some(chunk_result) = byte_stream.next().await {
-                let chunk = match chunk_result {
-                    Ok(c) => c,
-                    Err(e) => {
-                        yield Err(anyhow!("SSE byte-stream error: {e}"));
-                        return;
-                    }
-                };
-
-                let (events, stop) = decoder.feed_bytes(&chunk);
-                for event in events {
-                    yield event;
-                }
-                if stop {
-                    break 'outer;
-                }
-            }
-
-            if let Some(fallback) = decoder.finish() {
-                yield Ok(fallback);
-            }
-        };
-
-        // Wrap the raw SSE-derived stream in the universal normalization
-        // layer.  Empty `tags` selects the identity-passthrough parser so
-        // models that already emit strict OpenAI tool calls are unaffected.
-        let parser = get_parser(&self.model_context.tags);
-        let normalized = NormalizingStream::new(Box::pin(stream), parser);
-        Ok(Box::pin(normalized))
+        // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
+        Ok(stream::normalized_event_stream(
+            response,
+            &self.model_context.tags,
+            self.cache_metrics.clone(),
+        ))
     }
 }
 

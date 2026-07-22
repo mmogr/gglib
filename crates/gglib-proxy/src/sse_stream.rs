@@ -11,11 +11,11 @@ use bytes::Bytes;
 use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
-use crate::cache_metrics::CacheMetricsStore;
 use crate::connections::ConnectionGuard;
 use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visible_content_frame};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
+use gglib_core::cache_metrics::CacheMetricsStore;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline

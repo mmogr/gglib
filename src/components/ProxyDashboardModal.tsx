@@ -19,7 +19,7 @@ import type { FC } from 'react';
 import { Modal } from './ui/Modal';
 import { ContextUsageDonut } from './ContextUsageDonut';
 import { PromptProgressBar } from './PromptProgressBar';
-import { ProxyCachePanel } from './ProxyCachePanel';
+import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
 import { tokensInUse, type ActiveConnectionSnapshot, type ConnectionPhase, type SlotSnapshot } from '../services/transport/types/dashboard';
 
@@ -92,6 +92,18 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({ isOpen, onCl
         <section>
           <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">Prompt Cache</h3>
           <ProxyCachePanel cache={snapshot?.cache} />
+        </section>
+
+        <section>
+          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+            Agent Cache (Council · GUI Chat)
+          </h3>
+          {/*
+            A separate population from the proxied figure above: council and
+            GUI-chat runs talk to llama-server directly, so their reuse profile
+            is nothing like a user's conversation and must not be averaged in.
+          */}
+          <CacheUsageRows usage={snapshot?.agent_usage} />
         </section>
 
         <section>

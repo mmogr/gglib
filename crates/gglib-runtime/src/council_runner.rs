@@ -100,7 +100,9 @@ impl CouncilRunnerPort for CouncilRunnerAdapter {
         let model_context =
             request_pipeline::resolve(self.catalog_port.as_ref(), Some(&target.model_name)).await;
 
-        // Compose infrastructure ports.
+        // Compose infrastructure ports. Every council LLM call reports its
+        // prompt-cache reuse to the proxy's agent-path store (passed in via
+        // params), landing on the dashboard's `agent_usage`.
         let ports = compose_council_ports(
             target.base_url.clone(),
             self.http_client.clone(),
@@ -109,6 +111,7 @@ impl CouncilRunnerPort for CouncilRunnerAdapter {
             self.mcp.clone(),
             None, // no sandbox for orchestrator proxy calls
             None, // no sampling override
+            Some(Arc::clone(&params.agent_metrics)),
         );
 
         // Build executor config from injected params.

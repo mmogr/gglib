@@ -78,6 +78,8 @@ async fn init_session(
         Arc::clone(&ctx.mcp),
         cwd,
         None,
+        // No proxy dashboard in the CLI process — nowhere to report reuse.
+        None,
     );
     Ok((ports, handle))
 }

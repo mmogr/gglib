@@ -116,7 +116,6 @@ This crate provides an OpenAI-compatible HTTP server that:
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`cache_lifecycle.rs`](src/cache_lifecycle.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-coverage.json) |
-| [`cache_metrics.rs`](src/cache_metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_metrics-coverage.json) |
 | [`canonicalization.rs`](src/canonicalization.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-coverage.json) |
 | [`connections.rs`](src/connections.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-coverage.json) |
 | [`council_proxy.rs`](src/council_proxy.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-coverage.json) |
@@ -585,6 +584,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
+| `agent_usage` | `object` | Prompt-cache reuse for the in-process agent path (council + GUI chat), reported separately from `cache.usage` — see below |
 
 #### `cache` (`CacheStatus`)
 
@@ -612,16 +612,15 @@ Prompt-cache reuse measured since the proxy started, sourced from
 `n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
 report, so neither is silently missing from the totals.
 
-**Scope: proxied `/v1/chat/completions` requests only.** Council and other
-virtual-model runs are *not* counted. `council_runner` composes its LLM
-adapter directly against the model's `base_url`, so those calls never pass
-through this crate's forward path. That is deliberate on both counts —
-routing internal agent loops back through the user-facing proxy purely to
-collect telemetry would be a U-turn for no benefit, and a council run issues
-many small sub-agent calls whose reuse characteristics are nothing like a
-user's conversation. Averaging the two together would make the figure harder
-to interpret, not more complete. Tracked separately for future council-side
-metrics.
+**Scope: proxied `/v1/chat/completions` requests only.** Council and GUI-chat
+runs bypass this crate's forward path — they compose an LLM adapter directly
+against the model's `base_url` — so their reuse is reported *separately* in the
+top-level [`agent_usage`](#agent_usage-cacheusage), never merged into this
+figure. That separation is deliberate: a council run issues many small
+sub-agent calls whose reuse characteristics are nothing like a user's
+conversation, and averaging the two would make this figure harder to interpret,
+not more complete. Routing those internal loops back through the user-facing
+proxy purely to collect telemetry would also be a U-turn for no benefit.
 
 Raw counts only. Nothing is derived or extrapolated — in particular there is
 no "time saved" figure: reuse is measured exactly, but what it saved depends
@@ -636,6 +635,23 @@ numbers that are both real.
 | `cached_tokens` | `u64` | Total prompt tokens served from cache. Always `<= prompt_tokens` (an upstream figure above it is clamped) |
 | `last_prompt_tokens` | `u32 \| null` | Prompt tokens in the most recent reporting request; `null` before any |
 | `last_cached_tokens` | `u32 \| null` | Tokens reused in that same request. A `0` here is a measured full re-prefill, not missing data |
+
+#### `agent_usage` (`CacheUsage`)
+
+The same [`CacheUsage`](#cacheusage-cacheusage) shape as `cache.usage`, but a
+**separate population**: prompt-cache reuse for the in-process agent path —
+council runs (via the virtual-model route) and GUI chat — which reach
+llama-server directly rather than through the forward path above. Recorded by
+tapping the shared LLM adapter's response stream
+(`gglib_core::ports::CacheMetricsSink`), so both agent collectors are covered by
+one hook. Top-level rather than nested under `cache` because it does not depend
+on the proxy's cache configuration and surfaces even before a proxied request
+has resolved a model.
+
+CLI `gglib chat`/`q` (and standalone `gglib web`/`gglib council`) run in a
+separate process with no dashboard, so their reuse is not reported here; the
+same `CacheMetricsSink` seam would let a future cross-process reporter fill that
+gap without changing the adapter.
 
 #### `active_connections[]` (`ActiveConnectionSnapshot`)
 

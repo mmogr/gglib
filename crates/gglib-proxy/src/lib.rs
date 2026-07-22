@@ -2,7 +2,6 @@
 #![deny(unsafe_code)]
 
 pub mod cache_lifecycle;
-pub mod cache_metrics;
 pub mod canonicalization;
 pub mod connections;
 pub mod council_proxy;

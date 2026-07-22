@@ -75,6 +75,12 @@ struct DashboardSnapshot {
     /// resolves a model, and on a proxy older than this field.
     #[serde(default)]
     cache: Option<CacheStatus>,
+    /// Agent-path prompt-cache reuse (council + GUI chat) — a separate
+    /// population from [`CacheStatus::usage`]. Top-level and always present,
+    /// since it does not depend on a resolved model; `default` on a proxy older
+    /// than this field.
+    #[serde(default)]
+    agent_usage: CacheUsage,
 }
 
 /// Mirror of `gglib_proxy::dashboard::CacheStatus`.
@@ -94,7 +100,7 @@ struct CacheStatus {
     usage: CacheUsage,
 }
 
-/// Mirror of `gglib_proxy::cache_metrics::CacheUsage`.
+/// Mirror of `gglib_core::cache_metrics::CacheUsage`.
 ///
 /// Raw counts only — the server publishes no derived "time saved" figure, so
 /// there is none to render here either.
@@ -331,6 +337,13 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
         Some(cache) => out.push_str(&render_cache_section(cache, term_width)),
     }
 
+    // A separate population from the proxied figure above: council and GUI-chat
+    // runs talk to llama-server directly, so their reuse profile is nothing
+    // like a user's conversation and must not be averaged into it.
+    out.push('\n');
+    out.push_str("Agent cache (council · GUI chat)\n");
+    out.push_str(&render_usage_rows(&snapshot.agent_usage));
+
     out.push('\n');
     out.push_str(&format!(
         "Total requests served: {}\n",
@@ -339,23 +352,15 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
     out
 }
 
-/// Render the body of the prompt-cache section (rows only, no header).
+/// Render the reuse rows shared by the proxied and agent-path cache sections.
 ///
 /// Every figure is one the upstream measured. There is deliberately no
 /// "time saved" line: reuse is exact, but what it saved depends on a prefill
-/// that never ran — see `gglib_proxy::cache_metrics` for the same reasoning
+/// that never ran — see `gglib_core::cache_metrics` for the same reasoning
 /// on the server side.
-fn render_cache_section(cache: &CacheStatus, term_width: u16) -> String {
+fn render_usage_rows(usage: &CacheUsage) -> String {
     let mut out = String::new();
 
-    // Warnings are pre-phrased for display by the server; clip each to one
-    // physical row, matching how `slots_status` is handled above.
-    let max_warning_chars = usize::from(term_width.saturating_sub(4));
-    for warning in &cache.warnings {
-        out.push_str(&format!("  ! {}\n", truncate(warning, max_warning_chars)));
-    }
-
-    let usage = &cache.usage;
     if usage.reporting_requests == 0 {
         out.push_str("  (no cache activity recorded yet)\n");
     } else {
@@ -387,6 +392,23 @@ fn render_cache_section(cache: &CacheStatus, term_width: u16) -> String {
             thousands(usage.unreported_requests),
         ));
     }
+
+    out
+}
+
+/// Render the body of the prompt-cache section (rows only, no header): the
+/// proxy's cache warnings and config framing the shared reuse rows.
+fn render_cache_section(cache: &CacheStatus, term_width: u16) -> String {
+    let mut out = String::new();
+
+    // Warnings are pre-phrased for display by the server; clip each to one
+    // physical row, matching how `slots_status` is handled above.
+    let max_warning_chars = usize::from(term_width.saturating_sub(4));
+    for warning in &cache.warnings {
+        out.push_str(&format!("  ! {}\n", truncate(warning, max_warning_chars)));
+    }
+
+    out.push_str(&render_usage_rows(&cache.usage));
 
     let disk = if !cache.disk_enabled {
         "off"
@@ -682,6 +704,7 @@ mod tests {
             slots_status: Some("disabled upstream (--no-slots)".to_string()),
             total_requests: 0,
             cache: None,
+            agent_usage: CacheUsage::default(),
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -720,6 +743,7 @@ mod tests {
             slots_status: None,
             total_requests: 3,
             cache: None,
+            agent_usage: CacheUsage::default(),
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -806,6 +830,7 @@ mod tests {
             slots_status: Some(long_reason.clone()),
             total_requests: 0,
             cache: None,
+            agent_usage: CacheUsage::default(),
         };
         let width = 80u16;
         let frame = render_frame(
@@ -852,6 +877,20 @@ mod tests {
             slots_status: None,
             total_requests: 3,
             cache,
+            agent_usage: CacheUsage::default(),
+        };
+        render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    }
+
+    fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 0,
+            cache: None,
+            agent_usage,
         };
         render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
     }
@@ -861,6 +900,32 @@ mod tests {
         let frame = frame_with_cache(None);
         assert!(frame.contains("Prompt cache"));
         assert!(frame.contains("(no model resolved yet)"), "{frame}");
+    }
+
+    /// The agent population renders in its own section, even when no proxied
+    /// model has resolved (so the "Prompt cache" section shows the placeholder).
+    #[test]
+    fn agent_cache_section_renders_its_own_population() {
+        let idle = frame_with_agent_usage(CacheUsage::default());
+        assert!(idle.contains("Agent cache (council"), "{idle}");
+        assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
+        // The proxied section is independent and still shows its placeholder.
+        assert!(idle.contains("(no model resolved yet)"), "{idle}");
+
+        let active = frame_with_agent_usage(CacheUsage {
+            reporting_requests: 4,
+            prompt_tokens: 12_000,
+            cached_tokens: 9_800,
+            last_prompt_tokens: Some(3_000),
+            last_cached_tokens: Some(2_500),
+            ..CacheUsage::default()
+        });
+        assert!(active.contains("Agent cache (council"), "{active}");
+        assert!(active.contains("9,800 of 12,000 prompt tokens"), "{active}");
+        assert!(
+            active.contains("2,500 of 3,000 tokens from cache"),
+            "{active}"
+        );
     }
 
     #[test]
@@ -886,17 +951,21 @@ mod tests {
     /// facts; the server keeps them apart, so the frame must too.
     #[test]
     fn cache_section_distinguishes_no_activity_from_a_measured_zero() {
-        let idle = frame_with_cache(Some(cache_status(CacheUsage::default())));
+        // Scope to the proxied "Prompt cache" section: the agent section shares
+        // the same placeholder text and would otherwise mask the distinction.
+        let proxied = |frame: &str| frame.split("Agent cache").next().unwrap().to_string();
+
+        let idle = proxied(&frame_with_cache(Some(cache_status(CacheUsage::default()))));
         assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
 
-        let measured_zero = frame_with_cache(Some(cache_status(CacheUsage {
+        let measured_zero = proxied(&frame_with_cache(Some(cache_status(CacheUsage {
             reporting_requests: 1,
             prompt_tokens: 5_000,
             cached_tokens: 0,
             last_prompt_tokens: Some(5_000),
             last_cached_tokens: Some(0),
             ..CacheUsage::default()
-        })));
+        }))));
         assert!(
             !measured_zero.contains("no cache activity"),
             "{measured_zero}"

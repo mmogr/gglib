@@ -72,12 +72,12 @@ use gglib_core::request_pipeline::{
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
-use crate::cache_metrics::CacheMetricsStore;
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
+use gglib_core::cache_metrics::CacheMetricsStore;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
 /// or timed out).  Returned by [`forward_chat_completion`] so the caller can
@@ -108,7 +108,7 @@ pub(crate) struct StreamOutcome {
     /// How many of `prompt_tokens` the upstream served from its KV cache.
     /// `None` when no Usage frame arrived *or* when it omitted the field —
     /// see [`gglib_core::LlmStreamEvent::Usage`] on why absent and zero must
-    /// stay distinct. Feeds [`crate::cache_metrics::CacheMetricsStore`].
+    /// stay distinct. Feeds [`gglib_core::cache_metrics::CacheMetricsStore`].
     pub cached_tokens: Option<u32>,
 }
 

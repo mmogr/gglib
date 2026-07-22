@@ -165,6 +165,7 @@ pub async fn rewind_run(
         state.mcp.clone(),
         None,
         None,
+        Some(state.proxy.agent_metrics()),
     );
     let note_queue: Option<NoteQueue> = req.steering_note.map(|note| {
         let q: NoteQueue = Arc::new(tokio::sync::Mutex::new(vec![note]));

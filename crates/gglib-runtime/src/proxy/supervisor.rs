@@ -23,6 +23,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
+use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
@@ -136,6 +137,11 @@ pub struct ProxySupervisor {
     handle: Mutex<Option<ProxyHandle>>,
     /// Watch channel for broadcasting proxy status changes (exit events).
     exit_tx: watch::Sender<ProxyStatus>,
+    /// Agent-path prompt-cache reuse store. Owned here — the supervisor is the
+    /// composition root that both the proxy (`serve`, for the dashboard) and
+    /// the embedded axum server (GUI chat, via [`Self::agent_metrics`]) reach —
+    /// so a single population survives proxy restarts within one process.
+    agent_metrics: Arc<CacheMetricsStore>,
 }
 
 impl Default for ProxySupervisor {
@@ -152,7 +158,18 @@ impl ProxySupervisor {
         Self {
             handle: Mutex::new(None),
             exit_tx,
+            agent_metrics: Arc::new(CacheMetricsStore::new()),
         }
+    }
+
+    /// The agent-path prompt-cache reuse store shared with the proxy dashboard.
+    ///
+    /// The embedded axum server (GUI chat) records into this so its reuse lands
+    /// on `/v1/proxy/status`'s `agent_usage` alongside council runs. Cloning is
+    /// cheap; the store lives for the supervisor's lifetime.
+    #[must_use]
+    pub fn agent_metrics(&self) -> Arc<CacheMetricsStore> {
+        Arc::clone(&self.agent_metrics)
     }
 
     /// Get a watch receiver for proxy exit notifications.
@@ -232,6 +249,7 @@ impl ProxySupervisor {
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;
+        let agent_metrics = Arc::clone(&self.agent_metrics);
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -255,6 +273,7 @@ impl ProxySupervisor {
                 cache_enabled,
                 slot_dir,
                 disk_budget,
+                agent_metrics,
             )
             .await;
 

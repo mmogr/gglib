@@ -108,6 +108,7 @@ pub async fn run_sse(
         state.mcp.clone(),
         None,
         None,
+        Some(state.proxy.agent_metrics()),
     );
 
     let config = CouncilConfig {

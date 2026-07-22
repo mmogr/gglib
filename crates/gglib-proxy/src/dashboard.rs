@@ -37,12 +37,12 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::cache_metrics::{CacheMetricsStore, CacheUsage};
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
 use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
+use gglib_core::cache_metrics::{CacheMetricsStore, CacheUsage};
 
 /// Number of recent request snapshots included in each [`DashboardSnapshot`].
 const RECENT_REQUEST_LIMIT: usize = 20;
@@ -179,7 +179,7 @@ impl CacheStatus {
 /// Holds the **configuration** half only — every stored value carries a
 /// default [`CacheUsage`]. Reuse totals move on every request and would defeat
 /// the unchanged-write skip below, so they are read live from
-/// [`crate::cache_metrics::CacheMetricsStore`] and attached in
+/// [`gglib_core::cache_metrics::CacheMetricsStore`] and attached in
 /// [`DashboardSnapshot::build`] via [`CacheStatus::with_usage`].
 #[derive(Debug, Default)]
 pub struct CacheStatusCache {
@@ -260,6 +260,15 @@ pub struct DashboardSnapshot {
     /// the first request resolves a model, since the RAM budget isn't known
     /// until something is launched.
     pub cache: Option<CacheStatus>,
+    /// Prompt-cache reuse for the in-process **agent path** — council and GUI
+    /// chat, which talk to llama-server directly rather than through
+    /// [`crate::forward`]. Reported as a separate population from [`Self::cache`]'s
+    /// `usage`, never merged into it: a council run's many small sub-agent calls
+    /// have a reuse profile nothing like a user's conversation. Top-level rather
+    /// than nested under [`Self::cache`] because it does not depend on the
+    /// proxy's cache configuration and must surface even before a proxied
+    /// request has resolved a model.
+    pub agent_usage: CacheUsage,
 }
 
 impl DashboardSnapshot {
@@ -267,6 +276,7 @@ impl DashboardSnapshot {
     /// sources. Cheap: each source's read is a single mutex-guarded clone,
     /// none held across an `.await`.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         connections: &ActiveConnectionsRegistry,
         slots: &SlotsCache,
@@ -274,6 +284,7 @@ impl DashboardSnapshot {
         upstream_health: &UpstreamHealth,
         cache: &CacheStatusCache,
         cache_metrics: &CacheMetricsStore,
+        agent_metrics: &CacheMetricsStore,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -297,6 +308,7 @@ impl DashboardSnapshot {
             cache: cache
                 .get()
                 .map(|status| status.with_usage(cache_metrics.snapshot())),
+            agent_usage: agent_metrics.snapshot(),
         }
     }
 }
@@ -322,12 +334,19 @@ pub struct DashboardState {
     pub cache: Arc<CacheStatusCache>,
     /// Running prompt-cache reuse totals, recorded by the forward paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
+    /// Agent-path prompt-cache reuse totals — a separate population from
+    /// [`Self::cache_metrics`], recorded by council and GUI-chat runs (which
+    /// bypass [`crate::forward`]) via [`gglib_core::ports::CacheMetricsSink`].
+    /// Owned by the supervisor and passed in, so it outlives a single proxy
+    /// run and can be shared with the embedded axum server.
+    pub agent_metrics: Arc<CacheMetricsStore>,
 }
 
 impl DashboardState {
     /// Construct a fresh `DashboardState` wrapping the given stores, with a
     /// new (empty, zero-subscriber) broadcaster.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         connections: Arc<ActiveConnectionsRegistry>,
         slots: Arc<SlotsCache>,
@@ -335,6 +354,7 @@ impl DashboardState {
         upstream_health: Arc<UpstreamHealth>,
         cache: Arc<CacheStatusCache>,
         cache_metrics: Arc<CacheMetricsStore>,
+        agent_metrics: Arc<CacheMetricsStore>,
     ) -> Self {
         Self {
             connections,
@@ -344,6 +364,7 @@ impl DashboardState {
             broadcaster: Arc::new(Broadcaster::new(BROADCAST_CAPACITY)),
             cache,
             cache_metrics,
+            agent_metrics,
         }
     }
 
@@ -358,6 +379,7 @@ impl DashboardState {
             &self.upstream_health,
             &self.cache,
             &self.cache_metrics,
+            &self.agent_metrics,
         )
     }
 }
@@ -409,6 +431,7 @@ mod tests {
             Arc::new(UpstreamHealth::new()),
             Arc::new(CacheStatusCache::new()),
             Arc::new(CacheMetricsStore::new()),
+            Arc::new(CacheMetricsStore::new()),
         ))
     }
 
@@ -425,6 +448,7 @@ mod tests {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
+            &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
         );
 
@@ -459,6 +483,7 @@ mod tests {
             &upstream_health,
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
+            &CacheMetricsStore::new(),
         );
 
         assert_eq!(snapshot.active_connections.len(), 1);
@@ -481,6 +506,7 @@ mod tests {
             &metrics,
             &upstream_health,
             &CacheStatusCache::new(),
+            &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
         );
 
@@ -511,6 +537,7 @@ mod tests {
                 &metrics,
                 &upstream_health,
                 &CacheStatusCache::new(),
+                &CacheMetricsStore::new(),
                 &CacheMetricsStore::new(),
             );
 
@@ -667,6 +694,7 @@ mod tests {
             &upstream_health,
             &cache,
             &cache_metrics,
+            &CacheMetricsStore::new(),
         );
         assert_eq!(before.cache, None);
 
@@ -682,6 +710,7 @@ mod tests {
             &upstream_health,
             &cache,
             &cache_metrics,
+            &CacheMetricsStore::new(),
         );
         let status = after.cache.expect("cache status present after set");
         assert!(status.needs_attention);
@@ -708,9 +737,17 @@ mod tests {
         ));
 
         let build = |cm: &CacheMetricsStore| {
-            DashboardSnapshot::build(&connections, &slots, &metrics, &upstream_health, &cache, cm)
-                .cache
-                .expect("cache status present")
+            DashboardSnapshot::build(
+                &connections,
+                &slots,
+                &metrics,
+                &upstream_health,
+                &cache,
+                cm,
+                &CacheMetricsStore::new(),
+            )
+            .cache
+            .expect("cache status present")
         };
 
         assert_eq!(build(&cache_metrics).usage, CacheUsage::default());
@@ -730,5 +767,39 @@ mod tests {
             cache.get().expect("config cached"),
             CacheStatus::build(true, true, CacheRamHealth::Healthy { mb: 70_008 }),
         );
+    }
+
+    /// The agent population is reported alongside the proxied one and never
+    /// merged into it — and it surfaces even before any proxied request has
+    /// resolved a model (so `cache` is still `None`).
+    #[test]
+    fn agent_usage_is_a_separate_population_from_the_proxied_figure() {
+        let connections = ActiveConnectionsRegistry::new();
+        let slots = SlotsCache::new();
+        let metrics = ContextMetricsStore::new();
+        let upstream_health = UpstreamHealth::new();
+        let cache = CacheStatusCache::new();
+        let proxied = CacheMetricsStore::new();
+        let agent = CacheMetricsStore::new();
+
+        // Only the agent store records — e.g. a council run with no proxied
+        // traffic and no model config resolved yet.
+        agent.record(8_000, Some(7_600));
+
+        let snap = DashboardSnapshot::build(
+            &connections,
+            &slots,
+            &metrics,
+            &upstream_health,
+            &cache,
+            &proxied,
+            &agent,
+        );
+
+        assert_eq!(snap.agent_usage.reporting_requests, 1);
+        assert_eq!(snap.agent_usage.cached_tokens, 7_600);
+        assert_eq!(snap.agent_usage.last_prompt_tokens, Some(8_000));
+        // Proxied config never resolved, yet agent_usage still surfaced.
+        assert_eq!(snap.cache, None);
     }
 }

@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub mod agent;
 pub mod benchmark;
+pub mod cache_metrics_sink;
 pub mod chat_history;
 pub mod council_approvals;
 pub mod council_repository;
@@ -42,6 +43,7 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 
 // Re-export repository traits for convenience
 pub use benchmark::BenchmarkRepositoryPort;
+pub use cache_metrics_sink::CacheMetricsSink;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
 pub use council_repository::CouncilRepositoryPort;
