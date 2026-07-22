@@ -4,6 +4,7 @@
 //! only ever touch top-level keys.
 
 use serde_json::Value;
+use tracing::debug;
 
 use super::ModelContext;
 use crate::domain::InferenceConfig;
@@ -40,6 +41,61 @@ pub struct SamplingLayers {
     pub global: Option<InferenceConfig>,
 }
 
+/// Which layer supplied each resolved sampling value, as `field=layer` pairs.
+///
+/// Nothing else records this. Without it the effective sampling config is
+/// invisible at every log level, and answering "where did this
+/// `presence_penalty` come from?" means probing llama-server's live `/slots`
+/// mid-generation — which is how the leak behind #621 had to be found.
+///
+/// Mirrors the ladder in [`InferenceConfig::resolve_with_profile`], including
+/// the temperature coupling: once a layer declares a `temperature`, layers
+/// below it can no longer supply the parameters tuned against it, so those
+/// report `hardcoded` even though a lower layer names a value.
+fn describe_provenance(
+    client: &InferenceConfig,
+    model: Option<&InferenceConfig>,
+    layers: &SamplingLayers,
+) -> String {
+    let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+        ("cli", layers.cli_override.as_ref()),
+        ("client", Some(client)),
+        ("profile", layers.profile.as_ref()),
+        ("model", model),
+        ("global", layers.global.as_ref()),
+    ];
+
+    // The highest layer naming a temperature; layers below it cannot supply
+    // temperature-tuned parameters. `None` means nothing claimed it, so every
+    // layer stays eligible.
+    let claim = ordered
+        .iter()
+        .position(|(_, c)| c.is_some_and(|c| c.temperature.is_some()))
+        .unwrap_or(ordered.len());
+
+    let source = |declares: &dyn Fn(&InferenceConfig) -> bool, limit: usize| -> &'static str {
+        ordered
+            .iter()
+            .take(limit)
+            .find(|(_, c)| c.is_some_and(|c| declares(c)))
+            .map_or("hardcoded", |(name, _)| name)
+    };
+
+    let all = ordered.len();
+    // Tuned parameters are eligible only up to and including the claiming layer.
+    let tuned = claim.saturating_add(1).min(all);
+    format!(
+        "temperature={} top_p={} top_k={} max_tokens={} presence_penalty={} repeat_penalty={} min_p={}",
+        source(&|c| c.temperature.is_some(), all),
+        source(&|c| c.top_p.is_some(), all),
+        source(&|c| c.top_k.is_some(), all),
+        source(&|c| c.max_tokens.is_some(), all),
+        source(&|c| c.presence_penalty.is_some(), tuned),
+        source(&|c| c.repeat_penalty.is_some(), tuned),
+        source(&|c| c.min_p.is_some(), tuned),
+    )
+}
+
 /// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
 ///
 /// # Force-insert, not `or_insert`
@@ -59,13 +115,27 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // Operator flags sit above the client, everything else below it.
     let top = match layers.cli_override.as_ref() {
         Some(o) => o.clone().stacked_over(&client_params),
-        None => client_params,
+        None => client_params.clone(),
     };
     let resolved = top.resolve_with_profile(
         layers.profile.as_ref(),
         ctx.inference_defaults.as_ref(),
         layers.global.as_ref(),
     );
+
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        debug!(
+            temperature = ?resolved.temperature,
+            top_p = ?resolved.top_p,
+            top_k = ?resolved.top_k,
+            max_tokens = ?resolved.max_tokens,
+            presence_penalty = ?resolved.presence_penalty,
+            repeat_penalty = ?resolved.repeat_penalty,
+            min_p = ?resolved.min_p,
+            from = %describe_provenance(&client_params, ctx.inference_defaults.as_ref(), layers),
+            "sampling resolved"
+        );
+    }
 
     let Some(obj) = body.as_object_mut() else {
         return;
@@ -213,6 +283,68 @@ mod tests {
         assert_param(&body, "temperature", 0.2);
         assert_param(&body, "top_p", 0.87);
         assert_param(&body, "top_k", 20.0);
+    }
+
+    // ── Provenance ────────────────────────────────────────────────────────
+
+    /// The `:coding` shape. The provenance string must say the penalty came
+    /// from the neutral floor, not from the model — otherwise the log would
+    /// assert exactly the leak the merge now prevents.
+    #[test]
+    fn provenance_reports_coupling_suppressed_layers_as_hardcoded() {
+        let model = InferenceConfig {
+            temperature: Some(1.0),
+            presence_penalty: Some(1.5),
+            top_k: Some(20),
+            ..Default::default()
+        };
+        let got = describe_provenance(
+            &InferenceConfig::default(),
+            Some(&model),
+            &SamplingLayers {
+                profile: Some(temp(0.2)),
+                ..Default::default()
+            },
+        );
+
+        assert!(got.contains("temperature=profile"), "{got}");
+        assert!(got.contains("presence_penalty=hardcoded"), "{got}");
+        // Untuned parameters are unaffected by the claim.
+        assert!(got.contains("top_k=model"), "{got}");
+    }
+
+    /// With nothing above it claiming a temperature, the model's own recipe is
+    /// reported intact.
+    #[test]
+    fn provenance_attributes_an_unclaimed_recipe_to_the_model() {
+        let model = InferenceConfig {
+            temperature: Some(1.0),
+            presence_penalty: Some(1.5),
+            ..Default::default()
+        };
+        let got = describe_provenance(
+            &InferenceConfig::default(),
+            Some(&model),
+            &SamplingLayers::default(),
+        );
+
+        assert!(got.contains("temperature=model"), "{got}");
+        assert!(got.contains("presence_penalty=model"), "{got}");
+    }
+
+    /// Operator flags are reported as their own layer, above the client.
+    #[test]
+    fn provenance_names_the_cli_layer() {
+        let got = describe_provenance(
+            &temp(0.9),
+            None,
+            &SamplingLayers {
+                cli_override: Some(temp(0.3)),
+                ..Default::default()
+            },
+        );
+
+        assert!(got.contains("temperature=cli"), "{got}");
     }
 
     /// Regression for #621: operator flags must beat the per-model layer.
