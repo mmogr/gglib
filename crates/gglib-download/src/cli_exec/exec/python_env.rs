@@ -202,28 +202,40 @@ impl PythonEnvironment {
     async fn create_env(&self) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated().await?;
 
-        println!(
+        gglib_core::telemetry::console_println(&format!(
             "ℹ️  Creating Python environment for fast downloads at {}...",
             self.env_dir.display()
-        );
+        ));
 
         let mut cmd = async_cmd(&bootstrap);
         apply_python_subprocess_isolation(&mut cmd);
-        let status = cmd
+        // `.output()` rather than `.status()`: this pipes the child's stdout
+        // and stderr instead of inheriting the parent's, so `python -m venv`
+        // can never write raw bytes straight to the terminal. An inherited
+        // handle would bypass indicatif entirely and corrupt any live
+        // `MultiProgress` redraw the same way a stray `println!` does — see
+        // the module-level comment on `run_python_command` below.
+        let output = cmd
             .arg("-m")
             .arg("venv")
             .arg(&self.env_dir)
-            .status()
+            .output()
             .await
             .map_err(|e| EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
                 reason: e.to_string(),
             })?;
 
-        if !status.success() {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let reason = if stderr.is_empty() {
+                format!("python -m venv exited with {}", output.status)
+            } else {
+                format!("python -m venv exited with {}: {stderr}", output.status)
+            };
             return Err(EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
-                reason: format!("python -m venv exited with {status}"),
+                reason,
             });
         }
 
@@ -231,7 +243,7 @@ impl PythonEnvironment {
     }
 
     async fn install_requirements(&self) -> Result<(), EnvSetupError> {
-        println!("ℹ️  Installing fast download dependencies...");
+        gglib_core::telemetry::console_println("ℹ️  Installing fast download dependencies...");
 
         let python = self.python_path();
 

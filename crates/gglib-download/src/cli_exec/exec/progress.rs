@@ -39,9 +39,15 @@ enum ProgressRender {
 
 impl CliProgressPrinter {
     /// Create a new progress printer, auto-detecting terminal capability.
+    ///
+    /// Checks stderr, not stdout: the bar itself draws to stderr (see
+    /// [`FancyProgress::new`]), matching the queued-download path's
+    /// `CliDownloadEventEmitter`, which uses indicatif's stderr default. A
+    /// redirected stdout (`gglib model upgrade ... > file.txt`) should not
+    /// silently downgrade the bar when stderr is still an attended terminal.
     #[must_use]
     pub fn new() -> Self {
-        let inner = if io::stdout().is_terminal() {
+        let inner = if io::stderr().is_terminal() {
             ProgressRender::Fancy(FancyProgress::new())
         } else {
             ProgressRender::Plain(PlainProgress::new())
@@ -110,7 +116,9 @@ struct FancyProgress {
 
 impl FancyProgress {
     fn new() -> Self {
-        let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stdout());
+        // Stderr, matching CliDownloadEventEmitter's MultiProgress (indicatif's
+        // stderr default) — see the module doc on `CliProgressPrinter::new`.
+        let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
         bar.set_style(Self::spinner_style());
         bar.set_message("Preparing fast download".to_string());
         bar.enable_steady_tick(Duration::from_millis(120));
@@ -249,8 +257,8 @@ impl PlainProgress {
         }
 
         let pad = self.last_line_len.saturating_sub(line.len());
-        print!("\r{line}{:pad$}", "", pad = pad);
-        io::stdout().flush().ok();
+        eprint!("\r{line}{:pad$}", "", pad = pad);
+        io::stderr().flush().ok();
 
         self.last_line_len = line.len();
         self.printed = true;
@@ -258,7 +266,7 @@ impl PlainProgress {
 
     fn finish(&mut self) {
         if self.printed {
-            println!();
+            eprintln!();
             self.printed = false;
             self.last_line_len = 0;
         }

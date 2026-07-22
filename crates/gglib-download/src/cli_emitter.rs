@@ -59,11 +59,35 @@ pub struct CliDownloadEventEmitter {
 }
 
 impl CliDownloadEventEmitter {
-    /// Create a new emitter backed by a fresh [`MultiProgress`].
+    /// Create a new emitter backed by a fresh [`MultiProgress`], and install
+    /// it as the process-wide console hook (see
+    /// [`gglib_core::telemetry::set_console_hook`]).
+    ///
+    /// Any `tracing` log line — or other output routed through
+    /// [`gglib_core::telemetry::console_println`] — printed while this
+    /// emitter is alive goes through [`MultiProgress::println`] instead of
+    /// straight to a stream. That erases the live bars, prints the line,
+    /// and redraws atomically, so the bars' internal line-count bookkeeping
+    /// never falls out of sync with what's actually on screen. A raw
+    /// `eprintln!`/`println!` racing the bars' own redraws is exactly what
+    /// stranded old frames in scrollback before this was wired up.
     #[must_use]
     pub fn new() -> Self {
+        let multi_progress = Arc::new(MultiProgress::new());
+
+        let hook_target = Arc::clone(&multi_progress);
+        gglib_core::telemetry::set_console_hook(Arc::new(move |line: &str| {
+            // `MultiProgress::println` silently drops the line when the draw
+            // target is hidden (non-terminal stderr) rather than falling
+            // back to a plain write — checking first keeps non-TTY output
+            // (CI, pipes) intact.
+            if hook_target.is_hidden() || hook_target.println(line).is_err() {
+                eprintln!("{line}");
+            }
+        }));
+
         Self {
-            multi_progress: Arc::new(MultiProgress::new()),
+            multi_progress,
             bars: Mutex::new(HashMap::new()),
         }
     }

@@ -275,9 +275,11 @@ async fn run_download_process(
                         }
                     }
                 } else {
-                    // Non-protocol line — print to console
+                    // Non-protocol line — print to console via the shared
+                    // hook so it doesn't corrupt a live MultiProgress redraw
+                    // (see gglib_core::telemetry::console_println).
                     finish_progress(cli_progress.as_ref());
-                    println!("[fast-path] {line}");
+                    gglib_core::telemetry::console_println(&format!("[fast-path] {line}"));
                 }
             }
         }

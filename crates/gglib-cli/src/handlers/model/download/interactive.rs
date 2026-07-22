@@ -76,7 +76,14 @@ pub async fn run_interactive_monitor(
     downloads: Arc<dyn DownloadManagerPort>,
     emitter: Arc<CliDownloadEventEmitter>,
 ) -> Result<()> {
-    if std::io::stdout().is_terminal() {
+    // Checks stderr, not stdout: the progress bars draw to stderr (indicatif's
+    // `MultiProgress` default, used by `CliDownloadEventEmitter`), so that is
+    // what decides whether we're actually interactive. Checking stdout would
+    // silently fall back to the plain polling loop — and disable the `[a]`/`[q]`
+    // hotkeys, since `console::Term::stderr()`'s own TTY check follows the same
+    // stream — whenever stdout was redirected but the terminal remained
+    // attached via stderr.
+    if std::io::stderr().is_terminal() {
         run_tty_monitor(downloads, emitter).await
     } else {
         run_plain_monitor(downloads).await
@@ -165,7 +172,8 @@ async fn run_tty_monitor(
     // dropping the handle here is truly fire-and-forget: Tokio shuts down
     // immediately and the OS kills the thread when the process exits.
     let reader_handle = std::thread::spawn(move || {
-        let term = Term::stdout();
+        // Stderr, matching the bars — see the comment on `run_interactive_monitor`.
+        let term = Term::stderr();
         loop {
             let key = match term.read_key() {
                 Ok(k) => k,
@@ -347,7 +355,8 @@ async fn handle_add_to_queue(
     // we block on stdin, ensuring background downloads keep progressing.
     let prompt_result = tokio::task::block_in_place(|| {
         mp.suspend(|| -> Result<Option<(String, Option<String>)>> {
-            let term = Term::stdout();
+            // Stderr, matching the bars — see the comment on `run_interactive_monitor`.
+            let term = Term::stderr();
 
             // Print prompts to the same Term we read from so they line up
             // with the input cursor when bars are suspended.
