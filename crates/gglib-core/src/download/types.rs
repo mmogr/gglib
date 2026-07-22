@@ -506,6 +506,14 @@ impl FromStr for Quantization {
 }
 
 /// Information about a shard within a sharded model download.
+///
+/// [`preceding_bytes`](Self::preceding_bytes) and
+/// [`group_total_bytes`](Self::group_total_bytes) carry the exact byte offsets
+/// of this shard within the whole model, so aggregate progress does not have to
+/// assume every shard is the same size. GGUF shard sets almost always end with
+/// a smaller final shard, and estimating the group total as
+/// `this_shard_size * shard_count` made the percentage both wrong and
+/// discontinuous at every shard boundary.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShardInfo {
     /// 0-based index of this shard.
@@ -517,6 +525,12 @@ pub struct ShardInfo {
     /// Size of this shard file in bytes (if known).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_size: Option<u64>,
+    /// Summed size of every shard before this one (if all sizes are known).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preceding_bytes: Option<u64>,
+    /// Summed size of every shard in the group (if all sizes are known).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_total_bytes: Option<u64>,
 }
 
 impl ShardInfo {
@@ -528,6 +542,8 @@ impl ShardInfo {
             total_shards,
             filename: filename.into(),
             file_size: None,
+            preceding_bytes: None,
+            group_total_bytes: None,
         }
     }
 
@@ -540,11 +556,33 @@ impl ShardInfo {
         file_size: u64,
     ) -> Self {
         Self {
-            shard_index,
-            total_shards,
-            filename: filename.into(),
             file_size: Some(file_size),
+            ..Self::new(shard_index, total_shards, filename)
         }
+    }
+
+    /// Attach the exact byte offsets of this shard within its group.
+    ///
+    /// Only call this when *every* shard size in the group is known; a partial
+    /// offset is worse than none, because the fallback estimate at least stays
+    /// self-consistent.
+    #[must_use]
+    pub const fn with_group_offsets(mut self, preceding: u64, group_total: u64) -> Self {
+        self.preceding_bytes = Some(preceding);
+        self.group_total_bytes = Some(group_total);
+        self
+    }
+
+    /// Exact aggregate progress for the group, given this shard's own progress.
+    ///
+    /// Returns `None` when the group's byte layout is unknown, leaving the
+    /// caller to fall back to an equal-shard-size estimate.
+    #[must_use]
+    pub fn aggregate(&self, shard_downloaded: u64) -> Option<(u64, u64)> {
+        let preceding = self.preceding_bytes?;
+        let group_total = self.group_total_bytes?;
+        let downloaded = preceding.saturating_add(shard_downloaded).min(group_total);
+        Some((downloaded, group_total))
     }
 
     /// Format as display string (e.g., "Part 1/3").

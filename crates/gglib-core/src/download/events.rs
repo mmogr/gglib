@@ -99,12 +99,21 @@ impl DownloadStatus {
 /// type DownloadEvent =
 ///   | { type: "queue_snapshot"; items: DownloadSummary[]; max_size: number }
 ///   | { type: "download_started"; id: string; shard_index?: number; total_shards?: number }
-///   | { type: "download_progress"; id: string; downloaded: number; total: number; ... }
-///   | { type: "shard_progress"; id: string; shard_index: number; ... }
+///   | { type: "download_progress"; id: string; downloaded: number; total: number;
+///       speed_bps?: number; eta_seconds?: number; percentage: number }
+///   | { type: "shard_progress"; id: string; shard_index: number;
+///       speed_bps?: number; eta_seconds?: number; ... }
 ///   | { type: "download_completed"; id: string }
 ///   | { type: "download_failed"; id: string; error: string }
 ///   | { type: "download_cancelled"; id: string };
 /// ```
+///
+/// `speed_bps` and `eta_seconds` are **optional and omitted when unknown** — a
+/// download that has just started has no meaningful rate yet. Renderers must
+/// show a placeholder for the absent case rather than substituting `0`, and
+/// must never compute a rate of their own from successive `downloaded` values;
+/// the manager's `RateEstimator` is the only source. The mirrored TypeScript
+/// declaration lives in `src/services/transport/types/events.ts`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DownloadEvent {
@@ -137,9 +146,15 @@ pub enum DownloadEvent {
         /// Total bytes to download.
         total: u64,
         /// Current download speed in bytes per second.
-        speed_bps: f64,
-        /// Estimated time remaining in seconds.
-        eta_seconds: f64,
+        ///
+        /// Absent until the estimator has warmed up. This is deliberately not
+        /// `0.0`: zero is a real reading meaning "stalled", and conflating the
+        /// two is what rendered `ETA: 0s` on a healthy download.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        speed_bps: Option<f64>,
+        /// Estimated time remaining in seconds; absent when not yet known.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        eta_seconds: Option<f64>,
         /// Progress percentage (0.0 - 100.0).
         percentage: f64,
     },
@@ -162,10 +177,14 @@ pub enum DownloadEvent {
         aggregate_downloaded: u64,
         /// Aggregate total bytes across all shards.
         aggregate_total: u64,
-        /// Current download speed in bytes per second.
-        speed_bps: f64,
-        /// Estimated time remaining in seconds.
-        eta_seconds: f64,
+        /// Current download speed in bytes per second; absent until known.
+        ///
+        /// Measured across the whole shard group, not reset per shard.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        speed_bps: Option<f64>,
+        /// Estimated time remaining in seconds; absent when not yet known.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        eta_seconds: Option<f64>,
         /// Aggregate progress percentage (0.0 - 100.0).
         percentage: f64,
     },
@@ -243,33 +262,42 @@ impl DownloadEvent {
         }
     }
 
-    /// Create a non-sharded progress event.
+    /// Percentage complete, clamped to 0-100.
     #[allow(clippy::cast_precision_loss)]
-    pub fn progress(id: impl Into<String>, downloaded: u64, total: u64, speed_bps: f64) -> Self {
-        let percentage = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
+    fn percent_of(downloaded: u64, total: u64) -> f64 {
+        if total == 0 {
+            return 0.0;
+        }
+        ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+    }
 
-        let eta_seconds = if speed_bps > 0.0 && total > downloaded {
-            (total - downloaded) as f64 / speed_bps
-        } else {
-            0.0
-        };
-
+    /// Create a non-sharded progress event.
+    ///
+    /// `speed_bps` and `eta_seconds` come from the manager's
+    /// [`RateEstimator`](crate::download::RateEstimator) — this constructor
+    /// deliberately does not derive an ETA of its own. Two estimators for one
+    /// number is how the CLI and the GUI ended up disagreeing.
+    pub fn progress(
+        id: impl Into<String>,
+        downloaded: u64,
+        total: u64,
+        speed_bps: Option<f64>,
+        eta_seconds: Option<f64>,
+    ) -> Self {
         Self::DownloadProgress {
             id: id.into(),
             downloaded,
             total,
             speed_bps,
             eta_seconds,
-            percentage,
+            percentage: Self::percent_of(downloaded, total),
         }
     }
 
     /// Create a sharded progress event.
-    #[allow(clippy::too_many_arguments, clippy::cast_precision_loss)]
+    ///
+    /// See [`progress`](Self::progress) on where the rate values come from.
+    #[allow(clippy::too_many_arguments)]
     pub fn shard_progress(
         id: impl Into<String>,
         shard_index: u32,
@@ -279,20 +307,9 @@ impl DownloadEvent {
         shard_total: u64,
         aggregate_downloaded: u64,
         aggregate_total: u64,
-        speed_bps: f64,
+        speed_bps: Option<f64>,
+        eta_seconds: Option<f64>,
     ) -> Self {
-        let percentage = if aggregate_total > 0 {
-            (aggregate_downloaded as f64 / aggregate_total as f64) * 100.0
-        } else {
-            0.0
-        };
-
-        let eta_seconds = if speed_bps > 0.0 && aggregate_total > aggregate_downloaded {
-            (aggregate_total - aggregate_downloaded) as f64 / speed_bps
-        } else {
-            0.0
-        };
-
         Self::ShardProgress {
             id: id.into(),
             shard_index,
@@ -304,7 +321,7 @@ impl DownloadEvent {
             aggregate_total,
             speed_bps,
             eta_seconds,
-            percentage,
+            percentage: Self::percent_of(aggregate_downloaded, aggregate_total),
         }
     }
 
@@ -383,17 +400,43 @@ mod tests {
 
     #[test]
     fn test_progress_event_calculations() {
-        let event = DownloadEvent::progress("id", 500, 1000, 100.0);
+        let event = DownloadEvent::progress("id", 500, 1000, Some(100.0), Some(5.0));
         match event {
             DownloadEvent::DownloadProgress {
                 percentage,
                 eta_seconds,
+                speed_bps,
                 ..
             } => {
                 assert!((percentage - 50.0).abs() < 0.01);
-                assert!((eta_seconds - 5.0).abs() < 0.01);
+                assert_eq!(eta_seconds, Some(5.0), "ETA is passed through, not derived");
+                assert_eq!(speed_bps, Some(100.0));
             }
             _ => panic!("Expected DownloadProgress"),
+        }
+    }
+
+    #[test]
+    fn unknown_rate_is_omitted_from_the_wire() {
+        let event = DownloadEvent::progress("id", 500, 1000, None, None);
+        let json = serde_json::to_string(&event).expect("serializes");
+        assert!(
+            !json.contains("speed_bps") && !json.contains("eta_seconds"),
+            "an unknown rate must be absent, never 0: {json}"
+        );
+    }
+
+    #[test]
+    fn percentage_is_clamped_and_safe_at_zero_total() {
+        let over = DownloadEvent::progress("id", 1500, 1000, None, None);
+        let unknown = DownloadEvent::progress("id", 500, 0, None, None);
+        for (event, expected) in [(over, 100.0), (unknown, 0.0)] {
+            match event {
+                DownloadEvent::DownloadProgress { percentage, .. } => {
+                    assert!((percentage - expected).abs() < f64::EPSILON);
+                }
+                _ => panic!("Expected DownloadProgress"),
+            }
         }
     }
 

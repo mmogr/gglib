@@ -12,17 +12,19 @@ impl AppEvent {
     }
 
     /// Create a download progress event.
+    ///
+    /// `speed_bps` and `eta_seconds` come from the download manager's
+    /// `RateEstimator` and are `None` until it has warmed up; the percentage is
+    /// derived from the byte counts.
     pub fn download_progress(
         id: impl Into<String>,
         downloaded: u64,
         total: u64,
-        speed_bps: f64,
-        eta_seconds: f64,
-        percentage: f64,
+        speed_bps: Option<f64>,
+        eta_seconds: Option<f64>,
     ) -> Self {
-        let _ = (eta_seconds, percentage); // DownloadEvent::progress calculates these
         Self::Download {
-            event: DownloadEvent::progress(id, downloaded, total, speed_bps),
+            event: DownloadEvent::progress(id, downloaded, total, speed_bps, eta_seconds),
         }
     }
 

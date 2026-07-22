@@ -220,8 +220,11 @@ fn row_to_queued_download(
         position: position as u32,
         downloaded_bytes: downloaded_bytes as u64,
         total_bytes: total_bytes as u64,
-        speed_bps: 0.0,    // Not persisted, calculated live
-        eta_seconds: None, // Not persisted, calculated live
+        // Neither is persisted: they are live readings from the download
+        // manager's rate estimator, and a restored row has no transfer in
+        // flight to measure. None means unknown, which is exactly right here.
+        speed_bps: None,
+        eta_seconds: None,
         progress_percent,
         queued_at: queued_at as u64,
         started_at: started_at.map(|t| t as u64),

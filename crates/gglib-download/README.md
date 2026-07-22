@@ -35,9 +35,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │  manager.rs │ ──► │   queue/    │ ──► │  executor/  │ ──► │  progress/  │        │
-│  │  Public API │     │  Task queue │     │  Download   │     │  Tracking   │        │
-│  │  & facade   │     │  & state    │     │  workers    │     │  & events   │        │
+│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │ ──► │ cli_emitter │        │
+│  │  Public API │     │  Task queue │     │  Download   │     │  Terminal   │        │
+│  │  & facade   │     │  & state    │     │  workers    │     │  rendering  │        │
 │  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -79,7 +79,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`quant_selector.rs`** — Quantization selection logic for model downloads
 - **`queue/`** — Download task queue with priority and state management
 - **`executor/`** — Async download workers with retry logic
-- **`progress/`** — Progress tracking and event emission
+- **`cli_emitter.rs`** — Terminal progress bars for CLI contexts
+- **`progress/`** — `ProgressThrottle`, an emission rate limiter for callers
+  whose progress callbacks are driven by raw byte chunks rather than a tick
 - **`resolver/`** — File URL resolution and shard detection
 - **`cli_exec/`** — Python `hf_xet` subprocess for fast-path downloads
 - **`manager/`** — High-level download manager facade
@@ -90,6 +92,15 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Progress Tracking** — Real-time progress events for UI updates, including
   non-terminal `Finalizing` and `Registering` lifecycle transitions emitted
   between the last byte hitting disk and the model row being written.
+- **Speed and ETA** — Computed once, by the manager's progress bridge, using
+  `gglib_core::download::RateEstimator`, and shipped on the event for every
+  renderer to display verbatim. One estimator per *shard group*, so the
+  reported speed is continuous from the first shard to the last. Renderers must
+  not derive a rate from successive byte counts; `indicatif`'s built-in
+  `{bytes_per_sec}` and `{eta}` are deliberately absent from every template
+  here, because using them made the CLI and the GUI report different numbers
+  for the same transfer. Both are `Option` on the wire and omitted when
+  unknown — an absent rate is not a zero rate.
 - **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
 - **Resume Support** — Partial download resumption on failure
 - **Shard Handling** — Automatic detection and download of sharded models
