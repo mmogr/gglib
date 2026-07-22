@@ -16,4 +16,11 @@ Page-level download progress indicator showing the active download's progress ba
 
 `groupPendingItems()` collapses all shard items sharing a `group_id` into one queue entry with combined progress.
 
+Speed and ETA are displayed exactly as the backend reports them, via
+`formatRate` / `formatDuration` from `src/utils/format.ts`. Both are optional:
+absent means the rate estimator has not warmed up, and renders as a placeholder
+rather than `0`. This component computes no rate of its own — the download
+manager's `RateEstimator` is the single source, so the CLI and the GUI always
+agree.
+
 <!-- module-docs:end -->

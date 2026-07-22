@@ -12,9 +12,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use gglib_core::download::DownloadEvent;
+use gglib_core::download::{DownloadEvent, format_duration, format_rate};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 
@@ -31,7 +31,15 @@ use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 // The unified template renders fine even when the bar's length is unknown
 // (the bar widget appears empty until `set_length` is called with a real
 // total) and avoids the mid-stream style switch entirely.
-const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {bytes_per_sec} eta {eta}";
+//
+// Note the absence of `{bytes_per_sec}` and `{eta}`. Those are indicatif's own
+// estimates, derived from the `set_position` calls we make; using them meant
+// the CLI ignored the rate the manager had already computed and displayed a
+// different number from the GUI for the same transfer. Rate and ETA now arrive
+// on the event and are rendered into `{wide_msg}`. `{bytes}` and
+// `{total_bytes}` stay — those are sizes, which indicatif labels correctly as
+// binary (MiB/GiB).
+const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
 // ─── CliDownloadEventEmitter ─────────────────────────────────────────────────
@@ -97,6 +105,40 @@ impl CliDownloadEventEmitter {
             }
         }
     }
+
+    /// Apply a progress update to the bar registered for `id`.
+    ///
+    /// Shared by the sharded and unsharded progress arms — they differ only in
+    /// which byte counts they report and how they label themselves.
+    fn update_bar(&self, id: &str, position: u64, total: u64, message: &str) {
+        let Ok(bars) = self.bars.lock() else {
+            return;
+        };
+        let Some(bar) = bars.get(id) else {
+            return;
+        };
+
+        // Adopt the total whenever it changes — for a shard group the
+        // aggregate total is refined as shard sizes resolve. No `set_style`
+        // here; the unified template is already in place from DownloadStarted.
+        if total > 0 && bar.length().unwrap_or(0) != total {
+            bar.set_length(total);
+        }
+        bar.set_position(position);
+        bar.set_message(message.to_string());
+    }
+}
+
+/// Render the rate and ETA the manager computed, e.g. `118.4 MB/s · ETA 2m 40s`.
+///
+/// Both are `None` until the estimator warms up, and render as a placeholder
+/// rather than `0`, which would read as a stalled transfer.
+fn rate_suffix(speed_bps: Option<f64>, eta_seconds: Option<f64>) -> String {
+    format!(
+        "{} · ETA {}",
+        format_rate(speed_bps),
+        format_duration(eta_seconds)
+    )
 }
 
 impl Default for CliDownloadEventEmitter {
@@ -144,22 +186,16 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 id,
                 downloaded,
                 total,
-                speed_bps: _,
-                eta_seconds: _,
-                percentage: _,
+                speed_bps,
+                eta_seconds,
+                ..
             } => {
-                if let Ok(bars) = self.bars.lock() {
-                    if let Some(bar) = bars.get(&id) {
-                        // First time we see a real total, set length. No
-                        // set_style — the unified template is already in
-                        // place from DownloadStarted.
-                        if total > 0 && bar.length().unwrap_or(0) == 0 {
-                            bar.set_length(total);
-                        }
-                        bar.set_position(downloaded);
-                        bar.set_message(format!("{id} {}", HumanBytes(downloaded)));
-                    }
-                }
+                self.update_bar(
+                    &id,
+                    downloaded,
+                    total,
+                    &format!("{id} {}", rate_suffix(speed_bps, eta_seconds)),
+                );
             }
 
             DownloadEvent::ShardProgress {
@@ -168,24 +204,16 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 total_shards,
                 aggregate_downloaded,
                 aggregate_total,
+                speed_bps,
+                eta_seconds,
                 ..
             } => {
-                if let Ok(bars) = self.bars.lock() {
-                    if let Some(bar) = bars.get(&id) {
-                        // Update length on first real total or whenever the
-                        // total changes (e.g. final shard size resolved).
-                        // No set_style — unified template stays in place.
-                        if aggregate_total > 0 && bar.length().unwrap_or(0) != aggregate_total {
-                            bar.set_length(aggregate_total);
-                        }
-                        bar.set_position(aggregate_downloaded);
-                        bar.set_message(format!(
-                            "{id} [shard {}/{total_shards}] {}",
-                            shard_index + 1,
-                            HumanBytes(aggregate_downloaded),
-                        ));
-                    }
-                }
+                let label = format!(
+                    "{id} [shard {}/{total_shards}] {}",
+                    shard_index + 1,
+                    rate_suffix(speed_bps, eta_seconds),
+                );
+                self.update_bar(&id, aggregate_downloaded, aggregate_total, &label);
             }
 
             DownloadEvent::DownloadCompleted { id, .. } => {

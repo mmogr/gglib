@@ -5,9 +5,9 @@
 //! frontends via SSE, Tauri events, or CLI output.
 
 use super::events::DownloadStatus;
+use super::format::{format_duration, format_rate};
 use super::types::{Quantization, ShardInfo};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Snapshot of the entire download queue for API responses.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -89,8 +89,9 @@ pub struct QueuedDownload {
     /// Total bytes to download.
     pub total_bytes: u64,
 
-    /// Download speed in bytes per second.
-    pub speed_bps: f64,
+    /// Download speed in bytes per second; absent until the estimator warms up.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed_bps: Option<f64>,
 
     /// Estimated time remaining.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,7 +134,7 @@ impl QueuedDownload {
             position,
             downloaded_bytes: 0,
             total_bytes: 0,
-            speed_bps: 0.0,
+            speed_bps: None,
             eta_seconds: None,
             progress_percent: 0.0,
             queued_at,
@@ -166,10 +167,20 @@ impl QueuedDownload {
     }
 
     /// Update progress from bytes downloaded.
-    pub fn update_progress(&mut self, downloaded: u64, total: u64, speed_bps: f64) {
+    ///
+    /// `speed_bps` and `eta_seconds` come from the download manager's
+    /// `RateEstimator`; this type does not derive a rate or an ETA of its own.
+    pub fn update_progress(
+        &mut self,
+        downloaded: u64,
+        total: u64,
+        speed_bps: Option<f64>,
+        eta_seconds: Option<f64>,
+    ) {
         self.downloaded_bytes = downloaded;
         self.total_bytes = total;
         self.speed_bps = speed_bps;
+        self.eta_seconds = eta_seconds;
 
         self.progress_percent = if total > 0 {
             #[expect(
@@ -177,20 +188,9 @@ impl QueuedDownload {
                 reason = "precision loss acceptable for progress percentage"
             )]
             let progress = (downloaded as f64 / total as f64) * 100.0;
-            progress
+            progress.clamp(0.0, 100.0)
         } else {
             0.0
-        };
-
-        self.eta_seconds = if speed_bps > 0.0 && total > downloaded {
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "precision loss acceptable for ETA calculation"
-            )]
-            let eta = (total - downloaded) as f64 / speed_bps;
-            Some(eta)
-        } else {
-            None
         };
     }
 
@@ -208,23 +208,16 @@ impl QueuedDownload {
         )
     }
 
-    /// Get formatted speed string (e.g., "5.2 MB/s").
+    /// Get formatted speed string (e.g., `5.2 MB/s`, or a placeholder).
+    #[must_use]
     pub fn speed_display(&self) -> String {
-        format_bytes_per_second(self.speed_bps)
+        format_rate(self.speed_bps)
     }
 
-    /// Get formatted ETA string (e.g., "2m 30s").
+    /// Get formatted ETA string (e.g., `2m 30s`, or a placeholder).
     #[must_use]
-    pub fn eta_display(&self) -> Option<String> {
-        self.eta_seconds.map(|secs| {
-            #[expect(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "ETA seconds are always positive and within u64 range"
-            )]
-            let secs_u64 = secs as u64;
-            format_duration(secs_u64)
-        })
+    pub fn eta_display(&self) -> String {
+        format_duration(self.eta_seconds)
     }
 }
 
@@ -283,36 +276,6 @@ impl FailedDownload {
     }
 }
 
-/// Format bytes per second as human-readable string.
-fn format_bytes_per_second(bps: f64) -> String {
-    let (value, unit) = if bps >= 1_000_000_000.0 {
-        (bps / 1_000_000_000.0, "GB/s")
-    } else if bps >= 1_000_000.0 {
-        (bps / 1_000_000.0, "MB/s")
-    } else if bps >= 1_000.0 {
-        (bps / 1_000.0, "KB/s")
-    } else {
-        return format!("{bps:.0} B/s");
-    };
-    format!("{value:.1} {unit}")
-}
-
-/// Format seconds as human-readable duration.
-fn format_duration(secs: u64) -> String {
-    let duration = Duration::from_secs(secs);
-    let hours = duration.as_secs() / 3600;
-    let minutes = (duration.as_secs() % 3600) / 60;
-    let seconds = duration.as_secs() % 60;
-
-    if hours > 0 {
-        format!("{hours}h {minutes}m")
-    } else if minutes > 0 {
-        format!("{minutes}m {seconds}s")
-    } else {
-        format!("{seconds}s")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,50 +298,33 @@ mod tests {
     #[test]
     fn test_queued_download_progress() {
         let mut download = QueuedDownload::new("id", "model", "Display", 1, 0);
-        download.update_progress(500, 1000, 100.0);
+        download.update_progress(500, 1000, Some(100.0), Some(5.0));
 
         assert_eq!(download.downloaded_bytes, 500);
         assert!((download.progress_percent - 50.0).abs() < 0.01);
+        // Stored, not derived — the manager's estimator owns this number.
         assert!((download.eta_seconds.unwrap() - 5.0).abs() < 0.01);
     }
 
     #[test]
     fn test_speed_display() {
+        // Unit selection and thresholds are covered in `super::format`; this
+        // only checks that the DTO delegates there rather than formatting
+        // its own way.
         let mut download = QueuedDownload::new("id", "model", "Display", 1, 0);
 
-        download.speed_bps = 5_000_000.0;
+        download.speed_bps = Some(5_000_000.0);
         assert_eq!(download.speed_display(), "5.0 MB/s");
 
-        download.speed_bps = 1_500_000_000.0;
-        assert_eq!(download.speed_display(), "1.5 GB/s");
-
-        download.speed_bps = 500.0;
-        assert_eq!(download.speed_display(), "500 B/s");
-
-        // Edge cases: exact boundaries and just-below thresholds
-        download.speed_bps = 1_000.0;
-        assert_eq!(download.speed_display(), "1.0 KB/s");
-
-        download.speed_bps = 999.0;
-        assert_eq!(download.speed_display(), "999 B/s");
-
-        download.speed_bps = 1_000_000.0;
-        assert_eq!(download.speed_display(), "1.0 MB/s");
-
-        download.speed_bps = 1_000_000_000.0;
-        assert_eq!(download.speed_display(), "1.0 GB/s");
+        download.speed_bps = Some(1_500_000_000.0);
+        assert_eq!(download.speed_display(), "1.50 GB/s");
     }
 
     #[test]
-    fn test_format_duration() {
-        assert_eq!(format_duration(30), "30s");
-        assert_eq!(format_duration(90), "1m 30s");
-        assert_eq!(format_duration(3661), "1h 1m");
-
-        // Edge cases: exact hour boundaries and zero
-        assert_eq!(format_duration(0), "0s");
-        assert_eq!(format_duration(3600), "1h 0m");
-        assert_eq!(format_duration(7200), "2h 0m");
+    fn display_helpers_show_a_placeholder_when_unknown() {
+        let download = QueuedDownload::new("id", "model", "Display", 1, 0);
+        assert_eq!(download.speed_display(), crate::download::format::UNKNOWN);
+        assert_eq!(download.eta_display(), crate::download::format::UNKNOWN);
     }
 
     #[test]
@@ -450,27 +396,23 @@ mod tests {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
         // Call update_progress with downloaded > total
-        download.update_progress(1500, 1000, 100.0);
+        download.update_progress(1500, 1000, Some(100.0), None);
 
         // Progress percent exceeds 100% (no clamping)
+        // Clamped: a bar cannot be more than full, and an overshoot here means
+        // the byte counter is double-counting, not that 150% of the file exists.
         assert!(
-            download.progress_percent > 100.0,
-            "Progress should exceed 100% when downloaded > total"
-        );
-        assert!(
-            (download.progress_percent - 150.0).abs() < 0.01,
-            "Progress should be 150.0%"
+            (download.progress_percent - 100.0).abs() < 0.01,
+            "Progress should clamp to 100.0%"
         );
 
-        // ETA is None because total > downloaded condition is false
         assert!(
             download.eta_seconds.is_none(),
             "ETA should be None when downloaded >= total"
         );
 
-        // Speed and bytes are still updated
         assert_eq!(download.downloaded_bytes, 1500);
-        assert!((download.speed_bps - 100.0).abs() < 0.01);
+        assert!((download.speed_bps.unwrap() - 100.0).abs() < 0.01);
     }
 
     /// Test `update_progress` with zero total bytes (division-by-zero guard).
@@ -480,7 +422,7 @@ mod tests {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
         // Call update_progress with total = 0
-        download.update_progress(500, 0, 100.0);
+        download.update_progress(500, 0, Some(100.0), None);
 
         // Progress percent is 0.0 (the `if total > 0` guard prevents division by zero)
         assert_eq!(
@@ -496,7 +438,7 @@ mod tests {
 
         // Downloaded bytes and speed are still updated
         assert_eq!(download.downloaded_bytes, 500);
-        assert!((download.speed_bps - 100.0).abs() < 0.01);
+        assert!((download.speed_bps.unwrap() - 100.0).abs() < 0.01);
     }
 
     /// Test `update_progress` with zero speed (division-by-zero guard for ETA).
@@ -506,20 +448,20 @@ mod tests {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
         // Call update_progress with speed = 0.0
-        download.update_progress(500, 1000, 0.0);
+        download.update_progress(500, 1000, Some(0.0), None);
 
         // Progress percent is still calculated correctly (50%)
         assert_eq!(download.progress_percent, 50.0, "Progress should be 50.0%");
 
-        // ETA is None because `speed_bps > 0.0` guard prevents division by zero / infinity
+        // A zero rate means "stalled". The estimator reports no ETA for it,
+        // and the DTO stores that absence rather than inventing a 0.
         assert!(
             download.eta_seconds.is_none(),
             "ETA should be None when speed is 0"
         );
 
-        // Downloaded bytes are updated, speed is 0
         assert_eq!(download.downloaded_bytes, 500);
-        assert_eq!(download.speed_bps, 0.0);
+        assert_eq!(download.speed_bps, Some(0.0));
     }
 
     /// Test `update_progress` when download is complete (downloaded == total).
@@ -529,7 +471,7 @@ mod tests {
         let mut download = QueuedDownload::new("test-id", "test-model", "test-display", 1, 0);
 
         // Call update_progress with downloaded equal to total
-        download.update_progress(1000, 1000, 100.0);
+        download.update_progress(1000, 1000, Some(100.0), None);
 
         // Progress percent should be 100%
         assert_eq!(
@@ -545,7 +487,7 @@ mod tests {
 
         // Downloaded bytes and speed are updated normally
         assert_eq!(download.downloaded_bytes, 1000);
-        assert!((download.speed_bps - 100.0).abs() < 0.01);
+        assert!((download.speed_bps.unwrap() - 100.0).abs() < 0.01);
     }
 
     /// Test `update_progress` with large u64 values — verifies no overflow/panic and results are in the right ballpark despite f64 precision loss.
@@ -558,7 +500,7 @@ mod tests {
         let total: u64 = 100_000_000_000_000;
         let speed_bps: f64 = 1_000_000_000.0; // 1 GB/s
 
-        download.update_progress(downloaded, total, speed_bps);
+        download.update_progress(downloaded, total, Some(speed_bps), Some(50_000.0));
 
         // Progress should be approximately 50% (within tolerance for f64 precision loss)
         assert!(
@@ -567,12 +509,8 @@ mod tests {
             download.progress_percent
         );
 
-        // ETA: remaining bytes / speed = 50 TB / 1 GB/s = 50_000 seconds
-        assert!(
-            download.eta_seconds.is_some(),
-            "ETA should be Some for large values"
-        );
-        let eta = download.eta_seconds.unwrap();
+        // ETA is stored verbatim from the estimator.
+        let eta = download.eta_seconds.expect("ETA should be Some");
         assert!(
             (eta - 50_000.0).abs() < 1.0,
             "ETA should be ~50,000 seconds, got {eta}"
@@ -580,7 +518,7 @@ mod tests {
 
         // Verify downloaded_bytes and speed were updated
         assert_eq!(download.downloaded_bytes, downloaded);
-        assert!((download.speed_bps - speed_bps).abs() < 0.01);
+        assert!((download.speed_bps.unwrap() - speed_bps).abs() < 0.01);
     }
 
     /// Test `FailedDownload` builder pattern — defaults and chained setters.

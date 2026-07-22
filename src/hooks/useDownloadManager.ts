@@ -72,7 +72,11 @@ export interface UseDownloadManagerResult {
   clearQueueSummary: () => void;
 }
 
-const PROGRESS_THROTTLE_MS = 200;
+/**
+ * Progress events arrive already rate-limited by the download manager's 250ms
+ * bridge tick. A second throttle here aliased against that near-equal period
+ * and produced visible stutter, so there is deliberately none.
+ */
 
 interface UseDownloadManagerOptions {
   /**
@@ -164,11 +168,28 @@ function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
       // after bytes are on disk but before the model row is written. Treated
       // as progress so the UI keeps the download card mounted with a clear
       // status label instead of looking frozen at 100%.
+      //
+      // These are merged into the previous view, so the byte counts and
+      // percentage carry over and the bar stays full. The rate and ETA are
+      // explicitly cleared: nothing is transferring during these phases, and a
+      // stale "118 MB/s" would be a lie.
       if (event.status === 'finalizing') {
-        return { status: 'finalizing', id: event.id, message: 'Finalizing…' };
+        return {
+          status: 'finalizing',
+          id: event.id,
+          message: 'Finalizing…',
+          speedBps: undefined,
+          etaSeconds: undefined,
+        };
       }
       if (event.status === 'registering') {
-        return { status: 'registering', id: event.id, message: 'Registering…' };
+        return {
+          status: 'registering',
+          id: event.id,
+          message: 'Registering…',
+          speedBps: undefined,
+          etaSeconds: undefined,
+        };
       }
       return null;
     default:
@@ -210,9 +231,6 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
   const [connectionMode, setConnectionMode] = useState<string>('Initializing...');
   const [error, setError] = useState<string | null>(null);
 
-  const lastProgressUpdateRef = useRef<number>(0);
-  const pendingProgressRef = useRef<DownloadProgressView | null>(null);
-  const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelInFlightRef = useRef<Set<string>>(new Set());
   
   // Ref to access current queue status in event handler without causing re-subscriptions
@@ -236,63 +254,31 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     if (downloadUiStateRef.current.activeId === id) {
       setDownloadUiState({ activeId: null, phase: null });
       setCurrentProgress(null);
-      
-      // Clear any pending throttled progress updates
-      if (throttleTimeoutRef.current) {
-        clearTimeout(throttleTimeoutRef.current);
-        throttleTimeoutRef.current = null;
-      }
-      pendingProgressRef.current = null;
     }
     // Remove from in-flight cancel tracking
     cancelInFlightRef.current.delete(id);
   }, []);
 
-  const throttledSetProgress = useCallback((progressData: DownloadProgressView) => {
-    const now = Date.now();
-    const elapsed = now - lastProgressUpdateRef.current;
-
-    if (progressData.status !== 'progress') {
-      lastProgressUpdateRef.current = now;
-      setCurrentProgress(progressData);
-      pendingProgressRef.current = null;
-      return;
-    }
-
-    if (elapsed >= PROGRESS_THROTTLE_MS) {
-      lastProgressUpdateRef.current = now;
-      setCurrentProgress(progressData);
-      pendingProgressRef.current = null;
-      return;
-    }
-
-    pendingProgressRef.current = progressData;
-    if (!throttleTimeoutRef.current) {
-      throttleTimeoutRef.current = setTimeout(() => {
-        if (pendingProgressRef.current) {
-          lastProgressUpdateRef.current = Date.now();
-          setCurrentProgress(pendingProgressRef.current);
-          pendingProgressRef.current = null;
-        }
-        throttleTimeoutRef.current = null;
-      }, PROGRESS_THROTTLE_MS - elapsed);
-    }
+  /**
+   * Merge an update into the current view rather than replacing it.
+   *
+   * The `finalizing` and `registering` events carry only a status and a
+   * message. Replacing wholesale dropped `percentage`, which flipped the
+   * progress bar from a full determinate bar to an indeterminate shimmer for
+   * the last few seconds of every download.
+   */
+  const applyProgress = useCallback((next: DownloadProgressView) => {
+    setCurrentProgress((prev) =>
+      prev && prev.id === next.id ? { ...prev, ...next } : next
+    );
   }, []);
 
   // Use refs to avoid re-creating event handler and causing subscription loops
-  const throttledSetProgressRef = useRef(throttledSetProgress);
-  throttledSetProgressRef.current = throttledSetProgress;
-  
+  const applyProgressRef = useRef(applyProgress);
+  applyProgressRef.current = applyProgress;
+
   const onCompletedRef = useRef(onCompleted);
   onCompletedRef.current = onCompleted;
-
-  useEffect(() => {
-    return () => {
-      if (throttleTimeoutRef.current) {
-        clearTimeout(throttleTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const refreshQueue = useCallback(async () => {
     try {
@@ -342,7 +328,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
 
       const progress = eventToProgress(event);
       if (progress) {
-        throttledSetProgressRef.current(progress);
+        applyProgressRef.current(progress);
 
         // Ensure activeId is set for any progress event (prevents snapshot lag issues)
         if (downloadUiStateRef.current.activeId !== progress.id && 

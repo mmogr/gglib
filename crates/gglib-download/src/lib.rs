@@ -17,7 +17,9 @@ pub(crate) mod progress;
 pub(crate) mod queue;
 mod resolver;
 
-// Re-export progress throttle for consumers (adapters)
+// Re-export the progress throttle for consumers (adapters). Used by the Tauri
+// llama.cpp installer, whose progress callback is driven by raw HTTP chunks
+// rather than a fixed tick and so needs its own emission rate limit.
 pub use progress::ProgressThrottle;
 
 // Re-export queue types needed by consumers

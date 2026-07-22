@@ -142,36 +142,70 @@ async fn is_stale(last_real: &Arc<Mutex<Instant>>) -> bool {
 /// Sum the on-disk sizes of every existing target.
 ///
 /// Each target may be either a file or a directory:
-/// * **File** — its length is added directly. Missing files contribute zero
-///   (they may simply not have been created yet).
-/// * **Directory** — every regular file beneath it is summed recursively.
-///   This is required for the hf-xet path because `huggingface_hub` writes
-///   bytes to `<dest>/.cache/huggingface/download/<filename>.incomplete`
-///   while the transfer is in flight and only renames to `<dest>/<filename>`
-///   on completion. Stat'ing the final path alone would report 0 B for the
-///   entire transfer.
+/// * **File** — its length is added directly, and its in-flight temp file is
+///   then skipped (see below). Missing files contribute zero; they may simply
+///   not have been created yet.
+/// * **Directory** — treated as a cache root and walked for the in-flight temp
+///   files belonging to *this job's* targets only.
+///
+/// The directory case exists because `huggingface_hub` writes bytes to
+/// `<dest>/.cache/huggingface/download/<filename>.incomplete` while the
+/// transfer is in flight, renaming to `<dest>/<filename>` only on completion.
+/// Stat'ing the final path alone would report 0 B for the entire transfer.
+///
+/// # Why the walk is filtered
+///
+/// Every shard of a model shares one destination directory, so a naive
+/// recursive sum of `.cache` counts bytes that are not part of the current
+/// job: temp files left behind by a cancelled attempt, and — in the window
+/// after a rename — a completed file counted once at its final path and again
+/// under `.cache`. Both inflate `downloaded`, which drives the percentage past
+/// 100% and hands the rate estimator a phantom burst. Only `<target>.incomplete`
+/// entries for targets whose final file does not yet exist are counted.
 async fn sum_sizes(targets: &[PathBuf]) -> u64 {
+    // Temp files we still care about: one per target that has not landed yet.
+    let mut wanted: Vec<String> = Vec::new();
     let mut total: u64 = 0;
+
+    for path in targets {
+        match tokio::fs::metadata(path).await {
+            Ok(metadata) if metadata.is_file() => {
+                // Landed. Count it, and stop counting its temp file.
+                total = total.saturating_add(metadata.len());
+            }
+            Ok(metadata) if metadata.is_dir() => {}
+            _ => {
+                // Not yet on disk — its `.incomplete` is the live byte count.
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    wanted.push(format!("{name}.incomplete"));
+                }
+            }
+        }
+    }
+
     for path in targets {
         let Ok(metadata) = tokio::fs::metadata(path).await else {
             continue;
         };
-        if metadata.is_file() {
-            total = total.saturating_add(metadata.len());
-        } else if metadata.is_dir() {
-            total = total.saturating_add(sum_dir_size(path).await);
+        if metadata.is_dir() {
+            total = total.saturating_add(sum_incomplete(path, &wanted).await);
         }
     }
+
     total
 }
 
-/// Recursively sum the sizes of every regular file under `dir`.
+/// Recursively sum the sizes of in-flight temp files under `dir`.
 ///
-/// Symlinks are followed for size accounting only when the entry's metadata
-/// reports `is_file()` (i.e. the symlink points at a regular file). Errors
-/// reading individual entries are silently treated as zero so a transient
-/// `EACCES` or a vanishing temp file doesn't poison the running total.
-async fn sum_dir_size(dir: &Path) -> u64 {
+/// Only entries whose filename appears in `wanted` are counted; everything else
+/// beneath the cache root belongs to another job, another shard, or a previous
+/// cancelled attempt. Errors reading individual entries are treated as zero so
+/// a transient `EACCES` or a vanishing temp file doesn't poison the total.
+async fn sum_incomplete(dir: &Path, wanted: &[String]) -> u64 {
+    if wanted.is_empty() {
+        return 0;
+    }
+
     let mut total: u64 = 0;
     let mut stack: Vec<PathBuf> = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
@@ -182,10 +216,19 @@ async fn sum_dir_size(dir: &Path) -> u64 {
             let Ok(metadata) = entry.metadata().await else {
                 continue;
             };
-            if metadata.is_file() {
-                total = total.saturating_add(metadata.len());
-            } else if metadata.is_dir() {
+            if metadata.is_dir() {
                 stack.push(entry.path());
+                continue;
+            }
+            if !metadata.is_file() {
+                continue;
+            }
+            let matches = entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| wanted.iter().any(|w| w == name));
+            if matches {
+                total = total.saturating_add(metadata.len());
             }
         }
     }
@@ -299,26 +342,26 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn walks_directory_targets_recursively() {
-        // Mirrors the real hf-xet layout: bytes live under
+    async fn counts_in_flight_temp_files_under_the_cache_root() {
+        // Mirrors the real hf-xet layout and the real target list: the final
+        // file paths plus the `.cache` root. Bytes live under
         // `<dest>/.cache/huggingface/download/<file>.incomplete` while the
-        // transfer is in flight, and only the directory itself exists at
-        // the spawned target path.
+        // transfer is in flight and are renamed into place on completion.
         let dir = tempfile::tempdir().unwrap();
         let cache = dir.path().join(".cache/huggingface/download");
         tokio::fs::create_dir_all(&cache).await.unwrap();
         let temp_file = cache.join("model.gguf.incomplete");
         tokio::fs::write(&temp_file, vec![0u8; 4096]).await.unwrap();
 
+        let targets = vec![dir.path().join("model.gguf"), dir.path().join(".cache")];
         let (cb, log) = recording_callback();
-        let poller = XetPoller::spawn(vec![dir.path().to_path_buf()], Some(8192), cb);
+        let poller = XetPoller::spawn(targets, Some(8192), cb);
 
         // Wait past the staleness threshold so synthetic events kick in.
         tokio::time::sleep(STALE_AFTER + Duration::from_millis(50)).await;
 
-        // Grow the in-flight temp file; the poller should observe the
-        // change via the recursive walk even though the final path
-        // (`<dest>/model.gguf`) doesn't exist yet.
+        // Grow the in-flight temp file; the poller should observe the change
+        // even though the final path (`<dest>/model.gguf`) doesn't exist yet.
         let mut f = tokio::fs::OpenOptions::new()
             .append(true)
             .open(&temp_file)
@@ -336,6 +379,55 @@ mod tests {
         assert!(
             entries.iter().any(|(d, t)| *d == 6144 && *t == 8192),
             "expected synthetic event with downloaded=6144 total=8192, got {entries:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn does_not_double_count_a_file_that_has_landed() {
+        // The window after the rename: the final file exists and a stale temp
+        // file of the same name is still under `.cache`. Counting both reported
+        // 200% and handed the rate estimator a phantom burst.
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join(".cache/huggingface/download");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        tokio::fs::write(cache.join("model.gguf.incomplete"), vec![0u8; 4096])
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("model.gguf"), vec![0u8; 4096])
+            .await
+            .unwrap();
+
+        let targets = vec![dir.path().join("model.gguf"), dir.path().join(".cache")];
+        assert_eq!(
+            sum_sizes(&targets).await,
+            4096,
+            "a landed file must be counted once, not once per copy on disk"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ignores_temp_files_belonging_to_other_shards() {
+        // Every shard of a model shares one destination directory, so `.cache`
+        // routinely holds leftovers from a cancelled attempt at a different
+        // shard. Those bytes are not this job's progress.
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join(".cache/huggingface/download");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        tokio::fs::write(cache.join("shard-00001.gguf.incomplete"), vec![0u8; 1024])
+            .await
+            .unwrap();
+        tokio::fs::write(cache.join("shard-00002.gguf.incomplete"), vec![0u8; 8192])
+            .await
+            .unwrap();
+
+        let targets = vec![
+            dir.path().join("shard-00002.gguf"),
+            dir.path().join(".cache"),
+        ];
+        assert_eq!(
+            sum_sizes(&targets).await,
+            8192,
+            "only the current job's in-flight file counts"
         );
     }
 }

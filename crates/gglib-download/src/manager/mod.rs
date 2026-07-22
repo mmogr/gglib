@@ -18,7 +18,8 @@ use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, ShardInfo,
+    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, RateEstimator,
+    ShardInfo,
 };
 use gglib_core::ports::{
     DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
@@ -35,8 +36,11 @@ use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 pub use paths::DownloadDestination;
 pub use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
-/// EWA smoothing factor for speed calculation (2% of instant speed, 98% of previous).
-const EWA_SMOOTHING: f64 = 0.02;
+/// How often the progress bridge samples the worker and emits an event.
+///
+/// Speed and ETA smoothing live in [`RateEstimator`], not here; this is purely
+/// the display cadence. The GUI does not re-throttle on top of it.
+const PROGRESS_TICK: Duration = Duration::from_millis(250);
 
 /// Lease ID for tracking active downloads.
 ///
@@ -267,6 +271,12 @@ pub struct DownloadManagerImpl {
     prev_is_drained: Mutex<bool>,
     /// File entries with OIDs for each download (keyed by download ID).
     file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
+    /// Rate estimators, keyed by shard group (or by download ID when unsharded).
+    ///
+    /// Keyed by *group* rather than job so the estimate survives shard
+    /// boundaries. A per-job estimator restarted from zero on every shard,
+    /// which on a five-shard model meant five ramp-ups from a cold average.
+    rate_estimators: Mutex<HashMap<String, Arc<Mutex<RateEstimator>>>>,
 }
 
 impl DownloadManagerImpl {
@@ -307,7 +317,38 @@ impl DownloadManagerImpl {
             current_run: Mutex::new(None),
             prev_is_drained: Mutex::new(true), // Start in drained state
             file_entries_map: Mutex::new(HashMap::new()),
+            rate_estimators: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Get (or create) the rate estimator covering this item's transfer.
+    ///
+    /// Sharded downloads share one estimator across the whole group so the
+    /// reported speed is continuous from the first shard to the last.
+    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<RateEstimator>> {
+        let key = item
+            .group_id
+            .as_ref()
+            .map_or_else(|| item.id.to_string(), ToString::to_string);
+
+        Arc::clone(
+            self.rate_estimators
+                .lock()
+                .await
+                .entry(key)
+                .or_insert_with(|| {
+                    Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now())))
+                }),
+        )
+    }
+
+    /// Drop the estimator for a finished transfer.
+    async fn release_rate_estimator(&self, item: &QueuedItem) {
+        let key = item
+            .group_id
+            .as_ref()
+            .map_or_else(|| item.id.to_string(), ToString::to_string);
+        self.rate_estimators.lock().await.remove(&key);
     }
 
     /// Record a completion in the current queue run (if active).
@@ -388,12 +429,17 @@ impl DownloadManagerImpl {
         loop {
             // Try to get the next job
             if let Some((lease, item, cancel, progress_tx)) = self.next_job().await {
-                // Spawn progress bridge task
+                // Spawn progress bridge task, sharing the shard group's
+                // estimator so the reported speed does not restart per shard.
+                let estimator = self.rate_estimator_for(&item).await;
+                let bridge_finished = CancellationToken::new();
                 let bridge_handle = self.spawn_progress_bridge(
                     &item.id,
                     item.shard_info.as_ref(),
                     progress_tx.subscribe(),
                     cancel.clone(),
+                    estimator,
+                    bridge_finished.clone(),
                 );
 
                 // Create worker deps and job
@@ -443,12 +489,17 @@ impl DownloadManagerImpl {
                     primary_file_path.as_ref(),
                 );
 
-                // Drop the cloned sender so the bridge sees all senders
-                // dropped and can emit its final progress event.
                 drop(progress_tx_clone);
 
-                // Wait for bridge to finish (it will exit when sender is dropped)
-                drop(bridge_handle);
+                // Tell the bridge the worker is done, then actually join it.
+                // Dropping the JoinHandle only detaches the task, which let its
+                // final progress event race the terminal event emitted below.
+                //
+                // The signal is explicit rather than "wait for the senders to
+                // drop": the active-jobs map holds a `progress_tx` clone until
+                // `finalize_job` removes it, and that runs after this join.
+                bridge_finished.cancel();
+                let _ = bridge_handle.await;
 
                 // Finalize the job with item context for shard tracking
                 self.finalize_job(&item, lease, result).await;
@@ -627,6 +678,14 @@ impl DownloadManagerImpl {
 
         // Step 3 — now safe to remove from active map and notify watchers.
         self.remove_from_active(&item.id).await;
+
+        // A sharded download keeps its estimator until the whole group is
+        // done; the drain transition sweeps those. An unsharded one is finished
+        // here and there is nothing left to measure.
+        if item.group_id.is_none() {
+            self.release_rate_estimator(item).await;
+        }
+
         self.emit_queue_snapshot().await;
     }
 
@@ -918,116 +977,27 @@ impl DownloadManagerImpl {
     }
 
     /// Spawn a progress bridge task that rate-limits event emission.
+    ///
+    /// See [`run_progress_bridge`] for the behaviour; this only supplies the
+    /// manager's event emitter.
     fn spawn_progress_bridge(
         &self,
         id: &DownloadId,
         shard_info: Option<&ShardInfo>,
-        mut rx: watch::Receiver<ProgressUpdate>,
+        rx: watch::Receiver<ProgressUpdate>,
         cancel: CancellationToken,
+        estimator: Arc<Mutex<RateEstimator>>,
+        finished: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
-        let event_emitter = Arc::clone(&self.event_emitter);
-        let id_str = id.to_string();
-        let shard_info = shard_info.cloned();
-
-        tokio::spawn(async move {
-            use std::time::Instant;
-
-            let mut tick = interval(Duration::from_millis(250));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            let mut last_emitted = ProgressUpdate::default();
-            let mut last_bytes = 0u64;
-            let mut last_time = Instant::now();
-            let mut ewa_speed = 0.0f64;
-            let mut first_update = true;
-
-            loop {
-                tokio::select! {
-                    biased;
-
-                    () = cancel.cancelled() => {
-                        // Don't emit progress on cancel - let DownloadCancelled event be final
-                        break;
-                    }
-
-                    result = rx.changed() => {
-                        if result.is_err() {
-                            // Sender dropped (job finished), emit final and exit
-                            let final_progress = rx.borrow().clone();
-                            if final_progress.seq > last_emitted.seq {
-                                let now = Instant::now();
-                                let (speed, eta) = calculate_speed_eta(
-                                    final_progress.downloaded,
-                                    final_progress.total,
-                                    last_bytes,
-                                    last_time,
-                                    now,
-                                    ewa_speed,
-                                    first_update,
-                                );
-                                emit_progress(
-                                    &event_emitter,
-                                    &id_str,
-                                    shard_info.as_ref(),
-                                    &final_progress,
-                                    speed,
-                                    eta,
-                                );
-                            }
-                            break;
-                        }
-                        // Progress changed, will be picked up on next tick
-                    }
-
-                    _ = tick.tick() => {
-                        let current = rx.borrow().clone();
-                        if current.seq > last_emitted.seq {
-                            let now = Instant::now();
-                            let elapsed = now.duration_since(last_time).as_secs_f64();
-
-                            if elapsed > 0.0 {
-                                let bytes_delta = current.downloaded.saturating_sub(last_bytes);
-                                #[allow(clippy::cast_precision_loss)]
-                                let instant_speed = bytes_delta as f64 / elapsed;
-
-                                // Update EWA speed
-                                if first_update {
-                                    ewa_speed = instant_speed;
-                                    first_update = false;
-                                } else {
-                                    ewa_speed = EWA_SMOOTHING.mul_add(
-                                        instant_speed,
-                                        (1.0 - EWA_SMOOTHING) * ewa_speed
-                                    );
-                                }
-
-                                last_bytes = current.downloaded;
-                                last_time = now;
-                            }
-
-                            // Calculate ETA
-                            #[allow(clippy::cast_precision_loss)]
-                            let eta = if ewa_speed > 0.0 && current.downloaded < current.total {
-                                let remaining = current.total.saturating_sub(current.downloaded);
-                                remaining as f64 / ewa_speed
-                            } else {
-                                0.0
-                            };
-
-                            emit_progress(
-                                &event_emitter,
-                                &id_str,
-                                shard_info.as_ref(),
-                                &current,
-                                ewa_speed,
-                                eta,
-                            );
-                            last_emitted = current;
-                        }
-                    }
-                }
-            }
-        })
+        let bridge = ProgressBridge {
+            event_emitter: Arc::clone(&self.event_emitter),
+            id: id.to_string(),
+            shard_info: shard_info.cloned(),
+            estimator,
+            cancel,
+            finished,
+        };
+        tokio::spawn(run_progress_bridge(bridge, rx))
     }
 
     /// Extract files from a queued item.
@@ -1088,6 +1058,9 @@ impl DownloadManagerImpl {
             self.start_new_queue_run().await;
         } else if !was_drained && is_drained {
             self.finalize_queue_run().await;
+            // Nothing is in flight, so no estimator is in use. This is the
+            // sweep for shard groups, which outlive their individual jobs.
+            self.rate_estimators.lock().await.clear();
         }
 
         *prev = is_drained;
@@ -1253,41 +1226,146 @@ impl DownloadManagerImpl {
     }
 }
 
-/// Helper to calculate speed and ETA from progress deltas.
-fn calculate_speed_eta(
-    downloaded: u64,
-    total: u64,
-    last_bytes: u64,
-    last_time: std::time::Instant,
-    now: std::time::Instant,
-    ewa_speed: f64,
-    first_update: bool,
-) -> (f64, f64) {
-    let elapsed = now.duration_since(last_time).as_secs_f64();
+/// Everything the progress bridge needs, independent of the manager.
+struct ProgressBridge {
+    event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    /// Canonical download ID, as it appears on emitted events.
+    id: String,
+    shard_info: Option<ShardInfo>,
+    /// Shared with the rest of the shard group.
+    estimator: Arc<Mutex<RateEstimator>>,
+    /// User cancellation: stop without emitting further progress.
+    cancel: CancellationToken,
+    /// Worker finished: emit a final progress event, then stop.
+    finished: CancellationToken,
+}
 
-    if elapsed <= 0.0 {
-        return (ewa_speed, 0.0);
+/// Translate worker progress into rate-limited download events.
+///
+/// Samples the worker's `watch` channel on a fixed tick and feeds every sample
+/// — including ticks where the byte count has not moved — into the shared
+/// [`RateEstimator`]. Those idle samples are what let a stalled transfer decay
+/// toward zero instead of freezing the displayed speed while the ETA counts
+/// down against nothing. Events are emitted on every tick for the same reason.
+///
+/// The estimator belongs to the shard *group*, not the job, so it survives
+/// shard boundaries. Each shard's byte counter restarts at zero; the estimator
+/// re-baselines on that without disturbing its running average.
+///
+/// Termination is driven by `finished`, never by the `watch` senders dropping.
+/// The active-jobs map holds a `progress_tx` clone that is released only during
+/// finalization, which the run loop performs *after* joining this task — so
+/// waiting for sender-drop would deadlock the download runner on its first job.
+async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<ProgressUpdate>) {
+    let ProgressBridge {
+        event_emitter,
+        id,
+        shard_info,
+        estimator,
+        cancel,
+        finished,
+    } = bridge;
+
+    let mut tick = interval(PROGRESS_TICK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut last_emitted = ProgressUpdate::default();
+
+    loop {
+        tokio::select! {
+            biased;
+
+            () = cancel.cancelled() => {
+                // Don't emit progress on cancel — DownloadCancelled is final.
+                break;
+            }
+
+            () = finished.cancelled() => {
+                // Emit the last sample so the bar lands on its true final
+                // position, then exit.
+                let final_progress = rx.borrow().clone();
+                if final_progress.seq > last_emitted.seq {
+                    let (speed, eta) =
+                        sample(&estimator, shard_info.as_ref(), &final_progress).await;
+                    emit_progress(
+                        &event_emitter,
+                        &id,
+                        shard_info.as_ref(),
+                        &final_progress,
+                        speed,
+                        eta,
+                    );
+                }
+                break;
+            }
+
+            _ = tick.tick() => {
+                let current = rx.borrow().clone();
+
+                // Sample unconditionally — a tick carrying no new bytes is a
+                // real observation of "nothing arrived".
+                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current).await;
+
+                // Nothing has been reported yet: no bar to update.
+                if current.seq > 0 {
+                    emit_progress(
+                        &event_emitter,
+                        &id,
+                        shard_info.as_ref(),
+                        &current,
+                        speed,
+                        eta,
+                    );
+                    last_emitted = current;
+                }
+            }
+        }
+    }
+}
+
+/// Feed one observation to the group's estimator and read back its verdict.
+///
+/// The estimator is fed *aggregate* bytes so that it measures the whole shard
+/// group as one continuous transfer; per-shard counters restart at zero and
+/// would otherwise look like the download going backwards.
+async fn sample(
+    estimator: &Arc<Mutex<RateEstimator>>,
+    shard_info: Option<&ShardInfo>,
+    progress: &ProgressUpdate,
+) -> (Option<f64>, Option<f64>) {
+    let (downloaded, total) = shard_info.map_or((progress.downloaded, progress.total), |shard| {
+        aggregate_progress(shard, progress.downloaded, progress.total)
+    });
+
+    let mut estimator = estimator.lock().await;
+    estimator.record(downloaded, total, std::time::Instant::now());
+    (estimator.rate_bps(), estimator.eta_seconds())
+}
+
+/// Aggregate progress across a whole shard group.
+///
+/// Prefers the exact byte layout recorded on [`ShardInfo`] when `HuggingFace`
+/// supplied a size for every shard. Falls back to assuming equal-sized shards,
+/// which is close but not exact — real GGUF shard sets end with a smaller final
+/// shard, so the fallback percentage steps at each boundary.
+fn aggregate_progress(shard: &ShardInfo, downloaded: u64, shard_total: u64) -> (u64, u64) {
+    if let Some(exact) = shard.aggregate(downloaded) {
+        return exact;
     }
 
-    let bytes_delta = downloaded.saturating_sub(last_bytes);
-    #[allow(clippy::cast_precision_loss)]
-    let instant_speed = bytes_delta as f64 / elapsed;
-
-    let speed = if first_update {
-        instant_speed
-    } else {
-        EWA_SMOOTHING.mul_add(instant_speed, (1.0 - EWA_SMOOTHING) * ewa_speed)
-    };
-
-    #[allow(clippy::cast_precision_loss)]
-    let eta = if speed > 0.0 && downloaded < total {
-        let remaining = total.saturating_sub(downloaded);
-        remaining as f64 / speed
-    } else {
-        0.0
-    };
-
-    (speed, eta)
+    shard.file_size.map_or_else(
+        // No size info at all: report this shard's own progress and scale the
+        // total by the shard count, so the UI at least shows a moving bar and
+        // the correct shard index.
+        || (downloaded, shard_total * u64::from(shard.total_shards)),
+        |shard_size| {
+            let completed = u64::from(shard.shard_index) * shard_size;
+            (
+                completed.saturating_add(downloaded),
+                shard_size * u64::from(shard.total_shards),
+            )
+        },
+    )
 }
 
 /// Emit a progress event.
@@ -1298,31 +1376,12 @@ fn emit_progress(
     id: &str,
     shard_info: Option<&ShardInfo>,
     progress: &ProgressUpdate,
-    speed_bps: f64,
-    _eta_seconds: f64,
+    speed_bps: Option<f64>,
+    eta_seconds: Option<f64>,
 ) {
     if let Some(shard) = shard_info {
-        // Calculate aggregate totals across all shards
-        // For sequential shard downloads: completed shards + current shard progress
-        let (aggregate_downloaded, aggregate_total) = shard.file_size.map_or_else(
-            || {
-                // No size info: use current shard progress as approximation
-                // This will make aggregate == shard progress, but at least UI will show shard index
-                (
-                    progress.downloaded,
-                    progress.total * u64::from(shard.total_shards),
-                )
-            },
-            |shard_size| {
-                // We have size info: calculate proper aggregates
-                // Sum of all completed shards + current progress
-                let completed_bytes = u64::from(shard.shard_index) * shard_size;
-                let aggregate_downloaded = completed_bytes + progress.downloaded;
-                // Total = size per shard * number of shards (assumes equal-sized shards)
-                let aggregate_total = shard_size * u64::from(shard.total_shards);
-                (aggregate_downloaded, aggregate_total)
-            },
-        );
+        let (aggregate_downloaded, aggregate_total) =
+            aggregate_progress(shard, progress.downloaded, progress.total);
 
         emitter.emit(DownloadEvent::shard_progress(
             id,
@@ -1334,6 +1393,7 @@ fn emit_progress(
             aggregate_downloaded,
             aggregate_total,
             speed_bps,
+            eta_seconds,
         ));
     } else {
         // Non-sharded download: emit regular progress
@@ -1342,6 +1402,7 @@ fn emit_progress(
             progress.downloaded,
             progress.total,
             speed_bps,
+            eta_seconds,
         ));
     }
 }
@@ -1788,5 +1849,113 @@ mod tests {
         let p2 = ProgressUpdate::new(200, 1000, 2);
 
         assert!(p2.seq > p1.seq);
+    }
+
+    /// Build a shard with exact group offsets, as `create_shard_items` does.
+    fn shard_with_offsets(index: u32, preceding: u64, group_total: u64, size: u64) -> ShardInfo {
+        ShardInfo::with_size(index, 3, format!("shard-{index}.gguf"), size)
+            .with_group_offsets(preceding, group_total)
+    }
+
+    #[test]
+    fn exact_offsets_make_aggregate_progress_continuous_across_shards() {
+        // A realistic set: two full shards and a smaller tail.
+        let (a, b, c) = (4_000, 4_000, 1_500);
+        let group_total = a + b + c;
+
+        // End of shard 0 and start of shard 1 must agree.
+        let end_of_first = aggregate_progress(&shard_with_offsets(0, 0, group_total, a), a, a);
+        let start_of_second = aggregate_progress(&shard_with_offsets(1, a, group_total, b), 0, b);
+
+        assert_eq!(
+            end_of_first, start_of_second,
+            "aggregate progress must not jump at a shard boundary"
+        );
+        assert_eq!(end_of_first, (4_000, 9_500));
+    }
+
+    #[test]
+    fn exact_offsets_reach_exactly_one_hundred_percent() {
+        // The equal-shard-size estimate reported 3 * 4000 = 12000 as the group
+        // total, so a complete download of 9500 bytes stalled the bar at 79%.
+        let (a, b, c) = (4_000u64, 4_000u64, 1_500u64);
+        let group_total = a + b + c;
+
+        let (downloaded, total) =
+            aggregate_progress(&shard_with_offsets(2, a + b, group_total, c), c, c);
+
+        assert_eq!((downloaded, total), (group_total, group_total));
+    }
+
+    #[test]
+    fn falls_back_to_equal_sizes_when_offsets_are_unknown() {
+        // HuggingFace did not report every shard size; the estimate is the best
+        // available and must at least stay self-consistent.
+        let shard = ShardInfo::with_size(1, 3, "shard-1.gguf", 4_000);
+        assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (6_000, 12_000));
+    }
+
+    #[test]
+    fn falls_back_to_shard_progress_when_no_size_is_known() {
+        let shard = ShardInfo::new(1, 3, "shard-1.gguf");
+        assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (2_000, 12_000));
+    }
+
+    fn test_bridge(cancel: CancellationToken, finished: CancellationToken) -> ProgressBridge {
+        ProgressBridge {
+            event_emitter: Arc::new(gglib_core::ports::NoopDownloadEmitter::new()),
+            id: "owner/repo:Q4_K_M".to_string(),
+            shard_info: None,
+            estimator: Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now()))),
+            cancel,
+            finished,
+        }
+    }
+
+    /// The bridge must exit on its `finished` signal alone.
+    ///
+    /// It cannot wait for every `progress_tx` to drop: the active-jobs map
+    /// holds a clone released only during finalization, which the run loop
+    /// performs *after* joining this task. Waiting on sender-drop deadlocks the
+    /// download runner on its first job.
+    #[tokio::test]
+    async fn progress_bridge_exits_while_a_sender_is_still_alive() {
+        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
+        let finished = CancellationToken::new();
+        let bridge = test_bridge(CancellationToken::new(), finished.clone());
+        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
+
+        finished.cancel();
+
+        // `progress_tx` is deliberately still alive here, standing in for the
+        // clone the active-jobs map holds.
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        assert!(
+            joined.is_ok(),
+            "bridge must exit on the finished signal even with a live sender"
+        );
+    }
+
+    #[tokio::test]
+    async fn progress_bridge_exits_on_cancellation() {
+        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
+        let cancel = CancellationToken::new();
+        let bridge = test_bridge(cancel.clone(), CancellationToken::new());
+        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
+
+        cancel.cancel();
+
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        assert!(joined.is_ok(), "bridge must exit when the job is cancelled");
+    }
+
+    #[test]
+    fn aggregate_never_exceeds_the_group_total() {
+        // The stat poller can transiently over-report (a file counted at both
+        // its final path and under `.cache`). Clamping keeps the percentage
+        // sane and stops the estimator seeing a phantom burst.
+        let shard = shard_with_offsets(2, 8_000, 9_500, 1_500);
+        let (downloaded, total) = aggregate_progress(&shard, 5_000, 1_500);
+        assert_eq!(downloaded, total, "must clamp to the group total");
     }
 }
