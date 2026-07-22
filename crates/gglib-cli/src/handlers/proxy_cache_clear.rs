@@ -26,7 +26,16 @@ pub async fn execute(host: &str, port: u16, session_id: Option<&str>) -> Result<
 
     match status.as_u16() {
         200 => {
-            println!("Cache cleared: {}", body.unwrap_or_default());
+            // Prefer the human-readable summary; fall back to the raw body if
+            // the response shape is ever something we don't recognise.
+            let summary = body
+                .as_deref()
+                .and_then(|b| serde_json::from_str::<serde_json::Value>(b).ok())
+                .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(str::to_owned));
+            match summary {
+                Some(msg) => println!("Cache cleared: {msg}"),
+                None => println!("Cache cleared: {}", body.unwrap_or_default()),
+            }
             Ok(())
         }
         400 => {

@@ -183,7 +183,12 @@ pub fn spawn_and_return(
                 .await;
                 // Feed the terminal outcome to the watchdog: an empty
                 // response is a strike, visible output resets the streak.
-                upstream_health.record_stream_outcome(outcome.saw_output);
+                //
+                // Deliberately `saw_visible_output`, not "produced any frame":
+                // a reasoning-only turn is a failed turn from the client's
+                // point of view, and counting it as success reset this streak
+                // on every retry, so the recycle watchdog never fired.
+                upstream_health.record_stream_outcome(outcome.saw_visible_output);
                 // Calibrate this model's chars-per-token ratio from the
                 // real prompt-token count the upstream reported.
                 if let Some(prompt_tokens) = outcome.prompt_tokens {

@@ -283,6 +283,7 @@ async fn spawn_proxy_with_cache_for_model(
             fixtures::common::make_orchestrator_deps(),
             cancel_clone,
             Arc::new(fixtures::common::MockSettingsRepo),
+            None, // inference_override
             true, // cache_enabled
             Some(slot_dir),
             gglib_proxy::slot_eviction::DiskBudget::Auto,

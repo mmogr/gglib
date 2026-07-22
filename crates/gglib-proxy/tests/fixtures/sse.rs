@@ -26,6 +26,17 @@ data: {\"id\":\"u-2\",\"object\":\"chat.completion.chunk\",\"created\":172900000
 data: {\"id\":\"u-2\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n";
 
+/// Reasoning model that never leaves the thinking channel: `reasoning_content`
+/// only, `finish_reason: "stop"`, and no `content` at all.  This is what a
+/// model that fails to close its `<think>` block looks like on the wire, and it
+/// renders as an empty response in clients that collapse reasoning.  The proxy
+/// must promote the stranded text into the content channel.
+pub const REASONING_ONLY: &[u8] = b"\
+data: {\"id\":\"u-9\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"The answer \"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-9\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"is 42.\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-9\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n";
+
 /// Qwen-family model emitting an XML-wrapped tool call inside the text
 /// channel.  With `format:qwen-xml` tags the pipeline must rewrite this into
 /// strict OpenAI `tool_calls` deltas — the external client should never see

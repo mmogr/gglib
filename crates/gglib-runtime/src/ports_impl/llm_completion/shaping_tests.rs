@@ -129,9 +129,33 @@ fn per_model_inference_defaults_reach_the_body() {
 }
 
 /// The caller's own parameters are the top layer: they beat the model's
-/// stored defaults, and the model still fills in what they left unset.
+/// stored defaults, and the model still fills in the untuned ones they left
+/// unset.
 #[test]
 fn caller_sampling_beats_model_defaults_without_erasing_them() {
+    let ctx = ModelContext {
+        inference_defaults: Some(InferenceConfig {
+            temperature: Some(0.42),
+            top_p: Some(0.87),
+            ..Default::default()
+        }),
+        ..ModelContext::passthrough()
+    };
+    let caller = InferenceConfig {
+        temperature: Some(0.11),
+        ..Default::default()
+    };
+    let body = body_of(&adapter(ctx, Some(caller)), &[user("hi")]);
+
+    assert!((body["temperature"].as_f64().unwrap() - 0.11).abs() < 1e-6);
+    assert!((body["top_p"].as_f64().unwrap() - 0.87).abs() < 1e-6);
+}
+
+/// The agent path resolves through the same ladder as the proxy, so #621's
+/// coupling holds here too: a caller-supplied temperature must not drag along
+/// the model's `presence_penalty`, which was tuned for a different one.
+#[test]
+fn caller_temperature_does_not_inherit_model_penalties() {
     let ctx = ModelContext {
         inference_defaults: Some(InferenceConfig {
             temperature: Some(0.42),
@@ -147,7 +171,7 @@ fn caller_sampling_beats_model_defaults_without_erasing_them() {
     let body = body_of(&adapter(ctx, Some(caller)), &[user("hi")]);
 
     assert!((body["temperature"].as_f64().unwrap() - 0.11).abs() < 1e-6);
-    assert!((body["presence_penalty"].as_f64().unwrap() - 1.5).abs() < 1e-6);
+    assert!((body["presence_penalty"].as_f64().unwrap() - 0.0).abs() < 1e-6);
 }
 
 /// Pinned here for the same reason it is pinned in the proxy: the agent path

@@ -79,6 +79,9 @@ pub(crate) struct AppState {
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
     calibration: Arc<TokenCalibration>,
+    /// Operator overrides from the command line, applied above the client's
+    /// own request parameters when resolving sampling.
+    inference_override: Option<gglib_core::domain::InferenceConfig>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
     cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
@@ -132,6 +135,9 @@ pub async fn serve(
     council: CouncilDeps,
     cancel: CancellationToken,
     settings_repo: Arc<dyn SettingsRepository>,
+    // Operator overrides from this process's command line, applied above the
+    // client's own request parameters. See `SamplingLayers::cli_override`.
+    inference_override: Option<gglib_core::domain::InferenceConfig>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
     disk_budget: crate::slot_eviction::DiskBudget,
@@ -233,6 +239,7 @@ pub async fn serve(
         settings: Arc::new(SettingsCache::new(settings_repo)),
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
+        inference_override,
         cache_enabled,
         slot_dir,
         slot_gate,
@@ -430,23 +437,24 @@ async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoR
 
 /// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
 ///
-/// Optionally accepts `X-Gglib-Session-Id` header to clear a single session;
-/// without it, all slot files are cleared. Returns 200 OK with status JSON.
+/// Two independent caches sit behind this endpoint:
+///
+/// * the **disk slot** layer, opt-in via `--cache`, cleared per-session with
+///   `X-Gglib-Session-Id` or wholesale without it;
+/// * llama-server's **host-RAM prompt cache** (`--cache-ram`), which has no
+///   clear API of its own — recycling the process is the only way to drop it.
+///
+/// A global clear therefore also recycles the model. Without that, the common
+/// configuration (RAM cache on, disk layer off) had no way to clear the only
+/// cache it actually had: the endpoint reported `cache not enabled` and did
+/// nothing, which is the least useful answer available.
+///
+/// A session-scoped clear is deliberately disk-only. Recycling the process to
+/// service one session would discard every other session's cached prefix too.
 async fn handle_proxy_cache_clear(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    // Cache disabled → skip (idempotent no-op)
-    if !state.cache_enabled {
-        return (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "status": "skipped",
-                "message": "cache not enabled"
-            })),
-        );
-    }
-
     // Extract optional session ID from header
     let session_id = headers
         .get("x-gglib-session-id")
@@ -465,51 +473,73 @@ async fn handle_proxy_cache_clear(
         );
     }
 
-    let slot_dir = match &state.slot_dir {
-        Some(d) => d.clone(),
-        None => {
+    // ── Disk slot layer ───────────────────────────────────────────────────
+    let disk = if state.cache_enabled {
+        let Some(slot_dir) = state.slot_dir.clone() else {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": "slot_dir not configured"
                 })),
             );
+        };
+        let config = StreamConfig {
+            client: state.client.clone(),
+            base_url: String::new(), // Not used by clear_cache
+            slot_dir,
+            model_id: 0, // Sentinel — clear_cache only uses flags and hot-cache invalidation
+            clear_all_pending: state.clear_all_pending.clone(),
+            per_session_cleared: state.per_session_cleared.clone(),
+            server_start_time: state.server_start_time.clone(),
+            last_loaded_session: state.last_loaded_session.clone(),
+        };
+        match clear_cache(&config, session_id.as_deref()).await {
+            Ok(()) => {
+                if session_id.is_some() {
+                    "session cleared"
+                } else {
+                    "all slots cleared"
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": e.to_string() })),
+                );
+            }
         }
+    } else {
+        "disk cache not enabled"
     };
 
-    let config = StreamConfig {
-        client: state.client.clone(),
-        base_url: String::new(), // Not used by clear_cache
-        slot_dir,
-        model_id: 0, // Sentinel — clear_cache only uses flags and hot-cache invalidation
-        clear_all_pending: state.clear_all_pending.clone(),
-        per_session_cleared: state.per_session_cleared.clone(),
-        server_start_time: state.server_start_time.clone(),
-        last_loaded_session: state.last_loaded_session.clone(),
+    // ── Host-RAM prompt cache ─────────────────────────────────────────────
+    let ram = if session_id.is_some() {
+        "RAM cache kept (session-scoped clear)"
+    } else if state.dashboard.connections.is_empty() {
+        // Gated on idle for the same reason as the watchdog recycle in
+        // `chat_completions`: with `--parallel 1` an in-flight request owns the
+        // only slot, and stop_current() would kill its live generation.
+        info!("cache clear: recycling model to flush the host-RAM prompt cache");
+        match state.runtime_port.stop_current().await {
+            Ok(()) => "model recycled, RAM cache flushed",
+            Err(e) => {
+                warn!(error = %e, "cache clear: model recycle failed");
+                "RAM cache not flushed (recycle failed)"
+            }
+        }
+    } else {
+        "RAM cache not flushed (request in flight; retry when idle)"
     };
 
-    match clear_cache(&config, session_id.as_deref()).await {
-        Ok(()) => {
-            let msg = if session_id.is_some() {
-                "session cleared"
-            } else {
-                "all slots cleared"
-            };
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "ok",
-                    "message": msg
-                })),
-            )
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "error": e.to_string()
-            })),
-        ),
-    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "message": format!("{disk}; {ram}"),
+            "disk": disk,
+            "ram": ram,
+        })),
+    )
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
@@ -730,6 +760,7 @@ async fn chat_completions(
 
     // Global defaults come from the same snapshot the profile list did.
     let sampling = SamplingLayers {
+        cli_override: state.inference_override.clone(),
         profile: request_profile.clone(),
         global: settings.inference_defaults.clone(),
     };
@@ -948,6 +979,7 @@ async fn chat_completions(
             // so this is a fresh point in time. The profile is deliberately
             // not re-resolved — the client asked for a specific one.
             let retry_sampling = SamplingLayers {
+                cli_override: state.inference_override.clone(),
                 profile: request_profile.clone(),
                 global: state.settings.get().await.inference_defaults.clone(),
             };

@@ -96,10 +96,22 @@ pub(crate) enum ForwardError {
 /// (no output at all) for upstream-health bookkeeping.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct StreamOutcome {
-    /// `true` if at least one visible frame (content, reasoning, tool call,
-    /// recovered normalization text, or an error frame) was emitted to the
-    /// client. `false` means the model produced a completely empty response.
-    pub saw_output: bool,
+    /// `true` if at least one *client-renderable* frame (content, tool call,
+    /// recovered normalization text, or an error frame) was emitted.
+    ///
+    /// Reasoning deliberately does not count. A turn whose entire output landed
+    /// in `reasoning_content` renders as an empty response in every client that
+    /// treats reasoning as a collapsed side-channel (notably the VS Code LLM
+    /// Gateway), so scoring it as output made a hard failure indistinguishable
+    /// from success — and, via [`crate::upstream_health`], reset the strike
+    /// counter that arms the recycle watchdog. See [`Self::saw_reasoning`].
+    pub saw_visible_output: bool,
+    /// `true` if at least one `ReasoningDelta` was emitted.
+    ///
+    /// Tracked separately from [`Self::saw_visible_output`] so a reasoning-only
+    /// turn is distinguishable both from a healthy response and from a wholly
+    /// empty one.
+    pub saw_reasoning: bool,
     /// The `finish_reason` from the terminating `Done` event, if one arrived.
     pub finish_reason: Option<String>,
     /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
@@ -145,6 +157,17 @@ fn should_forward_header(name: &str) -> bool {
 /// always sees *something* and can tell the model attempted a tool call the
 /// proxy could not parse.
 const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
+
+/// Prefix prepended to reasoning text that is promoted into the content
+/// channel because the turn produced no visible output of its own.
+///
+/// Same rescue as [`NORMALIZATION_NOTICE_PREFIX`], one channel over: a model
+/// that never closes its `<think>` block leaves a complete, often correct
+/// answer stranded in `reasoning_content`, which clients that collapse
+/// reasoning render as an empty response. Promoting it makes the turn usable;
+/// the flag keeps the underlying degradation visible instead of silently
+/// papering over it.
+const REASONING_ONLY_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: reasoning-only response] ";
 
 /// Diagnostic text synthesized and sent to the client when an upstream
 /// streaming response completes without emitting a single visible frame.
@@ -647,6 +670,9 @@ pub(crate) async fn stream_response_to_channel(
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
+    // Accumulates reasoning text for the promotion path below. Bounded in
+    // practice by the request's `max_tokens`.
+    let mut reasoning_buf = String::new();
     while let Some(event) = normalized.next().await {
         let frame: Option<Bytes> = match event {
             Ok(ev) => match &ev {
@@ -664,18 +690,27 @@ pub(crate) async fn stream_response_to_channel(
                     // rather than dropping it silently (which manifested as an
                     // empty response when the whole turn was one bad tool call).
                     warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
-                    outcome.saw_output = true;
+                    outcome.saw_visible_output = true;
                     let recovered = LlmStreamEvent::TextDelta {
                         content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
                     };
                     encoder.encode(&recovered).map(Bytes::from)
                 }
+                LlmStreamEvent::ReasoningDelta { content } => {
+                    // Forwarded unchanged, but NOT counted as visible output —
+                    // clients that collapse reasoning render this as empty.
+                    // Buffered so it can be promoted if the turn ends without
+                    // ever producing content of its own.
+                    connection.mark_generating();
+                    outcome.saw_reasoning = true;
+                    reasoning_buf.push_str(content);
+                    encoder.encode(&ev).map(Bytes::from)
+                }
                 LlmStreamEvent::TextDelta { .. }
-                | LlmStreamEvent::ReasoningDelta { .. }
                 | LlmStreamEvent::ToolCallDelta { .. }
                 | LlmStreamEvent::UpstreamError { .. } => {
                     connection.mark_generating();
-                    outcome.saw_output = true;
+                    outcome.saw_visible_output = true;
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Done { finish_reason } => {
@@ -699,7 +734,7 @@ pub(crate) async fn stream_response_to_channel(
             },
             Err(e) => {
                 error!("proxy stream error: {e}");
-                outcome.saw_output = true;
+                outcome.saw_visible_output = true;
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),
@@ -722,17 +757,28 @@ pub(crate) async fn stream_response_to_channel(
         }
     }
 
-    // Empty-stream detector: if the upstream completed without emitting a
-    // single visible frame, synthesize a diagnostic so the client never sees
-    // an unexplained empty response. Skipped when the client already
-    // disconnected (nothing to send) or when output was surfaced.
-    if client_connected && !outcome.saw_output {
+    // No visible output: either rescue the turn or explain it. Skipped when the
+    // client already disconnected (nothing to send).
+    if client_connected && !outcome.saw_visible_output {
         let reason = outcome.finish_reason.as_deref().unwrap_or("none");
-        warn!(
-            finish_reason = %reason,
-            "proxy: upstream stream produced no visible output; emitting diagnostic"
-        );
-        let notice = format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})");
+        let notice = if outcome.saw_reasoning {
+            // Reasoning-only: the answer is usually complete and correct, just
+            // stranded in the wrong channel. Promote it rather than letting the
+            // client see an empty turn and retry a prompt that will deterministically
+            // strand it again.
+            warn!(
+                finish_reason = %reason,
+                reasoning_bytes = reasoning_buf.len(),
+                "proxy: response was reasoning-only; promoting reasoning to content"
+            );
+            format!("{REASONING_ONLY_NOTICE_PREFIX}{reasoning_buf}")
+        } else {
+            warn!(
+                finish_reason = %reason,
+                "proxy: upstream stream produced no visible output; emitting diagnostic"
+            );
+            format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})")
+        };
         if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
             let _ = tx.send(Ok(Bytes::from(s))).await;
         }

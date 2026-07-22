@@ -162,7 +162,14 @@ pub enum ProxyCommand {
         #[arg(short, long, default_value = "8080")]
         port: u16,
     },
-    /// Clear KV cache for a session or all sessions on an already-running proxy
+    /// Clear KV cache on an already-running proxy
+    ///
+    /// Without `--session-id` this clears every disk slot *and* recycles
+    /// llama-server, which is the only way to drop its host-RAM prompt cache
+    /// (`--cache-ram`). The recycle is skipped while a request is in flight.
+    ///
+    /// With `--session-id` only that session's disk slots are cleared; the
+    /// shared RAM cache is left alone.
     CacheClear {
         /// Host of the already-running proxy to connect to
         #[arg(long, default_value = "127.0.0.1")]
