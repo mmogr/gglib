@@ -19,7 +19,7 @@ function snapshotIsBusy(items: DownloadSummary[]): boolean {
   return items.some(i => i.status === 'queued' || i.status === 'downloading');
 }
 
-export type DownloadProgressStatus = 'started' | 'progress' | 'finalizing' | 'registering' | 'completed' | 'error';
+export type DownloadProgressStatus = 'started' | 'progress' | 'finalizing' | 'registering' | 'notice' | 'completed' | 'error';
 
 export interface DownloadProgressView {
   status: DownloadProgressStatus;
@@ -192,6 +192,18 @@ function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
         };
       }
       return null;
+    case 'download_notice':
+      // Transient setup note (e.g. first-run Python env creation for the
+      // fast downloader) that carries no byte progress. Merged into the
+      // previous view like finalizing/registering above, so the bar and
+      // byte counts don't reset — only the message and phase change.
+      return {
+        status: 'notice',
+        id: event.id,
+        message: event.message,
+        speedBps: undefined,
+        etaSeconds: undefined,
+      };
     default:
       return null;
   }
