@@ -9,15 +9,16 @@ This document is the definitive engineering guide for contributors. Read it befo
 1. [Core Philosophy](#core-philosophy)
 2. [Architecture Overview](#architecture-overview)
 3. [GUI Parity Principle](#gui-parity-principle)
-4. [Model Architecture Registry](#model-architecture-registry)
-5. [Concurrency Model](#concurrency-model)
-6. [Subprocess Invocation](#subprocess-invocation)
-7. [Crate Boundaries](#crate-boundaries)
-8. [Documentation Standards](#documentation-standards)
-9. [Badges Pipeline](#badges-pipeline)
-10. [Development Workflow](#development-workflow)
-11. [CI Pipeline](#ci-pipeline)
-12. [Pull Request Checklist](#pull-request-checklist)
+4. [UI Conventions](#ui-conventions)
+5. [Model Architecture Registry](#model-architecture-registry)
+6. [Concurrency Model](#concurrency-model)
+7. [Subprocess Invocation](#subprocess-invocation)
+8. [Crate Boundaries](#crate-boundaries)
+9. [Documentation Standards](#documentation-standards)
+10. [Badges Pipeline](#badges-pipeline)
+11. [Development Workflow](#development-workflow)
+12. [CI Pipeline](#ci-pipeline)
+13. [Pull Request Checklist](#pull-request-checklist)
 
 ---
 
@@ -91,6 +92,19 @@ When adding a new long-running operation:
 **Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
 **Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. The transport abstraction layer handles that distinction.
+
+---
+
+## UI Conventions
+
+The design system already exists — use it rather than reinventing it inline:
+
+- **Icons: `lucide-react` only, via `<Icon icon={...} />`** (`src/components/ui/Icon.tsx`). No emoji or unicode dingbats (`👈 🔽 🔍 ⚡ ✓ ✗ ▶ ▼`, etc.) anywhere in JSX or string literals — they render as full-colour, double-width glyphs that clash with lucide's thin monochrome strokes and can't inherit `currentColor`. This is enforced by an ESLint `no-restricted-syntax` rule (see `eslint.config.js`); it is not a style preference you can opt out of.
+- **Buttons: the `Button` primitive** (`src/components/ui/Button.tsx`), not raw `<button>`. It encodes a 4-level hierarchy — `primary` (one CTA per surface) → `secondary` (default action) → `outline` (emphasis without fill) → `ghost` (minimal) — plus semantic variants (`danger`, `success`, `warning`) and a `link` variant for inline text actions. Not yet lint-enforced (there is a large pre-existing surface of raw `<button>`s); new and touched code should still prefer it.
+- **Colour is semantic, never decorative.** `primary` = action, `success` = running/healthy, `warning` = degraded, `danger` = destructive/failure. A fact about a model (its quantization, its parameter count, its throughput) is not a state and should not borrow a state colour. An idle/stopped state is not a failure — it gets `--color-offline` (GUI) or `style::MUTED` (CLI), not danger red.
+- **Spacing and radius come from the token scale** (`--spacing-*`, `--radius-*` in `src/styles/base/variables.css`, bridged into Tailwind's `p-xs/sm/md/base/lg/xl`, `rounded-sm/base/md/lg/xl`), not raw Tailwind numerics (`p-2`, `rounded-[6px]`) or arbitrary bracket values, except where a value is genuinely one-off (e.g. matching an icon's exact pixel size).
+- **Reach for the existing primitives** (`src/components/primitives/`: `Card`, `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`) before writing a bespoke `flex` wrapper or empty-state block by hand.
+- **Files stay small and single-responsibility.** `scripts/check_file_complexity.sh` flags any `.ts`/`.tsx` file over 300 LOC. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
 
 ---
 
