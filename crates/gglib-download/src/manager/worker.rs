@@ -18,8 +18,8 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::download::{DownloadError, DownloadId, Quantization};
-use gglib_core::ports::DownloadManagerConfig;
+use gglib_core::download::{DownloadError, DownloadEvent, DownloadId, Quantization};
+use gglib_core::ports::{DownloadEventEmitterPort, DownloadManagerConfig};
 
 use crate::cli_exec::{FastDownloadRequest, PythonBridgeError, run_fast_download};
 
@@ -29,10 +29,19 @@ use super::paths::DownloadDestination;
 ///
 /// These are cloned Arc references to ports, allowing the worker
 /// to operate independently of the manager's state.
+///
+/// `event_emitter` is a narrow, deliberate exception to "worker only writes
+/// to `watch::Sender`" above: it exists solely so `execute_download` can
+/// surface [`DownloadEvent::DownloadNotice`] — a one-off, cosmetic note
+/// (e.g. "preparing fast downloader") that isn't part of the progress or
+/// completion state the manager sequences. Progress and terminal events
+/// still flow exclusively through the watch channel and `finalize_job`.
 #[derive(Clone)]
 pub struct WorkerDeps {
     /// Configuration (models directory, HF token, etc.).
     pub config: DownloadManagerConfig,
+    /// Event sink for [`DownloadEvent::DownloadNotice`] only.
+    pub event_emitter: Arc<dyn DownloadEventEmitterPort>,
 }
 
 /// A download job to be executed by the worker.
@@ -203,6 +212,18 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             });
         });
 
+    // Notice callback: surfaces transient setup notes (e.g. first-run Python
+    // venv creation) on the bar instead of leaving it looking frozen for the
+    // tens of seconds that can take. See the doc comment on `WorkerDeps`.
+    let notice_id = job.id.to_string();
+    let notice_emitter = Arc::clone(&deps.event_emitter);
+    let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
+        notice_emitter.emit(DownloadEvent::DownloadNotice {
+            id: notice_id.clone(),
+            message: message.to_string(),
+        });
+    });
+
     // Build download request
     let request = FastDownloadRequest {
         repo_id: job.id.model_id(),
@@ -213,6 +234,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         token: deps.config.hf_token.as_deref(),
         force: false,
         progress: Some(Arc::clone(&progress_callback)),
+        notice: Some(notice_callback),
         expected_total: job.expected_total,
         cancel_token: Some(job.cancel.clone()),
     };

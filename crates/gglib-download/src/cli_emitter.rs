@@ -276,6 +276,18 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 }
             }
 
+            DownloadEvent::DownloadNotice { id, message } => {
+                // Same idea as DownloadStatusChanged, but for free-form setup
+                // notes (e.g. building the first-run Python environment)
+                // rather than a fixed lifecycle status. The next progress or
+                // status event overwrites this naturally.
+                if let Ok(bars) = self.bars.lock() {
+                    if let Some(bar) = bars.get(&id) {
+                        bar.set_message(format!("{id} — {message}"));
+                    }
+                }
+            }
+
             // Queue-level events don't need bar updates in the CLI emitter.
             DownloadEvent::QueueSnapshot { .. } | DownloadEvent::QueueRunComplete { .. } => {}
         }

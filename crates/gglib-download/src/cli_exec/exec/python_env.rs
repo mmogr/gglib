@@ -12,6 +12,8 @@ use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
 use tokio::process::Command;
 
+use super::python_bridge::NoticeCallback;
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -127,8 +129,13 @@ impl PythonEnvironment {
     /// 3. Install/update requirements if the marker is stale
     /// 4. Deploy the helper script
     ///
+    /// `notice` receives transient setup notes ("creating environment...",
+    /// "installing dependencies...") for display on a per-download bar. When
+    /// `None` (the preflight/no-callback paths), those notes fall back to
+    /// [`gglib_core::telemetry::console_println`].
+    ///
     /// Returns `Err` if Python is not found or setup fails.
-    pub async fn prepare() -> Result<Self, EnvSetupError> {
+    pub async fn prepare(notice: Option<&NoticeCallback>) -> Result<Self, EnvSetupError> {
         let env_dir = get_env_directory()?;
         let script_path = get_script_path()?;
 
@@ -142,7 +149,7 @@ impl PythonEnvironment {
         };
 
         env.write_script()?;
-        env.ensure_env_ready().await?;
+        env.ensure_env_ready(notice).await?;
 
         // Validate the interpreter we will actually run.
         // This catches environment pollution (e.g., PYTHONHOME/PYTHONPATH) early.
@@ -186,26 +193,34 @@ impl PythonEnvironment {
     // Internal methods
     // ------------------------------------------------------------------------
 
-    async fn ensure_env_ready(&self) -> Result<(), EnvSetupError> {
+    async fn ensure_env_ready(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
         if !self.python_path().exists() {
-            self.create_env().await?;
+            self.create_env(notice).await?;
         }
 
         if !self.marker_is_fresh()? {
-            self.install_requirements().await?;
+            self.install_requirements(notice).await?;
             self.write_marker()?;
         }
 
         Ok(())
     }
 
-    async fn create_env(&self) -> Result<(), EnvSetupError> {
+    async fn create_env(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated().await?;
 
-        gglib_core::telemetry::console_println(&format!(
-            "ℹ️  Creating Python environment for fast downloads at {}...",
-            self.env_dir.display()
-        ));
+        // With a notice sink (the queued-download path), the note lands on
+        // the bar itself and stays terse — no path, it wouldn't fit and
+        // isn't actionable there. Without one (preflight, `model upgrade`),
+        // fall back to a console line with the full path for context.
+        notify(
+            notice,
+            "preparing fast downloader (first run, this can take a minute)…",
+            &format!(
+                "ℹ️  Creating Python environment for fast downloads at {}...",
+                self.env_dir.display()
+            ),
+        );
 
         let mut cmd = async_cmd(&bootstrap);
         apply_python_subprocess_isolation(&mut cmd);
@@ -213,8 +228,8 @@ impl PythonEnvironment {
         // and stderr instead of inheriting the parent's, so `python -m venv`
         // can never write raw bytes straight to the terminal. An inherited
         // handle would bypass indicatif entirely and corrupt any live
-        // `MultiProgress` redraw the same way a stray `println!` does — see
-        // the module-level comment on `run_python_command` below.
+        // `MultiProgress` redraw the same way a stray `println!` does.
+        // `run_python_command` below already pipes for the same reason.
         let output = cmd
             .arg("-m")
             .arg("venv")
@@ -242,8 +257,12 @@ impl PythonEnvironment {
         Ok(())
     }
 
-    async fn install_requirements(&self) -> Result<(), EnvSetupError> {
-        gglib_core::telemetry::console_println("ℹ️  Installing fast download dependencies...");
+    async fn install_requirements(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
+        notify(
+            notice,
+            "installing fast downloader dependencies…",
+            "ℹ️  Installing fast download dependencies...",
+        );
 
         let python = self.python_path();
 
@@ -370,6 +389,16 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
     }
 
     Err(EnvSetupError::PythonNotFound(PYTHON_CANDIDATES.join(", ")))
+}
+
+/// Surface a transient setup note: on the bar via `notice` when a sink is
+/// wired up, otherwise as a console line with fuller context.
+fn notify(notice: Option<&NoticeCallback>, bar_message: &str, console_message: &str) {
+    if let Some(notice) = notice {
+        notice(bar_message);
+    } else {
+        gglib_core::telemetry::console_println(console_message);
+    }
 }
 
 /// Run a Python command and check for success.

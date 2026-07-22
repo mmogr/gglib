@@ -79,6 +79,7 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         token: request.token.as_deref(),
         force: request.force,
         progress: None,
+        notice: None,
         expected_total: None,
         cancel_token: None,
     };

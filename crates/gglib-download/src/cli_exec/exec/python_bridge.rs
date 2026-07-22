@@ -33,6 +33,13 @@ use super::xet_poller::XetPoller;
 /// boxing through extra channels.
 pub type ProgressCallback = Arc<dyn Fn(u64, u64) + Send + Sync>;
 
+/// Callback for a transient setup notice, e.g. "preparing fast downloader".
+///
+/// Fires at most a handful of times per download (venv creation, dependency
+/// install) — unlike [`ProgressCallback`] this carries no byte counts, just
+/// a message to display in their place.
+pub type NoticeCallback = Arc<dyn Fn(&str) + Send + Sync>;
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -79,6 +86,10 @@ pub struct FastDownloadRequest<'a> {
     /// xet stat-fallback poller so synthetic progress events surface through
     /// the same channel as real Python `tqdm` events.
     pub progress: Option<ProgressCallback>,
+    /// Sink for transient setup notices (env creation, dependency install).
+    /// `None` routes those notices through `console_println` instead — see
+    /// [`PythonEnvironment::prepare`].
+    pub notice: Option<NoticeCallback>,
     /// Optional total size hint forwarded to synthetic progress events when
     /// the Python helper goes silent. `None` means "unknown" — the bar will
     /// display downloaded bytes without a percentage.
@@ -93,7 +104,7 @@ pub struct FastDownloadRequest<'a> {
 
 /// Ensure the fast download helper is ready (env + script prepared).
 pub async fn ensure_fast_helper_ready() -> Result<(), PythonBridgeError> {
-    PythonEnvironment::prepare().await?;
+    PythonEnvironment::prepare(None).await?;
     Ok(())
 }
 
@@ -113,7 +124,7 @@ pub async fn run_fast_download(request: &FastDownloadRequest<'_>) -> Result<(), 
         return Ok(());
     }
 
-    let env = PythonEnvironment::prepare().await?;
+    let env = PythonEnvironment::prepare(request.notice.as_ref()).await?;
 
     run_download_process(&env, request).await
 }
