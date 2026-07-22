@@ -199,6 +199,58 @@ impl InferenceConfig {
         }
     }
 
+    /// Fill `None` fields from `other`, except parameters tuned against a
+    /// temperature `self` has already claimed.
+    ///
+    /// `presence_penalty`, `repeat_penalty` and `min_p` are only meaningful
+    /// relative to how sharp the sampling distribution is, so they travel with
+    /// the `temperature` they were chosen for. [`reasoning_profile`] pairs
+    /// `temperature 1.0` with `presence_penalty 1.5` deliberately; a sparse
+    /// profile that sets `temperature 0.2` and leaves the penalty unset used to
+    /// inherit that 1.5 and run a recipe no layer ever intended — a penalty
+    /// tuned for a broad distribution applied to a near-greedy one.
+    ///
+    /// So: once a layer declares a `temperature`, lower layers may no longer
+    /// contribute the parameters tuned against it. They fall through to the
+    /// neutral values in [`with_hardcoded_defaults`] instead, which is applied
+    /// with plain [`merge_with`] as an unconditional floor — it is a set of
+    /// neutral defaults, not a competing recipe.
+    ///
+    /// Parameters that do not interact with temperature this way (`top_p`,
+    /// `top_k`, `max_tokens`) are unaffected and still fill from any layer.
+    ///
+    /// [`reasoning_profile`]: Self::reasoning_profile
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    /// [`merge_with`]: Self::merge_with
+    const fn merge_layer(&mut self, other: &Self) {
+        // Checked before any field is written, so a layer supplying both a
+        // temperature and its penalties still contributes them as a set.
+        let temperature_claimed = self.temperature.is_some();
+
+        if self.top_p.is_none() {
+            self.top_p = other.top_p;
+        }
+        if self.top_k.is_none() {
+            self.top_k = other.top_k;
+        }
+        if self.max_tokens.is_none() {
+            self.max_tokens = other.max_tokens;
+        }
+
+        if !temperature_claimed {
+            self.temperature = other.temperature;
+            if self.repeat_penalty.is_none() {
+                self.repeat_penalty = other.repeat_penalty;
+            }
+            if self.presence_penalty.is_none() {
+                self.presence_penalty = other.presence_penalty;
+            }
+            if self.min_p.is_none() {
+                self.min_p = other.min_p;
+            }
+        }
+    }
+
     /// Create a new config with all fields set to sensible defaults.
     ///
     /// These are the hardcoded fallback values used when no other
@@ -383,6 +435,15 @@ impl InferenceConfig {
     /// from the model, which is what keeps one global profile safe to apply
     /// across differing architectures.
     ///
+    /// # Temperature-tuned parameters do not fall through
+    ///
+    /// The one exception, enforced by [`merge_layer`]: once a layer declares a
+    /// `temperature`, lower layers may not contribute `presence_penalty`,
+    /// `repeat_penalty` or `min_p`. Those are tuned against a particular
+    /// distribution sharpness, so inheriting them across a temperature change
+    /// assembles a recipe no layer intended. They resolve to the neutral
+    /// hardcoded values instead.
+    ///
     /// # Example
     ///
     /// ```rust
@@ -390,10 +451,11 @@ impl InferenceConfig {
     ///
     /// // A sparse profile: sets temperature, says nothing about anything else.
     /// let profile = InferenceConfig { temperature: Some(0.2), ..Default::default() };
-    /// // A thinking model's stored defaults.
+    /// // A thinking model's stored defaults: 1.5 is tuned for temperature 1.0.
     /// let model = InferenceConfig {
     ///     temperature: Some(1.0),
     ///     presence_penalty: Some(1.5),
+    ///     top_k: Some(20),
     ///     ..Default::default()
     /// };
     ///
@@ -401,8 +463,11 @@ impl InferenceConfig {
     ///     .resolve_with_profile(Some(&profile), Some(&model), None);
     ///
     /// assert_eq!(resolved.temperature,      Some(0.2)); // profile beats model
-    /// assert_eq!(resolved.presence_penalty, Some(1.5)); // model still fills in
+    /// assert_eq!(resolved.presence_penalty, Some(0.0)); // NOT the model's 1.5
+    /// assert_eq!(resolved.top_k,            Some(20));  // untuned: still fills
     /// ```
+    ///
+    /// [`merge_layer`]: Self::merge_layer
     ///
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`resolve_with_defaults`]: Self::resolve_with_defaults
@@ -414,13 +479,13 @@ impl InferenceConfig {
         global: Option<&Self>,
     ) -> Self {
         if let Some(p) = profile {
-            self.merge_with(p);
+            self.merge_layer(p);
         }
         if let Some(m) = model {
-            self.merge_with(m);
+            self.merge_layer(m);
         }
         if let Some(g) = global {
-            self.merge_with(g);
+            self.merge_layer(g);
         }
         self.merge_with(&Self::with_hardcoded_defaults());
         self
@@ -676,14 +741,19 @@ mod tests {
 
         assert_eq!(resolved.temperature, Some(0.9)); // request beats profile
         assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
-        assert_eq!(resolved.presence_penalty, Some(1.5)); // model fills in
         assert_eq!(resolved.top_k, Some(10)); // global fills in
+        // The request claimed the temperature, so the model's 1.5 — tuned for
+        // its own 0.5 — must not fall through. Neutral hardcoded value instead.
+        assert_eq!(resolved.presence_penalty, Some(0.0));
         assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
     }
 
     /// The invariant that makes one global profile safe across differing
     /// architectures: parameters the profile leaves `None` still resolve from
     /// the model, so selecting a profile cannot erase per-model tuning.
+    ///
+    /// The exception is parameters tuned against temperature — see
+    /// [`test_profile_temperature_does_not_inherit_model_penalties`].
     #[test]
     fn test_sparse_profile_does_not_erase_model_defaults() {
         let profile = InferenceConfig {
@@ -696,12 +766,64 @@ mod tests {
             InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
 
         assert_eq!(resolved.temperature, Some(0.2)); // the profile's one opinion
-        // Everything the profile stayed silent about comes from the model.
-        assert_eq!(resolved.presence_penalty, model.presence_penalty);
+        // Untuned parameters the profile stayed silent about still come from
+        // the model — this is what keeps one profile safe across architectures.
         assert_eq!(resolved.top_k, model.top_k);
         assert_eq!(resolved.top_p, model.top_p);
         assert_eq!(resolved.max_tokens, model.max_tokens);
-        assert_eq!(resolved.min_p, model.min_p);
+    }
+
+    /// Regression for #621: a sparse profile that lowers the temperature must
+    /// not inherit penalties the model tuned for a much broader distribution.
+    ///
+    /// `reasoning_profile()` pairs `temperature 1.0` with `presence_penalty
+    /// 1.5` deliberately. Applying that 1.5 to a near-greedy `temperature 0.2`
+    /// request is a recipe no layer ever intended, and it reached production on
+    /// every `:coding` request.
+    #[test]
+    fn test_profile_temperature_does_not_inherit_model_penalties() {
+        let model = InferenceConfig::reasoning_profile();
+        assert_eq!(model.temperature, Some(1.0), "guards the premise");
+        assert_eq!(model.presence_penalty, Some(1.5), "guards the premise");
+
+        // Mirrors the shipped `coding` profile.
+        let profile = InferenceConfig {
+            temperature: Some(0.2),
+            top_p: Some(0.95),
+            top_k: Some(20),
+            max_tokens: Some(8192),
+            min_p: Some(0.05),
+            ..Default::default()
+        };
+
+        let resolved =
+            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+
+        assert_eq!(resolved.temperature, Some(0.2));
+        assert_eq!(resolved.presence_penalty, Some(0.0), "must not inherit 1.5");
+        assert_eq!(resolved.repeat_penalty, Some(1.0), "neutral, not the model's");
+        assert_eq!(resolved.min_p, Some(0.05), "the profile's own value stands");
+    }
+
+    /// The coupling is directional: a layer that supplies a temperature *and*
+    /// its penalties still contributes them together, so a coherent recipe
+    /// stored on a model is untouched when nothing above it sets a temperature.
+    #[test]
+    fn test_model_recipe_applies_intact_when_no_layer_sets_temperature() {
+        let model = InferenceConfig::reasoning_profile();
+        // A profile with opinions only about untuned parameters.
+        let profile = InferenceConfig {
+            top_k: Some(64),
+            ..Default::default()
+        };
+
+        let resolved =
+            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+
+        assert_eq!(resolved.temperature, model.temperature);
+        assert_eq!(resolved.presence_penalty, model.presence_penalty);
+        assert_eq!(resolved.repeat_penalty, model.repeat_penalty);
+        assert_eq!(resolved.top_k, Some(64)); // profile still wins where it spoke
     }
 
     /// `resolve_with_defaults` delegates to `resolve_with_profile`, so the two

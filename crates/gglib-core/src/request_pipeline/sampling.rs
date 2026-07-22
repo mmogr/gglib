@@ -154,9 +154,35 @@ mod tests {
     }
 
     /// Profiles are sparse: outranking the model layer must not blank out the
-    /// parameters the profile says nothing about.
+    /// untuned parameters the profile says nothing about.
     #[test]
     fn a_sparse_profile_leaves_other_model_defaults_intact() {
+        let mut body = json!({});
+        let model = InferenceConfig {
+            temperature: Some(1.0),
+            top_p: Some(0.87),
+            top_k: Some(20),
+            ..Default::default()
+        };
+        resolve_sampling(
+            &mut body,
+            &model_ctx(Some(model)),
+            &SamplingLayers {
+                profile: Some(temp(0.2)),
+                global: None,
+            },
+        );
+
+        assert_param(&body, "temperature", 0.2);
+        assert_param(&body, "top_p", 0.87);
+        assert_param(&body, "top_k", 20.0);
+    }
+
+    /// Regression for #621, at the pipeline level: the `:coding` shape — a
+    /// profile that lowers the temperature — must not carry the model's
+    /// `presence_penalty`, which was tuned for the model's own temperature.
+    #[test]
+    fn a_profile_temperature_does_not_carry_model_penalties() {
         let mut body = json!({});
         let model = InferenceConfig {
             temperature: Some(1.0),
@@ -173,7 +199,7 @@ mod tests {
         );
 
         assert_param(&body, "temperature", 0.2);
-        assert_param(&body, "presence_penalty", 1.5);
+        assert_param(&body, "presence_penalty", 0.0);
     }
 
     /// The force-insert. An `or_insert` implementation passes every test above
