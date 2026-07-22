@@ -123,7 +123,7 @@ impl SettingsRepository for MockSettingsRepo {
 
 mod fixtures;
 use fixtures::sse::{
-    BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK,
+    BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK, REASONING_ONLY,
     STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
 };
 
@@ -493,6 +493,42 @@ async fn reasoning_content_round_trip() {
         .collect();
     assert_eq!(reasoning, "Let me think.");
     assert_eq!(content, "42");
+}
+
+/// A turn that produces `reasoning_content` but never any `content` renders as
+/// an empty response in clients that collapse reasoning. The proxy must promote
+/// the stranded text into the content channel, flagged, so the turn is usable.
+#[tokio::test]
+async fn reasoning_only_response_is_promoted_to_content() {
+    let body = round_trip(vec![REASONING_ONLY], "r1-test", vec![]).await;
+    let (frames, saw_done) = parse_frames(&body);
+    assert!(saw_done);
+
+    let reasoning: String = frames
+        .iter()
+        .filter_map(|f| f["choices"][0]["delta"]["reasoning_content"].as_str())
+        .collect();
+    let content: String = frames
+        .iter()
+        .filter_map(|f| f["choices"][0]["delta"]["content"].as_str())
+        .collect();
+
+    // Reasoning still reaches the client untouched on its own channel.
+    assert_eq!(reasoning, "The answer is 42.");
+    // ...and is also promoted into content, so the turn is not empty.
+    assert!(
+        content.contains("The answer is 42."),
+        "stranded reasoning should be promoted into content, got {content:?}"
+    );
+    assert!(
+        content.contains("reasoning-only response"),
+        "promotion must be flagged so the degradation stays visible, got {content:?}"
+    );
+    // The wholly-empty diagnostic is a different path and must not fire here.
+    assert!(
+        !content.contains("produced no output"),
+        "empty-stream notice must not fire for a reasoning-only turn, got {content:?}"
+    );
 }
 
 /// Qwen XML tool calls must be rewritten into strict OpenAI `tool_calls`

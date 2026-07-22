@@ -158,6 +158,17 @@ fn should_forward_header(name: &str) -> bool {
 /// proxy could not parse.
 const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
 
+/// Prefix prepended to reasoning text that is promoted into the content
+/// channel because the turn produced no visible output of its own.
+///
+/// Same rescue as [`NORMALIZATION_NOTICE_PREFIX`], one channel over: a model
+/// that never closes its `<think>` block leaves a complete, often correct
+/// answer stranded in `reasoning_content`, which clients that collapse
+/// reasoning render as an empty response. Promoting it makes the turn usable;
+/// the flag keeps the underlying degradation visible instead of silently
+/// papering over it.
+const REASONING_ONLY_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: reasoning-only response] ";
+
 /// Diagnostic text synthesized and sent to the client when an upstream
 /// streaming response completes without emitting a single visible frame.
 ///
@@ -659,6 +670,9 @@ pub(crate) async fn stream_response_to_channel(
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
+    // Accumulates reasoning text for the promotion path below. Bounded in
+    // practice by the request's `max_tokens`.
+    let mut reasoning_buf = String::new();
     while let Some(event) = normalized.next().await {
         let frame: Option<Bytes> = match event {
             Ok(ev) => match &ev {
@@ -682,11 +696,14 @@ pub(crate) async fn stream_response_to_channel(
                     };
                     encoder.encode(&recovered).map(Bytes::from)
                 }
-                LlmStreamEvent::ReasoningDelta { .. } => {
+                LlmStreamEvent::ReasoningDelta { content } => {
                     // Forwarded unchanged, but NOT counted as visible output —
                     // clients that collapse reasoning render this as empty.
+                    // Buffered so it can be promoted if the turn ends without
+                    // ever producing content of its own.
                     connection.mark_generating();
                     outcome.saw_reasoning = true;
+                    reasoning_buf.push_str(content);
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::TextDelta { .. }
@@ -740,17 +757,28 @@ pub(crate) async fn stream_response_to_channel(
         }
     }
 
-    // Empty-stream detector: if the upstream completed without emitting a
-    // single visible frame, synthesize a diagnostic so the client never sees
-    // an unexplained empty response. Skipped when the client already
-    // disconnected (nothing to send) or when output was surfaced.
-    if client_connected && !outcome.saw_visible_output && !outcome.saw_reasoning {
+    // No visible output: either rescue the turn or explain it. Skipped when the
+    // client already disconnected (nothing to send).
+    if client_connected && !outcome.saw_visible_output {
         let reason = outcome.finish_reason.as_deref().unwrap_or("none");
-        warn!(
-            finish_reason = %reason,
-            "proxy: upstream stream produced no visible output; emitting diagnostic"
-        );
-        let notice = format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})");
+        let notice = if outcome.saw_reasoning {
+            // Reasoning-only: the answer is usually complete and correct, just
+            // stranded in the wrong channel. Promote it rather than letting the
+            // client see an empty turn and retry a prompt that will deterministically
+            // strand it again.
+            warn!(
+                finish_reason = %reason,
+                reasoning_bytes = reasoning_buf.len(),
+                "proxy: response was reasoning-only; promoting reasoning to content"
+            );
+            format!("{REASONING_ONLY_NOTICE_PREFIX}{reasoning_buf}")
+        } else {
+            warn!(
+                finish_reason = %reason,
+                "proxy: upstream stream produced no visible output; emitting diagnostic"
+            );
+            format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})")
+        };
         if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
             let _ = tx.send(Ok(Bytes::from(s))).await;
         }
