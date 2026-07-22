@@ -1,23 +1,24 @@
-//! CLI progress rendering for downloads.
+//! CLI progress rendering for direct (non-queued) downloads.
 //!
 //! Pure sync, presentation-only module — no knowledge of Python or protocol.
-//! Provides terminal and non-terminal progress display with EWA speed calculation.
+//! Used by the no-callback path (`model upgrade`), where there is no download
+//! manager to compute progress for us. The queued path renders through
+//! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
+//!
+//! Both renderers get their speed and ETA from
+//! [`RateEstimator`](gglib_core::download::RateEstimator) and format them with
+//! the shared [`format_rate`] / [`format_duration`]. This module owns no rate
+//! math of its own — an earlier private exponentially-weighted average here
+//! was one of three competing implementations that disagreed with each other.
 
 use std::io::{self, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
+use gglib_core::download::{RateEstimator, format_duration, format_rate};
 use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const KIB: u64 = 1024;
-const MIB: u64 = KIB * 1024;
-const GIB: u64 = MIB * 1024;
-
-/// Smoothing factor for exponentially weighted average speed calculation.
-const EWA_SMOOTHING: f64 = 0.02;
+/// Minimum gap between redraws on the non-terminal path.
+const PLAIN_MIN_INTERVAL: Duration = Duration::from_millis(250);
 
 // ============================================================================
 // CLI Progress Printer
@@ -26,6 +27,9 @@ const EWA_SMOOTHING: f64 = 0.02;
 /// CLI progress display that automatically selects terminal or plain output.
 pub struct CliProgressPrinter {
     inner: ProgressRender,
+    /// Shared across both renderers — the rate is a property of the transfer,
+    /// not of how it happens to be drawn.
+    estimator: RateEstimator,
 }
 
 enum ProgressRender {
@@ -35,23 +39,30 @@ enum ProgressRender {
 
 impl CliProgressPrinter {
     /// Create a new progress printer, auto-detecting terminal capability.
+    #[must_use]
     pub fn new() -> Self {
-        if io::stdout().is_terminal() {
-            Self {
-                inner: ProgressRender::Fancy(FancyProgress::new()),
-            }
+        let inner = if io::stdout().is_terminal() {
+            ProgressRender::Fancy(FancyProgress::new())
         } else {
-            Self {
-                inner: ProgressRender::Plain(PlainProgress::new()),
-            }
+            ProgressRender::Plain(PlainProgress::new())
+        };
+        Self {
+            inner,
+            estimator: RateEstimator::new(Instant::now()),
         }
     }
 
     /// Update progress display with current download state.
     pub fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+        self.estimator.record(downloaded, total, Instant::now());
+        let rate = Rate {
+            speed_bps: self.estimator.rate_bps(),
+            eta_seconds: self.estimator.eta_seconds(),
+        };
+
         match &mut self.inner {
-            ProgressRender::Fancy(inner) => inner.update(label, downloaded, total),
-            ProgressRender::Plain(inner) => inner.update(label, downloaded, total),
+            ProgressRender::Fancy(inner) => inner.update(label, downloaded, total, &rate),
+            ProgressRender::Plain(inner) => inner.update(label, downloaded, total, &rate),
         }
     }
 
@@ -67,6 +78,23 @@ impl CliProgressPrinter {
 impl Default for CliProgressPrinter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// The estimator's current verdict, ready for display.
+struct Rate {
+    speed_bps: Option<f64>,
+    eta_seconds: Option<f64>,
+}
+
+impl Rate {
+    /// Render as `118.4 MB/s · ETA 2m 40s`, with placeholders when unknown.
+    fn display(&self) -> String {
+        format!(
+            "{} · ETA {}",
+            format_rate(self.speed_bps),
+            format_duration(self.eta_seconds)
+        )
     }
 }
 
@@ -93,7 +121,7 @@ impl FancyProgress {
         }
     }
 
-    fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+    fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64, rate: &Rate) {
         let label_text = label.filter(|s| !s.is_empty()).unwrap_or("fast download");
         if total == 0 {
             self.bar
@@ -103,21 +131,22 @@ impl FancyProgress {
             return;
         }
 
-        if self.last_label.as_deref() != Some(label_text) {
-            self.bar.set_message(Self::format_label(label_text));
-            self.last_label = Some(label_text.to_string());
-        }
+        // The rate changes every tick, so the message is always rewritten.
+        self.bar.set_message(format!(
+            "{} {}",
+            Self::format_label(label_text),
+            rate.display()
+        ));
+        self.last_label = Some(label_text.to_string());
 
-        if !self.saw_length {
-            self.bar.set_style(Self::bar_style());
-            self.bar.set_length(total);
-            self.saw_length = true;
-        } else if let Some(current) = self.bar.length() {
-            if current != total {
+        if self.saw_length {
+            if self.bar.length() != Some(total) {
                 self.bar.set_length(total);
             }
         } else {
+            self.bar.set_style(Self::bar_style());
             self.bar.set_length(total);
+            self.saw_length = true;
         }
 
         self.bar.set_position(downloaded.min(total));
@@ -131,20 +160,30 @@ impl FancyProgress {
         ProgressStyle::with_template("⚡ {msg} {spinner}").unwrap()
     }
 
+    /// Note the absence of `{binary_bytes_per_sec}` and `{eta}` — those are
+    /// indicatif's own estimates. Rate and ETA come from the shared estimator
+    /// and are rendered into `{msg}`; `{human_bytes}` are sizes, which stay
+    /// binary.
     fn bar_style() -> ProgressStyle {
         ProgressStyle::with_template(
-            "⚡ {msg} {bar:28.cyan/blue} {human_bytes:>9} / {human_total:>9} ({percent:>5.1}%) @ {binary_bytes_per_sec}/s ETA {eta}"
+            "⚡ {msg} {bar:28.cyan/blue} {human_bytes:>9} / {human_total:>9} ({percent:>5.1}%)",
         )
         .unwrap()
-        .with_key("human_bytes", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
-            let _ = write!(w, "{}", HumanBytes(state.pos()));
-        })
-        .with_key("human_total", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
-            let value = state
-                .len()
-                .map_or_else(|| "?".to_string(), |len| HumanBytes(len).to_string());
-            let _ = write!(w, "{value}");
-        })
+        .with_key(
+            "human_bytes",
+            |state: &ProgressState, w: &mut dyn std::fmt::Write| {
+                let _ = write!(w, "{}", HumanBytes(state.pos()));
+            },
+        )
+        .with_key(
+            "human_total",
+            |state: &ProgressState, w: &mut dyn std::fmt::Write| {
+                let value = state
+                    .len()
+                    .map_or_else(|| "?".to_string(), |len| HumanBytes(len).to_string());
+                let _ = write!(w, "{value}");
+            },
+        )
     }
 
     fn format_label(raw: &str) -> String {
@@ -166,99 +205,51 @@ impl FancyProgress {
 
 struct PlainProgress {
     last_emit: Instant,
-    last_bytes: u64,
     last_line_len: usize,
     printed: bool,
-    /// Exponentially weighted average speed in bytes/sec
-    ewa_speed: f64,
 }
 
 impl PlainProgress {
     fn new() -> Self {
         Self {
             last_emit: Instant::now(),
-            last_bytes: 0,
             last_line_len: 0,
             printed: false,
-            ewa_speed: 0.0,
         }
     }
 
-    fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+    fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64, rate: &Rate) {
         use std::fmt::Write;
-        const MIN_INTERVAL: Duration = Duration::from_millis(250);
-        let now = Instant::now();
-        let elapsed_since_last = now.duration_since(self.last_emit);
 
-        if downloaded < total && elapsed_since_last < MIN_INTERVAL {
+        let now = Instant::now();
+        if downloaded < total && now.duration_since(self.last_emit) < PLAIN_MIN_INTERVAL {
             return;
         }
-
-        // Calculate instantaneous speed for this interval
-        let elapsed_secs = elapsed_since_last.as_secs_f64();
-        let bytes_delta = downloaded.saturating_sub(self.last_bytes);
-        #[allow(clippy::cast_precision_loss)]
-        let instant_speed = if elapsed_secs > 0.0 {
-            bytes_delta as f64 / elapsed_secs
-        } else {
-            0.0
-        };
-
-        // Update EWA speed
-        if self.printed {
-            self.ewa_speed =
-                EWA_SMOOTHING.mul_add(instant_speed, (1.0 - EWA_SMOOTHING) * self.ewa_speed);
-        } else {
-            self.ewa_speed = instant_speed;
-        }
-
         self.last_emit = now;
-        self.last_bytes = downloaded;
-
-        let speed_mib = self.ewa_speed / (1024.0 * 1024.0);
-
-        let (down_div, down_unit) = pick_display_unit(downloaded);
-        let (total_div, total_unit) = pick_display_unit(total);
-
-        #[allow(clippy::cast_precision_loss)]
-        let downloaded_val = downloaded as f64 / down_div;
-        #[allow(clippy::cast_precision_loss)]
-        let total_val = total as f64 / total_div;
-
-        let downloaded_str = format_scaled(downloaded_val, down_unit, downloaded);
-        let total_str = format_scaled(total_val, total_unit, total);
-
-        #[allow(clippy::cast_precision_loss)]
-        let percent = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
 
         let mut line = String::from("⚡ Fast download");
         if let Some(name) = label.filter(|name| !name.is_empty()) {
             let _ = write!(line, " [{name}]");
         }
-        if total > 0 {
-            if downloaded == 0 {
-                let _ = write!(line, ": Preparing... ({total_str} {total_unit})");
-            } else {
-                let _ = write!(
-                    line,
-                    ": {downloaded_str} {down_unit} / {total_str} {total_unit} ({percent:5.1}%) @ {speed_mib:5.1} MiB/s"
-                );
-            }
+
+        if total == 0 {
+            let _ = write!(line, ": {} downloaded", HumanBytes(downloaded));
+        } else if downloaded == 0 {
+            let _ = write!(line, ": Preparing... ({})", HumanBytes(total));
         } else {
-            let _ = write!(line, ": {downloaded_str} {down_unit} downloaded");
+            #[allow(clippy::cast_precision_loss)]
+            let percent = (downloaded as f64 / total as f64) * 100.0;
+            let _ = write!(
+                line,
+                ": {} / {} ({percent:5.1}%) @ {}",
+                HumanBytes(downloaded),
+                HumanBytes(total),
+                rate.display(),
+            );
         }
 
         let pad = self.last_line_len.saturating_sub(line.len());
-        print!("\r{line}");
-        if pad > 0 {
-            for _ in 0..pad {
-                print!(" ");
-            }
-        }
+        print!("\r{line}{:pad$}", "", pad = pad);
         io::stdout().flush().ok();
 
         self.last_line_len = line.len();
@@ -275,98 +266,12 @@ impl PlainProgress {
 }
 
 // ============================================================================
-// Display Unit Helpers
-// ============================================================================
-
-/// Select the appropriate display unit based on the reference value.
-#[allow(clippy::cast_precision_loss)]
-const fn pick_display_unit(reference: u64) -> (f64, &'static str) {
-    if reference >= GIB {
-        (GIB as f64, "GiB")
-    } else if reference >= MIB {
-        (MIB as f64, "MiB")
-    } else if reference >= KIB {
-        (KIB as f64, "KiB")
-    } else {
-        (1.0, "B")
-    }
-}
-
-/// Format a scaled value with appropriate precision.
-fn format_scaled(value: f64, unit: &str, raw: u64) -> String {
-    if unit == "B" {
-        return raw.to_string();
-    }
-
-    if value >= 100.0 {
-        format!("{value:6.1}")
-    } else if value >= 10.0 {
-        format!("{value:5.2}")
-    } else if value >= 1.0 {
-        format!("{value:4.2}")
-    } else {
-        format!("{value:.3}")
-    }
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_pick_display_unit_bytes() {
-        let (divisor, unit) = pick_display_unit(500);
-        assert_eq!(unit, "B");
-        assert!((divisor - 1.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_pick_display_unit_kib() {
-        let (divisor, unit) = pick_display_unit(2 * KIB);
-        assert_eq!(unit, "KiB");
-        #[allow(clippy::cast_precision_loss)]
-        let expected = KIB as f64;
-        assert!((divisor - expected).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_pick_display_unit_mib() {
-        let (divisor, unit) = pick_display_unit(50 * MIB);
-        assert_eq!(unit, "MiB");
-        #[allow(clippy::cast_precision_loss)]
-        let expected = MIB as f64;
-        assert!((divisor - expected).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_pick_display_unit_gib() {
-        let (divisor, unit) = pick_display_unit(2 * GIB);
-        assert_eq!(unit, "GiB");
-        #[allow(clippy::cast_precision_loss)]
-        let expected = GIB as f64;
-        assert!((divisor - expected).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_format_scaled_bytes() {
-        assert_eq!(format_scaled(123.0, "B", 123), "123");
-    }
-
-    #[test]
-    fn test_format_scaled_large() {
-        let result = format_scaled(150.5, "MiB", 150 * MIB);
-        assert!(result.contains("150"));
-    }
-
-    #[test]
-    fn test_format_scaled_small() {
-        let result = format_scaled(0.5, "MiB", MIB / 2);
-        assert!(result.contains("0.5"));
-    }
 
     #[test]
     fn test_format_label_short() {
@@ -381,5 +286,37 @@ mod tests {
         // Check char count, not byte length (ellipsis is multi-byte)
         assert!(result.chars().count() <= 40);
         assert!(result.ends_with('…'));
+    }
+
+    #[test]
+    fn rate_display_shows_placeholders_before_warmup() {
+        let rate = Rate {
+            speed_bps: None,
+            eta_seconds: None,
+        };
+        assert_eq!(rate.display(), "— · ETA —");
+    }
+
+    #[test]
+    fn rate_display_uses_the_shared_decimal_formatter() {
+        let rate = Rate {
+            speed_bps: Some(118_400_000.0),
+            eta_seconds: Some(160.0),
+        };
+        assert_eq!(rate.display(), "118.4 MB/s · ETA 2m 40s");
+    }
+
+    #[test]
+    fn printer_reports_no_rate_from_a_single_sample() {
+        // A resumed download's first event carries everything already on disk.
+        // Counting that as bytes transferred "just now" is what produced
+        // multi-GB/s readings.
+        let mut printer = CliProgressPrinter::new();
+        printer.update(
+            Some("model.gguf"),
+            2 * 1024 * 1024 * 1024,
+            4 * 1024 * 1024 * 1024,
+        );
+        assert_eq!(printer.estimator.rate_bps(), None);
     }
 }

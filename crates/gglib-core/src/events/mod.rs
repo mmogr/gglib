@@ -287,7 +287,7 @@ mod tests {
         let cases = vec![
             (AppEvent::download_started("id", "name"), "download:started"),
             (
-                AppEvent::download_progress("id", 50, 100, 1024.0, 10.0, 50.0),
+                AppEvent::download_progress("id", 50, 100, Some(1024.0), Some(10.0)),
                 "download:progress",
             ),
             (

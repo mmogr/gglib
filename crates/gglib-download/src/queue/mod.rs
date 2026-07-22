@@ -374,18 +374,32 @@ impl DownloadQueue {
         let group_id = ShardGroupId::generate(id);
         let total_shards = usize_to_u32_saturating(shard_files.len());
 
+        // Exact byte offsets, but only when HuggingFace gave us a size for
+        // every shard. A partial layout is worse than none: the consumer's
+        // equal-size fallback is at least self-consistent.
+        let group_total: Option<u64> = shard_files
+            .iter()
+            .map(|(_, size)| *size)
+            .sum::<Option<u64>>();
+
+        let mut preceding: u64 = 0;
+
         shard_files
             .into_iter()
             .enumerate()
             .map(|(idx, (filename, size))| {
+                let index = usize_to_u32_saturating(idx);
                 let shard_info = match size {
-                    Some(s) => ShardInfo::with_size(
-                        usize_to_u32_saturating(idx),
-                        total_shards,
-                        filename,
-                        s,
-                    ),
-                    None => ShardInfo::new(usize_to_u32_saturating(idx), total_shards, filename),
+                    Some(s) => ShardInfo::with_size(index, total_shards, filename, s),
+                    None => ShardInfo::new(index, total_shards, filename),
+                };
+                let shard_info = match group_total {
+                    Some(total) => {
+                        let info = shard_info.with_group_offsets(preceding, total);
+                        preceding = preceding.saturating_add(size.unwrap_or(0));
+                        info
+                    }
+                    None => shard_info,
                 };
                 QueuedItem::new_shard(
                     id.clone(),

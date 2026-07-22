@@ -184,7 +184,8 @@ mod tests {
             1_000_000,
             500_000,
             4_000_000,
-            1024.0,
+            Some(1024.0),
+            Some(3_417.0),
         );
 
         bridge.emit(shard_event);

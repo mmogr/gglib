@@ -13,12 +13,8 @@ pub use gglib_core::ports::{
 
 // Internal modules (pub(crate) to keep implementation private)
 pub(crate) mod executor;
-pub(crate) mod progress;
 pub(crate) mod queue;
 mod resolver;
-
-// Re-export progress throttle for consumers (adapters)
-pub use progress::ProgressThrottle;
 
 // Re-export queue types needed by consumers
 pub use queue::ShardGroupId;
