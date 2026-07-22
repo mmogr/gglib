@@ -57,8 +57,9 @@ export const ModelCard: FC<ModelCardProps> = ({
             <span className="text-[0.8rem] text-text-muted font-mono overflow-hidden text-ellipsis whitespace-nowrap">{model.id}</span>
           </div>
           <div className="flex gap-4 items-center shrink-0">
+            {/* Neutral: parameter count is a fact, not a warning. */}
             {model.parameters_b && (
-              <span className="px-2 py-[0.2rem] bg-warning-subtle text-warning border border-warning-border rounded-sm text-[0.75rem] font-semibold">
+              <span className="px-2 py-[0.2rem] bg-background text-text-secondary border border-border rounded-sm text-[0.75rem] font-semibold">
                 {model.parameters_b.toFixed(1)}B
               </span>
             )}

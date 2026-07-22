@@ -7,7 +7,16 @@
  */
 
 import { useServerHealth } from '../services/serverRegistry';
-import { getHealthDisplay } from '../types';
+import { getHealthDisplay, type HealthTone } from '../types';
+import { cn } from '../utils/cn';
+
+/** Token-backed dot colour per health tone. */
+const toneDot: Record<HealthTone, string> = {
+  healthy: 'bg-success',
+  degraded: 'bg-warning',
+  failed: 'bg-danger',
+  unknown: 'bg-offline',
+};
 
 interface Props {
   /** Model ID to monitor (server registry key) */
@@ -20,15 +29,15 @@ interface Props {
 
 export function ServerHealthIndicator({ modelId, className, showLabel = false }: Props) {
   const health = useServerHealth(modelId);
-  const { dot, label, title } = getHealthDisplay(health);
+  const { tone, label, title } = getHealthDisplay(health);
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 ${className || ''}`}
+      className={cn('inline-flex items-center gap-sm', className)}
       title={title}
       aria-label={`Server health: ${label}`}
     >
-      <span aria-hidden="true">{dot}</span>
+      <span className={cn('w-2 h-2 rounded-full shrink-0', toneDot[tone])} aria-hidden="true" />
       {showLabel && <span>{label}</span>}
     </span>
   );

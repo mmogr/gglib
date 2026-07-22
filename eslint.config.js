@@ -75,6 +75,28 @@ export default [
           selector: "JSXAttribute[name.name='className'] Literal[value=/\\bbtn\\b/]",
           message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
         },
+
+        // ── Iconography ───────────────────────────────────────────────────
+        // Emoji and dingbat glyphs render as full-colour, double-width
+        // system glyphs that clash with lucide's thin monochrome strokes,
+        // and they cannot inherit currentColor. lucide-react is already a
+        // dependency; ui/Icon.tsx wraps it with aria-hidden + stroke width.
+        //
+        // Ranges deliberately EXCLUDE U+2190–U+21FF (← ↑ → ↓ ↵), which are
+        // legitimate prose characters in diff summaries and keyboard hints.
+        // High surrogates (U+D800–U+DBFF) catch astral-plane emoji.
+        {
+          selector:
+            'JSXText[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
+          message:
+            'No emoji or glyph characters in JSX. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
+        },
+        {
+          selector:
+            'Literal[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
+          message:
+            'No emoji or glyph characters in string literals. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
+        },
       ],
 
       // Warn about inline styles (except truly dynamic ones)

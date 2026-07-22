@@ -312,7 +312,12 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         {r.response_text}
       </div>
       <div className="flex gap-md text-xs text-text-muted flex-wrap">
-        {r.generation_tps != null && <span>⚡ {formatTps(r.generation_tps)} gen</span>}
+        {r.generation_tps != null && (
+          <span className="inline-flex items-center gap-xs">
+            <Icon icon={Zap} size={12} />
+            {formatTps(r.generation_tps)} gen
+          </span>
+        )}
         {r.prompt_tps != null && <span>{formatTps(r.prompt_tps)} pp</span>}
         {r.generation_ms != null && <span>{formatMs(r.generation_ms)} gen</span>}
         {r.completion_tokens != null && <span>{r.completion_tokens} tokens</span>}

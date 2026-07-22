@@ -3,6 +3,8 @@ import { Library, Menu, Monitor, Settings, X } from "lucide-react";
 import { ServerInfo } from "../types";
 import { RunsPopover } from "./RunsPopover";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { Button } from "./ui/Button";
+import { Icon } from "./ui/Icon";
 import { cn } from "../utils/cn";
 
 interface HeaderProps {
@@ -27,6 +29,9 @@ const Header: FC<HeaderProps> = ({
 
   const serverCount = servers.length;
   const hasRunningServers = serverCount > 0;
+  const runsLabel = hasRunningServers
+    ? `${serverCount} server${serverCount !== 1 ? 's' : ''} running`
+    : 'No servers running';
 
   // Close menu when clicking outside
   useClickOutside(menuRef, () => setIsMobileMenuOpen(false), isMobileMenuOpen);
@@ -43,7 +48,7 @@ const Header: FC<HeaderProps> = ({
   };
 
   return (
-    <header className="bg-[linear-gradient(135deg,var(--color-background-elevated)_0%,var(--color-surface-elevated)_100%)] text-text py-sm px-xl border-b border-border shadow-md shrink-0">
+    <header className="bg-background-elevated text-text py-sm px-xl border-b border-border shrink-0">
       <div className="flex justify-between items-center w-full">
         <div className="flex flex-row items-center gap-sm">
           <h1 className="flex items-center gap-sm text-xl font-bold m-0">
@@ -56,26 +61,26 @@ const Header: FC<HeaderProps> = ({
           <div className="hidden md:flex items-center gap-base">
             {/* Server status button with popover */}
             <div className="relative">
-              <button
+              <Button
                 ref={runsButtonRef}
-                type="button"
+                variant="secondary"
+                iconOnly
                 className={cn(
-                  'flex items-center justify-center gap-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
-                  'hover:not-disabled:border-border-hover hover:not-disabled:bg-background-hover',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  'w-[var(--button-height-base)] p-0 relative',
-                  hasRunningServers && 'border-primary text-primary-light shadow-[0_0_12px_rgba(59,130,246,0.25)]',
+                  'rounded-full relative',
+                  hasRunningServers && 'border-primary text-primary-light',
                 )}
                 onClick={handleRunsClick}
                 disabled={!hasRunningServers}
-                aria-label={hasRunningServers ? `${serverCount} server${serverCount !== 1 ? 's' : ''} running` : 'No servers running'}
-                title={hasRunningServers ? `${serverCount} server${serverCount !== 1 ? 's' : ''} running` : 'No servers running'}
+                aria-label={runsLabel}
+                title={runsLabel}
               >
-                <Monitor className="w-[18px] h-[18px]" aria-hidden />
+                <Icon icon={Monitor} size={18} />
                 {hasRunningServers && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-[9px] bg-success text-white text-[11px] font-semibold flex items-center justify-center shadow-[0_0_6px_rgba(16,185,129,0.6)]">{serverCount}</span>
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-text-inverse text-[11px] font-semibold flex items-center justify-center">
+                    {serverCount}
+                  </span>
                 )}
-              </button>
+              </Button>
               <RunsPopover
                 isOpen={isRunsPopoverOpen}
                 onClose={() => setIsRunsPopoverOpen(false)}
@@ -85,61 +90,54 @@ const Header: FC<HeaderProps> = ({
                 onRefresh={onRefreshServers}
               />
             </div>
-            <button
-              type="button"
-              className={cn(
-                'flex items-center justify-center gap-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
-                'hover:not-disabled:border-border-hover hover:not-disabled:bg-background-hover',
-                'w-[var(--button-height-base)] p-0 relative',
-              )}
+            <Button
+              variant="secondary"
+              iconOnly
+              className="rounded-full"
               onClick={onOpenSettings}
               aria-label="Open settings"
               title="Open settings"
             >
-                <Settings className="w-[18px] h-[18px]" aria-hidden />
-            </button>
+              <Icon icon={Settings} size={18} />
+            </Button>
           </div>
 
           {/* Mobile menu toggle */}
-          <button
-            type="button"
-            className="flex md:hidden items-center justify-center w-[var(--button-height-base)] h-[var(--button-height-base)] p-0 rounded-full border border-border bg-background-elevated text-inherit text-lg cursor-pointer transition-all hover:border-border-hover hover:bg-background-hover"
+          <Button
+            variant="secondary"
+            iconOnly
+            className="flex md:hidden rounded-full"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
           >
-            {isMobileMenuOpen ? (
-              <X className="w-[18px] h-[18px]" aria-hidden />
-            ) : (
-              <Menu className="w-[18px] h-[18px]" aria-hidden />
-            )}
-          </button>
+            <Icon icon={isMobileMenuOpen ? X : Menu} size={18} />
+          </Button>
 
           {/* Mobile dropdown menu */}
           <div className={cn(
             'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface border border-border rounded-base shadow-lg z-[100]',
             isMobileMenuOpen && 'flex flex-col gap-xs',
           )}>
-            <button
-              type="button"
-              className={cn(
-                'flex items-center gap-sm w-full px-base py-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover',
-                hasRunningServers && 'bg-primary text-white',
-              )}
+            <Button
+              variant="ghost"
+              fullWidth
+              className="justify-start"
               onClick={() => hasRunningServers && handleMobileMenuAction(() => setIsRunsPopoverOpen(true))}
               disabled={!hasRunningServers}
+              leftIcon={<Icon icon={Monitor} size={18} />}
             >
-              <Monitor className="w-[18px] h-[18px]" aria-hidden />
               {hasRunningServers ? `${serverCount} Running` : 'No Servers'}
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-sm w-full px-base py-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover"
+            </Button>
+            <Button
+              variant="ghost"
+              fullWidth
+              className="justify-start"
               onClick={() => handleMobileMenuAction(onOpenSettings)}
+              leftIcon={<Icon icon={Settings} size={18} />}
             >
-              <Settings className="w-[18px] h-[18px]" aria-hidden />
               Settings
-            </button>
+            </Button>
           </div>
         </div>
       </div>

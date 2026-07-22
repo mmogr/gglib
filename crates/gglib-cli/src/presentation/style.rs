@@ -11,12 +11,17 @@ use termimad::{ListItemsIndentationMode, MadSkin, StyledChar};
 
 /// Green — success states, installed dependencies, GPU detected.
 pub const SUCCESS: &str = "\x1b[32m";
-/// Red — error states, missing required dependencies.
+/// Red — error states, missing required dependencies. Reserved for actual
+/// failure; an idle/stopped state is not a failure — use MUTED.
 pub const DANGER: &str = "\x1b[31m";
 /// Yellow — warnings, optional missing items.
 pub const WARNING: &str = "\x1b[33m";
 /// Blue — informational labels, commands, headings.
 pub const INFO: &str = "\x1b[34m";
+/// Grey — idle/stopped states. Mirrors --color-offline in the GUI's
+/// variables.css. Before this constant existed, idle states had nowhere
+/// to go but DANGER, which is why a stopped proxy used to print red.
+pub const MUTED: &str = "\x1b[90m";
 /// Bold — emphasis, table headers.
 pub const BOLD: &str = "\x1b[1m";
 /// Dim — reduced intensity (thinking blocks).

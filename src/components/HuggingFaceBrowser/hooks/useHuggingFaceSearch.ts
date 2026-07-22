@@ -9,7 +9,6 @@ import {
 import {
   parseModelSearchIntent,
   getButtonTextForIntent,
-  getButtonVariantForIntent,
   ModelSearchIntent,
 } from "../../../utils/modelSearchParser";
 import { queueDownload } from "../../../services/clients/downloads";
@@ -63,7 +62,6 @@ export interface UseHuggingFaceSearchReturn {
   // Search intent
   searchIntent: ModelSearchIntent;
   buttonText: string;
-  buttonVariant: "default" | "primary" | "accent";
 
   // Actions
   handleSearch: () => void;
@@ -284,7 +282,6 @@ export function useHuggingFaceSearch(
   const buttonText = loading
     ? "Loading..."
     : getButtonTextForIntent(searchIntent);
-  const buttonVariant = getButtonVariantForIntent(searchIntent);
 
   // Auto-search on debounced query change (after initial mount)
   useEffect(() => {
@@ -333,7 +330,6 @@ export function useHuggingFaceSearch(
     // Search intent
     searchIntent,
     buttonText,
-    buttonVariant,
 
     // Actions
     handleSearch,

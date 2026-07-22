@@ -50,9 +50,6 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ids::SHOW_CHAT => {
             emit_or_log(app, names::MENU_SHOW_CHAT, ());
         }
-        ids::TOGGLE_SIDEBAR => {
-            emit_or_log(app, names::MENU_TOGGLE_SIDEBAR, ());
-        }
 
         // Help menu
         ids::INSTALL_LLAMA => {

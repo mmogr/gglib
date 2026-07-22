@@ -22,7 +22,7 @@ interface SettingsModalProps {
 
 const sourceLabels: Record<string, string> = {
   explicit: "Custom path (CLI/UI override)",
-  env: "Configured via .env",
+  environment: "Configured via .env",
   default: "Default (~/.local/share/llama_models)",
 };
 

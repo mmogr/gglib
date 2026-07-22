@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   parseModelSearchIntent,
   getButtonTextForIntent,
-  getButtonVariantForIntent,
   type ModelSearchIntent,
 } from "../../../src/utils/modelSearchParser";
 
@@ -293,13 +292,13 @@ describe("getButtonTextForIntent", () => {
     expect(getButtonTextForIntent(intent)).toBe("View Model");
   });
 
-  it('returns "⬇️ Download" for download intent', () => {
+  it('returns "Download" for download intent', () => {
     const intent: ModelSearchIntent = {
       kind: "download",
       repo: "user/model",
       quant: "Q4_K_M",
     };
-    expect(getButtonTextForIntent(intent)).toBe("⬇️ Download");
+    expect(getButtonTextForIntent(intent)).toBe("Download");
   });
 
   it('returns "View Model" for url intent with repo only', () => {
@@ -311,14 +310,14 @@ describe("getButtonTextForIntent", () => {
     expect(getButtonTextForIntent(intent)).toBe("View Model");
   });
 
-  it('returns "⬇️ Download" for url intent with repo and quant', () => {
+  it('returns "Download" for url intent with repo and quant', () => {
     const intent: ModelSearchIntent = {
       kind: "url",
       url: "https://huggingface.co/user/model/blob/main/model.Q4_K_M.gguf",
       repo: "user/model",
       quant: "Q4_K_M",
     };
-    expect(getButtonTextForIntent(intent)).toBe("⬇️ Download");
+    expect(getButtonTextForIntent(intent)).toBe("Download");
   });
 
   it('returns "Search" for url intent without repo', () => {
@@ -330,42 +329,3 @@ describe("getButtonTextForIntent", () => {
   });
 });
 
-describe("getButtonVariantForIntent", () => {
-  it('returns "default" for search intent', () => {
-    const intent: ModelSearchIntent = { kind: "search", query: "llama" };
-    expect(getButtonVariantForIntent(intent)).toBe("default");
-  });
-
-  it('returns "primary" for repo intent', () => {
-    const intent: ModelSearchIntent = { kind: "repo", repo: "user/model" };
-    expect(getButtonVariantForIntent(intent)).toBe("primary");
-  });
-
-  it('returns "accent" for download intent', () => {
-    const intent: ModelSearchIntent = {
-      kind: "download",
-      repo: "user/model",
-      quant: "Q4_K_M",
-    };
-    expect(getButtonVariantForIntent(intent)).toBe("accent");
-  });
-
-  it('returns "primary" for url intent with repo only', () => {
-    const intent: ModelSearchIntent = {
-      kind: "url",
-      url: "https://huggingface.co/user/model",
-      repo: "user/model",
-    };
-    expect(getButtonVariantForIntent(intent)).toBe("primary");
-  });
-
-  it('returns "accent" for url intent with quant', () => {
-    const intent: ModelSearchIntent = {
-      kind: "url",
-      url: "https://huggingface.co/user/model/blob/main/model.Q4_K_M.gguf",
-      repo: "user/model",
-      quant: "Q4_K_M",
-    };
-    expect(getButtonVariantForIntent(intent)).toBe("accent");
-  });
-});

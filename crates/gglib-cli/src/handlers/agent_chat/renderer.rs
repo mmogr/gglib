@@ -124,7 +124,7 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
         }
 
         AgentEvent::Error { message } => {
-            eprintln!("\n  ❌  {message}");
+            eprintln!("\n  ✗  {message}");
         }
 
         AgentEvent::SystemWarning {

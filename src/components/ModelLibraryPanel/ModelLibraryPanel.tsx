@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import { BookOpenText, PlusCircle, RefreshCcw } from 'lucide-react';
+import { BookOpenText, PlusCircle, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
 import SidebarTabs, { SidebarTabId, SidebarTab } from './SidebarTabs';
 import ModelsListContent from './ModelsListContent';
@@ -7,6 +7,7 @@ import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
 import { FilterPopover, FilterState } from '../FilterPopover';
 import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 import { Input } from '../ui/Input';
 import { cn } from '../../utils/cn';
 
@@ -178,7 +179,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
                 title="Filter models"
                 iconOnly
               >
-                🔽
+                <Icon icon={SlidersHorizontal} size={16} />
                 {hasActiveFilters && <span className="absolute top-[2px] right-[2px] w-[8px] h-[8px] bg-primary rounded-full border-2 border-surface" />}
               </Button>
               

@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { Box, Plus } from 'lucide-react';
+import { Box, Plus, Zap } from 'lucide-react';
 import { GgufModel, ServerInfo } from '../../types';
 import { formatParamCount } from '../../utils/format';
 import { Icon } from '../ui/Icon';
@@ -55,18 +55,23 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
 
   return (
     <>
-      <div className="flex flex-col w-full">
+      <div className="flex flex-col w-full" role="listbox" aria-label="Model library">
         {models.map((model) => {
           const isSelected = selectedModelId === model.id;
           const isRunning = isModelRunning(model.id);
+          const tps = model.benchmarkSummary?.latest_tg_tps ?? model.benchmarkSummary?.best_tg_tps;
           return (
-          <div
+          <button
             key={model.id || model.name}
+            type="button"
+            role="option"
+            aria-selected={isSelected}
+            // The accent border is always present but transparent when idle,
+            // so selecting a row recolours it instead of shifting the text 3px.
             className={cn(
-              "py-md px-base border-b border-border cursor-pointer transition duration-200 w-full hover:bg-background-hover",
-              isSelected && !isRunning && "bg-primary-subtle border-l-[3px] border-l-primary",
-              isRunning && !isSelected && "border-l-[3px] border-l-success",
-              isRunning && isSelected && "border-l-[3px] border-l-primary bg-primary-subtle"
+              "py-md px-base text-left border-b border-border border-l-[3px] border-l-transparent cursor-pointer transition duration-200 w-full bg-transparent hover:bg-background-hover focus-visible:outline-none focus-visible:bg-background-hover focus-visible:border-l-primary",
+              isSelected && "bg-primary-subtle border-l-primary",
+              isRunning && !isSelected && "border-l-success",
             )}
             onClick={() => onSelectModel(model.id!)}
           >
@@ -82,17 +87,20 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {model.architecture && (
                   <span className="inline-flex items-center">{model.architecture}</span>
                 )}
+                {/* Neutral: quantization and throughput are facts about the
+                    model, not states needing attention. */}
                 {model.quantization && (
-                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-primary-border">{model.quantization}</span>
+                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-text-secondary border border-border">{model.quantization}</span>
                 )}
-                {(model.benchmarkSummary?.latest_tg_tps ?? model.benchmarkSummary?.best_tg_tps) != null && (
-                  <span className="py-xs px-sm bg-warning-subtle text-warning rounded-sm text-xs font-medium border border-warning-border">
-                    ⚡ {((model.benchmarkSummary!.latest_tg_tps ?? model.benchmarkSummary!.best_tg_tps)!).toFixed(0)} t/s
+                {tps != null && (
+                  <span className="inline-flex items-center gap-xs py-xs px-sm bg-background text-text-secondary rounded-sm text-xs font-medium border border-border">
+                    <Icon icon={Zap} size={11} />
+                    {tps.toFixed(0)} t/s
                   </span>
                 )}
               </div>
             </div>
-          </div>
+          </button>
           );
         })}
       </div>

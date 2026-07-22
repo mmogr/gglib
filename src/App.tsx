@@ -25,8 +25,6 @@ import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  // Sidebar visibility (for menu toggle, currently not visually implemented)
-  const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
   const { toasts, showToast, dismissToast } = useToastContext();
   const { 
@@ -90,7 +88,6 @@ function AppContent() {
 
     listenToMenuEvents({
       [MENU_EVENTS.OPEN_SETTINGS]: () => setIsSettingsOpen(true),
-      [MENU_EVENTS.TOGGLE_SIDEBAR]: () => setIsSidebarVisible(prev => !prev),
       [MENU_EVENTS.ADD_MODEL_FILE]: () => menuActionsRef.current?.addModelFromFile?.(),
       [MENU_EVENTS.SHOW_DOWNLOADS]: () => menuActionsRef.current?.showDownloads?.(),
       [MENU_EVENTS.SHOW_CHAT]: () => menuActionsRef.current?.showChat?.(),

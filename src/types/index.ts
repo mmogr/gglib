@@ -144,7 +144,9 @@ export interface ServerInfo {
 
 export interface ModelsDirectoryInfo {
   path: string;
-  source: 'explicit' | 'env' | 'default';
+  // Matches gglib_app_services::settings::format_source() exactly:
+  // ModelsDirSource::{Explicit,EnvVar,Default} -> "explicit"/"environment"/"default".
+  source: 'explicit' | 'environment' | 'default';
   defaultPath: string;
   exists: boolean;
   writable: boolean;
@@ -233,40 +235,46 @@ export type ServerHealthStatus =
   | { status: 'processdied' };
 
 /**
- * Get display info for a health status (dot, label, title).
+ * Semantic tone for a health state. Callers map this to a token colour
+ * rather than baking a colour (or a coloured emoji) into the model layer.
  */
-export function getHealthDisplay(health?: ServerHealthStatus): { dot: string; label: string; title: string } {
+export type HealthTone = 'healthy' | 'degraded' | 'failed' | 'unknown';
+
+/**
+ * Get display info for a health status (tone, label, title).
+ */
+export function getHealthDisplay(health?: ServerHealthStatus): { tone: HealthTone; label: string; title: string } {
   if (!health) {
-    return { dot: '🟡', label: 'Unknown', title: 'No health data yet' };
+    return { tone: 'unknown', label: 'Unknown', title: 'No health data yet' };
   }
 
   switch (health.status) {
     case 'healthy':
-      return { dot: '🟢', label: 'Healthy', title: 'Server responding normally' };
+      return { tone: 'healthy', label: 'Healthy', title: 'Server responding normally' };
 
     case 'degraded':
       return {
-        dot: '🟡',
+        tone: 'degraded',
         label: 'Degraded',
         title: health.reason ?? 'Health checks reporting degraded state',
       };
 
     case 'unreachable':
       return {
-        dot: '🔴',
+        tone: 'failed',
         label: 'Unreachable',
         title: health.lastError ?? 'Health endpoint not reachable',
       };
 
     case 'processdied':
       return {
-        dot: '🔴',
+        tone: 'failed',
         label: 'Process died',
         title: 'Server process appears to have exited',
       };
 
     default:
-      return { dot: '🟡', label: 'Unknown', title: 'Unrecognized health state' };
+      return { tone: 'unknown', label: 'Unknown', title: 'Unrecognized health state' };
   }
 }
 

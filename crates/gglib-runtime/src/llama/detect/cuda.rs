@@ -251,7 +251,7 @@ pub fn validate_cuda_gcc_compatibility() -> Result<()> {
 
         if !is_compatible {
             let mut msg = format!(
-                "\n\n❌ CUDA/GCC Compatibility Issue:\n\n\
+                "\n\n✗ CUDA/GCC Compatibility Issue:\n\n\
                  CUDA {cuda_major}.{cuda_minor} does not support \
                  {compiler_name} {gcc_major}.x as a host compiler.\n\n\
                  Supported workarounds:\n\n"

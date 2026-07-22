@@ -13,3 +13,6 @@ export type { DeleteModalState } from './useDeleteModal';
 
 export { useServerActions } from './useServerActions';
 export type { ServerActionsConfig, ServerActionsResult } from './useServerActions';
+
+export { useInspectorModals } from './useInspectorModals';
+export type { UseInspectorModalsResult } from './useInspectorModals';

@@ -1,5 +1,5 @@
 import { FC, useState, useRef } from "react";
-import { ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -123,11 +123,13 @@ const ProxyControl: FC<ProxyControlProps> = ({
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-background-overlay rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">
           <div className="flex justify-between items-center mb-base pb-md border-b border-border">
             <h3 className="m-0 text-lg text-text">OpenAI Proxy</h3>
+            {/* Stopped is idle, not an error — danger red is reserved for
+                failures. See --color-offline in styles/base/variables.css. */}
             <span className={cn(
               'px-md py-xs rounded-lg text-xs font-semibold uppercase',
               proxyState.running
-                ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-success'
-                : 'bg-[color-mix(in_srgb,var(--color-danger)_15%,transparent)] text-danger'
+                ? 'bg-success-subtle text-success'
+                : 'bg-background-hover text-offline'
             )}>
               {proxyState.running ? 'Running' : 'Stopped'}
             </span>
@@ -245,8 +247,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 variant="ghost"
                 className="w-full p-sm bg-transparent border border-border rounded-base cursor-pointer text-sm text-text-secondary mb-md transition-all hover:bg-surface-hover"
                 onClick={() => setShowSettings(!showSettings)}
+                leftIcon={<Icon icon={showSettings ? ChevronUp : ChevronDown} size={14} />}
               >
-                {showSettings ? '▲ Hide' : '▼ Show'} Settings
+                {showSettings ? 'Hide' : 'Show'} Settings
               </Button>
 
               <Button

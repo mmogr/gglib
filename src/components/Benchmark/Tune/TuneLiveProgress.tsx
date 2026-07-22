@@ -11,7 +11,9 @@
  */
 
 import { FC } from 'react';
+import { Check, X } from 'lucide-react';
 import { cn } from '../../../utils/cn';
+import { Icon } from '../../ui/Icon';
 
 export interface TuneTaskLogEntry {
   candidateIndex: number;
@@ -65,9 +67,11 @@ export const TuneLiveProgress: FC<TuneLiveProgressProps> = ({
             key={`${entry.candidateIndex}-${entry.taskId}-${i}`}
             className="flex items-center gap-sm text-xs"
           >
-            <span className={cn('font-bold', entry.passed ? 'text-success' : 'text-danger')}>
-              {entry.passed ? '✓' : '✗'}
-            </span>
+            <Icon
+              icon={entry.passed ? Check : X}
+              size={12}
+              className={cn('shrink-0', entry.passed ? 'text-success' : 'text-danger')}
+            />
             <span className="text-text-muted">candidate {entry.candidateIndex + 1}</span>
             <span className="text-text truncate">{entry.taskId}</span>
           </div>

@@ -118,10 +118,13 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     // Model Menu
     // =========================================================================
     // These start disabled until a model is selected
+    // "Endpoint" matches the web/Tauri inspector's "Start Endpoint" /
+    // "Stop Endpoint" button — this menu previously said "Server", one of
+    // three different names (menu, inspector, `gglib serve`) for one action.
     let start_server_item = MenuItem::with_id(
         app,
         ids::START_SERVER,
-        "Start Server",
+        "Start Endpoint",
         false, // Initially disabled
         Some("CmdOrCtrl+Return"),
     )?;
@@ -129,15 +132,16 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     let stop_server_item = MenuItem::with_id(
         app,
         ids::STOP_SERVER,
-        "Stop Server",
+        "Stop Endpoint",
         false, // Initially disabled
         Some("CmdOrCtrl+."),
     )?;
 
+    // Matches the inspector's "Delete" action.
     let remove_model_item = MenuItem::with_id(
         app,
         ids::REMOVE_MODEL,
-        "Remove from Library...",
+        "Delete Model...",
         false, // Initially disabled
         Some("CmdOrCtrl+Backspace"),
     )?;
@@ -199,23 +203,12 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     let show_chat_item =
         MenuItem::with_id(app, ids::SHOW_CHAT, "Show Chat", true, Some("CmdOrCtrl+1"))?;
 
-    // Toggle sidebar is currently not visually implemented in the UI
-    let toggle_sidebar_item = MenuItem::with_id(
-        app,
-        ids::TOGGLE_SIDEBAR,
-        "Toggle Sidebar",
-        false, // Disabled until visual implementation is added
-        Some("CmdOrCtrl+\\"),
-    )?;
-
     let view_submenu = Submenu::with_items(
         app,
         "View",
         true,
         &[
             &show_chat_item,
-            &PredefinedMenuItem::separator(app)?,
-            &toggle_sidebar_item,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, Some("Enter Full Screen"))?,
         ],

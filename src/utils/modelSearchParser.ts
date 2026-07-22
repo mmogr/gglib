@@ -163,13 +163,13 @@ export function parseModelSearchIntent(input: string): ModelSearchIntent {
 export function getButtonTextForIntent(intent: ModelSearchIntent): string {
   switch (intent.kind) {
     case "download":
-      return "⬇️ Download";
+      return "Download";
     case "repo":
       return "View Model";
     case "url":
       // If we extracted repo info from URL, show appropriate action
       if (intent.quant) {
-        return "⬇️ Download";
+        return "Download";
       }
       if (intent.repo) {
         return "View Model";
@@ -181,24 +181,3 @@ export function getButtonTextForIntent(intent: ModelSearchIntent): string {
   }
 }
 
-/**
- * Get button variant/style class based on current intent
- */
-export function getButtonVariantForIntent(
-  intent: ModelSearchIntent
-): "default" | "primary" | "accent" {
-  switch (intent.kind) {
-    case "download":
-      return "accent";
-    case "repo":
-      return "primary";
-    case "url":
-      if (intent.quant || intent.repo) {
-        return intent.quant ? "accent" : "primary";
-      }
-      return "default";
-    case "search":
-    default:
-      return "default";
-  }
-}

@@ -17,6 +17,7 @@ import {
   GitFork,
   Users,
   RefreshCcw,
+  Check,
 } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
@@ -313,8 +314,9 @@ const NodePanel: FC<NodePanelProps> = ({
                 </div>
               )}
               {qaState.kind === 'note_sent' && (
-                <p className="mt-xs text-xs text-success">
-                  ✓ Steering note sent to active run.
+                <p className="mt-xs text-xs text-success inline-flex items-center gap-xs">
+                  <Check size={12} strokeWidth={1.6} aria-hidden />
+                  Steering note sent to active run.
                 </p>
               )}
               {qaState.kind === 'error' && (
