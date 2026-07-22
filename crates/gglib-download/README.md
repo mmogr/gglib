@@ -68,6 +68,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | [`cli_exec/`](src/cli_exec/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-cli_exec-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-cli_exec-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-cli_exec-coverage.json) |
 | [`executor/`](src/executor/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-coverage.json) |
 | [`manager/`](src/manager/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-manager-coverage.json) |
+| [`progress/`](src/progress/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-progress-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-progress-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-progress-coverage.json) |
 | [`queue/`](src/queue/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-queue-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-queue-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-queue-coverage.json) |
 | [`resolver/`](src/resolver/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-resolver-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-resolver-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-resolver-coverage.json) |
 <!-- module-table:end -->
@@ -79,6 +80,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`queue/`** — Download task queue with priority and state management
 - **`executor/`** — Async download workers with retry logic
 - **`cli_emitter.rs`** — Terminal progress bars for CLI contexts
+- **`progress/`** — `ProgressThrottle`, an emission rate limiter for callers
+  whose progress callbacks are driven by raw byte chunks rather than a tick
 - **`resolver/`** — File URL resolution and shard detection
 - **`cli_exec/`** — Python `hf_xet` subprocess for fast-path downloads
 - **`manager/`** — High-level download manager facade

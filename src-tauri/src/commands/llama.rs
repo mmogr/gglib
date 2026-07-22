@@ -1,6 +1,7 @@
 //! llama.cpp installation and status commands.
 
 use crate::app::events::{emit_or_log, names};
+use gglib_core::download::{RateEstimator, format_duration, format_rate};
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_download::ProgressThrottle;
 use gglib_runtime::llama::{
@@ -9,6 +10,7 @@ use gglib_runtime::llama::{
     run_llama_source_build,
 };
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tauri::AppHandle;
 
 /// Response for check_llama_status command.
@@ -100,32 +102,41 @@ pub async fn install_llama(app: AppHandle) -> Result<String, String> {
                 },
             );
 
-            // Create progress callback (boxed, thread-safe)
-            let start_time = std::time::Instant::now();
+            // Create progress callback (boxed, thread-safe).
+            //
+            // Speed and ETA come from the same `RateEstimator` the model
+            // download path uses, and render through the same formatters, so
+            // this bar reads identically to the ones in the CLI and the model
+            // download UI. The previous inline arithmetic here divided total
+            // bytes by total elapsed time — a cumulative average that keeps
+            // drifting toward the run's mean and never reflects current
+            // throughput — and used 0 to mean "no ETA yet".
+            let estimator = Arc::new(Mutex::new(RateEstimator::new(Instant::now())));
             let throttle = Arc::new(Mutex::new(ProgressThrottle::default()));
             let app_clone = app.clone();
 
             let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> =
                 Box::new(move |downloaded: u64, total: u64| {
-                    // Rate-limit progress updates
+                    // Feed every callback; the estimator wants all the samples.
+                    let (speed_bps, eta_seconds) = match estimator.lock() {
+                        Ok(mut est) => {
+                            est.record(downloaded, total, Instant::now());
+                            (est.rate_bps(), est.eta_seconds())
+                        }
+                        Err(_) => (None, None),
+                    };
+
+                    // Rate-limit only the *emission*, not the measurement.
                     if let Ok(mut t) = throttle.lock()
                         && !t.should_emit()
                     {
                         return;
                     }
-                    let elapsed = start_time.elapsed().as_secs_f64();
+
                     let percentage = if total > 0 {
-                        (downloaded as f64 / total as f64) * 100.0
-                    } else {
-                        0.0
-                    };
-                    let speed = if elapsed > 0.0 {
-                        downloaded as f64 / elapsed
-                    } else {
-                        0.0
-                    };
-                    let eta = if speed > 0.0 && total > downloaded {
-                        (total - downloaded) as f64 / speed
+                        #[allow(clippy::cast_precision_loss)]
+                        let pct = (downloaded as f64 / total as f64) * 100.0;
+                        pct.clamp(0.0, 100.0)
                     } else {
                         0.0
                     };
@@ -139,10 +150,9 @@ pub async fn install_llama(app: AppHandle) -> Result<String, String> {
                             total,
                             percentage,
                             message: format!(
-                                "Downloading... {:.1}% ({:.1} MB/s, {:.0}s remaining)",
-                                percentage,
-                                speed / 1_000_000.0,
-                                eta
+                                "Downloading... {percentage:.1}% ({}, {} remaining)",
+                                format_rate(speed_bps),
+                                format_duration(eta_seconds),
                             ),
                         },
                     );

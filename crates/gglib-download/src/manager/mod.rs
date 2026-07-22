@@ -432,12 +432,14 @@ impl DownloadManagerImpl {
                 // Spawn progress bridge task, sharing the shard group's
                 // estimator so the reported speed does not restart per shard.
                 let estimator = self.rate_estimator_for(&item).await;
+                let bridge_finished = CancellationToken::new();
                 let bridge_handle = self.spawn_progress_bridge(
                     &item.id,
                     item.shard_info.as_ref(),
                     progress_tx.subscribe(),
                     cancel.clone(),
                     estimator,
+                    bridge_finished.clone(),
                 );
 
                 // Create worker deps and job
@@ -487,13 +489,16 @@ impl DownloadManagerImpl {
                     primary_file_path.as_ref(),
                 );
 
-                // Drop the cloned sender so the bridge sees all senders
-                // dropped and can emit its final progress event.
                 drop(progress_tx_clone);
 
-                // Actually wait for the bridge. Dropping the JoinHandle only
-                // detaches the task, which let its final progress event race
-                // ahead of — or behind — the terminal event emitted below.
+                // Tell the bridge the worker is done, then actually join it.
+                // Dropping the JoinHandle only detaches the task, which let its
+                // final progress event race the terminal event emitted below.
+                //
+                // The signal is explicit rather than "wait for the senders to
+                // drop": the active-jobs map holds a `progress_tx` clone until
+                // `finalize_job` removes it, and that runs after this join.
+                bridge_finished.cancel();
                 let _ = bridge_handle.await;
 
                 // Finalize the job with item context for shard tracking
@@ -973,93 +978,26 @@ impl DownloadManagerImpl {
 
     /// Spawn a progress bridge task that rate-limits event emission.
     ///
-    /// The bridge samples the worker's `watch` channel on a fixed tick and
-    /// feeds every sample — including ticks where the byte count has not moved
-    /// — into the shared [`RateEstimator`]. Those idle samples are what let a
-    /// stalled transfer decay toward zero instead of freezing the displayed
-    /// speed while the ETA counts down against nothing.
-    ///
-    /// `estimator` is owned by the shard *group*, not the job, so it survives
-    /// shard boundaries. Each shard's byte counter restarts at zero; the
-    /// estimator re-baselines on that without disturbing its running average.
+    /// See [`run_progress_bridge`] for the behaviour; this only supplies the
+    /// manager's event emitter.
     fn spawn_progress_bridge(
         &self,
         id: &DownloadId,
         shard_info: Option<&ShardInfo>,
-        mut rx: watch::Receiver<ProgressUpdate>,
+        rx: watch::Receiver<ProgressUpdate>,
         cancel: CancellationToken,
         estimator: Arc<Mutex<RateEstimator>>,
+        finished: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
-        let event_emitter = Arc::clone(&self.event_emitter);
-        let id_str = id.to_string();
-        let shard_info = shard_info.cloned();
-
-        tokio::spawn(async move {
-            let mut tick = interval(PROGRESS_TICK);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            let mut last_emitted = ProgressUpdate::default();
-
-            loop {
-                tokio::select! {
-                    biased;
-
-                    () = cancel.cancelled() => {
-                        // Don't emit progress on cancel - let DownloadCancelled event be final
-                        break;
-                    }
-
-                    result = rx.changed() => {
-                        if result.is_err() {
-                            // Sender dropped (job finished): emit a final event and exit.
-                            let final_progress = rx.borrow().clone();
-                            if final_progress.seq > last_emitted.seq {
-                                let (speed, eta) = sample(
-                                    &estimator,
-                                    shard_info.as_ref(),
-                                    &final_progress,
-                                ).await;
-                                emit_progress(
-                                    &event_emitter,
-                                    &id_str,
-                                    shard_info.as_ref(),
-                                    &final_progress,
-                                    speed,
-                                    eta,
-                                );
-                            }
-                            break;
-                        }
-                        // Progress changed, will be picked up on next tick
-                    }
-
-                    _ = tick.tick() => {
-                        let current = rx.borrow().clone();
-
-                        // Sample unconditionally — a tick with no new bytes is
-                        // a real observation of "nothing arrived".
-                        let (speed, eta) =
-                            sample(&estimator, shard_info.as_ref(), &current).await;
-
-                        // Emit on every tick while in flight, not only when the
-                        // byte count moved, so a decaying rate during a stall
-                        // reaches the UI.
-                        let has_progress = current.seq > 0;
-                        if has_progress {
-                            emit_progress(
-                                &event_emitter,
-                                &id_str,
-                                shard_info.as_ref(),
-                                &current,
-                                speed,
-                                eta,
-                            );
-                            last_emitted = current;
-                        }
-                    }
-                }
-            }
-        })
+        let bridge = ProgressBridge {
+            event_emitter: Arc::clone(&self.event_emitter),
+            id: id.to_string(),
+            shard_info: shard_info.cloned(),
+            estimator,
+            cancel,
+            finished,
+        };
+        tokio::spawn(run_progress_bridge(bridge, rx))
     }
 
     /// Extract files from a queued item.
@@ -1285,6 +1223,103 @@ impl DownloadManagerImpl {
                 CompletionKind::Failed => (d, f + 1, c),
                 CompletionKind::Cancelled => (d, f, c + 1),
             })
+    }
+}
+
+/// Everything the progress bridge needs, independent of the manager.
+struct ProgressBridge {
+    event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    /// Canonical download ID, as it appears on emitted events.
+    id: String,
+    shard_info: Option<ShardInfo>,
+    /// Shared with the rest of the shard group.
+    estimator: Arc<Mutex<RateEstimator>>,
+    /// User cancellation: stop without emitting further progress.
+    cancel: CancellationToken,
+    /// Worker finished: emit a final progress event, then stop.
+    finished: CancellationToken,
+}
+
+/// Translate worker progress into rate-limited download events.
+///
+/// Samples the worker's `watch` channel on a fixed tick and feeds every sample
+/// — including ticks where the byte count has not moved — into the shared
+/// [`RateEstimator`]. Those idle samples are what let a stalled transfer decay
+/// toward zero instead of freezing the displayed speed while the ETA counts
+/// down against nothing. Events are emitted on every tick for the same reason.
+///
+/// The estimator belongs to the shard *group*, not the job, so it survives
+/// shard boundaries. Each shard's byte counter restarts at zero; the estimator
+/// re-baselines on that without disturbing its running average.
+///
+/// Termination is driven by `finished`, never by the `watch` senders dropping.
+/// The active-jobs map holds a `progress_tx` clone that is released only during
+/// finalization, which the run loop performs *after* joining this task — so
+/// waiting for sender-drop would deadlock the download runner on its first job.
+async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<ProgressUpdate>) {
+    let ProgressBridge {
+        event_emitter,
+        id,
+        shard_info,
+        estimator,
+        cancel,
+        finished,
+    } = bridge;
+
+    let mut tick = interval(PROGRESS_TICK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut last_emitted = ProgressUpdate::default();
+
+    loop {
+        tokio::select! {
+            biased;
+
+            () = cancel.cancelled() => {
+                // Don't emit progress on cancel — DownloadCancelled is final.
+                break;
+            }
+
+            () = finished.cancelled() => {
+                // Emit the last sample so the bar lands on its true final
+                // position, then exit.
+                let final_progress = rx.borrow().clone();
+                if final_progress.seq > last_emitted.seq {
+                    let (speed, eta) =
+                        sample(&estimator, shard_info.as_ref(), &final_progress).await;
+                    emit_progress(
+                        &event_emitter,
+                        &id,
+                        shard_info.as_ref(),
+                        &final_progress,
+                        speed,
+                        eta,
+                    );
+                }
+                break;
+            }
+
+            _ = tick.tick() => {
+                let current = rx.borrow().clone();
+
+                // Sample unconditionally — a tick carrying no new bytes is a
+                // real observation of "nothing arrived".
+                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current).await;
+
+                // Nothing has been reported yet: no bar to update.
+                if current.seq > 0 {
+                    emit_progress(
+                        &event_emitter,
+                        &id,
+                        shard_info.as_ref(),
+                        &current,
+                        speed,
+                        eta,
+                    );
+                    last_emitted = current;
+                }
+            }
+        }
     }
 }
 
@@ -1864,6 +1899,54 @@ mod tests {
     fn falls_back_to_shard_progress_when_no_size_is_known() {
         let shard = ShardInfo::new(1, 3, "shard-1.gguf");
         assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (2_000, 12_000));
+    }
+
+    fn test_bridge(cancel: CancellationToken, finished: CancellationToken) -> ProgressBridge {
+        ProgressBridge {
+            event_emitter: Arc::new(gglib_core::ports::NoopDownloadEmitter::new()),
+            id: "owner/repo:Q4_K_M".to_string(),
+            shard_info: None,
+            estimator: Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now()))),
+            cancel,
+            finished,
+        }
+    }
+
+    /// The bridge must exit on its `finished` signal alone.
+    ///
+    /// It cannot wait for every `progress_tx` to drop: the active-jobs map
+    /// holds a clone released only during finalization, which the run loop
+    /// performs *after* joining this task. Waiting on sender-drop deadlocks the
+    /// download runner on its first job.
+    #[tokio::test]
+    async fn progress_bridge_exits_while_a_sender_is_still_alive() {
+        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
+        let finished = CancellationToken::new();
+        let bridge = test_bridge(CancellationToken::new(), finished.clone());
+        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
+
+        finished.cancel();
+
+        // `progress_tx` is deliberately still alive here, standing in for the
+        // clone the active-jobs map holds.
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        assert!(
+            joined.is_ok(),
+            "bridge must exit on the finished signal even with a live sender"
+        );
+    }
+
+    #[tokio::test]
+    async fn progress_bridge_exits_on_cancellation() {
+        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
+        let cancel = CancellationToken::new();
+        let bridge = test_bridge(cancel.clone(), CancellationToken::new());
+        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
+
+        cancel.cancel();
+
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        assert!(joined.is_ok(), "bridge must exit when the job is cancelled");
     }
 
     #[test]
