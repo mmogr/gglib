@@ -45,7 +45,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model, detail })
         {model.architecture && <InfoRow label="Architecture">{model.architecture}</InfoRow>}
 
         {model.quantization && (
-          <InfoRow label="Quantization" className="font-semibold text-primary">
+          <InfoRow label="Quantization" className="font-semibold">
             {model.quantization}
           </InfoRow>
         )}
