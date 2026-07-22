@@ -1,16 +1,14 @@
 import { FC, FormEvent } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "../ui/Button";
-import { Icon } from "../ui/Icon";
-import { Input } from "../ui/Input";
-import { Textarea } from "../ui/Textarea";
-import { Select } from "../ui/Select";
-import { InferenceParametersForm } from "../InferenceParametersForm";
-import { DEFAULT_TITLE_GENERATION_PROMPT } from "../../services/clients/chat";
 import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
-import { cn } from '../../utils/cn';
-import { Row, Label } from '../primitives';
-import { updateSettings } from '../../services/transport/api/settings';
+import {
+  PathSettings,
+  ModelDefaults,
+  PortSettings,
+  DisplaySettings,
+  AdvancedSettings,
+  SetupWizardRow,
+} from "./fields";
 
 interface GeneralSettingsProps {
   // Directory state
@@ -18,7 +16,7 @@ interface GeneralSettingsProps {
   setPathInput: (value: string) => void;
   info: ModelsDirectoryInfo | null;
   sourceDescription: string | null;
-  
+
   // Settings state
   contextSizeInput: string;
   setContextSizeInput: (value: string) => void;
@@ -30,13 +28,13 @@ interface GeneralSettingsProps {
   setMaxQueueSizeInput: (value: string) => void;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
-  
+
   // Default model state
   defaultModelInput: string;
   setDefaultModelInput: (value: string) => void;
   models: GgufModel[];
   loadingModels: boolean;
-  
+
   // Advanced settings
   isAdvancedOpen: boolean;
   setIsAdvancedOpen: (value: boolean) => void;
@@ -44,17 +42,17 @@ interface GeneralSettingsProps {
   setMaxToolIterationsInput: (value: string) => void;
   titlePromptInput: string;
   setTitlePromptInput: (value: string) => void;
-  
+
   // Inference defaults
   inferenceDefaultsInput: InferenceConfig | undefined;
   setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
-  
+
   // Actions
   onSubmit: (event: FormEvent) => Promise<void>;
   onReset: () => void;
   onRefresh: () => void;
   onClose: () => void;
-  
+
   // Status
   loading: boolean;
   saving: boolean;
@@ -109,249 +107,64 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
 
   return (
     <form className="flex flex-col gap-md" onSubmit={onSubmit}>
-      <Label htmlFor="models-dir-input">
-        Default Download Path
-      </Label>
-      <Input
-        id="models-dir-input"
-        value={pathInput}
-        onChange={(event) => setPathInput(event.target.value)}
-        placeholder="/path/to/models"
-        disabled={saving}
+      <PathSettings
+        pathInput={pathInput}
+        setPathInput={setPathInput}
+        info={info}
+        sourceDescription={sourceDescription}
+        onReset={onReset}
+        saving={saving}
       />
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        {sourceDescription && <span>{sourceDescription}</span>}
-        {info?.defaultPath && (
-          <button type="button" className="bg-none border-none text-primary cursor-pointer text-sm underline p-0" onClick={onReset}>
-            Reset to defaults
-          </button>
-        )}
-      </Row>
-
-      {info && (
-        <div className="flex gap-sm flex-wrap" role="status" aria-live="polite">
-          <span
-            className={cn(
-              'px-2 py-[2px] rounded-base text-sm',
-              info.exists ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning',
-            )}
-            aria-label={info.exists ? "Directory exists" : "Directory will be created (warning)"}
-          >
-            {info.exists ? "Directory exists" : "Directory will be created"}
-          </span>
-          <span
-            className={cn(
-              'px-2 py-[2px] rounded-base text-sm',
-              info.writable ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger',
-            )}
-            aria-label={info.writable ? "Writable" : "Not writable (error)"}
-          >
-            {info.writable ? "Writable" : "Not writable"}
-          </span>
-        </div>
-      )}
 
       <div className="border-t border-border my-md" />
 
-      <Label htmlFor="context-size-input">
-        Default Context Size
-      </Label>
-      <Input
-        id="context-size-input"
-        type="number"
-        value={contextSizeInput}
-        onChange={(event) => setContextSizeInput(event.target.value)}
-        placeholder="4096"
-        min="512"
-        max="1000000"
-        disabled={saving}
+      <ModelDefaults
+        contextSizeInput={contextSizeInput}
+        setContextSizeInput={setContextSizeInput}
+        defaultModelInput={defaultModelInput}
+        setDefaultModelInput={setDefaultModelInput}
+        models={models}
+        loadingModels={loadingModels}
+        saving={saving}
       />
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>Default context size for models (e.g., 4096, 8192, 16384)</span>
-      </Row>
 
-      <Label htmlFor="default-model-select">
-        Default Model
-      </Label>
-      <Select
-        id="default-model-select"
-        value={defaultModelInput}
-        onChange={(event) => setDefaultModelInput(event.target.value)}
-        disabled={saving || loadingModels}
-      >
-        <option value="">No default model</option>
-        {models.map((model) => (
-          <option key={model.id} value={model.id?.toString() ?? ""}>
-            {model.name}{model.quantization ? ` (${model.quantization})` : ""}
-          </option>
-        ))}
-      </Select>
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>Model to use for quick commands like <code>gglib question</code></span>
-      </Row>
-
-      <Label htmlFor="proxy-port-input">
-        Proxy Server Port
-      </Label>
-      <Input
-        id="proxy-port-input"
-        type="number"
-        value={proxyPortInput}
-        onChange={(event) => setProxyPortInput(event.target.value)}
-        placeholder="8080"
-        min="1024"
-        max="65535"
-        disabled={saving}
+      <PortSettings
+        proxyPortInput={proxyPortInput}
+        setProxyPortInput={setProxyPortInput}
+        serverPortInput={serverPortInput}
+        setServerPortInput={setServerPortInput}
+        maxQueueSizeInput={maxQueueSizeInput}
+        setMaxQueueSizeInput={setMaxQueueSizeInput}
+        saving={saving}
       />
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>Port for the OpenAI-compatible proxy server</span>
-      </Row>
-
-      <Label htmlFor="server-port-input">
-        Base Server Port
-      </Label>
-      <Input
-        id="server-port-input"
-        type="number"
-        value={serverPortInput}
-        onChange={(event) => setServerPortInput(event.target.value)}
-        placeholder="9000"
-        min="1024"
-        max="65535"
-        disabled={saving}
-      />
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>Starting port for llama-server instances</span>
-      </Row>
-
-      <Label htmlFor="max-queue-size-input">
-        Max Download Queue Size
-      </Label>
-      <Input
-        id="max-queue-size-input"
-        type="number"
-        value={maxQueueSizeInput}
-        onChange={(event) => setMaxQueueSizeInput(event.target.value)}
-        placeholder="10"
-        min="1"
-        max="50"
-        disabled={saving}
-      />
-      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>Maximum number of models that can be queued for download (1-50)</span>
-      </Row>
 
       <div className="border-t border-border my-md" />
 
-      <div>
-        <label className="flex items-center gap-sm cursor-pointer select-none">
-          <input
-            type="checkbox"
-            className="w-[18px] h-[18px] accent-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            checked={showFitIndicators}
-            onChange={(e) => setShowFitIndicators(e.target.checked)}
-            disabled={saving}
-          />
-          <span className="font-semibold text-text">Show memory fit indicators</span>
-        </label>
-        <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-          <span>Display fit status indicators in the HuggingFace browser showing if models fit in your system memory</span>
-        </Row>
-      </div>
+      <DisplaySettings
+        showFitIndicators={showFitIndicators}
+        setShowFitIndicators={setShowFitIndicators}
+        saving={saving}
+      />
 
-      {/* Advanced Settings Section */}
       <div className="border-t border-border my-md" />
-      <button
-        type="button"
-        className="flex items-center gap-sm bg-none border-none text-text text-sm font-semibold cursor-pointer py-xs px-0 transition-colors duration-200 hover:text-primary"
-        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-        aria-expanded={isAdvancedOpen}
-      >
-        <Icon icon={isAdvancedOpen ? ChevronDown : ChevronRight} size={14} />
-        <span>Advanced Settings</span>
-      </button>
 
-      {isAdvancedOpen && (
-        <div className="flex flex-col gap-md pl-md border-l-2 border-l-border mt-sm animate-slide-down">
-          <Label htmlFor="max-tool-iterations-input">
-            Max Tool Iterations
-          </Label>
-          <Input
-            id="max-tool-iterations-input"
-            type="number"
-            value={maxToolIterationsInput}
-            onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-            placeholder="25"
-            min="1"
-            max="50"
-            disabled={saving}
-          />
-          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-            <span>Maximum iterations for tool calling in agentic loop (default: 25)</span>
-          </Row>
-
-          <Label htmlFor="title-prompt-input">
-            Chat Title Generation Prompt
-          </Label>
-          <Textarea
-            id="title-prompt-input"
-            value={titlePromptInput}
-            onChange={(event) => setTitlePromptInput(event.target.value)}
-            placeholder={DEFAULT_TITLE_GENERATION_PROMPT}
-            rows={3}
-            disabled={saving}
-          />
-          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-            <span>Prompt used when AI generates chat titles. Leave empty to use the default.</span>
-            <button
-              type="button"
-              className="bg-none border-none text-primary cursor-pointer text-sm underline p-0"
-              onClick={() => setTitlePromptInput("")}
-            >
-              Reset to default
-            </button>
-          </Row>
-
-          <div className="border-t border-border my-md" />
-          <Label>
-            Global Inference Parameter Defaults
-          </Label>
-          <InferenceParametersForm
-            value={inferenceDefaultsInput}
-            onChange={setInferenceDefaultsInput}
-            disabled={saving}
-          />
-          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-            <span>Default inference parameters for all models. Can be overridden per-model in the model inspector.</span>
-          </Row>
-        </div>
-      )}
+      <AdvancedSettings
+        isOpen={isAdvancedOpen}
+        onToggle={() => setIsAdvancedOpen(!isAdvancedOpen)}
+        maxToolIterationsInput={maxToolIterationsInput}
+        setMaxToolIterationsInput={setMaxToolIterationsInput}
+        titlePromptInput={titlePromptInput}
+        setTitlePromptInput={setTitlePromptInput}
+        inferenceDefaultsInput={inferenceDefaultsInput}
+        setInferenceDefaultsInput={setInferenceDefaultsInput}
+        saving={saving}
+      />
 
       {error && <p className="text-danger text-sm" role="alert">{error}</p>}
       {successMessage && <p className="text-success text-sm" role="status" aria-live="polite">{successMessage}</p>}
 
-      {/* Setup Wizard */}
       <div className="border-t border-border my-md" />
-      <Row justify="between" gap="sm" className="items-center">
-        <div>
-          <Label>Setup Wizard</Label>
-          <p className="text-text-secondary text-sm mt-1">Re-run the first-run system configuration wizard</p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            // Reset setup_completed to false and reload page to trigger wizard
-            updateSettings({ setupCompleted: false }).then(() => {
-              window.location.reload();
-            });
-          }}
-          disabled={saving}
-        >
-          Re-run Wizard
-        </Button>
-      </Row>
+      <SetupWizardRow saving={saving} />
 
       <div className="flex items-center justify-between gap-md p-lg border-t border-border shrink-0">
         <Button type="button" variant="secondary" onClick={onRefresh} disabled={loading || saving}>

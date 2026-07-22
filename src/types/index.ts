@@ -144,7 +144,9 @@ export interface ServerInfo {
 
 export interface ModelsDirectoryInfo {
   path: string;
-  source: 'explicit' | 'env' | 'default';
+  // Matches gglib_app_services::settings::format_source() exactly:
+  // ModelsDirSource::{Explicit,EnvVar,Default} -> "explicit"/"environment"/"default".
+  source: 'explicit' | 'environment' | 'default';
   defaultPath: string;
   exists: boolean;
   writable: boolean;
