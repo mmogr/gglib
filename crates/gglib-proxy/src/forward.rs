@@ -96,10 +96,22 @@ pub(crate) enum ForwardError {
 /// (no output at all) for upstream-health bookkeeping.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct StreamOutcome {
-    /// `true` if at least one visible frame (content, reasoning, tool call,
-    /// recovered normalization text, or an error frame) was emitted to the
-    /// client. `false` means the model produced a completely empty response.
-    pub saw_output: bool,
+    /// `true` if at least one *client-renderable* frame (content, tool call,
+    /// recovered normalization text, or an error frame) was emitted.
+    ///
+    /// Reasoning deliberately does not count. A turn whose entire output landed
+    /// in `reasoning_content` renders as an empty response in every client that
+    /// treats reasoning as a collapsed side-channel (notably the VS Code LLM
+    /// Gateway), so scoring it as output made a hard failure indistinguishable
+    /// from success — and, via [`crate::upstream_health`], reset the strike
+    /// counter that arms the recycle watchdog. See [`Self::saw_reasoning`].
+    pub saw_visible_output: bool,
+    /// `true` if at least one `ReasoningDelta` was emitted.
+    ///
+    /// Tracked separately from [`Self::saw_visible_output`] so a reasoning-only
+    /// turn is distinguishable both from a healthy response and from a wholly
+    /// empty one.
+    pub saw_reasoning: bool,
     /// The `finish_reason` from the terminating `Done` event, if one arrived.
     pub finish_reason: Option<String>,
     /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
@@ -664,18 +676,24 @@ pub(crate) async fn stream_response_to_channel(
                     // rather than dropping it silently (which manifested as an
                     // empty response when the whole turn was one bad tool call).
                     warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
-                    outcome.saw_output = true;
+                    outcome.saw_visible_output = true;
                     let recovered = LlmStreamEvent::TextDelta {
                         content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
                     };
                     encoder.encode(&recovered).map(Bytes::from)
                 }
+                LlmStreamEvent::ReasoningDelta { .. } => {
+                    // Forwarded unchanged, but NOT counted as visible output —
+                    // clients that collapse reasoning render this as empty.
+                    connection.mark_generating();
+                    outcome.saw_reasoning = true;
+                    encoder.encode(&ev).map(Bytes::from)
+                }
                 LlmStreamEvent::TextDelta { .. }
-                | LlmStreamEvent::ReasoningDelta { .. }
                 | LlmStreamEvent::ToolCallDelta { .. }
                 | LlmStreamEvent::UpstreamError { .. } => {
                     connection.mark_generating();
-                    outcome.saw_output = true;
+                    outcome.saw_visible_output = true;
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Done { finish_reason } => {
@@ -699,7 +717,7 @@ pub(crate) async fn stream_response_to_channel(
             },
             Err(e) => {
                 error!("proxy stream error: {e}");
-                outcome.saw_output = true;
+                outcome.saw_visible_output = true;
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),
@@ -726,7 +744,7 @@ pub(crate) async fn stream_response_to_channel(
     // single visible frame, synthesize a diagnostic so the client never sees
     // an unexplained empty response. Skipped when the client already
     // disconnected (nothing to send) or when output was surfaced.
-    if client_connected && !outcome.saw_output {
+    if client_connected && !outcome.saw_visible_output && !outcome.saw_reasoning {
         let reason = outcome.finish_reason.as_deref().unwrap_or("none");
         warn!(
             finish_reason = %reason,

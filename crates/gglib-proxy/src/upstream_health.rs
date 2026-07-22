@@ -71,11 +71,20 @@ impl UpstreamHealth {
 
     /// Record the terminal outcome of a streamed response.
     ///
-    /// `saw_output == true` resets the strike counter (the upstream is
+    /// `saw_visible_output == true` resets the strike counter (the upstream is
     /// producing output and is considered healthy); `false` counts as a
     /// strike.
-    pub fn record_stream_outcome(&self, saw_output: bool) {
-        if saw_output {
+    ///
+    /// "Visible" is load-bearing: callers must pass
+    /// [`StreamOutcome::saw_visible_output`], not "the upstream emitted some
+    /// frame". A turn whose entire output arrived as `reasoning_content`
+    /// renders as an empty response in clients that collapse reasoning, so
+    /// counting it healthy resets this streak on every retry and the recycle
+    /// threshold is never reached.
+    ///
+    /// [`StreamOutcome::saw_visible_output`]: crate::forward::StreamOutcome
+    pub fn record_stream_outcome(&self, saw_visible_output: bool) {
+        if saw_visible_output {
             self.consecutive_strikes.store(0, Ordering::Relaxed);
         } else {
             self.total_empty_responses.fetch_add(1, Ordering::Relaxed);
