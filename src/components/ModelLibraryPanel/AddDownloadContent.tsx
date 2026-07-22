@@ -3,8 +3,8 @@ import { FolderOpen, Search } from 'lucide-react';
 import AddModel from '../AddModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
+import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { cn } from '../../utils/cn';
 
 export type AddDownloadSubTab = 'add' | 'browse';
 
@@ -51,27 +51,29 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
           <div className="mt-1 whitespace-pre-wrap">{downloadSystemError}</div>
         </div>
       )}
-      <div className="flex flex-col gap-sm py-sm border-b border-border shrink-0 mobile:flex-row mobile:flex-wrap">
-        <button
-          className={cn(
-            'flex-auto min-w-0 inline-flex items-center justify-center gap-sm bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
-            activeSubTab === 'browse' && 'bg-primary text-white border-primary',
-          )}
+      {/* px-base matches the gutter on the search row and list rows. Without
+          it this control bled to the panel's left edge and clipped its icon. */}
+      <div className="flex gap-sm px-base py-sm border-b border-border shrink-0">
+        <Button
+          variant={activeSubTab === 'browse' ? 'primary' : 'secondary'}
+          size="sm"
+          className="flex-1 min-w-0"
           onClick={() => handleSubTabChange('browse')}
+          leftIcon={<Icon icon={Search} size={14} />}
+          aria-pressed={activeSubTab === 'browse'}
         >
-          <Icon icon={Search} size={14} />
           Browse HF
-        </button>
-        <button
-          className={cn(
-            'flex-auto min-w-0 inline-flex items-center justify-center gap-sm bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
-            activeSubTab === 'add' && 'bg-primary text-white border-primary',
-          )}
+        </Button>
+        <Button
+          variant={activeSubTab === 'add' ? 'primary' : 'secondary'}
+          size="sm"
+          className="flex-1 min-w-0"
           onClick={() => handleSubTabChange('add')}
+          leftIcon={<Icon icon={FolderOpen} size={14} />}
+          aria-pressed={activeSubTab === 'add'}
         >
-          <Icon icon={FolderOpen} size={14} />
           Local File
-        </button>
+        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto py-base min-h-0">

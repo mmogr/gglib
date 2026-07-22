@@ -181,24 +181,3 @@ export function getButtonTextForIntent(intent: ModelSearchIntent): string {
   }
 }
 
-/**
- * Get button variant/style class based on current intent
- */
-export function getButtonVariantForIntent(
-  intent: ModelSearchIntent
-): "default" | "primary" | "accent" {
-  switch (intent.kind) {
-    case "download":
-      return "accent";
-    case "repo":
-      return "primary";
-    case "url":
-      if (intent.quant || intent.repo) {
-        return intent.quant ? "accent" : "primary";
-      }
-      return "default";
-    case "search":
-    default:
-      return "default";
-  }
-}

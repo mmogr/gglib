@@ -4,6 +4,29 @@ interface UsePanelResizeConfig {
   initial: number;
   min: number;
   max: number;
+  /**
+   * localStorage key for persisting the split. Omit to keep the width
+   * in-memory only (resets on reload).
+   */
+  storageKey?: string;
+}
+
+/**
+ * Read a persisted split width, clamped to the configured bounds.
+ * Falls back to `initial` for missing, malformed, or out-of-range values,
+ * and when storage is unavailable (private mode, disabled cookies).
+ */
+function readStoredWidth(storageKey: string | undefined, initial: number, min: number, max: number): number {
+  if (!storageKey) return initial;
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (raw === null) return initial;
+    const parsed = Number.parseFloat(raw);
+    if (!Number.isFinite(parsed)) return initial;
+    return Math.max(min, Math.min(max, parsed));
+  } catch {
+    return initial;
+  }
 }
 
 export interface UsePanelResizeResult {
@@ -19,10 +42,22 @@ export interface UsePanelResizeResult {
  * the browser implicit pointer-capture issue that suppresses mousemove events
  * while a pointerdown target has capture.
  */
-export function usePanelResize({ initial, min, max }: UsePanelResizeConfig): UsePanelResizeResult {
-  const [leftPanelWidth, setLeftPanelWidth] = useState(initial);
+export function usePanelResize({ initial, min, max, storageKey }: UsePanelResizeConfig): UsePanelResizeResult {
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() =>
+    readStoredWidth(storageKey, initial, min, max),
+  );
   const layoutRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+
+  // Persist the split so it survives reloads and app restarts.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, String(leftPanelWidth));
+    } catch {
+      // Storage unavailable — the split simply stays in-memory.
+    }
+  }, [storageKey, leftPanelWidth]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();

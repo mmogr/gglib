@@ -3,11 +3,11 @@ import { AlertTriangle, ArrowDown, ArrowUp, Search } from "lucide-react";
 import { HfModelSummary, HfSortField } from "../../types";
 import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
+import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
-import { cn } from '../../utils/cn';
 
 /** Glass-effect form label */
 const glassLabel = "block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]";
@@ -58,7 +58,6 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
     // Search intent
     buttonText,
-    buttonVariant,
 
     // Actions
     handleSearchAction,
@@ -86,19 +85,14 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               <span className="block text-[0.75rem] text-danger mt-[0.35rem]">{searchError}</span>
             )}
           </Stack>
-          <button
-            className={cn(
-              'px-[1.2rem] py-[0.6rem] border-none rounded-lg text-white font-semibold cursor-pointer transition-all duration-200 ease-linear whitespace-nowrap hover:not-disabled:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed',
-              buttonVariant === 'accent' && 'bg-linear-to-br from-[#34d399] to-[#10b981] hover:not-disabled:shadow-[0_4px_12px_rgba(16,185,129,0.3)]',
-              buttonVariant === 'primary' && 'bg-linear-to-br from-[#a78bfa] to-[#8b5cf6] hover:not-disabled:shadow-[0_4px_12px_rgba(139,92,246,0.3)]',
-              buttonVariant !== 'accent' && buttonVariant !== 'primary' && 'bg-linear-to-br from-[#22d3ee] to-[#0ea5e9] hover:not-disabled:shadow-[0_4px_12px_rgba(34,211,238,0.3)]'
-            )}
+          <Button
+            className="shrink-0 whitespace-nowrap"
             onClick={handleSearchAction}
             disabled={loading}
             aria-label={buttonText}
           >
             {buttonText}
-          </button>
+          </Button>
         </Row>
 
         <Row gap="base" className="mt-3" align="end" wrap>

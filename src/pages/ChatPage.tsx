@@ -73,7 +73,7 @@ export default function ChatPage({
   const persistedMessageIds = useRef<Set<string>>(new Set());
   
   // Panel width for resize
-  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50 });
+  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50, storageKey: 'gglib.chat.split' });
 
   // Toast notifications
   const { showToast } = useToastContext();
