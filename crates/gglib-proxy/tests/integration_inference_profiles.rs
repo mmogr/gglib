@@ -397,7 +397,8 @@ async fn client_supplied_temperature_beats_the_profile() {
 async fn sparse_profile_leaves_model_defaults_intact() {
     let model_defaults = InferenceConfig {
         temperature: Some(1.0),
-        presence_penalty: Some(1.5),
+        top_p: Some(0.87),
+        top_k: Some(20),
         ..Default::default()
     };
     let h = spawn(vec![coding_profile()], &[MODEL], Some(model_defaults)).await;
@@ -407,7 +408,28 @@ async fn sparse_profile_leaves_model_defaults_intact() {
     let body = h.only_forwarded();
     // Profile wins where it speaks; the model default survives where it is silent.
     assert_param(&body, "temperature", 0.2);
-    assert_param(&body, "presence_penalty", 1.5);
+    assert_param(&body, "top_p", 0.87);
+    assert_param(&body, "top_k", 20.0);
+}
+
+/// Regression for #621, end to end: a `:coding` request must not reach the
+/// upstream carrying a `presence_penalty` the model tuned for its own, much
+/// higher, temperature. This is the exact request shape that failed in
+/// production.
+#[tokio::test]
+async fn sparse_profile_does_not_forward_model_penalties() {
+    let model_defaults = InferenceConfig {
+        temperature: Some(1.0),
+        presence_penalty: Some(1.5),
+        ..Default::default()
+    };
+    let h = spawn(vec![coding_profile()], &[MODEL], Some(model_defaults)).await;
+
+    h.post(chat_request("qwen:coding")).await;
+
+    let body = h.only_forwarded();
+    assert_param(&body, "temperature", 0.2);
+    assert_param(&body, "presence_penalty", 0.0);
 }
 
 /// A profile that was renamed or deleted must fail loudly, and must not reach

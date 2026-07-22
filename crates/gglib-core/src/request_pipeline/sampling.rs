@@ -77,7 +77,7 @@ fn describe_provenance(
         ordered
             .iter()
             .take(limit)
-            .find(|(_, c)| c.is_some_and(|c| declares(c)))
+            .find(|(_, c)| c.is_some_and(&declares))
             .map_or("hardcoded", |(name, _)| name)
     };
 
@@ -113,10 +113,10 @@ fn describe_provenance(
 pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
     let client_params = InferenceConfig::from_openai_json(body);
     // Operator flags sit above the client, everything else below it.
-    let top = match layers.cli_override.as_ref() {
-        Some(o) => o.clone().stacked_over(&client_params),
-        None => client_params.clone(),
-    };
+    let top = layers.cli_override.as_ref().map_or_else(
+        || client_params.clone(),
+        |o| o.clone().stacked_over(&client_params),
+    );
     let resolved = top.resolve_with_profile(
         layers.profile.as_ref(),
         ctx.inference_defaults.as_ref(),

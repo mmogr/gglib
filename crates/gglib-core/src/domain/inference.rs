@@ -818,7 +818,11 @@ mod tests {
 
         assert_eq!(resolved.temperature, Some(0.2));
         assert_eq!(resolved.presence_penalty, Some(0.0), "must not inherit 1.5");
-        assert_eq!(resolved.repeat_penalty, Some(1.0), "neutral, not the model's");
+        assert_eq!(
+            resolved.repeat_penalty,
+            Some(1.0),
+            "neutral, not the model's"
+        );
         assert_eq!(resolved.min_p, Some(0.05), "the profile's own value stands");
     }
 

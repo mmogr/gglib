@@ -310,7 +310,6 @@ pub async fn start_proxy_standalone(
     // Create supervisor
     let supervisor = ProxySupervisor::new();
 
-
     // Start proxy
     let config = ProxyConfig {
         host: host.clone(),
