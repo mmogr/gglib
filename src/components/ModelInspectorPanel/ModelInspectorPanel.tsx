@@ -1,5 +1,4 @@
-import { FC, useCallback, useState, useEffect } from 'react';
-import { Shield, CloudSync, PackageOpen } from 'lucide-react';
+import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
@@ -8,32 +7,31 @@ import type { DownloadQueueStatus } from '../../services/transport/types/downloa
 import { useSettings } from '../../hooks/useSettings';
 import { useToastContext } from '../../contexts/ToastContext';
 import { HfModelPreview } from '../HfModelPreview';
-import { LlamaInstallModal } from '../LlamaInstallModal';
-import { LlamaServerNotInstalledMetadata } from '../../services/transport/errors';
-import { VerificationModal } from '../VerificationModal';
 import {
   useEditMode,
   useModelDetail,
   useServeModal,
   useDeleteModal,
   useServerActions,
+  useInspectorModals,
 } from './hooks';
 import {
   ModelMetadataGrid,
   ModelEditForm,
-  TagChips,
-  TagAddInput,
+  InspectorTags,
   ServeModal,
   DeleteModal,
-  InspectorActions,
+  InspectorHeader,
+  InspectorFooter,
+  InspectorEmptyState,
+  InspectorModals,
 } from './components';
-import { Icon } from '../ui/Icon';
-import { Input } from '../ui/Input';
-import { EmptyState } from '../primitives';
 
-const panelContainer = "flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0";
-
-const circleIconBtn = "flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed";
+/**
+ * Outer shell. `overflow-hidden` (not `auto`) so the header and footer stay
+ * pinned and only the middle section scrolls.
+ */
+const panelContainer = "flex flex-col overflow-hidden relative flex-1 bg-surface md:h-full md:min-h-0";
 
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
@@ -77,20 +75,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 }) => {
   const { settings } = useSettings();
   const { showToast } = useToastContext();
-  
-  // State for llama-server install modal
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installMetadata, setInstallMetadata] = useState<LlamaServerNotInstalledMetadata | null>(null);
-  
-  // State for verification and update modals
-  const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  
-  // Callback for when llama-server is not installed
-  const handleLlamaServerNotInstalled = useCallback((metadata: LlamaServerNotInstalledMetadata) => {
-    setInstallMetadata(metadata);
-    setShowInstallModal(true);
-  }, []);
+
+  // Install / verify / update modal state
+  const modals = useInspectorModals();
 
   // Hooks for state management
   const editMode = useEditMode(model);
@@ -138,7 +125,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     onUpdateModel,
     onStartServer,
     onServerStarted,
-    onLlamaServerNotInstalled: handleLlamaServerNotInstalled,
+    onLlamaServerNotInstalled: modals.handleLlamaServerNotInstalled,
     setIsServing: serveModal.setIsServing,
     setIsDeleting: deleteModal.setIsDeleting,
     closeServeModal: serveModal.closeServeModal,
@@ -193,59 +180,22 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   if (!model) {
     return (
       <div className={panelContainer}>
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-          <div className="flex flex-col items-center justify-center min-h-[300px]">
-            <EmptyState
-              icon={<Icon icon={PackageOpen} size={40} />}
-              title="No model selected"
-              description="Pick a model from the library to see its metadata, tags, and inference defaults."
-            />
-          </div>
-        </div>
+        <InspectorEmptyState />
       </div>
     );
   }
 
   return (
     <div className={panelContainer}>
-      <div className="p-base border-b border-border bg-background shrink-0">
-        <div className="flex items-center justify-between gap-base w-full">
-          {editMode.isEditMode ? (
-            <Input
-              type="text"
-              className="w-full m-0 py-sm px-md text-xl font-semibold bg-background-input border-2 border-border-focus rounded-base text-text transition duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
-              value={editMode.editedName}
-              onChange={(e) => editMode.setEditedName(e.target.value)}
-              placeholder="Model name"
-            />
-          ) : (
-            <h2 className="m-0 text-xl font-semibold">{model.name}</h2>
-          )}
-          {!editMode.isEditMode && (
-            <div className="flex items-center gap-xs">
-              <button
-                type="button"
-                className={circleIconBtn}
-                onClick={() => setShowVerifyModal(true)}
-                title="Verify model integrity"
-                aria-label="Verify model integrity"
-              >
-                <Shield className="shrink-0" size={16} />
-              </button>
-              <button
-                type="button"
-                className={circleIconBtn}
-                onClick={() => setShowUpdateModal(true)}
-                disabled={!model.hfRepoId}
-                title={model.hfRepoId ? "Check for updates on HuggingFace" : "No HuggingFace repo linked"}
-                aria-label="Check for updates"
-              >
-                <CloudSync className="shrink-0" size={16} />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <InspectorHeader
+        modelName={model.name}
+        hasHfRepo={Boolean(model.hfRepoId)}
+        isEditMode={editMode.isEditMode}
+        editedName={editMode.editedName}
+        onEditedNameChange={editMode.setEditedName}
+        onVerify={modals.openVerifyModal}
+        onCheckUpdates={modals.openUpdateModal}
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         <div className="p-base">
@@ -266,35 +216,26 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <ModelMetadataGrid model={model} detail={detail.modelDetail ?? undefined} />
           )}
 
-          {/* Tags Section */}
-          <section className="mb-xl">
-            <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Tags</h3>
-            <div className="flex flex-col gap-base">
-              <TagChips 
-                tags={detail.tags} 
-                onRemoveTag={detail.removeTag} 
-              />
-              <TagAddInput
-                value={detail.newTagInput}
-                onChange={detail.setNewTagInput}
-                onAdd={detail.addTag}
-              />
-            </div>
-          </section>
-
-          {/* Actions Section */}
-          <InspectorActions
-            isRunning={serverActions.isRunning}
-            isEditMode={editMode.isEditMode}
-            onToggleServer={handleToggleServer}
-            onEdit={editMode.handleEdit}
-            onSave={serverActions.handleSave}
-            onCancel={editMode.handleCancel}
-            onDelete={deleteModal.openDeleteModal}
-            onBenchmark={onBenchmark && model?.id != null ? () => onBenchmark(model.id!) : undefined}
+          <InspectorTags
+            tags={detail.tags}
+            newTagInput={detail.newTagInput}
+            onNewTagInputChange={detail.setNewTagInput}
+            onAddTag={detail.addTag}
+            onRemoveTag={detail.removeTag}
           />
         </div>
       </div>
+
+      <InspectorFooter
+        isRunning={serverActions.isRunning}
+        isEditMode={editMode.isEditMode}
+        onToggleServer={handleToggleServer}
+        onEdit={editMode.handleEdit}
+        onSave={serverActions.handleSave}
+        onCancel={editMode.handleCancel}
+        onDelete={deleteModal.openDeleteModal}
+        onBenchmark={onBenchmark && model?.id != null ? () => onBenchmark(model.id!) : undefined}
+      />
 
       {/* Serve Modal */}
       {serveModal.showServeModal && (
@@ -331,37 +272,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           onConfirm={serverActions.handleConfirmDelete}
         />
       )}
-      
-      {/* Llama Server Install Modal */}
-      {showInstallModal && installMetadata && (
-        <LlamaInstallModal
-          isOpen={showInstallModal}
-          onClose={() => setShowInstallModal(false)}
-          metadata={installMetadata}
-        />
-      )}
-      
-      {/* Verification Modal */}
-      {model.id && (
-        <VerificationModal
-          modelId={model.id}
-          modelName={model.name}
-          open={showVerifyModal}
-          onClose={() => setShowVerifyModal(false)}
-          mode="verify"
-        />
-      )}
-      
-      {/* Update Check Modal */}
-      {model.id && (
-        <VerificationModal
-          modelId={model.id}
-          modelName={model.name}
-          open={showUpdateModal}
-          onClose={() => setShowUpdateModal(false)}
-          mode="update"
-        />
-      )}
+
+      <InspectorModals model={model} modals={modals} />
     </div>
   );
 };
