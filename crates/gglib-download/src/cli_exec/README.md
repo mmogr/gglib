@@ -20,6 +20,20 @@ Interactive downloads (the `model download` command) now route through
 [`DownloadManagerPort::queue_smart`], giving the CLI the same queue,
 progress events, and model registration path as the GUI.
 
+# Console output
+
+Every `println!`-shaped line this layer produces (venv setup notes, the
+`[fast-path]` passthrough for non-protocol Python output, `model upgrade`'s
+status lines) goes through `gglib_core::telemetry::console_println` instead
+of a direct `println!`/`eprintln!`. With no hook installed it's a plain
+`eprintln!`; the queued-download path installs a hook
+(`CliDownloadEventEmitter`) that routes it through the live
+`MultiProgress::println` so it can't corrupt a bar's redraw bookkeeping. See
+[`gglib_core::telemetry`](../../../gglib-core/src/telemetry.rs) and the
+[`exec/`](exec/) submodule below for `FastDownloadRequest::notice`, which
+does the same thing for a specific download's bar instead of the shared
+console.
+
 <!-- module-docs:end -->
 
 <details>

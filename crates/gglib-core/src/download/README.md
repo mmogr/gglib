@@ -13,7 +13,13 @@ system. No I/O, networking, or runtime dependencies allowed.
   `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
   values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
   publish both with the same bit-depth suffix.
-- `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`)
+- `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`).
+  `DownloadEvent::DownloadNotice` is the one variant that isn't part of the
+  progress/lifecycle state machine: a transient, non-persisted, free-form note
+  (e.g. "preparing fast downloader…" while the first-run Python venv builds)
+  for renderers to show in place of progress that doesn't exist yet. Unlike
+  `DownloadStatusChanged`, it carries arbitrary text rather than a fixed
+  `DownloadStatus`, and the next progress or status event overwrites it.
 - `errors` - Error types for download operations
 - `queue` - Queue snapshot DTOs (`QueueSnapshot`, `QueuedDownload`, `FailedDownload`)
 - `completion` - Queue run completion tracking types

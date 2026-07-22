@@ -11,7 +11,12 @@ between the worker (core download logic) and bridges (event emission).
 # Architecture
 
 - **Manager**: Orchestrates queue, leases, and worker lifecycle
-- **Worker**: Executes downloads, writes only to `watch::Sender` (no events)
+- **Worker**: Executes downloads, writes only to `watch::Sender` (no events) —
+  with one narrow, deliberate exception: `WorkerDeps.event_emitter` lets
+  `execute_download` emit `DownloadEvent::DownloadNotice` directly for
+  transient, cosmetic setup notes (e.g. building the fast downloader's
+  first-run Python venv) that aren't part of the progress or completion state
+  the manager sequences. See the doc comment on `WorkerDeps` in `worker.rs`.
 - **Bridge tasks**: Subscribe to watch channels, emit events with rate-limiting
 
 # Concurrency Model

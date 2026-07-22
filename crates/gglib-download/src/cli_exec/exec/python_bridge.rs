@@ -88,7 +88,7 @@ pub struct FastDownloadRequest<'a> {
     pub progress: Option<ProgressCallback>,
     /// Sink for transient setup notices (env creation, dependency install).
     /// `None` routes those notices through `console_println` instead — see
-    /// [`PythonEnvironment::prepare`].
+    /// `PythonEnvironment::prepare`.
     pub notice: Option<NoticeCallback>,
     /// Optional total size hint forwarded to synthetic progress events when
     /// the Python helper goes silent. `None` means "unknown" — the bar will

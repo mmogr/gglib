@@ -7,6 +7,24 @@ Download execution module.
 This module handles the actual model download execution using the Python helper.
 It is intentionally kept separate from queue management.
 
+`python_env.rs` builds the fast downloader's Python venv on first run — a
+one-time, tens-of-seconds operation with no byte progress to show for it.
+`PythonEnvironment::prepare` takes an optional `NoticeCallback`
+(`Option<&NoticeCallback>`, aliased in `python_bridge.rs`): with one
+supplied — the queued-download path, via `FastDownloadRequest::notice` — venv
+creation and dependency install surface as a `DownloadEvent::DownloadNotice`
+on that download's bar instead of a console line; without one (preflight,
+`model upgrade`) they fall back to `gglib_core::telemetry::console_println`.
+`python -m venv` runs via `.output()`, not `.status()`, so its own stdio is
+captured rather than inherited — an inherited handle would write straight to
+the terminal, outside any bar's bookkeeping, the same way a stray `println!`
+would.
+
+`progress.rs`'s `CliProgressPrinter` (the no-callback path, e.g. `model
+upgrade`) draws to **stderr**, matching `CliDownloadEventEmitter`'s
+`MultiProgress` (indicatif's stderr default) — see the doc comment on
+`CliProgressPrinter::new`.
+
 <!-- module-docs:end -->
 
 <details>

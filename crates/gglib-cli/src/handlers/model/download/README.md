@@ -24,7 +24,11 @@ This module handles all download-related commands that interact with HuggingFace
 │              └───────────────────► interactive.rs (TUI monitor) │
 │                                        ↕  [a]/[q] hotkeys        │
 │                                   CliDownloadEventEmitter        │
-│                                   (indicatif MultiProgress)      │
+│                                   (indicatif MultiProgress,      │
+│                                    stderr, footer-pinned hint)   │
+│                                        ↕  console hook           │
+│                                   gglib_core::telemetry          │
+│                                   (tracing fmt layer, notices)   │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -32,7 +36,10 @@ This module handles all download-related commands that interact with HuggingFace
 **Key Flow:**
 1. User issues `gglib model download <repo>` command
 2. `exec.rs` queues it via `DownloadManagerPort::queue_smart` (same code path as the GUI)
-3. `interactive.rs` renders progress via `CliDownloadEventEmitter` (indicatif bars)
+3. `interactive.rs` renders progress via `CliDownloadEventEmitter` (indicatif bars,
+   drawn to **stderr** — TTY detection and the `console::Term` used for hotkeys and
+   the `[a]` prompt check stderr too, so a redirected stdout doesn't silently disable
+   either).
 4. In TTY mode: `[a]` prompts for another model to add to the queue.
    `[q]` (or `Esc` / `Ctrl-C`) is **two-step**:
    - First press → arms drain mode (hint becomes
@@ -42,17 +49,29 @@ This module handles all download-related commands that interact with HuggingFace
    - Second press → calls `cancel_all()`, which signals cancel tokens
      and waits up to 5 s for in-flight Python helpers to actually
      finalize before returning.
+   The `[a]/[q]` hint bar is created eagerly and registered as the emitter's
+   *footer* (`CliDownloadEventEmitter::set_footer`); every download bar is
+   inserted above it via `MultiProgress::insert_before`, so it stays pinned
+   to the bottom without ever being removed and re-added.
 5. Lifecycle states surfaced on the bar:
    `Downloading` → `Finalizing` (gathering HF metadata) →
    `Registering` (writing model row) → terminal `Completed` /
    `Failed` / `Cancelled`. The `Finalizing` / `Registering` labels
-   keep the UI from looking frozen at 100 %.
+   keep the UI from looking frozen at 100 %. A first-run-only phase
+   (`DownloadEvent::DownloadNotice`, e.g. "preparing fast downloader…")
+   covers the tens of seconds the fast downloader's Python venv can take
+   to build, before any bytes exist to show progress for.
 6. When the Python helper uses the `hf-xet` transport (which bypasses
    tqdm), a stat-based fallback poller emits synthetic progress events
    so the bar still ticks. See
    [`gglib-download/src/cli_exec/exec/xet_poller.rs`](../../../../../gglib-download/src/cli_exec/exec/xet_poller.rs).
 7. Model registration on completion is handled by the download manager
    (via `ModelRegistrarPort`).
+8. `CliDownloadEventEmitter` also installs itself as the process-wide
+   console hook (`gglib_core::telemetry::set_console_hook`): any `tracing`
+   log line emitted while bars are live is routed through
+   `MultiProgress::println` instead of a raw write, so it can't desync the
+   bars' redraw bookkeeping and strand old frames in scrollback.
 
 ## Modules
 
@@ -118,7 +137,8 @@ Download a model from HuggingFace Hub with interactive queue support.
 **Interactive mode (TTY):**
 - `[a]` — add another model to the queue while a download is running
 - `[q]` / Ctrl-C — cancel all pending downloads and exit cleanly
-- Falls back to a plain polling monitor when stdout is not a TTY (CI, pipes)
+- Falls back to a plain polling monitor when **stderr** is not a TTY (CI, pipes) —
+  stderr, not stdout, since that's where the bars themselves draw
 
 **Flow:**
 1. Queue initial model via `DownloadManagerPort::queue_smart` (same path as GUI)
