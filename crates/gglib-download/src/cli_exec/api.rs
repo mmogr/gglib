@@ -54,9 +54,9 @@ pub async fn list_quantizations(
             match client.list_quantizations(model_id).await {
                 Ok(quantizations) => {
                     if quantizations.is_empty() {
-                        println!("❌ No GGUF files found in this repository.");
+                        println!("✗ No GGUF files found in this repository.");
                     } else {
-                        println!("✅ Found {} quantizations:", quantizations.len());
+                        println!("✓ Found {} quantizations:", quantizations.len());
                         for quant in &quantizations {
                             let shard_info = if quant.shard_count > 1 {
                                 format!(" ({} shards)", quant.shard_count)
@@ -122,11 +122,11 @@ fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str) {
     }
 
     if found_files.is_empty() {
-        println!("❌ No GGUF files found with common patterns.");
+        println!("✗ No GGUF files found with common patterns.");
         println!("Try downloading directly if you know the exact quantization.");
     } else {
         println!(
-            "✅ Found {} GGUF files using fallback method",
+            "✓ Found {} GGUF files using fallback method",
             found_files.len()
         );
     }

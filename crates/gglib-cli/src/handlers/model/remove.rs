@@ -59,7 +59,7 @@ pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<
     let removed = ctx.app.models().remove(identifier).await?;
 
     println!(
-        "✅ Model '{}' (ID {}) successfully removed from database.",
+        "✓ Model '{}' (ID {}) successfully removed from database.",
         removed.name, removed.id
     );
 

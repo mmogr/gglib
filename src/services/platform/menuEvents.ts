@@ -12,7 +12,6 @@ import { isDesktop } from './detect';
  */
 export const MENU_EVENTS = {
   OPEN_SETTINGS: 'menu:open-settings',
-  TOGGLE_SIDEBAR: 'menu:toggle-sidebar',
   ADD_MODEL_FILE: 'menu:add-model-file',
   SHOW_DOWNLOADS: 'menu:show-downloads',
   REFRESH_MODELS: 'menu:refresh-models',
@@ -32,7 +31,6 @@ export type MenuEventType = typeof MENU_EVENTS[keyof typeof MENU_EVENTS];
 
 export interface MenuEventHandlers {
   [MENU_EVENTS.OPEN_SETTINGS]?: () => void;
-  [MENU_EVENTS.TOGGLE_SIDEBAR]?: () => void;
   [MENU_EVENTS.ADD_MODEL_FILE]?: () => void;
   [MENU_EVENTS.SHOW_DOWNLOADS]?: () => void;
   [MENU_EVENTS.REFRESH_MODELS]?: () => void;

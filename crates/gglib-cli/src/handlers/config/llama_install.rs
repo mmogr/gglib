@@ -103,7 +103,7 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
         let vk = vulkan_status();
         if !vk.ready_for_build() {
             println!();
-            println!("\x1b[1;31m❌ Vulkan build requirements not met\x1b[0m");
+            println!("\x1b[1;31m✗ Vulkan build requirements not met\x1b[0m");
             println!();
             println!(
                 "  Vulkan runtime (loader): {}",

@@ -109,7 +109,7 @@ pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     // Apply the updates
     ctx.app.models().update(&updated_model).await?;
 
-    println!("✅ Model updated successfully!");
+    println!("✓ Model updated successfully!");
     Ok(())
 }
 

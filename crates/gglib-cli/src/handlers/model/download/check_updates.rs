@@ -85,7 +85,7 @@ async fn check_model_update(model: &gglib_core::domain::Model, hf_repo: &str) ->
             }
         }
         Err(e) => {
-            println!("  ❌ Failed to check repository: {}", e);
+            println!("  ✗ Failed to check repository: {}", e);
         }
     }
 

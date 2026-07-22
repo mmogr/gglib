@@ -41,7 +41,6 @@ pub mod names {
     pub const MENU_PROXY_ERROR: &str = "menu:proxy-error";
     pub const MENU_COPY_TO_CLIPBOARD: &str = "menu:copy-to-clipboard";
     pub const MENU_SHOW_CHAT: &str = "menu:show-chat";
-    pub const MENU_TOGGLE_SIDEBAR: &str = "menu:toggle-sidebar";
     pub const MENU_INSTALL_LLAMA: &str = "menu:install-llama";
     pub const MENU_CHECK_LLAMA_STATUS: &str = "menu:check-llama-status";
     pub const MENU_OPEN_SETTINGS: &str = "menu:open-settings";

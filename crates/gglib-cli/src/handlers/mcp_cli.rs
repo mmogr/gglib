@@ -145,7 +145,7 @@ async fn add(
     }
 
     let server = ctx.mcp.add_server(new_server).await?;
-    println!("✅ Added MCP server '{}' (id: {})", server.name, server.id);
+    println!("✓ Added MCP server '{}' (id: {})", server.name, server.id);
 
     Ok(())
 }
@@ -165,7 +165,7 @@ async fn remove(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     }
 
     ctx.mcp.remove_server(server.id).await?;
-    println!("✅ Removed MCP server '{}'", server.name);
+    println!("✓ Removed MCP server '{}'", server.name);
 
     Ok(())
 }
@@ -174,7 +174,7 @@ async fn start(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
     let tools = ctx.mcp.start_server(server.id).await?;
     println!(
-        "✅ Started '{}' — {} tool(s) available",
+        "✓ Started '{}' — {} tool(s) available",
         server.name,
         tools.len()
     );
@@ -189,7 +189,7 @@ async fn start(ctx: &CliContext, identifier: &str) -> Result<()> {
 async fn stop(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
     ctx.mcp.stop_server(server.id).await?;
-    println!("✅ Stopped '{}'", server.name);
+    println!("✓ Stopped '{}'", server.name);
 
     Ok(())
 }
@@ -199,7 +199,7 @@ async fn set_enabled(ctx: &CliContext, identifier: &str, enabled: bool) -> Resul
     server.enabled = enabled;
     ctx.mcp.update_server(server.clone()).await?;
     let action = if enabled { "Enabled" } else { "Disabled" };
-    println!("✅ {} '{}'", action, server.name);
+    println!("✓ {} '{}'", action, server.name);
 
     Ok(())
 }
@@ -248,7 +248,7 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
 
     let tools = ctx.mcp.test_connection(new_server).await?;
     println!(
-        "✅ Connection successful — {} tool(s) discovered",
+        "✓ Connection successful — {} tool(s) discovered",
         tools.len()
     );
     for tool in &tools {
