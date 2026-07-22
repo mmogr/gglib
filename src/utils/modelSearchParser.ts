@@ -163,13 +163,13 @@ export function parseModelSearchIntent(input: string): ModelSearchIntent {
 export function getButtonTextForIntent(intent: ModelSearchIntent): string {
   switch (intent.kind) {
     case "download":
-      return "⬇️ Download";
+      return "Download";
     case "repo":
       return "View Model";
     case "url":
       // If we extracted repo info from URL, show appropriate action
       if (intent.quant) {
-        return "⬇️ Download";
+        return "Download";
       }
       if (intent.repo) {
         return "View Model";

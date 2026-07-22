@@ -293,13 +293,13 @@ describe("getButtonTextForIntent", () => {
     expect(getButtonTextForIntent(intent)).toBe("View Model");
   });
 
-  it('returns "⬇️ Download" for download intent', () => {
+  it('returns "Download" for download intent', () => {
     const intent: ModelSearchIntent = {
       kind: "download",
       repo: "user/model",
       quant: "Q4_K_M",
     };
-    expect(getButtonTextForIntent(intent)).toBe("⬇️ Download");
+    expect(getButtonTextForIntent(intent)).toBe("Download");
   });
 
   it('returns "View Model" for url intent with repo only', () => {
@@ -311,14 +311,14 @@ describe("getButtonTextForIntent", () => {
     expect(getButtonTextForIntent(intent)).toBe("View Model");
   });
 
-  it('returns "⬇️ Download" for url intent with repo and quant', () => {
+  it('returns "Download" for url intent with repo and quant', () => {
     const intent: ModelSearchIntent = {
       kind: "url",
       url: "https://huggingface.co/user/model/blob/main/model.Q4_K_M.gguf",
       repo: "user/model",
       quant: "Q4_K_M",
     };
-    expect(getButtonTextForIntent(intent)).toBe("⬇️ Download");
+    expect(getButtonTextForIntent(intent)).toBe("Download");
   });
 
   it('returns "Search" for url intent without repo', () => {

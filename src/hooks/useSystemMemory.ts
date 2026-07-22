@@ -136,7 +136,7 @@ export function useSystemMemory(): UseSystemMemoryReturn {
   const getTooltip = useCallback(
     (fileSizeBytes: number): string => {
       if (!memoryInfo || !availableMemory) {
-        return "❓ Memory info unavailable\n\nSystem memory could not be determined. The fit indicator is unavailable.";
+        return "Memory info unavailable\n\nSystem memory could not be determined. The fit indicator is unavailable.";
       }
 
       const required = getEstimate(fileSizeBytes);
@@ -151,16 +151,16 @@ export function useSystemMemory(): UseSystemMemoryReturn {
       let statusText: string;
       switch (status) {
         case 'fits':
-          statusText = "✅ Should fit comfortably";
+          statusText = "Should fit comfortably";
           break;
         case 'tight':
-          statusText = "⚠️ Tight fit - may work";
+          statusText = "Tight fit - may work";
           break;
         case 'wont_fit':
-          statusText = "❌ Likely won't fit";
+          statusText = "Likely won't fit";
           break;
         case 'unknown':
-          statusText = "❓ Unknown";
+          statusText = "Unknown";
           break;
       }
 
