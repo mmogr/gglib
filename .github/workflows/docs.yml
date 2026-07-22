@@ -45,7 +45,7 @@ jobs:
           ref: main
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
 
       - name: Install system dependencies
         run: |
