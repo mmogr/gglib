@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 
 use gglib_core::download::{DownloadEvent, format_duration, format_rate};
 use gglib_core::events::AppEvent;
@@ -36,9 +36,12 @@ use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 // estimates, derived from the `set_position` calls we make; using them meant
 // the CLI ignored the rate the manager had already computed and displayed a
 // different number from the GUI for the same transfer. Rate and ETA now arrive
-// on the event and are rendered into `{wide_msg}`. `{bytes}` and
-// `{total_bytes}` stay — those are sizes, which indicatif labels correctly as
-// binary (MiB/GiB).
+// on the event and are rendered into `{wide_msg}`. `{bytes}` stays — that's a
+// size, which indicatif labels correctly as binary (MiB/GiB). `{total_bytes}`
+// is overridden below by a custom key (see `total_bytes_key`) rather than left
+// as indicatif's builtin: the builtin renders the *length*, and a bar created
+// before its total is known has no length rather than a zero one — see the
+// `ProgressBar::no_length()` comment on `DownloadStarted` below.
 const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
@@ -56,6 +59,12 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 pub struct CliDownloadEventEmitter {
     multi_progress: Arc<MultiProgress>,
     bars: Mutex<HashMap<String, ProgressBar>>,
+    /// The interactive monitor's `[a] queue another  [q] quit` hint bar, if
+    /// one has been registered via [`Self::set_footer`]. When present, new
+    /// download bars are inserted above it instead of appended, so it stays
+    /// pinned to the bottom without the remove-then-re-add churn that used
+    /// to re-anchor it on every new item.
+    footer: Mutex<Option<ProgressBar>>,
 }
 
 impl CliDownloadEventEmitter {
@@ -89,6 +98,16 @@ impl CliDownloadEventEmitter {
         Self {
             multi_progress,
             bars: Mutex::new(HashMap::new()),
+            footer: Mutex::new(None),
+        }
+    }
+
+    /// Register the interactive monitor's hint bar as the footer: subsequent
+    /// download bars are inserted above it via `MultiProgress::insert_before`
+    /// instead of appended, keeping it pinned to the bottom.
+    pub fn set_footer(&self, bar: &ProgressBar) {
+        if let Ok(mut footer) = self.footer.lock() {
+            *footer = Some(bar.clone());
         }
     }
 
@@ -130,6 +149,44 @@ impl CliDownloadEventEmitter {
         }
     }
 
+    /// Create and register the bar for a newly started download, labeled
+    /// `label`.
+    ///
+    /// Uses the unified [`BAR_TEMPLATE`] — see its module-level comment for
+    /// why the style never switches mid-stream — and [`ProgressBar::no_length`]
+    /// rather than `new(0)`: indicatif's `fraction()` treats an explicit
+    /// length of 0 as 100% complete, so a bar created before its total is
+    /// known would render fully filled — exactly backwards — until the first
+    /// Progress/ShardProgress event calls `set_length`. No length at all
+    /// renders as an honestly empty bar instead.
+    ///
+    /// Inserted above the footer (if [`Self::set_footer`] has registered
+    /// one) rather than appended, so the `[a]/[q]` hint bar stays pinned to
+    /// the bottom without needing to be removed and re-added.
+    fn start_bar(&self, id: String, label: String) {
+        let style = ProgressStyle::with_template(BAR_TEMPLATE)
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            .progress_chars("█▓░")
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+            .with_key("total_bytes", total_bytes_key);
+
+        let footer = self.footer.lock().ok().and_then(|f| f.clone());
+        let bar = footer.as_ref().map_or_else(
+            || self.multi_progress.add(ProgressBar::no_length()),
+            |footer| {
+                self.multi_progress
+                    .insert_before(footer, ProgressBar::no_length())
+            },
+        );
+        bar.set_style(style);
+        bar.enable_steady_tick(TICK_INTERVAL);
+        bar.set_message(label);
+
+        if let Ok(mut bars) = self.bars.lock() {
+            bars.insert(id, bar);
+        }
+    }
+
     /// Apply a progress update to the bar registered for `id`.
     ///
     /// Shared by the sharded and unsharded progress arms — they differ only in
@@ -150,6 +207,21 @@ impl CliDownloadEventEmitter {
         }
         bar.set_position(position);
         bar.set_message(message.to_string());
+    }
+}
+
+/// Custom `{total_bytes}` renderer: `—` while the length is unknown, the
+/// human-readable size once `set_length` has been called with a real total.
+/// Registered via `ProgressStyle::with_key` — see the module-level comment on
+/// `BAR_TEMPLATE`.
+fn total_bytes_key(state: &ProgressState, w: &mut dyn std::fmt::Write) {
+    match state.len() {
+        Some(len) => {
+            let _ = write!(w, "{}", HumanBytes(len));
+        }
+        None => {
+            let _ = write!(w, "—");
+        }
     }
 }
 
@@ -186,24 +258,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                     _ => id.clone(),
                 };
 
-                // Always create the bar with the unified BAR_TEMPLATE — see
-                // module-level comment on `BAR_TEMPLATE` for why we never
-                // switch styles mid-stream. Length 0 is a sentinel meaning
-                // "total not yet known"; the bar widget renders empty until
-                // a Progress/ShardProgress event supplies a real length.
-                let style = ProgressStyle::with_template(BAR_TEMPLATE)
-                    .unwrap_or_else(|_| ProgressStyle::default_bar())
-                    .progress_chars("█▓░")
-                    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
-
-                let bar = self.multi_progress.add(ProgressBar::new(0));
-                bar.set_style(style);
-                bar.enable_steady_tick(TICK_INTERVAL);
-                bar.set_message(label);
-
-                if let Ok(mut bars) = self.bars.lock() {
-                    bars.insert(id, bar);
-                }
+                self.start_bar(id, label);
             }
 
             DownloadEvent::DownloadProgress {

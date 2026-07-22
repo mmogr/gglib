@@ -257,7 +257,10 @@ impl PythonEnvironment {
         Ok(())
     }
 
-    async fn install_requirements(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
+    async fn install_requirements(
+        &self,
+        notice: Option<&NoticeCallback>,
+    ) -> Result<(), EnvSetupError> {
         notify(
             notice,
             "installing fast downloader dependencies…",

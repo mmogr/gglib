@@ -26,7 +26,10 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         anyhow!("Please specify a quantization. Use --list-quants to see available options.")
     })?;
 
-    gglib_core::telemetry::console_println(&format!("Downloading {} from HuggingFace Hub...", request.model_id));
+    gglib_core::telemetry::console_println(&format!(
+        "Downloading {} from HuggingFace Hub...",
+        request.model_id
+    ));
 
     // Get commit SHA
     let api = super::api::create_hf_api(request.token.clone(), &request.models_dir)?;
