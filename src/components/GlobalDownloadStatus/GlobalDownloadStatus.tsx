@@ -3,7 +3,7 @@ import { Box, CheckCircle2, Download, RotateCcw } from 'lucide-react';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import type { DownloadProgressView, DownloadUiState } from '../../hooks/useDownloadManager';
 import type { QueueRunSummary } from '../../services/transport/types/events';
-import { formatBytes, formatTime } from '../../utils/format';
+import { formatBytes, formatDuration, formatRate } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
 import { Stack } from '../primitives';
@@ -200,18 +200,23 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           </span>
         </div>
 
+        {/*
+          Speed and ETA always occupy a slot, showing a placeholder while the
+          estimator warms up. Conditionally rendering them made the row reflow
+          a second or two into every download.
+        */}
         <div className="flex gap-md flex-wrap">
           {progress?.downloaded !== undefined && progress?.total !== undefined && (
             <span className="text-xs text-text-secondary">
               {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
             </span>
           )}
-          {progress?.speedBps !== undefined && (
-            <span className="text-xs text-text-secondary">{formatBytes(progress.speedBps)}/s</span>
-          )}
-          {progress?.etaSeconds !== undefined && (
-            <span className="text-xs text-text-secondary">ETA: {formatTime(progress.etaSeconds)}</span>
-          )}
+          <span className="text-xs text-text-secondary tabular-nums">
+            {formatRate(progress?.speedBps)}
+          </span>
+          <span className="text-xs text-text-secondary tabular-nums">
+            ETA: {formatDuration(progress?.etaSeconds)}
+          </span>
         </div>
 
         {isSharded && shard && (

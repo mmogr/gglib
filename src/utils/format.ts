@@ -3,19 +3,78 @@
  */
 
 /**
- * Format bytes into human-readable format (B, KB, MB, GB, etc.)
+ * Placeholder for a value that is not known yet.
+ *
+ * Deliberately not '0': zero is a real reading meaning "stalled", and
+ * conflating the two is what rendered "ETA: 0s" on a healthy download.
+ * Mirrors `UNKNOWN` in `crates/gglib-core/src/download/format.rs`.
+ */
+export const UNKNOWN = '—';
+
+/**
+ * Format a byte *size* in binary units (KiB, MiB, GiB).
+ *
+ * Sizes stay binary because that is the convention for model files on disk.
+ * For transfer *rates* use {@link formatRate}, which is decimal.
  */
 export const formatBytes = (bytes: number, decimals = 2): string => {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const sizes = ['Bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
 /**
+ * Format a transfer rate in decimal units, e.g. "118.4 MB/s".
+ *
+ * Decimal (1 MB/s = 1,000,000 B/s) so the number agrees with Activity Monitor,
+ * nettop and every ISP — which is what a download speed gets compared against.
+ * Must stay byte-for-byte identical to `format_rate` in
+ * `crates/gglib-core/src/download/format.rs` so the CLI and the GUI never
+ * disagree about the same transfer.
+ */
+export const formatRate = (bps: number | undefined | null): string => {
+  if (bps == null || !isFinite(bps) || bps < 0) return UNKNOWN;
+
+  const KB = 1_000;
+  const MB = 1_000_000;
+  const GB = 1_000_000_000;
+
+  if (bps >= GB) return `${(bps / GB).toFixed(2)} GB/s`;
+  if (bps >= MB) return `${(bps / MB).toFixed(1)} MB/s`;
+  if (bps >= KB) return `${(bps / KB).toFixed(0)} kB/s`;
+  return `${bps.toFixed(0)} B/s`;
+};
+
+/**
+ * Format a duration in seconds as "45s", "3m 20s" or "1h 04m".
+ *
+ * Mirrors `format_duration` in `crates/gglib-core/src/download/format.rs`.
+ * Returns {@link UNKNOWN} when the value is absent — an unknown ETA is not a
+ * zero ETA.
+ */
+export const formatDuration = (seconds: number | undefined | null): string => {
+  if (seconds == null || !isFinite(seconds) || seconds < 0) return UNKNOWN;
+
+  // Saturate rather than overflow the display on absurd inputs (a near-zero
+  // rate can produce an ETA of centuries before the average settles).
+  const total = Math.min(Math.ceil(seconds), 359_999);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  if (minutes > 0) return `${minutes}m ${String(secs).padStart(2, '0')}s`;
+  return `${Math.max(total, 1)}s`;
+};
+
+/**
  * Format seconds into human-readable time (e.g., "5m 30s")
+ *
+ * @deprecated Prefer {@link formatDuration}, which matches the Rust formatter
+ * and distinguishes "unknown" from zero.
  */
 export const formatTime = (seconds: number): string => {
   if (!isFinite(seconds) || seconds < 0) return 'Calculating...';

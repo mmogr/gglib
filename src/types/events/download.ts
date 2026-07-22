@@ -24,11 +24,11 @@ export interface NormalizedDownloadProgress {
   /** Bytes downloaded so far (aggregate for multi-shard) */
   downloadedBytes: number;
   
-  /** Current download speed in bytes per second (null if not yet calculated) */
-  speedBps: number | null;
+  /** Current download speed in bytes per second (undefined until known) */
+  speedBps?: number;
   
-  /** Estimated time remaining in seconds (null if not yet calculated) */
-  etaSeconds: number | null;
+  /** Estimated time remaining in seconds (undefined until known) */
+  etaSeconds?: number;
   
   /** Shard information (present only for multi-shard downloads) */
   shard?: {
@@ -54,8 +54,8 @@ export function normalizeDownloadProgress(event: {
   id: string;
   downloaded: number;
   total: number;
-  speed_bps: number;
-  eta_seconds: number;
+  speed_bps?: number;
+  eta_seconds?: number;
   percentage: number;
 }): NormalizedDownloadProgress {
   return {
@@ -81,8 +81,8 @@ export function normalizeShardProgress(event: {
   shard_total: number;
   aggregate_downloaded: number;
   aggregate_total: number;
-  speed_bps: number;
-  eta_seconds: number;
+  speed_bps?: number;
+  eta_seconds?: number;
   percentage: number;
 }): NormalizedDownloadProgress {
   return {
