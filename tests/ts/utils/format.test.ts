@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatBytes,
-  formatTime,
+  formatDuration,
+  formatRate,
   formatNumber,
   formatParamCount,
   getHuggingFaceUrl,
@@ -25,79 +26,89 @@ describe('formatBytes', () => {
   });
 
   it('formats kilobytes correctly', () => {
-    expect(formatBytes(1024)).toBe('1 KB');
-    expect(formatBytes(1536)).toBe('1.5 KB');
-    expect(formatBytes(10240)).toBe('10 KB');
+    expect(formatBytes(1024)).toBe('1 KiB');
+    expect(formatBytes(1536)).toBe('1.5 KiB');
+    expect(formatBytes(10240)).toBe('10 KiB');
   });
 
   it('formats megabytes correctly', () => {
-    expect(formatBytes(1048576)).toBe('1 MB');
-    expect(formatBytes(1572864)).toBe('1.5 MB');
-    expect(formatBytes(10485760)).toBe('10 MB');
+    expect(formatBytes(1048576)).toBe('1 MiB');
+    expect(formatBytes(1572864)).toBe('1.5 MiB');
+    expect(formatBytes(10485760)).toBe('10 MiB');
   });
 
   it('formats gigabytes correctly', () => {
-    expect(formatBytes(1073741824)).toBe('1 GB');
-    expect(formatBytes(5368709120)).toBe('5 GB');
-    expect(formatBytes(7516192768)).toBe('7 GB');
+    expect(formatBytes(1073741824)).toBe('1 GiB');
+    expect(formatBytes(5368709120)).toBe('5 GiB');
+    expect(formatBytes(7516192768)).toBe('7 GiB');
   });
 
   it('formats terabytes correctly', () => {
-    expect(formatBytes(1099511627776)).toBe('1 TB');
-    expect(formatBytes(2199023255552)).toBe('2 TB');
+    expect(formatBytes(1099511627776)).toBe('1 TiB');
+    expect(formatBytes(2199023255552)).toBe('2 TiB');
   });
 
   it('respects decimal places parameter', () => {
-    expect(formatBytes(1536, 0)).toBe('2 KB');
-    expect(formatBytes(1536, 1)).toBe('1.5 KB');
-    expect(formatBytes(1536, 3)).toBe('1.5 KB');
+    expect(formatBytes(1536, 0)).toBe('2 KiB');
+    expect(formatBytes(1536, 1)).toBe('1.5 KiB');
+    expect(formatBytes(1536, 3)).toBe('1.5 KiB');
   });
 
   it('handles negative decimal places as 0', () => {
-    expect(formatBytes(1536, -1)).toBe('2 KB');
+    expect(formatBytes(1536, -1)).toBe('2 KiB');
   });
 });
 
-describe('formatTime', () => {
-  it('returns "Calculating..." for non-finite values', () => {
-    expect(formatTime(Infinity)).toBe('Calculating...');
-    expect(formatTime(-Infinity)).toBe('Calculating...');
-    expect(formatTime(NaN)).toBe('Calculating...');
+describe('formatRate', () => {
+  it('returns a placeholder when the rate is not known', () => {
+    // Absent means "the estimator has not warmed up", not "stalled". Rendering
+    // 0 here is what made a healthy download look stuck.
+    expect(formatRate(undefined)).toBe('—');
+    expect(formatRate(null)).toBe('—');
+    expect(formatRate(NaN)).toBe('—');
+    expect(formatRate(Infinity)).toBe('—');
+    expect(formatRate(-1)).toBe('—');
   });
 
-  it('returns "Calculating..." for negative values', () => {
-    expect(formatTime(-1)).toBe('Calculating...');
-    expect(formatTime(-100)).toBe('Calculating...');
+  it('uses decimal units so the number matches a system network monitor', () => {
+    expect(formatRate(1_000_000)).toBe('1.0 MB/s');
+    // 1 MiB/s reads as 1.0 MB/s, not 1.0: decimal is the unit users compare to.
+    expect(formatRate(1_048_576)).toBe('1.0 MB/s');
   });
 
-  it('formats seconds correctly', () => {
-    expect(formatTime(0)).toBe('0s');
-    expect(formatTime(1)).toBe('1s');
-    expect(formatTime(30)).toBe('30s');
-    expect(formatTime(59)).toBe('59s');
+  it('scales by magnitude', () => {
+    expect(formatRate(0)).toBe('0 B/s');
+    expect(formatRate(999)).toBe('999 B/s');
+    expect(formatRate(1_000)).toBe('1 kB/s');
+    expect(formatRate(1_500_000)).toBe('1.5 MB/s');
+    expect(formatRate(118_400_000)).toBe('118.4 MB/s');
+    expect(formatRate(2_500_000_000)).toBe('2.50 GB/s');
+  });
+});
+
+describe('formatDuration', () => {
+  it('returns a placeholder when the ETA is not known', () => {
+    expect(formatDuration(undefined)).toBe('—');
+    expect(formatDuration(null)).toBe('—');
+    expect(formatDuration(NaN)).toBe('—');
+    expect(formatDuration(-5)).toBe('—');
   });
 
-  it('rounds up fractional seconds', () => {
-    expect(formatTime(0.1)).toBe('1s');
-    expect(formatTime(0.9)).toBe('1s');
-    expect(formatTime(29.1)).toBe('30s');
+  it('never shows 0s while work is in flight', () => {
+    expect(formatDuration(0)).toBe('1s');
+    expect(formatDuration(0.1)).toBe('1s');
   });
 
-  it('formats minutes and seconds correctly', () => {
-    expect(formatTime(60)).toBe('1m 0s');
-    expect(formatTime(61)).toBe('1m 1s');
-    expect(formatTime(90)).toBe('1m 30s');
-    expect(formatTime(120)).toBe('2m 0s');
-    expect(formatTime(150)).toBe('2m 30s');
+  it('scales by magnitude', () => {
+    expect(formatDuration(45)).toBe('45s');
+    expect(formatDuration(59.4)).toBe('1m 00s');
+    expect(formatDuration(200)).toBe('3m 20s');
+    expect(formatDuration(3_600)).toBe('1h 00m');
+    expect(formatDuration(3_845)).toBe('1h 04m');
   });
 
-  it('handles large values', () => {
-    expect(formatTime(3600)).toBe('60m 0s');
-    expect(formatTime(3661)).toBe('61m 1s');
-  });
-
-  it('rounds up remaining seconds in minutes format', () => {
-    expect(formatTime(90.5)).toBe('1m 31s');
+  it('saturates rather than overflowing on absurd input', () => {
+    expect(formatDuration(1e18)).toBe('99h 59m');
   });
 });
 

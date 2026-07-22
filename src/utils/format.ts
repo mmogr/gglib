@@ -71,20 +71,6 @@ export const formatDuration = (seconds: number | undefined | null): string => {
 };
 
 /**
- * Format seconds into human-readable time (e.g., "5m 30s")
- *
- * @deprecated Prefer {@link formatDuration}, which matches the Rust formatter
- * and distinguishes "unknown" from zero.
- */
-export const formatTime = (seconds: number): string => {
-  if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
-  if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.ceil(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-};
-
-/**
  * Format large numbers with K/M suffix (e.g., 1.5K, 2.3M)
  */
 export const formatNumber = (num: number): string => {

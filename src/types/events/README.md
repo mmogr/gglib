@@ -7,6 +7,10 @@
 
 Strict discriminated-union TypeScript types for all events emitted by the Rust backend over SSE. Mirrors `gglib_core::domain::agent::AgentEvent` and download progress domain structs, enabling exhaustive `switch` statements and preventing silent contract drift.
 
+On download progress events, `speed_bps` and `eta_seconds` are **optional** and
+omitted by the backend when unknown, so the corresponding fields are `number | undefined`.
+Absent means the rate estimator has not warmed up; it does not mean zero.
+
 ## Key Files
 
 | File | Role |
