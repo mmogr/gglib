@@ -274,6 +274,7 @@ async fn spawn(
             make_orchestrator_deps(),
             proxy_cancel,
             Arc::new(ProfileSettings { profiles }),
+            None, // inference_override
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

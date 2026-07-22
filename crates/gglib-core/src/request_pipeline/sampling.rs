@@ -23,6 +23,16 @@ use crate::domain::InferenceConfig;
 /// config.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SamplingLayers {
+    /// Operator-supplied overrides from the process's own command line
+    /// (`gglib proxy --temperature …`), applied *above* the client's request
+    /// parameters.
+    ///
+    /// Above the client deliberately: this is the person running the server
+    /// stating what the server does, which cannot be true if any client can
+    /// silently outrank it. These previously merged into [`Self::global`],
+    /// which sits below the per-model layer — so on any model with stored
+    /// `inference_defaults` the flags did nothing at all.
+    pub cli_override: Option<InferenceConfig>,
     /// The profile the request selected via `{model}:{profile}`, if any.
     /// Sparse — see [`crate::domain::inference_profile`].
     pub profile: Option<InferenceConfig>,
@@ -46,7 +56,12 @@ pub struct SamplingLayers {
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
     let client_params = InferenceConfig::from_openai_json(body);
-    let resolved = client_params.resolve_with_profile(
+    // Operator flags sit above the client, everything else below it.
+    let top = match layers.cli_override.as_ref() {
+        Some(o) => o.clone().stacked_over(&client_params),
+        None => client_params,
+    };
+    let resolved = top.resolve_with_profile(
         layers.profile.as_ref(),
         ctx.inference_defaults.as_ref(),
         layers.global.as_ref(),
@@ -105,12 +120,22 @@ mod tests {
 
     // ── The hierarchy ─────────────────────────────────────────────────────
 
-    /// One table, four rows: each layer wins only over the ones beneath it.
+    /// One table, one row per layer: each wins only over the ones beneath it.
     #[test]
     fn each_layer_beats_the_ones_below_it() {
         let cases = [
-            // (client temperature, profile, model, global, expected, why)
+            // (cli, client temperature, profile, model, global, expected, why)
             (
+                Some(0.05),
+                Some(0.11),
+                Some(0.22),
+                Some(0.33),
+                Some(0.44),
+                0.05,
+                "cli override beats client",
+            ),
+            (
+                None,
                 Some(0.11),
                 Some(0.22),
                 Some(0.33),
@@ -119,6 +144,7 @@ mod tests {
                 "client beats profile",
             ),
             (
+                None,
                 None,
                 Some(0.22),
                 Some(0.33),
@@ -129,18 +155,28 @@ mod tests {
             (
                 None,
                 None,
+                None,
                 Some(0.33),
                 Some(0.44),
                 0.33,
                 "model beats global",
             ),
-            (None, None, None, Some(0.44), 0.44, "global beats hardcoded"),
-            (None, None, None, None, 0.7, "hardcoded fallback"),
+            (
+                None,
+                None,
+                None,
+                None,
+                Some(0.44),
+                0.44,
+                "global beats hardcoded",
+            ),
+            (None, None, None, None, None, 0.7, "hardcoded fallback"),
         ];
 
-        for (client, profile, model, global, expected, why) in cases {
+        for (cli, client, profile, model, global, expected, why) in cases {
             let mut body = client.map_or_else(|| json!({}), |t| json!({"temperature": t}));
             let layers = SamplingLayers {
+                cli_override: cli.map(temp),
                 profile: profile.map(temp),
                 global: global.map(temp),
             };
@@ -168,6 +204,7 @@ mod tests {
             &mut body,
             &model_ctx(Some(model)),
             &SamplingLayers {
+                cli_override: None,
                 profile: Some(temp(0.2)),
                 global: None,
             },
@@ -176,6 +213,49 @@ mod tests {
         assert_param(&body, "temperature", 0.2);
         assert_param(&body, "top_p", 0.87);
         assert_param(&body, "top_k", 20.0);
+    }
+
+    /// Regression for #621: operator flags must beat the per-model layer.
+    ///
+    /// These previously merged into the *global* layer, which sits below the
+    /// model — so on any model with stored `inference_defaults`, every
+    /// `gglib proxy --temperature …` style flag silently did nothing.
+    #[test]
+    fn a_cli_override_beats_the_model_layer() {
+        let mut body = json!({});
+        resolve_sampling(
+            &mut body,
+            &model_ctx(Some(InferenceConfig {
+                temperature: Some(1.0),
+                top_k: Some(20),
+                ..Default::default()
+            })),
+            &SamplingLayers {
+                cli_override: Some(temp(0.3)),
+                ..Default::default()
+            },
+        );
+
+        assert_param(&body, "temperature", 0.3);
+        // Untuned parameters the operator said nothing about still resolve.
+        assert_param(&body, "top_k", 20.0);
+    }
+
+    /// The operator runs the server, so their flags also outrank the client's
+    /// own request parameters — otherwise any caller could quietly ignore them.
+    #[test]
+    fn a_cli_override_beats_client_request_params() {
+        let mut body = json!({"temperature": 0.9});
+        resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                cli_override: Some(temp(0.3)),
+                ..Default::default()
+            },
+        );
+
+        assert_param(&body, "temperature", 0.3);
     }
 
     /// Regression for #621, at the pipeline level: the `:coding` shape — a
@@ -193,6 +273,7 @@ mod tests {
             &mut body,
             &model_ctx(Some(model)),
             &SamplingLayers {
+                cli_override: None,
                 profile: Some(temp(0.2)),
                 global: None,
             },

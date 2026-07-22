@@ -236,6 +236,7 @@ async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, Cancel
             orchestrator,
             cancel_clone,
             Arc::new(MockSettingsRepo),
+            None, // inference_override
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

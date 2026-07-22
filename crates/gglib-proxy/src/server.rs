@@ -79,6 +79,9 @@ pub(crate) struct AppState {
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
     calibration: Arc<TokenCalibration>,
+    /// Operator overrides from the command line, applied above the client's
+    /// own request parameters when resolving sampling.
+    inference_override: Option<gglib_core::domain::InferenceConfig>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
     cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
@@ -132,6 +135,9 @@ pub async fn serve(
     council: CouncilDeps,
     cancel: CancellationToken,
     settings_repo: Arc<dyn SettingsRepository>,
+    // Operator overrides from this process's command line, applied above the
+    // client's own request parameters. See `SamplingLayers::cli_override`.
+    inference_override: Option<gglib_core::domain::InferenceConfig>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
     disk_budget: crate::slot_eviction::DiskBudget,
@@ -233,6 +239,7 @@ pub async fn serve(
         settings: Arc::new(SettingsCache::new(settings_repo)),
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
+        inference_override,
         cache_enabled,
         slot_dir,
         slot_gate,
@@ -730,6 +737,7 @@ async fn chat_completions(
 
     // Global defaults come from the same snapshot the profile list did.
     let sampling = SamplingLayers {
+        cli_override: state.inference_override.clone(),
         profile: request_profile.clone(),
         global: settings.inference_defaults.clone(),
     };
@@ -948,6 +956,7 @@ async fn chat_completions(
             // so this is a fresh point in time. The profile is deliberately
             // not re-resolved — the client asked for a specific one.
             let retry_sampling = SamplingLayers {
+                cli_override: state.inference_override.clone(),
                 profile: request_profile.clone(),
                 global: state.settings.get().await.inference_defaults.clone(),
             };

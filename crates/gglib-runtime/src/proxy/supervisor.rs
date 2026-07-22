@@ -24,6 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
@@ -103,6 +104,10 @@ pub struct ProxyConfig {
     /// Byte budget for the on-disk slot cache eviction sweep. Only consulted
     /// when `cache_enabled` is `true`.
     pub disk_budget: DiskBudget,
+    /// Operator overrides supplied on this process's command line
+    /// (`gglib proxy --temperature …`), applied above the client's own request
+    /// parameters. `None` means the client and the stored layers decide.
+    pub inference_override: Option<InferenceConfig>,
 }
 
 impl Default for ProxyConfig {
@@ -114,6 +119,7 @@ impl Default for ProxyConfig {
             cache_enabled: false,
             slot_dir: None,
             disk_budget: DiskBudget::Auto,
+            inference_override: None,
         }
     }
 }
@@ -249,6 +255,7 @@ impl ProxySupervisor {
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;
+        let inference_override = config.inference_override;
         let agent_metrics = Arc::clone(&self.agent_metrics);
         let exit_tx = self.exit_tx.clone();
 
@@ -270,6 +277,7 @@ impl ProxySupervisor {
                 orchestrator,
                 cancel_clone,
                 settings_repo,
+                inference_override,
                 cache_enabled,
                 slot_dir,
                 disk_budget,

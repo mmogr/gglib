@@ -42,6 +42,7 @@ async fn spawn_proxy(
             fixtures::common::make_orchestrator_deps(),
             cancel_clone,
             Arc::new(fixtures::common::MockSettingsRepo),
+            None, // inference_override
             cache_enabled,
             slot_dir,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

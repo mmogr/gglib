@@ -251,6 +251,23 @@ impl InferenceConfig {
         }
     }
 
+    /// Stack `self` as the higher-priority layer above `lower`.
+    ///
+    /// Same rules as the resolution ladder — `self` wins where it speaks,
+    /// `lower` fills the rest, and a `temperature` declared by `self` blocks
+    /// `lower`'s temperature-tuned parameters (see [`merge_layer`]). Used to
+    /// place a layer *above* the client's own request parameters, which
+    /// [`resolve_with_profile`] cannot express since it treats `self` as the
+    /// top.
+    ///
+    /// [`merge_layer`]: Self::merge_layer
+    /// [`resolve_with_profile`]: Self::resolve_with_profile
+    #[must_use]
+    pub const fn stacked_over(mut self, lower: &Self) -> Self {
+        self.merge_layer(lower);
+        self
+    }
+
     /// Create a new config with all fields set to sensible defaults.
     ///
     /// These are the hardcoded fallback values used when no other
