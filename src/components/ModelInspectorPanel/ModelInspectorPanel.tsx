@@ -1,5 +1,5 @@
 import { FC, useCallback, useState, useEffect } from 'react';
-import { Shield, CloudSync } from 'lucide-react';
+import { Shield, CloudSync, PackageOpen } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
@@ -27,7 +27,9 @@ import {
   DeleteModal,
   InspectorActions,
 } from './components';
+import { Icon } from '../ui/Icon';
 import { Input } from '../ui/Input';
+import { EmptyState } from '../primitives';
 
 const panelContainer = "flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0";
 
@@ -192,9 +194,12 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     return (
       <div className={panelContainer}>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-          <div className="flex flex-col items-center justify-center min-h-[300px] py-3xl px-xl text-center">
-            <div className="text-4xl mb-base opacity-50 text-text-disabled">👈</div>
-            <p className="text-text-secondary m-0">Select a model to view details</p>
+          <div className="flex flex-col items-center justify-center min-h-[300px]">
+            <EmptyState
+              icon={<Icon icon={PackageOpen} size={40} />}
+              title="No model selected"
+              description="Pick a model from the library to see its metadata, tags, and inference defaults."
+            />
           </div>
         </div>
       </div>

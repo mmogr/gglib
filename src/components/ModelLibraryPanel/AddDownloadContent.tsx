@@ -1,7 +1,9 @@
 import { FC, useState } from 'react';
+import { FolderOpen, Search } from 'lucide-react';
 import AddModel from '../AddModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
+import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
 
 export type AddDownloadSubTab = 'add' | 'browse';
@@ -52,21 +54,23 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
       <div className="flex flex-col gap-sm py-sm border-b border-border shrink-0 mobile:flex-row mobile:flex-wrap">
         <button
           className={cn(
-            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
+            'flex-auto min-w-0 inline-flex items-center justify-center gap-sm bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
             activeSubTab === 'browse' && 'bg-primary text-white border-primary',
           )}
           onClick={() => handleSubTabChange('browse')}
         >
-          🔍 Browse HF
+          <Icon icon={Search} size={14} />
+          Browse HF
         </button>
         <button
           className={cn(
-            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
+            'flex-auto min-w-0 inline-flex items-center justify-center gap-sm bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
             activeSubTab === 'add' && 'bg-primary text-white border-primary',
           )}
           onClick={() => handleSubTabChange('add')}
         >
-          📁 Local File
+          <Icon icon={FolderOpen} size={14} />
+          Local File
         </button>
       </div>
 

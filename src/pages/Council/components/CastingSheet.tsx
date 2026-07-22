@@ -15,6 +15,8 @@
 
 import { type FC } from 'react';
 import {
+  Check,
+  X,
   Search,
   Swords,
   ShieldCheck,
@@ -153,10 +155,14 @@ const ActorCardItem: FC<ActorCardProps> = ({ card, nodeState, isSelected, onSele
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />
         )}
         {phase === 'done' && (
-          <span className="text-success" aria-label="Done">✓</span>
+          <span className="text-success shrink-0" role="img" aria-label="Done">
+            <Check size={14} strokeWidth={1.6} aria-hidden />
+          </span>
         )}
         {phase === 'failed' && (
-          <span className="text-danger" aria-label="Failed">✗</span>
+          <span className="text-danger shrink-0" role="img" aria-label="Failed">
+            <X size={14} strokeWidth={1.6} aria-hidden />
+          </span>
         )}
       </div>
 

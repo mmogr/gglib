@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Undo2, X } from 'lucide-react';
 import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
@@ -91,7 +91,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                 title={editedServerDefaults === null ? "Revert 'clear' action" : "Clear override"}
                 className="text-text-muted hover:text-text"
               >
-                {editedServerDefaults === null ? "↩" : "✕"}
+                <Icon icon={editedServerDefaults === null ? Undo2 : X} size={14} />
               </button>
             )}
           </div>

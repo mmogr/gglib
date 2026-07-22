@@ -1,5 +1,5 @@
 import { FC, useState, useRef } from "react";
-import { ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -245,8 +245,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 variant="ghost"
                 className="w-full p-sm bg-transparent border border-border rounded-base cursor-pointer text-sm text-text-secondary mb-md transition-all hover:bg-surface-hover"
                 onClick={() => setShowSettings(!showSettings)}
+                leftIcon={<Icon icon={showSettings ? ChevronUp : ChevronDown} size={14} />}
               >
-                {showSettings ? '▲ Hide' : '▼ Show'} Settings
+                {showSettings ? 'Hide' : 'Show'} Settings
               </Button>
 
               <Button

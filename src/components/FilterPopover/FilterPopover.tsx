@@ -1,8 +1,10 @@
 import { FC, useRef } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
 import type { ModelFilterOptions, ModelSortBy, SortOrder } from '../../types';
 import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 
@@ -216,14 +218,15 @@ const FilterPopover: FC<FilterPopoverProps> = ({
               <button
                 key={dir}
                 className={cn(
-                  "flex-1 py-[4px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150 text-center",
+                  "flex-1 inline-flex items-center justify-center gap-xs py-[4px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150",
                   filters.sortOrder === dir
                     ? "bg-surface-elevated border-primary text-text"
                     : "bg-surface border-border text-text-muted hover:border-primary hover:text-text"
                 )}
                 onClick={() => onFiltersChange({ ...filters, sortOrder: dir })}
               >
-                {dir === 'desc' ? '↓ Desc' : '↑ Asc'}
+                <Icon icon={dir === 'desc' ? ArrowDown : ArrowUp} size={12} />
+                {dir === 'desc' ? 'Desc' : 'Asc'}
               </button>
             ))}
           </div>

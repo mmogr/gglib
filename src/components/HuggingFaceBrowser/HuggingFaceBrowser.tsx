@@ -1,7 +1,9 @@
 import { FC } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, Search } from "lucide-react";
 import { HfModelSummary, HfSortField } from "../../types";
 import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
+import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
@@ -143,7 +145,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 onClick={() => setSortAscending(!sortAscending)}
                 title={sortAscending ? "Ascending" : "Descending"}
               >
-                {sortAscending ? "↑" : "↓"}
+                <Icon icon={sortAscending ? ArrowUp : ArrowDown} size={14} />
               </button>
             </Row>
           </Stack>
@@ -155,7 +157,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         {/* Error State */}
         {error && (
           <EmptyState
-            icon={<span style={{ fontSize: '3rem' }}>⚠️</span>}
+            icon={<Icon icon={AlertTriangle} size={40} />}
             title="Error"
             description={error}
           />
@@ -172,7 +174,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         {/* Empty State */}
         {!loading && !error && models.length === 0 && (
           <EmptyState
-            icon="🔍"
+            icon={<Icon icon={Search} size={40} />}
             title="No models found"
             description="Try adjusting your search query or parameter filters."
           />

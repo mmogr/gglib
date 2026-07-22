@@ -1,8 +1,10 @@
 import { useState, FC, FormEvent } from "react";
+import { FolderOpen } from "lucide-react";
 import { appLogger } from '../services/platform';
 import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
+import { Icon } from "./ui/Icon";
 import { Input } from "./ui/Input";
 
 interface AddModelProps {
@@ -69,9 +71,10 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
             <button
               type="button"
               onClick={handleBrowse}
-              className="px-base py-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 w-full text-center md:w-auto md:text-left"
+              className="inline-flex items-center justify-center gap-sm px-base py-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 w-full md:w-auto"
             >
-              📁 Browse
+              <Icon icon={FolderOpen} size={14} />
+              Browse
             </button>
           </div>
         </div>

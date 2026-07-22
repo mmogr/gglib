@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { Brain, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../utils/cn';
+import { Icon } from '../ui/Icon';
 import { useThinkingTiming } from './context/ThinkingTimingContext';
 
 /** Format duration for display: "5.2s" or "1m 23s". */
@@ -129,10 +131,12 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         onKeyDown={handleKeyDown}
         aria-expanded={isExpanded}
       >
-        <span className={cn('text-[0.625rem] text-[#8b949e] transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}>
-          ▶
-        </span>
-        <span className="text-[1rem] shrink-0">💭</span>
+        <Icon
+          icon={ChevronRight}
+          size={12}
+          className={cn('text-[#8b949e] transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
+        />
+        <Icon icon={Brain} size={14} className="text-[#8b949e] shrink-0" />
         <span className="text-[0.8125rem] font-medium text-[#8b949e]">{getLabel()}</span>
         {isStreaming && <span className="w-[12px] h-[12px] border-2 border-[#8b949e] border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>

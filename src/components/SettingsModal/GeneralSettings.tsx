@@ -1,5 +1,7 @@
 import { FC, FormEvent } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "../ui/Button";
+import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { Select } from "../ui/Select";
@@ -265,7 +267,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
         aria-expanded={isAdvancedOpen}
       >
-        <span className="text-xs transition-transform duration-200">{isAdvancedOpen ? '▼' : '▶'}</span>
+        <Icon icon={isAdvancedOpen ? ChevronDown : ChevronRight} size={14} />
         <span>Advanced Settings</span>
       </button>
 
