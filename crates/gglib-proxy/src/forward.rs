@@ -324,6 +324,16 @@ fn shape_request_body(
 ///   `None` when the KV cache is disabled.
 /// * `session_id` - Session identifier used to key the KV cache save
 ///   (streaming path only). `None` when the KV cache is disabled.
+/// * `calibration_session_id` - Session id used to look up/freeze this
+///   session's chars-per-token snapshot (see
+///   [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
+///   `None` when no session id was resolved, which falls back to the live
+///   per-model ratio exactly as before. Distinct from `session_id` above:
+///   that one is only populated when disk KV-slot caching is enabled, but
+///   this budget-stability fix must work even when it's off (e.g. for
+///   hybrid/sliding-window-attention models, where disk caching is disabled
+///   but the host-RAM prompt cache — the thing this fix protects — still
+///   applies).
 ///
 /// # Returns
 ///
@@ -344,6 +354,7 @@ pub(crate) async fn forward_chat_completion(
     connection: ConnectionGuard,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
+    calibration_session_id: Option<&str>,
     cache_metrics: Arc<CacheMetricsStore>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<crate::cache_lifecycle::StreamConfig>,
@@ -368,7 +379,18 @@ pub(crate) async fn forward_chat_completion(
     // approximation until the first observation lands. That is strictly better
     // information than `ModelContext::context_budget_chars()` — which is what
     // the agent path uses — so the proxy passes its own.
-    let chars_per_token = calibration.chars_per_token(model_name);
+    //
+    // When a session id is available, the ratio is frozen per-session rather
+    // than read live: the live EWMA updates after every request, so reading
+    // it fresh on every turn let the budget wobble turn-to-turn purely from
+    // calibration noise — which could flip whether the earliest eligible
+    // message gets elided below, breaking llama.cpp's common-prefix cache
+    // match for a conversation that didn't actually change. See
+    // `TokenCalibration::session_chars_per_token`.
+    let chars_per_token = calibration_session_id.map_or_else(
+        || calibration.chars_per_token(model_name),
+        |sid| calibration.session_chars_per_token(model_name, sid, std::time::Instant::now()),
+    );
     let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
 
     let (body, report) = match shape_request_body(body, &context, &sampling, budget_chars) {
@@ -861,6 +883,20 @@ async fn forward_non_streaming_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_aware_budget_falls_back_to_live_ratio_without_a_session_id() {
+        let cal = TokenCalibration::new();
+        cal.record("m", 40_000, 10_000);
+        let live = cal.chars_per_token("m");
+        // Mirrors the exact fallback expression used in
+        // forward_chat_completion's budget computation above.
+        let via_none: f64 = None::<&str>.map_or_else(
+            || cal.chars_per_token("m"),
+            |sid| cal.session_chars_per_token("m", sid, std::time::Instant::now()),
+        );
+        assert_eq!(live, via_none);
+    }
 
     #[test]
     fn test_should_forward_header() {

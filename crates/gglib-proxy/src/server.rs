@@ -531,6 +531,22 @@ async fn handle_proxy_cache_clear(
         "RAM cache not flushed (request in flight; retry when idle)"
     };
 
+    // Drop any frozen per-session calibration snapshot too, so a session
+    // that explicitly cleared its cache re-baselines from the current
+    // global ratio on its next request instead of reusing a pre-clear one.
+    // Re-derive the sanitized (lowercased) form rather than reusing the raw
+    // header value above — the validation call earlier only checks
+    // `sanitize_session_id`'s `Err` case and discards its `Ok(String)`, so
+    // `session_id` itself is still whatever case the client sent, and
+    // `chat_completions` always keys snapshots by the lowercased form.
+    if let Some(ref sid) = session_id {
+        if let Ok(sanitized) = crate::slots::sanitize_session_id(sid) {
+            state.calibration.clear_session(&sanitized);
+        }
+    } else {
+        state.calibration.clear_all_sessions();
+    }
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -550,11 +566,13 @@ async fn chat_completions(
 ) -> Response {
     debug!("POST /v1/chat/completions");
 
-    // Canonicalize once, up front, and reuse the result for both the
-    // content-hash session id fallback below and the forwarded request
-    // (forward_chat_completion no longer re-canonicalizes) — avoids paying
-    // the parse/regex/serialize cost on this ~150KB+ body twice per request.
+    // Canonicalize the system prompt and tool order once, up front, and
+    // reuse the result for both the content-hash session id fallback below
+    // and the forwarded request (forward_chat_completion no longer
+    // re-canonicalizes) — avoids paying the parse/regex/serialize cost on
+    // this ~150KB+ body twice per request.
     let body = crate::canonicalization::canonicalize_system_prompt(body);
+    let body = crate::canonicalization::canonicalize_tool_order(body);
 
     // Extract and sanitize session ID from header (safety-critical: prevents path traversal)
     let session_id_from_header = headers
@@ -573,15 +591,26 @@ async fn chat_completions(
                     .unwrap();
             }
         }
-    } else if state.cache_enabled {
+    } else {
         // No explicit header — most clients (VS Code Copilot's LLM Gateway
         // extension, curl, anything else speaking plain OpenAI-compatible
         // chat completions) have no idea X-Gglib-Session-Id exists. Derive a
         // stable fallback from the request content itself so the cache
         // still works without any client cooperation.
+        //
+        // Derived unconditionally — not gated on `state.cache_enabled` — because
+        // this id now also keys `TokenCalibration`'s per-session budget
+        // snapshot (see `forward_chat_completion`'s `calibration_session_id`),
+        // which must work even when disk KV-slot caching is off. That's
+        // exactly the case for hybrid/sliding-window-attention models, where
+        // disk restore can't resume the prompt and is disabled by design (see
+        // `slot_restore` in `gglib_runtime::llama::args`) — but the host-RAM
+        // prompt cache this budget-stability fix protects still applies. The
+        // actual disk save/restore activation stays independently gated on
+        // `state.cache_enabled` at its own call site below, so widening where
+        // this id is *derived* doesn't turn on disk caching when the feature
+        // is off.
         crate::canonicalization::derive_fallback_session_id(&body)
-    } else {
-        None
     };
 
     if let Some(ref sid) = sanitized_session_id {
@@ -812,6 +841,7 @@ async fn chat_completions(
                         connection,
                         state.upstream_health.clone(),
                         state.calibration.clone(),
+                        sanitized_session_id.as_deref(),
                         state.dashboard.cache_metrics.clone(),
                         None,
                         None,
@@ -850,6 +880,7 @@ async fn chat_completions(
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
+                            sanitized_session_id.as_deref(),
                             state.dashboard.cache_metrics.clone(),
                             Some(permit),
                             Some(cfg),
@@ -873,6 +904,7 @@ async fn chat_completions(
                             connection,
                             state.upstream_health.clone(),
                             state.calibration.clone(),
+                            sanitized_session_id.as_deref(),
                             state.dashboard.cache_metrics.clone(),
                             None,
                             None,
@@ -898,6 +930,7 @@ async fn chat_completions(
                 connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
+                sanitized_session_id.as_deref(),
                 state.dashboard.cache_metrics.clone(),
                 None,
                 None,
@@ -921,6 +954,7 @@ async fn chat_completions(
             connection,
             state.upstream_health.clone(),
             state.calibration.clone(),
+            sanitized_session_id.as_deref(),
             state.dashboard.cache_metrics.clone(),
             None,
             None,
@@ -1044,6 +1078,7 @@ async fn chat_completions(
                 retry_connection,
                 state.upstream_health.clone(),
                 state.calibration.clone(),
+                sanitized_session_id.as_deref(),
                 state.dashboard.cache_metrics.clone(),
                 retry_permit,
                 retry_cfg,

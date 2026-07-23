@@ -119,6 +119,70 @@ pub fn canonicalize_system_prompt(body: Bytes) -> Bytes {
     }
 }
 
+/// Canonicalise the `tools[]` array into a stable, deterministic order.
+///
+/// llama.cpp's Jinja template renders tool/function schemas early in the
+/// prompt, right after the system message (see [`log_tool_names_for_diagnostics`]
+/// for how this was diagnosed). If the calling client sends `tools[]` in a
+/// different order between two turns of the same conversation, those early
+/// tokens change and llama.cpp's common-prefix match breaks for everything
+/// after — a full cold re-prefill even though the conversation didn't
+/// meaningfully change. Sorting by `function.name` before forwarding makes
+/// gglib's own request byte-stable regardless of what order the client sent,
+/// independent of genuine membership changes (adding/removing a tool), which
+/// remain a real client-side change this function cannot and must not hide.
+///
+/// # Sort key
+///
+/// `tools[].function.name`, ascending. A **stable** sort, so entries sharing
+/// a key — including any missing `function.name`, which sorts first as
+/// `None` — keep their relative order rather than being shuffled arbitrarily.
+///
+/// # Fail-open
+///
+/// No `tools` array, fewer than two entries, or a re-serialization failure
+/// all return the original `Bytes` unchanged.
+pub fn canonicalize_tool_order(body: Bytes) -> Bytes {
+    let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
+        return body;
+    };
+
+    let Some(tools) = value.get_mut("tools").and_then(|v| v.as_array_mut()) else {
+        return body;
+    };
+
+    if tools.len() < 2 {
+        return body;
+    }
+
+    let already_sorted = tools
+        .windows(2)
+        .all(|w| tool_name(&w[0]) <= tool_name(&w[1]));
+    if already_sorted {
+        return body;
+    }
+
+    tools.sort_by(|a, b| tool_name(a).cmp(&tool_name(b)));
+    debug!(
+        tool_count = tools.len(),
+        "canonicalised tools[] order for cache prefix stability"
+    );
+
+    match serde_json::to_vec(&value) {
+        Ok(v) => Bytes::from(v),
+        Err(e) => {
+            warn!(error = %e, "failed to re-serialize after tool-order canonicalisation; forwarding original");
+            body
+        }
+    }
+}
+
+/// `tools[N].function.name`, or `None` for a malformed entry. `Option<&str>`
+/// sorts `None` first — deterministic, never panics.
+fn tool_name(tool: &serde_json::Value) -> Option<&str> {
+    tool.get("function")?.get("name")?.as_str()
+}
+
 /// Number of leading digest bytes kept in [`derive_fallback_session_id`]'s
 /// identifier (16 bytes = 128 bits — ample collision resistance for a cache
 /// bucketing key that only needs fail-open behaviour on collision, not
@@ -200,11 +264,13 @@ pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
 /// schemas are typically enumerated early), so when a restore's LCP
 /// similarity comes back low for a session that should be stable, the
 /// question is whether the *client* changed the tool list shape between
-/// turns (different membership or order) rather than anything gglib did.
-/// Comparing two consecutive log lines for the same session_id answers
-/// that directly: identical list → not the cause; same names, different
-/// order → fixable by canonicalizing the order; different names → a real
-/// client-side change, outside the proxy's control.
+/// turns rather than anything gglib did. Since [`canonicalize_tool_order`]
+/// now runs before this (see the call site in `chat_completions`), *order*
+/// drift is no longer a possible answer — it's structurally eliminated
+/// upstream. What's left for this log to diagnose is *membership* drift:
+/// comparing two consecutive log lines for the same session_id, identical
+/// list → not the cause; different names → a real client-side change
+/// (a tool added/removed), outside the proxy's control.
 ///
 /// A no-op (skips the parse entirely) unless DEBUG-level tracing is
 /// actually enabled, so this costs nothing outside `-v` investigations.
@@ -482,5 +548,114 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(extract_tool_names(&body).unwrap(), vec!["read_file"]);
+    }
+
+    #[test]
+    fn canonicalize_tool_order_sorts_by_function_name() {
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "messages": [],
+                "tools": [
+                    {"type": "function", "function": {"name": "create_pull_request"}},
+                    {"type": "function", "function": {"name": "create_branch"}},
+                    {"type": "function", "function": {"name": "read_file"}}
+                ]
+            }))
+            .unwrap(),
+        );
+        let result = canonicalize_tool_order(body);
+        let value: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let names: Vec<&str> = value["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["function"]["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["create_branch", "create_pull_request", "read_file"]
+        );
+    }
+
+    #[test]
+    fn canonicalize_tool_order_is_idempotent_across_two_differently_ordered_turns() {
+        // The actual bug this fixes: two turns sending the same set in
+        // different order must forward byte-identically past the tools[]
+        // boundary, or llama.cpp's common-prefix match breaks right there.
+        let turn1 = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [
+                    {"type": "function", "function": {"name": "b_tool"}},
+                    {"type": "function", "function": {"name": "a_tool"}}
+                ]
+            }))
+            .unwrap(),
+        );
+        let turn2 = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [
+                    {"type": "function", "function": {"name": "a_tool"}},
+                    {"type": "function", "function": {"name": "b_tool"}}
+                ]
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            canonicalize_tool_order(turn1),
+            canonicalize_tool_order(turn2)
+        );
+    }
+
+    #[test]
+    fn canonicalize_tool_order_already_sorted_is_byte_identical() {
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [
+                    {"type": "function", "function": {"name": "a"}},
+                    {"type": "function", "function": {"name": "b"}}
+                ]
+            }))
+            .unwrap(),
+        );
+        assert_eq!(canonicalize_tool_order(body.clone()), body);
+    }
+
+    #[test]
+    fn canonicalize_tool_order_no_tools_field_unchanged() {
+        let body = Bytes::from(serde_json::to_vec(&serde_json::json!({"messages": []})).unwrap());
+        assert_eq!(canonicalize_tool_order(body.clone()), body);
+    }
+
+    #[test]
+    fn canonicalize_tool_order_single_tool_unchanged() {
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [{"type": "function", "function": {"name": "only_one"}}]
+            }))
+            .unwrap(),
+        );
+        assert_eq!(canonicalize_tool_order(body.clone()), body);
+    }
+
+    #[test]
+    fn canonicalize_tool_order_malformed_entries_never_panic() {
+        let body = Bytes::from(
+            serde_json::to_vec(&serde_json::json!({
+                "tools": [
+                    {"type": "function", "function": {"name": "z_tool"}},
+                    {"type": "function", "function": {}},
+                    "not even an object"
+                ]
+            }))
+            .unwrap(),
+        );
+        let result = canonicalize_tool_order(body); // must not panic
+        let _value: serde_json::Value = serde_json::from_slice(&result).unwrap();
+    }
+
+    #[test]
+    fn canonicalize_tool_order_invalid_json_passthrough() {
+        let body = Bytes::from(b"not json".to_vec());
+        assert_eq!(canonicalize_tool_order(body.clone()), body);
     }
 }
