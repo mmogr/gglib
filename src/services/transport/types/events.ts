@@ -122,6 +122,11 @@ export type DownloadEvent =
   | { type: 'download_failed'; id: DownloadId; error: string }
   | { type: 'download_cancelled'; id: DownloadId }
   | { type: 'download_status_changed'; id: DownloadId; status: import('./downloads').DownloadStatus }
+  // Transient, non-persisted note about work happening for this download
+  // that produces no byte progress (e.g. first-run Python env setup for the
+  // fast downloader). Unlike download_status_changed, message is free-form
+  // text rather than a fixed status.
+  | { type: 'download_notice'; id: DownloadId; message: string }
   | { type: 'queue_run_complete'; summary: QueueRunSummary };
 
 // ============================================================================

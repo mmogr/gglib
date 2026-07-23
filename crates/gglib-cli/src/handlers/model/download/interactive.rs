@@ -76,7 +76,14 @@ pub async fn run_interactive_monitor(
     downloads: Arc<dyn DownloadManagerPort>,
     emitter: Arc<CliDownloadEventEmitter>,
 ) -> Result<()> {
-    if std::io::stdout().is_terminal() {
+    // Checks stderr, not stdout: the progress bars draw to stderr (indicatif's
+    // `MultiProgress` default, used by `CliDownloadEventEmitter`), so that is
+    // what decides whether we're actually interactive. Checking stdout would
+    // silently fall back to the plain polling loop — and disable the `[a]`/`[q]`
+    // hotkeys, since `console::Term::stderr()`'s own TTY check follows the same
+    // stream — whenever stdout was redirected but the terminal remained
+    // attached via stderr.
+    if std::io::stderr().is_terminal() {
         run_tty_monitor(downloads, emitter).await
     } else {
         run_plain_monitor(downloads).await
@@ -165,7 +172,8 @@ async fn run_tty_monitor(
     // dropping the handle here is truly fire-and-forget: Tokio shuts down
     // immediately and the OS kills the thread when the process exits.
     let reader_handle = std::thread::spawn(move || {
-        let term = Term::stdout();
+        // Stderr, matching the bars — see the comment on `run_interactive_monitor`.
+        let term = Term::stderr();
         loop {
             let key = match term.read_key() {
                 Ok(k) => k,
@@ -186,9 +194,20 @@ async fn run_tty_monitor(
     });
 
     // ── Render state ───────────────────────────────────────────────────────
-    let mut hint_bar: Option<ProgressBar> = None;
+    // The hint bar is created eagerly, before any download bar exists, and
+    // registered as the emitter's footer so every `DownloadStarted` bar is
+    // inserted above it (see `CliDownloadEventEmitter::set_footer`). This
+    // keeps it pinned to the bottom without the remove-then-re-add dance the
+    // previous seen-items-gated, re-anchor-on-growth version needed.
+    let hint_style =
+        ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_bar());
+    let hint_bar = ProgressBar::new(0);
+    hint_bar.set_style(hint_style);
+    hint_bar.set_message(build_hint_message(0, 0));
+    let hint_bar = mp.add(hint_bar);
+    emitter.set_footer(&hint_bar);
+
     let mut seen_items = false;
-    let mut last_item_count: u32 = 0;
     // Two-step quit: first `q`/Ctrl-C arms `quitting=true` and lets active
     // downloads drain naturally; the second press calls `cancel_all()`.
     // Auto-exit fires when the queue empties on its own.
@@ -222,11 +241,9 @@ async fn run_tty_monitor(
                         }
                         // First press → arm drain mode and update the hint.
                         quitting = true;
-                        if let Some(bar) = &hint_bar {
-                            bar.set_message(
-                                "Draining... press q again to force quit".to_string(),
-                            );
-                        }
+                        hint_bar.set_message(
+                            "Draining... press q again to force quit".to_string(),
+                        );
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     Some(_) => {
@@ -249,11 +266,9 @@ async fn run_tty_monitor(
                     break Ok(());
                 }
                 quitting = true;
-                if let Some(bar) = &hint_bar {
-                    bar.set_message(
-                        "Draining... press q again to force quit".to_string(),
-                    );
-                }
+                hint_bar.set_message(
+                    "Draining... press q again to force quit".to_string(),
+                );
             }
 
             // ── 250 ms render / completion tick ────────────────────────────
@@ -265,43 +280,18 @@ async fn run_tty_monitor(
                     seen_items = true;
                 }
 
-                // Create the hint bar the first time we see activity.
-                if seen_items && hint_bar.is_none() {
-                    let style = ProgressStyle::with_template("{msg}")
-                        .unwrap_or_else(|_| ProgressStyle::default_bar());
-                    let bar = ProgressBar::new(0);
-                    bar.set_style(style);
-                    bar.set_message(build_hint_message(
-                        snapshot.active_count,
-                        snapshot.pending_count,
-                    ));
-                    hint_bar = Some(mp.add(bar));
-                    last_item_count = item_count;
-                }
-
                 // Update live counts in the hint message every tick.
                 // While quitting, keep the drain hint pinned so the user
                 // doesn't lose the "press q again" instruction.
-                if let Some(bar) = &hint_bar {
-                    if quitting {
-                        bar.set_message(
-                            "Draining... press q again to force quit".to_string(),
-                        );
-                    } else {
-                        bar.set_message(build_hint_message(
-                            snapshot.active_count,
-                            snapshot.pending_count,
-                        ));
-                    }
-                }
-
-                // Re-anchor hint to the bottom whenever new items appear.
-                if item_count > last_item_count {
-                    if let Some(bar) = &hint_bar {
-                        mp.remove(bar);
-                        mp.add(bar.clone());
-                    }
-                    last_item_count = item_count;
+                if quitting {
+                    hint_bar.set_message(
+                        "Draining... press q again to force quit".to_string(),
+                    );
+                } else {
+                    hint_bar.set_message(build_hint_message(
+                        snapshot.active_count,
+                        snapshot.pending_count,
+                    ));
                 }
 
                 // Fast-fail: exit if a failure appeared before any activity.
@@ -316,9 +306,7 @@ async fn run_tty_monitor(
     };
 
     // Clear the hint bar cleanly before returning.
-    if let Some(bar) = hint_bar {
-        bar.finish_and_clear();
-    }
+    hint_bar.finish_and_clear();
     // Detach the reader thread.  We already sent ReaderCmd::Stop so it will
     // exit as soon as the user presses the next key (or when the process
     // terminates and the OS kills it).  We must not join here — that would
@@ -347,7 +335,8 @@ async fn handle_add_to_queue(
     // we block on stdin, ensuring background downloads keep progressing.
     let prompt_result = tokio::task::block_in_place(|| {
         mp.suspend(|| -> Result<Option<(String, Option<String>)>> {
-            let term = Term::stdout();
+            // Stderr, matching the bars — see the comment on `run_interactive_monitor`.
+            let term = Term::stderr();
 
             // Print prompts to the same Term we read from so they line up
             // with the input cursor when bars are suspended.

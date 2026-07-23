@@ -105,7 +105,8 @@ impl DownloadStatus {
 ///       speed_bps?: number; eta_seconds?: number; ... }
 ///   | { type: "download_completed"; id: string }
 ///   | { type: "download_failed"; id: string; error: string }
-///   | { type: "download_cancelled"; id: string };
+///   | { type: "download_cancelled"; id: string }
+///   | { type: "download_notice"; id: string; message: string };
 /// ```
 ///
 /// `speed_bps` and `eta_seconds` are **optional and omitted when unknown** — a
@@ -224,6 +225,21 @@ pub enum DownloadEvent {
         id: String,
         /// New status of the download.
         status: DownloadStatus,
+    },
+
+    /// A transient, human-readable note about work happening for this
+    /// download that produces no byte progress of its own — e.g. building
+    /// the first-run Python environment for the fast downloader.
+    ///
+    /// Unlike [`Self::DownloadStatusChanged`] this carries free-form text
+    /// rather than a fixed [`DownloadStatus`] and is not persisted; it exists
+    /// purely so the renderer has something to show instead of looking
+    /// frozen while setup work happens before the first progress event.
+    DownloadNotice {
+        /// Canonical ID of the download.
+        id: String,
+        /// Human-readable note to display in place of progress.
+        message: String,
     },
 
     /// Queue run completed (all downloads in the queue finished).
@@ -370,7 +386,8 @@ impl DownloadEvent {
             | Self::DownloadCompleted { id, .. }
             | Self::DownloadFailed { id, .. }
             | Self::DownloadCancelled { id }
-            | Self::DownloadStatusChanged { id, .. } => Some(id),
+            | Self::DownloadStatusChanged { id, .. }
+            | Self::DownloadNotice { id, .. } => Some(id),
         }
     }
 
@@ -389,6 +406,7 @@ impl DownloadEvent {
             Self::DownloadFailed { .. } => "download:failed",
             Self::DownloadCancelled { .. } => "download:cancelled",
             Self::DownloadStatusChanged { .. } => "download:status_changed",
+            Self::DownloadNotice { .. } => "download:notice",
             Self::QueueRunComplete { .. } => "download:queue_run_complete",
         }
     }

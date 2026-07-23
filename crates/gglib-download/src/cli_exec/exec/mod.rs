@@ -26,7 +26,10 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         anyhow!("Please specify a quantization. Use --list-quants to see available options.")
     })?;
 
-    println!("Downloading {} from HuggingFace Hub...", request.model_id);
+    gglib_core::telemetry::console_println(&format!(
+        "Downloading {} from HuggingFace Hub...",
+        request.model_id
+    ));
 
     // Get commit SHA
     let api = super::api::create_hf_api(request.token.clone(), &request.models_dir)?;
@@ -39,10 +42,10 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         .info()
         .map_err(|e| anyhow!("Failed to get repo info: {e}"))?;
     let commit_sha = repo_info.sha.clone();
-    println!("Found repository, commit SHA: {commit_sha}");
+    gglib_core::telemetry::console_println(&format!("Found repository, commit SHA: {commit_sha}"));
 
     // Resolve files using the HuggingFace resolver
-    println!("Looking for {quant} quantization...");
+    gglib_core::telemetry::console_println(&format!("Looking for {quant} quantization..."));
     let client = gglib_hf::DefaultHfClient::new(&gglib_hf::HfClientConfig::default());
     let resolver = HfQuantizationResolver::new(std::sync::Arc::new(client));
 
@@ -54,13 +57,13 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
 
     let files: Vec<String> = resolution.files.iter().map(|f| f.path.clone()).collect();
     if resolution.is_sharded {
-        println!(
+        gglib_core::telemetry::console_println(&format!(
             "✓ Found {} sharded files for quantization {}",
             files.len(),
             quant
-        );
+        ));
     } else {
-        println!("✓ Found file: {}", files[0]);
+        gglib_core::telemetry::console_println(&format!("✓ Found file: {}", files[0]));
     }
 
     // Prepare destination directory
@@ -79,21 +82,22 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         token: request.token.as_deref(),
         force: request.force,
         progress: None,
+        notice: None,
         expected_total: None,
         cancel_token: None,
     };
 
     run_fast_download(&fast_request).await?;
-    println!("⚡ Downloaded via fast helper");
+    gglib_core::telemetry::console_println("⚡ Downloaded via fast helper");
 
     let primary_path = model_dir.join(&files[0]);
     let all_paths: Vec<_> = files.iter().map(|f| model_dir.join(f)).collect();
 
-    println!(
+    gglib_core::telemetry::console_println(&format!(
         "✓ Successfully downloaded {} to {}",
         request.model_id,
         model_dir.display()
-    );
+    ));
 
     Ok(CliDownloadResult {
         downloaded_paths: all_paths,

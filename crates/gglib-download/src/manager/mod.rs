@@ -445,6 +445,7 @@ impl DownloadManagerImpl {
                 // Create worker deps and job
                 let deps = WorkerDeps {
                     config: self.config.clone(),
+                    event_emitter: Arc::clone(&self.event_emitter),
                 };
 
                 let files = Self::extract_files(&item);
