@@ -25,6 +25,7 @@ use crate::presentation::style;
 ///   auto-discovery when `api_only` is `false`.
 pub async fn execute(
     port: u16,
+    host: String,
     base_port: u16,
     api_only: bool,
     static_dir: Option<PathBuf>,
@@ -44,13 +45,14 @@ pub async fn execute(
     }
 
     let mut config = ServerConfig {
+        host,
         port,
         base_port,
         llama_server_path: llama_server_path()?,
         max_concurrent: 4,
         max_concurrent_agent_loops: 4,
         static_dir: None,
-        cors: CorsConfig::AllowAll,
+        cors: CorsConfig::LocalOnly,
     };
 
     // Resolve static directory: api-only flag > explicit flag > auto-discover > none

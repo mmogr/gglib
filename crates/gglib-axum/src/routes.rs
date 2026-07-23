@@ -10,7 +10,7 @@ use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::bootstrap::{AxumContext, CorsConfig};
@@ -30,6 +30,18 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
             let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
             CorsLayer::new()
                 .allow_origin(allowed)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        CorsConfig::LocalOnly => {
+            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
+                let s = origin.to_str().unwrap_or("");
+                s.starts_with("http://localhost")
+                    || s.starts_with("http://127.0.0.1")
+                    || s.starts_with("http://[::1]")
+            });
+            CorsLayer::new()
+                .allow_origin(local)
                 .allow_methods(Any)
                 .allow_headers(Any)
         }

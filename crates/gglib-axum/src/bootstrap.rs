@@ -46,15 +46,19 @@ use gglib_core::paths::{
 #[derive(Debug, Clone, Default)]
 pub enum CorsConfig {
     /// Allow all origins (development mode).
-    #[default]
     AllowAll,
     /// Allow specific origins (production mode).
     AllowOrigins(Vec<String>),
+    /// Restrict to local-only access (localhost, 127.0.0.1, ::1).
+    #[default]
+    LocalOnly,
 }
 
 /// Server configuration for the Axum adapter.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
+    /// Host to bind the HTTP server.
+    pub host: String,
     /// Port for the HTTP server.
     pub port: u16,
     /// Base port for llama-server instances.
@@ -79,6 +83,7 @@ impl ServerConfig {
     /// Create config with default paths.
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
+            host: "127.0.0.1".into(),
             port: 9887,
             base_port: 9000,
             llama_server_path: llama_server_path()?,
@@ -414,7 +419,7 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
         crate::routes::create_router(ctx, &config.cors)
     };
 
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
 
     if config.static_dir.is_some() {
