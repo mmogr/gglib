@@ -12,6 +12,8 @@ use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
 use tokio::process::Command;
 
+use super::python_bridge::NoticeCallback;
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -127,8 +129,13 @@ impl PythonEnvironment {
     /// 3. Install/update requirements if the marker is stale
     /// 4. Deploy the helper script
     ///
+    /// `notice` receives transient setup notes ("creating environment...",
+    /// "installing dependencies...") for display on a per-download bar. When
+    /// `None` (the preflight/no-callback paths), those notes fall back to
+    /// [`gglib_core::telemetry::console_println`].
+    ///
     /// Returns `Err` if Python is not found or setup fails.
-    pub async fn prepare() -> Result<Self, EnvSetupError> {
+    pub async fn prepare(notice: Option<&NoticeCallback>) -> Result<Self, EnvSetupError> {
         let env_dir = get_env_directory()?;
         let script_path = get_script_path()?;
 
@@ -142,7 +149,7 @@ impl PythonEnvironment {
         };
 
         env.write_script()?;
-        env.ensure_env_ready().await?;
+        env.ensure_env_ready(notice).await?;
 
         // Validate the interpreter we will actually run.
         // This catches environment pollution (e.g., PYTHONHOME/PYTHONPATH) early.
@@ -186,52 +193,73 @@ impl PythonEnvironment {
     // Internal methods
     // ------------------------------------------------------------------------
 
-    async fn ensure_env_ready(&self) -> Result<(), EnvSetupError> {
+    async fn ensure_env_ready(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
         if !self.python_path().exists() {
-            self.create_env().await?;
+            self.create_env(notice).await?;
         }
 
         if !self.marker_is_fresh()? {
-            self.install_requirements().await?;
+            self.install_requirements(notice).await?;
             self.write_marker()?;
         }
 
         Ok(())
     }
 
-    async fn create_env(&self) -> Result<(), EnvSetupError> {
+    async fn create_env(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated().await?;
 
-        println!(
-            "ℹ️  Creating Python environment for fast downloads at {}...",
-            self.env_dir.display()
+        // With a notice sink (the queued-download path), the note lands on
+        // the bar itself and stays terse — no path, it wouldn't fit and
+        // isn't actionable there. Without one (preflight, `model upgrade`),
+        // fall back to a console line with the full path for context.
+        notify(
+            notice,
+            "preparing fast downloader (first run, this can take a minute)…",
+            &format!(
+                "ℹ️  Creating Python environment for fast downloads at {}...",
+                self.env_dir.display()
+            ),
         );
 
         let mut cmd = async_cmd(&bootstrap);
         apply_python_subprocess_isolation(&mut cmd);
-        let status = cmd
+        // `.output()` rather than `.status()`: this pipes the child's stdout
+        // and stderr instead of inheriting the parent's, so `python -m venv`
+        // can never write raw bytes straight to the terminal. An inherited
+        // handle would bypass indicatif entirely and corrupt any live
+        // `MultiProgress` redraw the same way a stray `println!` does.
+        // `run_python_command` below already pipes for the same reason.
+        let output = cmd
             .arg("-m")
             .arg("venv")
             .arg(&self.env_dir)
-            .status()
+            .output()
             .await
             .map_err(|e| EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
                 reason: e.to_string(),
             })?;
 
-        if !status.success() {
+        if !output.status.success() {
             return Err(EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
-                reason: format!("python -m venv exited with {status}"),
+                reason: venv_failure_reason(output.status, &output.stderr),
             });
         }
 
         Ok(())
     }
 
-    async fn install_requirements(&self) -> Result<(), EnvSetupError> {
-        println!("ℹ️  Installing fast download dependencies...");
+    async fn install_requirements(
+        &self,
+        notice: Option<&NoticeCallback>,
+    ) -> Result<(), EnvSetupError> {
+        notify(
+            notice,
+            "installing fast downloader dependencies…",
+            "ℹ️  Installing fast download dependencies...",
+        );
 
         let python = self.python_path();
 
@@ -358,6 +386,28 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
     }
 
     Err(EnvSetupError::PythonNotFound(PYTHON_CANDIDATES.join(", ")))
+}
+
+/// Surface a transient setup note: on the bar via `notice` when a sink is
+/// wired up, otherwise as a console line with fuller context.
+fn notify(notice: Option<&NoticeCallback>, bar_message: &str, console_message: &str) {
+    if let Some(notice) = notice {
+        notice(bar_message);
+    } else {
+        gglib_core::telemetry::console_println(console_message);
+    }
+}
+
+/// Build the `CreateEnvFailed` reason for a failed `python -m venv`,
+/// including captured stderr when there is any. Pulled out of `create_env`
+/// so the formatting is testable without spawning a real process.
+fn venv_failure_reason(status: std::process::ExitStatus, stderr: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    if stderr.is_empty() {
+        format!("python -m venv exited with {status}")
+    } else {
+        format!("python -m venv exited with {status}: {stderr}")
+    }
 }
 
 /// Run a Python command and check for success.
@@ -538,6 +588,40 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("virtualenv"));
         assert!(msg.contains("permission denied"));
+    }
+
+    /// `create_env` now runs `python -m venv` via `.output()` instead of
+    /// `.status()` specifically so its stderr can be captured into the
+    /// error instead of being inherited straight to the terminal (where it
+    /// could corrupt a live `MultiProgress` redraw). This is the formatting
+    /// half of that change, tested without spawning a process: a fake
+    /// `ExitStatus` plus captured stderr bytes.
+    #[cfg(unix)]
+    #[test]
+    fn venv_failure_reason_includes_captured_stderr() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let status = std::process::ExitStatus::from_raw(1 << 8); // exit code 1
+        let reason = venv_failure_reason(status, b"NotADirectoryError: [Errno 20]\n");
+
+        assert!(reason.contains("exited with"));
+        assert!(reason.contains("NotADirectoryError"));
+    }
+
+    /// Empty stderr (e.g. the process was killed by a signal before writing
+    /// anything) must not produce a dangling ": " with nothing after it.
+    #[cfg(unix)]
+    #[test]
+    fn venv_failure_reason_omits_colon_when_stderr_is_empty() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let status = std::process::ExitStatus::from_raw(1 << 8);
+        let reason = venv_failure_reason(status, b"");
+
+        // No trailing ": " separator (which would precede an empty stderr
+        // section) — just the bare "exited with <status>" whatever ExitStatus's
+        // own Display happens to contain.
+        assert_eq!(reason, format!("python -m venv exited with {status}"));
     }
 
     /// Test that environment isolation properly removes polluted environment variables

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 
 use gglib_core::download::{DownloadEvent, format_duration, format_rate};
 use gglib_core::events::AppEvent;
@@ -36,9 +36,12 @@ use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 // estimates, derived from the `set_position` calls we make; using them meant
 // the CLI ignored the rate the manager had already computed and displayed a
 // different number from the GUI for the same transfer. Rate and ETA now arrive
-// on the event and are rendered into `{wide_msg}`. `{bytes}` and
-// `{total_bytes}` stay — those are sizes, which indicatif labels correctly as
-// binary (MiB/GiB).
+// on the event and are rendered into `{wide_msg}`. `{bytes}` stays — that's a
+// size, which indicatif labels correctly as binary (MiB/GiB). `{total_bytes}`
+// is overridden below by a custom key (see `total_bytes_key`) rather than left
+// as indicatif's builtin: the builtin renders the *length*, and a bar created
+// before its total is known has no length rather than a zero one — see the
+// `ProgressBar::no_length()` comment on `DownloadStarted` below.
 const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
@@ -56,15 +59,71 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 pub struct CliDownloadEventEmitter {
     multi_progress: Arc<MultiProgress>,
     bars: Mutex<HashMap<String, ProgressBar>>,
+    /// The interactive monitor's `[a] queue another  [q] quit` hint bar, if
+    /// one has been registered via [`Self::set_footer`]. When present, new
+    /// download bars are inserted above it instead of appended, so it stays
+    /// pinned to the bottom without the remove-then-re-add churn that used
+    /// to re-anchor it on every new item.
+    footer: Mutex<Option<ProgressBar>>,
 }
 
 impl CliDownloadEventEmitter {
-    /// Create a new emitter backed by a fresh [`MultiProgress`].
+    /// Create a new emitter backed by a fresh [`MultiProgress`], and install
+    /// it as the process-wide console hook (see
+    /// [`gglib_core::telemetry::set_console_hook`]).
+    ///
+    /// Any `tracing` log line — or other output routed through
+    /// [`gglib_core::telemetry::console_println`] — printed while this
+    /// emitter is alive goes through [`MultiProgress::println`] instead of
+    /// straight to a stream. That erases the live bars, prints the line,
+    /// and redraws atomically, so the bars' internal line-count bookkeeping
+    /// never falls out of sync with what's actually on screen. A raw
+    /// `eprintln!`/`println!` racing the bars' own redraws is exactly what
+    /// stranded old frames in scrollback before this was wired up.
+    ///
+    /// The hook captures a `Weak` reference, not a strong one, and never
+    /// clears itself on drop. In production there is exactly one emitter
+    /// per CLI process (see `bootstrap()`), alive for the process's whole
+    /// life, so this never matters there — but tests construct several.
+    /// Clearing the global hook on `Drop` would be wrong: dropping an
+    /// *earlier* emitter after a *later* one has installed its own hook
+    /// would wipe out the still-active hook out from under it. `Weak`
+    /// sidesteps that: once an emitter's `MultiProgress` is actually gone,
+    /// its hook's `upgrade()` starts returning `None` and that hook falls
+    /// back to `eprintln!` forever — equivalent to no hook at all — without
+    /// needing to touch (or race) whatever hook is currently installed.
     #[must_use]
     pub fn new() -> Self {
+        let multi_progress = Arc::new(MultiProgress::new());
+
+        let hook_target = Arc::downgrade(&multi_progress);
+        gglib_core::telemetry::set_console_hook(Arc::new(move |line: &str| {
+            let Some(mp) = hook_target.upgrade() else {
+                eprintln!("{line}");
+                return;
+            };
+            // `MultiProgress::println` silently drops the line when the draw
+            // target is hidden (non-terminal stderr) rather than falling
+            // back to a plain write — checking first keeps non-TTY output
+            // (CI, pipes) intact.
+            if mp.is_hidden() || mp.println(line).is_err() {
+                eprintln!("{line}");
+            }
+        }));
+
         Self {
-            multi_progress: Arc::new(MultiProgress::new()),
+            multi_progress,
             bars: Mutex::new(HashMap::new()),
+            footer: Mutex::new(None),
+        }
+    }
+
+    /// Register the interactive monitor's hint bar as the footer: subsequent
+    /// download bars are inserted above it via `MultiProgress::insert_before`
+    /// instead of appended, keeping it pinned to the bottom.
+    pub fn set_footer(&self, bar: &ProgressBar) {
+        if let Ok(mut footer) = self.footer.lock() {
+            *footer = Some(bar.clone());
         }
     }
 
@@ -106,6 +165,44 @@ impl CliDownloadEventEmitter {
         }
     }
 
+    /// Create and register the bar for a newly started download, labeled
+    /// `label`.
+    ///
+    /// Uses the unified [`BAR_TEMPLATE`] — see its module-level comment for
+    /// why the style never switches mid-stream — and [`ProgressBar::no_length`]
+    /// rather than `new(0)`: indicatif's `fraction()` treats an explicit
+    /// length of 0 as 100% complete, so a bar created before its total is
+    /// known would render fully filled — exactly backwards — until the first
+    /// Progress/ShardProgress event calls `set_length`. No length at all
+    /// renders as an honestly empty bar instead.
+    ///
+    /// Inserted above the footer (if [`Self::set_footer`] has registered
+    /// one) rather than appended, so the `[a]/[q]` hint bar stays pinned to
+    /// the bottom without needing to be removed and re-added.
+    fn start_bar(&self, id: String, label: String) {
+        let style = ProgressStyle::with_template(BAR_TEMPLATE)
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            .progress_chars("█▓░")
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+            .with_key("total_bytes", total_bytes_key);
+
+        let footer = self.footer.lock().ok().and_then(|f| f.clone());
+        let bar = footer.as_ref().map_or_else(
+            || self.multi_progress.add(ProgressBar::no_length()),
+            |footer| {
+                self.multi_progress
+                    .insert_before(footer, ProgressBar::no_length())
+            },
+        );
+        bar.set_style(style);
+        bar.enable_steady_tick(TICK_INTERVAL);
+        bar.set_message(label);
+
+        if let Ok(mut bars) = self.bars.lock() {
+            bars.insert(id, bar);
+        }
+    }
+
     /// Apply a progress update to the bar registered for `id`.
     ///
     /// Shared by the sharded and unsharded progress arms — they differ only in
@@ -126,6 +223,21 @@ impl CliDownloadEventEmitter {
         }
         bar.set_position(position);
         bar.set_message(message.to_string());
+    }
+}
+
+/// Custom `{total_bytes}` renderer: `—` while the length is unknown, the
+/// human-readable size once `set_length` has been called with a real total.
+/// Registered via `ProgressStyle::with_key` — see the module-level comment on
+/// `BAR_TEMPLATE`.
+fn total_bytes_key(state: &ProgressState, w: &mut dyn std::fmt::Write) {
+    match state.len() {
+        Some(len) => {
+            let _ = write!(w, "{}", HumanBytes(len));
+        }
+        None => {
+            let _ = write!(w, "—");
+        }
     }
 }
 
@@ -162,24 +274,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                     _ => id.clone(),
                 };
 
-                // Always create the bar with the unified BAR_TEMPLATE — see
-                // module-level comment on `BAR_TEMPLATE` for why we never
-                // switch styles mid-stream. Length 0 is a sentinel meaning
-                // "total not yet known"; the bar widget renders empty until
-                // a Progress/ShardProgress event supplies a real length.
-                let style = ProgressStyle::with_template(BAR_TEMPLATE)
-                    .unwrap_or_else(|_| ProgressStyle::default_bar())
-                    .progress_chars("█▓░")
-                    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
-
-                let bar = self.multi_progress.add(ProgressBar::new(0));
-                bar.set_style(style);
-                bar.enable_steady_tick(TICK_INTERVAL);
-                bar.set_message(label);
-
-                if let Ok(mut bars) = self.bars.lock() {
-                    bars.insert(id, bar);
-                }
+                self.start_bar(id, label);
             }
 
             DownloadEvent::DownloadProgress {
@@ -252,6 +347,18 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 }
             }
 
+            DownloadEvent::DownloadNotice { id, message } => {
+                // Same idea as DownloadStatusChanged, but for free-form setup
+                // notes (e.g. building the first-run Python environment)
+                // rather than a fixed lifecycle status. The next progress or
+                // status event overwrites this naturally.
+                if let Ok(bars) = self.bars.lock() {
+                    if let Some(bar) = bars.get(&id) {
+                        bar.set_message(format!("{id} — {message}"));
+                    }
+                }
+            }
+
             // Queue-level events don't need bar updates in the CLI emitter.
             DownloadEvent::QueueSnapshot { .. } | DownloadEvent::QueueRunComplete { .. } => {}
         }
@@ -285,5 +392,131 @@ impl AppEventEmitter for CliDownloadEventEmitter {
         // See DownloadEventEmitterPort::clone_box above — the real emitter
         // is shared via Arc; this fallback is for the rare boxed-clone path.
         Box::new(gglib_core::ports::NoopEmitter::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gglib_core::download::DownloadEvent;
+
+    /// Clone the registered bar for `id` out of the lock, so tests can
+    /// assert on it without holding `emitter.bars`'s mutex for the
+    /// assertion (clippy's `significant_drop_tightening`).
+    fn bar_for(emitter: &CliDownloadEventEmitter, id: &str) -> ProgressBar {
+        emitter
+            .bars
+            .lock()
+            .unwrap()
+            .get(id)
+            .expect("bar should be registered")
+            .clone()
+    }
+
+    /// Regression guard for the bar rendering fully filled at `0 B/0 B`
+    /// before any bytes have been reported. `ProgressBar::new(0)` sets an
+    /// explicit length of 0, and indicatif's `fraction()` treats a length of
+    /// 0 as 100% complete — `no_length()` must leave the length unset until
+    /// a real Progress/ShardProgress event calls `set_length`.
+    #[test]
+    fn download_started_creates_a_bar_with_no_length() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+
+        assert_eq!(bar_for(&emitter, "test/model").length(), None);
+    }
+
+    #[test]
+    fn progress_event_sets_the_length_once_a_real_total_arrives() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::progress("test/model", 10, 100, None, None),
+        );
+
+        let bar = bar_for(&emitter, "test/model");
+        assert_eq!(bar.length(), Some(100));
+        assert_eq!(bar.position(), 10);
+    }
+
+    /// `DownloadNotice` sets the bar's message without touching its length
+    /// or position — it carries no byte progress, only a note for display
+    /// in place of it.
+    #[test]
+    fn download_notice_updates_message_without_touching_progress() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::progress("test/model", 10, 100, None, None),
+        );
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::DownloadNotice {
+                id: "test/model".to_string(),
+                message: "preparing fast downloader…".to_string(),
+            },
+        );
+
+        let bar = bar_for(&emitter, "test/model");
+        assert_eq!(bar.length(), Some(100));
+        assert_eq!(bar.position(), 10);
+        assert!(bar.message().contains("preparing fast downloader"));
+    }
+
+    /// `set_footer` + a subsequent `DownloadStarted` must not panic or fail
+    /// to register the bar — the actual bottom-pinned ordering is
+    /// `MultiProgress::insert_before`'s contract (exercised, not
+    /// reimplemented, by `start_bar`) and is verified visually per the
+    /// manual steps in the fix's PR description; `MultiProgress` doesn't
+    /// expose line order through its public API for a unit test to assert.
+    #[test]
+    fn set_footer_then_download_started_still_registers_the_bar() {
+        let emitter = CliDownloadEventEmitter::new();
+        let mp = emitter.multi_progress();
+
+        let footer = mp.add(ProgressBar::new(0));
+        footer.set_message("[a] queue another  [q] quit");
+        emitter.set_footer(&footer);
+
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+
+        let registered = emitter.bars.lock().unwrap().contains_key("test/model");
+        assert!(registered);
+    }
+
+    /// Interleaving `console_println` calls (the path a `tracing::warn!`
+    /// during a download takes) with live bar updates from the same
+    /// emitter must not panic — this is the exact scenario the console
+    /// hook exists to make safe instead of corrupting the bars.
+    #[test]
+    fn console_println_during_active_bar_does_not_panic() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        for i in 0..50 {
+            DownloadEventEmitterPort::emit(
+                &emitter,
+                DownloadEvent::progress("probe/model", i, 100, None, None),
+            );
+            gglib_core::telemetry::console_println(&format!("log line {i}"));
+        }
+    }
+
+    /// Dropping an emitter must not panic, hang, or otherwise misbehave —
+    /// the hook it installed captures a `Weak`, not a strong `Arc`, so it
+    /// degrades to `eprintln!` once this emitter (and its `MultiProgress`)
+    /// are gone rather than holding anything alive or needing explicit
+    /// teardown. See the doc comment on `CliDownloadEventEmitter::new`.
+    #[test]
+    fn dropping_the_emitter_is_fine() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        drop(emitter);
+
+        // The hook is still installed (nothing clears it), but its `Weak`
+        // can no longer upgrade — this must fall back to `eprintln!`
+        // without panicking.
+        gglib_core::telemetry::console_println("after drop");
     }
 }

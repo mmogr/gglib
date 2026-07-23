@@ -23,4 +23,12 @@ rather than `0`. This component computes no rate of its own — the download
 manager's `RateEstimator` is the single source, so the CLI and the GUI always
 agree.
 
+The phase label above the bar (`Downloading` / `Finalizing` / `Registering`)
+also covers `notice`: a transient, free-form setup note from the backend's
+`DownloadEvent::DownloadNotice` (e.g. "preparing fast downloader…" while the
+CLI/backend builds the fast downloader's first-run Python environment) shown
+verbatim in place of a fixed phase label, mirroring what the CLI shows on its
+own progress bar for the same event. It carries no byte progress; the next
+progress or status event overwrites it.
+
 <!-- module-docs:end -->

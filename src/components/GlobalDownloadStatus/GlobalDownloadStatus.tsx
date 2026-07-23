@@ -134,7 +134,11 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const isSharded = !!(shard && shard.total > 1);
   // Lifecycle label: surfaces Finalizing/Registering between bytes-on-disk
   // and the terminal Completed event so the UI doesn't look frozen at 100%.
+  // `notice` is the same idea for transient setup notes (e.g. first-run
+  // Python env creation for the fast downloader) that carry no byte
+  // progress — shown verbatim since the message itself is the label.
   const phaseLabel = (() => {
+    if (progress?.status === 'notice' && progress.message) return progress.message;
     if (progress?.status === 'finalizing') return 'Finalizing';
     if (progress?.status === 'registering') return 'Registering';
     if (isSharded && shard) return `Downloading shard ${shard.index + 1}/${shard.total}`;
