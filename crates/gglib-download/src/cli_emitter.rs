@@ -80,17 +80,33 @@ impl CliDownloadEventEmitter {
     /// never falls out of sync with what's actually on screen. A raw
     /// `eprintln!`/`println!` racing the bars' own redraws is exactly what
     /// stranded old frames in scrollback before this was wired up.
+    ///
+    /// The hook captures a `Weak` reference, not a strong one, and never
+    /// clears itself on drop. In production there is exactly one emitter
+    /// per CLI process (see `bootstrap()`), alive for the process's whole
+    /// life, so this never matters there — but tests construct several.
+    /// Clearing the global hook on `Drop` would be wrong: dropping an
+    /// *earlier* emitter after a *later* one has installed its own hook
+    /// would wipe out the still-active hook out from under it. `Weak`
+    /// sidesteps that: once an emitter's `MultiProgress` is actually gone,
+    /// its hook's `upgrade()` starts returning `None` and that hook falls
+    /// back to `eprintln!` forever — equivalent to no hook at all — without
+    /// needing to touch (or race) whatever hook is currently installed.
     #[must_use]
     pub fn new() -> Self {
         let multi_progress = Arc::new(MultiProgress::new());
 
-        let hook_target = Arc::clone(&multi_progress);
+        let hook_target = Arc::downgrade(&multi_progress);
         gglib_core::telemetry::set_console_hook(Arc::new(move |line: &str| {
+            let Some(mp) = hook_target.upgrade() else {
+                eprintln!("{line}");
+                return;
+            };
             // `MultiProgress::println` silently drops the line when the draw
             // target is hidden (non-terminal stderr) rather than falling
             // back to a plain write — checking first keeps non-TTY output
             // (CI, pipes) intact.
-            if hook_target.is_hidden() || hook_target.println(line).is_err() {
+            if mp.is_hidden() || mp.println(line).is_err() {
                 eprintln!("{line}");
             }
         }));
@@ -468,5 +484,39 @@ mod tests {
 
         let registered = emitter.bars.lock().unwrap().contains_key("test/model");
         assert!(registered);
+    }
+
+    /// Interleaving `console_println` calls (the path a `tracing::warn!`
+    /// during a download takes) with live bar updates from the same
+    /// emitter must not panic — this is the exact scenario the console
+    /// hook exists to make safe instead of corrupting the bars.
+    #[test]
+    fn console_println_during_active_bar_does_not_panic() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        for i in 0..50 {
+            DownloadEventEmitterPort::emit(
+                &emitter,
+                DownloadEvent::progress("probe/model", i, 100, None, None),
+            );
+            gglib_core::telemetry::console_println(&format!("log line {i}"));
+        }
+    }
+
+    /// Dropping an emitter must not panic, hang, or otherwise misbehave —
+    /// the hook it installed captures a `Weak`, not a strong `Arc`, so it
+    /// degrades to `eprintln!` once this emitter (and its `MultiProgress`)
+    /// are gone rather than holding anything alive or needing explicit
+    /// teardown. See the doc comment on `CliDownloadEventEmitter::new`.
+    #[test]
+    fn dropping_the_emitter_is_fine() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        drop(emitter);
+
+        // The hook is still installed (nothing clears it), but its `Weak`
+        // can no longer upgrade — this must fall back to `eprintln!`
+        // without panicking.
+        gglib_core::telemetry::console_println("after drop");
     }
 }
