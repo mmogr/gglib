@@ -151,3 +151,34 @@ pub fn init_tracing(verbose: bool) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// `console_println` must forward to an installed hook rather than
+    /// writing to stderr directly — this is the mechanism that lets a live
+    /// `MultiProgress` intercept log lines and redraw around them instead of
+    /// having them corrupt its bookkeeping. `CONSOLE_HOOK` is the only piece
+    /// of process-global state this module touches and no other test in
+    /// this crate installs a hook, so a single test covering both install
+    /// and teardown is safe without cross-test races.
+    #[test]
+    fn console_println_routes_through_an_installed_hook() {
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = Arc::clone(&captured);
+        set_console_hook(Arc::new(move |line: &str| {
+            captured_clone.lock().unwrap().push(line.to_string());
+        }));
+
+        console_println("hello from the hook");
+        clear_console_hook();
+
+        assert_eq!(captured.lock().unwrap().as_slice(), ["hello from the hook"]);
+
+        // After clearing, console_println must not still reach the old hook.
+        console_println("after clear");
+        assert_eq!(captured.lock().unwrap().len(), 1);
+    }
+}

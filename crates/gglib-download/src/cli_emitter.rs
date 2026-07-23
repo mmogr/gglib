@@ -378,3 +378,95 @@ impl AppEventEmitter for CliDownloadEventEmitter {
         Box::new(gglib_core::ports::NoopEmitter::new())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gglib_core::download::DownloadEvent;
+
+    /// Clone the registered bar for `id` out of the lock, so tests can
+    /// assert on it without holding `emitter.bars`'s mutex for the
+    /// assertion (clippy's `significant_drop_tightening`).
+    fn bar_for(emitter: &CliDownloadEventEmitter, id: &str) -> ProgressBar {
+        emitter
+            .bars
+            .lock()
+            .unwrap()
+            .get(id)
+            .expect("bar should be registered")
+            .clone()
+    }
+
+    /// Regression guard for the bar rendering fully filled at `0 B/0 B`
+    /// before any bytes have been reported. `ProgressBar::new(0)` sets an
+    /// explicit length of 0, and indicatif's `fraction()` treats a length of
+    /// 0 as 100% complete — `no_length()` must leave the length unset until
+    /// a real Progress/ShardProgress event calls `set_length`.
+    #[test]
+    fn download_started_creates_a_bar_with_no_length() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+
+        assert_eq!(bar_for(&emitter, "test/model").length(), None);
+    }
+
+    #[test]
+    fn progress_event_sets_the_length_once_a_real_total_arrives() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::progress("test/model", 10, 100, None, None),
+        );
+
+        let bar = bar_for(&emitter, "test/model");
+        assert_eq!(bar.length(), Some(100));
+        assert_eq!(bar.position(), 10);
+    }
+
+    /// `DownloadNotice` sets the bar's message without touching its length
+    /// or position — it carries no byte progress, only a note for display
+    /// in place of it.
+    #[test]
+    fn download_notice_updates_message_without_touching_progress() {
+        let emitter = CliDownloadEventEmitter::new();
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::progress("test/model", 10, 100, None, None),
+        );
+        DownloadEventEmitterPort::emit(
+            &emitter,
+            DownloadEvent::DownloadNotice {
+                id: "test/model".to_string(),
+                message: "preparing fast downloader…".to_string(),
+            },
+        );
+
+        let bar = bar_for(&emitter, "test/model");
+        assert_eq!(bar.length(), Some(100));
+        assert_eq!(bar.position(), 10);
+        assert!(bar.message().contains("preparing fast downloader"));
+    }
+
+    /// `set_footer` + a subsequent `DownloadStarted` must not panic or fail
+    /// to register the bar — the actual bottom-pinned ordering is
+    /// `MultiProgress::insert_before`'s contract (exercised, not
+    /// reimplemented, by `start_bar`) and is verified visually per the
+    /// manual steps in the fix's PR description; `MultiProgress` doesn't
+    /// expose line order through its public API for a unit test to assert.
+    #[test]
+    fn set_footer_then_download_started_still_registers_the_bar() {
+        let emitter = CliDownloadEventEmitter::new();
+        let mp = emitter.multi_progress();
+
+        let footer = mp.add(ProgressBar::new(0));
+        footer.set_message("[a] queue another  [q] quit");
+        emitter.set_footer(&footer);
+
+        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+
+        let registered = emitter.bars.lock().unwrap().contains_key("test/model");
+        assert!(registered);
+    }
+}

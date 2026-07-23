@@ -242,15 +242,9 @@ impl PythonEnvironment {
             })?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            let reason = if stderr.is_empty() {
-                format!("python -m venv exited with {}", output.status)
-            } else {
-                format!("python -m venv exited with {}: {stderr}", output.status)
-            };
             return Err(EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
-                reason,
+                reason: venv_failure_reason(output.status, &output.stderr),
             });
         }
 
@@ -401,6 +395,18 @@ fn notify(notice: Option<&NoticeCallback>, bar_message: &str, console_message: &
         notice(bar_message);
     } else {
         gglib_core::telemetry::console_println(console_message);
+    }
+}
+
+/// Build the `CreateEnvFailed` reason for a failed `python -m venv`,
+/// including captured stderr when there is any. Pulled out of `create_env`
+/// so the formatting is testable without spawning a real process.
+fn venv_failure_reason(status: std::process::ExitStatus, stderr: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    if stderr.is_empty() {
+        format!("python -m venv exited with {status}")
+    } else {
+        format!("python -m venv exited with {status}: {stderr}")
     }
 }
 
@@ -582,6 +588,40 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("virtualenv"));
         assert!(msg.contains("permission denied"));
+    }
+
+    /// `create_env` now runs `python -m venv` via `.output()` instead of
+    /// `.status()` specifically so its stderr can be captured into the
+    /// error instead of being inherited straight to the terminal (where it
+    /// could corrupt a live `MultiProgress` redraw). This is the formatting
+    /// half of that change, tested without spawning a process: a fake
+    /// `ExitStatus` plus captured stderr bytes.
+    #[cfg(unix)]
+    #[test]
+    fn venv_failure_reason_includes_captured_stderr() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let status = std::process::ExitStatus::from_raw(1 << 8); // exit code 1
+        let reason = venv_failure_reason(status, b"NotADirectoryError: [Errno 20]\n");
+
+        assert!(reason.contains("exited with"));
+        assert!(reason.contains("NotADirectoryError"));
+    }
+
+    /// Empty stderr (e.g. the process was killed by a signal before writing
+    /// anything) must not produce a dangling ": " with nothing after it.
+    #[cfg(unix)]
+    #[test]
+    fn venv_failure_reason_omits_colon_when_stderr_is_empty() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let status = std::process::ExitStatus::from_raw(1 << 8);
+        let reason = venv_failure_reason(status, b"");
+
+        // No trailing ": " separator (which would precede an empty stderr
+        // section) — just the bare "exited with <status>" whatever ExitStatus's
+        // own Display happens to contain.
+        assert_eq!(reason, format!("python -m venv exited with {status}"));
     }
 
     /// Test that environment isolation properly removes polluted environment variables
