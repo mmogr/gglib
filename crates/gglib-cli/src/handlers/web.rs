@@ -75,8 +75,11 @@ pub async fn execute(
     if let Some(ref dir) = config.static_dir {
         style::print_info_banner("Web Server", "\u{1f680}");
         eprintln!("  \u{1f4c2} Serving UI from: {}", dir.display());
-        eprintln!("  \u{1f310} Local:   http://localhost:{}", port);
-        eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        if config.host == "0.0.0.0" {
+            eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        } else {
+            eprintln!("  \u{1f310} Local:   http://{}:{}", config.host, port);
+        }
         eprintln!(
             "  \u{1f4ca} Status:  http://localhost:{}/v1/proxy/status",
             port
