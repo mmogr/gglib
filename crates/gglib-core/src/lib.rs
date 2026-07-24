@@ -7,6 +7,7 @@ pub mod contracts;
 pub mod domain;
 pub mod download;
 pub mod events;
+pub mod is_local_origin;
 pub mod normalize;
 pub mod paths;
 pub mod ports;
@@ -56,6 +57,9 @@ pub use settings::{
     DEFAULT_CONTEXT_SIZE, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError,
     SettingsUpdate, validate_settings,
 };
+
+// Re-export origin validation utility
+pub use is_local_origin::is_local_origin;
 
 // Re-export timing utility
 pub use utils::timing::{elapsed_ms, format_duration_human};
