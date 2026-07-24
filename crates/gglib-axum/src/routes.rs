@@ -35,10 +35,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
         }
         CorsConfig::LocalOnly => {
             let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
-                let s = origin.to_str().unwrap_or("");
-                s.starts_with("http://localhost")
-                    || s.starts_with("http://127.0.0.1")
-                    || s.starts_with("http://[::1]")
+                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
             });
             CorsLayer::new()
                 .allow_origin(local)
