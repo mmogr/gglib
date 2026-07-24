@@ -636,7 +636,7 @@ All interfaces share the same database and model directory. Pick whichever fits 
 |-----------|--------|---------|
 | **CLI** | `gglib <command>` | [gglib-cli](crates/gglib-cli/README.md) |
 | **Desktop GUI** | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md), [src-tauri](src-tauri/README.md) |
-| **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `0.0.0.0:9887` |
+| **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `127.0.0.1:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 
 **Shell completions** — enable tab completion for your shell:
@@ -652,7 +652,7 @@ All interfaces share the same database and model directory. Pick whichever fits 
 <details>
 <summary><strong>Security notes</strong></summary>
 
-- Web server binds `0.0.0.0` (LAN-accessible); proxy binds `127.0.0.1` (local only) by default
+- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. Proxy also binds `127.0.0.1`
 - No authentication — designed for trusted networks
 - Use firewall rules, private subnets, or VPN; do not expose to the public internet without additional auth
 

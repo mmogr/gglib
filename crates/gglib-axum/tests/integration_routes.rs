@@ -16,6 +16,7 @@ use gglib_axum::routes::create_router;
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
     ServerConfig {
+        host: "127.0.0.1".into(),
         port: 0, // Not used in tests
         base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
