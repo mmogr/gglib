@@ -101,6 +101,13 @@ impl ServerConfig {
         self
     }
 
+    /// Set the bind host (e.g. `127.0.0.1` for localhost-only).
+    #[must_use]
+    pub fn with_host(mut self, host: impl Into<String>) -> Self {
+        self.host = host.into();
+        self
+    }
+
     /// Set CORS to allow specific origins.
     #[must_use]
     pub fn with_allowed_origins(mut self, origins: Vec<String>) -> Self {
