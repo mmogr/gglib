@@ -7,11 +7,23 @@ use url::Url;
 
 /// Returns `true` if the origin string resolves to a local host.
 ///
-/// Accepted hosts: `localhost`, `127.0.0.1`, `::1`.
+/// Accepted hosts: `localhost`, `127.0.0.1`, `::1`, `tauri.localhost`.
 ///
 /// Schemes `http` and `https` are accepted; ports are ignored.
+/// Tauri custom schemes (`tauri://localhost`, `asset://localhost`) are also accepted.
+/// URLs with userinfo (e.g. `http://user@localhost`) are rejected to prevent
+/// credential-injection bypasses.
 /// Malformed URLs, missing hosts, and non-local hosts return `false`.
 pub fn is_local_origin(origin: &str) -> bool {
+    // Handle Tauri custom schemes that Url::parse cannot parse (not registered URI schemes).
+    if let Some(stripped) = origin
+        .strip_prefix("tauri://")
+        .or_else(|| origin.strip_prefix("asset://"))
+    {
+        let host = stripped.trim_end_matches('/');
+        return matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1");
+    }
+
     let Ok(parsed) = Url::parse(origin) else {
         return false;
     };
@@ -25,11 +37,17 @@ pub fn is_local_origin(origin: &str) -> bool {
         return false;
     };
 
+    // Reject URLs with userinfo (e.g. http://user@localhost) to prevent
+    // credential-injection bypasses.
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+
     // `url::Url::host_str()` returns IPv6 addresses with brackets (e.g. `[::1]`),
     // so strip them for comparison.
     let host = host_str.trim_start_matches('[').trim_end_matches(']');
 
-    matches!(host, "localhost" | "127.0.0.1" | "::1")
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "tauri.localhost")
 }
 
 #[cfg(test)]
@@ -110,5 +128,33 @@ mod tests {
     fn rejects_url_encoded_bypass() {
         // `http://localhost:8080@evil.com` parses with host = "evil.com"
         assert!(!is_local_origin("http://localhost:8080@evil.com"));
+    }
+
+    #[test]
+    fn accepts_tauri_scheme_localhost() {
+        assert!(is_local_origin("tauri://localhost"));
+        assert!(is_local_origin("tauri://localhost/"));
+    }
+
+    #[test]
+    fn accepts_asset_scheme_localhost() {
+        assert!(is_local_origin("asset://localhost"));
+    }
+
+    #[test]
+    fn accepts_http_tauri_localhost() {
+        assert!(is_local_origin("http://tauri.localhost"));
+        assert!(is_local_origin("http://tauri.localhost:3000"));
+    }
+
+    #[test]
+    fn rejects_userinfo_localhost() {
+        // http://user@localhost parses with host="localhost" — must be rejected via userinfo guard
+        assert!(!is_local_origin("http://user@localhost"));
+    }
+
+    #[test]
+    fn rejects_userinfo_with_password() {
+        assert!(!is_local_origin("http://user:pass@localhost"));
     }
 }
