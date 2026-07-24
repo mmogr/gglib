@@ -278,7 +278,7 @@ gglib web --api-only --port 9887
 gglib web --port 9887 --base-port 9000
 ```
 
-The web server binds to `0.0.0.0` by default, making it accessible from your LAN. See [Interfaces](../README.md#interfaces) for details.
+The web server binds to `127.0.0.1` by default (local only). Use `--host 0.0.0.0` for LAN access. See [Interfaces](../README.md#interfaces) for details.
 
 ### llama.cpp Management
 
