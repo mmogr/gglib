@@ -4,6 +4,7 @@
 pub mod cache_config;
 pub mod cache_metrics;
 pub mod contracts;
+pub mod cors;
 pub mod domain;
 pub mod download;
 pub mod events;
@@ -20,6 +21,7 @@ pub mod telemetry;
 pub mod utils;
 
 // Re-export commonly used types for convenience
+pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
     ApprovalKind, AssistantContent, ChatMessage, Conversation, ConversationUpdate, CouncilEvent,

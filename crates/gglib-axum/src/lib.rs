@@ -40,7 +40,8 @@ pub mod sse;
 pub mod state;
 
 // Re-export primary types
-pub use bootstrap::{AxumContext, CorsConfig, ServerConfig, bootstrap, start_server};
+pub use bootstrap::{AxumContext, ServerConfig, bootstrap, start_server};
+pub use gglib_core::CorsConfig;
 pub use embedded::{EmbeddedApiInfo, EmbeddedServerConfig, start_embedded_server};
 pub use error::HttpError;
 pub use routes::{create_router, create_spa_router};

@@ -13,10 +13,11 @@ use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::bootstrap::{AxumContext, CorsConfig};
+use crate::bootstrap::AxumContext;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
+use gglib_core::CorsConfig;
 
 /// Build CORS layer from configuration.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {

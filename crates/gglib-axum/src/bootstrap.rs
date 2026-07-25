@@ -41,18 +41,7 @@ use crate::sse::SseBroadcaster;
 use gglib_core::paths::{
     data_root, database_path, llama_server_path, resolve_models_dir, resource_root,
 };
-
-/// CORS configuration for the web server.
-#[derive(Debug, Clone, Default)]
-pub enum CorsConfig {
-    /// Allow all origins (development mode).
-    AllowAll,
-    /// Allow specific origins (production mode).
-    AllowOrigins(Vec<String>),
-    /// Restrict to local-only access (localhost, 127.0.0.1, ::1).
-    #[default]
-    LocalOnly,
-}
+use gglib_core::CorsConfig;
 
 /// Server configuration for the Axum adapter.
 #[derive(Debug, Clone)]

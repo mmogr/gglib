@@ -17,9 +17,10 @@ mod common;
 
 use common::ports::TEST_BASE_PORT;
 use gglib_axum::{
-    bootstrap::{CorsConfig, ServerConfig, bootstrap},
+    bootstrap::{ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, default_embedded_cors_origins, start_embedded_server},
 };
+use gglib_core::CorsConfig;
 use reqwest::{Method, StatusCode, header};
 
 /// Process-level mutex that serialises concurrent `bootstrap()` calls.

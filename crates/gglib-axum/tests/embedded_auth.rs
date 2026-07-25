@@ -10,9 +10,10 @@ mod common;
 
 use common::ports::{TEST_BASE_PORT, TEST_CORS_ORIGIN};
 use gglib_axum::{
-    bootstrap::{CorsConfig, ServerConfig, bootstrap},
+    bootstrap::{ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, start_embedded_server},
 };
+use gglib_core::CorsConfig;
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {

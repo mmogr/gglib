@@ -12,8 +12,9 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use common::ports::TEST_BASE_PORT;
-use gglib_axum::bootstrap::{CorsConfig, ServerConfig, bootstrap};
+use gglib_axum::bootstrap::{ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
+use gglib_core::CorsConfig;
 
 /// Helper to create a test config.
 fn test_config() -> ServerConfig {
