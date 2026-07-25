@@ -10,7 +10,11 @@ pub enum CorsConfig {
     AllowAll,
     /// Allow specific origins (production mode).
     AllowOrigins(Vec<String>),
-    /// Restrict to local-only access (localhost, 127.0.0.1, `::1`).
+    /// Restrict to local-only access.
+    ///
+    /// Accepts `localhost`, `127.0.0.1`, `::1`, `tauri.localhost`,
+    /// and Tauri custom schemes (`tauri://localhost`, `asset://localhost`).
+    /// This is the default for both the web server and the proxy.
     #[default]
     LocalOnly,
 }

@@ -652,7 +652,8 @@ All interfaces share the same database and model directory. Pick whichever fits 
 <details>
 <summary><strong>Security notes</strong></summary>
 
-- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. Proxy also binds `127.0.0.1`
+- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. Proxy also binds `127.0.0.1` by default with the same `--host` flag.
+- Both `gglib web` and `gglib proxy` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
 - No authentication — designed for trusted networks
 - Use firewall rules, private subnets, or VPN; do not expose to the public internet without additional auth
 

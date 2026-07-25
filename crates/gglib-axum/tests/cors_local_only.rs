@@ -145,8 +145,39 @@ async fn server_config_defaults_are_local_only() {
     let config = ServerConfig::with_defaults().expect("defaults should build");
 
     assert_eq!(config.host, "127.0.0.1", "Default host should be 127.0.0.1");
-    match config.cors {
-        CorsConfig::LocalOnly => {} // expected
-        other => panic!("Default CORS should be LocalOnly, got: {:?}", other),
-    }
+    assert!(matches!(config.cors, CorsConfig::LocalOnly));
+}
+
+#[tokio::test]
+async fn local_only_allows_tauri_localhost_origin() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(ctx, &CorsConfig::LocalOnly);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/models")
+                .header("Origin", "http://tauri.localhost")
+                .header("Access-Control-Request-Method", "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let allow_origin = response.headers().get("Access-Control-Allow-Origin");
+    assert!(
+        allow_origin.is_some(),
+        "tauri.localhost origin should be allowed"
+    );
+    assert_eq!(
+        allow_origin.unwrap().to_str().unwrap(),
+        "http://tauri.localhost",
+        "Origin should be reflected"
+    );
 }
