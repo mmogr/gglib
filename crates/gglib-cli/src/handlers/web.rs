@@ -31,8 +31,8 @@ pub async fn execute(
     static_dir: Option<PathBuf>,
 ) -> Result<()> {
     use gglib_axum::{ServerConfig, start_server};
-    use gglib_core::paths::llama_server_path;
     use gglib_core::CorsConfig;
+    use gglib_core::paths::llama_server_path;
 
     // Warn if the VITE env var is set but unparseable so the user knows
     // we are ignoring it rather than silently falling back to the default.

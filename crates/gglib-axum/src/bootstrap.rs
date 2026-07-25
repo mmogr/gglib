@@ -38,10 +38,10 @@ use gglib_runtime::system::DefaultSystemProbe;
 use crate::sse::SseBroadcaster;
 
 // Path utilities from core
+use gglib_core::CorsConfig;
 use gglib_core::paths::{
     data_root, database_path, llama_server_path, resolve_models_dir, resource_root,
 };
-use gglib_core::CorsConfig;
 
 /// Server configuration for the Axum adapter.
 #[derive(Debug, Clone)]

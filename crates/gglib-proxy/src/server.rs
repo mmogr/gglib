@@ -22,8 +22,8 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
-use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::CorsConfig;
+use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
