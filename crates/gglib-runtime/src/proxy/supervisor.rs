@@ -282,6 +282,7 @@ impl ProxySupervisor {
                 slot_dir,
                 disk_budget,
                 agent_metrics,
+                &gglib_core::CorsConfig::LocalOnly,
             )
             .await;
 
