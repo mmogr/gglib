@@ -1,8 +1,14 @@
-//! Verifies the proxy's permissive CORS layer, added specifically so the
-//! Tauri GUI's webview (origin `tauri://localhost` / `http://tauri.localhost`
-//! on Windows) can call this proxy's endpoints — including opening an
-//! `EventSource` connection to `GET /v1/proxy/status/stream` — without the
-//! browser blocking the request as cross-origin.
+//! Verifies the proxy's LocalOnly CORS layer.
+//!
+//! The proxy binds to 127.0.0.1 and accepts only local origins:
+//! `localhost`, `127.0.0.1`, `::1`, `tauri.localhost`, and Tauri custom
+//! schemes (`tauri://localhost`, `asset://localhost`).
+//! Non-local origins are rejected.
+//!
+//! This ensures the Tauri GUI's webview (origin `tauri://localhost` /
+//! `http://tauri.localhost` on Windows) can call this proxy's endpoints —
+//! including opening an `EventSource` connection to `GET /v1/proxy/status/stream`
+//! — without the browser blocking the request as cross-origin.
 //!
 //! Uses the real `gglib_proxy::serve` (not a hand-rolled router), following
 //! the same self-contained-harness pattern as the other integration tests in
@@ -208,6 +214,7 @@ async fn spawn_proxy() -> (String, CancellationToken) {
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            &gglib_core::CorsConfig::LocalOnly,
         )
         .await
         .ok();
@@ -242,10 +249,10 @@ async fn get_request_from_tauri_origin_receives_cors_header() {
         .expect("missing access-control-allow-origin header")
         .to_str()
         .unwrap();
-    // `Any` reflects as a literal `*` (no credentials involved), which is
-    // valid for a non-credentialed request from any origin, including
+    // LocalOnly reflects the requesting origin back (not `*`), which is
+    // valid for a non-credentialed request from a local origin like
     // `tauri://localhost`.
-    assert_eq!(allow_origin, "*");
+    assert_eq!(allow_origin, "tauri://localhost");
 
     cancel.cancel();
 }
@@ -287,7 +294,8 @@ async fn preflight_request_to_sse_endpoint_is_allowed() {
 }
 
 /// A request from a plain `http://localhost:5173` (Vite dev server) origin
-/// works identically — the permissive layer doesn't special-case Tauri.
+/// works identically — the LocalOnly layer accepts any localhost origin
+/// and reflects it back.
 #[tokio::test]
 async fn get_request_from_vite_dev_origin_receives_cors_header() {
     let (base_url, cancel) = spawn_proxy().await;
@@ -300,7 +308,38 @@ async fn get_request_from_vite_dev_origin_receives_cors_header() {
         .expect("request should succeed");
 
     assert!(resp.status().is_success());
-    assert!(resp.headers().contains_key("access-control-allow-origin"));
+    let allow_origin = resp
+        .headers()
+        .get("access-control-allow-origin")
+        .expect("missing access-control-allow-origin header")
+        .to_str()
+        .unwrap();
+    assert_eq!(allow_origin, "http://localhost:5173");
+
+    cancel.cancel();
+}
+
+/// A request from `http://tauri.localhost` (Tauri dev server on Windows)
+/// is accepted and reflected back by the LocalOnly CORS policy.
+#[tokio::test]
+async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
+    let (base_url, cancel) = spawn_proxy().await;
+
+    let resp = Client::new()
+        .get(format!("{base_url}/v1/proxy/status"))
+        .header("Origin", "http://tauri.localhost")
+        .send()
+        .await
+        .expect("request should succeed");
+
+    assert!(resp.status().is_success());
+    let allow_origin = resp
+        .headers()
+        .get("access-control-allow-origin")
+        .expect("missing access-control-allow-origin header")
+        .to_str()
+        .unwrap();
+    assert_eq!(allow_origin, "http://tauri.localhost");
 
     cancel.cancel();
 }
