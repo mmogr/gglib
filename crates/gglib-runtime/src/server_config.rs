@@ -158,5 +158,10 @@ pub fn build_server_config(
             .with_spec_draft_p_min(mtp.draft_p_min);
     }
 
+    // --- Memory lock (--mlock) -------------------------------------------------
+    if opts.mlock.unwrap_or(false) {
+        config = config.with_mlock();
+    }
+
     config
 }
