@@ -356,6 +356,9 @@ pub struct StartServerRequest {
     /// Inference parameters for this serve session (overrides model/global defaults).
     #[serde(default)]
     pub inference_params: Option<gglib_core::domain::InferenceConfig>,
+    /// Memory-lock the model into RAM (`--mlock`).
+    #[serde(default)]
+    pub mlock: bool,
 }
 
 /// Response for starting a server.
@@ -708,5 +711,24 @@ mod update_model_request_tests {
             })),
             "populated object must resolve to Some(Some(config))"
         );
+    }
+}
+
+#[cfg(test)]
+mod start_server_request_tests {
+    //! JSON-boundary tests for `StartServerRequest.mlock`.
+
+    use super::StartServerRequest;
+
+    #[test]
+    fn mlock_deserializes_from_json() {
+        let req: StartServerRequest = serde_json::from_str(r#"{"mlock": true}"#).unwrap();
+        assert!(req.mlock, "explicit true must deserialize");
+    }
+
+    #[test]
+    fn mlock_defaults_to_false_when_omitted() {
+        let req: StartServerRequest = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(!req.mlock, "omitted key must default to false via #[serde(default)]");
     }
 }
