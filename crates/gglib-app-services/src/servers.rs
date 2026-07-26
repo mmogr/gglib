@@ -181,7 +181,7 @@ impl ServerOps {
             cache_reuse: None,
             cache_type_k: None,
             cache_type_v: None,
-            mlock: None,
+            mlock: Some(request.mlock),
         };
 
         // Resolve KV cache types once so the RAM budget below reflects the
