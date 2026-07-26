@@ -729,6 +729,9 @@ mod start_server_request_tests {
     #[test]
     fn mlock_defaults_to_false_when_omitted() {
         let req: StartServerRequest = serde_json::from_str(r#"{}"#).unwrap();
-        assert!(!req.mlock, "omitted key must default to false via #[serde(default)]");
+        assert!(
+            !req.mlock,
+            "omitted key must default to false via #[serde(default)]"
+        );
     }
 }
