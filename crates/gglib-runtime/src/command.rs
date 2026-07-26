@@ -265,6 +265,11 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         }
     }
 
+    // Memory lock
+    if config.mlock {
+        cmd.arg("--mlock");
+    }
+
     // Add inference parameters if specified
     if let Some(ref inference) = config.inference_config {
         for arg in inference.to_cli_args() {
@@ -530,6 +535,7 @@ mod tests {
             cache_reuse: None,
             cache_type_k: None,
             cache_type_v: None,
+            mlock: false,
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)
@@ -539,6 +545,31 @@ mod tests {
         assert!(
             result.is_ok(),
             "build_and_spawn should succeed with valid bootstrap path"
+        );
+    }
+
+    #[test]
+    fn mlock_omitted_by_default() {
+        let config = minimal_config(); // mlock defaults to false
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        assert!(
+            !args.contains(&"--mlock".to_string()),
+            "--mlock should not be present by default"
+        );
+    }
+
+    #[test]
+    fn mlock_emits_flag_when_enabled() {
+        let config = ServerConfig {
+            mlock: true,
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+        assert!(
+            args.contains(&"--mlock".to_string()),
+            "--mlock should be present when enabled"
         );
     }
 }
