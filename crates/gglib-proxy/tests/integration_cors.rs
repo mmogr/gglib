@@ -343,3 +343,31 @@ async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
 
     cancel.cancel();
 }
+
+/// A request from an external (non-local) origin must NOT receive the
+/// `access-control-allow-origin` header — the tower-http CORS layer
+/// silently omits it rather than returning 403; the browser enforces
+/// the block client-side.
+#[tokio::test]
+async fn get_request_from_external_origin_is_rejected() {
+    let (base_url, cancel) = spawn_proxy().await;
+
+    let resp = Client::new()
+        .get(format!("{base_url}/v1/proxy/status"))
+        .header("Origin", "http://evil.com")
+        .send()
+        .await
+        .expect("request should succeed");
+
+    // The CORS layer does NOT return 403 for rejected origins — it returns
+    // 200 (or whatever the handler returns) but omits the CORS header.
+    assert!(resp.status().is_success());
+    let allow_origin = resp.headers().get("access-control-allow-origin");
+    assert!(
+        allow_origin.is_none(),
+        "Remote origin should be rejected (no access-control-allow-origin header), got: {:?}",
+        allow_origin
+    );
+
+    cancel.cancel();
+}
