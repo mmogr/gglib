@@ -54,7 +54,10 @@ pub fn is_local_origin(origin: &str) -> bool {
 
     // RFC 3986 §3.2.2: host comparison is case-insensitive for IPv4 and
     // domain names. Normalizing to lowercase documents this intent.
-    matches!(host.to_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1" | "tauri.localhost")
+    matches!(
+        host.to_lowercase().as_str(),
+        "localhost" | "127.0.0.1" | "::1" | "tauri.localhost"
+    )
 }
 
 #[cfg(test)]
