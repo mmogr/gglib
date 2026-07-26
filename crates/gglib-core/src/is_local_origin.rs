@@ -21,6 +21,11 @@ pub fn is_local_origin(origin: &str) -> bool {
         .or_else(|| origin.strip_prefix("asset://"))
     {
         let host = stripped.trim_end_matches('/');
+        // Reject userinfo in custom schemes (defensive symmetry with the
+        // standard URL userinfo guard below).
+        if host.contains('@') {
+            return false;
+        }
         return matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1");
     }
 
@@ -47,7 +52,9 @@ pub fn is_local_origin(origin: &str) -> bool {
     // so strip them for comparison.
     let host = host_str.trim_start_matches('[').trim_end_matches(']');
 
-    matches!(host, "localhost" | "127.0.0.1" | "::1" | "tauri.localhost")
+    // RFC 3986 §3.2.2: host comparison is case-insensitive for IPv4 and
+    // domain names. Normalizing to lowercase documents this intent.
+    matches!(host.to_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1" | "tauri.localhost")
 }
 
 #[cfg(test)]
@@ -156,5 +163,25 @@ mod tests {
     #[test]
     fn rejects_userinfo_with_password() {
         assert!(!is_local_origin("http://user:pass@localhost"));
+    }
+
+    #[test]
+    fn rejects_tauri_scheme_userinfo() {
+        assert!(!is_local_origin("tauri://user@localhost"));
+    }
+
+    #[test]
+    fn rejects_asset_scheme_external_host() {
+        assert!(!is_local_origin("asset://evil.com"));
+    }
+
+    #[test]
+    fn accepts_https_tauri_localhost() {
+        assert!(is_local_origin("https://tauri.localhost"));
+    }
+
+    #[test]
+    fn accepts_uppercase_localhost() {
+        assert!(is_local_origin("http://LOCALHOST"));
     }
 }
