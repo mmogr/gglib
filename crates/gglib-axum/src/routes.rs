@@ -331,6 +331,11 @@ pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
     let cors = build_cors_layer(cors_config);
 
     Router::new()
+        // Intentionally placed outside the CORS layer — /health is a
+        // low-sensitivity health probe that should be accessible without
+        // origin restrictions (e.g. for container orchestration liveness checks).
+        // The proxy server applies CORS globally (including /health) via a
+        // router-level .layer(), but this Axum router scopes CORS to /api/* only.
         .route("/health", get(health_check))
         .nest("/api", api_routes().with_state(state).layer(cors))
 }
