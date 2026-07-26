@@ -353,6 +353,7 @@ mod tests {
             cache_reuse: None,
             cache_type_k: None,
             cache_type_v: None,
+            mlock: false,
         }
     }
 
