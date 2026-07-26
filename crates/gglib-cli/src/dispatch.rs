@@ -244,11 +244,12 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
         Commands::Web {
             port,
+            host,
             base_port,
             api_only,
             static_dir,
         } => {
-            handlers::web::execute(port, base_port, api_only, static_dir).await?;
+            handlers::web::execute(port, host, base_port, api_only, static_dir).await?;
         }
         Commands::Proxy {
             host,

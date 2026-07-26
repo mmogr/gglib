@@ -4,9 +4,11 @@
 pub mod cache_config;
 pub mod cache_metrics;
 pub mod contracts;
+pub mod cors;
 pub mod domain;
 pub mod download;
 pub mod events;
+pub mod is_local_origin;
 pub mod normalize;
 pub mod paths;
 pub mod ports;
@@ -19,6 +21,7 @@ pub mod telemetry;
 pub mod utils;
 
 // Re-export commonly used types for convenience
+pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
     ApprovalKind, AssistantContent, ChatMessage, Conversation, ConversationUpdate, CouncilEvent,
@@ -56,6 +59,9 @@ pub use settings::{
     DEFAULT_CONTEXT_SIZE, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError,
     SettingsUpdate, validate_settings,
 };
+
+// Re-export origin validation utility
+pub use is_local_origin::is_local_origin;
 
 // Re-export timing utility
 pub use utils::timing::{elapsed_ms, format_duration_human};

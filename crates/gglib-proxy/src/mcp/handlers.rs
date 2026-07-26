@@ -361,16 +361,11 @@ async fn handle_notification(
 /// We reject requests from browser origins that don't match localhost.
 #[allow(clippy::result_large_err)]
 fn validate_origin(headers: &HeaderMap) -> Result<(), Response> {
-    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
-        let lower = origin.to_lowercase();
-        let allowed = lower.starts_with("http://localhost")
-            || lower.starts_with("http://127.0.0.1")
-            || lower.starts_with("https://localhost")
-            || lower.starts_with("https://127.0.0.1");
-        if !allowed {
-            warn!(origin, "MCP: rejected request with disallowed Origin");
-            return Err(StatusCode::FORBIDDEN.into_response());
-        }
+    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok())
+        && !gglib_core::is_local_origin(origin)
+    {
+        warn!(origin, "MCP: rejected request with disallowed Origin");
+        return Err(StatusCode::FORBIDDEN.into_response());
     }
     // No Origin header = non-browser client (curl, OpenWebUI server-side) — allow
     Ok(())

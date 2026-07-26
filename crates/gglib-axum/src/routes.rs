@@ -10,13 +10,14 @@ use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::bootstrap::{AxumContext, CorsConfig};
+use crate::bootstrap::AxumContext;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
+use gglib_core::CorsConfig;
 
 /// Build CORS layer from configuration.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
@@ -30,6 +31,15 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
             let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
             CorsLayer::new()
                 .allow_origin(allowed)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        CorsConfig::LocalOnly => {
+            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
+                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
+            });
+            CorsLayer::new()
+                .allow_origin(local)
                 .allow_methods(Any)
                 .allow_headers(Any)
         }
@@ -321,6 +331,11 @@ pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
     let cors = build_cors_layer(cors_config);
 
     Router::new()
+        // Intentionally placed outside the CORS layer — /health is a
+        // low-sensitivity health probe that should be accessible without
+        // origin restrictions (e.g. for container orchestration liveness checks).
+        // The proxy server applies CORS globally (including /health) via a
+        // router-level .layer(), but this Axum router scopes CORS to /api/* only.
         .route("/health", get(health_check))
         .nest("/api", api_routes().with_state(state).layer(cors))
 }

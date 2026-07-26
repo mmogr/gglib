@@ -38,23 +38,16 @@ use gglib_runtime::system::DefaultSystemProbe;
 use crate::sse::SseBroadcaster;
 
 // Path utilities from core
+use gglib_core::CorsConfig;
 use gglib_core::paths::{
     data_root, database_path, llama_server_path, resolve_models_dir, resource_root,
 };
 
-/// CORS configuration for the web server.
-#[derive(Debug, Clone, Default)]
-pub enum CorsConfig {
-    /// Allow all origins (development mode).
-    #[default]
-    AllowAll,
-    /// Allow specific origins (production mode).
-    AllowOrigins(Vec<String>),
-}
-
 /// Server configuration for the Axum adapter.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
+    /// Host to bind the HTTP server.
+    pub host: String,
     /// Port for the HTTP server.
     pub port: u16,
     /// Base port for llama-server instances.
@@ -79,6 +72,7 @@ impl ServerConfig {
     /// Create config with default paths.
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
+            host: "127.0.0.1".into(),
             port: 9887,
             base_port: 9000,
             llama_server_path: llama_server_path()?,
@@ -93,6 +87,13 @@ impl ServerConfig {
     #[must_use]
     pub fn with_static_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.static_dir = Some(path.into());
+        self
+    }
+
+    /// Set the bind host (e.g. `127.0.0.1` for localhost-only).
+    #[must_use]
+    pub fn with_host(mut self, host: impl Into<String>) -> Self {
+        self.host = host.into();
         self
     }
 
@@ -414,7 +415,7 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
         crate::routes::create_router(ctx, &config.cors)
     };
 
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
 
     if config.static_dir.is_some() {

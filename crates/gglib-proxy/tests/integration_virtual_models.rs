@@ -241,6 +241,7 @@ async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, Cancel
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            &gglib_core::CorsConfig::LocalOnly,
         )
         .await
         .ok();

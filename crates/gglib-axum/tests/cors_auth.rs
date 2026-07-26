@@ -17,9 +17,10 @@ mod common;
 
 use common::ports::TEST_BASE_PORT;
 use gglib_axum::{
-    bootstrap::{CorsConfig, ServerConfig, bootstrap},
+    bootstrap::{ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, default_embedded_cors_origins, start_embedded_server},
 };
+use gglib_core::CorsConfig;
 use reqwest::{Method, StatusCode, header};
 
 /// Process-level mutex that serialises concurrent `bootstrap()` calls.
@@ -28,6 +29,7 @@ static BOOTSTRAP_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(()
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
     ServerConfig {
+        host: "127.0.0.1".into(),
         port: 0,
         base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),

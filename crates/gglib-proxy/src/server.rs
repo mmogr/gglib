@@ -19,9 +19,10 @@ use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
+use gglib_core::CorsConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
@@ -125,6 +126,34 @@ pub(crate) struct AppState {
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
+/// Build CORS layer from configuration.
+// TODO: Extract to a shared gglib-http crate if tracing/auth middleware is added to the proxy in the future.
+fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
+    match config {
+        CorsConfig::AllowAll => CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any),
+        CorsConfig::AllowOrigins(origins) => {
+            use axum::http::HeaderValue;
+            let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
+            CorsLayer::new()
+                .allow_origin(allowed)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        CorsConfig::LocalOnly => {
+            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
+                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
+            });
+            CorsLayer::new()
+                .allow_origin(local)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn serve(
     listener: TcpListener,
@@ -146,6 +175,7 @@ pub async fn serve(
     // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
     // the proxied figure.
     agent_metrics: Arc<CacheMetricsStore>,
+    cors_config: &CorsConfig,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -257,21 +287,9 @@ pub async fn serve(
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
-        // Permissive CORS: this proxy only ever binds to 127.0.0.1 for local
-        // developer use (CLI or the Tauri GUI) and strips `Authorization`
-        // before forwarding upstream (see `forward.rs`), so there's no
-        // credentialed session to protect and no benefit to restricting
-        // origins — same rationale as `CorsConfig::AllowAll` in gglib-axum.
-        // Without this, browser-based clients (notably the Tauri webview,
-        // which runs on the `tauri://localhost` / `http://tauri.localhost`
-        // origin) are blocked from calling this proxy's endpoints, including
-        // the `EventSource` connection to `/v1/proxy/status/stream`.
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
-        )
+        // LocalOnly CORS: mirrors the Axum web server's default security posture.
+        // Only localhost, 127.0.0.1, ::1, and tauri://localhost origins are accepted.
+        .layer(build_cors_layer(cors_config))
         .with_state(state);
 
     info!("Proxy listening on {addr}");

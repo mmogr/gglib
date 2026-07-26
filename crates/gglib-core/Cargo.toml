@@ -23,6 +23,7 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 sha2 = "0.10"
 futures-core = "0.3"
+url = "2.5"
 
 [dev-dependencies]
 mockall = { workspace = true }

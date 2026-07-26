@@ -385,6 +385,9 @@ pub enum Commands {
         /// Port to serve the web GUI on
         #[arg(short, long, env = "VITE_GGLIB_WEB_PORT", default_value = "9887")]
         port: u16,
+        /// Host to bind the web server
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
         /// Base port for llama-server instances (Note: Port 5000 conflicts with macOS AirPlay)
         #[arg(long, default_value = "9000")]
         base_port: u16,

@@ -25,11 +25,13 @@ use crate::presentation::style;
 ///   auto-discovery when `api_only` is `false`.
 pub async fn execute(
     port: u16,
+    host: String,
     base_port: u16,
     api_only: bool,
     static_dir: Option<PathBuf>,
 ) -> Result<()> {
-    use gglib_axum::{CorsConfig, ServerConfig, start_server};
+    use gglib_axum::{ServerConfig, start_server};
+    use gglib_core::CorsConfig;
     use gglib_core::paths::llama_server_path;
 
     // Warn if the VITE env var is set but unparseable so the user knows
@@ -44,13 +46,14 @@ pub async fn execute(
     }
 
     let mut config = ServerConfig {
+        host,
         port,
         base_port,
         llama_server_path: llama_server_path()?,
         max_concurrent: 4,
         max_concurrent_agent_loops: 4,
         static_dir: None,
-        cors: CorsConfig::AllowAll,
+        cors: CorsConfig::LocalOnly,
     };
 
     // Resolve static directory: api-only flag > explicit flag > auto-discover > none
@@ -73,8 +76,11 @@ pub async fn execute(
     if let Some(ref dir) = config.static_dir {
         style::print_info_banner("Web Server", "\u{1f680}");
         eprintln!("  \u{1f4c2} Serving UI from: {}", dir.display());
-        eprintln!("  \u{1f310} Local:   http://localhost:{}", port);
-        eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        if config.host == "0.0.0.0" {
+            eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        } else {
+            eprintln!("  \u{1f310} Local:   http://{}:{}", config.host, port);
+        }
         eprintln!(
             "  \u{1f4ca} Status:  http://localhost:{}/v1/proxy/status",
             port
