@@ -152,6 +152,10 @@ pub struct ServerConfigOptions {
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.
     pub inference_params: Option<InferenceConfig>,
+
+    /// Whether to memory-lock the model into RAM (`--mlock`).
+    /// `None` defaults to `false` in `build_server_config()`.
+    pub mlock: Option<bool>,
 }
 
 // =============================================================================
