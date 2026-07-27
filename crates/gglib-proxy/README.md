@@ -263,7 +263,15 @@ auto-started by the proxy.
 `gglib serve <model>` is this same stack pinned to one model: it refuses
 requests for any other model rather than swapping, which gives clients that
 cannot switch via `/v1/models` a fixed endpoint without giving up the
-dashboard, cache lifecycle or request normalization.
+dashboard, cache lifecycle or request normalization. It takes the same cache
+flags (`--cache`, `--cache-ram-mb`, `--cache-reuse`, …) as `gglib proxy`,
+opt-in on both.
+
+In pinned mode `GET /v1/models` advertises only the pinned model, so a client
+is never offered a model the endpoint would refuse. Its `{model}:{profile}`
+variants and the council virtuals remain listed: a profile changes only the
+request body, and a council run dispatches to whatever model is loaded, so
+neither reaches the pinned guard.
 
 ### Inference Defaults Auto-Injection
 
