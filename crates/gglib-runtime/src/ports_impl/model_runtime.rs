@@ -5,7 +5,9 @@
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::ports::{LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget};
+use gglib_core::ports::{
+    LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
+};
 use std::fmt;
 use std::sync::Arc;
 
@@ -99,6 +101,10 @@ impl ModelRuntimePort for RuntimePortImpl {
 
     async fn current_model(&self) -> Option<RunningTarget> {
         self.mgr.current_model().await
+    }
+
+    async fn list_running(&self) -> Vec<ProcessHandle> {
+        self.mgr.list_running().await
     }
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {

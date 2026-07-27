@@ -9,7 +9,8 @@ use super::health::wait_for_http_health;
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{
-    LaunchOverrides, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
+    LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
+    ServerConfig,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
@@ -385,6 +386,28 @@ impl ProcessManager {
         core.list_all().into_iter().cloned().collect()
     }
 
+    /// List running servers as [`ProcessHandle`]s.
+    ///
+    /// The same processes [`Self::list_servers`] reports, projected onto the
+    /// port type so callers that already speak `ProcessHandle` — the GUI
+    /// server list and its health monitor — can consume a manager-backed
+    /// runtime without a second shape to handle.
+    pub async fn list_running(&self) -> Vec<ProcessHandle> {
+        let core = self.core.read().await;
+        core.list_all()
+            .into_iter()
+            .map(|info| {
+                ProcessHandle::new(
+                    i64::from(info.model_id),
+                    info.model_name.clone(),
+                    Some(info.pid),
+                    info.port,
+                    info.started_at,
+                )
+            })
+            .collect()
+    }
+
     /// Graceful shutdown
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down process manager");
@@ -552,6 +575,23 @@ mod tests {
     async fn test_list_servers_empty() {
         let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
         assert_eq!(manager.list_servers().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn list_running_is_empty_with_no_servers() {
+        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        assert!(manager.list_running().await.is_empty());
+    }
+
+    /// Both listings project the same underlying process set, so they must
+    /// never disagree on how many servers are up.
+    #[tokio::test]
+    async fn list_running_agrees_with_list_servers() {
+        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        assert_eq!(
+            manager.list_running().await.len(),
+            manager.list_servers().await.len()
+        );
     }
 
     #[tokio::test]
