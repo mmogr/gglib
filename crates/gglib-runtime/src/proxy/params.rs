@@ -91,6 +91,24 @@ impl ProxyCacheOptions {
 /// `gglib serve --mlock` and friends reach llama-server at all; an unpinned
 /// proxy has no model in scope at startup, so those are resolved per request
 /// when a model is first named.
+///
+/// ## Why the pinned model wins the merge
+///
+/// `cache_opts.overlay(&model.launch_overrides)` puts the pinned model on the
+/// winning side, which reads backwards — the cache options come from CLI flags,
+/// normally the outranking tier. The model is not a competing tier, though: its
+/// `launch_overrides` are the *output* of the full three-tier cascade
+/// ([`UnifiedServerConfig::resolved_options`](crate::unified_server_config::UnifiedServerConfig::resolved_options)),
+/// so letting the run-wide skeleton win here would undo a cascade that has
+/// already run.
+///
+/// The flags that look like the higher tier — `--cache-reuse`, `--cache-type-k`
+/// and `--cache-type-v` — only exist on `gglib proxy`, which is unpinned and
+/// never reaches the overlay at all. The field that genuinely overlaps is
+/// `slot_save_path`: both sides derive it from the same `UnifiedServerConfig`,
+/// and the pinned copy has already had the `cache_enabled` master switch
+/// applied, making it the more-resolved of the two. The direction itself is
+/// pinned by `pinned_model_options_outrank_run_wide_cache_settings`.
 pub(super) fn compose_launch_overrides(
     cache: &ProxyCacheOptions,
     pinned: Option<&PinnedModel>,

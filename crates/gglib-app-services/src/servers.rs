@@ -547,37 +547,56 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Classify a spawn failure as a llama-server availability problem.
+///
+/// Returns the `reason` for [`GuiError::LlamaServerNotInstalled`], or `None`
+/// when the spawn failed for a cause the user cannot fix by installing — an OOM
+/// kill, a bound port, a missing model file.
+///
+/// Inspecting text is unavoidable here: `build_and_spawn` renders
+/// `LlamaServerError` into `anyhow` before `SpawnFailed` wraps it, so the typed
+/// variant is long gone by the time it reaches this layer. Restricting the
+/// probe to the `SpawnFailed` arm is what keeps it honest — no other failure
+/// mode can trip it by coincidence.
+fn llama_server_unavailable_reason(msg: &str) -> Option<&'static str> {
+    if !(msg.contains("llama-server binary")
+        || msg.contains("Failed to spawn llama-server")
+        || msg.contains("No such file or directory"))
+    {
+        return None;
+    }
+
+    Some(if msg.contains("not executable") {
+        "not executable"
+    } else if msg.contains("Permission denied") {
+        "permission denied"
+    } else {
+        "not found"
+    })
+}
+
 /// Map a runtime failure onto the GUI error the frontend expects.
 ///
 /// Preserves the llama-server-not-installed hint, which is the one failure a
-/// user can act on directly.
+/// user can act on directly. Only [`ModelRuntimeError::SpawnFailed`] is probed
+/// for it — that is the sole variant a binary problem can arrive as, so no
+/// other failure gets to claim the install prompt by wording alone.
 fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
-    let text = err.to_string();
-
-    if text.contains("llama-server binary not found")
-        || text.contains("Failed to spawn llama-server")
-        || text.contains("No such file or directory")
-    {
-        return GuiError::LlamaServerNotInstalled {
-            expected_path: "~/.local/share/gglib/.llama/bin/llama-server".to_string(),
-            legacy_path: None,
-            suggested_command: "gglib config llama install".to_string(),
-            reason: if text.contains("not executable") {
-                "not executable".to_string()
-            } else if text.contains("Permission denied") {
-                "permission denied".to_string()
-            } else {
-                "not found".to_string()
-            },
-        };
-    }
-
     match err {
         ModelRuntimeError::ModelNotFound(name) => GuiError::NotFound {
             entity: "model",
             id: name.clone(),
         },
-        _ => GuiError::Internal(format!("Failed to start server: {text}")),
+        ModelRuntimeError::SpawnFailed(msg) => llama_server_unavailable_reason(msg).map_or_else(
+            || GuiError::Internal(format!("Failed to start server: {err}")),
+            |reason| GuiError::LlamaServerNotInstalled {
+                expected_path: "~/.local/share/gglib/.llama/bin/llama-server".to_string(),
+                legacy_path: None,
+                suggested_command: "gglib config llama install".to_string(),
+                reason: reason.to_string(),
+            },
+        ),
+        _ => GuiError::Internal(format!("Failed to start server: {err}")),
     }
 }
 
@@ -847,5 +866,104 @@ mod tests {
     async fn stop_all_succeeds_with_no_servers() {
         let ops = make_server_ops().await;
         assert!(ops.stop_all().await.is_ok());
+    }
+
+    // ---------------------------------------------------------------
+    // Runtime error mapping
+    // ---------------------------------------------------------------
+
+    /// The `reason` of a [`GuiError::LlamaServerNotInstalled`], or a panic
+    /// naming what came back instead.
+    fn install_hint_reason(err: &GuiError) -> &str {
+        match err {
+            GuiError::LlamaServerNotInstalled { reason, .. } => reason,
+            other => panic!("expected LlamaServerNotInstalled, got {other:?}"),
+        }
+    }
+
+    /// A missing binary is the one start failure a user can fix themselves, so
+    /// it has to reach the frontend as the actionable install prompt.
+    #[test]
+    fn missing_binary_maps_to_the_install_hint() {
+        let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
+            "llama-server binary not found at: /home/u/.local/share/gglib/.llama/bin/llama-server\n\nPlease install llama.cpp by running:\n  gglib config llama install".to_string(),
+        ));
+
+        assert_eq!(install_hint_reason(&err), "not found");
+    }
+
+    /// The OS-level spawn failure carries no llama-server wording of its own,
+    /// only errno text — it still means the binary is not usable.
+    #[test]
+    fn failed_spawn_maps_to_the_install_hint() {
+        let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
+            "Failed to spawn llama-server: No such file or directory (os error 2)".to_string(),
+        ));
+
+        assert_eq!(install_hint_reason(&err), "not found");
+    }
+
+    /// A present-but-unusable binary is a distinct fix from a missing one, so
+    /// the reason has to say so rather than collapsing to "not found".
+    #[test]
+    fn non_executable_binary_reports_its_own_reason() {
+        let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
+            "llama-server binary exists but is not executable: /home/u/.llama/bin/llama-server\n\nPlease check file permissions or reinstall with:\n  gglib config llama install".to_string(),
+        ));
+
+        assert_eq!(install_hint_reason(&err), "not executable");
+    }
+
+    /// Same again for the permission case — reinstalling will not help, so it
+    /// must not be described as a missing binary.
+    #[test]
+    fn permission_denied_reports_its_own_reason() {
+        let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(
+            "Permission denied accessing llama-server binary: /home/u/.llama/bin/llama-server\n\nPlease check file permissions.".to_string(),
+        ));
+
+        assert_eq!(install_hint_reason(&err), "permission denied");
+    }
+
+    /// `SpawnFailed` covers far more than binary problems. An OOM kill or a
+    /// bound port must not be dressed up as a missing install, which is what
+    /// matching the variant alone would do.
+    #[test]
+    fn unrelated_spawn_failures_stay_internal() {
+        for msg in ["OOM killed", "port already in use", "Failed to get child PID"] {
+            let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(msg.to_string()));
+            assert!(
+                matches!(err, GuiError::Internal(_)),
+                "{msg} should map to Internal, got {err:?}"
+            );
+        }
+    }
+
+    /// Only `SpawnFailed` is probed for binary wording. Another variant that
+    /// happens to quote the same errno text is not an install problem, and the
+    /// old text-first gate got this wrong.
+    #[test]
+    fn lookalike_text_on_other_variants_is_not_an_install_problem() {
+        let err = map_runtime_error(&ModelRuntimeError::Internal(
+            "No such file or directory".to_string(),
+        ));
+
+        assert!(
+            matches!(err, GuiError::Internal(_)),
+            "expected Internal, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn model_not_found_maps_to_not_found() {
+        let err = map_runtime_error(&ModelRuntimeError::ModelNotFound("qwen2.5".to_string()));
+
+        match err {
+            GuiError::NotFound { entity, id } => {
+                assert_eq!(entity, "model");
+                assert_eq!(id, "qwen2.5");
+            }
+            other => panic!("expected NotFound, got {other:?}"),
+        }
     }
 }
