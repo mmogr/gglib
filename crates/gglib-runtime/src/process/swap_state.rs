@@ -120,6 +120,15 @@ impl SwapState {
         }
     }
 
+    /// The model this state is pinned to, if any.
+    ///
+    /// The read side of [`Self::check_pinned`]: callers that want to avoid
+    /// provoking a mismatch rather than handle one need to know the name up
+    /// front.
+    pub(super) fn pinned_name(&self) -> Option<&str> {
+        self.pinned.as_deref()
+    }
+
     /// Reject a request for any model other than the pinned one.
     ///
     /// Checked before the startup guard is consulted, so a foreign request

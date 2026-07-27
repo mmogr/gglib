@@ -273,6 +273,24 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     ///
     /// This is primarily for cleanup/shutdown scenarios.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
+
+    /// The one model this runtime is pinned to, if any.
+    ///
+    /// `Some(name)` means every other model is refused with
+    /// [`ModelRuntimeError::PinnedModelMismatch`] rather than swapped to —
+    /// the mode `gglib serve` runs in. `None` is the ordinary auto-swapping
+    /// runtime.
+    ///
+    /// Synchronous because pinning is fixed when the runtime is constructed
+    /// and never changes afterwards, unlike [`Self::current_model`], which
+    /// reports live process state.
+    ///
+    /// Defaults to unpinned so test doubles and remote backends need not
+    /// implement it. Callers use it to avoid offering a model that would only
+    /// be refused — `/v1/models` being the motivating case.
+    fn pinned_model(&self) -> Option<&str> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -341,6 +359,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(target.effective_ctx, 4096);
+    }
+
+    /// Unpinned is the safe default: a runtime that says nothing about
+    /// pinning must not cause callers to narrow what they offer.
+    #[test]
+    fn pinned_model_defaults_to_unpinned() {
+        assert_eq!(MinimalRuntime.pinned_model(), None);
     }
 
     #[tokio::test]
