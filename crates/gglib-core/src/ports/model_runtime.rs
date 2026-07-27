@@ -121,6 +121,21 @@ pub enum ModelRuntimeError {
     #[error("Model file not found: {0}")]
     ModelFileNotFound(String),
 
+    /// A model other than the pinned one was requested.
+    ///
+    /// Only reachable in pinned mode (`gglib serve <model>`), which exists to
+    /// give single-model clients — VS Code Copilot's BYOK endpoint, for one —
+    /// an endpoint that never switches models underneath them. Swapping to the
+    /// requested model would defeat that guarantee, so the request is refused
+    /// rather than served.
+    #[error("Server is pinned to model '{expected}'; refusing request for '{requested}'")]
+    PinnedModelMismatch {
+        /// The model this server was pinned to at startup.
+        expected: String,
+        /// The model the caller asked for.
+        requested: String,
+    },
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -139,7 +154,11 @@ impl ModelRuntimeError {
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
             Self::ModelLoading | Self::ContentionTimeout(_) => 503,
-            Self::ModelNotFound(_) | Self::ModelFileNotFound(_) => 404,
+            // A pinned mismatch is 404, not 403: from the client's point of
+            // view the model it asked for does not exist on this endpoint.
+            Self::ModelNotFound(_)
+            | Self::ModelFileNotFound(_)
+            | Self::PinnedModelMismatch { .. } => 404,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -189,4 +208,39 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     ///
     /// This is primarily for cleanup/shutdown scenarios.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ModelRuntimeError;
+
+    fn pinned_mismatch() -> ModelRuntimeError {
+        ModelRuntimeError::PinnedModelMismatch {
+            expected: "qwen2.5".to_string(),
+            requested: "llama-3-8b".to_string(),
+        }
+    }
+
+    /// 404 rather than 403: from the caller's point of view the model it asked
+    /// for does not exist on this endpoint.
+    #[test]
+    fn pinned_mismatch_is_not_found() {
+        assert_eq!(pinned_mismatch().suggested_status_code(), 404);
+    }
+
+    /// Retrying the identical request can never succeed — the pin is fixed for
+    /// the process lifetime — so clients must not back off and retry.
+    #[test]
+    fn pinned_mismatch_is_not_retryable() {
+        assert!(!pinned_mismatch().is_retryable());
+    }
+
+    /// Both model names belong in the message; without them the caller cannot
+    /// tell what this endpoint actually serves.
+    #[test]
+    fn pinned_mismatch_names_both_models() {
+        let rendered = pinned_mismatch().to_string();
+        assert!(rendered.contains("qwen2.5"), "{rendered}");
+        assert!(rendered.contains("llama-3-8b"), "{rendered}");
+    }
 }

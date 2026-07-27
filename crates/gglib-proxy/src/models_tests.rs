@@ -713,3 +713,37 @@ fn routing_envelope_rejects_missing_model() {
     let result: Result<ChatRoutingEnvelope, _> = serde_json::from_str(json);
     assert!(result.is_err(), "model is required");
 }
+
+// =========================================================================
+// Pinned-mode error mapping
+// =========================================================================
+
+/// Carries its own code so a client can distinguish "no such model anywhere"
+/// from "this endpoint serves exactly one model, and it isn't that one".
+#[test]
+fn pinned_model_mismatch_maps_to_its_own_code() {
+    let err: ErrorResponse = ModelRuntimeError::PinnedModelMismatch {
+        expected: "qwen2.5".to_string(),
+        requested: "llama-3-8b".to_string(),
+    }
+    .into();
+
+    assert_eq!(err.error.code.as_deref(), Some("pinned_model_mismatch"));
+    assert_eq!(err.error.r#type, "invalid_request_error");
+    assert!(err.error.message.contains("qwen2.5"), "{:?}", err.error);
+    assert!(err.error.message.contains("llama-3-8b"), "{:?}", err.error);
+}
+
+/// Distinct from the plain not-found code, which is the whole reason for the
+/// separate variant.
+#[test]
+fn pinned_model_mismatch_is_not_plain_model_not_found() {
+    let pinned: ErrorResponse = ModelRuntimeError::PinnedModelMismatch {
+        expected: "a".to_string(),
+        requested: "b".to_string(),
+    }
+    .into();
+    let plain = ErrorResponse::model_not_found("b");
+
+    assert_ne!(pinned.error.code, plain.error.code);
+}
