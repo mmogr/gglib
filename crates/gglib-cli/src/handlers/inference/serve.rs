@@ -95,6 +95,7 @@ pub async fn execute(
         // `--cache-disk-gb`, which `start_proxy_standalone` resolves into a
         // `DiskBudget` for both commands alike.
         globals: GlobalDefaults {
+            host: options.host.clone(),
             proxy_port: options.port,
             llama_base_port: options.llama_port,
             default_ctx: settings.default_context_size,
@@ -265,6 +266,20 @@ mod tests {
     fn serve_binds_loopback_by_default() {
         let cfg = unified(ServerConfigOptions::default(), GlobalDefaults::default());
         assert_eq!(cfg.to_proxy_config().host, "127.0.0.1");
+    }
+
+    /// `--host` must reach the proxy config — otherwise there is no way to
+    /// serve a pinned endpoint to another machine on a trusted network.
+    #[test]
+    fn explicit_host_overrides_the_loopback_default() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                host: "0.0.0.0".to_string(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(cfg.to_proxy_config().host, "0.0.0.0");
     }
 
     // ---------------------------------------------------------------

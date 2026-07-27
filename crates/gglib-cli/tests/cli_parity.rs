@@ -90,6 +90,20 @@ fn serve_and_proxy_expose_the_same_sampling_flags() {
     }
 }
 
+/// `--host` isn't part of a flattened shared-args group — `Serve` and
+/// `Proxy` each declare it inline — so nothing else pins this one down.
+/// `serve` binding only loopback by default was the original security gap
+/// #630 set out to close; without `--host` there is no way to serve a
+/// pinned endpoint to another machine on a trusted network at all.
+#[test]
+fn serve_and_proxy_both_expose_host() {
+    let serve = long_flags("serve");
+    let proxy = long_flags("proxy");
+
+    assert!(serve.contains(&"host".to_owned()), "`serve` is missing --host; it has {serve:?}");
+    assert!(proxy.contains(&"host".to_owned()), "`proxy` is missing --host; it has {proxy:?}");
+}
+
 /// Guards the rename risk in flattening `SamplingArgs` onto `proxy`: the
 /// inline fields derived their long names from the field names, while
 /// `SamplingArgs` spells them out explicitly. Anything but an exact match

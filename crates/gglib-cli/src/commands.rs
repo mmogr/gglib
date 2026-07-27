@@ -220,7 +220,8 @@ pub enum Commands {
     /// normalization and upstream health monitoring.
     ///
     /// `--port` is the endpoint clients connect to; `--llama-port` is the
-    /// upstream llama-server behind it.
+    /// upstream llama-server behind it. `--host` defaults to loopback; the
+    /// endpoint has no authentication, so only widen it on a trusted network.
     #[command(display_order = 10)]
     Serve {
         /// ID of the model to serve
