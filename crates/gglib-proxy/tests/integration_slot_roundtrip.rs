@@ -844,8 +844,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
 /// asserted fact instead of an assumption.
 #[tokio::test]
 async fn pinned_proxy_persists_kv_cache_across_the_session() {
-    let slot_dir =
-        std::env::temp_dir().join(format!("gglib-slot-pinned-{}", std::process::id()));
+    let slot_dir = std::env::temp_dir().join(format!("gglib-slot-pinned-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
 
     let upstream_cancel = CancellationToken::new();

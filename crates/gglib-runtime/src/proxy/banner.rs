@@ -139,7 +139,10 @@ mod tests {
             min_p: Some(0.05),
             ..Default::default()
         };
-        assert_eq!(format_inference_override(&ic), "temperature=0.7, min_p=0.05");
+        assert_eq!(
+            format_inference_override(&ic),
+            "temperature=0.7, min_p=0.05"
+        );
     }
 
     #[test]

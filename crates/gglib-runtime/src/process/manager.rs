@@ -256,9 +256,15 @@ impl ProcessManager {
         let current = Arc::clone(&state.current);
         let guard = current.read().await;
         guard.as_ref().map(|c| {
-            RunningTarget::local(c.port, c.model_id, c.model_name.clone(), c.context_size, false)
-                .with_slot_restore_supported(c.slot_restore_supported)
-                .with_cache_ram_health(c.cache_ram_health)
+            RunningTarget::local(
+                c.port,
+                c.model_id,
+                c.model_name.clone(),
+                c.context_size,
+                false,
+            )
+            .with_slot_restore_supported(c.slot_restore_supported)
+            .with_cache_ram_health(c.cache_ram_health)
         })
     }
 
@@ -354,7 +360,12 @@ impl ProcessManager {
     #[must_use]
     pub fn is_loading(&self) -> bool {
         let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        state.loading.read().ok().map(|s| s.is_some()).unwrap_or(false)
+        state
+            .loading
+            .read()
+            .ok()
+            .map(|s| s.is_some())
+            .unwrap_or(false)
     }
 }
 

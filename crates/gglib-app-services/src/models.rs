@@ -449,7 +449,8 @@ mod tests {
             _model_name: &str,
             _num_ctx: Option<u64>,
             _default_ctx: u64,
-        ) -> Result<gglib_core::ports::RunningTarget, gglib_core::ports::ModelRuntimeError> {
+        ) -> Result<gglib_core::ports::RunningTarget, gglib_core::ports::ModelRuntimeError>
+        {
             unimplemented!("not exercised by the remove() tests")
         }
 
@@ -468,7 +469,8 @@ mod tests {
         }
 
         async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
-            self.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.stopped
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
     }

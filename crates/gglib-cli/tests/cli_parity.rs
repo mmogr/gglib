@@ -100,8 +100,14 @@ fn serve_and_proxy_both_expose_host() {
     let serve = long_flags("serve");
     let proxy = long_flags("proxy");
 
-    assert!(serve.contains(&"host".to_owned()), "`serve` is missing --host; it has {serve:?}");
-    assert!(proxy.contains(&"host".to_owned()), "`proxy` is missing --host; it has {proxy:?}");
+    assert!(
+        serve.contains(&"host".to_owned()),
+        "`serve` is missing --host; it has {serve:?}"
+    );
+    assert!(
+        proxy.contains(&"host".to_owned()),
+        "`proxy` is missing --host; it has {proxy:?}"
+    );
 }
 
 /// Guards the rename risk in flattening `SamplingArgs` onto `proxy`: the

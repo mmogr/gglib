@@ -201,7 +201,14 @@ mod tests {
     ) -> ServerConfig {
         let base_port = globals.llama_base_port;
         let opts = UnifiedServerConfig { explicit, globals }.resolved_options();
-        build_server_config(7, "cascade-model".to_string(), model_path(), base_port, tags, opts)
+        build_server_config(
+            7,
+            "cascade-model".to_string(),
+            model_path(),
+            base_port,
+            tags,
+            opts,
+        )
     }
 
     #[test]

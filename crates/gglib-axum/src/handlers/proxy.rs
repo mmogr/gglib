@@ -81,8 +81,11 @@ fn to_runtime_config(cfg: &StartProxyConfig, settings_default: Option<u64>) -> R
     // slot_dir is absent (see gglib-proxy's server.rs), unlike the CLI's
     // standalone path, which auto-defaults it. Applying the same default
     // here keeps `cache: true` alone sufficient, matching the CLI.
-    let slot_dir =
-        cache_enabled.then(|| cfg.slot_dir.clone().unwrap_or_else(gglib_runtime::default_slot_dir));
+    let slot_dir = cache_enabled.then(|| {
+        cfg.slot_dir
+            .clone()
+            .unwrap_or_else(gglib_runtime::default_slot_dir)
+    });
 
     RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
@@ -216,7 +219,10 @@ mod tests {
         };
         let runtime_cfg = to_runtime_config(&cfg, None);
         assert!(runtime_cfg.cache_enabled);
-        assert_eq!(runtime_cfg.slot_dir, Some(gglib_runtime::default_slot_dir()));
+        assert_eq!(
+            runtime_cfg.slot_dir,
+            Some(gglib_runtime::default_slot_dir())
+        );
     }
 
     /// `default_context` resolution is untouched by the cache wiring — still
