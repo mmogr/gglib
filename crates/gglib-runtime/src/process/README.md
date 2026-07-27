@@ -18,14 +18,20 @@ with integrated log streaming and event broadcasting for GUI use cases.
 
 # Strategies
 
-`ProcessStrategy` has two shapes:
+`ProcessStrategy` has one shape today:
 
-- **Concurrent** — several models at once, up to a limit (multi-model GUI use).
 - **SingleSwap** — one model at a time, holding a [`SwapState`]. Optionally
   *pinned*: `ProcessManager::new_pinned` serves exactly one model and returns
   `PinnedModelMismatch` for any other, rather than swapping. Pinning changes
   only which models are admitted — startup coordination, cache handling and
   launch options are identical either way.
+
+Every launch surface — the CLI, the proxy, both GUIs — shares one
+`SingleSwap` manager built by `build_service_graph`, which is what makes
+"only one llama-server runs at a time system-wide" an invariant. A
+`Concurrent` strategy existed here for the GUI's earlier direct-spawn path;
+epic #630 routed the GUI through the proxy's manager instead, so it was
+deleted along with the rest of that path.
 
 # Launch options
 
