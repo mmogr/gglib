@@ -209,7 +209,19 @@ pub enum Commands {
     },
 
     // ── Inference ────────────────────────────────────────────────────────
-    /// Serve a GGUF model with llama-server
+    /// Serve one pinned model on an OpenAI-compatible endpoint
+    ///
+    /// Runs the same proxy stack as `gglib proxy`, pinned to a single model:
+    /// requests naming any other model are refused rather than swapped. That
+    /// makes it the right choice for clients that cannot switch models via
+    /// `/v1/models` — VS Code Copilot's BYOK endpoint, for one.
+    ///
+    /// Being the proxy, it also brings the dashboard (`/v1/proxy/status` and
+    /// its SSE stream), KV cache reuse, prompt-cache auto-sizing, request
+    /// normalization and upstream health monitoring.
+    ///
+    /// `--port` is the endpoint clients connect to; `--llama-port` is the
+    /// upstream llama-server behind it.
     #[command(display_order = 10)]
     Serve {
         /// ID of the model to serve

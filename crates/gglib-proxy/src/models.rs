@@ -449,6 +449,20 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "invalid_request_error",
                 "model_file_not_found",
             ),
+            // Named separately from `model_not_found` so a client can tell
+            // "no such model anywhere" from "this endpoint only serves one
+            // model, and it isn't that one" — the latter is actionable by
+            // changing the request, not the catalog.
+            ModelRuntimeError::PinnedModelMismatch {
+                expected,
+                requested,
+            } => Self::with_code(
+                format!(
+                    "This endpoint is pinned to model '{expected}' and cannot serve '{requested}'"
+                ),
+                "invalid_request_error",
+                "pinned_model_mismatch",
+            ),
             ModelRuntimeError::Internal(msg) => Self::new(msg, "server_error"),
         }
     }

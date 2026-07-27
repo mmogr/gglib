@@ -1,25 +1,33 @@
 //! Serve command handler.
 //!
-//! Handles serving a GGUF model with llama-server.
+//! `gglib serve <model>` runs the unified proxy stack pinned to a single
+//! model. It is not a separate way to launch llama-server — it is
+//! [`start_proxy_standalone`](gglib_runtime::proxy::start_proxy_standalone)
+//! with [`StandaloneProxyParams::pinned`] set, which is what gives it the
+//! dashboard, KV cache lifecycle, SSE progress, request normalization and
+//! upstream health monitoring that the old direct-spawn path lacked entirely.
+//!
+//! Pinning exists for clients that cannot switch models via `/v1/models` —
+//! VS Code Copilot's BYOK endpoint being the motivating case. Requests naming
+//! any other model are refused rather than silently swapped.
 
 use anyhow::Result;
-use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
-use gglib_runtime::llama::{
-    LlamaCommandBuilder, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
+use gglib_runtime::llama::{ensure_llama_initialized, resolve_llama_server, resolve_mtp_args};
+use gglib_runtime::proxy::{
+    PinnedModel, ProxyCacheOptions, StandaloneProxyParams, start_proxy_standalone,
 };
+use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 
-use super::shared::{
-    log_command_execution, log_inference_info, log_mlock_info, resolve_inference_config,
-};
+use super::shared::{log_inference_info, log_mlock_info, resolve_inference_config};
 
 /// Execute the serve command.
 ///
-/// Starts llama-server with the specified model.
+/// Starts the proxy pinned to the requested model and blocks until Ctrl-C.
 pub async fn execute(
     ctx: &CliContext,
     id: u32,
@@ -32,121 +40,228 @@ pub async fn execute(
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
 
-    // Resolve and validate llama-server binary path
-    let llama_path = resolve_llama_server().map_err(|e| {
+    let llama_server_path = resolve_llama_server().map_err(|e| {
         anyhow::anyhow!(
             "{}\n\nTo install llama.cpp, run:\n  gglib config llama install",
             e
         )
     })?;
 
-    // Look up the model using CliContext
     let model = ctx
         .app
         .models()
-        .get_by_id(id as i64)
+        .get_by_id(i64::from(id))
         .await?
         .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", id))?;
 
-    // Log model info
+    let settings = ctx.app.settings().get().await?;
+
+    // The raw `--ctx-size` flag is shape-validated at parse time, before the
+    // model is known; resolving it here against the model's GGUF context
+    // length is what makes `--ctx-size max` work.
+    let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
+
+    let inference_config =
+        resolve_inference_config(ctx, sampling.into_inference_config(), &model).await?;
+
+    let mtp_args = resolve_mtp_args(mtp.mtp_draft_n_max, mtp.mtp_draft_p_min, &model.tags);
+
+    // Everything the CLI knows, expressed as the three tiers. The cascade and
+    // the translation into llama-server flags both happen downstream, so this
+    // handler never assembles a command line of its own.
+    let unified = UnifiedServerConfig {
+        model_id: model.id,
+        model_name: model.name.clone(),
+        model_path: model.file_path.clone(),
+        model_tags: model.tags.clone(),
+        explicit: ServerConfigOptions {
+            context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
+            model_server_ctx: model
+                .server_defaults
+                .as_ref()
+                .and_then(|s| s.context_length),
+            // `false` is the flag's absence, not a request to disable mlock —
+            // leaving it None lets a future global default apply.
+            mlock: context.mlock.then_some(true),
+            jinja: options.jinja.then_some(true),
+            inference_params: Some(inference_config.clone()),
+            mtp_draft_n_max: mtp_args.enabled.then_some(mtp_args.draft_n_max),
+            mtp_draft_p_min: mtp_args.enabled.then_some(mtp_args.draft_p_min),
+            ..Default::default()
+        },
+        globals: GlobalDefaults {
+            proxy_port: options.port,
+            llama_base_port: options.llama_port,
+            default_ctx: settings.default_context_size,
+            ..Default::default()
+        },
+        pinned: true,
+    };
+
+    let launch_overrides = unified.resolved_options();
+    let effective_ctx = resolve_context_size(&launch_overrides);
+
     style::print_info_banner("Info", "\u{2139}\u{fe0f}");
     eprintln!("  Using model: {} (ID: {})", model.name, model.id);
     eprintln!("  File: {}", model.file_path.display());
-
-    // Handle context size.
-    // The raw flag is parsed (shape-validated) independently of the model,
-    // then resolved against the model's GGUF context length now that it's
-    // available — this is what makes `--ctx-size max` work.
-    let settings = ctx.app.settings().get().await?;
-    let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
-    let effective_ctx = resolve_context_size(&ServerConfigOptions {
-        context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
-        model_server_ctx: model
-            .server_defaults
-            .as_ref()
-            .and_then(|s| s.context_length),
-        global_default_ctx: settings.default_context_size,
-        ..Default::default()
-    });
     eprintln!("  Context size: {} (resolved)", effective_ctx);
     log_mlock_info(context.mlock);
-
-    // Resolve inference parameters using 3-level hierarchy
-    let inference_config =
-        resolve_inference_config(ctx, sampling.into_inference_config(), &model).await?;
     log_inference_info(&inference_config);
-
-    // Handle Jinja flag
     if options.jinja {
         eprintln!("  Jinja templates: enabled");
     }
-
-    // Resolve MTP speculative decoding
-    let mtp = resolve_mtp_args(mtp.mtp_draft_n_max, mtp.mtp_draft_p_min, &model.tags);
-    if mtp.enabled {
+    if mtp_args.enabled {
         eprintln!(
             "  MTP speculative decoding: enabled (n-max={}, p-min={:.2}, source={:?})",
-            mtp.draft_n_max, mtp.draft_p_min, mtp.source
+            mtp_args.draft_n_max, mtp_args.draft_p_min, mtp_args.source
+        );
+    }
+    style::print_banner_close();
+
+    if verbose {
+        tracing::debug!(
+            model = %model.name,
+            proxy_port = options.port,
+            llama_port = options.llama_port,
+            "starting pinned proxy"
         );
     }
 
-    eprintln!(
-        "  Server will be available on http://localhost:{}",
-        options.port
-    );
-    style::print_banner_close();
+    let proxy_config = unified.to_proxy_config();
 
-    // Build llama-server command
-    let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
-        .context_size(effective_ctx)
-        .mlock(context.mlock)
-        .inference_config(inference_config)
-        .arg_with_value("--port", options.port.to_string());
-
-    if options.jinja {
-        builder = builder.flag("--jinja");
-    }
-
-    if mtp.enabled {
-        builder = builder
-            .arg_with_value("--spec-type", "draft-mtp".to_string())
-            .arg_with_value("--spec-draft-n-max", mtp.draft_n_max.to_string())
-            .arg_with_value("--spec-draft-p-min", mtp.draft_p_min.to_string());
-    }
-
-    // Suppress llama-server's own INFO-level startup chatter unless --verbose.
-    // -lv 1 = errors only; -lv 3 = INFO (llama-server default).
-    let log_verbosity = if verbose { "3" } else { "1" };
-    builder = builder.arg_with_value("-lv", log_verbosity.to_string());
-
-    let mut cmd = builder.build();
-
-    // Set up stdio to inherit from parent
-    cmd.stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
-
-    log_command_execution(&cmd);
-    eprintln!("  Starting server... (Press Ctrl+C to stop)");
-
-    // Execute llama-server
-    let status = cmd.status()?;
-
-    if status.success() {
-        eprintln!("  llama-server exited successfully");
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!(
-            "llama-server exited with code: {:?}",
-            status.code()
-        ))
-    }
+    start_proxy_standalone(StandaloneProxyParams {
+        host: proxy_config.host,
+        port: proxy_config.port,
+        llama_base_port: unified.globals.llama_base_port,
+        llama_server_path,
+        model_repo: ctx.model_repo.clone(),
+        mcp: ctx.mcp.clone(),
+        settings_repo: ctx.app.settings().repo(),
+        default_context: proxy_config.default_context,
+        // Sampling is carried on the pinned model's launch options rather than
+        // as a proxy-wide override, so it lands on the llama-server command
+        // line exactly as every other launch surface applies it.
+        inference_override: None,
+        cache: ProxyCacheOptions {
+            enabled: proxy_config.cache_enabled,
+            slot_dir: proxy_config.slot_dir,
+            ..Default::default()
+        },
+        pinned: Some(PinnedModel {
+            id: model.id,
+            name: model.name.clone(),
+            launch_overrides,
+        }),
+    })
+    .await
 }
 
 #[cfg(test)]
 mod tests {
+    use gglib_core::server_config::{
+        CtxSizeArg, ServerConfigOptions, parse_ctx_size_flag, resolve_context_size,
+    };
+    use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
+    use std::path::PathBuf;
+
+    /// Mirrors how `execute` assembles its config, minus the I/O.
+    fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedServerConfig {
+        UnifiedServerConfig {
+            model_id: 1,
+            model_name: "qwen2.5".to_string(),
+            model_path: PathBuf::from("/models/qwen2.5.gguf"),
+            model_tags: Vec::new(),
+            explicit,
+            globals,
+            pinned: true,
+        }
+    }
+
+    /// `--ctx-size max` resolves against the model's GGUF context length,
+    /// which is only known after the model is fetched — hence the deferred
+    /// parse the handler performs.
     #[test]
-    fn test_serve_handler_exists() {
-        // Placeholder test to ensure module compiles
+    fn ctx_size_max_resolves_against_model_metadata() {
+        let arg = parse_ctx_size_flag(Some("max")).unwrap();
+        assert_eq!(arg, Some(CtxSizeArg::Max));
+
+        let cfg = unified(
+            ServerConfigOptions {
+                context_size: arg.and_then(|a| a.resolve(Some(131_072))),
+                ..Default::default()
+            },
+            GlobalDefaults::default(),
+        );
+
+        assert_eq!(resolve_context_size(&cfg.resolved_options()), 131_072);
+    }
+
+    /// An omitted `--ctx-size` must fall through the cascade rather than
+    /// pinning the context to a hardcoded value.
+    #[test]
+    fn omitted_ctx_size_falls_through_to_the_global_default() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                default_ctx: Some(8192),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(resolve_context_size(&cfg.resolved_options()), 8192);
+    }
+
+    /// An absent `--mlock` must stay `None`, not `Some(false)`: the flag's
+    /// absence is "no opinion", which lets lower tiers still apply.
+    #[test]
+    fn absent_mlock_flag_expresses_no_opinion() {
+        let cfg = unified(
+            ServerConfigOptions {
+                mlock: false.then_some(true),
+                ..Default::default()
+            },
+            GlobalDefaults::default(),
+        );
+
+        assert_eq!(cfg.resolved_options().mlock, None);
+    }
+
+    #[test]
+    fn mlock_flag_reaches_the_resolved_options() {
+        let cfg = unified(
+            ServerConfigOptions {
+                mlock: true.then_some(true),
+                ..Default::default()
+            },
+            GlobalDefaults::default(),
+        );
+
+        assert_eq!(cfg.resolved_options().mlock, Some(true));
+    }
+
+    /// `--port` is the proxy's listener and `--llama-port` the upstream. They
+    /// must stay distinct or the proxy would try to bind the port its own
+    /// llama-server is on.
+    #[test]
+    fn proxy_and_llama_ports_are_carried_separately() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                proxy_port: 8080,
+                llama_base_port: 5500,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(cfg.to_proxy_config().port, 8080);
+        assert_eq!(cfg.globals.llama_base_port, 5500);
+    }
+
+    /// Serve binds loopback by default — the security gap that motivated
+    /// routing this command through the proxy stack in the first place.
+    #[test]
+    fn serve_binds_loopback_by_default() {
+        let cfg = unified(ServerConfigOptions::default(), GlobalDefaults::default());
+        assert_eq!(cfg.to_proxy_config().host, "127.0.0.1");
     }
 }

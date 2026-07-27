@@ -26,6 +26,23 @@
 //! | Jinja templates | `opts.jinja = Some(…)` | `"agent"` tag → enabled |
 //! | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
 //! | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → enabled |
+//!
+//! ## Two layers, one translator
+//!
+//! Callers reach this module through one of two entry points, and it matters
+//! which:
+//!
+//! | Function | Answers | Use when |
+//! |----------|---------|----------|
+//! | [`resolve_unified_config`] | "which tier wins, *then* which flags?" | the caller holds a [`UnifiedServerConfig`] — CLI, GUI, proxy |
+//! | [`build_server_config`] | "which flags?" | the caller has already flattened its options |
+//!
+//! [`resolve_unified_config`] is a *cascade* layer: it resolves tier
+//! precedence and then hands the flattened result straight to
+//! [`build_server_config`], which remains the sole translator from options to
+//! llama-server arguments. It deliberately does not re-derive jinja, reasoning
+//! format, MTP or KV cache types — duplicating those resolvers is precisely
+//! the drift this module exists to prevent.
 
 use std::path::PathBuf;
 
@@ -36,6 +53,7 @@ use tracing::debug;
 use crate::llama::args::{
     resolve_jinja_flag, resolve_kv_cache_types, resolve_mtp_args, resolve_reasoning_format,
 };
+use crate::unified_server_config::UnifiedServerConfig;
 
 // =============================================================================
 // Builder
@@ -164,4 +182,239 @@ pub fn build_server_config(
     }
 
     config
+}
+
+// =============================================================================
+// Cascade entry point
+// =============================================================================
+
+/// Resolve a [`UnifiedServerConfig`] into a fully-resolved [`ServerConfig`].
+///
+/// This is the entry point every launch surface should reach for. It applies
+/// the strict 3-tier cascade (explicit overrides > model defaults > global
+/// defaults) and then delegates to [`build_server_config`] for the actual
+/// translation into llama-server arguments.
+///
+/// The delegation is the point: capability detection stays defined exactly
+/// once, so a resolver added to [`build_server_config`] reaches this path
+/// automatically. See the [module docs](self) for how the two layers divide.
+#[must_use]
+pub fn resolve_unified_config(input: &UnifiedServerConfig) -> ServerConfig {
+    build_server_config(
+        input.model_id,
+        input.model_name.clone(),
+        input.model_path.clone(),
+        input.globals.llama_base_port,
+        &input.model_tags,
+        input.resolved_options(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::unified_server_config::GlobalDefaults;
+    use gglib_core::domain::InferenceConfig;
+
+    const BASE_PORT: u16 = 9000;
+
+    fn model_path() -> PathBuf {
+        PathBuf::from("/models/test.gguf")
+    }
+
+    /// Build both ways from the same inputs and compare.
+    ///
+    /// `ServerConfig` has no `PartialEq`, so the comparison goes through
+    /// `Debug` — every field is represented there, so a dropped or altered
+    /// field still shows up.
+    fn assert_parity(tags: &[String], opts: ServerConfigOptions, globals: GlobalDefaults) {
+        let direct = build_server_config(
+            7,
+            "parity-model".to_string(),
+            model_path(),
+            BASE_PORT,
+            tags,
+            opts.clone(),
+        );
+
+        let unified = resolve_unified_config(&UnifiedServerConfig {
+            model_id: 7,
+            model_name: "parity-model".to_string(),
+            model_path: model_path(),
+            model_tags: tags.to_vec(),
+            explicit: opts,
+            globals,
+            pinned: false,
+        });
+
+        assert_eq!(format!("{direct:?}"), format!("{unified:?}"));
+    }
+
+    /// Tier 3 contributes nothing, so the cascade must be a pass-through and
+    /// both entry points must agree exactly.
+    #[test]
+    fn parity_with_default_options() {
+        assert_parity(
+            &[],
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                llama_base_port: BASE_PORT,
+                ..Default::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parity_with_fully_specified_options() {
+        let opts = ServerConfigOptions {
+            context_size: Some(32_768),
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(8192),
+            port: Some(5501),
+            jinja: Some(true),
+            reasoning_format: Some("deepseek".to_string()),
+            mtp_draft_n_max: Some(4),
+            mtp_draft_p_min: Some(0.8),
+            cache_ram_mb: Some(4096),
+            cache_reuse: Some(256),
+            inference_params: Some(InferenceConfig {
+                temperature: Some(0.7),
+                ..Default::default()
+            }),
+            mlock: Some(true),
+            ..Default::default()
+        };
+
+        assert_parity(
+            &["mtp".to_string(), "agent".to_string()],
+            opts,
+            GlobalDefaults {
+                llama_base_port: BASE_PORT,
+                ..Default::default()
+            },
+        );
+    }
+
+    /// Tag-driven auto-detection has to survive the extra layer — this is the
+    /// capability drift the epic exists to prevent.
+    #[test]
+    fn parity_with_tag_driven_detection() {
+        assert_parity(
+            &[
+                "mtp".to_string(),
+                "agent".to_string(),
+                "reasoning".to_string(),
+            ],
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                llama_base_port: BASE_PORT,
+                ..Default::default()
+            },
+        );
+    }
+
+    /// With caching on, the slot directory reaches the built config the same
+    /// way whether it arrived as an explicit option or a global default.
+    #[test]
+    fn parity_with_cache_enabled() {
+        let slot_dir = PathBuf::from("/slots/parity");
+
+        assert_parity(
+            &[],
+            ServerConfigOptions {
+                slot_save_path: Some(slot_dir.clone()),
+                ..Default::default()
+            },
+            GlobalDefaults {
+                llama_base_port: BASE_PORT,
+                cache_enabled: true,
+                slot_dir: Some(slot_dir),
+                ..Default::default()
+            },
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // The cascade is actually applied (not just passed through)
+    // ---------------------------------------------------------------
+
+    fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> ServerConfig {
+        resolve_unified_config(&UnifiedServerConfig {
+            model_id: 1,
+            model_name: "m".to_string(),
+            model_path: model_path(),
+            model_tags: Vec::new(),
+            explicit,
+            globals,
+            pinned: false,
+        })
+    }
+
+    #[test]
+    fn cascade_applies_global_context_when_nothing_explicit() {
+        let config = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                default_ctx: Some(8192),
+                ..Default::default()
+            },
+        );
+        assert_eq!(config.context_size, Some(8192));
+    }
+
+    #[test]
+    fn cascade_lets_explicit_context_beat_global() {
+        let config = unified(
+            ServerConfigOptions {
+                context_size: Some(32_768),
+                ..Default::default()
+            },
+            GlobalDefaults {
+                default_ctx: Some(8192),
+                ..Default::default()
+            },
+        );
+        assert_eq!(config.context_size, Some(32_768));
+    }
+
+    #[test]
+    fn cascade_carries_the_llama_base_port_from_globals() {
+        let config = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                llama_base_port: 5500,
+                ..Default::default()
+            },
+        );
+        assert_eq!(config.base_port, 5500);
+    }
+
+    /// mlock reaching the built config is what #631 plumbed; this asserts the
+    /// new cascade layer did not sever it.
+    #[test]
+    fn cascade_carries_mlock_through_to_the_built_config() {
+        let config = unified(
+            ServerConfigOptions {
+                mlock: Some(true),
+                ..Default::default()
+            },
+            GlobalDefaults::default(),
+        );
+        assert!(config.mlock);
+    }
+
+    #[test]
+    fn cascade_suppresses_slot_path_when_cache_disabled() {
+        let config = unified(
+            ServerConfigOptions {
+                slot_save_path: Some(PathBuf::from("/slots/ignored")),
+                ..Default::default()
+            },
+            GlobalDefaults {
+                cache_enabled: false,
+                ..Default::default()
+            },
+        );
+        assert_eq!(config.slot_save_path, None);
+    }
 }

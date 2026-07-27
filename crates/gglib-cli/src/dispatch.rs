@@ -12,6 +12,7 @@
 use anyhow::Result;
 use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_runtime::proxy::{ProxyCacheOptions, StandaloneProxyParams};
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -326,24 +327,29 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             } else {
                 None
             };
-            gglib_runtime::proxy::start_proxy_standalone(
+            gglib_runtime::proxy::start_proxy_standalone(StandaloneProxyParams {
                 host,
                 port,
-                llama_port,
-                ctx.llama_server_path.clone(),
-                ctx.model_repo.clone(),
-                effective_context,
-                ctx.mcp.clone(),
-                ctx.app.settings().repo(),
+                llama_base_port: llama_port,
+                llama_server_path: ctx.llama_server_path.clone(),
+                model_repo: ctx.model_repo.clone(),
+                mcp: ctx.mcp.clone(),
+                settings_repo: ctx.app.settings().repo(),
+                default_context: effective_context,
                 inference_override,
-                cache,
-                slot_dir,
-                cache_ram_mb,
-                cache_reuse,
-                cache_disk_gb,
-                cache_type_k,
-                cache_type_v,
-            )
+                cache: ProxyCacheOptions {
+                    enabled: cache,
+                    slot_dir,
+                    ram_mb: cache_ram_mb,
+                    reuse: cache_reuse,
+                    disk_gb: cache_disk_gb,
+                    type_k: cache_type_k,
+                    type_v: cache_type_v,
+                },
+                // `gglib proxy` serves the whole catalog and swaps on demand;
+                // `gglib serve` is the pinned mode of this same entry point.
+                pinned: None,
+            })
             .await?;
         }
 

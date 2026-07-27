@@ -14,7 +14,6 @@ mod ensure;
 pub mod error;
 #[cfg(feature = "cli")]
 mod install;
-pub mod invocation;
 pub mod progress;
 pub mod prompt;
 mod server_availability;
@@ -62,9 +61,6 @@ pub use install::run_llama_source_build;
 pub use uninstall::handle_uninstall;
 #[cfg(feature = "cli")]
 pub use update::{handle_check_updates, handle_update};
-
-// Command building
-pub use invocation::{LlamaCommandBuilder, log_model_info};
 
 // Args resolution
 pub use args::{

@@ -8,7 +8,31 @@ use async_trait::async_trait;
 use std::fmt;
 use thiserror::Error;
 
+use crate::cache_config::CacheRamSetting;
 use crate::domain::CacheRamHealth;
+use crate::ports::ProcessHandle;
+use crate::server_config::ServerConfigOptions;
+
+/// Per-call launch overrides layered on a runtime's standing configuration.
+///
+/// A runtime is normally built once with a standing template — the proxy's
+/// cache settings, say — and then shared, so that only one llama-server runs
+/// at a time. This is how an individual caller contributes launch options on
+/// top of that template without needing a manager of its own.
+///
+/// `Default` means "no opinion": every field falls through to the template.
+#[derive(Debug, Clone, Default)]
+pub struct LaunchOverrides {
+    /// Explicit options merged over the runtime's template, `Some` fields
+    /// winning — see [`ServerConfigOptions::overlay`].
+    pub options: ServerConfigOptions,
+    /// How to size llama-server's host-RAM prompt cache for this launch.
+    ///
+    /// Separate from [`Self::options`] because it is resolved at spawn against
+    /// live system RAM and the model's KV footprint, not carried as a flag.
+    /// `None` defers to the runtime's own setting.
+    pub cache_ram: Option<CacheRamSetting>,
+}
 
 /// Target information for a running model instance.
 ///
@@ -121,6 +145,21 @@ pub enum ModelRuntimeError {
     #[error("Model file not found: {0}")]
     ModelFileNotFound(String),
 
+    /// A model other than the pinned one was requested.
+    ///
+    /// Only reachable in pinned mode (`gglib serve <model>`), which exists to
+    /// give single-model clients — VS Code Copilot's BYOK endpoint, for one —
+    /// an endpoint that never switches models underneath them. Swapping to the
+    /// requested model would defeat that guarantee, so the request is refused
+    /// rather than served.
+    #[error("Server is pinned to model '{expected}'; refusing request for '{requested}'")]
+    PinnedModelMismatch {
+        /// The model this server was pinned to at startup.
+        expected: String,
+        /// The model the caller asked for.
+        requested: String,
+    },
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -139,7 +178,11 @@ impl ModelRuntimeError {
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
             Self::ModelLoading | Self::ContentionTimeout(_) => 503,
-            Self::ModelNotFound(_) | Self::ModelFileNotFound(_) => 404,
+            // A pinned mismatch is 404, not 403: from the client's point of
+            // view the model it asked for does not exist on this endpoint.
+            Self::ModelNotFound(_)
+            | Self::ModelFileNotFound(_)
+            | Self::PinnedModelMismatch { .. } => 404,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -180,13 +223,168 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError>;
 
+    /// Same as [`Self::ensure_model_running`], but with per-call overrides
+    /// layered on top of whatever standing configuration the implementation
+    /// was built with.
+    ///
+    /// Lets one shared runtime — and therefore one llama-server at a time —
+    /// serve callers with different launch needs, instead of each caller
+    /// constructing its own manager and losing that guarantee. A GUI start
+    /// request carrying `--mlock` and a benchmark run that must never gain a
+    /// prompt cache can both go through the same instance.
+    ///
+    /// Defaults to ignoring the overrides and delegating, so implementations
+    /// with no per-call configuration to apply need not override it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the model cannot be started.
+    async fn ensure_model_running_with(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: u64,
+        overrides: LaunchOverrides,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        let _ = overrides;
+        self.ensure_model_running(model_name, num_ctx, default_ctx)
+            .await
+    }
+
     /// Get information about the currently running model, if any.
     ///
     /// Returns `None` if no model is currently running.
     async fn current_model(&self) -> Option<RunningTarget>;
 
+    /// Every llama-server process this runtime currently owns.
+    ///
+    /// Sibling of [`Self::current_model`] for callers that need process-level
+    /// detail — pid and start time — rather than routing information; the GUI
+    /// server list is the motivating case.
+    ///
+    /// Defaults to empty for runtimes that do not track individual processes
+    /// (test doubles, remote backends). Returning nothing is always safe here:
+    /// callers treat it as "no servers to show".
+    async fn list_running(&self) -> Vec<ProcessHandle> {
+        Vec::new()
+    }
+
     /// Stop the currently running model.
     ///
     /// This is primarily for cleanup/shutdown scenarios.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Implements only the three required methods, so the defaulted ones are
+    /// exercised exactly as an untouched test double would get them.
+    #[derive(Debug)]
+    struct MinimalRuntime;
+
+    #[async_trait]
+    impl ModelRuntimePort for MinimalRuntime {
+        async fn ensure_model_running(
+            &self,
+            model_name: &str,
+            num_ctx: Option<u64>,
+            default_ctx: u64,
+        ) -> Result<RunningTarget, ModelRuntimeError> {
+            Ok(RunningTarget::local(
+                5500,
+                1,
+                model_name.to_string(),
+                num_ctx.unwrap_or(default_ctx),
+                false,
+            ))
+        }
+
+        async fn current_model(&self) -> Option<RunningTarget> {
+            None
+        }
+
+        async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+            Ok(())
+        }
+    }
+
+    /// The default must delegate rather than fail, which is what lets existing
+    /// implementations adopt the trait change without being edited.
+    #[tokio::test]
+    async fn ensure_model_running_with_defaults_to_delegating() {
+        let target = MinimalRuntime
+            .ensure_model_running_with("m", Some(8192), 4096, LaunchOverrides::default())
+            .await
+            .expect("default implementation should delegate");
+
+        assert_eq!(target.model_name, "m");
+        assert_eq!(target.effective_ctx, 8192);
+    }
+
+    /// Overrides are dropped by the default, not silently half-applied — an
+    /// implementation that cares must opt in by overriding the method.
+    #[tokio::test]
+    async fn default_ensure_model_running_with_ignores_overrides() {
+        let overrides = LaunchOverrides {
+            options: ServerConfigOptions {
+                context_size: Some(999),
+                ..Default::default()
+            },
+            cache_ram: Some(CacheRamSetting::ExplicitMb(0)),
+        };
+
+        let target = MinimalRuntime
+            .ensure_model_running_with("m", None, 4096, overrides)
+            .await
+            .unwrap();
+
+        assert_eq!(target.effective_ctx, 4096);
+    }
+
+    #[tokio::test]
+    async fn list_running_defaults_to_empty() {
+        assert!(MinimalRuntime.list_running().await.is_empty());
+    }
+
+    /// "No opinion" has to be the default, or merging one in would silently
+    /// override the runtime's own template.
+    #[test]
+    fn launch_overrides_default_is_empty() {
+        let overrides = LaunchOverrides::default();
+        assert!(overrides.cache_ram.is_none());
+        assert!(overrides.options.context_size.is_none());
+        assert!(overrides.options.mlock.is_none());
+    }
+
+    fn pinned_mismatch() -> ModelRuntimeError {
+        ModelRuntimeError::PinnedModelMismatch {
+            expected: "qwen2.5".to_string(),
+            requested: "llama-3-8b".to_string(),
+        }
+    }
+
+    /// 404 rather than 403: from the caller's point of view the model it asked
+    /// for does not exist on this endpoint.
+    #[test]
+    fn pinned_mismatch_is_not_found() {
+        assert_eq!(pinned_mismatch().suggested_status_code(), 404);
+    }
+
+    /// Retrying the identical request can never succeed — the pin is fixed for
+    /// the process lifetime — so clients must not back off and retry.
+    #[test]
+    fn pinned_mismatch_is_not_retryable() {
+        assert!(!pinned_mismatch().is_retryable());
+    }
+
+    /// Both model names belong in the message; without them the caller cannot
+    /// tell what this endpoint actually serves.
+    #[test]
+    fn pinned_mismatch_names_both_models() {
+        let rendered = pinned_mismatch().to_string();
+        assert!(rendered.contains("qwen2.5"), "{rendered}");
+        assert!(rendered.contains("llama-3-8b"), "{rendered}");
+    }
 }

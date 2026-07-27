@@ -5,88 +5,41 @@
 //! - **SingleSwap**: Auto-swapping single model with smart context handling (Proxy use case)
 
 use super::core::GuiProcessCore;
-use super::health::{check_http_health, wait_for_http_health};
+use super::health::wait_for_http_health;
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
-use gglib_core::cache_config::KvCacheType;
-use gglib_core::domain::{CacheRamHealth, classify_cache_ram};
-use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
+    LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
+    ServerConfig,
 };
-use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
-use std::path::PathBuf;
+use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::process::startup_guard::{
     STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, should_bail_on_insufficient_budget,
     wait_for_startup,
 };
-use crate::server_config::{ServerConfigOptions, build_server_config};
-
-/// Currently running model state for SingleSwap strategy.
-#[derive(Debug, Clone)]
-pub struct CurrentModelState {
-    /// Database ID of the running model.
-    pub model_id: u32,
-    /// Model name.
-    pub model_name: String,
-    /// Context size being used.
-    pub context_size: u64,
-    /// Port the server is listening on.
-    pub port: u16,
-    /// Path to the model file.
-    pub model_path: PathBuf,
-    /// Whether disk slot restore can resume this model (see
-    /// [`gglib_core::ports::RunningTarget::slot_restore_supported`]). Derived
-    /// from the launch spec at spawn and cached here so the already-running
-    /// fast path can answer without a second catalog lookup.
-    pub slot_restore_supported: bool,
-    /// Health of the `--cache-ram` budget this instance launched with (see
-    /// [`gglib_core::ports::RunningTarget::cache_ram_health`]). Cached for the
-    /// same reason: the budget arithmetic only happens at spawn, so a later
-    /// `current_model()` call has no way to recompute it.
-    pub cache_ram_health: CacheRamHealth,
-}
+use crate::process::swap_state::SwapState;
 
 /// Strategy for managing llama-server processes.
 pub enum ProcessStrategy {
     /// Allow multiple concurrent models up to max_concurrent (GUI).
     Concurrent { max_concurrent: usize },
-    /// Only allow one model at a time, auto-swap when different model requested (Proxy).
-    /// Concurrent requests during startup wait via watch channel instead of failing immediately.
-    SingleSwap {
-        /// Model catalog for resolving model names and getting launch specs.
-        catalog: Arc<dyn ModelCatalogPort>,
-        /// Currently running model state (Arc for 'static spawn compatibility).
-        current: Arc<RwLock<Option<CurrentModelState>>>,
-        /// Loading slot — `Some(StartupState)` means a driver is active, `None` means idle.
-        loading: Arc<std::sync::RwLock<Option<crate::process::startup_guard::StartupState>>>,
-        /// KV cache slot-save directory (`--slot-save-path`), or `None` if the
-        /// disk slot-persistence feature is disabled. Forwarded verbatim into
-        /// every `build_server_config` call made by this manager's driver.
-        slot_save_path: Option<PathBuf>,
-        /// How to size llama-server's own host-RAM prompt cache
-        /// (`--cache-ram`). Independent of `slot_save_path`. `Auto` derives a
-        /// budget per launch from system RAM, the model's weights, and its KV
-        /// footprint; `LlamaDefault` emits no flag (what benchmark launches
-        /// want, so a prompt cache never perturbs their measurements).
-        cache_ram: CacheRamSetting,
-        /// Minimum chunk size in tokens for KV-shift cache reuse
-        /// (`--cache-reuse`). Forwarded verbatim into every
-        /// `build_server_config` call.
-        cache_reuse: Option<u32>,
-        /// Explicit override for the K cache element type
-        /// (`--cache-type-k`). `None` resolves to the `q8_0` default (see
-        /// `resolve_kv_cache_types`).
-        cache_type_k: Option<KvCacheType>,
-        /// Explicit override for the V cache element type
-        /// (`--cache-type-v`). Same resolution as `cache_type_k`.
-        cache_type_v: Option<KvCacheType>,
-    },
+    /// Only allow one model at a time, auto-swap when a different model is
+    /// requested (proxy, and `gglib serve` in pinned mode).
+    ///
+    /// Concurrent requests during startup wait via watch channel instead of
+    /// failing immediately. All state and the launch sequence itself live on
+    /// [`SwapState`].
+    ///
+    /// Boxed because `SwapState` carries a full `ServerConfigOptions`
+    /// template, which would otherwise inflate every `ProcessStrategy` — and
+    /// so every `ProcessManager` — to its size, including in the `Concurrent`
+    /// case that has no use for it.
+    SingleSwap(Box<SwapState>),
 }
 
 /// Unified process manager for llama-server instances.
@@ -132,20 +85,17 @@ impl ProcessManager {
     /// * `llama_server_path` — Path to the llama-server binary to execute.
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
-    /// * `slot_save_path` — KV cache slot-save directory, or `None` to
-    ///   disable disk slot persistence entirely (no `--slot-save-path` flag
-    ///   emitted).
+    /// * `launch_overrides` — Standing launch options every spawn starts from
+    ///   (slot-save path, cache reuse, KV cache types, and anything else
+    ///   [`ServerConfigOptions`] carries). Per-call
+    ///   [`LaunchOverrides`] are layered on top; see
+    ///   [`SwapState`](crate::process::swap_state::SwapState) for the
+    ///   composition order.
     /// * `cache_ram` — how to size llama-server's own host-RAM prompt cache
-    ///   (`--cache-ram`), independent of `slot_save_path`.
+    ///   (`--cache-ram`). Not part of `launch_overrides` because it is
+    ///   resolved at spawn rather than passed through.
     ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
     ///   benchmark launches, where a large prompt cache would perturb results.
-    /// * `cache_reuse` — Minimum chunk size in tokens for KV-shift cache
-    ///   reuse past the first prefix divergence (`--cache-reuse`). `None`
-    ///   disables it.
-    /// * `cache_type_k` / `cache_type_v` — Explicit overrides for the K/V
-    ///   cache element types (`--cache-type-k`/`--cache-type-v`). `None`
-    ///   resolves to the `q8_0` default per axis (see
-    ///   `crate::llama::args::resolve_kv_cache_types`).
     ///
     /// # When to use
     ///
@@ -153,30 +103,57 @@ impl ProcessManager {
     /// HTTP API layer). For multi-model workloads (e.g. the GUI dashboard),
     /// prefer [`ProcessManager::new_concurrent`] which allows multiple models
     /// to run simultaneously up to a configurable limit.
-    #[allow(clippy::too_many_arguments)]
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
-        slot_save_path: Option<PathBuf>,
+        launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
-        cache_reuse: Option<u32>,
-        cache_type_k: Option<KvCacheType>,
-        cache_type_v: Option<KvCacheType>,
     ) -> Self {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
             core: Arc::new(RwLock::new(core)),
-            strategy: ProcessStrategy::SingleSwap {
+            strategy: ProcessStrategy::SingleSwap(Box::new(SwapState::new(
                 catalog,
-                current: Arc::new(RwLock::new(None)),
-                loading: Arc::new(std::sync::RwLock::new(None)),
-                slot_save_path,
+                launch_overrides,
                 cache_ram,
-                cache_reuse,
-                cache_type_k,
-                cache_type_v,
-            },
+            ))),
+        }
+    }
+
+    /// Create a `ProcessManager` pinned to a single model (`gglib serve`).
+    ///
+    /// Behaves exactly like [`Self::new_single_swap`] for the pinned model —
+    /// same startup coordination, same cache handling, same launch options
+    /// template — but rejects every other model with
+    /// [`ModelRuntimeError::PinnedModelMismatch`] instead of swapping to it.
+    ///
+    /// That refusal is the feature. `gglib serve <model>` exists to give
+    /// single-model clients (VS Code Copilot's BYOK endpoint, for one) an
+    /// endpoint that cannot change model underneath them; silently honouring a
+    /// foreign request would defeat the guarantee they are relying on.
+    ///
+    /// # Arguments
+    ///
+    /// Identical to [`Self::new_single_swap`], plus `model_name` — the model
+    /// to pin to, matched exactly against each request's model name.
+    pub fn new_pinned(
+        model_name: impl Into<String>,
+        base_port: u16,
+        llama_server_path: impl Into<String>,
+        catalog: Arc<dyn ModelCatalogPort>,
+        launch_overrides: ServerConfigOptions,
+        cache_ram: CacheRamSetting,
+    ) -> Self {
+        let core = GuiProcessCore::new(base_port, llama_server_path);
+        Self {
+            core: Arc::new(RwLock::new(core)),
+            strategy: ProcessStrategy::SingleSwap(Box::new(SwapState::pinned_to(
+                model_name,
+                catalog,
+                launch_overrides,
+                cache_ram,
+            ))),
         }
     }
 
@@ -184,7 +161,7 @@ impl ProcessManager {
     pub async fn start_server(&self, config: ServerConfig) -> Result<u16> {
         let max_concurrent = match &self.strategy {
             ProcessStrategy::Concurrent { max_concurrent } => *max_concurrent,
-            ProcessStrategy::SingleSwap { .. } => {
+            ProcessStrategy::SingleSwap(_) => {
                 return Err(anyhow!(
                     "SingleSwap strategy should use ensure_model_running() instead of start_server()"
                 ));
@@ -247,18 +224,19 @@ impl ProcessManager {
         num_ctx: Option<u64>,
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        self.ensure_model_running_with(model_name, num_ctx, default_ctx, None)
+        self.ensure_model_running_with(model_name, num_ctx, default_ctx, LaunchOverrides::default())
             .await
     }
 
-    /// Same as [`Self::ensure_model_running`], but with an optional per-call
-    /// override for the host-RAM prompt cache setting.
+    /// Same as [`Self::ensure_model_running`], but with per-call launch
+    /// overrides layered on the manager's standing template.
     ///
     /// Lets a single shared `ProcessManager` serve callers with different
-    /// cache-RAM needs (e.g. a GUI's proxy — which should auto-size like the
-    /// CLI proxy — and its benchmark runner — which must never gain a
-    /// prompt cache) without constructing a second manager. `None` falls
-    /// back to the setting the manager was constructed with (see
+    /// launch needs — a GUI start request carrying `--mlock`, and a benchmark
+    /// runner that must never gain a prompt cache — without constructing a
+    /// second manager and losing the one-llama-server-at-a-time guarantee.
+    /// [`LaunchOverrides::default`] means "no opinion": every field falls
+    /// through to what the manager was constructed with (see
     /// [`Self::new_single_swap`]).
     ///
     /// # Errors
@@ -269,38 +247,10 @@ impl ProcessManager {
         model_name: &str,
         num_ctx: Option<u64>,
         default_ctx: u64,
-        cache_ram_override: Option<CacheRamSetting>,
+        overrides: LaunchOverrides,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        // 1. Extract refs from strategy
-        let (
-            catalog,
-            current_lock,
-            loading_slot,
-            slot_save_path,
-            cache_ram,
-            cache_reuse,
-            cache_type_k,
-            cache_type_v,
-        ) = match &self.strategy {
-            ProcessStrategy::SingleSwap {
-                catalog,
-                current,
-                loading,
-                slot_save_path,
-                cache_ram,
-                cache_reuse,
-                cache_type_k,
-                cache_type_v,
-            } => (
-                catalog,
-                current,
-                loading,
-                slot_save_path,
-                *cache_ram,
-                *cache_reuse,
-                *cache_type_k,
-                *cache_type_v,
-            ),
+        let state = match &self.strategy {
+            ProcessStrategy::SingleSwap(state) => state,
             ProcessStrategy::Concurrent { .. } => {
                 return Err(ModelRuntimeError::Internal(
                     "ensure_model_running() is only available for SingleSwap strategy".to_string(),
@@ -308,24 +258,28 @@ impl ProcessManager {
             }
         };
 
-        // 2. Retry loop with overall deadline (prevents unbounded waits through other models' swaps)
+        // Refuse foreign models before touching the startup guard, so a
+        // rejected request neither queues behind the pinned model nor
+        // displaces it.
+        state.check_pinned(model_name)?;
+
+        // Retry loop with an overall deadline, so a caller cannot wait
+        // unboundedly while other models swap in and out ahead of it.
         let deadline = tokio::time::Instant::now() + STARTUP_WAIT_TIMEOUT;
 
         loop {
-            let disposition = StartupDisposition::check(loading_slot, model_name.to_string());
-
-            match disposition {
+            match StartupDisposition::check(&state.loading, model_name.to_string()) {
                 StartupDisposition::Waiter {
                     rx,
                     target_model_name,
                 } => {
-                    // Check if this startup is for our model
                     if target_model_name == model_name {
-                        // Yes — wait for the result (offset by 5s so driver always broadcasts first)
+                        // Our model is already starting — wait for that result.
+                        // Offset by 5s so the driver always broadcasts first.
                         return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5))
                             .await;
                     }
-                    // No — another model is starting. Wait for it to finish, then retry.
+                    // A different model is starting. Wait for it to finish, then retry.
                     let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                     if should_bail_on_insufficient_budget(remaining) {
                         return Err(ModelRuntimeError::ContentionTimeout(
@@ -334,260 +288,21 @@ impl ProcessManager {
                         ));
                     }
                     let _ = wait_for_startup(rx, remaining).await;
-                    // Loop back and re-check the slot
                 }
                 StartupDisposition::Initiator { guard, self_rx } => {
-                    // 3. Clone everything needed for the 'static async block.
-                    let core = self.core.clone();
-                    let catalog_owned = catalog.clone();
-                    let current_owned = current_lock.clone(); // Arc clone — cheap
-                    let model_name_owned = model_name.to_string();
-                    let slot_save_path_owned = slot_save_path.clone();
-                    let cache_ram_owned = cache_ram_override.unwrap_or(cache_ram);
-                    let cache_reuse_owned = cache_reuse;
-                    let cache_type_k_owned = cache_type_k;
-                    let cache_type_v_owned = cache_type_v;
+                    drive(
+                        guard,
+                        STARTUP_WAIT_TIMEOUT,
+                        state.startup_future(
+                            Arc::clone(&self.core),
+                            model_name.to_string(),
+                            num_ctx,
+                            default_ctx,
+                            overrides,
+                        ),
+                    );
 
-                    // 4. Spawn the driver task (detached from this request's future)
-                    drive(guard, STARTUP_WAIT_TIMEOUT, async move {
-                        // --- Model resolution ---
-                        let launch_spec = catalog_owned
-                            .resolve_for_launch(&model_name_owned)
-                            .await
-                            .map_err(|e| match e {
-                                CatalogError::QueryFailed(msg) => ModelRuntimeError::Internal(msg),
-                                CatalogError::Internal(msg) => ModelRuntimeError::Internal(msg),
-                            })?
-                            .ok_or_else(|| {
-                                ModelRuntimeError::ModelNotFound(model_name_owned.clone())
-                            })?;
-
-                        let effective_ctx = num_ctx.unwrap_or(default_ctx);
-                        let model_path = &launch_spec.file_path;
-
-                        // Check model file exists
-                        if !tokio::fs::try_exists(model_path).await.unwrap_or(false) {
-                            return Err(ModelRuntimeError::ModelFileNotFound(
-                                model_path.display().to_string(),
-                            ));
-                        }
-
-                        // --- Cached instance check (fast path: already running + healthy) ---
-                        let cached = {
-                            let current_guard = current_owned.read().await;
-                            current_guard.as_ref().and_then(|current| {
-                                (current.model_id == launch_spec.id
-                                    && current.context_size == effective_ctx)
-                                    .then(|| {
-                                        (
-                                            current.port,
-                                            current.model_id,
-                                            current.model_name.clone(),
-                                            current.context_size,
-                                        )
-                                    })
-                            })
-                        };
-                        if let Some((port, model_id, cached_name, context_size)) = cached {
-                            if check_http_health(port).await {
-                                info!(
-                                    model_id = %model_id,
-                                    model_name = %cached_name,
-                                    port = %port,
-                                    context = %context_size,
-                                    "Model already running with correct context"
-                                );
-                                return Ok(RunningTarget::local(
-                                    port,
-                                    model_id,
-                                    cached_name,
-                                    context_size,
-                                    false, // cached healthy — not a fresh spawn
-                                )
-                                // Same model id as `launch_spec`, so its
-                                // metadata answers this without re-reading
-                                // the cached state.
-                                .with_slot_restore_supported(
-                                    crate::llama::args::resolve_slot_restore(
-                                        launch_spec.kv_memory_is_partial,
-                                    )
-                                    .enabled,
-                                ));
-                            }
-                            warn!(
-                                model_id = %model_id,
-                                port = %port,
-                                "cached model failed health check; recycling degraded instance"
-                            );
-                        }
-
-                        // --- Stop current model if running ---
-                        {
-                            let mut current_guard = current_owned.write().await;
-                            if let Some(current) = current_guard.take() {
-                                info!(
-                                    model_id = %current.model_id,
-                                    model_name = %current.model_name,
-                                    "Stopping current model for swap"
-                                );
-                                let mut core_w = core.write().await;
-                                if let Err(e) = core_w.kill(current.model_id).await {
-                                    warn!(error = %e, "Failed to stop current model cleanly, continuing");
-                                }
-                            }
-                        }
-
-                        // Clean up any dead processes
-                        {
-                            let mut core_w = core.write().await;
-                            core_w.cleanup_dead().await;
-                        }
-
-                        // --- Spawn new instance ---
-                        info!(
-                            model_id = %launch_spec.id,
-                            model_name = %launch_spec.name,
-                            context = %effective_ctx,
-                            "Starting model"
-                        );
-
-                        let mut opts = ServerConfigOptions {
-                            context_size: num_ctx,
-                            model_server_ctx: launch_spec
-                                .server_defaults
-                                .as_ref()
-                                .and_then(|sc| sc.context_length),
-                            global_default_ctx: Some(default_ctx),
-                            slot_save_path: slot_save_path_owned.clone(),
-                            cache_reuse: cache_reuse_owned,
-                            ..Default::default()
-                        };
-
-                        // Resolve K/V cache types once here (not left to
-                        // `build_server_config`'s own internal resolution) so
-                        // the RAM budget below reflects the *actual*
-                        // quantized footprint the launch will use. The
-                        // resolved values are baked into `opts` as if
-                        // explicit, so `build_server_config`'s own resolution
-                        // just passes them through unchanged.
-                        let kv_types = crate::llama::args::resolve_kv_cache_types(
-                            cache_type_k_owned,
-                            cache_type_v_owned,
-                        );
-                        if let Some(explanation) = kv_types.explain() {
-                            info!("{explanation}");
-                        }
-                        opts.cache_type_k = Some(kv_types.k);
-                        opts.cache_type_v = Some(kv_types.v);
-
-                        // Size the host-RAM prompt cache. Deliberately uses
-                        // `resolve_context_size` (the same 4-tier chain
-                        // `build_server_config` applies, including the
-                        // per-model tier) rather than `effective_ctx`, so the
-                        // KV estimate matches the context the server actually
-                        // launches with.
-                        let launch_ctx = resolve_context_size(&opts);
-                        let kv_bytes_per_token = launch_spec.kv_elems_per_token.map(|elems| {
-                            gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v)
-                        });
-                        let cache_ram = crate::llama::args::resolve_cache_ram(
-                            cache_ram_owned,
-                            crate::system::total_system_ram_bytes(),
-                            launch_spec.file_size_bytes,
-                            kv_bytes_per_token,
-                            launch_ctx,
-                        );
-                        if let Some(explanation) = cache_ram.explain() {
-                            info!("{explanation}");
-                        }
-                        opts.cache_ram_mb = cache_ram.cache_ram_mb;
-
-                        // Classify the budget while the auto-vs-explicit
-                        // distinction is still in scope — downstream only sees
-                        // the number, which can't distinguish a zero the user
-                        // asked for from one the machine forced.
-                        let cache_ram_health = classify_cache_ram(
-                            cache_ram.cache_ram_mb,
-                            cache_ram.source == crate::llama::args::CacheRamSource::Explicit,
-                        );
-
-                        // Whether the disk slot layer can resume this model at
-                        // all. Resolved once per spawn (alongside the other
-                        // launch decisions above) and carried on the target,
-                        // so the proxy never re-derives it per request.
-                        let slot_restore = crate::llama::args::resolve_slot_restore(
-                            launch_spec.kv_memory_is_partial,
-                        );
-                        if let Some(explanation) = slot_restore.explain() {
-                            info!("{explanation}");
-                        }
-
-                        let config = build_server_config(
-                            launch_spec.id as i64,
-                            launch_spec.name.clone(),
-                            model_path.to_path_buf(),
-                            0, // base_port unused — GuiProcessCore resolves port internally
-                            &launch_spec.tags,
-                            opts,
-                        );
-
-                        // Purge stale slot .bin files before spawning a fresh instance.
-                        // Old slot files are incompatible with the new server process.
-                        if let Some(ref slot_dir) = slot_save_path_owned {
-                            // Ensure the directory exists so llama-server doesn't crash on startup
-                            if let Err(e) = std::fs::create_dir_all(slot_dir) {
-                                tracing::warn!("Failed to create slot directory: {}", e);
-                            }
-                            purge_stale_slot_bin_files(slot_dir, launch_spec.id);
-                        }
-
-                        let port = {
-                            let mut core_w = core.write().await;
-                            core_w
-                                .spawn(config)
-                                .await
-                                .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
-                        };
-
-                        // --- Wait for health check ---
-                        if let Err(e) = wait_for_http_health(port, 120).await {
-                            return Err(ModelRuntimeError::HealthCheckFailed(e.to_string()));
-                        }
-
-                        // --- SUCCESS: update current model state ---
-                        {
-                            let mut current_guard = current_owned.write().await;
-                            *current_guard = Some(CurrentModelState {
-                                model_id: launch_spec.id,
-                                model_name: launch_spec.name.clone(),
-                                context_size: effective_ctx,
-                                port,
-                                model_path: launch_spec.file_path.clone(),
-                                slot_restore_supported: slot_restore.enabled,
-                                cache_ram_health,
-                            });
-                        }
-
-                        info!(
-                            model_id = %launch_spec.id,
-                            model_name = %launch_spec.name,
-                            port = %port,
-                            context = %effective_ctx,
-                            "Model started successfully"
-                        );
-
-                        Ok(RunningTarget::local(
-                            port,
-                            launch_spec.id,
-                            launch_spec.name,
-                            effective_ctx,
-                            true, // fresh spawn — cache slots are stale
-                        )
-                        .with_slot_restore_supported(slot_restore.enabled)
-                        .with_cache_ram_health(cache_ram_health))
-                    });
-
-                    // 5. Wait for result — same path as every other caller (offset by 5s so driver always broadcasts first)
+                    // Wait on the same channel as every other caller.
                     return wait_for_startup(
                         self_rx,
                         STARTUP_WAIT_TIMEOUT + Duration::from_secs(5),
@@ -601,8 +316,8 @@ impl ProcessManager {
     /// Get information about the currently running model (SingleSwap only).
     pub async fn current_model(&self) -> Option<RunningTarget> {
         match &self.strategy {
-            ProcessStrategy::SingleSwap { current, .. } => {
-                let current = current.clone();
+            ProcessStrategy::SingleSwap(state) => {
+                let current = Arc::clone(&state.current);
                 let guard = current.read().await;
                 guard.as_ref().map(|c| {
                     RunningTarget::local(
@@ -623,8 +338,8 @@ impl ProcessManager {
     /// Stop the currently running model (SingleSwap only).
     pub async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         match &self.strategy {
-            ProcessStrategy::SingleSwap { current, .. } => {
-                let current = current.clone();
+            ProcessStrategy::SingleSwap(state) => {
+                let current = Arc::clone(&state.current);
                 let mut guard = current.write().await;
                 if let Some(state) = guard.take() {
                     let mut core = self.core.write().await;
@@ -671,12 +386,34 @@ impl ProcessManager {
         core.list_all().into_iter().cloned().collect()
     }
 
+    /// List running servers as [`ProcessHandle`]s.
+    ///
+    /// The same processes [`Self::list_servers`] reports, projected onto the
+    /// port type so callers that already speak `ProcessHandle` — the GUI
+    /// server list and its health monitor — can consume a manager-backed
+    /// runtime without a second shape to handle.
+    pub async fn list_running(&self) -> Vec<ProcessHandle> {
+        let core = self.core.read().await;
+        core.list_all()
+            .into_iter()
+            .map(|info| {
+                ProcessHandle::new(
+                    i64::from(info.model_id),
+                    info.model_name.clone(),
+                    Some(info.pid),
+                    info.port,
+                    info.started_at,
+                )
+            })
+            .collect()
+    }
+
     /// Graceful shutdown
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down process manager");
         // For SingleSwap, also clear current model state
-        if let ProcessStrategy::SingleSwap { current, .. } = &self.strategy {
-            let current = current.clone();
+        if let ProcessStrategy::SingleSwap(state) = &self.strategy {
+            let current = Arc::clone(&state.current);
             let mut guard = current.write().await;
             *guard = None;
         }
@@ -686,16 +423,19 @@ impl ProcessManager {
     /// Check if this manager uses SingleSwap strategy.
     #[must_use]
     pub fn is_single_swap(&self) -> bool {
-        matches!(self.strategy, ProcessStrategy::SingleSwap { .. })
+        matches!(self.strategy, ProcessStrategy::SingleSwap(_))
     }
 
     /// Check if a model is currently loading (SingleSwap only).
     #[must_use]
     pub fn is_loading(&self) -> bool {
         match &self.strategy {
-            ProcessStrategy::SingleSwap { loading, .. } => {
-                loading.read().ok().map(|s| s.is_some()).unwrap_or(false)
-            }
+            ProcessStrategy::SingleSwap(state) => state
+                .loading
+                .read()
+                .ok()
+                .map(|s| s.is_some())
+                .unwrap_or(false),
             ProcessStrategy::Concurrent { .. } => false,
         }
     }
@@ -705,131 +445,118 @@ impl ProcessManager {
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
-/// Remove stale slot files for the given model from `slot_dir`.
-///
-/// Slot files are flat as `{slot_dir}/{model_id}__{session}.bin`; this removes
-/// only files whose name starts with the model's `{model_id}__` prefix, so a
-/// model/context swap leaves other models' caches untouched. Called on
-/// llama-server restart when the model or context size changes.
-fn purge_stale_slot_bin_files(slot_dir: &std::path::Path, model_id: u32) {
-    let prefix = slot_model_prefix(model_id);
-    if let Ok(entries) = std::fs::read_dir(slot_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let is_bin = path.extension().and_then(|e| e.to_str()) == Some("bin");
-            let matches_model = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with(&prefix));
-            if is_bin && matches_model {
-                let _ = std::fs::remove_file(&path);
-            }
-        }
-    }
-    // Silently skip if slot_dir doesn't exist or can't be read.
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn purge_stale_slot_bin_files_removes_bin_only() {
-        let dir = std::env::temp_dir().join(format!(
-            "gglib-purge-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
-        ));
-        let model_id: u32 = 42;
-        tokio::fs::create_dir_all(&dir).await.unwrap();
-        // Flat `{model_id}__{session}.bin` files for model 42 (should be purged).
-        tokio::fs::write(dir.join("42__session1.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        tokio::fs::write(dir.join("42__session2.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // A non-.bin file with the model prefix (should survive — wrong extension).
-        tokio::fs::write(dir.join("42__notes.txt"), "keep me")
-            .await
-            .unwrap();
-        // A legacy pre-namespacing flat .bin without any prefix (should survive).
-        tokio::fs::write(dir.join("orphan.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        // Another model's .bin (should survive). The `__` delimiter means the
-        // `4__` prefix of some model would not match, and 42's prefix must not
-        // match model 99's file either.
-        tokio::fs::write(dir.join("99__session3.bin"), &[0u8; 8])
-            .await
-            .unwrap();
+    // ---------------------------------------------------------------
+    // Pinned mode
+    // ---------------------------------------------------------------
 
-        // Purge only model 42's slot files.
-        purge_stale_slot_bin_files(&dir, model_id);
+    #[derive(Debug)]
+    struct StubCatalog;
 
-        assert!(
-            !tokio::fs::try_exists(dir.join("42__session1.bin"))
-                .await
-                .unwrap()
-        );
-        assert!(
-            !tokio::fs::try_exists(dir.join("42__session2.bin"))
-                .await
-                .unwrap()
-        );
-        assert!(
-            tokio::fs::try_exists(dir.join("42__notes.txt"))
-                .await
-                .unwrap()
-        );
-        assert!(tokio::fs::try_exists(dir.join("orphan.bin")).await.unwrap());
-        assert!(
-            tokio::fs::try_exists(dir.join("99__session3.bin"))
-                .await
-                .unwrap()
-        );
-
-        // Cleanup
-        let _ = tokio::fs::remove_dir_all(&dir).await;
+    #[async_trait::async_trait]
+    impl ModelCatalogPort for StubCatalog {
+        async fn list_models(
+            &self,
+        ) -> Result<Vec<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError> {
+            Ok(Vec::new())
+        }
+        async fn resolve_model(
+            &self,
+            _name: &str,
+        ) -> Result<Option<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError>
+        {
+            Ok(None)
+        }
+        async fn resolve_for_launch(
+            &self,
+            _name: &str,
+        ) -> Result<Option<gglib_core::ports::ModelLaunchSpec>, gglib_core::ports::CatalogError>
+        {
+            Ok(None)
+        }
     }
 
-    /// Regression: model `1`'s purge prefix (`1__`) must not delete model
-    /// `11`'s files (`11__…`) — the `__` delimiter is what prevents this.
-    #[tokio::test]
-    async fn purge_prefix_does_not_match_longer_model_id() {
-        let dir = std::env::temp_dir().join(format!(
-            "gglib-purge-prefix-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
-        ));
-        tokio::fs::create_dir_all(&dir).await.unwrap();
-        tokio::fs::write(dir.join("1__a.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-        tokio::fs::write(dir.join("11__b.bin"), &[0u8; 8])
-            .await
-            .unwrap();
-
-        purge_stale_slot_bin_files(&dir, 1);
-
-        assert!(!tokio::fs::try_exists(dir.join("1__a.bin")).await.unwrap());
-        assert!(
-            tokio::fs::try_exists(dir.join("11__b.bin")).await.unwrap(),
-            "model 11's file must survive a purge of model 1"
-        );
-
-        let _ = tokio::fs::remove_dir_all(&dir).await;
+    fn pinned_manager() -> ProcessManager {
+        ProcessManager::new_pinned(
+            "qwen2.5",
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        )
     }
 
+    /// The guard has to sit on the real entry point, not just on SwapState —
+    /// this is what a proxy request actually calls.
     #[tokio::test]
-    async fn purge_stale_slot_bin_files_noop_on_missing_dir() {
-        let dir = std::env::temp_dir().join(format!(
-            "gglib-purge-missing-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now().elapsed().unwrap().as_nanos()
-        ));
-        // Should not panic or error — just returns silently (dir doesn't exist)
-        purge_stale_slot_bin_files(&dir, 999);
+    async fn ensure_model_running_rejects_a_foreign_model() {
+        let err = pinned_manager()
+            .ensure_model_running("llama-3-8b", None, 4096)
+            .await
+            .expect_err("a pinned manager must refuse a foreign model");
+
+        assert!(
+            matches!(err, ModelRuntimeError::PinnedModelMismatch { .. }),
+            "expected PinnedModelMismatch, got {err:?}"
+        );
+    }
+
+    /// A foreign request must be refused without the catalog ever being
+    /// consulted, proving it short-circuits ahead of the startup machinery
+    /// rather than failing somewhere inside it. The stub resolves every model
+    /// to `None`, so reaching the catalog would surface as ModelNotFound.
+    #[tokio::test]
+    async fn foreign_model_is_refused_before_catalog_lookup() {
+        let err = pinned_manager()
+            .ensure_model_running("llama-3-8b", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            !matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "request reached the catalog instead of being refused up front"
+        );
+    }
+
+    /// The pinned model itself is admitted past the guard — it fails later,
+    /// at catalog resolution, which is exactly how far this stub allows.
+    #[tokio::test]
+    async fn ensure_model_running_admits_the_pinned_model() {
+        let err = pinned_manager()
+            .ensure_model_running("qwen2.5", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "pinned model should pass the guard and reach the catalog, got {err:?}"
+        );
+    }
+
+    /// Pinning must not leak into the ordinary proxy manager.
+    #[tokio::test]
+    async fn single_swap_manager_admits_any_model() {
+        let manager = ProcessManager::new_single_swap(
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        );
+
+        let err = manager
+            .ensure_model_running("anything", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "unpinned manager must not reject on identity, got {err:?}"
+        );
     }
 
     #[tokio::test]
@@ -848,6 +575,23 @@ mod tests {
     async fn test_list_servers_empty() {
         let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
         assert_eq!(manager.list_servers().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn list_running_is_empty_with_no_servers() {
+        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        assert!(manager.list_running().await.is_empty());
+    }
+
+    /// Both listings project the same underlying process set, so they must
+    /// never disagree on how many servers are up.
+    #[tokio::test]
+    async fn list_running_agrees_with_list_servers() {
+        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        assert_eq!(
+            manager.list_running().await.len(),
+            manager.list_servers().await.len()
+        );
     }
 
     #[tokio::test]

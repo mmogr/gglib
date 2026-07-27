@@ -310,3 +310,56 @@ pub(crate) async fn test_core() -> Arc<AppCore> {
         Arc::new(MockProcessRunner),
     ))
 }
+
+/// An `AppCore` and a `ProxyOps` sharing one in-memory database.
+///
+/// `ServerOps` drives models through the proxy, so its tests need both. The
+/// proxy is never started here — the runtime reports nothing running, which is
+/// the state the lifecycle tests exercise.
+#[allow(dead_code)]
+pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    use gglib_core::ports::{
+        CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort, ModelRuntimePort,
+    };
+    use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+    use gglib_mcp::McpService;
+    use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+    use gglib_runtime::process::ProcessManager;
+    use gglib_runtime::proxy::{
+        InMemoryApprovalRegistry, InMemoryCouncilRepository, ProxySupervisor,
+    };
+
+    let pool = setup_test_database().await.expect("in-memory DB");
+    let repos = CoreFactory::build_repos(pool);
+    let core = Arc::new(AppCore::new(repos.clone(), Arc::new(MockProcessRunner)));
+
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(Arc::new(
+        ProcessManager::new_single_swap(
+            9000,
+            "llama-server",
+            catalog,
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        ),
+    )));
+
+    let proxy = Arc::new(crate::ProxyOps::new(crate::ProxyDeps {
+        supervisor: Arc::new(ProxySupervisor::new()),
+        model_repo: repos.models.clone(),
+        mcp: Arc::new(McpService::new(
+            repos.mcp_servers.clone(),
+            Arc::new(gglib_core::ports::NoopEmitter::new()),
+        )),
+        core: Arc::clone(&core),
+        // The runtime's in-memory backends, not the SQLite ones: the latter's
+        // in-memory constructor blocks on a runtime of its own, which panics
+        // inside an async test.
+        approval_registry: Arc::new(InMemoryApprovalRegistry::new())
+            as Arc<dyn CouncilApprovalRegistryPort>,
+        council_repo: Arc::new(InMemoryCouncilRepository::new()) as Arc<dyn CouncilRepositoryPort>,
+        runtime,
+    }));
+
+    (core, proxy)
+}
