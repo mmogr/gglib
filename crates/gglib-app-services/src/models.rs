@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gglib_core::ports::{GgufParserPort, ProcessRunner};
+use gglib_core::ports::{GgufParserPort, ModelRuntimePort};
 use gglib_core::services::AppCore;
 use gglib_core::{
     ModelCapabilities, ModelFilterOptions,
@@ -19,7 +19,10 @@ use crate::types::{
 /// Dependencies for model operations.
 pub struct ModelDeps {
     pub core: Arc<AppCore>,
-    pub runner: Arc<dyn ProcessRunner>,
+    /// The runtime backing server lifecycle — the same one `ServerOps` starts
+    /// models through, so serving status here agrees with what `ServerOps`
+    /// actually has running rather than a second, independent registry.
+    pub runtime: Arc<dyn ModelRuntimePort>,
     pub gguf_parser: Arc<dyn GgufParserPort>,
 }
 
@@ -35,17 +38,13 @@ impl ModelOps {
 
     /// Check if a model is currently being served.
     async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
-        match self.deps.runner.list_running().await {
-            Ok(handles) => {
-                for handle in handles {
-                    if handle.model_id == model_id {
-                        return (true, Some(handle.port));
-                    }
-                }
-                (false, None)
-            }
-            Err(_) => (false, None),
-        }
+        self.deps
+            .runtime
+            .list_running()
+            .await
+            .into_iter()
+            .find(|h| h.model_id == model_id)
+            .map_or((false, None), |h| (true, Some(h.port)))
     }
 
     /// List all models with their serving status.
@@ -173,7 +172,15 @@ impl ModelOps {
     pub async fn remove(&self, id: i64, request: RemoveModelRequest) -> Result<String, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        if let Some(handle) = crate::helpers::find_handle(&*self.deps.runner, id).await {
+        let running = self
+            .deps
+            .runtime
+            .list_running()
+            .await
+            .into_iter()
+            .find(|h| h.model_id == id);
+
+        if let Some(handle) = running {
             if !request.force {
                 return Err(GuiError::Conflict(format!(
                     "Model is currently serving on port {}. Stop the server first or use force=true",
@@ -181,8 +188,8 @@ impl ModelOps {
                 )));
             }
             self.deps
-                .runner
-                .stop(&handle)
+                .runtime
+                .stop_current()
                 .await
                 .map_err(|e| GuiError::Internal(format!("Failed to stop server: {e}")))?;
         }
@@ -313,13 +320,13 @@ mod tests {
 
     use super::*;
     use crate::error::GuiError;
-    use crate::test_support::{MockProcessRunner, test_core};
-    use gglib_core::ports::NoopGgufParser;
+    use crate::test_support::test_core;
+    use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
 
     fn make_ops(core: Arc<AppCore>) -> ModelOps {
         ModelOps::new(ModelDeps {
             core,
-            runner: Arc::new(MockProcessRunner),
+            runtime: Arc::new(NoopModelRuntime),
             gguf_parser: Arc::new(NoopGgufParser),
         })
     }
@@ -403,6 +410,132 @@ mod tests {
                 })
             ),
             "expected NotFound, got {result:?}"
+        );
+    }
+
+    /// A runtime that reports one fixed model as running, and records
+    /// whether `stop_current` was called.
+    ///
+    /// Stands in for the shared `ProcessManager`-backed runtime `ServerOps`
+    /// starts models through. Before this fix, `ModelOps` consulted its own
+    /// `ProcessRunner` instead — a registry `ServerOps` never wrote to — so a
+    /// model actually running under the proxy looked idle here and the force
+    /// guard below never fired.
+    #[derive(Debug)]
+    struct RunningRuntime {
+        model_id: i64,
+        port: u16,
+        stopped: std::sync::atomic::AtomicBool,
+    }
+
+    impl RunningRuntime {
+        fn new(model_id: i64, port: u16) -> Self {
+            Self {
+                model_id,
+                port,
+                stopped: std::sync::atomic::AtomicBool::new(false),
+            }
+        }
+
+        fn stopped(&self) -> bool {
+            self.stopped.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
+        async fn ensure_model_running(
+            &self,
+            _model_name: &str,
+            _num_ctx: Option<u64>,
+            _default_ctx: u64,
+        ) -> Result<gglib_core::ports::RunningTarget, gglib_core::ports::ModelRuntimeError> {
+            unimplemented!("not exercised by the remove() tests")
+        }
+
+        async fn current_model(&self) -> Option<gglib_core::ports::RunningTarget> {
+            None
+        }
+
+        async fn list_running(&self) -> Vec<gglib_core::ports::ProcessHandle> {
+            vec![gglib_core::ports::ProcessHandle::new(
+                self.model_id,
+                "running-model".to_string(),
+                None,
+                self.port,
+                0,
+            )]
+        }
+
+        async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
+            self.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    /// Add a placeholder model on disk and register it, returning the DTO.
+    async fn add_placeholder_model(core: Arc<AppCore>, dir: &tempfile::TempDir) -> GuiModel {
+        let gguf_path = dir.path().join("model.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+        let gguf_path = gguf_path.canonicalize().unwrap();
+
+        make_ops(core)
+            .add(AddModelRequest {
+                file_path: gguf_path.to_str().unwrap().to_string(),
+            })
+            .await
+            .expect("add should succeed")
+    }
+
+    /// Regression test for the `ModelOps`/`ServerOps` registry split: `remove`
+    /// must consult the same runtime models are actually started through, so
+    /// a model the proxy reports running blocks deletion here too.
+    #[tokio::test]
+    async fn remove_blocks_when_the_shared_runtime_reports_the_model_running() {
+        let core = test_core().await;
+        let dir = tempdir().unwrap();
+        let added = add_placeholder_model(Arc::clone(&core), &dir).await;
+
+        let runtime = Arc::new(RunningRuntime::new(added.id, 5500));
+        let ops = ModelOps::new(ModelDeps {
+            core,
+            runtime: Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
+            gguf_parser: Arc::new(NoopGgufParser),
+        });
+
+        let result = ops.remove(added.id, RemoveModelRequest::default()).await;
+        assert!(
+            matches!(result, Err(GuiError::Conflict(_))),
+            "expected Conflict while the shared runtime reports the model running, got {result:?}"
+        );
+        assert!(
+            !runtime.stopped(),
+            "a blocked (non-forced) remove must not stop the server"
+        );
+    }
+
+    /// `force=true` must stop the server through the same shared runtime
+    /// `ServerOps` uses, not a disconnected registry that never saw it start.
+    #[tokio::test]
+    async fn remove_with_force_stops_the_server_through_the_shared_runtime() {
+        let core = test_core().await;
+        let dir = tempdir().unwrap();
+        let added = add_placeholder_model(Arc::clone(&core), &dir).await;
+
+        let runtime = Arc::new(RunningRuntime::new(added.id, 5500));
+        let ops = ModelOps::new(ModelDeps {
+            core,
+            runtime: Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
+            gguf_parser: Arc::new(NoopGgufParser),
+        });
+
+        let result = ops
+            .remove(added.id, RemoveModelRequest { force: true })
+            .await;
+        assert!(result.is_ok(), "force=true should proceed: {result:?}");
+        assert!(
+            runtime.stopped(),
+            "force=true must stop the server via the shared runtime"
         );
     }
 

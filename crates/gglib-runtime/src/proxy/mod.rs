@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod banner;
 pub mod models;
 pub mod params;
 pub mod supervisor;
@@ -333,59 +334,21 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
     let tools = mcp.list_all_tools().await;
     let tool_count: usize = tools.iter().map(|(_, v)| v.len()).sum();
 
-    // Show startup banner
-    println!();
-    match pinned.as_ref() {
-        Some(_) => println!("  🚀 gglib serve starting (pinned)..."),
-        None => println!("  🚀 gglib proxy starting..."),
-    }
-    println!();
-    println!("  Host:            {}", host);
-    println!("  Port:            {}", port);
-    println!("  Llama base port: {}", llama_base_port);
-    println!("  Default context: {}", default_context);
-    if let Some(model) = pinned.as_ref() {
-        // Stated up front because it changes what the endpoint will accept:
-        // every other model is refused rather than swapped in.
-        println!(
-            "  Pinned model:    {} (id {}) — other models will be refused",
-            model.name, model.id
-        );
-    }
-    if let Some(ref ic) = inference_override {
-        let mut parts: Vec<String> = Vec::new();
-        if let Some(v) = ic.temperature {
-            parts.push(format!("temperature={v}"));
-        }
-        if let Some(v) = ic.top_p {
-            parts.push(format!("top_p={v}"));
-        }
-        if let Some(v) = ic.top_k {
-            parts.push(format!("top_k={v}"));
-        }
-        if let Some(v) = ic.max_tokens {
-            parts.push(format!("max_tokens={v}"));
-        }
-        if let Some(v) = ic.repeat_penalty {
-            parts.push(format!("repeat_penalty={v}"));
-        }
-        if let Some(v) = ic.presence_penalty {
-            parts.push(format!("presence_penalty={v}"));
-        }
-        if let Some(v) = ic.min_p {
-            parts.push(format!("min_p={v}"));
-        }
-        println!("  Inference override: {}", parts.join(", "));
-    }
-    println!(
-        "  MCP servers:     {} (eager: {}, lazy: {}, manual: {})",
+    banner::print_starting(
+        pinned.as_ref(),
+        &host,
+        port,
+        llama_base_port,
+        default_context,
+        inference_override.as_ref(),
+        cache.enabled,
+        config.slot_dir.as_deref(),
         servers.len(),
         eager_count,
         lazy_count,
-        manual_count
+        manual_count,
+        tool_count,
     );
-    println!("  MCP tools:       {} (eager-started)", tool_count);
-    println!();
 
     let addr = supervisor
         .start(
@@ -400,15 +363,7 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");
 
-    // Show success message with configuration URLs
-    println!("  ✓ Proxy started successfully on {}", addr);
-    println!();
-    println!("  Configure OpenWebUI:");
-    println!("    OpenAI API: http://{}/v1", addr);
-    println!("    MCP Tools:  http://{}/mcp", addr);
-    println!();
-    println!("  Press Ctrl+C to stop");
-    println!();
+    banner::print_ready(addr, pinned.as_ref());
 
     // Wait for Ctrl-C
     tokio::signal::ctrl_c().await?;

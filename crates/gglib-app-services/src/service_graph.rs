@@ -143,7 +143,11 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     let ServiceGraphParams {
         core,
         repos,
-        runner,
+        // `ModelOps` now reads server status through `runtime` below rather
+        // than a standalone `ProcessRunner` — see `ModelDeps::runtime`. The
+        // field stays on `ServiceGraphParams` since adapters still have a
+        // `ProcessRunner` on hand from `CoreBootstrap::build`.
+        runner: _,
         downloads,
         hf_client,
         gguf_parser,
@@ -209,7 +213,10 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
 
     let models = Arc::new(ModelOps::new(ModelDeps {
         core: Arc::clone(&core),
-        runner: Arc::clone(&runner),
+        // The shared runtime, not a standalone runner: `ServerOps` now starts
+        // models through it, so it is the only registry that knows what is
+        // actually running.
+        runtime: Arc::clone(&runtime),
         gguf_parser,
     }));
 

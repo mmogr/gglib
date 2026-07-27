@@ -72,10 +72,6 @@ pub async fn execute(
     // the translation into llama-server flags both happen downstream, so this
     // handler never assembles a command line of its own.
     let unified = UnifiedServerConfig {
-        model_id: model.id,
-        model_name: model.name.clone(),
-        model_path: model.file_path.clone(),
-        model_tags: model.tags.clone(),
         explicit: ServerConfigOptions {
             context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
             model_server_ctx: model
@@ -99,6 +95,7 @@ pub async fn execute(
         // `--cache-disk-gb`, which `start_proxy_standalone` resolves into a
         // `DiskBudget` for both commands alike.
         globals: GlobalDefaults {
+            host: options.host.clone(),
             proxy_port: options.port,
             llama_base_port: options.llama_port,
             default_ctx: settings.default_context_size,
@@ -106,7 +103,6 @@ pub async fn execute(
             slot_dir: cache.slot_dir.clone(),
             ..Default::default()
         },
-        pinned: true,
     };
 
     let launch_overrides = unified.resolved_options();
@@ -181,15 +177,7 @@ mod tests {
 
     /// Mirrors how `execute` assembles its config, minus the I/O.
     fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedServerConfig {
-        UnifiedServerConfig {
-            model_id: 1,
-            model_name: "qwen2.5".to_string(),
-            model_path: PathBuf::from("/models/qwen2.5.gguf"),
-            model_tags: Vec::new(),
-            explicit,
-            globals,
-            pinned: true,
-        }
+        UnifiedServerConfig { explicit, globals }
     }
 
     /// `--ctx-size max` resolves against the model's GGUF context length,
@@ -278,6 +266,20 @@ mod tests {
     fn serve_binds_loopback_by_default() {
         let cfg = unified(ServerConfigOptions::default(), GlobalDefaults::default());
         assert_eq!(cfg.to_proxy_config().host, "127.0.0.1");
+    }
+
+    /// `--host` must reach the proxy config — otherwise there is no way to
+    /// serve a pinned endpoint to another machine on a trusted network.
+    #[test]
+    fn explicit_host_overrides_the_loopback_default() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                host: "0.0.0.0".to_string(),
+                ..Default::default()
+            },
+        );
+        assert_eq!(cfg.to_proxy_config().host, "0.0.0.0");
     }
 
     // ---------------------------------------------------------------

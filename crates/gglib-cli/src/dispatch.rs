@@ -10,8 +10,6 @@
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
 use anyhow::Result;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::StandaloneProxyParams;
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -289,30 +287,15 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 return Ok(());
             }
 
-            let settings = ctx.app.settings().get().await?;
-            let effective_context = resolve_context_size(&ServerConfigOptions {
-                context_size: default_context
-                    .as_deref()
-                    .and_then(|s| s.parse::<u64>().ok()),
-                global_default_ctx: settings.default_context_size,
-                ..Default::default()
-            });
-            let inference_override = sampling.into_override();
-            gglib_runtime::proxy::start_proxy_standalone(StandaloneProxyParams {
+            handlers::inference::proxy::execute(
+                ctx,
                 host,
                 port,
-                llama_base_port: llama_port,
-                llama_server_path: ctx.llama_server_path.clone(),
-                model_repo: ctx.model_repo.clone(),
-                mcp: ctx.mcp.clone(),
-                settings_repo: ctx.app.settings().repo(),
-                default_context: effective_context,
-                inference_override,
-                cache: cache.into_proxy_cache_options(),
-                // `gglib proxy` serves the whole catalog and swaps on demand;
-                // `gglib serve` is the pinned mode of this same entry point.
-                pinned: None,
-            })
+                llama_port,
+                default_context,
+                sampling,
+                cache,
+            )
             .await?;
         }
 

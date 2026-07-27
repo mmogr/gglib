@@ -116,36 +116,30 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
 - **MTP Speculative Decoding** — Auto-enabled for models with the `"mtp"` tag via the canonical `build_server_config` builder
 
-## Config: two layers, one translator
+## Config: one translator, fed by an optional cascade
 
-Every launch surface — the CLI, the proxy, both GUIs — resolves configuration
-through the same two layers, which is what guarantees a given model receives
-identical llama-server arguments regardless of what started it.
+Every launch surface — the CLI, the proxy, both GUIs — ultimately calls
+`build_server_config`, which is what guarantees a given model receives
+identical llama-server arguments regardless of what started it. Capability
+detection lives in exactly one place; adding a resolver there reaches every
+surface automatically.
 
-| Layer | Entry point | Answers |
-|-------|-------------|---------|
-| Cascade | `resolve_unified_config` | which tier wins, *then* which flags |
-| Translation | `build_server_config` | which flags |
-
-`UnifiedServerConfig` carries the three tiers — explicit overrides, curated
-model defaults, global defaults — and `resolve_unified_config` flattens them
-before delegating to `build_server_config`. Capability detection therefore
-lives in exactly one place; adding a resolver to `build_server_config` reaches
-every surface automatically.
+A caller juggling explicit overrides, curated model defaults and global
+defaults resolves them first with `UnifiedServerConfig::resolved_options()`,
+then hands the flattened result to `build_server_config` alongside the
+model's identity and tags:
 
 ```rust,ignore
-use gglib_runtime::{UnifiedServerConfig, GlobalDefaults, server_config::resolve_unified_config};
+use gglib_runtime::{UnifiedServerConfig, GlobalDefaults, build_server_config};
 use gglib_core::server_config::ServerConfigOptions;
 
-let config = resolve_unified_config(&UnifiedServerConfig {
-    model_id,
-    model_name,
-    model_path,
-    model_tags: model.tags.clone(),
+let opts = UnifiedServerConfig {
     explicit: ServerConfigOptions { mlock: Some(true), ..Default::default() },
     globals: GlobalDefaults::default(),
-    pinned: false,
-});
+}
+.resolved_options();
+
+let config = build_server_config(model.id, model.name.clone(), model.file_path.clone(), base_port, &model.tags, opts);
 ```
 
 ### The translator directly

@@ -206,6 +206,12 @@ pub struct ServeOptions {
     /// Force-enable Jinja template parsing for chat templates
     #[arg(long)]
     pub jinja: bool,
+    /// Host the OpenAI-compatible endpoint binds to.
+    ///
+    /// Defaults to loopback. `0.0.0.0` accepts LAN clients — the endpoint
+    /// has no authentication, so only do that on a network you trust.
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
     /// Port the OpenAI-compatible endpoint listens on.
     ///
     /// The proxy dashboard is served from the same port at
@@ -218,16 +224,6 @@ pub struct ServeOptions {
     /// llama-server binds its own port separately from `--port`.
     #[arg(long, default_value = "5500")]
     pub llama_port: u16,
-}
-
-impl Default for ServeOptions {
-    fn default() -> Self {
-        Self {
-            jinja: false,
-            port: 8080,
-            llama_port: 5500,
-        }
-    }
 }
 
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)

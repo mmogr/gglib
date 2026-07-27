@@ -169,10 +169,6 @@ impl ServerOps {
         default_context_size: Option<u64>,
     ) -> LaunchOverrides {
         let unified = UnifiedServerConfig {
-            model_id: model.id,
-            model_name: model.name.clone(),
-            model_path: model.file_path.clone(),
-            model_tags: model.tags.clone(),
             explicit: ServerConfigOptions {
                 context_size: request.context_length,
                 model_server_ctx: model
@@ -192,9 +188,6 @@ impl ServerOps {
                 default_ctx: default_context_size,
                 ..Default::default()
             },
-            // The GUI serves whichever model the user picks, so the proxy
-            // must stay free to swap.
-            pinned: false,
         };
 
         LaunchOverrides {

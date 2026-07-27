@@ -1,22 +1,23 @@
 //! Unified process manager for llama-server instances.
 //!
-//! This module provides a high-level process manager that supports two strategies:
-//! - **Concurrent**: Multiple models running simultaneously (GUI use case)
-//! - **SingleSwap**: Auto-swapping single model with smart context handling (Proxy use case)
+//! Every launch surface — the CLI, the proxy, both GUIs — now shares one
+//! `SingleSwap` manager (built once by `build_service_graph`), which is what
+//! makes "only one llama-server runs at a time system-wide" an invariant
+//! rather than a hope. A `Concurrent` strategy existed here for the GUI's
+//! earlier direct-spawn path; epic #630 routed the GUI through the proxy's
+//! manager instead, so it was deleted along with the rest of that path.
 
 use super::core::GuiProcessCore;
-use super::health::wait_for_http_health;
 use super::types::ServerInfo;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use gglib_core::ports::{
     LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
-    ServerConfig,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::process::startup_guard::{
     STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, should_bail_on_insufficient_budget,
@@ -25,47 +26,35 @@ use crate::process::startup_guard::{
 use crate::process::swap_state::SwapState;
 
 /// Strategy for managing llama-server processes.
+///
+/// The only strategy today: auto-swap a single model at a time (proxy, GUI,
+/// and `gglib serve` in pinned mode). Kept as an enum — rather than folding
+/// `SwapState` directly into `ProcessManager` — so a future strategy remains
+/// a variant away rather than a structural change.
 pub enum ProcessStrategy {
-    /// Allow multiple concurrent models up to max_concurrent (GUI).
-    Concurrent { max_concurrent: usize },
     /// Only allow one model at a time, auto-swap when a different model is
-    /// requested (proxy, and `gglib serve` in pinned mode).
+    /// requested.
     ///
     /// Concurrent requests during startup wait via watch channel instead of
     /// failing immediately. All state and the launch sequence itself live on
     /// [`SwapState`].
     ///
     /// Boxed because `SwapState` carries a full `ServerConfigOptions`
-    /// template, which would otherwise inflate every `ProcessStrategy` — and
-    /// so every `ProcessManager` — to its size, including in the `Concurrent`
-    /// case that has no use for it.
+    /// template, which would otherwise inflate every `ProcessManager` to its
+    /// size even before any model has launched.
     SingleSwap(Box<SwapState>),
 }
 
 /// Unified process manager for llama-server instances.
 ///
-/// Supports two strategies:
-/// - **Concurrent**: Multiple models at once (GUI) - use `new_concurrent`
-/// - **SingleSwap**: One model at a time, auto-swap (Proxy) - use `new_single_swap`
+/// One strategy today — `SingleSwap`, one model at a time, auto-swap — built
+/// via `new_single_swap` or `new_pinned`. See [`ProcessStrategy`].
 pub struct ProcessManager {
     core: Arc<RwLock<GuiProcessCore>>,
     strategy: ProcessStrategy,
 }
 
 impl ProcessManager {
-    /// Create a new `ProcessManager` with Concurrent strategy (for GUI)
-    pub fn new_concurrent(
-        base_port: u16,
-        max_concurrent: usize,
-        llama_server_path: impl Into<String>,
-    ) -> Self {
-        let core = GuiProcessCore::new(base_port, llama_server_path);
-        Self {
-            core: Arc::new(RwLock::new(core)),
-            strategy: ProcessStrategy::Concurrent { max_concurrent },
-        }
-    }
-
     /// Create a new `ProcessManager` with SingleSwap strategy (for Proxy).
     ///
     /// This strategy allows only one model to run at a time. When a request
@@ -97,12 +86,8 @@ impl ProcessManager {
     ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
     ///   benchmark launches, where a large prompt cache would perturb results.
     ///
-    /// # When to use
-    ///
-    /// Use `new_single_swap()` when you need a single-model proxy (e.g. the
-    /// HTTP API layer). For multi-model workloads (e.g. the GUI dashboard),
-    /// prefer [`ProcessManager::new_concurrent`] which allows multiple models
-    /// to run simultaneously up to a configurable limit.
+    /// Use [`Self::new_pinned`] instead when the manager must refuse every
+    /// model but one.
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
@@ -157,48 +142,7 @@ impl ProcessManager {
         }
     }
 
-    /// Start a llama-server instance for a model (Concurrent strategy only)
-    pub async fn start_server(&self, config: ServerConfig) -> Result<u16> {
-        let max_concurrent = match &self.strategy {
-            ProcessStrategy::Concurrent { max_concurrent } => *max_concurrent,
-            ProcessStrategy::SingleSwap(_) => {
-                return Err(anyhow!(
-                    "SingleSwap strategy should use ensure_model_running() instead of start_server()"
-                ));
-            }
-        };
-
-        let model_id = config.model_id as u32;
-        let mut core = self.core.write().await;
-
-        // Check if already running
-        if core.is_running(model_id) {
-            return Err(anyhow!("Model {} is already being served", model_id));
-        }
-
-        // Check concurrent limit
-        if core.count() >= max_concurrent {
-            return Err(anyhow!(
-                "Maximum concurrent servers ({}) reached. Stop a server first.",
-                max_concurrent
-            ));
-        }
-
-        // Spawn the process
-        let allocated_port = core.spawn(config).await?;
-
-        // Release the lock before waiting
-        drop(core);
-
-        // Wait for server to be ready by polling health endpoint
-        debug!(port = %allocated_port, "Waiting for llama-server to be ready");
-        wait_for_http_health(allocated_port, 30).await?;
-        debug!("llama-server is ready and accepting requests");
-
-        Ok(allocated_port)
-    }
-
-    /// Ensure a model is running (SingleSwap strategy only).
+    /// Ensure a model is running.
     ///
     /// This method:
     /// 1. Atomically checks if another startup is in progress (via watch channel)
@@ -249,14 +193,7 @@ impl ProcessManager {
         default_ctx: u64,
         overrides: LaunchOverrides,
     ) -> Result<RunningTarget, ModelRuntimeError> {
-        let state = match &self.strategy {
-            ProcessStrategy::SingleSwap(state) => state,
-            ProcessStrategy::Concurrent { .. } => {
-                return Err(ModelRuntimeError::Internal(
-                    "ensure_model_running() is only available for SingleSwap strategy".to_string(),
-                ));
-            }
-        };
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
 
         // Refuse foreign models before touching the startup guard, so a
         // rejected request neither queues behind the pinned model nor
@@ -313,46 +250,30 @@ impl ProcessManager {
         }
     } // end ensure_model_running
 
-    /// Get information about the currently running model (SingleSwap only).
+    /// Get information about the currently running model.
     pub async fn current_model(&self) -> Option<RunningTarget> {
-        match &self.strategy {
-            ProcessStrategy::SingleSwap(state) => {
-                let current = Arc::clone(&state.current);
-                let guard = current.read().await;
-                guard.as_ref().map(|c| {
-                    RunningTarget::local(
-                        c.port,
-                        c.model_id,
-                        c.model_name.clone(),
-                        c.context_size,
-                        false,
-                    )
-                    .with_slot_restore_supported(c.slot_restore_supported)
-                    .with_cache_ram_health(c.cache_ram_health)
-                })
-            }
-            ProcessStrategy::Concurrent { .. } => None,
-        }
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        let current = Arc::clone(&state.current);
+        let guard = current.read().await;
+        guard.as_ref().map(|c| {
+            RunningTarget::local(c.port, c.model_id, c.model_name.clone(), c.context_size, false)
+                .with_slot_restore_supported(c.slot_restore_supported)
+                .with_cache_ram_health(c.cache_ram_health)
+        })
     }
 
-    /// Stop the currently running model (SingleSwap only).
+    /// Stop the currently running model.
     pub async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        match &self.strategy {
-            ProcessStrategy::SingleSwap(state) => {
-                let current = Arc::clone(&state.current);
-                let mut guard = current.write().await;
-                if let Some(state) = guard.take() {
-                    let mut core = self.core.write().await;
-                    core.kill(state.model_id)
-                        .await
-                        .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
-                }
-                Ok(())
-            }
-            ProcessStrategy::Concurrent { .. } => Err(ModelRuntimeError::Internal(
-                "stop_current() is only available for SingleSwap strategy".to_string(),
-            )),
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        let current = Arc::clone(&state.current);
+        let mut guard = current.write().await;
+        if let Some(state) = guard.take() {
+            let mut core = self.core.write().await;
+            core.kill(state.model_id)
+                .await
+                .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
         }
+        Ok(())
     }
 
     /// Stop a running server by model ID
@@ -411,46 +332,29 @@ impl ProcessManager {
     /// Graceful shutdown
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down process manager");
-        // For SingleSwap, also clear current model state
-        if let ProcessStrategy::SingleSwap(state) = &self.strategy {
-            let current = Arc::clone(&state.current);
-            let mut guard = current.write().await;
-            *guard = None;
-        }
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        let current = Arc::clone(&state.current);
+        let mut guard = current.write().await;
+        *guard = None;
+        drop(guard);
         self.stop_all().await
-    }
-
-    /// Check if this manager uses SingleSwap strategy.
-    #[must_use]
-    pub fn is_single_swap(&self) -> bool {
-        matches!(self.strategy, ProcessStrategy::SingleSwap(_))
     }
 
     /// The single model this manager is pinned to, if any.
     ///
     /// `Some(name)` is `gglib serve`: every other model is refused rather
-    /// than swapped to. Only `SingleSwap` can be pinned — `Concurrent` serves
-    /// many models by design.
+    /// than swapped to.
     #[must_use]
     pub fn pinned_model(&self) -> Option<&str> {
-        match &self.strategy {
-            ProcessStrategy::SingleSwap(state) => state.pinned_name(),
-            ProcessStrategy::Concurrent { .. } => None,
-        }
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        state.pinned_name()
     }
 
-    /// Check if a model is currently loading (SingleSwap only).
+    /// Check if a model is currently loading.
     #[must_use]
     pub fn is_loading(&self) -> bool {
-        match &self.strategy {
-            ProcessStrategy::SingleSwap(state) => state
-                .loading
-                .read()
-                .ok()
-                .map(|s| s.is_some())
-                .unwrap_or(false),
-            ProcessStrategy::Concurrent { .. } => false,
-        }
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        state.loading.read().ok().map(|s| s.is_some()).unwrap_or(false)
     }
 }
 
@@ -596,34 +500,31 @@ mod tests {
         assert_eq!(manager.pinned_model(), None);
     }
 
-    /// Concurrent serves many models by design and can never be pinned.
-    #[test]
-    fn concurrent_manager_reports_no_pinned_model() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
-        assert_eq!(manager.pinned_model(), None);
-    }
-
-    #[tokio::test]
-    async fn test_concurrent_manager_creation() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
-        assert_eq!(manager.list_servers().await.len(), 0);
+    fn single_swap_manager() -> ProcessManager {
+        ProcessManager::new_single_swap(
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        )
     }
 
     #[tokio::test]
     async fn test_is_serving() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        let manager = single_swap_manager();
         assert!(!manager.is_serving(1).await);
     }
 
     #[tokio::test]
     async fn test_list_servers_empty() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        let manager = single_swap_manager();
         assert_eq!(manager.list_servers().await.len(), 0);
     }
 
     #[tokio::test]
     async fn list_running_is_empty_with_no_servers() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        let manager = single_swap_manager();
         assert!(manager.list_running().await.is_empty());
     }
 
@@ -631,7 +532,7 @@ mod tests {
     /// never disagree on how many servers are up.
     #[tokio::test]
     async fn list_running_agrees_with_list_servers() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        let manager = single_swap_manager();
         assert_eq!(
             manager.list_running().await.len(),
             manager.list_servers().await.len()
@@ -639,14 +540,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_is_single_swap() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
-        assert!(!manager.is_single_swap());
-    }
-
-    #[tokio::test]
-    async fn test_is_loading_concurrent() {
-        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+    async fn test_is_loading() {
+        let manager = single_swap_manager();
         assert!(!manager.is_loading());
     }
 }

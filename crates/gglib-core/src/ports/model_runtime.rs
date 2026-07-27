@@ -293,6 +293,39 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     }
 }
 
+/// A [`ModelRuntimePort`] that never has anything running.
+///
+/// For callers with no shared [`ProcessManager`](crate::ports::ProcessRunner)
+/// to point at — the CLI's single-shot commands, whose `is_serving` checks
+/// against a runtime scoped to that one process invocation would report
+/// "nothing running" regardless, since nothing was started in it. Making that
+/// explicit here is more honest than wiring in a real runner that can only
+/// ever agree.
+#[derive(Debug, Default)]
+pub struct NoopModelRuntime;
+
+#[async_trait]
+impl ModelRuntimePort for NoopModelRuntime {
+    async fn ensure_model_running(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal(
+            "no runtime available in this context".to_string(),
+        ))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -255,10 +255,9 @@ flags — no extra configuration required:
 
 Tags are detected automatically at model import time from GGUF metadata and
 stored in the model catalog. This parity is architecturally enforced: the proxy,
-GUI, and CLI all route through `resolve_unified_config` and its single
-translator `build_server_config` in `gglib-runtime`, so any model that works
-correctly when started from the GUI or CLI will behave identically when
-auto-started by the proxy.
+GUI, and CLI all route through the single translator `build_server_config` in
+`gglib-runtime`, so any model that works correctly when started from the GUI
+or CLI will behave identically when auto-started by the proxy.
 
 `gglib serve <model>` is this same stack pinned to one model: it refuses
 requests for any other model rather than swapping, which gives clients that

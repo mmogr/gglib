@@ -133,12 +133,12 @@ use std::sync::Arc;
 
 # fn example(
 #     core: Arc<gglib_core::services::AppCore>,
-#     runner: Arc<dyn gglib_core::ports::ProcessRunner>,
+#     runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
 #     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
 # ) {
 let model_ops = ModelOps::new(ModelDeps {
     core: core.clone(),
-    runner: runner.clone(),
+    runtime: runtime.clone(),
     gguf_parser,
 });
 
