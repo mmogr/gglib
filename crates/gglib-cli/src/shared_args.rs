@@ -86,9 +86,15 @@ pub struct ServeOptions {
     /// Force-enable Jinja template parsing for chat templates
     #[arg(long)]
     pub jinja: bool,
-    /// Port to serve on
+    /// Port the OpenAI-compatible endpoint listens on
     #[arg(short, long, default_value = "8080")]
     pub port: u16,
+    /// Starting port for the underlying llama-server instance
+    ///
+    /// `gglib serve` runs the model behind the proxy stack, so the upstream
+    /// llama-server binds its own port separately from `--port`.
+    #[arg(long, default_value = "5500")]
+    pub llama_port: u16,
 }
 
 impl Default for ServeOptions {
@@ -96,6 +102,7 @@ impl Default for ServeOptions {
         Self {
             jinja: false,
             port: 8080,
+            llama_port: 5500,
         }
     }
 }
