@@ -930,7 +930,11 @@ mod tests {
     /// matching the variant alone would do.
     #[test]
     fn unrelated_spawn_failures_stay_internal() {
-        for msg in ["OOM killed", "port already in use", "Failed to get child PID"] {
+        for msg in [
+            "OOM killed",
+            "port already in use",
+            "Failed to get child PID",
+        ] {
             let err = map_runtime_error(&ModelRuntimeError::SpawnFailed(msg.to_string()));
             assert!(
                 matches!(err, GuiError::Internal(_)),

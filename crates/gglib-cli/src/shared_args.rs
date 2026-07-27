@@ -5,6 +5,8 @@
 //! `Serve`, `Chat`, and `Question`.
 
 use clap::Args;
+use gglib_core::cache_config::KvCacheType;
+use gglib_runtime::proxy::ProxyCacheOptions;
 
 /// Sampling-parameter overrides common to all inference commands.
 ///
@@ -78,6 +80,95 @@ pub struct MtpArgs {
     /// cost of output quality. Recommended range: 0.5–0.95.
     #[arg(long)]
     pub mtp_draft_p_min: Option<f32>,
+}
+
+/// KV cache flags common to the proxy-backed commands.
+///
+/// Flattened into both `Serve` and `Proxy` so the two parse identically —
+/// `gglib serve` is the pinned mode of the same proxy stack, and a cache
+/// setting that only one of them could express would be a parity gap by
+/// construction.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CacheArgs {
+    /// Enable KV cache session persistence, saving/restoring llama-server
+    /// slot state to disk per session.
+    ///
+    /// Independent of the host-RAM prompt cache, which is auto-sized on
+    /// every launch whether or not this flag is set (see `--cache-ram-mb`).
+    #[arg(long)]
+    pub cache: bool,
+    /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
+    #[arg(long)]
+    pub slot_dir: Option<std::path::PathBuf>,
+    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+    /// (`--cache-ram`) — what makes switching between conversations fast.
+    ///
+    /// Omit to auto-size it from total system RAM, the model's weights, and
+    /// its KV footprint at the launch context size; the chosen budget and
+    /// its arithmetic are logged at startup.
+    ///
+    /// Pass a value to override — `0` disables the cache. Set
+    /// `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to skip auto-sizing entirely and
+    /// use llama-server's built-in default. Independent of
+    /// `--cache`/`--slot-dir`.
+    #[arg(long)]
+    pub cache_ram_mb: Option<u64>,
+    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+    /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
+    /// whose earlier messages were edited or summarized (e.g. a Copilot
+    /// history compaction), which plain prefix matching can't reuse at all.
+    /// Omit to disable. Can be suppressed at runtime without editing this
+    /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
+    #[arg(long)]
+    pub cache_reuse: Option<u32>,
+    /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
+    /// sweep. Only meaningful with `--cache`.
+    ///
+    /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
+    /// of free space + the cache's own current footprint, recomputed on
+    /// every sweep so it tracks disk pressure from other applications).
+    /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
+    /// without editing this flag; the flag wins if both are set.
+    #[arg(long)]
+    pub cache_disk_gb: Option<u64>,
+    /// Override the K cache element type (`--cache-type-k`). One of:
+    /// `f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`.
+    ///
+    /// Omit to use the `q8_0` default, which roughly halves KV cache
+    /// bytes-per-token versus llama-server's own `f16` default. Set
+    /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
+    /// axis not explicitly overridden here.
+    #[arg(long)]
+    pub cache_type_k: Option<KvCacheType>,
+    /// Override the V cache element type (`--cache-type-v`). Same values
+    /// as `--cache-type-k`.
+    ///
+    /// Quantizing V additionally requires Flash Attention to be active —
+    /// llama-server hard-errors at startup otherwise. gglib leaves
+    /// `--flash-attn` at llama-server's own `auto`; if that resolves off
+    /// for your model/backend, override this to `f16` or set
+    /// `GGLIB_DISABLE_KV_QUANT=1`.
+    #[arg(long)]
+    pub cache_type_v: Option<KvCacheType>,
+}
+
+impl CacheArgs {
+    /// Convert into the runtime's cache options.
+    ///
+    /// The single construction point for [`ProxyCacheOptions`] on the CLI
+    /// side, so `serve` and `proxy` cannot drift in how a flag is mapped.
+    #[must_use]
+    pub fn into_proxy_cache_options(self) -> ProxyCacheOptions {
+        ProxyCacheOptions {
+            enabled: self.cache,
+            slot_dir: self.slot_dir,
+            ram_mb: self.cache_ram_mb,
+            reuse: self.cache_reuse,
+            disk_gb: self.cache_disk_gb,
+            type_k: self.cache_type_k,
+            type_v: self.cache_type_v,
+        }
+    }
 }
 
 /// Serve-command options that don't belong to another group.

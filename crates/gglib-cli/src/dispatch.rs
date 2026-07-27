@@ -12,7 +12,7 @@
 use anyhow::Result;
 use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::{ProxyCacheOptions, StandaloneProxyParams};
+use gglib_runtime::proxy::StandaloneProxyParams;
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -265,12 +265,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             presence_penalty,
             min_p,
             cache,
-            slot_dir,
-            cache_ram_mb,
-            cache_reuse,
-            cache_disk_gb,
-            cache_type_k,
-            cache_type_v,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -337,15 +331,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 settings_repo: ctx.app.settings().repo(),
                 default_context: effective_context,
                 inference_override,
-                cache: ProxyCacheOptions {
-                    enabled: cache,
-                    slot_dir,
-                    ram_mb: cache_ram_mb,
-                    reuse: cache_reuse,
-                    disk_gb: cache_disk_gb,
-                    type_k: cache_type_k,
-                    type_v: cache_type_v,
-                },
+                cache: cache.into_proxy_cache_options(),
                 // `gglib proxy` serves the whole catalog and swaps on demand;
                 // `gglib serve` is the pinned mode of this same entry point.
                 pinned: None,
