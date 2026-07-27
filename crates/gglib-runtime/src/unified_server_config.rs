@@ -9,33 +9,34 @@
 //! populate them won, and a surface that forgot silently got llama-server's
 //! default instead of gglib's.
 //!
-//! [`UnifiedServerConfig`] is the one struct that carries *everything* needed
-//! to launch a model — whether the caller is `gglib serve`, `gglib proxy`, or
-//! the GUI — and applies a strict 3-tier cascade to it.
+//! [`UnifiedServerConfig`] carries the settings needed to launch a model —
+//! whether the caller is `gglib serve`, `gglib proxy`, or the GUI — and
+//! applies a strict 3-tier cascade to them.
 //!
 //! ## The cascade
 //!
 //! | Tier | Source | Where it lives |
 //! |------|--------|----------------|
 //! | 1 (wins) | Explicit overrides — CLI flags, GUI request fields | [`UnifiedServerConfig::explicit`] |
-//! | 2 | Curated model defaults — GGUF metadata, model tags | `explicit.model_server_ctx`, [`UnifiedServerConfig::model_tags`] |
+//! | 2 | Curated model defaults — GGUF metadata, model tags | `explicit.model_server_ctx`; tags, resolved by the caller |
 //! | 3 (floor) | Global defaults — app settings, `127.0.0.1`, `--parallel 1` | [`UnifiedServerConfig::globals`] |
 //!
 //! Tier 2 is split across two places for a reason. The per-model context
 //! length already has a home inside [`ServerConfigOptions`] (it is the second
-//! rung of [`resolve_context_size`]'s 4-level chain), and the tag-driven
-//! defaults for jinja, reasoning format and MTP are resolved from
-//! [`UnifiedServerConfig::model_tags`] downstream in `build_server_config`.
-//! Duplicating either here would mean two resolvers to keep in step.
+//! rung of [`resolve_context_size`]'s 4-level chain). The tag-driven defaults
+//! for jinja, reasoning format and MTP are resolved from the model's own tags
+//! by `build_server_config` — the caller already has the model in hand to get
+//! `model_id`/`model_name`/`model_path` there in the first place, so this
+//! struct does not duplicate them.
 //!
 //! ## Layering, not re-implementation
 //!
 //! This module resolves *tiers*; it does not translate options into
 //! command-line flags. [`resolved_options`](UnifiedServerConfig::resolved_options)
-//! flattens the three tiers into a single [`ServerConfigOptions`], and
-//! `crate::server_config::resolve_unified_config` then hands that to the
-//! canonical `build_server_config`. Adding a capability resolver stays a
-//! one-line change in `build_server_config` and propagates here for free.
+//! flattens the three tiers into a single [`ServerConfigOptions`], which the
+//! caller then hands to the canonical `build_server_config` alongside the
+//! model's identity and tags. Adding a capability resolver stays a one-line
+//! change in `build_server_config` and propagates here for free.
 
 use std::path::PathBuf;
 
@@ -116,36 +117,22 @@ pub fn default_slot_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("slots"))
 }
 
-/// Everything needed to launch one model, across every surface.
+/// The launch settings that go through the 3-tier cascade, across every
+/// surface.
 ///
-/// See the [module docs](self) for the tier semantics.
+/// Model identity (`model_id`/`model_name`/`model_path`/tags) and pinning are
+/// deliberately not here: every real caller already has the `Model` domain
+/// object and its own pinning decision in hand, and threading copies of both
+/// through this struct as well would just be a second place for them to go
+/// stale. See the [module docs](self) for the tier semantics.
 #[derive(Debug, Clone)]
 pub struct UnifiedServerConfig {
-    // --- Model identity ---
-    /// Database row id.
-    pub model_id: i64,
-    /// Human-readable name, also the key clients address the model by.
-    pub model_name: String,
-    /// Absolute path to the GGUF file.
-    pub model_path: PathBuf,
-    /// Capability tags (`"mtp"`, `"agent"`, `"reasoning"`, …) driving the
-    /// tag-based half of tier 2.
-    pub model_tags: Vec<String>,
-
     /// Tier 1 — explicit overrides. Also carries the per-model context length
     /// (`model_server_ctx`), which is tier 2; see the module docs.
     pub explicit: ServerConfigOptions,
 
     /// Tier 3 — the global floor.
     pub globals: GlobalDefaults,
-
-    /// Whether the HTTP surface should refuse every model but this one.
-    ///
-    /// `true` for `gglib serve <model>`, which exists to give single-model
-    /// clients (VS Code Copilot's BYOK endpoint, for one) a fixed endpoint.
-    /// `false` for `gglib proxy` and the GUI, where switching models is the
-    /// point.
-    pub pinned: bool,
 }
 
 impl UnifiedServerConfig {
@@ -153,9 +140,9 @@ impl UnifiedServerConfig {
     ///
     /// Tier 3 is the base and tier 1 is overlaid on top, so an explicit `Some`
     /// always wins and an explicit `None` falls through to the global default.
-    /// Tier 2 rides along inside the merged options (`model_server_ctx`) and
-    /// on [`Self::model_tags`], both consumed downstream by
-    /// `build_server_config`.
+    /// Tier 2's per-model context rides along inside the merged options
+    /// (`model_server_ctx`); its tag-driven half is resolved by the caller
+    /// passing the model's own tags to `build_server_config` alongside this.
     #[must_use]
     pub fn resolved_options(&self) -> ServerConfigOptions {
         let tier3 = ServerConfigOptions {
@@ -216,13 +203,8 @@ mod tests {
     /// A config with nothing explicit set — every value comes from tier 3.
     fn bare(globals: GlobalDefaults) -> UnifiedServerConfig {
         UnifiedServerConfig {
-            model_id: 1,
-            model_name: "test-model".to_string(),
-            model_path: PathBuf::from("/models/test.gguf"),
-            model_tags: Vec::new(),
             explicit: ServerConfigOptions::default(),
             globals,
-            pinned: false,
         }
     }
 

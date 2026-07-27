@@ -72,10 +72,6 @@ pub async fn execute(
     // the translation into llama-server flags both happen downstream, so this
     // handler never assembles a command line of its own.
     let unified = UnifiedServerConfig {
-        model_id: model.id,
-        model_name: model.name.clone(),
-        model_path: model.file_path.clone(),
-        model_tags: model.tags.clone(),
         explicit: ServerConfigOptions {
             context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
             model_server_ctx: model
@@ -106,7 +102,6 @@ pub async fn execute(
             slot_dir: cache.slot_dir.clone(),
             ..Default::default()
         },
-        pinned: true,
     };
 
     let launch_overrides = unified.resolved_options();
@@ -181,15 +176,7 @@ mod tests {
 
     /// Mirrors how `execute` assembles its config, minus the I/O.
     fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedServerConfig {
-        UnifiedServerConfig {
-            model_id: 1,
-            model_name: "qwen2.5".to_string(),
-            model_path: PathBuf::from("/models/qwen2.5.gguf"),
-            model_tags: Vec::new(),
-            explicit,
-            globals,
-            pinned: true,
-        }
+        UnifiedServerConfig { explicit, globals }
     }
 
     /// `--ctx-size max` resolves against the model's GGUF context length,
