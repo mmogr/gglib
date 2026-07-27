@@ -64,6 +64,17 @@ impl SamplingArgs {
             min_p: self.min_p,
         }
     }
+
+    /// The overrides as a config, or `None` when no sampling flag was passed.
+    ///
+    /// An all-`None` config is not the same as no override at all: it sits at
+    /// the top of the merge hierarchy, so handing one down unconditionally
+    /// would announce an opinion the user never expressed.
+    #[must_use]
+    pub fn into_override(self) -> Option<gglib_core::domain::InferenceConfig> {
+        let config = self.into_inference_config();
+        (config != gglib_core::domain::InferenceConfig::default()).then_some(config)
+    }
 }
 
 /// MTP (Multi-Token Prediction) speculative-decoding overrides for the `serve` command.

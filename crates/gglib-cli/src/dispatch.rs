@@ -10,7 +10,6 @@
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
 use anyhow::Result;
-use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_runtime::proxy::StandaloneProxyParams;
 
@@ -257,13 +256,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             port,
             llama_port,
             default_context,
-            temperature,
-            top_p,
-            top_k,
-            max_tokens,
-            repeat_penalty,
-            presence_penalty,
-            min_p,
+            sampling,
             cache,
             command,
         } => {
@@ -301,26 +294,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 global_default_ctx: settings.default_context_size,
                 ..Default::default()
             });
-            let inference_override = if temperature.is_some()
-                || top_p.is_some()
-                || top_k.is_some()
-                || max_tokens.is_some()
-                || repeat_penalty.is_some()
-                || presence_penalty.is_some()
-                || min_p.is_some()
-            {
-                Some(InferenceConfig {
-                    temperature,
-                    top_p,
-                    top_k,
-                    max_tokens,
-                    repeat_penalty,
-                    presence_penalty,
-                    min_p,
-                })
-            } else {
-                None
-            };
+            let inference_override = sampling.into_override();
             gglib_runtime::proxy::start_proxy_standalone(StandaloneProxyParams {
                 host,
                 port,
