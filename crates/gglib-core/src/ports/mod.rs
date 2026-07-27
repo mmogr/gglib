@@ -64,7 +64,7 @@ pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
-pub use model_runtime::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
+pub use model_runtime::{LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget};
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
