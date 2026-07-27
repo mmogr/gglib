@@ -13,27 +13,20 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    BenchmarkDeps, BenchmarkOps, CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps,
-    McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps,
-    SettingsOps, SetupDeps, SetupOps,
+    AppServices, BenchmarkOps, CouncilApprovalRegistry, DownloadOps, McpOps, ModelOps, ProxyOps,
+    ServerOps, ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, ProcessRunner,
+    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRuntimePort,
+    ProcessRunner,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
 use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
-
-use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
-use gglib_runtime::process::ProcessManager;
-use gglib_runtime::proxy::ProxySupervisor;
-use gglib_runtime::system::DefaultSystemProbe;
 
 use crate::sse::SseBroadcaster;
 
@@ -240,107 +233,49 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 5. Build 7 domain ops.
-    let server_events: Arc<dyn gglib_core::events::ServerEvents> =
-        Arc::new(crate::sse::AxumServerEvents::new((*sse).clone()));
-    let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
-        Arc::new(ToolSupportDetector::new());
-    let proxy_supervisor = Arc::new(ProxySupervisor::new());
-    let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-
-    // Create the shared SingleSwap ProcessManager and ModelRuntimePort at the
-    // composition root. Injecting this into both ProxyOps and (later)
-    // BenchmarkOps ensures that only one llama-server can run at a time
-    // system-wide — enforced by SingleSwap — preventing VRAM contention.
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
-    let catalog_for_runtime = Arc::clone(&catalog);
-    // `Auto` is the manager's default (used by ProxyOps and this composition
-    // root's public `runtime` field, parity with the CLI proxy). BenchmarkOps
-    // below overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
-    // — it must never gain a prompt cache, which would perturb prefill timings
-    // and RAM footprint — while still sharing this same SingleSwap manager, so
-    // only one llama-server ever runs system-wide.
-    let process_manager = Arc::new(ProcessManager::new_single_swap(
-        config.base_port,
-        config.llama_server_path.to_string_lossy().into_owned(),
-        catalog_for_runtime,
-        ServerConfigOptions::default(),
-        CacheRamSetting::Auto,
-    ));
-    let runtime: Arc<dyn ModelRuntimePort> =
-        Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
-    let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
-        process_manager,
-        CacheRamSetting::ExplicitMb(0),
-    ));
-    let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
-        Arc::new(DefaultSystemProbe::new());
-    let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
-
-    let models = Arc::new(ModelOps::new(ModelDeps {
-        core: Arc::clone(&core),
-        runner: runner.clone(),
-        gguf_parser,
-    }));
-
-    let servers = Arc::new(ServerOps::new(ServerDeps {
-        core: Arc::clone(&core),
-        runner: runner.clone(),
-        emitter: sse_emitter,
-        server_events,
-        tool_detector: tool_detector.clone(),
-    }));
-
-    let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
-        downloads: downloads.clone(),
-        hf: hf_client.clone(),
-        tool_detector,
-    }));
-
-    let settings = Arc::new(SettingsOps::new(SettingsDeps {
-        core: Arc::clone(&core),
-        system_probe: system_probe.clone(),
-        downloads: downloads.clone(),
-    }));
-
-    let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
-
-    // Create orchestrator repos early so we can share them between ProxyOps
-    // (virtual model routing) and AxumContext (REST API handlers).
+    // 5. Build the shared domain-ops graph.
+    //
+    // Assembly lives in gglib-app-services so this adapter and the Tauri one
+    // cannot drift; only genuinely Axum-shaped wiring stays here.
     let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
     if let Err(e) = council_repo.mark_interrupted_runs().await {
         tracing::warn!("council: failed to mark interrupted runs on startup: {e}");
     }
     let approval_registry = Arc::new(CouncilApprovalRegistry::new());
-
-    // Benchmark repository and ops — constructed after runtime so BenchmarkOps
-    // shares the same SingleSwap ProcessManager as ProxyOps.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
-    let benchmark_http_client = BenchmarkDeps::build_http_client()?;
-    let benchmark = Arc::new(BenchmarkOps::new(BenchmarkDeps {
-        model_repo: repos.models.clone(),
-        runtime: benchmark_runtime,
-        bench_repo: bench_repo.clone(),
-        http_client: benchmark_http_client,
-        settings_repo: repos.settings.clone(),
-    }));
 
-    let proxy = Arc::new(ProxyOps::new(ProxyDeps {
-        supervisor: proxy_supervisor,
-        model_repo,
-        mcp: mcp.clone(),
+    let AppServices {
+        models,
+        servers,
+        downloads: download_ops,
+        settings,
+        mcp_ops,
+        proxy,
+        setup,
+        benchmark,
+        proxy_supervisor: _,
+        model_repo: _,
+        catalog,
+        runtime,
+    } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&core),
-        approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        repos: repos.clone(),
+        runner: runner.clone(),
+        downloads: downloads.clone(),
+        hf_client: hf_client.clone(),
+        gguf_parser,
+        tool_detector: Arc::new(ToolSupportDetector::new()),
+        mcp: mcp.clone(),
+        emitter: sse.clone(),
+        server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
         council_repo: Arc::clone(&council_repo)
             as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
-        runtime: Arc::clone(&runtime),
-    }));
-
-    let setup = Arc::new(SetupOps::new(SetupDeps {
-        core: Arc::clone(&core),
-        system_probe,
-    }));
+        approval_registry: Arc::clone(&approval_registry)
+            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
+        base_port: config.base_port,
+        llama_server_path: config.llama_server_path.clone(),
+    })?;
 
     // Emit initial server snapshot after initialization
     tokio::spawn({
