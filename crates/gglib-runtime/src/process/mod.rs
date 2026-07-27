@@ -9,6 +9,7 @@ mod ports;
 pub mod shutdown;
 mod startup_guard;
 mod stream;
+pub mod swap_state;
 mod types;
 
 // Re-export commonly used types
@@ -19,7 +20,8 @@ pub use health::{
     check_http_health, check_process_health, update_health_batch, wait_for_http_health,
 };
 pub use logs::{LogManagerSink, ServerLogEntry, ServerLogManager, get_log_manager};
-pub use manager::{CurrentModelState, ProcessManager, ProcessStrategy};
+pub use manager::{ProcessManager, ProcessStrategy};
 pub use shutdown::{kill_pid, shutdown_child};
 pub(crate) use stream::spawn_stream_reader;
+pub use swap_state::{CurrentModelState, SwapState};
 pub use types::{RunningProcess, ServerInfo};

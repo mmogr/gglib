@@ -370,7 +370,20 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
     match state.catalog_port.list_models().await {
-        Ok(models) => {
+        Ok(mut models) => {
+            // Pinned mode refuses every other model, so advertising the rest
+            // of the catalog would offer a BYOK client a choice that can only
+            // come back as PinnedModelMismatch. Filtering the summaries here
+            // rather than the finished response also keeps the variants below
+            // correct for free — they are built from what survives.
+            //
+            // Profile variants of the pinned model and the council virtuals
+            // both stay: neither changes which model actually runs, so
+            // neither can trip the guard.
+            if let Some(pinned) = state.runtime_port.pinned_model() {
+                models.retain(|m| m.name == pinned);
+            }
+
             let mut response = ModelsResponse::from_summaries(models, state.default_ctx);
 
             // Apply safety margin to every model's context_window.

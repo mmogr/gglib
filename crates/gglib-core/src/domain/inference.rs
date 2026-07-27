@@ -310,9 +310,9 @@ impl InferenceConfig {
     /// Returns a vector of argument strings suitable for passing to llama-server.
     /// Uses the same flag names as llama.cpp: `--temp`, `--top-p`, `--top-k`, `-n`, `--repeat-penalty`.
     ///
-    /// This is the single source of truth for CLI flag conversion, used by:
-    /// - `LlamaCommandBuilder` (for CLI commands)
-    /// - GUI server startup (via `ServerConfig.extra_args`)
+    /// This is the single source of truth for CLI flag conversion, reached by
+    /// every launch surface through `build_server_config` and
+    /// `ServerConfig.extra_args`.
     ///
     /// # Example
     ///

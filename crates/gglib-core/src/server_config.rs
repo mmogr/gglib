@@ -152,6 +152,76 @@ pub struct ServerConfigOptions {
     /// Inference parameter overrides (temperature, top-p, etc.) forwarded
     /// directly to llama-server.
     pub inference_params: Option<InferenceConfig>,
+
+    /// Whether to memory-lock the model into RAM (`--mlock`).
+    /// `None` defaults to `false` in `build_server_config()`.
+    pub mlock: Option<bool>,
+}
+
+impl ServerConfigOptions {
+    /// Field-wise merge: every `Some` in `over` wins, every `None` falls
+    /// through to `self`.
+    ///
+    /// This is the single layering primitive behind both places where two sets
+    /// of options meet:
+    ///
+    /// - the 3-tier cascade in `UnifiedServerConfig::resolved_options`, where
+    ///   global defaults are the base and explicit CLI/GUI overrides are `over`;
+    /// - per-call launch overrides layered on top of a `ProcessManager`'s
+    ///   standing template.
+    ///
+    /// Note that this merges *options*, not resolved values — the tier chain
+    /// baked into [`resolve_context_size`] (request → per-model → global →
+    /// hardcoded) still runs afterwards on the merged result, so overlaying
+    /// never collapses those tiers early.
+    ///
+    /// `over` is destructured exhaustively on purpose: adding a field to this
+    /// struct then fails to compile until it is given merge semantics here,
+    /// rather than being silently dropped.
+    #[must_use]
+    pub fn overlay(&self, over: &Self) -> Self {
+        let Self {
+            context_size,
+            model_server_ctx,
+            global_default_ctx,
+            port,
+            jinja,
+            reasoning_format,
+            mtp_draft_n_max,
+            mtp_draft_p_min,
+            slot_save_path,
+            cache_ram_mb,
+            cache_reuse,
+            cache_type_k,
+            cache_type_v,
+            inference_params,
+            mlock,
+        } = over;
+
+        Self {
+            context_size: context_size.or(self.context_size),
+            model_server_ctx: model_server_ctx.or(self.model_server_ctx),
+            global_default_ctx: global_default_ctx.or(self.global_default_ctx),
+            port: port.or(self.port),
+            jinja: jinja.or(self.jinja),
+            reasoning_format: reasoning_format
+                .clone()
+                .or_else(|| self.reasoning_format.clone()),
+            mtp_draft_n_max: mtp_draft_n_max.or(self.mtp_draft_n_max),
+            mtp_draft_p_min: mtp_draft_p_min.or(self.mtp_draft_p_min),
+            slot_save_path: slot_save_path
+                .clone()
+                .or_else(|| self.slot_save_path.clone()),
+            cache_ram_mb: cache_ram_mb.or(self.cache_ram_mb),
+            cache_reuse: cache_reuse.or(self.cache_reuse),
+            cache_type_k: cache_type_k.or(self.cache_type_k),
+            cache_type_v: cache_type_v.or(self.cache_type_v),
+            inference_params: inference_params
+                .clone()
+                .or_else(|| self.inference_params.clone()),
+            mlock: mlock.or(self.mlock),
+        }
+    }
 }
 
 // =============================================================================
@@ -304,5 +374,129 @@ mod tests {
     #[test]
     fn parse_ctx_size_flag_propagates_parse_error() {
         assert!(parse_ctx_size_flag(Some("not-a-number")).is_err());
+    }
+
+    // -------------------------------------------------------------------
+    // overlay
+    // -------------------------------------------------------------------
+
+    use crate::cache_config::KvCacheType;
+    use crate::domain::InferenceConfig;
+    use std::path::PathBuf;
+
+    /// Every field set, so a merge that drops one is visible. `marker` is a
+    /// `u8` purely so each field can widen losslessly via `From`.
+    fn populated(marker: u8) -> ServerConfigOptions {
+        ServerConfigOptions {
+            context_size: Some(u64::from(marker)),
+            model_server_ctx: Some(usize::from(marker)),
+            global_default_ctx: Some(u64::from(marker)),
+            port: Some(u16::from(marker)),
+            jinja: Some(true),
+            reasoning_format: Some(format!("fmt-{marker}")),
+            mtp_draft_n_max: Some(u32::from(marker)),
+            mtp_draft_p_min: Some(f32::from(marker)),
+            slot_save_path: Some(PathBuf::from(format!("/slots/{marker}"))),
+            cache_ram_mb: Some(u64::from(marker)),
+            cache_reuse: Some(u32::from(marker)),
+            cache_type_k: Some(KvCacheType::Q8_0),
+            cache_type_v: Some(KvCacheType::F16),
+            inference_params: Some(InferenceConfig {
+                temperature: Some(f32::from(marker)),
+                ..Default::default()
+            }),
+            mlock: Some(true),
+        }
+    }
+
+    /// A fully-populated `over` must win on every single field. Compared
+    /// field-by-field rather than wholesale so a failure names the culprit.
+    #[test]
+    fn overlay_over_wins_on_every_field() {
+        let merged = populated(1).overlay(&populated(2));
+
+        assert_eq!(merged.context_size, Some(2));
+        assert_eq!(merged.model_server_ctx, Some(2));
+        assert_eq!(merged.global_default_ctx, Some(2));
+        assert_eq!(merged.port, Some(2));
+        assert_eq!(merged.jinja, Some(true));
+        assert_eq!(merged.reasoning_format.as_deref(), Some("fmt-2"));
+        assert_eq!(merged.mtp_draft_n_max, Some(2));
+        assert_eq!(merged.mtp_draft_p_min, Some(2.0));
+        assert_eq!(merged.slot_save_path, Some(PathBuf::from("/slots/2")));
+        assert_eq!(merged.cache_ram_mb, Some(2));
+        assert_eq!(merged.cache_reuse, Some(2));
+        assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
+        assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
+        assert_eq!(
+            merged.inference_params.and_then(|c| c.temperature),
+            Some(2.0)
+        );
+        assert_eq!(merged.mlock, Some(true));
+    }
+
+    /// The direction that actually does the work — and the identity property
+    /// the cascade leans on when a tier has no opinion: a base with values and
+    /// an `over` that is silent must keep every base value.
+    #[test]
+    fn overlay_falls_through_to_base_on_every_field() {
+        let merged = populated(1).overlay(&ServerConfigOptions::default());
+
+        assert_eq!(merged.context_size, Some(1));
+        assert_eq!(merged.model_server_ctx, Some(1));
+        assert_eq!(merged.global_default_ctx, Some(1));
+        assert_eq!(merged.port, Some(1));
+        assert_eq!(merged.jinja, Some(true));
+        assert_eq!(merged.reasoning_format.as_deref(), Some("fmt-1"));
+        assert_eq!(merged.mtp_draft_n_max, Some(1));
+        assert_eq!(merged.mtp_draft_p_min, Some(1.0));
+        assert_eq!(merged.slot_save_path, Some(PathBuf::from("/slots/1")));
+        assert_eq!(merged.cache_ram_mb, Some(1));
+        assert_eq!(merged.cache_reuse, Some(1));
+        assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
+        assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
+        assert_eq!(
+            merged.inference_params.and_then(|c| c.temperature),
+            Some(1.0)
+        );
+        assert_eq!(merged.mlock, Some(true));
+    }
+
+    /// Per-field interleaving: neither side wholesale-replaces the other.
+    #[test]
+    fn overlay_merges_per_field_not_wholesale() {
+        let base = ServerConfigOptions {
+            context_size: Some(8192),
+            mlock: Some(true),
+            ..Default::default()
+        };
+        let over = ServerConfigOptions {
+            port: Some(5500),
+            mlock: Some(false),
+            ..Default::default()
+        };
+
+        let merged = base.overlay(&over);
+
+        assert_eq!(merged.context_size, Some(8192), "base-only field survives");
+        assert_eq!(merged.port, Some(5500), "over-only field lands");
+        assert_eq!(merged.mlock, Some(false), "contested field goes to over");
+    }
+
+    /// `Some(false)` is an explicit opinion, not an absence — it has to beat a
+    /// `Some(true)` underneath it. This is what lets `--mtp-draft-n-max 0` and
+    /// an explicit jinja-off override a tag-derived default.
+    #[test]
+    fn overlay_treats_some_false_as_an_override() {
+        let base = ServerConfigOptions {
+            jinja: Some(true),
+            ..Default::default()
+        };
+        let over = ServerConfigOptions {
+            jinja: Some(false),
+            ..Default::default()
+        };
+
+        assert_eq!(base.overlay(&over).jinja, Some(false));
     }
 }

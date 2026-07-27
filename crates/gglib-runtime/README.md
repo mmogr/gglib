@@ -77,6 +77,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | [`process_core.rs`](src/process_core.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-coverage.json) |
 | [`runner.rs`](src/runner.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-runner-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-runner-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-runner-coverage.json) |
 | [`server_config.rs`](src/server_config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-coverage.json) |
+| [`unified_server_config.rs`](src/unified_server_config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-coverage.json) |
 | [`assistant_ui/`](src/assistant_ui/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-coverage.json) |
 | [`llama/`](src/llama/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-coverage.json) |
 | [`pidfile/`](src/pidfile/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-coverage.json) |
@@ -108,18 +109,43 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **CLI Chat** — Direct terminal chat via llama-cli
 - **`OpenAI` Proxy** — Transparent proxy that routes to appropriate model instances
 - **Auto Model Swap** — Proxy automatically loads/unloads models based on requests
+- **Pinned Mode** — `ProcessManager::new_pinned` serves exactly one model and refuses all others, backing `gglib serve`
 - **Concurrent Startup Coordination** — SingleSwap strategy uses watch channels so concurrent requests during model startup wait for the result rather than failing immediately.
 - **Health Monitoring** — Polls server health endpoints for readiness
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
 - **MTP Speculative Decoding** — Auto-enabled for models with the `"mtp"` tag via the canonical `build_server_config` builder
 
-## ServerConfig Builder
+## Config: one translator, fed by an optional cascade
 
-All launch surfaces (proxy auto-start, GUI/HTTP start-server, CLI agent chat)
-must use `build_server_config` to construct a `ServerConfig`. This is the
-canonical entry point that calls all capability resolvers in one place and
-guarantees identical llama-server arguments across every surface.
+Every launch surface — the CLI, the proxy, both GUIs — ultimately calls
+`build_server_config`, which is what guarantees a given model receives
+identical llama-server arguments regardless of what started it. Capability
+detection lives in exactly one place; adding a resolver there reaches every
+surface automatically.
+
+A caller juggling explicit overrides, curated model defaults and global
+defaults resolves them first with `UnifiedServerConfig::resolved_options()`,
+then hands the flattened result to `build_server_config` alongside the
+model's identity and tags:
+
+```rust,ignore
+use gglib_runtime::{UnifiedServerConfig, GlobalDefaults, build_server_config};
+use gglib_core::server_config::ServerConfigOptions;
+
+let opts = UnifiedServerConfig {
+    explicit: ServerConfigOptions { mlock: Some(true), ..Default::default() },
+    globals: GlobalDefaults::default(),
+}
+.resolved_options();
+
+let config = build_server_config(model.id, model.name.clone(), model.file_path.clone(), base_port, &model.tags, opts);
+```
+
+### The translator directly
+
+Callers that have already flattened their options can reach
+`build_server_config` on its own:
 
 ```rust,ignore
 use gglib_runtime::{build_server_config, ServerConfigOptions};

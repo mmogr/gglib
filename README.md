@@ -24,8 +24,10 @@ gglib model list
 # Start chatting (launches llama-server automatically)
 gglib chat qwen2.5
 
-# Serve a model and use it from any OpenAI client
+# Pin one model to an OpenAI-compatible endpoint (same proxy stack, one model)
 gglib serve qwen2.5
+# API:       http://127.0.0.1:8080/v1/chat/completions
+# Dashboard: http://127.0.0.1:8080/v1/proxy/status
 
 # Pipe anything into a question
 cat error.log | gglib question "what went wrong?"
@@ -190,8 +192,10 @@ is forwarded to llama-server, a stateless truncation pass runs:
 **Proxy dashboard** — a unified `DashboardSnapshot` of active connections,
 per-slot context usage, and recent request history — is available at
 `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (live SSE
-updates). It's consumed by both `gglib proxy dashboard` (a live terminal
-view) and the web GUI's Proxy Dashboard modal. See
+updates), on `gglib serve` as well as `gglib proxy`: `serve` runs the same
+stack pinned to one model, so it gets the same endpoints. It's consumed by
+both `gglib proxy dashboard` (a live terminal view) and the web GUI's Proxy
+Dashboard modal. See
 [`gglib-proxy`'s docs](crates/gglib-proxy/README.md#proxy-dashboard) for the
 full data contract.
 
@@ -202,7 +206,8 @@ gglib proxy dashboard --port 9887
 
 ### KV Cache Session Persistence
 
-For sequential multi-agent workflows, enable `--cache --slot-dir <path>` to persist
+Available on `gglib serve` and `gglib proxy` alike, and opt-in on both. For
+sequential multi-agent workflows, enable `--cache --slot-dir <path>` to persist
 KV cache state between requests. The proxy automatically saves and restores per-session
 slot files (saved atomically via a temp-then-rename), gated by a semaphore to prevent
 concurrent access. Stale caches are detected via mtime comparison and skipped
@@ -638,6 +643,7 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Desktop GUI** | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md), [src-tauri](src-tauri/README.md) |
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `127.0.0.1:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
+| **Pinned endpoint** | `gglib serve <id>` | The same proxy locked to one model — `/v1/models` advertises only that model, for clients that cannot switch |
 
 **Shell completions** — enable tab completion for your shell:
 
@@ -652,8 +658,8 @@ All interfaces share the same database and model directory. Pick whichever fits 
 <details>
 <summary><strong>Security notes</strong></summary>
 
-- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. Proxy also binds `127.0.0.1` by default with the same `--host` flag.
-- Both `gglib web` and `gglib proxy` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
+- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. `gglib proxy` and `gglib serve` also bind `127.0.0.1` by default — `serve` runs the proxy stack, so it inherits the same hardened defaults (`--host 127.0.0.1`, `--metrics`, `--parallel 1`) rather than the bare llama-server invocation it used before.
+- `gglib web`, `gglib proxy` and `gglib serve` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
 - No authentication — designed for trusted networks
 - Use firewall rules, private subnets, or VPN; do not expose to the public internet without additional auth
 

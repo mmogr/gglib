@@ -68,8 +68,3 @@ pub fn log_inference_info(config: &InferenceConfig) {
         eprintln!("    Min-p: {}", min_p);
     }
 }
-
-/// Log command execution at debug level.
-pub fn log_command_execution(cmd: &std::process::Command) {
-    tracing::debug!("Executing: {:?}", cmd);
-}

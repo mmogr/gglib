@@ -40,6 +40,15 @@ struct FixedUpstream {
     /// sliding-window/hybrid/recurrent model, where the proxy must bypass the
     /// disk slot layer entirely.
     slot_restore_supported: bool,
+    /// Whether this runtime reports itself pinned to `model_name`.
+    ///
+    /// Only affects [`ModelRuntimePort::pinned_model`] — enforcement lives in
+    /// `gglib-runtime`'s `SwapState` and is out of scope here (see
+    /// `integration_pinned_models.rs`). This exists so the roundtrip tests
+    /// below can prove KV cache persistence works identically whether or not
+    /// the endpoint is pinned — #633 asked for CI coverage of exactly this
+    /// combination, and nothing previously exercised it.
+    pinned: bool,
 }
 
 #[async_trait]
@@ -62,6 +71,10 @@ impl ModelRuntimePort for FixedUpstream {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    fn pinned_model(&self) -> Option<&str> {
+        self.pinned.then_some(self.model_name.as_str())
     }
 }
 
@@ -246,16 +259,27 @@ async fn spawn_proxy_with_cache(
     model_name: &str,
     slot_dir: std::path::PathBuf,
 ) -> (String, CancellationToken) {
-    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true).await
+    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true, false).await
+}
+
+/// [`spawn_proxy_with_cache`], pinned to `model_name` — the `gglib serve`
+/// shape, as opposed to every other helper here which models `gglib proxy`.
+async fn spawn_pinned_proxy_with_cache(
+    upstream_port: u16,
+    model_name: &str,
+    slot_dir: std::path::PathBuf,
+) -> (String, CancellationToken) {
+    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true, true).await
 }
 
 /// [`spawn_proxy_with_cache`] with control over whether the upstream model
-/// supports disk slot restore.
+/// supports disk slot restore, and whether the runtime reports itself pinned.
 async fn spawn_proxy_with_cache_for_model(
     upstream_port: u16,
     model_name: &str,
     slot_dir: std::path::PathBuf,
     slot_restore_supported: bool,
+    pinned: bool,
 ) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -264,6 +288,7 @@ async fn spawn_proxy_with_cache_for_model(
         port: upstream_port,
         model_name: model_name.into(),
         slot_restore_supported,
+        pinned,
     });
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
@@ -746,6 +771,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
         "test-model",
         slot_dir.clone(),
         false, // partial KV memory — disk layer must be skipped
+        false, // pinned
     )
     .await;
 
@@ -800,6 +826,86 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
         vec![1],
         "Expected generate only, got: {:?}",
         actions
+    );
+
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
+    let _ = std::fs::remove_dir_all(&slot_dir);
+}
+
+/// KV cache persistence on the pinned (`gglib serve`) path.
+///
+/// Issue #633 asked for CI coverage of `/v1/proxy/status` *and* KV cache
+/// persistence on `gglib serve <model>` — `integration_pinned_models.rs`
+/// covers the dashboard and catalog filtering, and the roundtrip test above
+/// covers caching, but nothing exercised the combination. `gglib serve`
+/// pins the process manager, not the cache lifecycle, so this is expected to
+/// pass identically to the unpinned case — this test is what makes that an
+/// asserted fact instead of an assumption.
+#[tokio::test]
+async fn pinned_proxy_persists_kv_cache_across_the_session() {
+    let slot_dir = std::env::temp_dir().join(format!("gglib-slot-pinned-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&slot_dir);
+
+    let upstream_cancel = CancellationToken::new();
+    let (upstream_port, action_log, save_count, restore_count, _last_chat_body) =
+        spawn_mock_upstream_with_slots(upstream_cancel.clone(), slot_dir.clone()).await;
+
+    let session_id = "pinned-roundtrip-test";
+
+    let (proxy_base, proxy_cancel) =
+        spawn_pinned_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
+
+    // Written after the proxy starts — see the identical comment on
+    // `slot_roundtrip_non_streaming_verify_order_and_counts` for why the
+    // ordering matters (the mtime staleness guard compares whole seconds
+    // against `server_start_time`).
+    let bin_path = slot_bin_path(&slot_dir, 1, session_id);
+    std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
+    std::fs::write(&bin_path, b"fake kv state").unwrap();
+
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy_base))
+        .header("X-Gglib-Session-Id", session_id)
+        .json(&json!({
+            "model": "test-model",
+            "messages": [{ "role": "user", "content": "hello" }],
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("proxy should be running");
+
+    assert!(
+        response.status().is_success(),
+        "Chat completion on the pinned model should succeed: {}",
+        response.status()
+    );
+
+    assert_eq!(
+        restore_count.load(Ordering::Relaxed),
+        1,
+        "Expected exactly 1 restore call on the pinned path"
+    );
+    assert_eq!(
+        save_count.load(Ordering::Relaxed),
+        1,
+        "Expected exactly 1 save call on the pinned path"
+    );
+
+    let actions = action_log.lock().await.clone();
+    assert_eq!(
+        actions,
+        vec![0, 1, 2],
+        "Expected restore→generate→save order on the pinned path, got: {:?}",
+        actions
+    );
+
+    let final_bin = slot_bin_path(&slot_dir, 1, session_id);
+    assert!(
+        final_bin.exists(),
+        "final .bin should exist after a successful save on the pinned path: {}",
+        final_bin.display()
     );
 
     proxy_cancel.cancel();

@@ -7,6 +7,8 @@
 //!
 //! [`ModelCapabilities`]: gglib_core::ModelCapabilities
 
+use std::sync::Arc;
+
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::SetCapabilitiesRequest;
 use gglib_app_services::{ModelDeps, ModelOps};
@@ -29,9 +31,13 @@ pub async fn execute(
     let core_model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     // Build-once — ModelOps is cheap and constructed the same way as in Axum/Tauri.
+    //
+    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
+    // no shared `ProcessManager` to check, and this handler never touches
+    // serving status anyway (`get`/`set_capabilities` only).
     let ops = ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
-        runner: ctx.runner.clone(),
+        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
         gguf_parser: ctx.gguf_parser.clone(),
     });
 

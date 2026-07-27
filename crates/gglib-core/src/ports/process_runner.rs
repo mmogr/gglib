@@ -81,6 +81,8 @@ pub struct ServerConfig {
     /// V cache element type (`--cache-type-v`). Same semantics as
     /// [`Self::cache_type_k`].
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
+    /// Whether to lock the model in RAM (`--mlock`). Default: `false`.
+    pub mlock: bool,
 }
 
 impl ServerConfig {
@@ -111,6 +113,7 @@ impl ServerConfig {
             cache_reuse: None,
             cache_type_k: None,
             cache_type_v: None,
+            mlock: false,
         }
     }
 
@@ -222,6 +225,13 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_cache_type_v(mut self, t: crate::cache_config::KvCacheType) -> Self {
         self.cache_type_v = Some(t);
+        self
+    }
+
+    /// Enable memory lock (`--mlock`).
+    #[must_use]
+    pub const fn with_mlock(mut self) -> Self {
+        self.mlock = true;
         self
     }
 }

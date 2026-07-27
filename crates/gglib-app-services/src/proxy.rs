@@ -15,6 +15,7 @@ use gglib_core::ports::{
     CacheMetricsSink, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, ModelRuntimePort,
 };
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
@@ -33,7 +34,7 @@ use crate::error::GuiError;
 /// Validates that the port is in the valid range (1024-65535).
 ///
 /// Returns (port, source_description) for logging.
-pub(crate) fn resolve_llama_base_port(
+pub fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,
 ) -> Result<(u16, &'static str), GuiError> {
@@ -116,6 +117,16 @@ impl ProxyOps {
     ///
     /// * `config` - Proxy server configuration (host, port, default context)
     pub async fn start(&self, config: ProxyConfig) -> Result<SocketAddr, GuiError> {
+        self.start_raw(config).await.map_err(Self::map_start_error)
+    }
+
+    /// Shared setup behind [`Self::start`] and [`Self::ensure_running`],
+    /// returning the untranslated [`SupervisorError`].
+    ///
+    /// Kept untranslated (rather than eagerly mapped to [`GuiError`]) because
+    /// the two callers need to react differently to `AlreadyRunning` versus
+    /// `BindFailed` — see [`Self::ensure_running`].
+    async fn start_raw(&self, config: ProxyConfig) -> Result<SocketAddr, SupervisorError> {
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).
         let catalog: Arc<dyn ModelCatalogPort> =
@@ -129,7 +140,7 @@ impl ProxyOps {
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(10)
             .build()
-            .map_err(|e| GuiError::Internal(format!("Failed to build HTTP client: {e}")))?;
+            .map_err(|e| SupervisorError::Internal(format!("Failed to build HTTP client: {e}")))?;
         let orch_runner = Arc::new(CouncilRunnerAdapter::new(
             Arc::clone(&runtime),
             Arc::clone(&catalog),
@@ -142,7 +153,6 @@ impl ProxyOps {
             council_repo: Arc::clone(&self.council_repo),
         };
 
-        // Start the proxy
         self.supervisor
             .start(
                 config,
@@ -153,18 +163,97 @@ impl ProxyOps {
                 self.core.settings().repo(),
             )
             .await
-            .map_err(|e| match e {
-                SupervisorError::AlreadyRunning(addr) => {
-                    GuiError::Conflict(format!("Proxy already running at {}", addr))
-                }
-                SupervisorError::BindFailed { address, reason } => {
-                    GuiError::Internal(format!("Failed to bind proxy to {}: {}", address, reason))
-                }
-                SupervisorError::NotRunning => {
-                    GuiError::Internal("Proxy not running (unexpected)".to_string())
-                }
-                SupervisorError::Internal(msg) => GuiError::Internal(msg),
-            })
+    }
+
+    /// Translate a [`SupervisorError`] into the [`GuiError`] a caller sees.
+    ///
+    /// `BindFailed` maps to `Conflict`, not `Internal`: from the OS's
+    /// perspective the port is simply taken, which is exactly the shape of
+    /// error a caller can act on (stop the other process, or use a different
+    /// port) — the same category as `AlreadyRunning`, just discovered a layer
+    /// lower. It reads as "unexpected" only when nothing else was expected to
+    /// be listening there.
+    fn map_start_error(e: SupervisorError) -> GuiError {
+        match e {
+            SupervisorError::AlreadyRunning(addr) => {
+                GuiError::Conflict(format!("Proxy already running at {}", addr))
+            }
+            SupervisorError::BindFailed { address, reason } => GuiError::Conflict(format!(
+                "Port {address} is already in use ({reason}) — likely another `gglib serve` \
+                 or `gglib proxy` process. Stop it, or change the proxy port in Settings."
+            )),
+            SupervisorError::NotRunning => {
+                GuiError::Internal("Proxy not running (unexpected)".to_string())
+            }
+            SupervisorError::Internal(msg) => GuiError::Internal(msg),
+        }
+    }
+
+    /// Start the proxy if it is not already running, and return its address.
+    ///
+    /// Idempotent, unlike [`Self::start`], which reports an already-running
+    /// proxy as a conflict. That distinction matters for callers who need the
+    /// proxy up as a precondition rather than as the thing they were asked to
+    /// do — starting a model from the GUI, for one.
+    ///
+    /// Reads the saved `proxy_port`/`default_context_size` settings rather
+    /// than `ProxyConfig::default()`'s hardcoded 8080: a user running a
+    /// standing `gglib serve`/`gglib proxy` on the default port (the
+    /// Copilot-facing case this exists for) would otherwise have every GUI
+    /// model start fail with a bind conflict against their own process.
+    ///
+    /// A concurrent starter racing this same `ProxyOps` is treated as
+    /// success: the status check and the start are not atomic, so two
+    /// callers can race, and both should end up with a usable address rather
+    /// than one seeing a spurious conflict. A bind failure against a
+    /// *foreign* process is not recoverable the same way — this supervisor
+    /// never started it, so its own status stays `Stopped` — and is
+    /// surfaced directly instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `GuiError::Internal` if settings cannot be loaded, and
+    /// whatever [`Self::map_start_error`] produces if the proxy cannot start.
+    pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
+        if let ProxyStatus::Running { address } = self.supervisor.status().await {
+            return Ok(address);
+        }
+
+        let settings = self
+            .core
+            .settings()
+            .get()
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let config = ProxyConfig {
+            port: settings.effective_proxy_port(),
+            default_context: resolve_context_size(&ServerConfigOptions {
+                global_default_ctx: settings.default_context_size,
+                ..Default::default()
+            }),
+            ..ProxyConfig::default()
+        };
+
+        match self.start_raw(config).await {
+            Ok(address) => Ok(address),
+            Err(SupervisorError::AlreadyRunning(_)) => match self.supervisor.status().await {
+                ProxyStatus::Running { address } => Ok(address),
+                other => Err(GuiError::Internal(format!(
+                    "proxy reported as already running but status is {other}"
+                ))),
+            },
+            Err(e) => Err(Self::map_start_error(e)),
+        }
+    }
+
+    /// The shared model runtime backing this proxy.
+    ///
+    /// Exposed so other services can drive models through the *same*
+    /// `ProcessManager` the proxy uses, preserving the invariant that only one
+    /// llama-server runs at a time system-wide.
+    #[must_use]
+    pub fn runtime(&self) -> &Arc<dyn ModelRuntimePort> {
+        &self.runtime
     }
 
     /// Stop the proxy server.
@@ -256,5 +345,75 @@ mod tests {
         let settings = Settings::default();
         assert!(resolve_llama_base_port(Some(1024), &settings).is_ok());
         assert!(resolve_llama_base_port(Some(65535), &settings).is_ok());
+    }
+
+    // ---------------------------------------------------------------
+    // ensure_running — settings-aware port, and BindFailed as Conflict
+    // ---------------------------------------------------------------
+
+    /// `ensure_running` must bind the saved `proxy_port`, not the hardcoded
+    /// `ProxyConfig::default()` port — otherwise a user with a standing
+    /// `gglib serve`/`gglib proxy` on a non-default port would still collide
+    /// on 8080 the moment the GUI starts a model.
+    #[tokio::test]
+    async fn ensure_running_uses_the_saved_proxy_port_setting() {
+        let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+
+        let saved_port = 18080;
+        core.settings()
+            .update(gglib_core::SettingsUpdate {
+                proxy_port: Some(Some(saved_port)),
+                ..Default::default()
+            })
+            .await
+            .expect("settings update should succeed");
+
+        let addr = proxy
+            .ensure_running()
+            .await
+            .expect("ensure_running should succeed on an unused port");
+        assert_eq!(addr.port(), saved_port);
+
+        proxy.stop().await.expect("stop should succeed");
+    }
+
+    /// A foreign process already holding the configured port must surface as
+    /// a `Conflict` naming the port — not `Internal`, and not the confusing
+    /// "reported as already running but status is Stopped" message that
+    /// `ensure_running`'s self-race recovery would produce if `BindFailed`
+    /// were routed through it: this supervisor never started the foreign
+    /// process, so its own status correctly stays `Stopped` throughout.
+    #[tokio::test]
+    async fn ensure_running_reports_a_clear_conflict_when_the_port_is_taken_by_another_process() {
+        let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+
+        // Hold the port ourselves to simulate a foreign gglib process.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind a port for the test");
+        let taken_port = listener.local_addr().unwrap().port();
+
+        core.settings()
+            .update(gglib_core::SettingsUpdate {
+                proxy_port: Some(Some(taken_port)),
+                ..Default::default()
+            })
+            .await
+            .expect("settings update should succeed");
+
+        let err = proxy
+            .ensure_running()
+            .await
+            .expect_err("a taken port must not be reported as success");
+
+        let GuiError::Conflict(message) = &err else {
+            panic!("expected Conflict, got {err:?}");
+        };
+        assert!(
+            message.contains(&taken_port.to_string()),
+            "conflict message should name the port: {message}"
+        );
+
+        drop(listener);
     }
 }

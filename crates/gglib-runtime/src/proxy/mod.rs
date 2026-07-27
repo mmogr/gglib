@@ -1,13 +1,16 @@
 #![doc = include_str!("README.md")]
+mod banner;
 pub mod models;
+pub mod params;
 pub mod supervisor;
 
 // Re-export supervisor types
+use params::compose_launch_overrides;
+pub use params::{PinnedModel, ProxyCacheOptions, StandaloneProxyParams};
 pub use supervisor::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 
 use async_trait::async_trait;
@@ -16,15 +19,12 @@ use tokio::sync::oneshot;
 use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
-use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
-use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
-    ModelRepository, RepositoryError, SettingsRepository,
+    RepositoryError,
 };
 use gglib_core::server_config::CacheRamSetting;
-use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
 
 // =============================================================================
@@ -35,12 +35,19 @@ use gglib_proxy::CouncilDeps;
 ///
 /// Uses `std::sync::Mutex` so no extra crate dependencies are required.
 /// Interactive-mode approval gates work for the lifetime of the proxy process.
-struct InMemoryApprovalRegistry {
+///
+/// Public so callers that need a council backend without a database — the
+/// standalone proxy, and tests composing a `ProxyOps` — share this one rather
+/// than each writing their own.
+#[derive(Default)]
+pub struct InMemoryApprovalRegistry {
     pending: StdMutex<HashMap<String, oneshot::Sender<ApprovalDecision>>>,
 }
 
 impl InMemoryApprovalRegistry {
-    fn new() -> Self {
+    /// Create an empty registry.
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             pending: StdMutex::new(HashMap::new()),
         }
@@ -79,14 +86,20 @@ impl CouncilApprovalRegistryPort for InMemoryApprovalRegistry {
 
 /// Minimal in-memory orchestrator repository for standalone proxy usage.
 ///
-/// Stores run records in memory only; no SQLite dep required.
-/// Interactive-mode state persists for the lifetime of the proxy process.
-struct InMemoryCouncilRepository {
+/// Stores run records in memory only; no SQLite dep required. Interactive-mode
+/// state persists for the lifetime of the proxy process.
+///
+/// Unlike the SQLite repository's blocking in-memory constructor, this needs no
+/// runtime of its own, so it is safe to build inside an async context.
+#[derive(Default)]
+pub struct InMemoryCouncilRepository {
     runs: StdMutex<HashMap<String, CouncilRun>>,
 }
 
 impl InMemoryCouncilRepository {
-    fn new() -> Self {
+    /// Create an empty repository.
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             runs: StdMutex::new(HashMap::new()),
         }
@@ -194,95 +207,71 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
 
 /// Start the OpenAI-compatible proxy as a standalone server (CLI usage).
 ///
-/// This is the main entry point for CLI usage. It creates all required
-/// components internally and blocks until shutdown.
+/// The single entry point behind both `gglib proxy` and `gglib serve`. It
+/// creates every component internally and blocks until shutdown.
 ///
-/// # Arguments
+/// [`StandaloneProxyParams::pinned`] is what separates the two commands: when
+/// set, the process manager refuses every model but the pinned one, giving
+/// single-model clients a fixed endpoint. The Axum layer, cache lifecycle,
+/// dashboard, SSE, MCP gateway and shutdown path are shared verbatim between
+/// the modes — `serve` is a mode of the proxy, not a second stack.
 ///
-/// * `host` - Host to bind to (e.g., "127.0.0.1")
-/// * `port` - Port to bind to
-/// * `llama_base_port` - Base port for llama-server instances
-/// * `llama_server_path` - Path to llama-server binary
-/// * `model_repo` - Model repository for catalog access
-/// * `default_context` - Default context size for models
-/// * `mcp` - MCP service for tool gateway
-/// * `settings_repo` - Settings repository for global inference defaults
-/// * `inference_override` - Optional once-off inference parameter overrides
-///   (applied on top of persisted global defaults; not saved to disk)
-/// * `cache_enabled` - Whether to enable KV cache session persistence.
-///   `false` means zero behavior change (no `--slot-save-path`/`--cache-ram`
-///   flags are ever passed to llama-server).
-/// * `slot_dir` - Directory for KV cache slot files. Only consulted when
-///   `cache_enabled` is `true`; `None` falls back to `<app-data-dir>/slots`.
-/// * `cache_ram_mb` - RAM budget in MiB for llama-server's own host-RAM
-///   prompt cache (`--cache-ram`). Independent of `cache_enabled`/`slot_dir`.
-///   `None` auto-sizes the budget from system RAM, the model's weights, and
-///   its KV footprint at the launch context size (see
-///   `gglib_runtime::llama::args::resolve_cache_ram`); pass an explicit value
-///   to override, or set `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to fall back to
-///   llama-server's own default.
-/// * `cache_reuse` - Minimum chunk size in tokens for KV-shift cache reuse
-///   past the first prefix divergence (`--cache-reuse`). `None` disables it.
-/// * `cache_disk_gb` - Explicit byte budget (in GiB) for the on-disk slot
-///   cache eviction sweep (`--cache-disk-gb`). `None` auto-sizes from free
-///   disk space at `slot_dir` (see
-///   `gglib_proxy::slot_eviction::resolve_disk_budget`), unless
-///   `GGLIB_CACHE_DISK_GB` is set.
-/// * `cache_type_k` / `cache_type_v` - Explicit overrides for the K/V cache
-///   element types (`--cache-type-k`/`--cache-type-v`). `None` resolves to
-///   the `q8_0` default per axis, unless `GGLIB_DISABLE_KV_QUANT=1` is set
-///   (see `gglib_runtime::llama::args::resolve_kv_cache_types`).
-#[allow(clippy::too_many_arguments)]
-pub async fn start_proxy_standalone(
-    host: String,
-    port: u16,
-    llama_base_port: u16,
-    llama_server_path: PathBuf,
-    model_repo: Arc<dyn ModelRepository>,
-    default_context: u64,
-    mcp: Arc<McpService>,
-    settings_repo: Arc<dyn SettingsRepository>,
-    inference_override: Option<InferenceConfig>,
-    cache_enabled: bool,
-    slot_dir: Option<PathBuf>,
-    cache_ram_mb: Option<u64>,
-    cache_reuse: Option<u32>,
-    cache_disk_gb: Option<u64>,
-    cache_type_k: Option<KvCacheType>,
-    cache_type_v: Option<KvCacheType>,
-) -> Result<()> {
-    // Resolve the actual KV cache slot-save directory. `None` when the
-    // feature is disabled, regardless of what `slot_dir` was passed — this
-    // guarantees `--cache` off means zero cache-related flags downstream.
-    let slot_save_path: Option<PathBuf> = if cache_enabled {
-        Some(slot_dir.unwrap_or_else(|| {
-            gglib_core::paths::data_root()
-                .map(|d| d.join("slots"))
-                .unwrap_or_else(|_| PathBuf::from("slots"))
-        }))
-    } else {
-        None
-    };
+/// # Errors
+///
+/// Returns an error if the HTTP client cannot be built, the proxy cannot bind
+/// its address, or shutdown fails.
+pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()> {
+    let StandaloneProxyParams {
+        host,
+        port,
+        llama_base_port,
+        llama_server_path,
+        model_repo,
+        mcp,
+        settings_repo,
+        default_context,
+        inference_override,
+        cache,
+        pinned,
+    } = params;
+
+    // Resolve the actual KV cache slot-save directory. `None` whenever the
+    // feature is disabled, whatever directory was passed — this is what makes
+    // `--cache` off mean zero cache-related flags downstream.
+    let slot_save_path = cache.resolved_slot_dir();
+    let launch_overrides =
+        compose_launch_overrides(&cache, pinned.as_ref(), slot_save_path.clone());
 
     // Create catalog port from model repository
     let catalog_port: Arc<dyn ModelCatalogPort> =
         Arc::new(CatalogPortImpl::new(Arc::clone(&model_repo)));
 
-    // Create ProcessManager with SingleSwap strategy for proxy use
-    // Now uses resolve_for_launch internally - no path resolver needed
-    let process_manager = Arc::new(ProcessManager::new_single_swap(
-        llama_base_port,
-        llama_server_path.to_string_lossy(),
-        Arc::clone(&catalog_port),
-        slot_save_path.clone(),
-        // No explicit value from the caller means auto-size, not "leave the
-        // llama-server default" — the proxy is the one launch surface where a
-        // right-sized prompt cache is the whole point.
-        cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb),
-        cache_reuse,
-        cache_type_k,
-        cache_type_v,
-    ));
+    // One manager either way — pinned only changes which models it admits.
+    // No explicit cache-RAM value means auto-size rather than "leave the
+    // llama-server default": the proxy is the one launch surface where a
+    // right-sized prompt cache is the whole point.
+    let cache_ram = cache
+        .ram_mb
+        .map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb);
+    let llama_path = llama_server_path.to_string_lossy().into_owned();
+
+    let process_manager = Arc::new(match &pinned {
+        Some(model) => ProcessManager::new_pinned(
+            model.name.clone(),
+            llama_base_port,
+            llama_path,
+            Arc::clone(&catalog_port),
+            launch_overrides,
+            cache_ram,
+        ),
+        None => ProcessManager::new_single_swap(
+            llama_base_port,
+            llama_path,
+            Arc::clone(&catalog_port),
+            launch_overrides,
+            cache_ram,
+        ),
+    });
 
     // Create runtime port
     let runtime_port: Arc<dyn gglib_core::ports::ModelRuntimePort> =
@@ -315,9 +304,9 @@ pub async fn start_proxy_standalone(
         host: host.clone(),
         port,
         default_context,
-        cache_enabled,
+        cache_enabled: cache.enabled,
         slot_dir: slot_save_path,
-        disk_budget: gglib_proxy::slot_eviction::resolve_disk_budget(cache_disk_gb),
+        disk_budget: gglib_proxy::slot_eviction::resolve_disk_budget(cache.disk_gb),
         // Passed as its own top-priority sampling layer rather than folded into
         // the persisted global defaults, which sit below the per-model layer.
         inference_override: inference_override.clone(),
@@ -345,48 +334,21 @@ pub async fn start_proxy_standalone(
     let tools = mcp.list_all_tools().await;
     let tool_count: usize = tools.iter().map(|(_, v)| v.len()).sum();
 
-    // Show startup banner
-    println!();
-    println!("  🚀 gglib proxy starting...");
-    println!();
-    println!("  Host:            {}", host);
-    println!("  Port:            {}", port);
-    println!("  Llama base port: {}", llama_base_port);
-    println!("  Default context: {}", default_context);
-    if let Some(ref ic) = inference_override {
-        let mut parts: Vec<String> = Vec::new();
-        if let Some(v) = ic.temperature {
-            parts.push(format!("temperature={v}"));
-        }
-        if let Some(v) = ic.top_p {
-            parts.push(format!("top_p={v}"));
-        }
-        if let Some(v) = ic.top_k {
-            parts.push(format!("top_k={v}"));
-        }
-        if let Some(v) = ic.max_tokens {
-            parts.push(format!("max_tokens={v}"));
-        }
-        if let Some(v) = ic.repeat_penalty {
-            parts.push(format!("repeat_penalty={v}"));
-        }
-        if let Some(v) = ic.presence_penalty {
-            parts.push(format!("presence_penalty={v}"));
-        }
-        if let Some(v) = ic.min_p {
-            parts.push(format!("min_p={v}"));
-        }
-        println!("  Inference override: {}", parts.join(", "));
-    }
-    println!(
-        "  MCP servers:     {} (eager: {}, lazy: {}, manual: {})",
+    banner::print_starting(
+        pinned.as_ref(),
+        &host,
+        port,
+        llama_base_port,
+        default_context,
+        inference_override.as_ref(),
+        cache.enabled,
+        config.slot_dir.as_deref(),
         servers.len(),
         eager_count,
         lazy_count,
-        manual_count
+        manual_count,
+        tool_count,
     );
-    println!("  MCP tools:       {} (eager-started)", tool_count);
-    println!();
 
     let addr = supervisor
         .start(
@@ -401,15 +363,7 @@ pub async fn start_proxy_standalone(
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");
 
-    // Show success message with configuration URLs
-    println!("  ✓ Proxy started successfully on {}", addr);
-    println!();
-    println!("  Configure OpenWebUI:");
-    println!("    OpenAI API: http://{}/v1", addr);
-    println!("    MCP Tools:  http://{}/mcp", addr);
-    println!();
-    println!("  Press Ctrl+C to stop");
-    println!();
+    banner::print_ready(addr, pinned.as_ref());
 
     // Wait for Ctrl-C
     tokio::signal::ctrl_c().await?;

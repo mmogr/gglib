@@ -16,6 +16,7 @@ pub mod proxy;
 mod runner;
 pub mod server_config;
 pub mod system;
+pub mod unified_server_config;
 
 // Re-export the main ProcessRunner implementation
 pub use runner::LlamaServerRunner;
@@ -52,3 +53,6 @@ pub use council_runner::CouncilRunnerAdapter;
 
 // Re-export canonical ServerConfig builder for all launch surfaces
 pub use server_config::{ServerConfigOptions, build_server_config};
+
+// Re-export the unified launch config and its 3-tier cascade
+pub use unified_server_config::{GlobalDefaults, UnifiedServerConfig, default_slot_dir};

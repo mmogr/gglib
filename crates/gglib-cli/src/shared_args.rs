@@ -5,6 +5,8 @@
 //! `Serve`, `Chat`, and `Question`.
 
 use clap::Args;
+use gglib_core::cache_config::KvCacheType;
+use gglib_runtime::proxy::ProxyCacheOptions;
 
 /// Sampling-parameter overrides common to all inference commands.
 ///
@@ -62,6 +64,17 @@ impl SamplingArgs {
             min_p: self.min_p,
         }
     }
+
+    /// The overrides as a config, or `None` when no sampling flag was passed.
+    ///
+    /// An all-`None` config is not the same as no override at all: it sits at
+    /// the top of the merge hierarchy, so handing one down unconditionally
+    /// would announce an opinion the user never expressed.
+    #[must_use]
+    pub fn into_override(self) -> Option<gglib_core::domain::InferenceConfig> {
+        let config = self.into_inference_config();
+        (config != gglib_core::domain::InferenceConfig::default()).then_some(config)
+    }
 }
 
 /// MTP (Multi-Token Prediction) speculative-decoding overrides for the `serve` command.
@@ -80,24 +93,137 @@ pub struct MtpArgs {
     pub mtp_draft_p_min: Option<f32>,
 }
 
+/// KV cache flags common to the proxy-backed commands.
+///
+/// Flattened into both `Serve` and `Proxy` so the two parse identically —
+/// `gglib serve` is the pinned mode of the same proxy stack, and a cache
+/// setting that only one of them could express would be a parity gap by
+/// construction.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CacheArgs {
+    /// Enable KV cache session persistence, saving/restoring llama-server
+    /// slot state to disk per session.
+    ///
+    /// Independent of the host-RAM prompt cache, which is auto-sized on
+    /// every launch whether or not this flag is set (see `--cache-ram-mb`).
+    #[arg(long)]
+    pub cache: bool,
+    /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
+    #[arg(long)]
+    pub slot_dir: Option<std::path::PathBuf>,
+    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
+    /// (`--cache-ram`) — what makes switching between conversations fast.
+    ///
+    /// Omit to auto-size it from total system RAM, the model's weights, and
+    /// its KV footprint at the launch context size; the chosen budget and
+    /// its arithmetic are logged at startup.
+    ///
+    /// Pass a value to override — `0` disables the cache. Set
+    /// `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to skip auto-sizing entirely and
+    /// use llama-server's built-in default. Independent of
+    /// `--cache`/`--slot-dir`.
+    #[arg(long)]
+    pub cache_ram_mb: Option<u64>,
+    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
+    /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
+    /// whose earlier messages were edited or summarized (e.g. a Copilot
+    /// history compaction), which plain prefix matching can't reuse at all.
+    /// Omit to disable. Can be suppressed at runtime without editing this
+    /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
+    #[arg(long)]
+    pub cache_reuse: Option<u32>,
+    /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
+    /// sweep. Only meaningful with `--cache`.
+    ///
+    /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
+    /// of free space + the cache's own current footprint, recomputed on
+    /// every sweep so it tracks disk pressure from other applications).
+    /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
+    /// without editing this flag; the flag wins if both are set.
+    #[arg(long)]
+    pub cache_disk_gb: Option<u64>,
+    /// Override the K cache element type (`--cache-type-k`).
+    ///
+    /// Omit to use the `q8_0` default, which roughly halves KV cache
+    /// bytes-per-token versus llama-server's own `f16` default. Set
+    /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
+    /// axis not explicitly overridden here.
+    #[arg(long, value_parser = kv_cache_type_parser())]
+    pub cache_type_k: Option<KvCacheType>,
+    /// Override the V cache element type (`--cache-type-v`).
+    ///
+    /// Quantizing V additionally requires Flash Attention to be active —
+    /// llama-server hard-errors at startup otherwise. gglib leaves
+    /// `--flash-attn` at llama-server's own `auto`; if that resolves off
+    /// for your model/backend, override this to `f16` or set
+    /// `GGLIB_DISABLE_KV_QUANT=1`.
+    #[arg(long, value_parser = kv_cache_type_parser())]
+    pub cache_type_v: Option<KvCacheType>,
+}
+
+/// Value parser for `--cache-type-k`/`--cache-type-v`.
+///
+/// Built from [`KvCacheType::ALL`] so `--help` and shell completions list the
+/// accepted values instead of leaving users to discover them from a parse
+/// error. Wrapping the domain type's `FromStr` here rather than deriving
+/// `ValueEnum` on it keeps clap out of `gglib-core`, which has no CLI
+/// dependency and should not gain one to improve a help string.
+fn kv_cache_type_parser() -> impl clap::builder::TypedValueParser {
+    use clap::builder::TypedValueParser as _;
+
+    clap::builder::PossibleValuesParser::new(KvCacheType::ALL.iter().map(|t| t.as_llama_arg())).map(
+        |s| {
+            // Unreachable: clap has already rejected anything outside `ALL`,
+            // and every entry there round-trips through `as_llama_arg`.
+            s.parse::<KvCacheType>()
+                .expect("clap accepted a value outside KvCacheType::ALL")
+        },
+    )
+}
+
+impl CacheArgs {
+    /// Convert into the runtime's cache options.
+    ///
+    /// The single construction point for [`ProxyCacheOptions`] on the CLI
+    /// side, so `serve` and `proxy` cannot drift in how a flag is mapped.
+    #[must_use]
+    pub fn into_proxy_cache_options(self) -> ProxyCacheOptions {
+        ProxyCacheOptions {
+            enabled: self.cache,
+            slot_dir: self.slot_dir,
+            ram_mb: self.cache_ram_mb,
+            reuse: self.cache_reuse,
+            disk_gb: self.cache_disk_gb,
+            type_k: self.cache_type_k,
+            type_v: self.cache_type_v,
+        }
+    }
+}
+
 /// Serve-command options that don't belong to another group.
 #[derive(Args, Debug, Clone)]
 pub struct ServeOptions {
     /// Force-enable Jinja template parsing for chat templates
     #[arg(long)]
     pub jinja: bool,
-    /// Port to serve on
+    /// Host the OpenAI-compatible endpoint binds to.
+    ///
+    /// Defaults to loopback. `0.0.0.0` accepts LAN clients — the endpoint
+    /// has no authentication, so only do that on a network you trust.
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+    /// Port the OpenAI-compatible endpoint listens on.
+    ///
+    /// The proxy dashboard is served from the same port at
+    /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
     #[arg(short, long, default_value = "8080")]
     pub port: u16,
-}
-
-impl Default for ServeOptions {
-    fn default() -> Self {
-        Self {
-            jinja: false,
-            port: 8080,
-        }
-    }
+    /// Starting port for the underlying llama-server instance
+    ///
+    /// `gglib serve` runs the model behind the proxy stack, so the upstream
+    /// llama-server binds its own port separately from `--port`.
+    #[arg(long, default_value = "5500")]
+    pub llama_port: u16,
 }
 
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
