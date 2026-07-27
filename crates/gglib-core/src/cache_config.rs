@@ -54,6 +54,23 @@ pub enum KvCacheType {
 }
 
 impl KvCacheType {
+    /// Every accepted type, in the order they should be offered to a user.
+    ///
+    /// The one list: [`FromStr`] parses against it, its error message names
+    /// it, and the CLI builds `--cache-type-k`/`-v`'s possible values from
+    /// it. Adding a variant here is enough to make it parse, appear in
+    /// `--help` and appear in shell completions.
+    pub const ALL: &'static [Self] = &[
+        Self::F32,
+        Self::F16,
+        Self::Bf16,
+        Self::Q8_0,
+        Self::Q5_1,
+        Self::Q5_0,
+        Self::Q4_1,
+        Self::Q4_0,
+    ];
+
     /// The value passed on the command line (matches llama.cpp's own
     /// `ggml_type_name`).
     #[must_use]
@@ -100,19 +117,18 @@ impl FromStr for KvCacheType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "f32" => Ok(Self::F32),
-            "f16" => Ok(Self::F16),
-            "bf16" => Ok(Self::Bf16),
-            "q8_0" => Ok(Self::Q8_0),
-            "q5_1" => Ok(Self::Q5_1),
-            "q5_0" => Ok(Self::Q5_0),
-            "q4_1" => Ok(Self::Q4_1),
-            "q4_0" => Ok(Self::Q4_0),
-            other => Err(format!(
-                "unknown KV cache type {other:?} (expected one of: f32, f16, bf16, q8_0, q5_1, q5_0, q4_1, q4_0)"
-            )),
-        }
+        let normalized = s.trim().to_ascii_lowercase();
+        Self::ALL
+            .iter()
+            .find(|t| t.as_llama_arg() == normalized)
+            .copied()
+            .ok_or_else(|| {
+                let expected: Vec<&str> = Self::ALL.iter().map(|t| t.as_llama_arg()).collect();
+                format!(
+                    "unknown KV cache type {normalized:?} (expected one of: {})",
+                    expected.join(", ")
+                )
+            })
     }
 }
 

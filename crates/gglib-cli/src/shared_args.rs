@@ -142,25 +142,43 @@ pub struct CacheArgs {
     /// without editing this flag; the flag wins if both are set.
     #[arg(long)]
     pub cache_disk_gb: Option<u64>,
-    /// Override the K cache element type (`--cache-type-k`). One of:
-    /// `f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`.
+    /// Override the K cache element type (`--cache-type-k`).
     ///
     /// Omit to use the `q8_0` default, which roughly halves KV cache
     /// bytes-per-token versus llama-server's own `f16` default. Set
     /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
     /// axis not explicitly overridden here.
-    #[arg(long)]
+    #[arg(long, value_parser = kv_cache_type_parser())]
     pub cache_type_k: Option<KvCacheType>,
-    /// Override the V cache element type (`--cache-type-v`). Same values
-    /// as `--cache-type-k`.
+    /// Override the V cache element type (`--cache-type-v`).
     ///
     /// Quantizing V additionally requires Flash Attention to be active —
     /// llama-server hard-errors at startup otherwise. gglib leaves
     /// `--flash-attn` at llama-server's own `auto`; if that resolves off
     /// for your model/backend, override this to `f16` or set
     /// `GGLIB_DISABLE_KV_QUANT=1`.
-    #[arg(long)]
+    #[arg(long, value_parser = kv_cache_type_parser())]
     pub cache_type_v: Option<KvCacheType>,
+}
+
+/// Value parser for `--cache-type-k`/`--cache-type-v`.
+///
+/// Built from [`KvCacheType::ALL`] so `--help` and shell completions list the
+/// accepted values instead of leaving users to discover them from a parse
+/// error. Wrapping the domain type's `FromStr` here rather than deriving
+/// `ValueEnum` on it keeps clap out of `gglib-core`, which has no CLI
+/// dependency and should not gain one to improve a help string.
+fn kv_cache_type_parser() -> impl clap::builder::TypedValueParser {
+    use clap::builder::TypedValueParser as _;
+
+    clap::builder::PossibleValuesParser::new(KvCacheType::ALL.iter().map(|t| t.as_llama_arg())).map(
+        |s| {
+            // Unreachable: clap has already rejected anything outside `ALL`,
+            // and every entry there round-trips through `as_llama_arg`.
+            s.parse::<KvCacheType>()
+                .expect("clap accepted a value outside KvCacheType::ALL")
+        },
+    )
 }
 
 impl CacheArgs {
