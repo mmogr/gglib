@@ -188,7 +188,10 @@ pub struct ServeOptions {
     /// Force-enable Jinja template parsing for chat templates
     #[arg(long)]
     pub jinja: bool,
-    /// Port the OpenAI-compatible endpoint listens on
+    /// Port the OpenAI-compatible endpoint listens on.
+    ///
+    /// The proxy dashboard is served from the same port at
+    /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
     #[arg(short, long, default_value = "8080")]
     pub port: u16,
     /// Starting port for the underlying llama-server instance

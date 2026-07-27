@@ -15,7 +15,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
-use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
 use gglib_runtime::llama::{ensure_llama_initialized, resolve_llama_server, resolve_mtp_args};
 use gglib_runtime::proxy::{
@@ -28,6 +28,7 @@ use super::shared::{log_inference_info, log_mlock_info, resolve_inference_config
 /// Execute the serve command.
 ///
 /// Starts the proxy pinned to the requested model and blocks until Ctrl-C.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     id: u32,
@@ -35,6 +36,7 @@ pub async fn execute(
     options: ServeOptions,
     sampling: SamplingArgs,
     mtp: MtpArgs,
+    cache: CacheArgs,
     verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
@@ -89,10 +91,19 @@ pub async fn execute(
             mtp_draft_p_min: mtp_args.enabled.then_some(mtp_args.draft_p_min),
             ..Default::default()
         },
+        // The cache master switch and directory are tier 3: `resolved_options`
+        // applies `cache_enabled` over `slot_save_path`, which is how
+        // `--cache` reaches llama-server on the pinned model's launch options
+        // at all. The remaining cache flags carry no model-specific meaning
+        // and go straight to the proxy via `ProxyCacheOptions` — including
+        // `--cache-disk-gb`, which `start_proxy_standalone` resolves into a
+        // `DiskBudget` for both commands alike.
         globals: GlobalDefaults {
             proxy_port: options.port,
             llama_base_port: options.llama_port,
             default_ctx: settings.default_context_size,
+            cache_enabled: cache.cache,
+            slot_dir: cache.slot_dir.clone(),
             ..Default::default()
         },
         pinned: true,
@@ -142,10 +153,12 @@ pub async fn execute(
         // as a proxy-wide override, so it lands on the llama-server command
         // line exactly as every other launch surface applies it.
         inference_override: None,
+        // `slot_dir` comes from the cascade rather than the raw flag: it has
+        // already had the `cache_enabled` master switch applied and the
+        // default directory filled in.
         cache: ProxyCacheOptions {
-            enabled: proxy_config.cache_enabled,
             slot_dir: proxy_config.slot_dir,
-            ..Default::default()
+            ..cache.into_proxy_cache_options()
         },
         pinned: Some(PinnedModel {
             id: model.id,
@@ -158,6 +171,8 @@ pub async fn execute(
 
 #[cfg(test)]
 mod tests {
+    use crate::shared_args::CacheArgs;
+    use gglib_core::cache_config::KvCacheType;
     use gglib_core::server_config::{
         CtxSizeArg, ServerConfigOptions, parse_ctx_size_flag, resolve_context_size,
     };
@@ -263,5 +278,84 @@ mod tests {
     fn serve_binds_loopback_by_default() {
         let cfg = unified(ServerConfigOptions::default(), GlobalDefaults::default());
         assert_eq!(cfg.to_proxy_config().host, "127.0.0.1");
+    }
+
+    // ---------------------------------------------------------------
+    // Cache flags (#633 — parity with `gglib proxy`)
+    // ---------------------------------------------------------------
+
+    /// Without `--cache`, no `--slot-save-path` may reach llama-server even
+    /// when a directory was named: the master switch outranks the directory,
+    /// so "cache off" means byte-for-byte no cache flags.
+    #[test]
+    fn slot_dir_without_cache_flag_emits_no_slot_path() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                cache_enabled: false,
+                slot_dir: Some(PathBuf::from("/custom/slots")),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(cfg.resolved_options().slot_save_path, None);
+        assert_eq!(cfg.to_proxy_config().slot_dir, None);
+    }
+
+    /// `--cache --slot-dir` must reach the pinned model's launch options —
+    /// the path by which disk KV-slot persistence works on `serve` at all.
+    #[test]
+    fn cache_flag_carries_the_slot_dir_into_launch_options() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                cache_enabled: true,
+                slot_dir: Some(PathBuf::from("/custom/slots")),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            cfg.resolved_options().slot_save_path,
+            Some(PathBuf::from("/custom/slots"))
+        );
+    }
+
+    /// `--cache` with no directory falls back to the default rather than
+    /// silently disabling persistence.
+    #[test]
+    fn cache_flag_without_slot_dir_uses_the_default_directory() {
+        let cfg = unified(
+            ServerConfigOptions::default(),
+            GlobalDefaults {
+                cache_enabled: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(cfg.resolved_options().slot_save_path.is_some());
+    }
+
+    /// The model-independent cache flags ride `ProxyCacheOptions` rather than
+    /// the cascade, and must survive the conversion intact.
+    #[test]
+    fn model_independent_cache_flags_reach_the_proxy_options() {
+        let opts = CacheArgs {
+            cache: true,
+            cache_ram_mb: Some(4096),
+            cache_reuse: Some(256),
+            cache_disk_gb: Some(8),
+            cache_type_k: Some(KvCacheType::F16),
+            cache_type_v: Some(KvCacheType::Q8_0),
+            ..Default::default()
+        }
+        .into_proxy_cache_options();
+
+        assert!(opts.enabled);
+        assert_eq!(opts.ram_mb, Some(4096));
+        assert_eq!(opts.reuse, Some(256));
+        assert_eq!(opts.disk_gb, Some(8));
+        assert_eq!(opts.type_k, Some(KvCacheType::F16));
+        assert_eq!(opts.type_v, Some(KvCacheType::Q8_0));
     }
 }

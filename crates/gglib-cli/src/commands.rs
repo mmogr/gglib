@@ -233,6 +233,8 @@ pub enum Commands {
         sampling: SamplingArgs,
         #[command(flatten)]
         mtp: MtpArgs,
+        #[command(flatten)]
+        cache: CacheArgs,
     },
 
     /// Chat with a model interactively, or manage chat history
