@@ -26,6 +26,15 @@ pub struct StartProxyConfig {
     pub port: Option<u16>,
     pub llama_base_port: Option<u16>,
     pub default_context: Option<u64>,
+    /// Enable KV cache session persistence (disk slot save/restore),
+    /// mirroring `gglib serve`/`gglib proxy --cache`. Omitted or `None`
+    /// means disabled, matching the CLI's own default.
+    #[serde(default)]
+    pub cache: Option<bool>,
+    /// Directory for KV cache slot files. Only consulted when `cache` is
+    /// `true`; omitted falls back to `<data-root>/slots`, same as the CLI.
+    #[serde(default)]
+    pub slot_dir: Option<std::path::PathBuf>,
 }
 
 /// Convert runtime ProxyStatus to API ProxyStatus.
@@ -69,13 +78,21 @@ fn to_runtime_config(
         ..Default::default()
     });
 
+    let cache_enabled = cfg.cache.unwrap_or(false);
+    // Resolved here rather than left `None`: the Axum proxy path errors
+    // requests with "slot_dir not configured" when cache_enabled is true and
+    // slot_dir is absent (see gglib-proxy's server.rs), unlike the CLI's
+    // standalone path, which auto-defaults it. Applying the same default
+    // here keeps `cache: true` alone sufficient, matching the CLI.
+    let slot_dir =
+        cache_enabled.then(|| cfg.slot_dir.clone().unwrap_or_else(gglib_runtime::default_slot_dir));
+
     Ok(RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
         port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
         default_context,
-        // GUI cache toggle is out of scope until Step 7 — always disabled here.
-        cache_enabled: false,
-        slot_dir: None,
+        cache_enabled,
+        slot_dir,
         ..Default::default()
     })
 }
@@ -141,4 +158,76 @@ pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, Ht
     }
 
     Ok(Json(fetch_status(&state).await))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Omitting `cache` must mean disabled, matching the CLI's own default —
+    /// and, with cache off, no slot dir even if one were supplied.
+    #[test]
+    fn cache_omitted_defaults_to_disabled() {
+        let cfg = StartProxyConfig::default();
+        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        assert!(!runtime_cfg.cache_enabled);
+        assert_eq!(runtime_cfg.slot_dir, None);
+    }
+
+    /// The master switch beats an explicit slot dir, matching
+    /// `ProxyCacheOptions`/`UnifiedServerConfig` on the CLI side: cache off
+    /// means zero cache-related settings reach the runtime, full stop.
+    #[test]
+    fn cache_false_ignores_a_supplied_slot_dir() {
+        let cfg = StartProxyConfig {
+            cache: Some(false),
+            slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
+            ..Default::default()
+        };
+        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        assert!(!runtime_cfg.cache_enabled);
+        assert_eq!(runtime_cfg.slot_dir, None);
+    }
+
+    /// `cache: true` with an explicit directory must carry it through
+    /// unchanged — this is what lets a GUI-started proxy persist KV slots
+    /// anywhere but the default location.
+    #[test]
+    fn cache_true_carries_the_explicit_slot_dir() {
+        let cfg = StartProxyConfig {
+            cache: Some(true),
+            slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
+            ..Default::default()
+        };
+        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        assert!(runtime_cfg.cache_enabled);
+        assert_eq!(
+            runtime_cfg.slot_dir,
+            Some(std::path::PathBuf::from("/custom/slots"))
+        );
+    }
+
+    /// `cache: true` with no directory must fall back to the same default the
+    /// CLI uses, not `None` — the Axum proxy path errors requests with
+    /// "slot_dir not configured" when cache is on and slot_dir is absent, so
+    /// leaving it `None` here would make `cache: true` alone insufficient.
+    #[test]
+    fn cache_true_without_slot_dir_uses_the_default_directory() {
+        let cfg = StartProxyConfig {
+            cache: Some(true),
+            ..Default::default()
+        };
+        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        assert!(runtime_cfg.cache_enabled);
+        assert_eq!(runtime_cfg.slot_dir, Some(gglib_runtime::default_slot_dir()));
+    }
+
+    /// `default_context` resolution is untouched by the cache wiring — still
+    /// falls through explicit → settings → hardcoded default.
+    #[test]
+    fn default_context_falls_through_to_settings() {
+        let cfg = StartProxyConfig::default();
+        let runtime_cfg = to_runtime_config(&cfg, Some(16_384)).unwrap();
+        assert_eq!(runtime_cfg.default_context, 16_384);
+    }
 }
