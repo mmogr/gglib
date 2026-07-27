@@ -167,6 +167,43 @@ impl ProxyOps {
             })
     }
 
+    /// Start the proxy if it is not already running, and return its address.
+    ///
+    /// Idempotent, unlike [`Self::start`], which reports an already-running
+    /// proxy as a conflict. That distinction matters for callers who need the
+    /// proxy up as a precondition rather than as the thing they were asked to
+    /// do — starting a model from the GUI, for one.
+    ///
+    /// A concurrent starter is treated as success: the status check and the
+    /// start are not atomic, so two callers can race, and both should end up
+    /// with a usable address rather than one seeing a spurious conflict.
+    pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
+        if let ProxyStatus::Running { address } = self.supervisor.status().await {
+            return Ok(address);
+        }
+
+        match self.start(ProxyConfig::default()).await {
+            Ok(address) => Ok(address),
+            Err(GuiError::Conflict(_)) => match self.supervisor.status().await {
+                ProxyStatus::Running { address } => Ok(address),
+                other => Err(GuiError::Internal(format!(
+                    "proxy reported as already running but status is {other}"
+                ))),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The shared model runtime backing this proxy.
+    ///
+    /// Exposed so other services can drive models through the *same*
+    /// `ProcessManager` the proxy uses, preserving the invariant that only one
+    /// llama-server runs at a time system-wide.
+    #[must_use]
+    pub fn runtime(&self) -> &Arc<dyn ModelRuntimePort> {
+        &self.runtime
+    }
+
     /// Stop the proxy server.
     pub async fn stop(&self) -> Result<(), GuiError> {
         self.supervisor.stop().await.map_err(|e| match e {
