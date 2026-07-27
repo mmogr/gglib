@@ -7,9 +7,13 @@
 //! from this list once, so an entry that can only come back as
 //! `PinnedModelMismatch` is worse than no entry at all.
 //!
-//! The pinned *guard* is tested in `gglib-runtime`; the mock here only
-//! reports pinning, so a failure means the catalog is wrong rather than the
-//! enforcement.
+//! The pinned guard itself is unit-tested in `gglib-runtime`'s
+//! `manager.rs`/`swap_state.rs`. Most tests below use [`PinnedRuntime`],
+//! which only *reports* pinning, so a failure there means the catalog is
+//! wrong rather than the enforcement. The enforcement test near the bottom
+//! uses [`EnforcingPinnedRuntime`] instead, to assert the actual wire
+//! contract a BYOK client hits — 404 plus `pinned_model_mismatch` — over
+//! real HTTP.
 
 mod fixtures;
 
@@ -23,8 +27,8 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use fixtures::common::{
-    MockSettingsRepo, NoopRuntime, PinnedRuntime, ProfileSettingsRepo, StaticCatalog,
-    make_mcp_service, make_orchestrator_deps,
+    EnforcingPinnedRuntime, MockSettingsRepo, NoopRuntime, PinnedRuntime, ProfileSettingsRepo,
+    StaticCatalog, make_mcp_service, make_orchestrator_deps,
 };
 
 const PINNED: &str = "qwen2.5";
@@ -239,6 +243,90 @@ async fn pinned_proxy_serves_the_dashboard() {
             "dashboard snapshot missing {field}: {snapshot}"
         );
     }
+
+    cancel.cancel();
+}
+
+// ─── Enforcement ──────────────────────────────────────────────────────────
+
+/// The contract a BYOK client hits when it asks for the wrong model: a 404
+/// naming both models, distinguishable from a plain `model_not_found` so the
+/// client can tell "no such model anywhere" from "not on this endpoint".
+///
+/// Everything above this test proves the *catalog* never offers a foreign
+/// model; this proves that if a client asks anyway — a stale cache, a
+/// hand-rolled request — the refusal itself is correct over real HTTP, not
+/// just at the `SwapState`/`ErrorResponse` unit level.
+#[tokio::test]
+async fn pinned_proxy_refuses_a_foreign_model_over_http() {
+    let (base, cancel) = spawn(
+        Arc::new(EnforcingPinnedRuntime(PINNED)),
+        Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
+        Arc::new(MockSettingsRepo),
+    )
+    .await;
+
+    let resp = Client::new()
+        .post(format!("{base}/v1/chat/completions"))
+        .json(&serde_json::json!({
+            "model": FOREIGN,
+            "messages": [{"role": "user", "content": "hi"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.status(),
+        404,
+        "a pinned endpoint must refuse a foreign model"
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "pinned_model_mismatch");
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains(PINNED),
+        "message should name the pinned model: {message}"
+    );
+    assert!(
+        message.contains(FOREIGN),
+        "message should name the requested model: {message}"
+    );
+
+    cancel.cancel();
+}
+
+/// The pinned model itself must still be servable through the same
+/// enforcing runtime — the guard rejects on identity, not universally.
+#[tokio::test]
+async fn pinned_proxy_still_admits_the_pinned_model_over_http() {
+    let (base, cancel) = spawn(
+        Arc::new(EnforcingPinnedRuntime(PINNED)),
+        Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
+        Arc::new(MockSettingsRepo),
+    )
+    .await;
+
+    let resp = Client::new()
+        .post(format!("{base}/v1/chat/completions"))
+        .json(&serde_json::json!({
+            "model": PINNED,
+            "messages": [{"role": "user", "content": "hi"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // `EnforcingPinnedRuntime` has no real upstream to forward to, so this
+    // proves the request got *past* the pinned guard (anything other than
+    // the mismatch's 404/pinned_model_mismatch), not that it fully succeeds.
+    let status = resp.status();
+    let body: Value = resp.json().await.unwrap();
+    assert_ne!(
+        body["error"]["code"], "pinned_model_mismatch",
+        "the pinned model itself must not be rejected by the pin guard, got {status}: {body}"
+    );
 
     cancel.cancel();
 }

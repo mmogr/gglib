@@ -78,6 +78,48 @@ impl ModelRuntimePort for PinnedRuntime {
     }
 }
 
+/// Runtime port that *enforces* the pin, rather than only reporting it.
+///
+/// The write side of `gglib serve`: [`PinnedRuntime`] above deliberately
+/// lets a foreign request through so catalog tests can tell "not
+/// advertised" from "refused". This one refuses, so the wire contract a
+/// BYOK client actually hits — 404 plus `pinned_model_mismatch` — can be
+/// asserted end to end over HTTP, not just at the `SwapState`/error-mapping
+/// unit level (`gglib-runtime`'s `manager.rs`, `gglib-proxy`'s
+/// `models_tests.rs`).
+#[derive(Debug)]
+pub struct EnforcingPinnedRuntime(pub &'static str);
+
+#[async_trait]
+impl ModelRuntimePort for EnforcingPinnedRuntime {
+    async fn ensure_model_running(
+        &self,
+        model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        if model_name != self.0 {
+            return Err(ModelRuntimeError::PinnedModelMismatch {
+                expected: self.0.to_string(),
+                requested: model_name.to_string(),
+            });
+        }
+        Ok(RunningTarget::local(0, 1, self.0.into(), 4096, false))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    fn pinned_model(&self) -> Option<&str> {
+        Some(self.0)
+    }
+}
+
 // ─── ModelCatalogPort mock ────────────────────────────────────────────────
 
 /// Catalog port with no models.
