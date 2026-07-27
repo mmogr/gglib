@@ -273,9 +273,10 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         approval_registry: Arc::clone(&approval_registry)
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
-        base_port: config.base_port,
+        base_port: Some(config.base_port),
         llama_server_path: config.llama_server_path.clone(),
-    })?;
+    })
+    .await?;
 
     // Emit initial server snapshot after initialization
     tokio::spawn({

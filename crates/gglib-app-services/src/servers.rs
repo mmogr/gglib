@@ -15,22 +15,28 @@ use tracing::{debug, warn};
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
-    AppEventEmitter, ProcessHandle, ProcessRunner, ServerHealthStatus, ToolSupportDetectorPort,
+    AppEventEmitter, LaunchOverrides, ModelRuntimeError, ProcessHandle, ServerHealthStatus,
+    ToolSupportDetectorPort,
 };
-use gglib_core::server_config::{CacheRamSetting, resolve_context_size};
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::services::AppCore;
-use gglib_runtime::llama::args::{resolve_cache_ram, resolve_kv_cache_types};
-use gglib_runtime::ports_impl::total_model_bytes;
-use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
-use gglib_runtime::system::total_system_ram_bytes;
+use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 
 use crate::error::GuiError;
+use crate::proxy::ProxyOps;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
 /// Dependencies for server lifecycle operations.
 pub struct ServerDeps {
     pub core: Arc<AppCore>,
-    pub runner: Arc<dyn ProcessRunner>,
+    /// The proxy the GUI drives models through.
+    ///
+    /// Replaces the former direct `ProcessRunner`: starting a model from the
+    /// GUI now goes through the same pipeline as `gglib proxy` and `gglib
+    /// serve`, so it gains the dashboard, cache lifecycle and request
+    /// normalization those already had, and can no longer contend with the
+    /// proxy for the GPU by running a second llama-server alongside it.
+    pub proxy: Arc<ProxyOps>,
     pub emitter: Arc<dyn AppEventEmitter>,
     pub server_events: Arc<dyn gglib_core::events::ServerEvents>,
     pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
@@ -147,76 +153,54 @@ impl ServerOps {
         }
     }
 
-    /// Build a [`ServerConfig`] from a model and GUI request.
+    /// Translate a GUI start request into per-call launch overrides.
     ///
-    /// Delegates to [`build_server_config`] so that this path generates
-    /// identical llama-server arguments to every other launch surface,
-    /// including host-RAM prompt cache auto-sizing (parity with the CLI
-    /// proxy — see `resolve_cache_ram`) and KV cache quantization defaults.
+    /// Expresses the request as the explicit tier of a [`UnifiedServerConfig`]
+    /// and lets the cascade resolve it, so a GUI-started model receives
+    /// exactly the arguments the CLI and proxy would give it.
     ///
-    /// Context size precedence (4-level fallback chain): explicit request
-    /// field → per-model `server_defaults.context_length` → global settings
-    /// default → hardcoded default.
-    fn build_config(
+    /// Cache sizing is deliberately absent: the process manager resolves the
+    /// RAM budget and KV cache types at spawn, against live system memory and
+    /// the model's actual KV footprint. This path used to duplicate that
+    /// arithmetic and could only drift from it.
+    fn launch_overrides(
         model: &Model,
         request: &StartServerRequest,
-        base_port: u16,
         default_context_size: Option<u64>,
-    ) -> gglib_core::ports::ServerConfig {
-        let mut opts = ServerConfigOptions {
-            context_size: request.context_length,
-            model_server_ctx: model
-                .server_defaults
-                .as_ref()
-                .and_then(|s| s.context_length),
-            global_default_ctx: default_context_size,
-            port: request.port,
-            jinja: request.jinja,
-            reasoning_format: request.reasoning_format.clone(),
-            mtp_draft_n_max: request.mtp_draft_n_max,
-            mtp_draft_p_min: request.mtp_draft_p_min,
-            inference_params: request.inference_params.clone(),
-            slot_save_path: None,
-            cache_ram_mb: None,
-            cache_reuse: None,
-            cache_type_k: None,
-            cache_type_v: None,
-            mlock: Some(request.mlock),
+    ) -> LaunchOverrides {
+        let unified = UnifiedServerConfig {
+            model_id: model.id,
+            model_name: model.name.clone(),
+            model_path: model.file_path.clone(),
+            model_tags: model.tags.clone(),
+            explicit: ServerConfigOptions {
+                context_size: request.context_length,
+                model_server_ctx: model
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|s| s.context_length),
+                port: request.port,
+                jinja: request.jinja,
+                reasoning_format: request.reasoning_format.clone(),
+                mtp_draft_n_max: request.mtp_draft_n_max,
+                mtp_draft_p_min: request.mtp_draft_p_min,
+                inference_params: request.inference_params.clone(),
+                mlock: request.mlock.then_some(true),
+                ..Default::default()
+            },
+            globals: GlobalDefaults {
+                default_ctx: default_context_size,
+                ..Default::default()
+            },
+            // The GUI serves whichever model the user picks, so the proxy
+            // must stay free to swap.
+            pinned: false,
         };
 
-        // Resolve KV cache types once so the RAM budget below reflects the
-        // actual quantized footprint (see `process::manager` for the same
-        // pattern on the proxy launch path).
-        let kv_types = resolve_kv_cache_types(opts.cache_type_k, opts.cache_type_v);
-        opts.cache_type_k = Some(kv_types.k);
-        opts.cache_type_v = Some(kv_types.v);
-
-        let launch_ctx = resolve_context_size(&opts);
-        let kv_bytes_per_token = gglib_core::domain::estimate_kv_elems_per_token(
-            &model.metadata,
-            model.architecture.as_deref(),
-        )
-        .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
-        let cache_ram = resolve_cache_ram(
-            CacheRamSetting::Auto,
-            total_system_ram_bytes(),
-            total_model_bytes(&model.file_path),
-            kv_bytes_per_token,
-            launch_ctx,
-        );
-        if let Some(explanation) = cache_ram.explain() {
-            debug!("{explanation}");
+        LaunchOverrides {
+            options: unified.resolved_options(),
+            cache_ram: None,
         }
-        opts.cache_ram_mb = cache_ram.cache_ram_mb;
-
-        build_server_config(
-            model.id,
-            model.name.clone(),
-            model.file_path.clone(),
-            base_port,
-            &model.tags,
-            opts,
-        )
     }
 
     /// Start serving a model.
@@ -227,13 +211,6 @@ impl ServerOps {
     ) -> Result<StartServerResponse, GuiError> {
         debug!(model_id = %id, "Starting server for model");
 
-        if let Some(handle) = crate::helpers::find_handle(&*self.deps.runner, id).await {
-            return Ok(StartServerResponse {
-                port: handle.port,
-                message: format!("Server already running on port {}", handle.port),
-            });
-        }
-
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         if !model.file_path.exists() {
@@ -243,8 +220,6 @@ impl ServerOps {
             )));
         }
 
-        // Resolve base_port from settings at serve-time (not bootstrap-time)
-        use crate::proxy::resolve_llama_base_port;
         let settings = self
             .deps
             .core
@@ -252,94 +227,55 @@ impl ServerOps {
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
-        let (base_port, source) = resolve_llama_base_port(None, &settings)?;
-        debug!(
-            base_port = %base_port,
-            source = %source,
-            "Resolved llama-server base port for model serving"
-        );
 
-        let config = Self::build_config(&model, &request, base_port, settings.default_context_size);
-        let handle = self.deps.runner.start(config).await.map_err(|e| {
-            // Emit error event before mapping the error
-            let error_summary = ServerSummary {
-                id: format!("server-{}", id),
-                model_id: id.to_string(),
-                model_name: model.name.clone(),
-                port: 0, // No port on failure
-                healthy: Some(false),
-            };
-            self.deps
-                .server_events
-                .error(&error_summary, &e.to_string());
+        // The proxy must be up before the model: it owns the runtime the model
+        // will run under, and its dashboard and cache lifecycle are the reason
+        // this path exists.
+        let proxy_addr = self.deps.proxy.ensure_running().await?;
+        debug!(%proxy_addr, "proxy ready for model start");
 
-            // Map ProcessError to semantic GuiError
-            // Check if the error message indicates llama-server binary issues
-            let err_str = e.to_string();
+        let overrides = Self::launch_overrides(&model, &request, settings.default_context_size);
+        let default_ctx = resolve_context_size(&overrides.options);
 
-            if err_str.contains("llama-server binary not found")
-                || err_str.contains("Failed to spawn llama-server")
-                || err_str.contains("No such file or directory")
-            {
-                // Parse error details for structured response
-                let expected_path = if let Some(start) = err_str.find("at: ") {
-                    let path_start = start + 4;
-                    if let Some(end) = err_str[path_start..].find('\n') {
-                        err_str[path_start..path_start + end].to_string()
-                    } else {
-                        "~/.local/share/gglib/.llama/bin/llama-server".to_string()
-                    }
-                } else {
-                    "~/.local/share/gglib/.llama/bin/llama-server".to_string()
+        let target = self
+            .deps
+            .proxy
+            .runtime()
+            .ensure_model_running_with(&model.name, request.context_length, default_ctx, overrides)
+            .await
+            .map_err(|e| {
+                let error_summary = ServerSummary {
+                    id: format!("server-{}", id),
+                    model_id: id.to_string(),
+                    model_name: model.name.clone(),
+                    port: 0, // No port on failure
+                    healthy: Some(false),
                 };
+                self.deps
+                    .server_events
+                    .error(&error_summary, &e.to_string());
+                map_runtime_error(&e)
+            })?;
 
-                let legacy_path = if err_str.contains("Found an older installation at:") {
-                    err_str
-                        .lines()
-                        .find(|l| l.contains("Found an older installation at:"))
-                        .and_then(|l| l.split("at: ").nth(1))
-                        .map(|s| s.trim().to_string())
-                } else {
-                    None
-                };
+        debug!(model_id = %id, port = %target.port, "Server started successfully");
 
-                let reason = if err_str.contains("not executable") {
-                    "not executable".to_string()
-                } else if err_str.contains("Permission denied") {
-                    "permission denied".to_string()
-                } else {
-                    "not found".to_string()
-                };
-
-                GuiError::LlamaServerNotInstalled {
-                    expected_path,
-                    legacy_path,
-                    suggested_command: "gglib config llama install".to_string(),
-                    reason,
-                }
-            } else {
-                GuiError::Internal(format!("Failed to start server: {e}"))
-            }
-        })?;
-
-        debug!(model_id = %id, port = %handle.port, "Server started successfully");
-
-        // Emit server:started event
         let summary = ServerSummary {
             id: format!("server-{}", id),
             model_id: id.to_string(),
             model_name: model.name.clone(),
-            port: handle.port,
+            port: target.port,
             healthy: Some(true), // Assume healthy on successful start
         };
         self.deps.server_events.started(&summary);
 
-        // Spawn health monitor after successful start
-        self.spawn_health_monitor(handle.clone(), id).await;
+        let handle = ProcessHandle::new(id, model.name.clone(), None, target.port, now_secs());
+        self.spawn_health_monitor(handle, id).await;
 
+        // The llama-server port, not the proxy's: existing GUI flows talk to
+        // the model directly, and the proxy runs alongside for observability.
         Ok(StartServerResponse {
-            port: handle.port,
-            message: format!("Server started on port {}", handle.port),
+            port: target.port,
+            message: format!("Server started on port {}", target.port),
         })
     }
 
@@ -407,45 +343,50 @@ impl ServerOps {
     pub async fn stop(&self, id: i64) -> Result<String, GuiError> {
         debug!(model_id = %id, "Stopping server");
 
-        let handle = crate::helpers::find_handle(&*self.deps.runner, id)
+        let running = self
+            .deps
+            .proxy
+            .runtime()
+            .current_model()
             .await
+            .filter(|t| i64::from(t.model_id) == id)
             .ok_or_else(|| GuiError::NotFound {
                 entity: "server",
                 id: id.to_string(),
             })?;
 
-        // Get model info for event emission
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        // Emit stopping event
         let summary = ServerSummary {
             id: format!("server-{}", id),
             model_id: id.to_string(),
             model_name: model.name.clone(),
-            port: handle.port,
+            port: running.port,
             healthy: None, // Unknown during shutdown
         };
         self.deps.server_events.stopping(&summary);
 
-        // Cancel monitoring first
+        // Cancel monitoring first, so a shutdown is not reported as a health
+        // regression.
         let server_id = {
             let registry = self.monitors.lock().await;
             registry.find_by_model_id(id)
         };
-
         if let Some(server_id) = server_id {
             let mut registry = self.monitors.lock().await;
             registry.cancel(server_id).await?;
         }
 
-        // Then stop the server process
-        self.deps.runner.stop(&handle).await.map_err(|e| {
-            // Emit error event on stop failure
-            self.deps.server_events.error(&summary, &e.to_string());
-            GuiError::Internal(format!("Failed to stop server: {e}"))
-        })?;
+        self.deps
+            .proxy
+            .runtime()
+            .stop_current()
+            .await
+            .map_err(|e| {
+                self.deps.server_events.error(&summary, &e.to_string());
+                GuiError::Internal(format!("Failed to stop server: {e}"))
+            })?;
 
-        // Emit stopped event after successful stop
         self.deps.server_events.stopped(&summary);
 
         Ok(format!("Server for model {} stopped", id))
@@ -453,21 +394,23 @@ impl ServerOps {
 
     /// Stop all running servers.
     ///
-    /// Used during application shutdown to ensure all llama-server processes are terminated.
+    /// Used during application shutdown to ensure all llama-server processes
+    /// are terminated.
     pub async fn stop_all(&self) -> Result<(), GuiError> {
         debug!("Stopping all servers");
 
-        // Get all running servers
-        let handles =
-            self.deps.runner.list_running().await.map_err(|e| {
-                GuiError::Internal(format!("Failed to list running servers: {}", e))
-            })?;
-
-        let model_ids: Vec<i64> = handles.iter().map(|h| h.model_id).collect();
+        let model_ids: Vec<i64> = self
+            .deps
+            .proxy
+            .runtime()
+            .list_running()
+            .await
+            .iter()
+            .map(|h| h.model_id)
+            .collect();
 
         debug!("Found {} running servers to stop", model_ids.len());
 
-        // Stop each server
         for model_id in model_ids {
             if let Err(e) = self.stop(model_id).await {
                 warn!("Failed to stop server {}: {}", model_id, e);
@@ -527,10 +470,14 @@ impl ServerOps {
 
     /// List all running servers as GUI DTOs.
     pub async fn list_servers(&self) -> Vec<ServerInfo> {
-        match self.deps.runner.list_running().await {
-            Ok(handles) => handles.iter().map(ServerInfo::from_handle).collect(),
-            Err(_) => Vec::new(),
-        }
+        self.deps
+            .proxy
+            .runtime()
+            .list_running()
+            .await
+            .iter()
+            .map(ServerInfo::from_handle)
+            .collect()
     }
 
     /// Get logs for a specific server port.
@@ -589,6 +536,48 @@ impl ServerOps {
             confidence: detection.confidence,
             detected_format: detection.detected_format.map(|f| f.to_string()),
         })
+    }
+}
+
+/// Seconds since the Unix epoch, for process-handle timestamps.
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Map a runtime failure onto the GUI error the frontend expects.
+///
+/// Preserves the llama-server-not-installed hint, which is the one failure a
+/// user can act on directly.
+fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
+    let text = err.to_string();
+
+    if text.contains("llama-server binary not found")
+        || text.contains("Failed to spawn llama-server")
+        || text.contains("No such file or directory")
+    {
+        return GuiError::LlamaServerNotInstalled {
+            expected_path: "~/.local/share/gglib/.llama/bin/llama-server".to_string(),
+            legacy_path: None,
+            suggested_command: "gglib config llama install".to_string(),
+            reason: if text.contains("not executable") {
+                "not executable".to_string()
+            } else if text.contains("Permission denied") {
+                "permission denied".to_string()
+            } else {
+                "not found".to_string()
+            },
+        };
+    }
+
+    match err {
+        ModelRuntimeError::ModelNotFound(name) => GuiError::NotFound {
+            entity: "model",
+            id: name.clone(),
+        },
+        _ => GuiError::Internal(format!("Failed to start server: {text}")),
     }
 }
 
@@ -821,12 +810,13 @@ mod tests {
     use gglib_core::events::NoopServerEvents;
     use gglib_core::ports::NoopEmitter;
 
-    use crate::test_support::{MockProcessRunner, MockToolSupportDetector, test_core};
+    use crate::test_support::{MockToolSupportDetector, test_core_and_proxy};
 
-    fn make_server_ops(core: Arc<AppCore>) -> ServerOps {
+    async fn make_server_ops() -> ServerOps {
+        let (core, proxy) = test_core_and_proxy().await;
         ServerOps::new(ServerDeps {
             core,
-            runner: Arc::new(MockProcessRunner),
+            proxy,
             emitter: Arc::new(NoopEmitter::new()),
             server_events: Arc::new(NoopServerEvents),
             tool_detector: Arc::new(MockToolSupportDetector),
@@ -835,20 +825,27 @@ mod tests {
 
     #[tokio::test]
     async fn list_servers_empty_on_fresh_db() {
-        let core = test_core().await;
-        let ops = make_server_ops(core);
-        let servers = ops.list_servers().await;
-        assert!(servers.is_empty());
+        let ops = make_server_ops().await;
+        assert!(ops.list_servers().await.is_empty());
     }
 
+    /// With nothing running, the proxy runtime reports no current model, so a
+    /// stop must surface as NotFound rather than a generic failure.
     #[tokio::test]
-    async fn stop_nonexistent_model_returns_error() {
-        let core = test_core().await;
-        let ops = make_server_ops(core);
-        let result = ops.stop(9999).await;
+    async fn stop_nonexistent_model_returns_not_found() {
+        let ops = make_server_ops().await;
+        let err = ops.stop(9999).await.expect_err("expected NotFound");
         assert!(
-            result.is_err(),
-            "expected error stopping non-existent model"
+            matches!(err, GuiError::NotFound { .. }),
+            "expected NotFound, got {err:?}"
         );
+    }
+
+    /// Nothing is running, so stopping everything is a no-op rather than an
+    /// error — application shutdown depends on this.
+    #[tokio::test]
+    async fn stop_all_succeeds_with_no_servers() {
+        let ops = make_server_ops().await;
+        assert!(ops.stop_all().await.is_ok());
     }
 }

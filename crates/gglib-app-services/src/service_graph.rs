@@ -90,8 +90,12 @@ pub struct ServiceGraphParams {
     pub approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
     /// Benchmark run persistence.
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
-    /// Base port for llama-server allocation.
-    pub base_port: u16,
+    /// Adapter-supplied base port for llama-server allocation.
+    ///
+    /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
+    /// `Settings.llama_base_port`, then the compiled default. See
+    /// [`resolve_llama_base_port`](crate::proxy::resolve_llama_base_port).
+    pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
 }
@@ -133,8 +137,9 @@ pub struct AppServices {
 ///
 /// # Errors
 ///
-/// Returns an error if the benchmark HTTP client cannot be constructed.
-pub fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<AppServices> {
+/// Returns an error if settings cannot be read or the benchmark HTTP client
+/// cannot be constructed.
+pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<AppServices> {
     let ServiceGraphParams {
         core,
         repos,
@@ -152,6 +157,18 @@ pub fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<AppServ
         base_port,
         llama_server_path,
     } = params;
+
+    // Resolved here, once, so both adapters honour `Settings.llama_base_port`.
+    // Previously only the GUI start path consulted it and the proxy path did
+    // not, which is how the two ended up on different ports.
+    let settings = core.settings().get().await?;
+    let (base_port, base_port_source) = crate::proxy::resolve_llama_base_port(base_port, &settings)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    tracing::debug!(
+        port = base_port,
+        source = base_port_source,
+        "resolved llama base port"
+    );
 
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(model_repo.clone()));
@@ -198,7 +215,7 @@ pub fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<AppServ
 
     let servers = Arc::new(ServerOps::new(ServerDeps {
         core: Arc::clone(&core),
-        runner: Arc::clone(&runner),
+        proxy: Arc::clone(&proxy),
         emitter,
         server_events,
         tool_detector: Arc::clone(&tool_detector),

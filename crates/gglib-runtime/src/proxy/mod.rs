@@ -34,12 +34,19 @@ use gglib_proxy::CouncilDeps;
 ///
 /// Uses `std::sync::Mutex` so no extra crate dependencies are required.
 /// Interactive-mode approval gates work for the lifetime of the proxy process.
-struct InMemoryApprovalRegistry {
+///
+/// Public so callers that need a council backend without a database — the
+/// standalone proxy, and tests composing a `ProxyOps` — share this one rather
+/// than each writing their own.
+#[derive(Default)]
+pub struct InMemoryApprovalRegistry {
     pending: StdMutex<HashMap<String, oneshot::Sender<ApprovalDecision>>>,
 }
 
 impl InMemoryApprovalRegistry {
-    fn new() -> Self {
+    /// Create an empty registry.
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             pending: StdMutex::new(HashMap::new()),
         }
@@ -78,14 +85,20 @@ impl CouncilApprovalRegistryPort for InMemoryApprovalRegistry {
 
 /// Minimal in-memory orchestrator repository for standalone proxy usage.
 ///
-/// Stores run records in memory only; no SQLite dep required.
-/// Interactive-mode state persists for the lifetime of the proxy process.
-struct InMemoryCouncilRepository {
+/// Stores run records in memory only; no SQLite dep required. Interactive-mode
+/// state persists for the lifetime of the proxy process.
+///
+/// Unlike the SQLite repository's blocking in-memory constructor, this needs no
+/// runtime of its own, so it is safe to build inside an async context.
+#[derive(Default)]
+pub struct InMemoryCouncilRepository {
     runs: StdMutex<HashMap<String, CouncilRun>>,
 }
 
 impl InMemoryCouncilRepository {
-    fn new() -> Self {
+    /// Create an empty repository.
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             runs: StdMutex::new(HashMap::new()),
         }

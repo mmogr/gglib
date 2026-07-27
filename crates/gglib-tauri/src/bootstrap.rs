@@ -16,7 +16,6 @@ use gglib_app_services::{
     ServerOps, ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::DEFAULT_LLAMA_BASE_PORT;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
@@ -252,9 +251,11 @@ async fn bootstrap_inner(
         approval_registry: Arc::clone(&approval_registry)
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
-        base_port: DEFAULT_LLAMA_BASE_PORT,
+        // No CLI override on the desktop app, so the saved setting decides.
+        base_port: None,
         llama_server_path: config.llama_server_path.clone(),
-    })?;
+    })
+    .await?;
 
     Ok(TauriContext {
         app,
@@ -286,7 +287,7 @@ async fn bootstrap_inner(
 /// Shares the same domain-ops graph as the real bootstraps, so a test context
 /// cannot silently diverge from production wiring. Only the repositories,
 /// runner and event sinks differ.
-pub fn bootstrap_with(
+pub async fn bootstrap_with(
     repos: Repos,
     runner: Arc<dyn ProcessRunner>,
     download_manager: Arc<dyn DownloadManagerPort>,
@@ -337,9 +338,10 @@ pub fn bootstrap_with(
         approval_registry: Arc::clone(&approval_registry)
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
-        base_port: DEFAULT_LLAMA_BASE_PORT,
+        base_port: None,
         llama_server_path: PathBuf::from("llama-server"),
     })
+    .await
     .expect("service graph construction should not fail in tests");
 
     TauriContext {

@@ -106,38 +106,44 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 ## Usage
 
+Adapters do not assemble the ops graph by hand — `build_service_graph`
+does it once for both, enforcing the shared-`ProcessManager` ordering that
+keeps only one llama-server running system-wide:
+
+```rust,ignore
+use gglib_app_services::{AppServices, ServiceGraphParams, build_service_graph};
+
+let AppServices { models, servers, proxy, .. } =
+    build_service_graph(ServiceGraphParams {
+        core,
+        repos,
+        runner,
+        // … adapter-supplied emitter, event sink and repositories …
+        base_port: None, // defer to Settings.llama_base_port
+        llama_server_path,
+    })
+    .await?;
+```
+
+Individual ops can still be constructed directly when only one is needed:
+
 ```rust
-use gglib_app_services::{ModelOps, ModelDeps, ServerOps, ServerDeps};
+use gglib_app_services::{ModelOps, ModelDeps};
 use std::sync::Arc;
 
-# // This example shows the typical usage pattern.
-# // In practice, dependencies would be injected from the adapter bootstrap.
 # fn example(
 #     core: Arc<gglib_core::services::AppCore>,
 #     runner: Arc<dyn gglib_core::ports::ProcessRunner>,
 #     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
-#     emitter: Arc<dyn gglib_core::ports::AppEventEmitter>,
-#     server_events: Arc<dyn gglib_core::events::ServerEvents>,
-#     tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort>,
 # ) {
-// Construct per-domain ops with injected dependencies
 let model_ops = ModelOps::new(ModelDeps {
     core: core.clone(),
     runner: runner.clone(),
     gguf_parser,
 });
 
-let server_ops = ServerOps::new(ServerDeps {
-    core: core.clone(),
-    runner,
-    emitter,
-    server_events,
-    tool_detector,
-});
-
 // Use ops asynchronously in handlers
 // let models = model_ops.list().await?;
-// server_ops.start(model_id, request).await?;
 # }
 ```
 
@@ -155,4 +161,4 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | `settings.rs` | 4 — get defaults, directory info, memory threshold (Some/None) |
 | `mcp.rs` | 4 — list empty, add+list, invalid type, remove |
 | `setup.rs` | 1 — smoke test (get_status returns Ok) |
-| `servers.rs` | 8 — 6 registry unit tests + list empty + stop non-existent |
+| `servers.rs` | 9 — 6 registry unit tests + list empty + stop not-found + stop-all no-op |
