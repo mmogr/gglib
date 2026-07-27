@@ -12,6 +12,8 @@
 //!
 //! All terminal rendering lives in `presentation/inspect_display.rs`.
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use gglib_app_services::{ModelDeps, ModelOps};
 
@@ -38,9 +40,15 @@ pub async fn execute(
     // Step 2: fetch the full DTO via ModelOps so serving status is included.
     // This mirrors exactly what the Axum detail route does, ensuring CLI and
     // REST API output are consistent for a model that is currently being served.
+    //
+    // `NoopModelRuntime` rather than `ctx.runner`: this is a one-shot CLI
+    // command with no shared `ProcessManager` to check, and a runner scoped
+    // to this single invocation would never have anything running in it
+    // regardless — this makes that explicit instead of asking a real runner
+    // a question it can only ever answer "no" to.
     let ops = ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
-        runner: ctx.runner.clone(),
+        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
         gguf_parser: ctx.gguf_parser.clone(),
     });
     let dto = ops.get_detail(model.id).await?;
