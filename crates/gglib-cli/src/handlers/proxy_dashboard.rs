@@ -876,6 +876,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn visual_row_count_matches_logical_lines_when_nothing_wraps() {
+        let frame = "gglib proxy dashboard\n(Ctrl+C to exit)\n\nTotal requests served: 0\n";
+        assert_eq!(
+            visual_row_count(frame, DEFAULT_TERM_WIDTH),
+            frame.lines().count() as u16
+        );
+    }
+
+    #[test]
+    fn visual_row_count_counts_a_wrapped_line_as_multiple_rows() {
+        let frame = format!("{}\n", "x".repeat(150));
+        assert_eq!(visual_row_count(&frame, 80), 2);
+    }
+
+    /// Reproduces the reported bug directly: at a narrow terminal width the
+    /// unguarded header line (fixed content, no truncation applied to it)
+    /// is long enough to wrap onto a second physical row. The old
+    /// `frame.lines().count()` redraw math would undercount here — proving
+    /// exactly the undershoot that made the dashboard drift/repeat down a
+    /// narrow terminal instead of redrawing in place.
+    #[test]
+    fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 0,
+            cache: None,
+            agent_usage: CacheUsage::default(),
+        };
+        let term_width = 40u16;
+        let frame = render_frame(
+            "http://127.0.0.1:8080/v1/proxy/status/stream",
+            &snapshot,
+            term_width,
+        );
+
+        let naive_count = frame.lines().count() as u16;
+        let accurate_count = visual_row_count(&frame, term_width);
+        assert!(
+            accurate_count > naive_count,
+            "expected wrapping to be detected: naive={naive_count} accurate={accurate_count}"
+        );
+    }
+
     // ── Prompt cache section ─────────────────────────────────────────────
 
     fn cache_status(usage: CacheUsage) -> CacheStatus {
