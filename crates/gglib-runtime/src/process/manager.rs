@@ -426,6 +426,19 @@ impl ProcessManager {
         matches!(self.strategy, ProcessStrategy::SingleSwap(_))
     }
 
+    /// The single model this manager is pinned to, if any.
+    ///
+    /// `Some(name)` is `gglib serve`: every other model is refused rather
+    /// than swapped to. Only `SingleSwap` can be pinned — `Concurrent` serves
+    /// many models by design.
+    #[must_use]
+    pub fn pinned_model(&self) -> Option<&str> {
+        match &self.strategy {
+            ProcessStrategy::SingleSwap(state) => state.pinned_name(),
+            ProcessStrategy::Concurrent { .. } => None,
+        }
+    }
+
     /// Check if a model is currently loading (SingleSwap only).
     #[must_use]
     pub fn is_loading(&self) -> bool {
@@ -557,6 +570,37 @@ mod tests {
             matches!(err, ModelRuntimeError::ModelNotFound(_)),
             "unpinned manager must not reject on identity, got {err:?}"
         );
+    }
+
+    /// The read side of the guard: callers that want to avoid provoking a
+    /// mismatch — `/v1/models`, which should not advertise a model that can
+    /// only be refused — need the name without attempting a request.
+    #[test]
+    fn pinned_manager_reports_its_model() {
+        assert_eq!(pinned_manager().pinned_model(), Some("qwen2.5"));
+    }
+
+    /// Reporting must agree with admission: a manager that admits any model
+    /// must not name one, or callers would narrow what they offer for no
+    /// reason.
+    #[test]
+    fn single_swap_manager_reports_no_pinned_model() {
+        let manager = ProcessManager::new_single_swap(
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        );
+
+        assert_eq!(manager.pinned_model(), None);
+    }
+
+    /// Concurrent serves many models by design and can never be pinned.
+    #[test]
+    fn concurrent_manager_reports_no_pinned_model() {
+        let manager = ProcessManager::new_concurrent(8080, 5, "llama-server");
+        assert_eq!(manager.pinned_model(), None);
     }
 
     #[tokio::test]

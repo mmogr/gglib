@@ -397,6 +397,9 @@ gglib model list
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
 gglib serve 1 --port 8080 --llama-port 5500
 
+# Same, with KV cache session persistence on disk
+gglib serve 1 --cache --slot-dir ~/.gglib/slots
+
 # Search HuggingFace
 gglib model search "llama 3 GGUF"
 

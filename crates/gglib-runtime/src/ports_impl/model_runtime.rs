@@ -110,6 +110,10 @@ impl ModelRuntimePort for RuntimePortImpl {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         self.mgr.stop_current().await
     }
+
+    fn pinned_model(&self) -> Option<&str> {
+        self.mgr.pinned_model()
+    }
 }
 
 #[cfg(test)]

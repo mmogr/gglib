@@ -7,7 +7,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::Settings;
+use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
+use gglib_core::domain::inference_profile::InferenceProfile;
 use gglib_core::ports::{
     ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
     ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
@@ -43,6 +45,39 @@ impl ModelRuntimePort for NoopRuntime {
     }
 }
 
+/// Runtime port that reports itself pinned to one model.
+///
+/// The read side of `gglib serve`: what a caller sees when the manager was
+/// built with `ProcessManager::new_pinned`. It does not enforce the pin —
+/// that guard lives in `gglib-runtime` and is tested there — so a test can
+/// tell the difference between "not advertised" and "refused".
+#[derive(Debug)]
+pub struct PinnedRuntime(pub &'static str);
+
+#[async_trait]
+impl ModelRuntimePort for PinnedRuntime {
+    async fn ensure_model_running(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        Ok(RunningTarget::local(0, 1, self.0.into(), 4096, false))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    fn pinned_model(&self) -> Option<&str> {
+        Some(self.0)
+    }
+}
+
 // ─── ModelCatalogPort mock ────────────────────────────────────────────────
 
 /// Catalog port with no models.
@@ -67,6 +102,64 @@ impl ModelCatalogPort for EmptyCatalog {
     }
 }
 
+/// Catalog port over a fixed set of model names.
+///
+/// Names are all `/v1/models` filtering cares about, so everything else is
+/// filled with plausible constants rather than made configurable.
+#[derive(Debug)]
+pub struct StaticCatalog(pub Vec<String>);
+
+impl StaticCatalog {
+    /// Build a catalog listing the given model names.
+    pub fn new(names: &[&str]) -> Self {
+        Self(names.iter().map(|n| (*n).to_string()).collect())
+    }
+
+    fn summary(id: u32, name: &str) -> ModelSummary {
+        ModelSummary {
+            id,
+            name: name.to_string(),
+            tags: vec![],
+            capabilities: Default::default(),
+            param_count: "7B".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+            architecture: Some("llama".to_string()),
+            created_at: 0,
+            file_size: 0,
+            context_length: Some(8192),
+            inference_defaults: None,
+            server_defaults: None,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelCatalogPort for StaticCatalog {
+    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+        Ok(self
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, name)| Self::summary(u32::try_from(i).unwrap_or(0) + 1, name))
+            .collect())
+    }
+
+    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+        Ok(self
+            .0
+            .iter()
+            .position(|n| n == name)
+            .map(|i| Self::summary(u32::try_from(i).unwrap_or(0) + 1, name)))
+    }
+
+    async fn resolve_for_launch(
+        &self,
+        _name: &str,
+    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+        Ok(None)
+    }
+}
+
 // ─── SettingsRepository mock ──────────────────────────────────────────────
 
 /// Returns default settings; save is a no-op.
@@ -76,6 +169,29 @@ pub struct MockSettingsRepo;
 impl SettingsRepository for MockSettingsRepo {
     async fn load(&self) -> Result<Settings, RepositoryError> {
         Ok(Settings::with_defaults())
+    }
+
+    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+}
+
+/// Settings carrying one listed inference profile, so `/v1/models` emits
+/// `{model}:{name}` variant entries.
+pub struct ProfileSettingsRepo(pub &'static str);
+
+#[async_trait]
+impl SettingsRepository for ProfileSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        Ok(Settings {
+            inference_profiles: Some(vec![InferenceProfile {
+                name: self.0.to_string(),
+                description: None,
+                config: InferenceConfig::default(),
+                list_in_models: true,
+            }]),
+            ..Settings::with_defaults()
+        })
     }
 
     async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {

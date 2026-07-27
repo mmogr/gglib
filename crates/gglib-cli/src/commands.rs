@@ -7,13 +7,12 @@
 
 use clap::Subcommand;
 use clap_complete::Shell;
-use gglib_core::cache_config::KvCacheType;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
-use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 
 /// Subcommands available under `gglib council`.
 #[derive(Subcommand)]
@@ -234,6 +233,8 @@ pub enum Commands {
         sampling: SamplingArgs,
         #[command(flatten)]
         mtp: MtpArgs,
+        #[command(flatten)]
+        cache: CacheArgs,
     },
 
     /// Chat with a model interactively, or manage chat history
@@ -444,6 +445,11 @@ pub enum Commands {
     ///
     /// This is identical to the behaviour when starting a model from the GUI or
     /// CLI — all surfaces go through the same canonical config builder.
+    ///
+    /// The sampling flags apply as proxy-wide defaults: requests that don't
+    /// specify a value use them, while per-request and per-model values still
+    /// win. (On `gglib serve` the same flags ride on the pinned model's own
+    /// launch options instead, since there is exactly one model in scope.)
     #[command(display_order = 22)]
     Proxy {
         /// Host to bind to
@@ -463,100 +469,10 @@ pub enum Commands {
         #[arg(long)]
         default_context: Option<String>,
 
-        /// Override sampling temperature for this proxy session (0.0–2.0).
-        ///
-        /// Applied as a global default: requests that don't specify temperature
-        /// will use this value. Per-request and per-model values still win.
-        #[arg(long)]
-        temperature: Option<f32>,
-
-        /// Override nucleus sampling top-p for this proxy session (0.0–1.0).
-        #[arg(long)]
-        top_p: Option<f32>,
-
-        /// Override top-k sampling limit for this proxy session.
-        #[arg(long)]
-        top_k: Option<i32>,
-
-        /// Override max tokens to generate for this proxy session.
-        #[arg(long)]
-        max_tokens: Option<u32>,
-
-        /// Override repetition penalty for this proxy session (typically 1.0–1.3).
-        #[arg(long)]
-        repeat_penalty: Option<f32>,
-
-        /// Override presence penalty for this proxy session (0.0–2.0).
-        ///
-        /// Useful for reasoning/thinking models (e.g. `1.5` for Qwen3, DeepSeek-R1).
-        #[arg(long)]
-        presence_penalty: Option<f32>,
-
-        /// Override min-p sampling threshold for this proxy session (0.0–1.0).
-        ///
-        /// Set `0.0` to disable (recommended by Qwen3).
-        #[arg(long)]
-        min_p: Option<f32>,
-        /// Enable KV cache session persistence, saving/restoring llama-server
-        /// slot state to disk per session.
-        ///
-        /// Independent of the host-RAM prompt cache, which is auto-sized on
-        /// every launch whether or not this flag is set (see `--cache-ram-mb`).
-        #[arg(long)]
-        cache: bool,
-        /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
-        #[arg(long)]
-        slot_dir: Option<std::path::PathBuf>,
-        /// RAM budget in MiB for llama-server's own host-RAM prompt cache
-        /// (`--cache-ram`) — what makes switching between conversations fast.
-        ///
-        /// Omit to auto-size it from total system RAM, the model's weights, and
-        /// its KV footprint at the launch context size; the chosen budget and
-        /// its arithmetic are logged at startup.
-        ///
-        /// Pass a value to override — `0` disables the cache. Set
-        /// `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to skip auto-sizing entirely and
-        /// use llama-server's built-in default. Independent of
-        /// `--cache`/`--slot-dir`.
-        #[arg(long)]
-        cache_ram_mb: Option<u64>,
-        /// Minimum chunk size in tokens for KV-shift cache reuse past the first
-        /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
-        /// whose earlier messages were edited or summarized (e.g. a Copilot
-        /// history compaction), which plain prefix matching can't reuse at all.
-        /// Omit to disable. Can be suppressed at runtime without editing this
-        /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
-        #[arg(long)]
-        cache_reuse: Option<u32>,
-        /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
-        /// sweep. Only meaningful with `--cache`.
-        ///
-        /// Omit to auto-size from free disk space at `--slot-dir` (a quarter
-        /// of free space + the cache's own current footprint, recomputed on
-        /// every sweep so it tracks disk pressure from other applications).
-        /// Can also be set via `GGLIB_CACHE_DISK_GB` (e.g. in a `.env` file)
-        /// without editing this flag; the flag wins if both are set.
-        #[arg(long)]
-        cache_disk_gb: Option<u64>,
-        /// Override the K cache element type (`--cache-type-k`). One of:
-        /// `f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`.
-        ///
-        /// Omit to use the `q8_0` default, which roughly halves KV cache
-        /// bytes-per-token versus llama-server's own `f16` default. Set
-        /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
-        /// axis not explicitly overridden here.
-        #[arg(long)]
-        cache_type_k: Option<KvCacheType>,
-        /// Override the V cache element type (`--cache-type-v`). Same values
-        /// as `--cache-type-k`.
-        ///
-        /// Quantizing V additionally requires Flash Attention to be active —
-        /// llama-server hard-errors at startup otherwise. gglib leaves
-        /// `--flash-attn` at llama-server's own `auto`; if that resolves off
-        /// for your model/backend, override this to `f16` or set
-        /// `GGLIB_DISABLE_KV_QUANT=1`.
-        #[arg(long)]
-        cache_type_v: Option<KvCacheType>,
+        #[command(flatten)]
+        sampling: SamplingArgs,
+        #[command(flatten)]
+        cache: CacheArgs,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,

@@ -10,9 +10,8 @@
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
 use anyhow::Result;
-use gglib_core::domain::inference::InferenceConfig;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::{ProxyCacheOptions, StandaloneProxyParams};
+use gglib_runtime::proxy::StandaloneProxyParams;
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -45,9 +44,12 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             options,
             sampling,
             mtp,
+            cache,
         } => {
-            handlers::inference::serve::execute(ctx, id, context, options, sampling, mtp, verbose)
-                .await?;
+            handlers::inference::serve::execute(
+                ctx, id, context, options, sampling, mtp, cache, verbose,
+            )
+            .await?;
         }
         Commands::Chat {
             identifier,
@@ -257,20 +259,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             port,
             llama_port,
             default_context,
-            temperature,
-            top_p,
-            top_k,
-            max_tokens,
-            repeat_penalty,
-            presence_penalty,
-            min_p,
+            sampling,
             cache,
-            slot_dir,
-            cache_ram_mb,
-            cache_reuse,
-            cache_disk_gb,
-            cache_type_k,
-            cache_type_v,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -307,26 +297,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 global_default_ctx: settings.default_context_size,
                 ..Default::default()
             });
-            let inference_override = if temperature.is_some()
-                || top_p.is_some()
-                || top_k.is_some()
-                || max_tokens.is_some()
-                || repeat_penalty.is_some()
-                || presence_penalty.is_some()
-                || min_p.is_some()
-            {
-                Some(InferenceConfig {
-                    temperature,
-                    top_p,
-                    top_k,
-                    max_tokens,
-                    repeat_penalty,
-                    presence_penalty,
-                    min_p,
-                })
-            } else {
-                None
-            };
+            let inference_override = sampling.into_override();
             gglib_runtime::proxy::start_proxy_standalone(StandaloneProxyParams {
                 host,
                 port,
@@ -337,15 +308,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 settings_repo: ctx.app.settings().repo(),
                 default_context: effective_context,
                 inference_override,
-                cache: ProxyCacheOptions {
-                    enabled: cache,
-                    slot_dir,
-                    ram_mb: cache_ram_mb,
-                    reuse: cache_reuse,
-                    disk_gb: cache_disk_gb,
-                    type_k: cache_type_k,
-                    type_v: cache_type_v,
-                },
+                cache: cache.into_proxy_cache_options(),
                 // `gglib proxy` serves the whole catalog and swaps on demand;
                 // `gglib serve` is the pinned mode of this same entry point.
                 pinned: None,
