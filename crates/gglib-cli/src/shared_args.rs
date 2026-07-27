@@ -226,17 +226,6 @@ pub struct ServeOptions {
     pub llama_port: u16,
 }
 
-impl Default for ServeOptions {
-    fn default() -> Self {
-        Self {
-            jinja: false,
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            llama_port: 5500,
-        }
-    }
-}
-
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
 /// from CLI argument groups.
 ///

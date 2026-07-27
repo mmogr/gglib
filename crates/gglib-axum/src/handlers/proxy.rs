@@ -68,10 +68,7 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
 }
 
 /// Convert handler config to runtime config with defaults.
-fn to_runtime_config(
-    cfg: &StartProxyConfig,
-    settings_default: Option<u64>,
-) -> Result<RuntimeProxyConfig, HttpError> {
+fn to_runtime_config(cfg: &StartProxyConfig, settings_default: Option<u64>) -> RuntimeProxyConfig {
     let default_context = resolve_context_size(&ServerConfigOptions {
         context_size: cfg.default_context,
         global_default_ctx: settings_default,
@@ -87,14 +84,14 @@ fn to_runtime_config(
     let slot_dir =
         cache_enabled.then(|| cfg.slot_dir.clone().unwrap_or_else(gglib_runtime::default_slot_dir));
 
-    Ok(RuntimeProxyConfig {
+    RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
         port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
         default_context,
         cache_enabled,
         slot_dir,
         ..Default::default()
-    })
+    }
 }
 
 /// Get current proxy status.
@@ -112,7 +109,7 @@ pub async fn start(
     // Resolve context size through the shared 3-level fallback chain
     // (flag > settings default > hard-coded default), matching CLI behavior.
     let settings = state.settings.get().await?;
-    let runtime_cfg = to_runtime_config(&cfg, settings.default_context_size)?;
+    let runtime_cfg = to_runtime_config(&cfg, settings.default_context_size);
 
     // Idempotent: if already running (Conflict), treat as success
     match state.proxy.start(runtime_cfg).await {
@@ -169,7 +166,7 @@ mod tests {
     #[test]
     fn cache_omitted_defaults_to_disabled() {
         let cfg = StartProxyConfig::default();
-        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        let runtime_cfg = to_runtime_config(&cfg, None);
         assert!(!runtime_cfg.cache_enabled);
         assert_eq!(runtime_cfg.slot_dir, None);
     }
@@ -184,7 +181,7 @@ mod tests {
             slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        let runtime_cfg = to_runtime_config(&cfg, None);
         assert!(!runtime_cfg.cache_enabled);
         assert_eq!(runtime_cfg.slot_dir, None);
     }
@@ -199,7 +196,7 @@ mod tests {
             slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        let runtime_cfg = to_runtime_config(&cfg, None);
         assert!(runtime_cfg.cache_enabled);
         assert_eq!(
             runtime_cfg.slot_dir,
@@ -217,7 +214,7 @@ mod tests {
             cache: Some(true),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None).unwrap();
+        let runtime_cfg = to_runtime_config(&cfg, None);
         assert!(runtime_cfg.cache_enabled);
         assert_eq!(runtime_cfg.slot_dir, Some(gglib_runtime::default_slot_dir()));
     }
@@ -227,7 +224,7 @@ mod tests {
     #[test]
     fn default_context_falls_through_to_settings() {
         let cfg = StartProxyConfig::default();
-        let runtime_cfg = to_runtime_config(&cfg, Some(16_384)).unwrap();
+        let runtime_cfg = to_runtime_config(&cfg, Some(16_384));
         assert_eq!(runtime_cfg.default_context, 16_384);
     }
 }
