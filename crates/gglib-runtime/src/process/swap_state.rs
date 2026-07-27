@@ -83,10 +83,15 @@ pub struct SwapState {
     /// pass through: it is resolved at spawn against live system RAM, the
     /// model's weights and its KV footprint at the launch context size.
     pub(super) cache_ram: CacheRamSetting,
+    /// The one model this state will serve, if pinned.
+    ///
+    /// `Some(name)` makes every other model a hard error instead of a swap —
+    /// see [`Self::check_pinned`]. `None` is the ordinary auto-swapping proxy.
+    pub(super) pinned: Option<String>,
 }
 
 impl SwapState {
-    /// Create swap state with a standing options template.
+    /// Create auto-swapping swap state with a standing options template.
     pub(super) fn new(
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
@@ -98,6 +103,37 @@ impl SwapState {
             loading: Arc::new(std::sync::RwLock::new(None)),
             launch_overrides,
             cache_ram,
+            pinned: None,
+        }
+    }
+
+    /// Create swap state pinned to a single model.
+    pub(super) fn pinned_to(
+        model_name: impl Into<String>,
+        catalog: Arc<dyn ModelCatalogPort>,
+        launch_overrides: ServerConfigOptions,
+        cache_ram: CacheRamSetting,
+    ) -> Self {
+        Self {
+            pinned: Some(model_name.into()),
+            ..Self::new(catalog, launch_overrides, cache_ram)
+        }
+    }
+
+    /// Reject a request for any model other than the pinned one.
+    ///
+    /// Checked before the startup guard is consulted, so a foreign request
+    /// fails immediately rather than queueing behind — or worse, displacing —
+    /// the pinned model.
+    pub(super) fn check_pinned(&self, model_name: &str) -> Result<(), ModelRuntimeError> {
+        match &self.pinned {
+            Some(expected) if expected != model_name => {
+                Err(ModelRuntimeError::PinnedModelMismatch {
+                    expected: expected.clone(),
+                    requested: model_name.to_owned(),
+                })
+            }
+            _ => Ok(()),
         }
     }
 
@@ -371,6 +407,106 @@ fn purge_stale_slot_bin_files(slot_dir: &Path, model_id: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use gglib_core::ports::{CatalogError, ModelLaunchSpec, ModelSummary};
+
+    #[derive(Debug)]
+    struct StubCatalog;
+
+    #[async_trait]
+    impl ModelCatalogPort for StubCatalog {
+        async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+            Ok(Vec::new())
+        }
+        async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+            Ok(None)
+        }
+        async fn resolve_for_launch(
+            &self,
+            _name: &str,
+        ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+            Ok(None)
+        }
+    }
+
+    fn pinned_state(model: &str) -> SwapState {
+        SwapState::pinned_to(
+            model,
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        )
+    }
+
+    fn swapping_state() -> SwapState {
+        SwapState::new(
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        )
+    }
+
+    #[test]
+    fn pinned_state_admits_its_own_model() {
+        assert!(pinned_state("qwen2.5").check_pinned("qwen2.5").is_ok());
+    }
+
+    #[test]
+    fn pinned_state_rejects_a_foreign_model() {
+        let err = pinned_state("qwen2.5")
+            .check_pinned("llama-3-8b")
+            .expect_err("a foreign model must be refused");
+
+        match err {
+            ModelRuntimeError::PinnedModelMismatch {
+                expected,
+                requested,
+            } => {
+                assert_eq!(expected, "qwen2.5");
+                assert_eq!(requested, "llama-3-8b");
+            }
+            other => panic!("expected PinnedModelMismatch, got {other:?}"),
+        }
+    }
+
+    /// Matching is exact: a pinned endpoint must not quietly accept a
+    /// near-miss and serve a different model than the caller named.
+    #[test]
+    fn pinned_matching_is_exact() {
+        let state = pinned_state("qwen2.5");
+        assert!(state.check_pinned("Qwen2.5").is_err(), "case differs");
+        assert!(state.check_pinned("qwen2.5-coder").is_err(), "suffix added");
+        assert!(state.check_pinned("qwen2").is_err(), "prefix only");
+    }
+
+    /// The unpinned proxy must keep swapping freely — pinning is opt-in.
+    #[test]
+    fn unpinned_state_admits_any_model() {
+        let state = swapping_state();
+        assert!(state.check_pinned("anything").is_ok());
+        assert!(state.check_pinned("something-else").is_ok());
+    }
+
+    /// Pinning changes only the admission check; the launch configuration a
+    /// pinned server uses must be identical to the swapping one.
+    #[test]
+    fn pinning_does_not_alter_launch_configuration() {
+        let template = ServerConfigOptions {
+            mlock: Some(true),
+            cache_reuse: Some(256),
+            ..Default::default()
+        };
+        let state = SwapState::pinned_to(
+            "qwen2.5",
+            Arc::new(StubCatalog),
+            template.clone(),
+            CacheRamSetting::ExplicitMb(4096),
+        );
+
+        assert_eq!(state.launch_overrides.mlock, template.mlock);
+        assert_eq!(state.launch_overrides.cache_reuse, template.cache_reuse);
+        assert_eq!(state.cache_ram, CacheRamSetting::ExplicitMb(4096));
+    }
 
     fn temp_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(

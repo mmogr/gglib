@@ -120,6 +120,42 @@ impl ProcessManager {
         }
     }
 
+    /// Create a `ProcessManager` pinned to a single model (`gglib serve`).
+    ///
+    /// Behaves exactly like [`Self::new_single_swap`] for the pinned model —
+    /// same startup coordination, same cache handling, same launch options
+    /// template — but rejects every other model with
+    /// [`ModelRuntimeError::PinnedModelMismatch`] instead of swapping to it.
+    ///
+    /// That refusal is the feature. `gglib serve <model>` exists to give
+    /// single-model clients (VS Code Copilot's BYOK endpoint, for one) an
+    /// endpoint that cannot change model underneath them; silently honouring a
+    /// foreign request would defeat the guarantee they are relying on.
+    ///
+    /// # Arguments
+    ///
+    /// Identical to [`Self::new_single_swap`], plus `model_name` — the model
+    /// to pin to, matched exactly against each request's model name.
+    pub fn new_pinned(
+        model_name: impl Into<String>,
+        base_port: u16,
+        llama_server_path: impl Into<String>,
+        catalog: Arc<dyn ModelCatalogPort>,
+        launch_overrides: ServerConfigOptions,
+        cache_ram: CacheRamSetting,
+    ) -> Self {
+        let core = GuiProcessCore::new(base_port, llama_server_path);
+        Self {
+            core: Arc::new(RwLock::new(core)),
+            strategy: ProcessStrategy::SingleSwap(Box::new(SwapState::pinned_to(
+                model_name,
+                catalog,
+                launch_overrides,
+                cache_ram,
+            ))),
+        }
+    }
+
     /// Start a llama-server instance for a model (Concurrent strategy only)
     pub async fn start_server(&self, config: ServerConfig) -> Result<u16> {
         let max_concurrent = match &self.strategy {
@@ -220,6 +256,11 @@ impl ProcessManager {
                 ));
             }
         };
+
+        // Refuse foreign models before touching the startup guard, so a
+        // rejected request neither queues behind the pinned model nor
+        // displaces it.
+        state.check_pinned(model_name)?;
 
         // Retry loop with an overall deadline, so a caller cannot wait
         // unboundedly while other models swap in and out ahead of it.
@@ -384,6 +425,116 @@ impl ProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---------------------------------------------------------------
+    // Pinned mode
+    // ---------------------------------------------------------------
+
+    #[derive(Debug)]
+    struct StubCatalog;
+
+    #[async_trait::async_trait]
+    impl ModelCatalogPort for StubCatalog {
+        async fn list_models(
+            &self,
+        ) -> Result<Vec<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError> {
+            Ok(Vec::new())
+        }
+        async fn resolve_model(
+            &self,
+            _name: &str,
+        ) -> Result<Option<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError>
+        {
+            Ok(None)
+        }
+        async fn resolve_for_launch(
+            &self,
+            _name: &str,
+        ) -> Result<Option<gglib_core::ports::ModelLaunchSpec>, gglib_core::ports::CatalogError>
+        {
+            Ok(None)
+        }
+    }
+
+    fn pinned_manager() -> ProcessManager {
+        ProcessManager::new_pinned(
+            "qwen2.5",
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        )
+    }
+
+    /// The guard has to sit on the real entry point, not just on SwapState —
+    /// this is what a proxy request actually calls.
+    #[tokio::test]
+    async fn ensure_model_running_rejects_a_foreign_model() {
+        let err = pinned_manager()
+            .ensure_model_running("llama-3-8b", None, 4096)
+            .await
+            .expect_err("a pinned manager must refuse a foreign model");
+
+        assert!(
+            matches!(err, ModelRuntimeError::PinnedModelMismatch { .. }),
+            "expected PinnedModelMismatch, got {err:?}"
+        );
+    }
+
+    /// A foreign request must be refused without the catalog ever being
+    /// consulted, proving it short-circuits ahead of the startup machinery
+    /// rather than failing somewhere inside it. The stub resolves every model
+    /// to `None`, so reaching the catalog would surface as ModelNotFound.
+    #[tokio::test]
+    async fn foreign_model_is_refused_before_catalog_lookup() {
+        let err = pinned_manager()
+            .ensure_model_running("llama-3-8b", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            !matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "request reached the catalog instead of being refused up front"
+        );
+    }
+
+    /// The pinned model itself is admitted past the guard — it fails later,
+    /// at catalog resolution, which is exactly how far this stub allows.
+    #[tokio::test]
+    async fn ensure_model_running_admits_the_pinned_model() {
+        let err = pinned_manager()
+            .ensure_model_running("qwen2.5", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "pinned model should pass the guard and reach the catalog, got {err:?}"
+        );
+    }
+
+    /// Pinning must not leak into the ordinary proxy manager.
+    #[tokio::test]
+    async fn single_swap_manager_admits_any_model() {
+        let manager = ProcessManager::new_single_swap(
+            9000,
+            "llama-server",
+            Arc::new(StubCatalog),
+            ServerConfigOptions::default(),
+            CacheRamSetting::Auto,
+        );
+
+        let err = manager
+            .ensure_model_running("anything", None, 4096)
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "unpinned manager must not reject on identity, got {err:?}"
+        );
+    }
 
     #[tokio::test]
     async fn test_concurrent_manager_creation() {
