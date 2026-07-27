@@ -24,6 +24,7 @@ mod mcp;
 mod models;
 mod proxy;
 mod servers;
+mod service_graph;
 mod settings;
 pub mod setup;
 pub mod types;
@@ -39,6 +40,7 @@ pub use mcp::{McpDeps, McpOps};
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::{ProxyDeps, ProxyOps};
 pub use servers::{ServerDeps, ServerOps};
+pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::{SettingsDeps, SettingsOps};
 pub use setup::{SetupDeps, SetupOps};
 
