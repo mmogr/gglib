@@ -24,7 +24,7 @@ gglib model list
 # Start chatting (launches llama-server automatically)
 gglib chat qwen2.5
 
-# Serve a model and use it from any OpenAI client
+# Pin one model to an OpenAI-compatible endpoint (dashboard and cache included)
 gglib serve qwen2.5
 
 # Pipe anything into a question
@@ -638,6 +638,7 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Desktop GUI** | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md), [src-tauri](src-tauri/README.md) |
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `127.0.0.1:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
+| **Pinned endpoint** | `gglib serve <id>` | The same proxy locked to one model, for clients that cannot switch via `/v1/models` |
 
 **Shell completions** — enable tab completion for your shell:
 
@@ -652,8 +653,8 @@ All interfaces share the same database and model directory. Pick whichever fits 
 <details>
 <summary><strong>Security notes</strong></summary>
 
-- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. Proxy also binds `127.0.0.1` by default with the same `--host` flag.
-- Both `gglib web` and `gglib proxy` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
+- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. `gglib proxy` and `gglib serve` also bind `127.0.0.1` by default — `serve` runs the proxy stack, so it inherits the same hardened defaults (`--host 127.0.0.1`, `--metrics`, `--parallel 1`) rather than the bare llama-server invocation it used before.
+- `gglib web`, `gglib proxy` and `gglib serve` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
 - No authentication — designed for trusted networks
 - Use firewall rules, private subnets, or VPN; do not expose to the public internet without additional auth
 

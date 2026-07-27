@@ -14,6 +14,19 @@ proxy server lifecycle. The actual HTTP server implementation lives in
 - **gglib-proxy**: HTTP server with OpenAI-compatible endpoints
 - Adapters (Tauri, Axum, CLI) call supervisor methods without storing handles
 
+# One entry point, two modes
+
+`start_proxy_standalone` backs both CLI commands. `StandaloneProxyParams::pinned`
+is the only difference between them:
+
+| | `gglib proxy` | `gglib serve <model>` |
+|---|---|---|
+| `pinned` | `None` — auto-swap on request | `Some(PinnedModel)` — refuse others |
+
+Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP gateway,
+council wiring and shutdown — is shared verbatim. `serve` is a *mode* of the
+proxy, not a second stack.
+
 <!-- module-docs:end -->
 
 <details>

@@ -109,18 +109,49 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **CLI Chat** — Direct terminal chat via llama-cli
 - **`OpenAI` Proxy** — Transparent proxy that routes to appropriate model instances
 - **Auto Model Swap** — Proxy automatically loads/unloads models based on requests
+- **Pinned Mode** — `ProcessManager::new_pinned` serves exactly one model and refuses all others, backing `gglib serve`
 - **Concurrent Startup Coordination** — SingleSwap strategy uses watch channels so concurrent requests during model startup wait for the result rather than failing immediately.
 - **Health Monitoring** — Polls server health endpoints for readiness
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
 - **MTP Speculative Decoding** — Auto-enabled for models with the `"mtp"` tag via the canonical `build_server_config` builder
 
-## ServerConfig Builder
+## Config: two layers, one translator
 
-All launch surfaces (proxy auto-start, GUI/HTTP start-server, CLI agent chat)
-must use `build_server_config` to construct a `ServerConfig`. This is the
-canonical entry point that calls all capability resolvers in one place and
-guarantees identical llama-server arguments across every surface.
+Every launch surface — the CLI, the proxy, both GUIs — resolves configuration
+through the same two layers, which is what guarantees a given model receives
+identical llama-server arguments regardless of what started it.
+
+| Layer | Entry point | Answers |
+|-------|-------------|---------|
+| Cascade | `resolve_unified_config` | which tier wins, *then* which flags |
+| Translation | `build_server_config` | which flags |
+
+`UnifiedServerConfig` carries the three tiers — explicit overrides, curated
+model defaults, global defaults — and `resolve_unified_config` flattens them
+before delegating to `build_server_config`. Capability detection therefore
+lives in exactly one place; adding a resolver to `build_server_config` reaches
+every surface automatically.
+
+```rust,ignore
+use gglib_runtime::{UnifiedServerConfig, GlobalDefaults, server_config::resolve_unified_config};
+use gglib_core::server_config::ServerConfigOptions;
+
+let config = resolve_unified_config(&UnifiedServerConfig {
+    model_id,
+    model_name,
+    model_path,
+    model_tags: model.tags.clone(),
+    explicit: ServerConfigOptions { mlock: Some(true), ..Default::default() },
+    globals: GlobalDefaults::default(),
+    pinned: false,
+});
+```
+
+### The translator directly
+
+Callers that have already flattened their options can reach
+`build_server_config` on its own:
 
 ```rust,ignore
 use gglib_runtime::{build_server_config, ServerConfigOptions};

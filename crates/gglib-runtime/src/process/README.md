@@ -10,10 +10,34 @@ with integrated log streaming and event broadcasting for GUI use cases.
 # Structure
 
 - `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs)
-- `ProcessManager` - High-level concurrent process orchestration
+- `ProcessManager` - High-level orchestration; dispatch only
+- `SwapState` - Single-model-at-a-time state and the startup driver itself
 - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
 - `ServerLogManager` - Log streaming infrastructure
 - Health check utilities
+
+# Strategies
+
+`ProcessStrategy` has two shapes:
+
+- **Concurrent** — several models at once, up to a limit (multi-model GUI use).
+- **SingleSwap** — one model at a time, holding a [`SwapState`]. Optionally
+  *pinned*: `ProcessManager::new_pinned` serves exactly one model and returns
+  `PinnedModelMismatch` for any other, rather than swapping. Pinning changes
+  only which models are admitted — startup coordination, cache handling and
+  launch options are identical either way.
+
+# Launch options
+
+`SwapState` carries a standing `ServerConfigOptions` template rather than a
+hand-picked list of fields. Each launch resolves to
+
+```text
+template  ⊕  per-call overrides  ⊕  this request's context chain
+```
+
+so a flag added to `ServerConfigOptions` reaches llama-server through this path
+with no change here at all.
 
 # Distinction from `ProcessCore`
 

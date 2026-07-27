@@ -232,7 +232,7 @@ Model Context Protocol integration:
 Command-line interface:
 - `gglib model add` - Add models
 - `gglib model list` - List models
-- `gglib serve` - Start servers
+- `gglib serve` - Pinned single-model OpenAI endpoint
 - `gglib chat` - Interactive chat
 - `gglib config` - Configuration management
 
