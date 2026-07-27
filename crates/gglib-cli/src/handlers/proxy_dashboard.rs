@@ -352,6 +352,26 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
     out
 }
 
+/// Number of physical terminal rows `frame` will occupy when printed at
+/// `term_width` columns, accounting for lines that auto-wrap. Mirrors the
+/// terminal's own wrapping behavior in cooked mode: a line of `w` columns
+/// takes `ceil(w / term_width)` rows (minimum 1, even for an empty line).
+///
+/// Used instead of a bare logical-line count (`frame.lines().count()`) when
+/// tracking how far to move the cursor up on the next redraw — see the
+/// module's "Redraw strategy" doc comment for why an undercount there
+/// corrupts the display.
+fn visual_row_count(frame: &str, term_width: u16) -> u16 {
+    let cols = term_width.max(1);
+    frame
+        .lines()
+        .map(|line| {
+            let width = line.chars().count() as u16;
+            width.div_ceil(cols).max(1)
+        })
+        .fold(0u16, |acc, rows| acc.saturating_add(rows))
+}
+
 /// Render the reuse rows shared by the proxied and agent-path cache sections.
 ///
 /// Every figure is one the upstream measured. There is deliberately no
@@ -595,7 +615,7 @@ pub async fn execute(host: String, port: u16) -> Result<()> {
                         )?;
                         write!(out, "{frame}")?;
                         out.flush()?;
-                        previous_frame_lines = frame.lines().count() as u16;
+                        previous_frame_lines = visual_row_count(&frame, term_width);
                     } else {
                         print!("{frame}");
                     }
