@@ -22,7 +22,7 @@ use gglib_core::ports::{
     AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, ProcessRunner,
 };
-use gglib_core::server_config::CacheRamSetting;
+use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
 use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
@@ -264,11 +264,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         config.base_port,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
-        None,
+        ServerConfigOptions::default(),
         CacheRamSetting::Auto,
-        None,
-        None,
-        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));

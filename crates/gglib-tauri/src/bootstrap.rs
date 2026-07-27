@@ -22,7 +22,7 @@ use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_core::server_config::CacheRamSetting;
+use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::repositories::SqliteCouncilRepository;
@@ -201,7 +201,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         DEFAULT_LLAMA_BASE_PORT,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
-        None,
+        ServerConfigOptions::default(),
         // `Auto` is the manager's default (used by ProxyOps and the public
         // `runtime` field, parity with the CLI proxy). BenchmarkOps below
         // overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
@@ -209,9 +209,6 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         // timings and RAM footprint — while still sharing this same
         // SingleSwap manager, so only one llama-server ever runs.
         CacheRamSetting::Auto,
-        None,
-        None,
-        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
@@ -328,11 +325,8 @@ pub fn bootstrap_with(
         DEFAULT_LLAMA_BASE_PORT,
         String::from("llama-server"),
         catalog_for_runtime,
-        None,
+        ServerConfigOptions::default(),
         CacheRamSetting::Auto,
-        None,
-        None,
-        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
@@ -487,7 +481,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         DEFAULT_LLAMA_BASE_PORT,
         config.llama_server_path.to_string_lossy().into_owned(),
         catalog_for_runtime,
-        None,
+        ServerConfigOptions::default(),
         // `Auto` is the manager's default (used by ProxyOps and the public
         // `runtime` field, parity with the CLI proxy). BenchmarkOps below
         // overrides it to `ExplicitMb(0)` via `RuntimePortImpl::with_cache_ram`
@@ -495,9 +489,6 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         // timings and RAM footprint — while still sharing this same
         // SingleSwap manager, so only one llama-server ever runs.
         CacheRamSetting::Auto,
-        None,
-        None,
-        None,
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));

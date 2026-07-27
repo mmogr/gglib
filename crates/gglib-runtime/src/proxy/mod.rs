@@ -23,7 +23,7 @@ use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
     ModelRepository, RepositoryError, SettingsRepository,
 };
-use gglib_core::server_config::CacheRamSetting;
+use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
 
@@ -274,14 +274,17 @@ pub async fn start_proxy_standalone(
         llama_base_port,
         llama_server_path.to_string_lossy(),
         Arc::clone(&catalog_port),
-        slot_save_path.clone(),
+        ServerConfigOptions {
+            slot_save_path: slot_save_path.clone(),
+            cache_reuse,
+            cache_type_k,
+            cache_type_v,
+            ..Default::default()
+        },
         // No explicit value from the caller means auto-size, not "leave the
         // llama-server default" — the proxy is the one launch surface where a
         // right-sized prompt cache is the whole point.
         cache_ram_mb.map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb),
-        cache_reuse,
-        cache_type_k,
-        cache_type_v,
     ));
 
     // Create runtime port

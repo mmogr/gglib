@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::ports::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
+use gglib_core::ports::{LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunningTarget};
 use std::fmt;
 use std::sync::Arc;
 
@@ -76,8 +76,24 @@ impl ModelRuntimePort for RuntimePortImpl {
         num_ctx: Option<u64>,
         default_ctx: u64,
     ) -> Result<RunningTarget, ModelRuntimeError> {
+        self.ensure_model_running_with(model_name, num_ctx, default_ctx, LaunchOverrides::default())
+            .await
+    }
+
+    async fn ensure_model_running_with(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: u64,
+        mut overrides: LaunchOverrides,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        // This instance's standing cache-RAM setting applies only when the
+        // caller expressed no preference of its own, so a per-call override
+        // still wins over `with_cache_ram`.
+        overrides.cache_ram = overrides.cache_ram.or(self.cache_ram_override);
+
         self.mgr
-            .ensure_model_running_with(model_name, num_ctx, default_ctx, self.cache_ram_override)
+            .ensure_model_running_with(model_name, num_ctx, default_ctx, overrides)
             .await
     }
 
