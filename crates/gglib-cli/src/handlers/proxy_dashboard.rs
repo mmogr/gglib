@@ -24,12 +24,15 @@
 //! that `crossterm::terminal::enable_raw_mode()` breaks `println!`-based
 //! redraws (it disables `OPOST`, so `\n` stops returning the cursor to column
 //! 0). This module never touches raw mode. Instead, each frame after the
-//! first moves the cursor up by the previous frame's line count and clears
-//! everything below before printing the next frame — plain
-//! `crossterm::cursor`/`terminal` commands in normal (cooked) mode, which
-//! compose fine with ordinary `print!`/`println!`. When stdout is not a TTY
-//! (piped output, CI), frames are printed sequentially instead, since there is
-//! no cursor to move.
+//! first moves the cursor up by the previous frame's *physical row* count
+//! (see [`visual_row_count`]) and clears everything below before printing
+//! the next frame — plain `crossterm::cursor`/`terminal` commands in normal
+//! (cooked) mode, which compose fine with ordinary `print!`/`println!`.
+//! Cooked mode means a line longer than the terminal's width auto-wraps onto
+//! an extra physical row, which is exactly what `visual_row_count` accounts
+//! for when computing how far to move the cursor up on the next tick. When
+//! stdout is not a TTY (piped output, CI), frames are printed sequentially
+//! instead, since there is no cursor to move.
 //!
 //! ## Shutdown
 //!
@@ -274,14 +277,15 @@ fn format_elapsed_secs(started_at_secs: u64) -> String {
 /// Build the full multi-line dashboard frame for one snapshot. Pure text
 /// generation — no IO — so it's testable without a terminal or network.
 ///
-/// `term_width` bounds every rendered line to at most one physical terminal
-/// row. Without this, an unbounded string (e.g. the `/slots` unreachable
-/// reason, which can easily exceed 100 characters) wraps onto extra
-/// *physical* rows that the caller's `frame.lines().count()` bookkeeping
-/// never sees, undercounting how far to move the cursor up on the next
-/// redraw — this both corrupts the display (stale wrapped remnants left
-/// on screen, looking like truncation) and makes the whole frame drift
-/// down the terminal on every subsequent tick (visible scrolling).
+/// `term_width` is used to pre-truncate the two fields whose content is
+/// otherwise unbounded (the `/slots` unreachable reason and cache warnings,
+/// both server-phrased strings that can easily exceed 100 characters), so
+/// the frame stays legible even before wrapping is accounted for. Every
+/// other line in the frame is fixed-width by construction, but may still
+/// wrap on a narrow enough terminal — the caller does not rely on `frame`
+/// having exactly one physical row per logical line; see
+/// [`visual_row_count`], which is what the redraw loop actually uses to
+/// compute how far to move the cursor up.
 fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> String {
     let mut out = String::new();
     out.push_str(&format!("gglib proxy dashboard — {url}\n"));
@@ -837,9 +841,9 @@ mod tests {
         // A realistic reqwest connect-error string easily exceeds 100 chars
         // — e.g. "error sending request for url (http://127.0.0.1:5500/slots):
         // error trying to connect: tcp connect error: Connection refused (os
-        // error 61)". Without width-aware truncation this would wrap onto
-        // multiple physical terminal rows that `frame.lines().count()` can't
-        // see, corrupting the redraw (bugs #1 and #4).
+        // error 61)". This still confirms the pre-truncation keeps the line
+        // within one row, on top of the general wrap-aware row counting in
+        // `visual_row_count`.
         let long_reason = "error sending request for url (http://127.0.0.1:5500/slots): "
             .to_string()
             + &"error trying to connect: tcp connect error: Connection refused ".repeat(3);
