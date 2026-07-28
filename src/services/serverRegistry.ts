@@ -13,7 +13,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { ServerHealthStatus } from '../types';
+import type { RuntimeErrorInfo, ServerHealthStatus } from '../types';
 
 // Re-export for convenience
 export type { ServerHealthStatus } from '../types';
@@ -49,7 +49,7 @@ export type ServerEvent =
   | { type: 'running'; modelId: string; port?: number; updatedAt: number; modelName?: string }
   | { type: 'stopping'; modelId: string; port?: number; updatedAt: number; modelName?: string }
   | { type: 'stopped'; modelId: string; port?: number; updatedAt: number; modelName?: string }
-  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; modelName?: string }
+  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; modelName?: string; error?: RuntimeErrorInfo }
   | { type: 'server_health_changed'; modelId: string; status: ServerHealthStatus; detail?: string; updatedAt: number };
 
 // ============================================================================

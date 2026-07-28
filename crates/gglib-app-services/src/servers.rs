@@ -244,9 +244,7 @@ impl ServerOps {
                     port: 0, // No port on failure
                     healthy: Some(false),
                 };
-                self.deps
-                    .server_events
-                    .error(&error_summary, &e.to_string());
+                self.deps.server_events.error(&error_summary, &e);
                 map_runtime_error(&e)
             })?;
 
@@ -376,7 +374,7 @@ impl ServerOps {
             .stop_current()
             .await
             .map_err(|e| {
-                self.deps.server_events.error(&summary, &e.to_string());
+                self.deps.server_events.error(&summary, &e);
                 GuiError::Internal(format!("Failed to stop server: {e}"))
             })?;
 
@@ -779,7 +777,7 @@ mod tests {
                 .push(format!("snapshot:{}", servers.len()));
         }
 
-        fn error(&self, server: &ServerSummary, error: &str) {
+        fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
             self.calls
                 .lock()
                 .unwrap()
@@ -804,14 +802,17 @@ mod tests {
         recorder.started(&summary);
         recorder.stopping(&summary);
         recorder.stopped(&summary);
-        recorder.error(&summary, "test error");
+        recorder.error(
+            &summary,
+            &ModelRuntimeError::Internal("test error".to_string()),
+        );
 
         let calls = recorder.get_calls();
         assert_eq!(calls.len(), 4);
         assert_eq!(calls[0], "started:TestModel");
         assert_eq!(calls[1], "stopping:TestModel");
         assert_eq!(calls[2], "stopped:TestModel");
-        assert_eq!(calls[3], "error:TestModel:test error");
+        assert_eq!(calls[3], "error:TestModel:Internal error: test error");
     }
 
     // =========================================================================

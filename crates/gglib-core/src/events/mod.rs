@@ -6,7 +6,7 @@ mod server;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ports::McpErrorInfo;
+use crate::ports::{McpErrorInfo, RuntimeErrorEnvelope};
 
 // Re-export event types
 pub use app::ModelSummary;
@@ -55,8 +55,9 @@ pub enum AppEvent {
         /// Name of the model being served.
         #[serde(rename = "modelName")]
         model_name: String,
-        /// Error description.
-        error: String,
+        /// Structured error detail (message, type discriminant, retryable
+        /// flag), mirroring the HTTP layer's `ErrorResponse` shape.
+        error: RuntimeErrorEnvelope,
     },
 
     /// Snapshot of all currently running servers.

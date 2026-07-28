@@ -85,6 +85,33 @@ describe('serverEvents.normalize', () => {
     expect(evt).toBeNull();
   });
 
+  it('normalizes server_error into crashed with the structured error envelope', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_error',
+      modelId: 123,
+      modelName: 'TestModel',
+      error: { message: 'model is loading, try again', type: 'service_unavailable', retryable: true },
+    });
+
+    expect(evt).toMatchObject({
+      type: 'crashed',
+      modelId: '123',
+      error: { message: 'model is loading, try again', type: 'service_unavailable', retryable: true },
+    });
+  });
+
+  it('drops a malformed server_error error payload instead of throwing', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_error',
+      modelId: 123,
+      modelName: 'TestModel',
+      error: 'legacy plain string',
+    });
+
+    expect(evt).toMatchObject({ type: 'crashed', modelId: '123' });
+    expect((evt as { error?: unknown }).error).toBeUndefined();
+  });
+
   it('normalizes server_health_changed using timestamp (ms)', () => {
     const evt = normalizeServerEventFromAppEvent({
       type: 'server_health_changed',

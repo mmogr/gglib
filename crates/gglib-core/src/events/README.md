@@ -22,6 +22,19 @@ Events are serialized with a `type` tag for TypeScript compatibility:
 { "type": "server_started", "modelName": "Llama-2-7B", "port": 8080 }
 ```
 
+`server_error` carries a structured error envelope (message, stable `type`
+discriminant, `retryable` flag) rather than a bare string, mirroring the HTTP
+layer's `ErrorResponse` shape so Tauri and HTTP clients agree on meaning:
+
+```json
+{
+  "type": "server_error",
+  "modelId": 1,
+  "modelName": "Llama-2-7B",
+  "error": { "message": "...", "type": "service_unavailable", "retryable": true }
+}
+```
+
 <!-- module-docs:end -->
 
 <details>

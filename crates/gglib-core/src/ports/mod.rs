@@ -66,6 +66,7 @@ pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{
     LaunchOverrides, ModelRuntimeError, ModelRuntimePort, NoopModelRuntime, RunningTarget,
+    RuntimeErrorEnvelope,
 };
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig};
 pub use server_health::ServerHealthStatus;

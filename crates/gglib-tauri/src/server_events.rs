@@ -4,6 +4,7 @@
 //! to Tauri's `ServerEvent` types and emitting via the Tauri event system.
 
 use gglib_core::events::{AppEvent, ServerEvents, ServerSummary};
+use gglib_core::ports::ModelRuntimeError;
 use tauri::AppHandle;
 
 use crate::events::emit_or_log;
@@ -50,8 +51,8 @@ impl ServerEvents for TauriServerEvents {
         emit_or_log(&self.app, event.event_name(), &event);
     }
 
-    fn error(&self, server: &ServerSummary, error: &str) {
-        let event = AppEvent::from_server_error(server, error);
+    fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
+        let event = AppEvent::from_server_error(server, error.into());
         emit_or_log(&self.app, event.event_name(), &event);
     }
 }

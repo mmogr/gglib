@@ -15,7 +15,7 @@ use std::sync::Arc;
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
 use gglib_core::events::{AppEvent, ServerEvents, ServerSummary};
-use gglib_core::ports::AppEventEmitter;
+use gglib_core::ports::{AppEventEmitter, ModelRuntimeError};
 use gglib_sse::{Broadcaster, SseOptions};
 
 /// SSE broadcaster that implements event emitter ports.
@@ -133,8 +133,8 @@ impl ServerEvents for AxumServerEvents {
         self.broadcaster.emit(event);
     }
 
-    fn error(&self, server: &ServerSummary, error: &str) {
-        let event = AppEvent::from_server_error(server, error);
+    fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
+        let event = AppEvent::from_server_error(server, error.into());
         self.broadcaster.emit(event);
     }
 }
