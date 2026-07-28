@@ -1,9 +1,17 @@
 //! Shared mock implementations for gglib-proxy integration tests.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, oneshot};
+use axum::{Router, body::Body, http::Response, routing::post};
+use bytes::Bytes;
+use serde_json::{Value, json};
+use tokio::net::TcpListener;
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::Settings;
@@ -371,4 +379,523 @@ pub fn make_mcp_service() -> Arc<McpService> {
         Arc::new(EmptyMcpRepo),
         Arc::new(NoopEmitter::new()),
     ))
+}
+
+// ─── Mock upstream (chat-completions + optional slots) ────────────────────
+//
+// Shared by the SSE pipeline tests (`integration_proxy_pipeline.rs`), the
+// disk-cache roundtrip tests (`integration_slot_roundtrip.rs`), and the
+// streaming+cache roundtrip tests (`integration_streaming_slot_roundtrip.rs`)
+// — consolidated here so all three stop hand-rolling their own copies of the
+// same `ModelRuntimePort`/`ModelCatalogPort` mocks and mock-upstream servers.
+
+/// Runtime port that hands back a fixed upstream port.
+///
+/// `slot_restore_supported` mirrors `RunningTarget::slot_restore_supported` —
+/// false models a sliding-window/hybrid/recurrent model, where the proxy must
+/// bypass the disk slot layer entirely. `pinned` only affects
+/// [`ModelRuntimePort::pinned_model`] — enforcement lives in `gglib-runtime`'s
+/// `SwapState` and is out of scope here.
+#[derive(Debug)]
+pub struct FixedUpstream {
+    pub port: u16,
+    pub model_name: String,
+    pub slot_restore_supported: bool,
+    pub pinned: bool,
+}
+
+#[async_trait]
+impl ModelRuntimePort for FixedUpstream {
+    async fn ensure_model_running(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        Ok(
+            RunningTarget::local(self.port, 1, self.model_name.clone(), 4096, false)
+                .with_slot_restore_supported(self.slot_restore_supported),
+        )
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    fn pinned_model(&self) -> Option<&str> {
+        self.pinned.then_some(self.model_name.as_str())
+    }
+}
+
+/// Catalog port that always resolves the requested model with the given tags.
+#[derive(Debug)]
+pub struct TaggedCatalog {
+    pub name: String,
+    pub tags: Vec<String>,
+}
+
+impl TaggedCatalog {
+    fn summary(&self) -> ModelSummary {
+        ModelSummary {
+            id: 1,
+            name: self.name.clone(),
+            tags: self.tags.clone(),
+            capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: None,
+            inference_defaults: None,
+            server_defaults: None,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelCatalogPort for TaggedCatalog {
+    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+        Ok(vec![self.summary()])
+    }
+
+    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+        if name == self.name {
+            Ok(Some(self.summary()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn resolve_for_launch(
+        &self,
+        _name: &str,
+    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+        Ok(None)
+    }
+}
+
+/// Spawn a mock upstream HTTP server that yields `chunks` (in order) when
+/// `POST /v1/chat/completions` is called. Returns the bound port.
+///
+/// Each chunk is sent as a separate body frame so tests can deliberately
+/// split SSE frames across byte boundaries.
+pub async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: CancellationToken) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().unwrap().port();
+
+    // Wrap chunks in a Mutex<Option<...>> so the handler can take them once
+    // (axum requires Fn handlers; we serve a single request per upstream).
+    let slot: Arc<StdMutex<Option<Vec<&'static [u8]>>>> = Arc::new(StdMutex::new(Some(chunks)));
+
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move || {
+            let slot = slot.clone();
+            async move {
+                let chunks = slot
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .unwrap_or_else(|| vec![b"data: [DONE]\n\n" as &[u8]]);
+                let stream = futures_util::stream::iter(
+                    chunks
+                        .into_iter()
+                        .map(|c| Ok::<Bytes, std::io::Error>(Bytes::from_static(c))),
+                );
+                Response::builder()
+                    .header("content-type", "text/event-stream")
+                    .header("cache-control", "no-cache")
+                    .body(Body::from_stream(stream))
+                    .unwrap()
+            }
+        }),
+    );
+
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(cancel.cancelled_owned())
+            .await
+            .ok();
+    });
+
+    // Give the listener a moment to start accepting.
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    port
+}
+
+/// Spawn a mock upstream server that records action order for the disk-slot
+/// save/restore lifecycle, and serves a plain **non-streaming** JSON response
+/// from `/v1/chat/completions`.
+///
+/// Returns `(port, action_log, save_count, restore_count, last_chat_body)`
+/// where `action_log` is a mutex-protected byte vector: `0` = restore,
+/// `1` = generate, `2` = save; `last_chat_body` captures the raw bytes of
+/// the most recent `/v1/chat/completions` request, for asserting on what
+/// the proxy actually forwarded upstream (e.g. injected fields).
+///
+/// On a save action, this actually writes the requested `filename` (gglib
+/// sends a per-attempt temp name, see `slots::save_slot`) under `slot_dir` —
+/// real llama-server does the equivalent, writing into its
+/// `--slot-save-path`. Without this, gglib's post-save `rename(tmp, final)`
+/// would always fail (nothing was ever written), turning every "successful"
+/// save into a `Transient` failure and retry storm.
+pub async fn spawn_mock_upstream_with_slots(
+    cancel: CancellationToken,
+    slot_dir: PathBuf,
+) -> (
+    u16,
+    Arc<Mutex<Vec<u8>>>,
+    Arc<AtomicU64>,
+    Arc<AtomicU64>,
+    Arc<Mutex<Option<Bytes>>>,
+) {
+    spawn_mock_upstream_with_slots_impl(cancel, slot_dir, ChatResponseMode::Json).await
+}
+
+/// Same as [`spawn_mock_upstream_with_slots`], but `/v1/chat/completions`
+/// responds with a **streaming** `text/event-stream` body (the fixed
+/// [`super::sse::BASIC_TEXT`] fixture) instead of a single JSON object — for
+/// exercising the streaming+cache code path (`sse_stream::spawn_and_return`)
+/// rather than the non-streaming one (`cache_lifecycle::run_with_cache`).
+pub async fn spawn_mock_upstream_with_slots_streaming(
+    cancel: CancellationToken,
+    slot_dir: PathBuf,
+) -> (
+    u16,
+    Arc<Mutex<Vec<u8>>>,
+    Arc<AtomicU64>,
+    Arc<AtomicU64>,
+    Arc<Mutex<Option<Bytes>>>,
+) {
+    spawn_mock_upstream_with_slots_impl(cancel, slot_dir, ChatResponseMode::Sse).await
+}
+
+/// How the mock upstream's `/v1/chat/completions` handler responds — shared
+/// by the JSON (non-streaming) and SSE (streaming) slot-roundtrip mocks so
+/// the `/slots/0` save/restore handler (identical in both) isn't duplicated.
+enum ChatResponseMode {
+    Json,
+    Sse,
+}
+
+async fn spawn_mock_upstream_with_slots_impl(
+    cancel: CancellationToken,
+    slot_dir: PathBuf,
+    mode: ChatResponseMode,
+) -> (
+    u16,
+    Arc<Mutex<Vec<u8>>>,
+    Arc<AtomicU64>,
+    Arc<AtomicU64>,
+    Arc<Mutex<Option<Bytes>>>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock upstream");
+    let port = listener.local_addr().unwrap().port();
+
+    let action_log: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let save_count = Arc::new(AtomicU64::new(0));
+    let restore_count = Arc::new(AtomicU64::new(0));
+    let last_chat_body: Arc<Mutex<Option<Bytes>>> = Arc::new(Mutex::new(None));
+
+    let log_c = action_log.clone();
+    let save_n = save_count.clone();
+    let restore_n = restore_count.clone();
+    let last_body_c = last_chat_body.clone();
+
+    let chat_route = {
+        let log_c = log_c.clone();
+        let last_body_c = last_body_c.clone();
+        match mode {
+            ChatResponseMode::Json => post(move |body: Bytes| {
+                let log_c = log_c.clone();
+                let last_body_c = last_body_c.clone();
+                async move {
+                    log_c.lock().await.push(1);
+                    *last_body_c.lock().await = Some(body);
+                    let body = json!({
+                        "id": "test-123",
+                        "object": "chat.completion",
+                        "model": "test-model",
+                        "choices": [{
+                            "index": 0,
+                            "message": { "role": "assistant", "content": "hello" },
+                            "finish_reason": "stop"
+                        }]
+                    })
+                    .to_string();
+                    Response::builder()
+                        .header("content-type", "application/json")
+                        .body(Body::from(body))
+                        .unwrap()
+                }
+            }),
+            ChatResponseMode::Sse => post(move |body: Bytes| {
+                let log_c = log_c.clone();
+                let last_body_c = last_body_c.clone();
+                async move {
+                    log_c.lock().await.push(1);
+                    *last_body_c.lock().await = Some(body);
+                    let stream = futures_util::stream::iter(vec![Ok::<Bytes, std::io::Error>(
+                        Bytes::from_static(super::sse::BASIC_TEXT),
+                    )]);
+                    Response::builder()
+                        .header("content-type", "text/event-stream")
+                        .header("cache-control", "no-cache")
+                        .body(Body::from_stream(stream))
+                        .unwrap()
+                }
+            }),
+        }
+    };
+
+    let app = Router::new()
+        .route("/v1/chat/completions", chat_route)
+        // Slot save/restore handler — records action `0` (restore) or `2` (save)
+        .route(
+            "/slots/0",
+            post(
+                move |params: axum::extract::Query<HashMap<String, String>>, body: Bytes| {
+                    let log = log_c.clone();
+                    let save_n = save_n.clone();
+                    let restore_n = restore_n.clone();
+                    let slot_dir = slot_dir.clone();
+                    async move {
+                        if let Some(action) = params.get("action") {
+                            match action.as_str() {
+                                "restore" => {
+                                    log.lock().await.push(0);
+                                    restore_n.fetch_add(1, Ordering::Relaxed);
+                                }
+                                "save" => {
+                                    // Mirror real llama-server: write the requested
+                                    // filename under the slot-save path so gglib's
+                                    // post-save rename(tmp, final) has something to
+                                    // find.
+                                    if let Ok(payload) =
+                                        serde_json::from_slice::<serde_json::Value>(&body)
+                                        && let Some(filename) =
+                                            payload.get("filename").and_then(|v| v.as_str())
+                                    {
+                                        let _ = std::fs::create_dir_all(&slot_dir);
+                                        let _ = std::fs::write(
+                                            slot_dir.join(filename),
+                                            b"fake kv state",
+                                        );
+                                    }
+                                    log.lock().await.push(2);
+                                    save_n.fetch_add(1, Ordering::Relaxed);
+                                }
+                                _ => {}
+                            }
+                        }
+                        Response::builder()
+                            .status(200)
+                            .body(Body::from("{}"))
+                            .unwrap()
+                    }
+                },
+            ),
+        );
+
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(cancel.cancelled_owned())
+            .await
+            .ok();
+    });
+
+    // Give the mock server time to start listening.
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    (port, action_log, save_count, restore_count, last_chat_body)
+}
+
+/// Spawn a proxy server with cache disabled, pointing at the given upstream
+/// port. Returns `(proxy_base_url, cancel)`.
+pub async fn spawn_proxy(
+    upstream_port: u16,
+    model_name: &str,
+    tags: Vec<String>,
+) -> (String, CancellationToken) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
+        port: upstream_port,
+        model_name: model_name.into(),
+        slot_restore_supported: true,
+        pinned: false,
+    });
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
+        name: model_name.into(),
+        tags,
+    });
+    let mcp = make_mcp_service();
+
+    let cancel = CancellationToken::new();
+    let cancel_clone = cancel.clone();
+    tokio::spawn(async move {
+        gglib_proxy::serve(
+            listener,
+            4096,
+            runtime,
+            catalog,
+            mcp,
+            make_orchestrator_deps(),
+            cancel_clone,
+            Arc::new(MockSettingsRepo),
+            None, // inference_override
+            false,
+            None,
+            gglib_proxy::slot_eviction::DiskBudget::Auto,
+            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            &gglib_core::CorsConfig::LocalOnly,
+        )
+        .await
+        .ok();
+    });
+
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    (format!("http://{addr}"), cancel)
+}
+
+/// Spawn a proxy server with cache enabled, pointing at the given upstream
+/// port, with control over whether the upstream model supports disk slot
+/// restore, and whether the runtime reports itself pinned.
+pub async fn spawn_proxy_with_cache_for_model(
+    upstream_port: u16,
+    model_name: &str,
+    slot_dir: PathBuf,
+    slot_restore_supported: bool,
+    pinned: bool,
+) -> (String, CancellationToken) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
+        port: upstream_port,
+        model_name: model_name.into(),
+        slot_restore_supported,
+        pinned,
+    });
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
+        name: model_name.into(),
+        tags: vec![],
+    });
+    let mcp = make_mcp_service();
+    let cancel = CancellationToken::new();
+    let cancel_clone = cancel.clone();
+
+    tokio::spawn(async move {
+        gglib_proxy::serve(
+            listener,
+            4096,
+            runtime,
+            catalog,
+            mcp,
+            make_orchestrator_deps(),
+            cancel_clone,
+            Arc::new(MockSettingsRepo),
+            None, // inference_override
+            true, // cache_enabled
+            Some(slot_dir),
+            gglib_proxy::slot_eviction::DiskBudget::Auto,
+            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            &gglib_core::CorsConfig::LocalOnly,
+        )
+        .await
+        .ok();
+    });
+
+    // Give the proxy time to start listening.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    (format!("http://{}", addr), cancel)
+}
+
+/// [`spawn_proxy_with_cache_for_model`] with defaults matching the common
+/// case: slot restore supported, not pinned (the `gglib proxy` shape).
+pub async fn spawn_proxy_with_cache(
+    upstream_port: u16,
+    model_name: &str,
+    slot_dir: PathBuf,
+) -> (String, CancellationToken) {
+    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true, false).await
+}
+
+/// [`spawn_proxy_with_cache`], pinned to `model_name` — the `gglib serve`
+/// shape, as opposed to the default which models `gglib proxy`.
+pub async fn spawn_pinned_proxy_with_cache(
+    upstream_port: u16,
+    model_name: &str,
+    slot_dir: PathBuf,
+) -> (String, CancellationToken) {
+    spawn_proxy_with_cache_for_model(upstream_port, model_name, slot_dir, true, true).await
+}
+
+// ─── SSE frame assertions ──────────────────────────────────────────────────
+
+/// Parse `data:` payloads from the SSE-encoded body. Returns one entry per
+/// frame; `[DONE]` is tracked separately via the returned bool.
+pub fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
+    let mut frames = Vec::new();
+    let mut saw_done = false;
+    for raw in body.split("\n\n") {
+        let line = raw.trim_start();
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if payload.trim() == "[DONE]" {
+            saw_done = true;
+            continue;
+        }
+        let v: Value = serde_json::from_str(payload).unwrap_or_else(|e| {
+            panic!("proxy emitted non-JSON data frame: {e}\nframe: {payload}");
+        });
+        frames.push(v);
+    }
+    (frames, saw_done)
+}
+
+/// Assert that every frame has the OpenAI canonical envelope and a stable
+/// `id` / `model` / `created` triple. Returns the (id, model, created).
+pub fn assert_sse_canonical_envelope(
+    frames: &[Value],
+    expected_model: &str,
+) -> (String, String, u64) {
+    assert!(!frames.is_empty(), "expected at least one data frame");
+    let first = &frames[0];
+    let id = first["id"].as_str().expect("string id").to_owned();
+    let model = first["model"].as_str().expect("string model").to_owned();
+    let created = first["created"].as_u64().expect("u64 created");
+
+    assert!(
+        id.starts_with("chatcmpl-"),
+        "id should start with chatcmpl-, got {id}"
+    );
+    assert_eq!(model, expected_model, "advertised model name mismatch");
+
+    for f in frames {
+        // PromptProgress frames are top-level (no choices) — they still must
+        // share the envelope identity.
+        assert_eq!(f["object"], "chat.completion.chunk");
+        assert_eq!(f["id"], json!(id), "id must be stable across frames");
+        assert_eq!(
+            f["model"],
+            json!(model),
+            "model must be stable across frames"
+        );
+        assert_eq!(
+            f["created"],
+            json!(created),
+            "created must be stable across frames"
+        );
+    }
+
+    (id, model, created)
 }
