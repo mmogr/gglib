@@ -20,7 +20,6 @@ use crate::process::shutdown::shutdown_child;
 struct RunningProcess {
     handle: ProcessHandle,
     child: Child,
-    context_size: Option<u64>,
 }
 
 /// Core process lifecycle manager.
@@ -85,14 +84,11 @@ impl ProcessCore {
             now,
         );
 
-        // Note: PID file cleanup on natural exit handled by cleanup_dead() periodic task
-
         self.processes.insert(
             config.model_id,
             RunningProcess {
                 handle: handle.clone(),
                 child,
-                context_size: config.context_size,
             },
         );
 
@@ -118,16 +114,6 @@ impl ProcessCore {
         }
 
         Ok(())
-    }
-
-    /// Get context size for a running process.
-    pub fn get_context_size(&self, model_id: i64) -> Option<u64> {
-        self.processes.get(&model_id).and_then(|p| p.context_size)
-    }
-
-    /// List all running process handles.
-    pub fn list_all(&self) -> Vec<ProcessHandle> {
-        self.processes.values().map(|p| p.handle.clone()).collect()
     }
 
     /// Check if a model is running.
@@ -182,29 +168,6 @@ impl ProcessCore {
         ))
     }
 
-    /// Remove dead processes from tracking and clean PID files.
-    pub async fn cleanup_dead(&mut self) -> Vec<i64> {
-        let mut dead = Vec::new();
-
-        for (id, r) in self.processes.iter_mut() {
-            match r.child.try_wait() {
-                Ok(Some(_)) | Err(_) => {
-                    dead.push(*id);
-                }
-                Ok(None) => {}
-            }
-        }
-
-        for id in &dead {
-            self.processes.remove(id);
-            // Remove PID file for naturally exited process
-            if let Err(e) = delete_pidfile(*id) {
-                debug!("Failed to delete PID file for {}: {}", id, e);
-            }
-        }
-
-        dead
-    }
 }
 
 // Note: Drop is not async, so we can't use graceful shutdown (shutdown_child) here.

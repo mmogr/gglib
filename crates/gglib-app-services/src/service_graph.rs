@@ -39,7 +39,7 @@ use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, CouncilApprovalRegistryPort, CouncilRepositoryPort,
     DownloadManagerPort, GgufParserPort, HfClientPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, ProcessRunner, Repos, SystemProbePort, ToolSupportDetectorPort,
+    ModelRuntimePort, Repos, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
@@ -66,8 +66,6 @@ pub struct ServiceGraphParams {
     pub core: Arc<AppCore>,
     /// Repository container.
     pub repos: Repos,
-    /// Process runner from the shared bootstrap.
-    pub runner: Arc<dyn ProcessRunner>,
     /// Download manager.
     pub downloads: Arc<dyn DownloadManagerPort>,
     /// HuggingFace client.
@@ -143,11 +141,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     let ServiceGraphParams {
         core,
         repos,
-        // `ModelOps` now reads server status through `runtime` below rather
-        // than a standalone `ProcessRunner` — see `ModelDeps::runtime`. The
-        // field stays on `ServiceGraphParams` since adapters still have a
-        // `ProcessRunner` on hand from `CoreBootstrap::build`.
-        runner: _,
         downloads,
         hf_client,
         gguf_parser,

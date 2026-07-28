@@ -8,7 +8,6 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 
 use gglib_core::Repos;
-use gglib_core::ports::ProcessRunner;
 use gglib_core::services::AppCore;
 
 use crate::repositories::{
@@ -52,34 +51,31 @@ impl CoreFactory {
         )
     }
 
-    /// Build a complete `AppCore` instance from a pool and process runner.
+    /// Build a complete `AppCore` instance from a pool.
     ///
     /// This is the recommended single-step way for adapters to obtain
     /// a fully composed `AppCore`. Equivalent to:
     ///
     /// ```ignore
     /// let repos = CoreFactory::build_repos(pool);
-    /// let core = AppCore::new(repos, runner);
+    /// let core = AppCore::new(repos);
     /// ```
     ///
     /// # Arguments
     ///
     /// * `pool` - `SQLite` connection pool from `setup_database()`
-    /// * `runner` - Process runner implementation (e.g., `LlamaServerRunner`)
     ///
     /// # Example
     ///
     /// ```ignore
     /// use gglib_db::{CoreFactory, setup_database};
-    /// use gglib_runtime::LlamaServerRunner;
     ///
     /// let pool = setup_database(&db_path).await?;
-    /// let runner = Arc::new(LlamaServerRunner::new(...));
-    /// let core = CoreFactory::build_app_core(pool, runner);
+    /// let core = CoreFactory::build_app_core(pool);
     /// ```
-    pub fn build_app_core(pool: SqlitePool, runner: Arc<dyn ProcessRunner>) -> AppCore {
+    pub fn build_app_core(pool: SqlitePool) -> AppCore {
         let repos = Self::build_repos(pool);
-        AppCore::new(repos, runner)
+        AppCore::new(repos)
     }
 
     /// Create a model repository from a pool.

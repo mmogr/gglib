@@ -74,9 +74,9 @@ This module contains the **handler functions** that implement the actual logic f
   - Call `ModelService::remove_model`
   - Handle errors if model in use
 
-- **`serve.rs`** - Start/stop model servers
+- **`inference/serve.rs`** - Start the proxy pinned to a single model
   - Validate model exists
-  - Call `ServerService::start`/`stop`
+  - Call `start_proxy_standalone` (unified proxy stack)
   - Display server URL and status
 
 - **`update.rs`** - Update model metadata

@@ -4,13 +4,13 @@
 //! `ProcessRunner` trait from `gglib-core`, managing llama-server processes.
 
 use async_trait::async_trait;
-use gglib_core::ports::{ProcessError, ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
+use gglib_core::ports::{ProcessError, ProcessHandle, ProcessRunner, ServerConfig};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
-use crate::health::{check_http_health, wait_for_http_health};
+use crate::health::wait_for_http_health;
 use crate::process_core::ProcessCore;
 
 /// Default timeout for health checks when starting a server (seconds).
@@ -137,49 +137,5 @@ impl ProcessRunner for LlamaServerRunner {
         core.kill(handle.model_id)
             .await
             .map_err(|e| ProcessError::StopFailed(e.to_string()))
-    }
-
-    async fn is_running(&self, handle: &ProcessHandle) -> bool {
-        let core = self.core.read().await;
-        core.is_running(handle.model_id)
-    }
-
-    async fn health(&self, handle: &ProcessHandle) -> Result<ServerHealth, ProcessError> {
-        let core = self.core.read().await;
-
-        if !core.is_running(handle.model_id) {
-            return Err(ProcessError::NotRunning(format!(
-                "Model {} is not running",
-                handle.model_id
-            )));
-        }
-
-        let context_size = core.get_context_size(handle.model_id);
-        drop(core);
-
-        // Check HTTP health
-        match check_http_health(handle.port).await {
-            Ok(true) => {
-                let mut health = ServerHealth::healthy();
-                if let Some(ctx) = context_size {
-                    health = health.with_context_size(ctx);
-                }
-                Ok(health)
-            }
-            Ok(false) => Ok(ServerHealth::unhealthy("Health check returned non-200")),
-            Err(e) => Ok(ServerHealth::unhealthy(format!(
-                "Health check error: {}",
-                e
-            ))),
-        }
-    }
-
-    async fn list_running(&self) -> Result<Vec<ProcessHandle>, ProcessError> {
-        let mut core = self.core.write().await;
-
-        // Clean up dead processes first
-        core.cleanup_dead().await;
-
-        Ok(core.list_all())
     }
 }

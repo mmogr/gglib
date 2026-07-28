@@ -123,10 +123,7 @@ impl CoreBootstrap {
         ));
 
         // 12. AppCore — fully wired with verification
-        let app = Arc::new(
-            AppCore::new(repos.clone(), Arc::clone(&runner))
-                .with_verification(verification_service),
-        );
+        let app = Arc::new(AppCore::new(repos.clone()).with_verification(verification_service));
 
         tracing::debug!(
             db_path = %config.db_path.display(),

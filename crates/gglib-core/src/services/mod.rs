@@ -4,7 +4,6 @@ mod chat_history;
 mod model_registrar;
 mod model_service;
 mod model_verification;
-mod server_service;
 mod settings_service;
 
 pub use app_core::AppCore;
@@ -16,5 +15,4 @@ pub use model_verification::{
     ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,
     VerificationProgress, VerificationReport,
 };
-pub use server_service::ServerService;
 pub use settings_service::SettingsService;

@@ -51,7 +51,7 @@ pub use ports::{
     McpErrorInfo, McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort,
     ModelRepository, NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle,
     ProcessRunner, QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile,
-    ResponseFormat, ServerConfig, ServerHealth, SettingsRepository, StructuredOutputError,
+    ResponseFormat, ServerConfig, SettingsRepository, StructuredOutputError,
     TOOL_NOT_AVAILABLE_MSG, ToolExecutorPort,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};

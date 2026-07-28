@@ -55,7 +55,6 @@ fn main() {
                 core: ctx.app.clone(),
                 mcp: ctx.mcp.clone(),
                 hf_client: ctx.hf_client.clone(),
-                runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
                 http_client: reqwest::Client::new(),
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
