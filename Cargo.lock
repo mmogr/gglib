@@ -2070,6 +2070,7 @@ dependencies = [
  "gglib-download",
  "gglib-hf",
  "gglib-mcp",
+ "gglib-proxy",
  "gglib-runtime",
  "hf-hub",
  "indicatif 0.18.6",

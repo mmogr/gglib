@@ -21,6 +21,7 @@ gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
+gglib-proxy = { path = "../gglib-proxy" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 reqwest = { workspace = true }
 
