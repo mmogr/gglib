@@ -20,105 +20,21 @@ use futures_util::StreamExt as _;
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::Settings;
 use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
-use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
-use gglib_core::ports::{
-    ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
-    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
-    RunningTarget,
-};
-use gglib_core::ports::{RepositoryError, SettingsRepository};
-use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
-use gglib_mcp::McpService;
+use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 
-// =============================================================================
-// Minimal mock ports (runtime / catalog / MCP)
-// =============================================================================
-
-struct MockSettingsRepo;
-#[async_trait]
-impl SettingsRepository for MockSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings::with_defaults())
-    }
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
-
-/// Runtime that always returns an error — virtual model requests never reach it.
-#[derive(Debug)]
-struct NoopRuntime;
-
-#[async_trait]
-impl ModelRuntimePort for NoopRuntime {
-    async fn ensure_model_running(
-        &self,
-        model: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Err(ModelRuntimeError::ModelNotFound(model.to_string()))
-    }
-    async fn current_model(&self) -> Option<RunningTarget> {
-        None
-    }
-    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        Ok(())
-    }
-}
-
-/// Catalog that returns an empty model list.
-#[derive(Debug)]
-struct EmptyCatalog;
-
-#[async_trait]
-impl ModelCatalogPort for EmptyCatalog {
-    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(vec![])
-    }
-    async fn resolve_model(&self, _: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(None)
-    }
-    async fn resolve_for_launch(&self, _: &str) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
-    }
-}
-
-struct EmptyMcpRepo;
-
-#[async_trait]
-impl McpServerRepository for EmptyMcpRepo {
-    async fn insert(&self, _s: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::Internal("not implemented".into()))
-    }
-    async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(id.to_string()))
-    }
-    async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(name.into()))
-    }
-    async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
-        Ok(vec![])
-    }
-    async fn update(&self, _s: &McpServer) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn delete(&self, _id: i64) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-}
+mod fixtures;
+use fixtures::common::{
+    EmptyCatalog, MockSettingsRepo, NoopApprovalRegistry, NoopOrchestratorRepo, NoopRuntime,
+    make_mcp_service,
+};
 
 // =============================================================================
 // Scripted runner — emits a fixed sequence of CouncilEvents
@@ -153,58 +69,6 @@ impl CouncilRunnerPort for ScriptedRunner {
 }
 
 // =============================================================================
-// Noop orchestrator registry and repository
-// =============================================================================
-
-struct NoopApprovalRegistry;
-
-impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
-    fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
-    fn resolve(&self, _: &str, _: ApprovalDecision) -> bool {
-        false
-    }
-    fn is_pending(&self, _: &str) -> bool {
-        false
-    }
-}
-
-struct NoopOrchestratorRepo;
-
-#[async_trait]
-impl CouncilRepositoryPort for NoopOrchestratorRepo {
-    async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn update_run_status(&self, _: &str, _: CouncilRunStatus) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
-        Ok(None)
-    }
-    async fn list_runs(
-        &self,
-        _: Option<CouncilRunStatus>,
-    ) -> Result<Vec<CouncilRun>, RepositoryError> {
-        Ok(vec![])
-    }
-    async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
-        Ok(vec![])
-    }
-    async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
-        Ok(0)
-    }
-}
-
-// =============================================================================
 // Proxy harness
 // =============================================================================
 
@@ -212,10 +76,7 @@ async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, Cancel
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let mcp = Arc::new(McpService::new(
-        Arc::new(EmptyMcpRepo),
-        Arc::new(NoopEmitter::new()),
-    ));
+    let mcp = make_mcp_service();
     let orchestrator = CouncilDeps {
         runner,
         approval_registry: Arc::new(NoopApprovalRegistry),
