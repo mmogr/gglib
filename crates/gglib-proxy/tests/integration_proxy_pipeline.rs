@@ -29,99 +29,13 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::Settings;
-use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
-use gglib_core::ports::{
-    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
-    SettingsRepository,
-};
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
     ModelSummary, RunningTarget,
 };
-use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
-use gglib_mcp::McpService;
-use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
-use tokio::sync::{mpsc, oneshot};
-
-#[derive(Debug)]
-struct NoopRunner;
-#[async_trait]
-impl CouncilRunnerPort for NoopRunner {
-    async fn run(
-        &self,
-        _: &str,
-        _: CouncilRunParams,
-        _: mpsc::Sender<CouncilEvent>,
-        _: CancellationToken,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-struct NoopApprovalRegistry;
-impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
-    fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
-    fn resolve(&self, _: &str, _: ApprovalDecision) -> bool {
-        false
-    }
-    fn is_pending(&self, _: &str) -> bool {
-        false
-    }
-}
-struct NoopOrchestratorRepo;
-#[async_trait]
-impl CouncilRepositoryPort for NoopOrchestratorRepo {
-    async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn update_run_status(&self, _: &str, _: CouncilRunStatus) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
-        Ok(None)
-    }
-    async fn list_runs(
-        &self,
-        _: Option<CouncilRunStatus>,
-    ) -> Result<Vec<CouncilRun>, RepositoryError> {
-        Ok(vec![])
-    }
-    async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
-        Ok(vec![])
-    }
-    async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
-        Ok(0)
-    }
-}
-fn make_orchestrator_deps() -> CouncilDeps {
-    CouncilDeps {
-        runner: Arc::new(NoopRunner),
-        approval_registry: Arc::new(NoopApprovalRegistry),
-        council_repo: Arc::new(NoopOrchestratorRepo),
-    }
-}
-
-struct MockSettingsRepo;
-#[async_trait]
-impl SettingsRepository for MockSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings::with_defaults())
-    }
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
 
 mod fixtures;
+use fixtures::common::{MockSettingsRepo, make_mcp_service, make_orchestrator_deps};
 use fixtures::sse::{
     BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK, REASONING_ONLY,
     STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
@@ -206,35 +120,6 @@ impl TaggedCatalog {
     }
 }
 
-/// Empty MCP repo — chat completion path doesn't touch MCP, but the proxy
-/// still wires it up.
-struct EmptyMcpRepo;
-
-#[async_trait]
-impl McpServerRepository for EmptyMcpRepo {
-    async fn insert(&self, _s: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::Internal("not implemented".into()))
-    }
-    async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(id.to_string()))
-    }
-    async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(name.into()))
-    }
-    async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
-        Ok(vec![])
-    }
-    async fn update(&self, _s: &McpServer) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn delete(&self, _id: i64) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-}
-
 // ─── Mock upstream ─────────────────────────────────────────────────────────
 
 /// Spawn a mock upstream HTTP server that yields `chunks` (in order) when
@@ -306,10 +191,7 @@ async fn spawn_proxy(
         name: model_name.into(),
         tags,
     });
-    let mcp = Arc::new(McpService::new(
-        Arc::new(EmptyMcpRepo),
-        Arc::new(NoopEmitter::new()),
-    ));
+    let mcp = make_mcp_service();
 
     let cancel = CancellationToken::new();
     let cancel_clone = cancel.clone();

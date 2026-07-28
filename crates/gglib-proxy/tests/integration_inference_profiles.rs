@@ -24,11 +24,9 @@ use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
     ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
 };
-use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
-use gglib_mcp::McpService;
 
 mod fixtures;
-use fixtures::common::make_orchestrator_deps;
+use fixtures::common::{make_mcp_service, make_orchestrator_deps};
 
 const MODEL: &str = "qwen";
 
@@ -128,33 +126,6 @@ impl SettingsRepository for ProfileSettings {
         })
     }
     async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
-
-struct EmptyMcpRepo;
-
-#[async_trait]
-impl McpServerRepository for EmptyMcpRepo {
-    async fn insert(&self, _s: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::Internal("not implemented".into()))
-    }
-    async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(id.to_string()))
-    }
-    async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
-        Err(McpRepositoryError::NotFound(name.into()))
-    }
-    async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
-        Ok(vec![])
-    }
-    async fn update(&self, _s: &McpServer) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn delete(&self, _id: i64) -> Result<(), McpRepositoryError> {
-        Ok(())
-    }
-    async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
         Ok(())
     }
 }
@@ -259,10 +230,7 @@ async fn spawn(
         names: catalog_names.iter().map(|n| (*n).to_owned()).collect(),
         inference_defaults: model_defaults,
     });
-    let mcp = Arc::new(McpService::new(
-        Arc::new(EmptyMcpRepo),
-        Arc::new(NoopEmitter::new()),
-    ));
+    let mcp = make_mcp_service();
     let proxy_cancel = cancel.clone();
     tokio::spawn(async move {
         gglib_proxy::serve(
