@@ -58,7 +58,7 @@ pub async fn execute(ctx: &CliContext, identifier: &str) -> Result<()> {
         repo_id: hf_repo,
         quantization,
         models_dir,
-        token: None, // TODO: Get from config
+        token: std::env::var("HF_TOKEN").ok(),
     };
 
     // Execute update
