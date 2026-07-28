@@ -30,11 +30,11 @@ use gglib_core::ports::{
 use gglib_core::request_pipeline::SamplingLayers;
 use gglib_mcp::McpService;
 
-use crate::cache_lifecycle::{StreamConfig, clear_cache, run_with_cache};
+use crate::cache_lifecycle::{StreamConfig, clear_cache, resolve_cache_triple, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
-use crate::forward::{ForwardError, forward_chat_completion};
+use crate::forward::{ForwardError, ForwardRequest};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
@@ -101,6 +101,25 @@ pub(crate) struct AppState {
     /// when the same model+session is already hot.
     last_loaded_session:
         Arc<tokio::sync::RwLock<Option<crate::cache_lifecycle::LastLoadedSession>>>,
+}
+
+impl AppState {
+    /// Build a [`StreamConfig`] for `base_url`/`model_id`, sourced from this
+    /// state's cache-lifecycle fields. Returns `None` when `slot_dir` isn't
+    /// configured — the one condition under which a `StreamConfig` cannot be
+    /// built, since it holds `slot_dir` as an owned (not `Option`) `PathBuf`.
+    fn build_stream_config(&self, base_url: String, model_id: u32) -> Option<StreamConfig> {
+        self.slot_dir.as_ref().map(|dir| StreamConfig {
+            client: self.client.clone(),
+            base_url,
+            slot_dir: dir.clone(),
+            model_id,
+            clear_all_pending: self.clear_all_pending.clone(),
+            per_session_cleared: self.per_session_cleared.clone(),
+            server_start_time: self.server_start_time.clone(),
+            last_loaded_session: self.last_loaded_session.clone(),
+        })
+    }
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -506,23 +525,15 @@ async fn handle_proxy_cache_clear(
 
     // ── Disk slot layer ───────────────────────────────────────────────────
     let disk = if state.cache_enabled {
-        let Some(slot_dir) = state.slot_dir.clone() else {
+        // base_url is unused by clear_cache; model_id 0 is a sentinel — it only
+        // touches flags and hot-cache invalidation, not any specific model's slots.
+        let Some(config) = state.build_stream_config(String::new(), 0) else {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "error": "slot_dir not configured"
                 })),
             );
-        };
-        let config = StreamConfig {
-            client: state.client.clone(),
-            base_url: String::new(), // Not used by clear_cache
-            slot_dir,
-            model_id: 0, // Sentinel — clear_cache only uses flags and hot-cache invalidation
-            clear_all_pending: state.clear_all_pending.clone(),
-            per_session_cleared: state.per_session_cleared.clone(),
-            server_start_time: state.server_start_time.clone(),
-            last_loaded_session: state.last_loaded_session.clone(),
         };
         match clear_cache(&config, session_id.as_deref()).await {
             Ok(()) => {
@@ -838,160 +849,57 @@ async fn chat_completions(
     // takes every disk save/restore call out of the request path; the
     // host-RAM cache handles conversation switching by itself.
     let stream_config = if state.cache_enabled && target.slot_restore_supported {
-        state.slot_dir.as_ref().map(|dir| StreamConfig {
-            client: state.client.clone(),
-            base_url: target.base_url.clone(),
-            slot_dir: dir.clone(),
-            model_id: target.model_id,
-            clear_all_pending: state.clear_all_pending.clone(),
-            per_session_cleared: state.per_session_cleared.clone(),
-            server_start_time: state.server_start_time.clone(),
-            last_loaded_session: state.last_loaded_session.clone(),
-        })
+        state.build_stream_config(target.base_url.clone(), target.model_id)
     } else {
         None
     };
 
-    // Forward the request, optionally wrapped in cache lifecycle
-    let response = if state.cache_enabled {
-        if let (Some(sid), Some(cfg)) = (&sanitized_session_id, &stream_config) {
+    // Everything forward_chat_completion needs that doesn't vary across the
+    // cache-branching below — see `ForwardRequest` docs.
+    let req = ForwardRequest {
+        client: &state.client,
+        upstream_url: &upstream_url,
+        headers: &headers,
+        body,
+        is_streaming,
+        model_name: &model_name,
+        effective_ctx: target.effective_ctx,
+        catalog: state.catalog_port.clone(),
+        metrics: state.dashboard.metrics.clone(),
+        sampling,
+        connection,
+        upstream_health: state.upstream_health.clone(),
+        calibration: state.calibration.clone(),
+        calibration_session_id: sanitized_session_id.as_deref(),
+        cache_metrics: state.dashboard.cache_metrics.clone(),
+    };
+
+    // Forward the request, optionally wrapped in cache lifecycle. `Some(cfg)`
+    // in `stream_config` already implies `state.cache_enabled` (see its
+    // construction just above), so matching on `(session_id, stream_config)`
+    // alone — without a redundant outer `cache_enabled` check — covers every
+    // case: cache disabled, cache enabled but no session id/config, and
+    // cache enabled with both all fall into the same "no triple" arm below.
+    let response = match (&sanitized_session_id, &stream_config) {
+        (Some(sid), Some(cfg)) => {
             if !is_streaming {
                 // Non-streaming with cache: wrap in run_with_cache (fail-open internally)
-                let (resp, _restore_result) = run_with_cache(cfg, &state.slot_gate, sid, || async {
-                    forward_chat_completion(
-                        &state.client,
-                        &upstream_url,
-                        &headers,
-                        body,
-                        is_streaming,
-                        &model_name,
-                        target.effective_ctx,
-                        state.catalog_port.clone(),
-                        state.dashboard.metrics.clone(),
-                        sampling,
-                        connection,
-                        state.upstream_health.clone(),
-                        state.calibration.clone(),
-                        sanitized_session_id.as_deref(),
-                        state.dashboard.cache_metrics.clone(),
-                        None,
-                        None,
-                        None,
-                    )
-                    .await
-                })
-                .await
-                .expect(
-                    "run_with_cache only returns Err on sanitization failure, which is already checked",
-                );
+                let (resp, _restore_result) =
+                    run_with_cache(cfg, &state.slot_gate, sid, || req.send(None, None, None))
+                        .await
+                        .expect(
+                        "run_with_cache only returns Err on sanitization failure, which is already checked",
+                    );
                 resp
             } else {
                 // Streaming with cache: use prepare_streaming_cycle + sse_stream::spawn_and_return
-                let sid = sid.clone();
-                let cfg = cfg.clone();
-                match crate::cache_lifecycle::prepare_streaming_cycle(
-                    &cfg,
-                    state.slot_gate.clone(),
-                    &sid,
-                )
-                .await
-                {
-                    Ok((permit, _sanitized, _restore_result)) => {
-                        forward_chat_completion(
-                            &state.client,
-                            &upstream_url,
-                            &headers,
-                            body,
-                            is_streaming,
-                            &model_name,
-                            target.effective_ctx,
-                            state.catalog_port.clone(),
-                            state.dashboard.metrics.clone(),
-                            sampling,
-                            connection,
-                            state.upstream_health.clone(),
-                            state.calibration.clone(),
-                            sanitized_session_id.as_deref(),
-                            state.dashboard.cache_metrics.clone(),
-                            Some(permit),
-                            Some(cfg),
-                            Some(sid),
-                        )
-                        .await
-                    }
-                    Err(_) => {
-                        // Fail-open: proceed without cache for streaming too
-                        forward_chat_completion(
-                            &state.client,
-                            &upstream_url,
-                            &headers,
-                            body,
-                            is_streaming,
-                            &model_name,
-                            target.effective_ctx,
-                            state.catalog_port.clone(),
-                            state.dashboard.metrics.clone(),
-                            sampling,
-                            connection,
-                            state.upstream_health.clone(),
-                            state.calibration.clone(),
-                            sanitized_session_id.as_deref(),
-                            state.dashboard.cache_metrics.clone(),
-                            None,
-                            None,
-                            None,
-                        )
-                        .await
-                    }
-                }
+                let (permit, cfg, sid) =
+                    resolve_cache_triple(cfg, state.slot_gate.clone(), sid).await;
+                req.send(permit, cfg, sid).await
             }
-        } else {
-            // Cache enabled but no session ID or config: direct call
-            forward_chat_completion(
-                &state.client,
-                &upstream_url,
-                &headers,
-                body,
-                is_streaming,
-                &model_name,
-                target.effective_ctx,
-                state.catalog_port.clone(),
-                state.dashboard.metrics.clone(),
-                sampling,
-                connection,
-                state.upstream_health.clone(),
-                state.calibration.clone(),
-                sanitized_session_id.as_deref(),
-                state.dashboard.cache_metrics.clone(),
-                None,
-                None,
-                None,
-            )
-            .await
         }
-    } else {
-        // Cache disabled: direct call
-        forward_chat_completion(
-            &state.client,
-            &upstream_url,
-            &headers,
-            body,
-            is_streaming,
-            &model_name,
-            target.effective_ctx,
-            state.catalog_port.clone(),
-            state.dashboard.metrics.clone(),
-            sampling,
-            connection,
-            state.upstream_health.clone(),
-            state.calibration.clone(),
-            sanitized_session_id.as_deref(),
-            state.dashboard.cache_metrics.clone(),
-            None,
-            None,
-            None,
-        )
-        .await
+        // Cache disabled, or cache enabled but no session id/config: direct call
+        _ => req.send(None, None, None).await,
     };
 
     // Handle UpstreamDead from the primary forward (only possible when cache is disabled
@@ -1060,63 +968,44 @@ async fn chat_completions(
 
             // Compute cache-aware permit/config/session_id for the retry.
             // Mirrors the normal-path pattern: acquire permit via
-            // prepare_streaming_cycle, fail-open on error.
+            // prepare_streaming_cycle, fail-open on error. Deliberately does
+            // NOT branch on `is_streaming` the way the primary attempt does
+            // above — a non-streaming retry still resolves the triple this
+            // way rather than going through `run_with_cache`, matching this
+            // path's existing behavior.
             // The disk-layer gate also applies here: the retry targets a freshly
             // spawned instance of the same model, so a partial-KV model stays on
             // the RAM-cache-only path (see the initial attempt above).
-            let (retry_permit, retry_cfg, retry_session) =
-                if let (true, Some(sid), Some(slot_dir)) = (
-                    state.cache_enabled && new_target.slot_restore_supported,
-                    sanitized_session_id.as_ref(),
-                    state.slot_dir.as_ref(),
-                ) {
-                    let sid = sid.clone();
-                    let cfg = StreamConfig {
-                        client: state.client.clone(),
-                        base_url: new_target.base_url.clone(),
-                        slot_dir: slot_dir.clone(),
-                        model_id: new_target.model_id,
-                        clear_all_pending: state.clear_all_pending.clone(),
-                        per_session_cleared: state.per_session_cleared.clone(),
-                        server_start_time: state.server_start_time.clone(),
-                        last_loaded_session: state.last_loaded_session.clone(),
-                    };
-                    match crate::cache_lifecycle::prepare_streaming_cycle(
-                        &cfg,
-                        state.slot_gate.clone(),
-                        &sid,
-                    )
-                    .await
-                    {
-                        Ok((permit, _sanitized, _restore)) => (Some(permit), Some(cfg), Some(sid)),
-                        Err(_) => (None, None, None), // fail-open
-                    }
-                } else {
-                    (None, None, None)
-                };
+            let (retry_permit, retry_cfg, retry_session) = match (
+                state.cache_enabled && new_target.slot_restore_supported,
+                sanitized_session_id.as_ref(),
+                state.build_stream_config(new_target.base_url.clone(), new_target.model_id),
+            ) {
+                (true, Some(sid), Some(cfg)) => {
+                    resolve_cache_triple(&cfg, state.slot_gate.clone(), sid).await
+                }
+                _ => (None, None, None),
+            };
 
-            match forward_chat_completion(
-                &state.client,
-                &retry_url,
-                &headers,
-                body_for_retry,
+            let retry_req = ForwardRequest {
+                client: &state.client,
+                upstream_url: &retry_url,
+                headers: &headers,
+                body: body_for_retry,
                 is_streaming,
-                &model_name,
-                new_target.effective_ctx,
-                state.catalog_port.clone(),
-                state.dashboard.metrics.clone(),
-                retry_sampling,
-                retry_connection,
-                state.upstream_health.clone(),
-                state.calibration.clone(),
-                sanitized_session_id.as_deref(),
-                state.dashboard.cache_metrics.clone(),
-                retry_permit,
-                retry_cfg,
-                retry_session,
-            )
-            .await
-            {
+                model_name: &model_name,
+                effective_ctx: new_target.effective_ctx,
+                catalog: state.catalog_port.clone(),
+                metrics: state.dashboard.metrics.clone(),
+                sampling: retry_sampling,
+                connection: retry_connection,
+                upstream_health: state.upstream_health.clone(),
+                calibration: state.calibration.clone(),
+                calibration_session_id: sanitized_session_id.as_deref(),
+                cache_metrics: state.dashboard.cache_metrics.clone(),
+            };
+
+            match retry_req.send(retry_permit, retry_cfg, retry_session).await {
                 Ok(resp) => resp,
                 Err(_) => {
                     // Server failed immediately after a fresh restart —

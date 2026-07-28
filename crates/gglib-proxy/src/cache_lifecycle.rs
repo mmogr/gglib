@@ -285,6 +285,27 @@ pub async fn prepare_streaming_cycle(
     Ok((permit, sanitized, restore_result))
 }
 
+/// Resolve the `(permit, config, session_id)` triple [`crate::forward::ForwardRequest::send`]
+/// needs for a streaming forward attempt — either a request's primary
+/// attempt, or a fresh disk-cache retry after `UpstreamDead`. Fails open:
+/// any [`prepare_streaming_cycle`] error degrades to `(None, None, None)` —
+/// the caller proceeds without disk cache participation for this cycle.
+pub async fn resolve_cache_triple(
+    cfg: &StreamConfig,
+    slot_gate: Arc<Semaphore>,
+    session_id: &str,
+) -> (
+    Option<OwnedSemaphorePermit>,
+    Option<StreamConfig>,
+    Option<String>,
+) {
+    let sid = session_id.to_owned();
+    match prepare_streaming_cycle(cfg, slot_gate, &sid).await {
+        Ok((permit, _sanitized, _restore_result)) => (Some(permit), Some(cfg.clone()), Some(sid)),
+        Err(_) => (None, None, None), // fail-open — proceed without disk cache for this cycle
+    }
+}
+
 /// Clear slot files for a session (or all sessions if None).
 ///
 /// Deliberately does NOT acquire the semaphore (Design A) — clears are instant
