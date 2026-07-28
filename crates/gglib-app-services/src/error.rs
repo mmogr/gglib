@@ -35,8 +35,6 @@ pub enum GuiError {
     LlamaServerNotInstalled {
         /// The path where llama-server was expected
         expected_path: String,
-        /// Optional legacy path where an old installation was detected
-        legacy_path: Option<String>,
         /// Suggested command to fix the issue
         suggested_command: String,
         /// Reason for the failure (NotFound, NotExecutable, PermissionDenied)
@@ -56,7 +54,6 @@ impl fmt::Display for GuiError {
             Self::Unavailable(msg) => write!(f, "service unavailable: {msg}"),
             Self::LlamaServerNotInstalled {
                 expected_path,
-                legacy_path,
                 suggested_command,
                 reason,
             } => {
@@ -64,11 +61,7 @@ impl fmt::Display for GuiError {
                     f,
                     "llama-server not installed: {} at {}\nRun: {}",
                     reason, expected_path, suggested_command
-                )?;
-                if let Some(legacy) = legacy_path {
-                    write!(f, "\nFound older installation at: {}", legacy)?;
-                }
-                Ok(())
+                )
             }
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }

@@ -20,7 +20,6 @@ interface LlamaInstallModalProps {
   // New props for error-triggered mode
   metadata?: {
     expectedPath: string;
-    legacyPath?: string;
     suggestedCommand: string;
     reason: string;
   };
@@ -149,13 +148,6 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       <div className="flex flex-col gap-2">
         <p className="m-0 text-text-secondary leading-normal">The llama-server binary was not found at:</p>
         <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-[0.9rem] text-text break-all">{metadata?.expectedPath}</code>
-        {metadata?.legacyPath && (
-          <div className="p-3 rounded-lg border border-border bg-background-secondary flex flex-col gap-[0.35rem]">
-            <p className="m-0 font-semibold text-text">Older installation detected</p>
-            <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-[0.9rem] text-text break-all">{metadata.legacyPath}</code>
-            <p className="m-0 text-[0.9rem] text-text-secondary">Move or symlink it to the expected path to reuse.</p>
-          </div>
-        )}
       </div>
 
       {error ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}

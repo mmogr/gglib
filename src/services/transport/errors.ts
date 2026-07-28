@@ -26,7 +26,6 @@ export type TransportErrorCode =
  */
 export interface LlamaServerNotInstalledMetadata {
   expectedPath: string;
-  legacyPath?: string;
   suggestedCommand: string;
   reason: string;
 }
@@ -79,7 +78,6 @@ export class TransportError extends Error {
     
     return {
       expectedPath: (details.expectedPath || details.expected_path || '') as string,
-      legacyPath: (details.legacyPath || details.legacy_path) as string | undefined,
       suggestedCommand: (details.suggestedCommand || details.suggested_command || 'gglib config llama install') as string,
       reason: (details.reason || 'not found') as string,
     };
