@@ -136,6 +136,7 @@ jobs:
           cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
           cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
           cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
+          cargo test -p gglib-integration-tests --verbose 2>&1 | tee rust-test-gglib-integration-tests.txt
 
       - name: Run doctests
         run: cargo test --doc --verbose
@@ -161,6 +162,7 @@ jobs:
             rust-test-gglib-cli.txt
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt
+            rust-test-gglib-integration-tests.txt
           retention-days: 30
 
   test-frontend:

@@ -2188,6 +2188,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-integration-tests"
+version = "0.10.3"
+dependencies = [
+ "chrono",
+ "gglib-core",
+ "gglib-db",
+ "gglib-gguf",
+ "gglib-hf",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "urlencoding",
+]
+
+[[package]]
 name = "gglib-mcp"
 version = "0.10.3"
 dependencies = [

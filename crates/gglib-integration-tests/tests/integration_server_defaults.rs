@@ -1,13 +1,13 @@
-//! Integration tests for per-model server defaults (server_defaults).
+//! Integration tests for per-model server defaults (`server_defaults`).
 //!
 //! These tests verify that `server_defaults` on [`Model`] round-trips correctly
-//! through the SQLite repository: persistence, null-clearing, partial updates,
+//! through the `SQLite` repository: persistence, null-clearing, partial updates,
 //! no-op omission, sequential overwrites, and boundary validation.
 
 mod common;
 
 use chrono::Utc;
-use common::database::setup_test_pool;
+use common::setup_test_pool;
 use gglib_core::domain::ServerConfig;
 use gglib_core::{ModelRepository, NewModel, services::ModelService};
 use gglib_db::SqliteModelRepository;
@@ -30,7 +30,7 @@ fn make_new_model(name: &str) -> NewModel {
 }
 
 /// Convenience: create a `ServerConfig` with only `context_length` set.
-fn cfg_ctx(len: usize) -> ServerConfig {
+const fn cfg_ctx(len: usize) -> ServerConfig {
     ServerConfig {
         context_length: Some(len),
     }
@@ -40,7 +40,7 @@ fn cfg_ctx(len: usize) -> ServerConfig {
 // Tests
 // ---------------------------------------------------------------------------
 
-/// (a) PATCH model with server_defaults containing context_length, verify it
+/// (a) PATCH model with `server_defaults` containing `context_length`, verify it
 /// persists and round-trips correctly through the DB.
 #[tokio::test]
 async fn test_server_defaults_patch_and_retrieve() {
@@ -74,7 +74,7 @@ async fn test_server_defaults_patch_and_retrieve() {
     );
 }
 
-/// (b) Set server_defaults on a model, then clear it (set to None), verify DB
+/// (b) Set `server_defaults` on a model, then clear it (set to None), verify DB
 /// stores NULL.
 #[tokio::test]
 async fn test_server_defaults_null_clearing() {
@@ -109,10 +109,10 @@ async fn test_server_defaults_null_clearing() {
     );
 }
 
-/// (c) Set multiple server_defaults fields, update only one, verify the other
-/// survives.  Currently ServerConfig has only `context_length`, so this test
+/// (c) Set multiple `server_defaults` fields, update only one, verify the other
+/// survives.  Currently `ServerConfig` has only `context_length`, so this test
 /// verifies that updating the model's *other* fields (e.g., name) doesn't
-/// clobber server_defaults — i.e., the full-model UPDATE preserves the JSON
+/// clobber `server_defaults` — i.e., the full-model UPDATE preserves the JSON
 /// blob when we explicitly re-assign it.
 #[tokio::test]
 async fn test_server_defaults_partial_update_preserves_other_fields() {
@@ -142,10 +142,10 @@ async fn test_server_defaults_partial_update_preserves_other_fields() {
     );
 }
 
-/// (d) Fetch a model that has server_defaults, modify an unrelated field, and
-/// save — the existing server_defaults value should be untouched (no-op for
+/// (d) Fetch a model that has `server_defaults`, modify an unrelated field, and
+/// save — the existing `server_defaults` value should be untouched (no-op for
 /// that key).  This is the "omitted key is no-op" behaviour: when you read
-/// the full model from DB and write it back without touching server_defaults,
+/// the full model from DB and write it back without touching `server_defaults`,
 /// the value persists.
 #[tokio::test]
 async fn test_server_defaults_omitted_key_is_noop() {
@@ -215,8 +215,8 @@ async fn test_server_defaults_sequential_overwrite() {
     );
 }
 
-/// (f) Attempt to set context_length to 0.  Document observed behaviour:
-/// the current ServerConfig type stores `Option<usize>`, so 0 is a valid
+/// (f) Attempt to set `context_length` to 0.  Document observed behaviour:
+/// the current `ServerConfig` type stores `Option<usize>`, so 0 is a valid
 /// usize value and will be accepted by the DB layer.  This test documents
 /// that behaviour (accepts 0) rather than asserting rejection, because no
 /// validation layer currently rejects zero.
