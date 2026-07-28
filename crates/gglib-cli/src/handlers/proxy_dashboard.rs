@@ -24,12 +24,15 @@
 //! that `crossterm::terminal::enable_raw_mode()` breaks `println!`-based
 //! redraws (it disables `OPOST`, so `\n` stops returning the cursor to column
 //! 0). This module never touches raw mode. Instead, each frame after the
-//! first moves the cursor up by the previous frame's line count and clears
-//! everything below before printing the next frame — plain
-//! `crossterm::cursor`/`terminal` commands in normal (cooked) mode, which
-//! compose fine with ordinary `print!`/`println!`. When stdout is not a TTY
-//! (piped output, CI), frames are printed sequentially instead, since there is
-//! no cursor to move.
+//! first moves the cursor up by the previous frame's *physical row* count
+//! (see [`visual_row_count`]) and clears everything below before printing
+//! the next frame — plain `crossterm::cursor`/`terminal` commands in normal
+//! (cooked) mode, which compose fine with ordinary `print!`/`println!`.
+//! Cooked mode means a line longer than the terminal's width auto-wraps onto
+//! an extra physical row, which is exactly what `visual_row_count` accounts
+//! for when computing how far to move the cursor up on the next tick. When
+//! stdout is not a TTY (piped output, CI), frames are printed sequentially
+//! instead, since there is no cursor to move.
 //!
 //! ## Shutdown
 //!
@@ -274,14 +277,15 @@ fn format_elapsed_secs(started_at_secs: u64) -> String {
 /// Build the full multi-line dashboard frame for one snapshot. Pure text
 /// generation — no IO — so it's testable without a terminal or network.
 ///
-/// `term_width` bounds every rendered line to at most one physical terminal
-/// row. Without this, an unbounded string (e.g. the `/slots` unreachable
-/// reason, which can easily exceed 100 characters) wraps onto extra
-/// *physical* rows that the caller's `frame.lines().count()` bookkeeping
-/// never sees, undercounting how far to move the cursor up on the next
-/// redraw — this both corrupts the display (stale wrapped remnants left
-/// on screen, looking like truncation) and makes the whole frame drift
-/// down the terminal on every subsequent tick (visible scrolling).
+/// `term_width` is used to pre-truncate the two fields whose content is
+/// otherwise unbounded (the `/slots` unreachable reason and cache warnings,
+/// both server-phrased strings that can easily exceed 100 characters), so
+/// the frame stays legible even before wrapping is accounted for. Every
+/// other line in the frame is fixed-width by construction, but may still
+/// wrap on a narrow enough terminal — the caller does not rely on `frame`
+/// having exactly one physical row per logical line; see
+/// [`visual_row_count`], which is what the redraw loop actually uses to
+/// compute how far to move the cursor up.
 fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> String {
     let mut out = String::new();
     out.push_str(&format!("gglib proxy dashboard — {url}\n"));
@@ -350,6 +354,26 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
         snapshot.total_requests
     ));
     out
+}
+
+/// Number of physical terminal rows `frame` will occupy when printed at
+/// `term_width` columns, accounting for lines that auto-wrap. Mirrors the
+/// terminal's own wrapping behavior in cooked mode: a line of `w` columns
+/// takes `ceil(w / term_width)` rows (minimum 1, even for an empty line).
+///
+/// Used instead of a bare logical-line count (`frame.lines().count()`) when
+/// tracking how far to move the cursor up on the next redraw — see the
+/// module's "Redraw strategy" doc comment for why an undercount there
+/// corrupts the display.
+fn visual_row_count(frame: &str, term_width: u16) -> u16 {
+    let cols = term_width.max(1);
+    frame
+        .lines()
+        .map(|line| {
+            let width = line.chars().count() as u16;
+            width.div_ceil(cols).max(1)
+        })
+        .fold(0u16, |acc, rows| acc.saturating_add(rows))
 }
 
 /// Render the reuse rows shared by the proxied and agent-path cache sections.
@@ -595,7 +619,7 @@ pub async fn execute(host: String, port: u16) -> Result<()> {
                         )?;
                         write!(out, "{frame}")?;
                         out.flush()?;
-                        previous_frame_lines = frame.lines().count() as u16;
+                        previous_frame_lines = visual_row_count(&frame, term_width);
                     } else {
                         print!("{frame}");
                     }
@@ -817,9 +841,9 @@ mod tests {
         // A realistic reqwest connect-error string easily exceeds 100 chars
         // — e.g. "error sending request for url (http://127.0.0.1:5500/slots):
         // error trying to connect: tcp connect error: Connection refused (os
-        // error 61)". Without width-aware truncation this would wrap onto
-        // multiple physical terminal rows that `frame.lines().count()` can't
-        // see, corrupting the redraw (bugs #1 and #4).
+        // error 61)". This still confirms the pre-truncation keeps the line
+        // within one row, on top of the general wrap-aware row counting in
+        // `visual_row_count`.
         let long_reason = "error sending request for url (http://127.0.0.1:5500/slots): "
             .to_string()
             + &"error trying to connect: tcp connect error: Connection refused ".repeat(3);
@@ -853,6 +877,53 @@ mod tests {
         assert!(
             frame.contains('\u{2026}'),
             "long reason should be truncated with an ellipsis"
+        );
+    }
+
+    #[test]
+    fn visual_row_count_matches_logical_lines_when_nothing_wraps() {
+        let frame = "gglib proxy dashboard\n(Ctrl+C to exit)\n\nTotal requests served: 0\n";
+        assert_eq!(
+            visual_row_count(frame, DEFAULT_TERM_WIDTH),
+            frame.lines().count() as u16
+        );
+    }
+
+    #[test]
+    fn visual_row_count_counts_a_wrapped_line_as_multiple_rows() {
+        let frame = format!("{}\n", "x".repeat(150));
+        assert_eq!(visual_row_count(&frame, 80), 2);
+    }
+
+    /// Reproduces the reported bug directly: at a narrow terminal width the
+    /// unguarded header line (fixed content, no truncation applied to it)
+    /// is long enough to wrap onto a second physical row. The old
+    /// `frame.lines().count()` redraw math would undercount here — proving
+    /// exactly the undershoot that made the dashboard drift/repeat down a
+    /// narrow terminal instead of redrawing in place.
+    #[test]
+    fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 0,
+            cache: None,
+            agent_usage: CacheUsage::default(),
+        };
+        let term_width = 40u16;
+        let frame = render_frame(
+            "http://127.0.0.1:8080/v1/proxy/status/stream",
+            &snapshot,
+            term_width,
+        );
+
+        let naive_count = frame.lines().count() as u16;
+        let accurate_count = visual_row_count(&frame, term_width);
+        assert!(
+            accurate_count > naive_count,
+            "expected wrapping to be detected: naive={naive_count} accurate={accurate_count}"
         );
     }
 
