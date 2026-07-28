@@ -290,76 +290,119 @@ fn shape_request_body(
     }
 }
 
+/// Bundles the arguments to [`forward_chat_completion`] that stay constant
+/// across the cache-branching in `chat_completions` — only the trailing
+/// `(permit, config, session_id)` triple passed to [`Self::send`] varies
+/// between the non-streaming/streaming/fail-open/cache-disabled branches, and
+/// between a request's primary attempt and its post-`UpstreamDead` retry.
+pub(crate) struct ForwardRequest<'a> {
+    /// HTTP client to use for the request.
+    pub client: &'a Client,
+    /// Full URL to the llama-server endpoint.
+    pub upstream_url: &'a str,
+    /// Original request headers.
+    pub headers: &'a HeaderMap,
+    /// Request body bytes.
+    pub body: Bytes,
+    /// Whether this is a streaming request (affects response handling).
+    pub is_streaming: bool,
+    /// Model name to advertise to the client (used in the SSE envelope).
+    pub model_name: &'a str,
+    /// Live context size (tokens) the target llama-server was launched
+    /// with. Converted to a character budget (`× CHARS_PER_TOKEN_APPROX`)
+    /// for the history-truncation hard-abort; floored at the historical
+    /// default inside [`truncate_history`].
+    pub effective_ctx: u64,
+    /// Catalog port used to resolve capabilities and `format:*` tags.
+    pub catalog: Arc<dyn ModelCatalogPort>,
+    /// Metrics store for recording per-request context snapshots.
+    pub metrics: Arc<ContextMetricsStore>,
+    /// The profile and global sampling layers to resolve beneath the
+    /// client's own request parameters.
+    pub sampling: SamplingLayers,
+    /// RAII dashboard-registry guard for this request. Moved into the
+    /// spawned streaming task for the streaming path (so it lives exactly
+    /// as long as that task); held for the duration of
+    /// [`forward_chat_completion`] for the non-streaming path. Dropping it
+    /// (by any path — completion, early return, or panic) unregisters the
+    /// connection from the dashboard.
+    pub connection: ConnectionGuard,
+    /// Consecutive-failure watchdog. The streaming task records each
+    /// terminal outcome (empty stream or first-byte timeout is a strike;
+    /// any visible output resets it) so the handler can recycle a
+    /// degraded-but-`/health`-green upstream before the next request.
+    pub upstream_health: Arc<UpstreamHealth>,
+    /// Per-model chars-per-token calibration store.
+    pub calibration: Arc<TokenCalibration>,
+    /// Session id used to look up/freeze this session's chars-per-token
+    /// snapshot (see
+    /// [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
+    /// `None` when no session id was resolved, which falls back to the live
+    /// per-model ratio exactly as before. Distinct from the `session_id`
+    /// parameter of [`Self::send`]: that one is only populated when disk
+    /// KV-slot caching is enabled, but this budget-stability fix must work
+    /// even when it's off (e.g. for hybrid/sliding-window-attention models,
+    /// where disk caching is disabled but the host-RAM prompt cache — the
+    /// thing this fix protects — still applies).
+    pub calibration_session_id: Option<&'a str>,
+    /// Cache-hit telemetry sink, fed from both the streaming and
+    /// non-streaming response paths.
+    pub cache_metrics: Arc<CacheMetricsStore>,
+}
+
+impl ForwardRequest<'_> {
+    /// Forward this request to the upstream llama-server, participating in
+    /// the disk KV cache according to `(permit, config, session_id)`.
+    ///
+    /// * `permit` - KV cache semaphore permit (streaming path only), moved
+    ///   into the spawned task and held for its entire lifetime. `None`
+    ///   when the KV cache is disabled.
+    /// * `config` - KV cache lifecycle configuration (streaming path only).
+    ///   `None` when the KV cache is disabled.
+    /// * `session_id` - Session identifier used to key the KV cache save
+    ///   (streaming path only). `None` when the KV cache is disabled.
+    ///
+    /// Returns the response from llama-server, with the streaming SSE body
+    /// re-emitted through the universal normalization pipeline when
+    /// `is_streaming` is true.
+    pub(crate) async fn send(
+        self,
+        permit: Option<tokio::sync::OwnedSemaphorePermit>,
+        config: Option<crate::cache_lifecycle::StreamConfig>,
+        session_id: Option<String>,
+    ) -> Result<Response, ForwardError> {
+        forward_chat_completion(self, permit, config, session_id).await
+    }
+}
+
 /// Forward a chat completion request to the upstream llama-server.
 ///
-/// # Arguments
-///
-/// * `client` - HTTP client to use for the request
-/// * `upstream_url` - Full URL to the llama-server endpoint
-/// * `headers` - Original request headers
-/// * `body` - Request body bytes
-/// * `is_streaming` - Whether this is a streaming request (affects response handling)
-/// * `model_name` - Model name to advertise to the client (used in SSE envelope)
-/// * `effective_ctx` - Live context size (tokens) the target llama-server
-///   was launched with. Converted to a character budget
-///   (`× CHARS_PER_TOKEN_APPROX`) for the history-truncation hard-abort;
-///   floored at the historical default inside [`truncate_history`].
-/// * `catalog` - Catalog port used to resolve capabilities and `format:*` tags
-/// * `metrics` - Metrics store for recording per-request context snapshots
-/// * `sampling` - The profile and global sampling layers to resolve beneath
-///   the client's own request parameters
-/// * `connection` - RAII dashboard-registry guard for this request. Moved
-///   into the spawned streaming task for the streaming path (so it lives
-///   exactly as long as that task); held for the duration of this function
-///   for the non-streaming path. Dropping it (by any path — completion,
-///   early return, or panic) unregisters the connection from the dashboard.
-/// * `upstream_health` - Consecutive-failure watchdog. The streaming task
-///   records each terminal outcome (empty stream or first-byte timeout is a
-///   strike; any visible output resets it) so the handler can recycle a
-///   degraded-but-`/health`-green upstream before the next request.
-/// * `permit` - KV cache semaphore permit (streaming path only), moved into
-///   the spawned task and held for its entire lifetime. `None` when the KV
-///   cache is disabled.
-/// * `config` - KV cache lifecycle configuration (streaming path only).
-///   `None` when the KV cache is disabled.
-/// * `session_id` - Session identifier used to key the KV cache save
-///   (streaming path only). `None` when the KV cache is disabled.
-/// * `calibration_session_id` - Session id used to look up/freeze this
-///   session's chars-per-token snapshot (see
-///   [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
-///   `None` when no session id was resolved, which falls back to the live
-///   per-model ratio exactly as before. Distinct from `session_id` above:
-///   that one is only populated when disk KV-slot caching is enabled, but
-///   this budget-stability fix must work even when it's off (e.g. for
-///   hybrid/sliding-window-attention models, where disk caching is disabled
-///   but the host-RAM prompt cache — the thing this fix protects — still
-///   applies).
-///
-/// # Returns
-///
-/// The response from llama-server, with the streaming SSE body re-emitted
-/// through the universal normalization pipeline when `is_streaming` is true.
-#[allow(clippy::too_many_arguments)]
+/// See [`ForwardRequest`] for what `req`'s fields mean, and
+/// [`ForwardRequest::send`] (its sole caller) for the trailing cache triple.
 pub(crate) async fn forward_chat_completion(
-    client: &Client,
-    upstream_url: &str,
-    headers: &HeaderMap,
-    body: Bytes,
-    is_streaming: bool,
-    model_name: &str,
-    effective_ctx: u64,
-    catalog: Arc<dyn ModelCatalogPort>,
-    metrics: Arc<ContextMetricsStore>,
-    sampling: SamplingLayers,
-    connection: ConnectionGuard,
-    upstream_health: Arc<UpstreamHealth>,
-    calibration: Arc<TokenCalibration>,
-    calibration_session_id: Option<&str>,
-    cache_metrics: Arc<CacheMetricsStore>,
+    req: ForwardRequest<'_>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<crate::cache_lifecycle::StreamConfig>,
     session_id: Option<String>,
 ) -> Result<Response, ForwardError> {
+    let ForwardRequest {
+        client,
+        upstream_url,
+        headers,
+        body,
+        is_streaming,
+        model_name,
+        effective_ctx,
+        catalog,
+        metrics,
+        sampling,
+        connection,
+        upstream_health,
+        calibration,
+        calibration_session_id,
+        cache_metrics,
+    } = req;
+
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
 
     // Single catalog lookup — yields both capabilities (request preprocessing)
