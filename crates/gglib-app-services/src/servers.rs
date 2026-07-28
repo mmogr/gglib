@@ -803,7 +803,10 @@ mod tests {
         recorder.started(&summary);
         recorder.stopping(&summary);
         recorder.stopped(&summary);
-        recorder.error(&summary, &ModelRuntimeError::Internal("test error".to_string()));
+        recorder.error(
+            &summary,
+            &ModelRuntimeError::Internal("test error".to_string()),
+        );
 
         let calls = recorder.get_calls();
         assert_eq!(calls.len(), 4);
