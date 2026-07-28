@@ -2,6 +2,10 @@
 //!
 //! These tests verify the data models work correctly with various
 //! data types, edge cases, and serialization scenarios.
+//!
+//! Exact float comparisons below check that a value survives a JSON
+//! round-trip bit-for-bit, so `clippy::float_cmp` is intentionally allowed.
+#![allow(clippy::float_cmp)]
 
 use chrono::Utc;
 use gglib_core::{GgufMetadata, NewModel};
@@ -111,7 +115,7 @@ fn test_new_model_with_unicode_content() {
 #[test]
 fn test_new_model_with_minimal_data() {
     let model = NewModel::new(
-        "".to_string(),              // Empty name
+        String::new(),               // Empty name
         PathBuf::from("model.gguf"), // Minimal path
         0.0,                         // Zero parameters
         Utc::now(),
@@ -144,6 +148,7 @@ fn test_gguf_metadata_structure() {
         quantization: Some("Q4_0".to_string()),
         context_length: Some(4096),
         metadata: metadata_map.clone(),
+        ..Default::default()
     };
 
     // Test all fields are accessible
@@ -157,14 +162,7 @@ fn test_gguf_metadata_structure() {
 
 #[test]
 fn test_gguf_metadata_with_all_none_values() {
-    let gguf_metadata = GgufMetadata {
-        name: None,
-        architecture: None,
-        param_count_b: None,
-        quantization: None,
-        context_length: None,
-        metadata: HashMap::new(),
-    };
+    let gguf_metadata = GgufMetadata::default();
 
     // Should handle all None values gracefully
     assert_eq!(gguf_metadata.name, None);
@@ -235,7 +233,7 @@ fn test_metadata_edge_cases() {
     let mut complex_metadata = HashMap::new();
 
     // Test various edge cases in metadata
-    complex_metadata.insert("empty_value".to_string(), "".to_string());
+    complex_metadata.insert("empty_value".to_string(), String::new());
     complex_metadata.insert(
         "very.long.nested.key.with.many.dots".to_string(),
         "nested_value".to_string(),
@@ -267,7 +265,7 @@ fn test_metadata_edge_cases() {
     assert_eq!(model.metadata.len(), 7);
     assert_eq!(model.metadata.get("empty_value").unwrap(), "");
     assert!(model.metadata.get("unicode_key_🔑").unwrap().contains("🎯"));
-    assert!(model.metadata.get("multiline").unwrap().contains("\n"));
+    assert!(model.metadata.get("multiline").unwrap().contains('\n'));
 
     // Test serialization preserves complex metadata
     let serialized = serde_json::to_string(&model).unwrap();
@@ -307,7 +305,7 @@ fn test_model_cloning() {
         param_count_b: Some(7.0),
         quantization: Some("Q4_0".to_string()),
         context_length: Some(4096),
-        metadata: HashMap::new(),
+        ..Default::default()
     };
 
     let cloned_metadata = gguf_metadata.clone();

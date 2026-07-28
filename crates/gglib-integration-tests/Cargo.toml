@@ -1,0 +1,21 @@
+[package]
+name = "gglib-integration-tests"
+version.workspace = true
+edition.workspace = true
+description = "Cross-crate integration tests for gglib (add/question command flows, chat parity, HuggingFace client, model serialization, path resolution, server defaults, validation)"
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+gglib-core = { workspace = true }
+gglib-db = { workspace = true }
+gglib-hf = { workspace = true }
+gglib-gguf = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+urlencoding = "2.1"

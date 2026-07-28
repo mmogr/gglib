@@ -195,6 +195,7 @@ async fn test_sharded_file_pattern_detection() {
 }
 
 #[tokio::test]
+#[allow(clippy::cast_precision_loss)] // display formatting, not exactness-sensitive
 async fn test_file_size_parsing() {
     // Test handling of file sizes from HuggingFace API
     let size_test_cases = vec![
@@ -211,7 +212,7 @@ async fn test_file_size_parsing() {
 
         // Test that we can format sizes consistently
         assert!(formatted.contains("MB"));
-        assert!(formatted.contains("."));
+        assert!(formatted.contains('.'));
 
         // For larger files, verify they're in the expected range
         if size_bytes > 1_073_741_824 {
@@ -221,6 +222,7 @@ async fn test_file_size_parsing() {
 }
 
 #[tokio::test]
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // mock data is fixed-case
 async fn test_search_result_filtering() {
     // Test GGUF filtering logic for search results
 

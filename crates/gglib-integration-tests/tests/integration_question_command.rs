@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::database::setup_test_pool;
+use common::setup_test_pool;
 use std::sync::Arc;
 
 use chrono::Utc;
