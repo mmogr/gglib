@@ -274,57 +274,6 @@ impl ProcessHandle {
     }
 }
 
-/// Health status of a running server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerHealth {
-    /// Whether the server is responding to health checks.
-    pub healthy: bool,
-    /// Unix timestamp (seconds) of the last successful health check.
-    pub last_check: Option<u64>,
-    /// Context size being used by the server.
-    pub context_size: Option<u64>,
-    /// Optional status message.
-    pub message: Option<String>,
-}
-
-impl ServerHealth {
-    /// Get the current Unix timestamp in seconds.
-    fn now_secs() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    }
-
-    /// Create a healthy server status.
-    #[must_use]
-    pub fn healthy() -> Self {
-        Self {
-            healthy: true,
-            last_check: Some(Self::now_secs()),
-            context_size: None,
-            message: None,
-        }
-    }
-
-    /// Create an unhealthy server status with a message.
-    pub fn unhealthy(message: impl Into<String>) -> Self {
-        Self {
-            healthy: false,
-            last_check: Some(Self::now_secs()),
-            context_size: None,
-            message: Some(message.into()),
-        }
-    }
-
-    /// Set the context size.
-    #[must_use]
-    pub const fn with_context_size(mut self, size: u64) -> Self {
-        self.context_size = Some(size);
-        self
-    }
-}
-
 /// Process runner for managing model server processes.
 ///
 /// This trait abstracts process management for testability and
@@ -346,17 +295,4 @@ pub trait ProcessRunner: Send + Sync {
     ///
     /// Returns `Err(ProcessError::NotRunning)` if the process isn't running.
     async fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError>;
-
-    /// Check if a server is still running.
-    async fn is_running(&self, handle: &ProcessHandle) -> bool;
-
-    /// Get the health status of a running server.
-    ///
-    /// Returns `Err(ProcessError::NotRunning)` if the process isn't running.
-    async fn health(&self, handle: &ProcessHandle) -> Result<ServerHealth, ProcessError>;
-
-    /// List all currently running server processes.
-    ///
-    /// This is needed for snapshot behavior (e.g., `server:snapshot` events).
-    async fn list_running(&self) -> Result<Vec<ProcessHandle>, ProcessError>;
 }

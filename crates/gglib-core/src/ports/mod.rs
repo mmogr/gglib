@@ -67,7 +67,7 @@ pub use model_repository::ModelRepository;
 pub use model_runtime::{
     LaunchOverrides, ModelRuntimeError, ModelRuntimePort, NoopModelRuntime, RunningTarget,
 };
-pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
+pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
 pub use settings_repository::SettingsRepository;
@@ -91,7 +91,7 @@ pub use tool_support::{
 ///
 /// // In adapter bootstrap:
 /// let repos = gglib_db::factory::build_repos(&pool);
-/// let core = AppCore::new(repos, runner);
+/// let core = AppCore::new(repos);
 /// ```
 #[derive(Clone)]
 pub struct Repos {

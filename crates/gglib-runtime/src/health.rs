@@ -132,20 +132,3 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
         }
     }
 }
-
-/// Check if a process is alive using its PID.
-///
-/// Uses a simple file-based check on Unix systems.
-#[cfg(unix)]
-pub fn check_process_alive(pid: u32) -> bool {
-    // Check if /proc/<pid> exists (Linux) or use kill signal check
-    std::path::Path::new(&format!("/proc/{}", pid)).exists()
-        || std::fs::metadata(format!("/proc/{}", pid)).is_ok()
-}
-
-#[cfg(not(unix))]
-pub fn check_process_alive(_pid: u32) -> bool {
-    // Windows/other: assume alive if we have a PID
-    // Full implementation would use platform-specific APIs
-    true
-}

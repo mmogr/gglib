@@ -9,52 +9,12 @@ use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::ports::{
     DownloadManagerPort, DownloadRequest, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo,
-    HfRepoInfo, HfSearchOptions, HfSearchResult, ProcessError, ProcessHandle, ProcessRunner,
-    ServerConfig, ServerHealth, SystemProbePort, ToolSupportDetection, ToolSupportDetectionInput,
-    ToolSupportDetectorPort,
+    HfRepoInfo, HfSearchOptions, HfSearchResult, SystemProbePort, ToolSupportDetection,
+    ToolSupportDetectionInput, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
 use gglib_db::{CoreFactory, setup_test_database};
-
-// ---------------------------------------------------------------------------
-// MockProcessRunner
-// ---------------------------------------------------------------------------
-
-/// A no-op `ProcessRunner` that always reports no running processes.
-#[allow(dead_code)]
-pub(crate) struct MockProcessRunner;
-
-#[async_trait]
-impl ProcessRunner for MockProcessRunner {
-    async fn start(&self, _config: ServerConfig) -> Result<ProcessHandle, ProcessError> {
-        Err(ProcessError::StartFailed(
-            "mock: start not supported".to_string(),
-        ))
-    }
-
-    async fn stop(&self, _handle: &ProcessHandle) -> Result<(), ProcessError> {
-        Ok(())
-    }
-
-    async fn is_running(&self, _handle: &ProcessHandle) -> bool {
-        false
-    }
-
-    async fn health(&self, _handle: &ProcessHandle) -> Result<ServerHealth, ProcessError> {
-        Err(ProcessError::NotRunning("mock: no processes".to_string()))
-    }
-
-    async fn list_running(&self) -> Result<Vec<ProcessHandle>, ProcessError> {
-        Ok(vec![])
-    }
-}
-
-/// Convenience constructor for a no-op process runner.
-#[allow(dead_code)]
-pub(crate) fn noop_runner() -> Arc<MockProcessRunner> {
-    Arc::new(MockProcessRunner)
-}
 
 // ---------------------------------------------------------------------------
 // MockDownloadManager
@@ -305,10 +265,7 @@ impl SystemProbePort for MockSystemProbePort {
 /// Uses the `test-utils` feature gate from `gglib-db`.
 pub(crate) async fn test_core() -> Arc<AppCore> {
     let pool = setup_test_database().await.expect("in-memory DB");
-    Arc::new(CoreFactory::build_app_core(
-        pool,
-        Arc::new(MockProcessRunner),
-    ))
+    Arc::new(CoreFactory::build_app_core(pool))
 }
 
 /// An `AppCore` and a `ProxyOps` sharing one in-memory database.
@@ -331,7 +288,7 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 
     let pool = setup_test_database().await.expect("in-memory DB");
     let repos = CoreFactory::build_repos(pool);
-    let core = Arc::new(AppCore::new(repos.clone(), Arc::new(MockProcessRunner)));
+    let core = Arc::new(AppCore::new(repos.clone()));
 
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(Arc::new(

@@ -19,7 +19,6 @@ use gglib_app_services::{
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRuntimePort,
-    ProcessRunner,
 };
 use gglib_core::services::AppCore;
 use gglib_db::cleanup_zombie_benchmark_runs;
@@ -118,8 +117,6 @@ pub struct AxumContext {
     pub mcp: Arc<McpService>,
     /// HuggingFace client for model discovery.
     pub hf_client: Arc<dyn HfClientPort>,
-    /// Process runner for server lifecycle management.
-    pub runner: Arc<dyn ProcessRunner>,
     /// SSE broadcaster for real-time events.
     pub sse: Arc<SseBroadcaster>,
     /// Shared HTTP client for outbound requests (LLM completion, HF, etc.).
@@ -197,7 +194,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {
         app: core,
-        runner,
+        runner: _,
         downloads,
         hf_client,
         gguf_parser,
@@ -260,7 +257,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&core),
         repos: repos.clone(),
-        runner: runner.clone(),
         downloads: downloads.clone(),
         hf_client: hf_client.clone(),
         gguf_parser,
@@ -314,7 +310,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         core,
         mcp,
         hf_client,
-        runner,
         sse,
         http_client: Client::new(),
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(

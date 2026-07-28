@@ -184,7 +184,7 @@ pub fn bootstrap_with(
     llama_server_path: PathBuf,
 ) -> CliContext {
     let model_repo = repos.models.clone();
-    let app = Arc::new(AppCore::new(repos.clone(), runner.clone()));
+    let app = Arc::new(AppCore::new(repos.clone()));
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),

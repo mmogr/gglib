@@ -3,25 +3,22 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::ports::{ProcessRunner, Repos};
+use crate::ports::Repos;
 use std::sync::Arc;
 
-use super::{
-    ChatHistoryService, ModelService, ModelVerificationService, ServerService, SettingsService,
-};
+use super::{ChatHistoryService, ModelService, ModelVerificationService, SettingsService};
 
 /// The core application facade.
 ///
 /// `AppCore` provides access to all core services. It's constructed at the
 /// adapter's composition root (main.rs or bootstrap.rs) with concrete
-/// implementations of repositories and runners.
+/// implementations of repositories.
 ///
 /// # Example
 ///
 /// ```ignore
 /// let repos = Repos { models: model_repo, settings: settings_repo };
-/// let runner = Arc::new(LlamaServerRunner::new(...));
-/// let core = AppCore::new(repos, runner);
+/// let core = AppCore::new(repos);
 ///
 /// // Access services
 /// let models = core.models().list().await?;
@@ -29,18 +26,16 @@ use super::{
 pub struct AppCore {
     models: ModelService,
     settings: SettingsService,
-    servers: ServerService,
     chat_history: ChatHistoryService,
     verification: Option<Arc<ModelVerificationService>>,
 }
 
 impl AppCore {
-    /// Create a new `AppCore` with the given repositories and process runner.
-    pub fn new(repos: Repos, runner: Arc<dyn ProcessRunner>) -> Self {
+    /// Create a new `AppCore` with the given repositories.
+    pub fn new(repos: Repos) -> Self {
         Self {
             models: ModelService::new(repos.models),
             settings: SettingsService::new(repos.settings),
-            servers: ServerService::new(runner),
             chat_history: ChatHistoryService::new(repos.chat_history),
             verification: None,
         }
@@ -65,11 +60,6 @@ impl AppCore {
         &self.settings
     }
 
-    /// Access the server service.
-    pub const fn servers(&self) -> &ServerService {
-        &self.servers
-    }
-
     /// Access the chat history service.
     pub const fn chat_history(&self) -> &ChatHistoryService {
         &self.chat_history
@@ -91,8 +81,7 @@ mod tests {
     use crate::domain::{Model, NewModel};
     use crate::ports::{
         ChatHistoryError, ChatHistoryRepository, McpRepositoryError, McpServerRepository,
-        ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError, ServerConfig,
-        ServerHealth, SettingsRepository,
+        ModelRepository, RepositoryError, SettingsRepository,
     };
     use crate::settings::Settings;
     use async_trait::async_trait;
@@ -229,33 +218,6 @@ mod tests {
         }
     }
 
-    struct MockRunner;
-
-    #[async_trait]
-    impl ProcessRunner for MockRunner {
-        async fn start(&self, config: ServerConfig) -> Result<ProcessHandle, ProcessError> {
-            Ok(ProcessHandle::new(
-                config.model_id,
-                config.model_name,
-                Some(12345),
-                9000,
-                0,
-            ))
-        }
-        async fn stop(&self, _handle: &ProcessHandle) -> Result<(), ProcessError> {
-            Ok(())
-        }
-        async fn is_running(&self, _handle: &ProcessHandle) -> bool {
-            false
-        }
-        async fn health(&self, _handle: &ProcessHandle) -> Result<ServerHealth, ProcessError> {
-            Ok(ServerHealth::healthy())
-        }
-        async fn list_running(&self) -> Result<Vec<ProcessHandle>, ProcessError> {
-            Ok(vec![])
-        }
-    }
-
     #[tokio::test]
     async fn test_app_core_creation() {
         let repos = Repos {
@@ -264,9 +226,8 @@ mod tests {
             mcp_servers: Arc::new(MockMcpRepo),
             chat_history: Arc::new(MockChatHistoryRepo),
         };
-        let runner = Arc::new(MockRunner);
 
-        let core = AppCore::new(repos, runner);
+        let core = AppCore::new(repos);
 
         // Verify services are accessible
         let models = core.models().list().await.unwrap();

@@ -18,7 +18,7 @@ use gglib_app_services::{
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, HfClientPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, NoopEmitter, ProcessRunner, Repos,
+    ModelRuntimePort, NoopEmitter, Repos,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
@@ -61,8 +61,6 @@ impl TauriConfig {
 pub struct TauriContext {
     /// The core application facade.
     pub app: Arc<AppCore>,
-    /// Process runner for direct server operations.
-    pub runner: Arc<dyn ProcessRunner>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
     /// Download manager.
@@ -111,11 +109,6 @@ impl TauriContext {
     /// Access the AppCore.
     pub fn app(&self) -> &Arc<AppCore> {
         &self.app
-    }
-
-    /// Access the process runner for server operations.
-    pub fn runner(&self) -> &Arc<dyn ProcessRunner> {
-        &self.runner
     }
 
     /// Access the MCP service.
@@ -201,7 +194,7 @@ async fn bootstrap_inner(
     };
     let BuiltCore {
         app,
-        runner,
+        runner: _,
         downloads,
         hf_client,
         gguf_parser,
@@ -238,7 +231,6 @@ async fn bootstrap_inner(
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&app),
         repos: repos.clone(),
-        runner: runner.clone(),
         downloads: downloads.clone(),
         hf_client: hf_client.clone(),
         gguf_parser,
@@ -259,7 +251,6 @@ async fn bootstrap_inner(
 
     Ok(TauriContext {
         app,
-        runner,
         mcp,
         download_manager: downloads,
         hf_client,
@@ -285,16 +276,15 @@ async fn bootstrap_inner(
 /// Bootstrap with custom repos and runner (for testing).
 ///
 /// Shares the same domain-ops graph as the real bootstraps, so a test context
-/// cannot silently diverge from production wiring. Only the repositories,
-/// runner and event sinks differ.
+/// cannot silently diverge from production wiring. Only the repositories
+/// and event sinks differ.
 pub async fn bootstrap_with(
     repos: Repos,
-    runner: Arc<dyn ProcessRunner>,
     download_manager: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
     app_handle: Option<AppHandle>,
 ) -> TauriContext {
-    let app = Arc::new(AppCore::new(repos.clone(), runner.clone()));
+    let app = Arc::new(AppCore::new(repos.clone()));
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
@@ -325,7 +315,6 @@ pub async fn bootstrap_with(
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&app),
         repos: repos.clone(),
-        runner: runner.clone(),
         downloads: Arc::clone(&download_manager),
         hf_client: Arc::clone(&hf_client),
         gguf_parser: Arc::new(GgufParser::new()),
@@ -346,7 +335,6 @@ pub async fn bootstrap_with(
 
     TauriContext {
         app,
-        runner,
         mcp,
         download_manager,
         hf_client,
