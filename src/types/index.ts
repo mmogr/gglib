@@ -241,6 +241,16 @@ export type ServerHealthStatus =
 export type HealthTone = 'healthy' | 'degraded' | 'failed' | 'unknown';
 
 /**
+ * Structured detail for a model runtime failure.
+ * Maps to gglib-core::ports::model_runtime::RuntimeErrorEnvelope.
+ */
+export interface RuntimeErrorInfo {
+  message: string;
+  type: string;
+  retryable: boolean;
+}
+
+/**
  * Get display info for a health status (tone, label, title).
  */
 export function getHealthDisplay(health?: ServerHealthStatus): { tone: HealthTone; label: string; title: string } {

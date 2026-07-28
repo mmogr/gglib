@@ -6,6 +6,7 @@
  */
 
 import type { ServerEvent } from './serverRegistry';
+import type { RuntimeErrorInfo } from '../types';
 
 export type CanonicalServerEventName =
   | 'server:snapshot'
@@ -99,6 +100,21 @@ function normalizeHealthChanged(data: Record<string, unknown>): ServerEvent | nu
   };
 }
 
+function toRuntimeErrorInfo(value: unknown): RuntimeErrorInfo | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const err = value as Record<string, unknown>;
+
+  if (
+    typeof err.message !== 'string' ||
+    typeof err.type !== 'string' ||
+    typeof err.retryable !== 'boolean'
+  ) {
+    return undefined;
+  }
+
+  return { message: err.message, type: err.type, retryable: err.retryable };
+}
+
 function normalizeLifecycle(
   kind: 'running' | 'stopped' | 'crashed',
   data: Record<string, unknown>
@@ -122,7 +138,7 @@ function normalizeLifecycle(
   if (kind === 'stopped') return { type: 'stopped', modelId, port, updatedAt, modelName };
 
   // server:error may omit modelId on the Rust side; ignore in that case.
-  return { type: 'crashed', modelId, port, updatedAt, modelName };
+  return { type: 'crashed', modelId, port, updatedAt, modelName, error: toRuntimeErrorInfo(data.error) };
 }
 
 /**

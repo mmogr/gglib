@@ -5,6 +5,7 @@
 //! details from the proxy layer.
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
@@ -184,6 +185,44 @@ impl ModelRuntimeError {
             | Self::ModelFileNotFound(_)
             | Self::PinnedModelMismatch { .. } => 404,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
+        }
+    }
+}
+
+/// Structured, serializable view of a [`ModelRuntimeError`].
+///
+/// For IPC boundaries (Tauri events, SSE) that need machine-readable type +
+/// retry hints alongside the human-readable message, mirroring the shape
+/// `gglib_proxy::models::ErrorResponse` already sends over HTTP.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RuntimeErrorEnvelope {
+    /// Human-readable error message.
+    pub message: String,
+    /// Stable error type discriminant, matching the `type` strings the HTTP
+    /// layer already sends for the same `ModelRuntimeError` variants (e.g.
+    /// `"service_unavailable"`), so GUI and HTTP clients agree on meaning.
+    pub r#type: String,
+    /// Whether retrying the same request may succeed.
+    pub retryable: bool,
+}
+
+impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
+    fn from(err: &ModelRuntimeError) -> Self {
+        let error_type = match err {
+            ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_) => {
+                "service_unavailable"
+            }
+            ModelRuntimeError::ModelNotFound(_)
+            | ModelRuntimeError::ModelFileNotFound(_)
+            | ModelRuntimeError::PinnedModelMismatch { .. } => "invalid_request_error",
+            ModelRuntimeError::SpawnFailed(_)
+            | ModelRuntimeError::HealthCheckFailed(_)
+            | ModelRuntimeError::Internal(_) => "server_error",
+        };
+        Self {
+            message: err.to_string(),
+            r#type: error_type.to_string(),
+            retryable: err.is_retryable(),
         }
     }
 }
@@ -444,5 +483,25 @@ mod tests {
         let rendered = pinned_mismatch().to_string();
         assert!(rendered.contains("qwen2.5"), "{rendered}");
         assert!(rendered.contains("llama-3-8b"), "{rendered}");
+    }
+
+    /// A retryable error's envelope must carry `retryable: true` and the
+    /// `service_unavailable` type, matching the HTTP layer's 503 mapping.
+    #[test]
+    fn envelope_for_contention_timeout_is_retryable_service_unavailable() {
+        let err = ModelRuntimeError::ContentionTimeout("waited too long".to_string());
+        let envelope = RuntimeErrorEnvelope::from(&err);
+        assert_eq!(envelope.r#type, "service_unavailable");
+        assert!(envelope.retryable);
+        assert_eq!(envelope.message, err.to_string());
+    }
+
+    /// A non-retryable error's envelope must say so, matching the HTTP
+    /// layer's non-503 mapping.
+    #[test]
+    fn envelope_for_pinned_mismatch_is_not_retryable_invalid_request() {
+        let envelope = RuntimeErrorEnvelope::from(&pinned_mismatch());
+        assert_eq!(envelope.r#type, "invalid_request_error");
+        assert!(!envelope.retryable);
     }
 }

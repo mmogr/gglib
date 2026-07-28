@@ -5,6 +5,7 @@
 
 import type { Unsubscribe, EventHandler } from './common';
 import type { DownloadId } from './ids';
+import type { RuntimeErrorInfo } from '../../../types';
 
 // ============================================================================
 // Server Events
@@ -24,7 +25,7 @@ export type ServerEvent =
   | { type: 'running'; modelId: string; port?: number; updatedAt: number }
   | { type: 'stopping'; modelId: string; port?: number; updatedAt: number }
   | { type: 'stopped'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number };
+  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; error?: RuntimeErrorInfo };
 
 // ============================================================================
 // Download Events

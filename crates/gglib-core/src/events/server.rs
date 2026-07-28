@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ports::model_runtime::{ModelRuntimeError, RuntimeErrorEnvelope};
+
 use super::AppEvent;
 
 /// Summary of a running server for event emission.
@@ -50,6 +52,7 @@ impl ServerSummary {
 ///
 /// ```rust
 /// use gglib_core::events::{ServerEvents, ServerSummary};
+/// use gglib_core::ports::ModelRuntimeError;
 ///
 /// struct LoggingEvents;
 ///
@@ -66,7 +69,7 @@ impl ServerSummary {
 ///     fn snapshot(&self, servers: &[ServerSummary]) {
 ///         println!("Server snapshot: {} running", servers.len());
 ///     }
-///     fn error(&self, server: &ServerSummary, error: &str) {
+///     fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
 ///         eprintln!("Server {} error: {}", server.model_name, error);
 ///     }
 /// }
@@ -85,7 +88,7 @@ pub trait ServerEvents: Send + Sync {
     fn snapshot(&self, servers: &[ServerSummary]);
 
     /// Called when a server error occurs.
-    fn error(&self, server: &ServerSummary, error: &str);
+    fn error(&self, server: &ServerSummary, error: &ModelRuntimeError);
 }
 
 /// No-op implementation of `ServerEvents` for testing and non-GUI contexts.
@@ -100,7 +103,7 @@ impl ServerEvents for NoopServerEvents {
     fn stopping(&self, _server: &ServerSummary) {}
     fn stopped(&self, _server: &ServerSummary) {}
     fn snapshot(&self, _servers: &[ServerSummary]) {}
-    fn error(&self, _server: &ServerSummary, _error: &str) {}
+    fn error(&self, _server: &ServerSummary, _error: &ModelRuntimeError) {}
 }
 
 /// Entry in a server snapshot.
@@ -141,12 +144,12 @@ impl AppEvent {
     pub fn server_error(
         model_id: Option<i64>,
         model_name: impl Into<String>,
-        error: impl Into<String>,
+        error: RuntimeErrorEnvelope,
     ) -> Self {
         Self::ServerError {
             model_id,
             model_name: model_name.into(),
-            error: error.into(),
+            error,
         }
     }
 
@@ -168,7 +171,7 @@ impl AppEvent {
     }
 
     /// Build a `ServerError` event from a `ServerSummary`.
-    pub fn from_server_error(server: &ServerSummary, error: &str) -> Self {
+    pub fn from_server_error(server: &ServerSummary, error: RuntimeErrorEnvelope) -> Self {
         let model_id = server.model_id.parse::<i64>().ok();
         Self::server_error(model_id, &server.model_name, error)
     }
@@ -244,7 +247,8 @@ mod tests {
     #[test]
     fn test_from_server_error() {
         let server = make_server("srv-1", "42", "test-model", 8080);
-        let event = AppEvent::from_server_error(&server, "something failed");
+        let runtime_err = ModelRuntimeError::Internal("something failed".to_string());
+        let event = AppEvent::from_server_error(&server, RuntimeErrorEnvelope::from(&runtime_err));
         match event {
             AppEvent::ServerError {
                 model_id,
@@ -253,7 +257,9 @@ mod tests {
             } => {
                 assert_eq!(model_id, Some(42));
                 assert_eq!(model_name, "test-model");
-                assert_eq!(error, "something failed");
+                assert_eq!(error.message, "Internal error: something failed");
+                assert_eq!(error.r#type, "server_error");
+                assert!(!error.retryable);
             }
             _ => panic!("expected ServerError"),
         }
@@ -262,7 +268,8 @@ mod tests {
     #[test]
     fn test_from_server_error_invalid_model_id() {
         let server = make_server("srv-1", "abc", "test-model", 8080);
-        let event = AppEvent::from_server_error(&server, "something failed");
+        let runtime_err = ModelRuntimeError::Internal("something failed".to_string());
+        let event = AppEvent::from_server_error(&server, RuntimeErrorEnvelope::from(&runtime_err));
         match event {
             AppEvent::ServerError {
                 model_id,
@@ -271,7 +278,7 @@ mod tests {
             } => {
                 assert_eq!(model_id, None);
                 assert_eq!(model_name, "test-model");
-                assert_eq!(error, "something failed");
+                assert_eq!(error.message, "Internal error: something failed");
             }
             _ => panic!("expected ServerError"),
         }
