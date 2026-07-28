@@ -1,7 +1,7 @@
 //! llama-server binary availability checking and path resolution.
 //!
 //! This module provides centralized logic for resolving the llama-server binary path
-//! with support for multiple resolution strategies and legacy path migration.
+//! with support for multiple resolution strategies.
 
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -16,8 +16,6 @@ pub enum LlamaServerError {
     NotFound {
         /// The path where the binary was expected
         path: PathBuf,
-        /// Optional legacy path where an old installation was detected
-        legacy_path: Option<PathBuf>,
     },
 
     /// The binary exists but is not executable (permission denied).
@@ -51,7 +49,6 @@ pub type LlamaServerResult<T> = Result<T, LlamaServerError>;
 /// This function applies the following precedence order:
 /// 1. `GGLIB_LLAMA_SERVER_PATH` environment variable (explicit override)
 /// 2. Default path from `gglib_core::paths::llama_server_path()`
-/// 3. Legacy paths (pre-refactor locations) with migration hints
 ///
 /// After resolving a candidate path, this function validates that:
 /// - The file exists
@@ -84,22 +81,7 @@ pub fn resolve_llama_server() -> LlamaServerResult<PathBuf> {
         .map_err(|e| LlamaServerError::PathResolution(e.to_string()))?;
 
     // Check if default path works
-    match validate_binary(&default_path) {
-        Ok(path) => Ok(path),
-        Err(default_err) => {
-            // Strategy 3: Probe legacy paths for migration hints
-            if let Some(legacy_path) = probe_legacy_paths() {
-                // Found a legacy installation - return error with migration hint
-                Err(LlamaServerError::NotFound {
-                    path: default_path,
-                    legacy_path: Some(legacy_path),
-                })
-            } else {
-                // No legacy path found - return original validation error
-                Err(default_err)
-            }
-        }
-    }
+    validate_binary(&default_path)
 }
 
 /// Validate that a binary exists and is executable.
@@ -108,7 +90,6 @@ fn validate_binary(path: &Path) -> LlamaServerResult<PathBuf> {
     if !path.exists() {
         return Err(LlamaServerError::NotFound {
             path: path.to_path_buf(),
-            legacy_path: None,
         });
     }
 
@@ -152,24 +133,6 @@ fn validate_binary(path: &Path) -> LlamaServerResult<PathBuf> {
     Ok(path.to_path_buf())
 }
 
-/// Probe for legacy llama-server installation paths.
-///
-/// This function checks common locations where llama-server may have been
-/// installed in previous versions of gglib, before recent path refactors.
-///
-/// Returns `Some(PathBuf)` if a valid legacy binary is found, `None` otherwise.
-fn probe_legacy_paths() -> Option<PathBuf> {
-    // Legacy path candidates (add more as needed based on historical locations)
-    let legacy_candidates: Vec<PathBuf> = vec![
-        // Example legacy paths - adjust based on actual refactor history
-        // These would be paths used before PRs #226-227
-    ];
-
-    legacy_candidates
-        .into_iter()
-        .find(|candidate| candidate.exists() && validate_binary(candidate).is_ok())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,12 +142,5 @@ mod tests {
         let nonexistent = PathBuf::from("/nonexistent/path/to/llama-server");
         let result = validate_binary(&nonexistent);
         assert!(matches!(result, Err(LlamaServerError::NotFound { .. })));
-    }
-
-    #[test]
-    fn test_legacy_path_probe_returns_none_for_empty_candidates() {
-        // With no legacy candidates defined, should return None
-        let result = probe_legacy_paths();
-        assert_eq!(result, None);
     }
 }

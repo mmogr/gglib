@@ -58,37 +58,6 @@ fn test_error_messages_include_install_instructions() {
     }
 }
 
-#[test]
-fn test_legacy_path_detection_logic() {
-    // This test verifies that probe_legacy_paths() returns None
-    // when no legacy candidates exist (current implementation)
-    //
-    // If legacy paths are added in the future, this test should be updated
-    // to verify proper detection and migration hints
-
-    let result = resolve_llama_server();
-
-    // Should fail with NotFound or PathResolution, not with legacy path hint
-    // (since no legacy paths are configured yet)
-    if let Err(err) = result {
-        match err {
-            LlamaServerError::NotFound { legacy_path, .. } => {
-                // Legacy path should be None in current implementation
-                assert!(
-                    legacy_path.is_none(),
-                    "No legacy paths should be detected yet"
-                );
-            }
-            LlamaServerError::PathResolution(_) => {
-                // Also acceptable - path couldn't be resolved
-            }
-            _ => {
-                // Other errors are fine too in test environment
-            }
-        }
-    }
-}
-
 /// Integration test: validate full error propagation chain
 #[test]
 fn test_error_has_all_required_fields() {
@@ -96,11 +65,9 @@ fn test_error_has_all_required_fields() {
 
     if let Err(err) = result {
         match err {
-            LlamaServerError::NotFound { path, legacy_path } => {
+            LlamaServerError::NotFound { path } => {
                 // Path should be populated
                 assert!(!path.as_os_str().is_empty());
-                // Legacy path should be None or Some depending on detection
-                let _ = legacy_path; // Just verify it exists
             }
             LlamaServerError::NotExecutable { path } => {
                 assert!(!path.as_os_str().is_empty());

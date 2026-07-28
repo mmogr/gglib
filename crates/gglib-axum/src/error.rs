@@ -35,7 +35,6 @@ pub enum HttpError {
     LlamaServerNotInstalled {
         message: String,
         expected_path: String,
-        legacy_path: Option<String>,
         suggested_command: String,
         reason: String,
     },
@@ -74,13 +73,11 @@ impl IntoResponse for HttpError {
             HttpError::LlamaServerNotInstalled {
                 message,
                 expected_path,
-                legacy_path,
                 suggested_command,
                 reason,
             } => {
                 let metadata_json = serde_json::json!({
                     "expectedPath": expected_path,
-                    "legacyPath": legacy_path,
                     "suggestedCommand": suggested_command,
                     "reason": reason,
                 });
@@ -164,7 +161,6 @@ impl From<GuiError> for HttpError {
             GuiError::Unavailable(msg) => HttpError::ServiceUnavailable(msg),
             GuiError::LlamaServerNotInstalled {
                 expected_path,
-                legacy_path,
                 suggested_command,
                 reason,
             } => HttpError::LlamaServerNotInstalled {
@@ -173,7 +169,6 @@ impl From<GuiError> for HttpError {
                     reason, suggested_command
                 ),
                 expected_path,
-                legacy_path,
                 suggested_command,
                 reason,
             },

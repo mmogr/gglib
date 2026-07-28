@@ -104,16 +104,11 @@ pub fn build_and_spawn(
         .map_err(|e| {
             // Convert LlamaServerError to anyhow with full context
             match e {
-                LlamaServerError::NotFound { path, legacy_path } => {
-                    let mut msg = format!("llama-server binary not found at: {}", path.display());
-                    if let Some(legacy) = legacy_path {
-                        msg.push_str(&format!(
-                            "\n\nFound an older installation at: {}\nConsider moving or symlinking it to the new location.",
-                            legacy.display()
-                        ));
-                    }
-                    msg.push_str("\n\nPlease install llama.cpp by running:\n  gglib config llama install");
-                    anyhow::anyhow!("{}", msg)
+                LlamaServerError::NotFound { path } => {
+                    anyhow::anyhow!(
+                        "llama-server binary not found at: {}\n\nPlease install llama.cpp by running:\n  gglib config llama install",
+                        path.display()
+                    )
                 }
                 LlamaServerError::NotExecutable { path } => {
                     anyhow::anyhow!(
