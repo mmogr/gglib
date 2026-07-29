@@ -23,6 +23,10 @@ use gglib_runtime as _;
 // gglib-axum used for web command in main.rs
 use gglib_axum as _;
 
+// gglib-proxy used for the shared SlotSnapshot/tokens_in_use parser in
+// handlers/proxy_dashboard.rs
+use gglib_proxy as _;
+
 pub mod assistant_ui_commands;
 pub mod benchmark_commands;
 pub mod bootstrap;
