@@ -81,13 +81,6 @@ impl ModelService {
             .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
     }
 
-    /// Find a model by name. Returns error if not found.
-    pub async fn find_by_name(&self, name: &str) -> Result<Model, CoreError> {
-        self.get_by_name(name)
-            .await?
-            .ok_or_else(|| CoreError::Validation(format!("Model not found: {name}")))
-    }
-
     /// Add a new model.
     pub async fn add(&self, model: NewModel) -> Result<Model, CoreError> {
         self.repo.insert(&model).await.map_err(CoreError::from)
