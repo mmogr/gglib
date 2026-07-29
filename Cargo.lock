@@ -448,9 +448,9 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.2.4"
+version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f2d30e4173c4026932d51d31d6b0613b1fd3014bf3f9f8943d4ba139c437ba0"
+checksum = "bb1307f12aa967b5a58416e87b3653360e0fd614a016b6e970db08fecbb1b80d"
 dependencies = [
  "serde_core",
 ]
@@ -614,9 +614,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.6.7"
+version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8b397918185f0161ff3d6fcaa9e4bfc09b8367caf6e1d4a2848e5477ed027b"
+checksum = "b1f84a88507dbd05c695f2cb5e8558e747179134005e9893882dec964190ed89"
 dependencies = [
  "clap",
 ]
@@ -680,15 +680,6 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
-]
-
-[[package]]
-name = "concurrent-queue"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -1263,13 +1254,13 @@ dependencies = [
 
 [[package]]
 name = "displaydoc"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
+checksum = "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1400,7 +1391,7 @@ dependencies = [
  "cc",
  "memchr",
  "rustc_version",
- "toml 1.1.3+spec-1.1.0",
+ "toml 1.1.4+spec-1.1.0",
  "vswhom",
  "winreg",
 ]
@@ -1478,11 +1469,10 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.4.1"
+version = "5.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13b66accf52311f30a0db42147dadea9850cb48cd070028831ae5f5d4b856ab"
+checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
- "concurrent-queue",
  "parking",
  "pin-project-lite",
 ]
@@ -1906,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1929,7 +1919,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1955,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1987,7 +1977,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2024,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2043,14 +2033,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2090,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2115,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2135,7 +2125,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2161,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2173,7 +2163,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2190,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2205,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2222,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2255,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2287,7 +2277,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "axum",
  "futures-util",
@@ -2300,7 +2290,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "gglib-app-services",
@@ -4079,7 +4069,7 @@ dependencies = [
  "bitflags 2.13.1",
  "libc",
  "plain",
- "redox_syscall 0.9.0",
+ "redox_syscall 0.9.1",
 ]
 
 [[package]]
@@ -5339,9 +5329,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5102a6aaa05aa011a238e178e6bca86d2cb56fc9f586d37cb80f5bca6e07759"
+checksum = "07507be7b4a5f9f26eeb41eeaebb1f5a7ff29dfb29739facc21d35bf8b11c21e"
 dependencies = [
  "bitflags 2.13.1",
 ]
@@ -5733,9 +5723,9 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
+checksum = "687274d293b6cdc6e73e0fee520bf2049650090d7164f87672d212a3c530cf4a"
 dependencies = [
  "dyn-clone",
  "ref-cast",
@@ -5944,7 +5934,7 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.14.0",
  "schemars 0.9.0",
- "schemars 1.2.1",
+ "schemars 1.2.2",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -6840,7 +6830,7 @@ dependencies = [
  "tauri-plugin",
  "tauri-utils",
  "thiserror 2.0.19",
- "toml 1.1.3+spec-1.1.0",
+ "toml 1.1.4+spec-1.1.0",
  "url",
 ]
 
@@ -6926,7 +6916,7 @@ dependencies = [
  "serde_with",
  "swift-rs",
  "thiserror 2.0.19",
- "toml 1.1.3+spec-1.1.0",
+ "toml 1.1.4+spec-1.1.0",
  "url",
  "urlpattern",
  "uuid",
@@ -6941,7 +6931,7 @@ checksum = "cc65d45c68858bfe420dd29e834b5d15dbecf8a07a8a16cf4d532c7b1f69d4b6"
 dependencies = [
  "dunce",
  "embed-resource",
- "toml 1.1.3+spec-1.1.0",
+ "toml 1.1.4+spec-1.1.0",
 ]
 
 [[package]]
@@ -7222,9 +7212,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.3+spec-1.1.0"
+version = "1.1.4+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53c96ecdfa941c8fc4fcaed14f99ada8ebed502eef533015095a07e3301d4c3c"
+checksum = "3aace63f4bbcdfc2c965b059de67119c89c4017a70d633be6c104910f67056f5"
 dependencies = [
  "indexmap 2.14.0",
  "serde_core",
@@ -7300,9 +7290,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.2+spec-1.1.0"
+version = "1.1.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2abe9b86193656635d2411dc43050282ca48aa31c2451210f4202550afb7526"
+checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
 dependencies = [
  "winnow 1.0.4",
 ]
