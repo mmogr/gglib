@@ -472,6 +472,20 @@ impl Quantization {
             Self::Unknown => "unknown",
         }
     }
+
+    /// Every canonical filename pattern string recognized by
+    /// [`Self::from_filename`], for callers that need to *generate*
+    /// candidate filenames rather than match an existing one — e.g. probing
+    /// a repository for known-quantization files when a richer listing API
+    /// is unavailable.
+    ///
+    /// Exposes only the pattern strings, not the private `"UD-"` variant
+    /// table: candidate generation only needs the string half, and the
+    /// smaller surface avoids committing to more than the current caller
+    /// needs.
+    pub fn canonical_patterns() -> impl Iterator<Item = &'static str> {
+        QUANT_PATTERNS.iter().map(|(pattern, _)| *pattern)
+    }
 }
 
 impl fmt::Display for Quantization {
@@ -636,6 +650,14 @@ mod tests {
     fn test_quantization_as_str() {
         assert_eq!(Quantization::Q4KM.as_str(), "Q4_K_M");
         assert_eq!(Quantization::F16.as_str(), "F16");
+    }
+
+    #[test]
+    fn canonical_patterns_includes_known_entries_and_excludes_ud_prefix() {
+        let patterns: Vec<&str> = Quantization::canonical_patterns().collect();
+        assert!(patterns.contains(&"Q4_K_M"));
+        assert!(patterns.contains(&"IQ4_XS"));
+        assert!(!patterns.iter().any(|p| p.starts_with("UD-")));
     }
 
     #[test]

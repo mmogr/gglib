@@ -31,8 +31,6 @@ pub struct CompletedDownload {
     pub commit_sha: String,
     /// Whether this was a sharded download.
     pub is_sharded: bool,
-    /// Total bytes downloaded.
-    pub total_bytes: u64,
     /// Ordered list of all file paths for sharded models (None for single-file models).
     pub file_paths: Option<Vec<std::path::PathBuf>>,
     /// `HuggingFace` tags for the model.
@@ -79,27 +77,4 @@ pub trait ModelRegistrarPort: Send + Sync {
     ///
     /// Returns the created `Model` on success.
     async fn register_model(&self, download: &CompletedDownload) -> Result<Model, RepositoryError>;
-
-    /// Register a model using raw path parameters.
-    ///
-    /// This is a simpler interface for cases where you have the file path
-    /// but not the full download metadata.
-    ///
-    /// # Arguments
-    ///
-    /// * `repo_id` - `HuggingFace` repository ID
-    /// * `commit_sha` - Git commit SHA
-    /// * `file_path` - Path to the GGUF file
-    /// * `quantization` - Quantization type as string
-    ///
-    /// # Returns
-    ///
-    /// Returns the created `Model` on success.
-    async fn register_model_from_path(
-        &self,
-        repo_id: &str,
-        commit_sha: &str,
-        file_path: &Path,
-        quantization: &str,
-    ) -> Result<Model, RepositoryError>;
 }

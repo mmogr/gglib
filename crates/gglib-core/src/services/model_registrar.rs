@@ -4,7 +4,6 @@
 //! and `GgufParserPort` dependencies. It's used by the download manager
 //! to register completed downloads.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -12,7 +11,6 @@ use chrono::Utc;
 
 use super::{HfOrigin, ModelOrigin, build_new_model};
 use crate::domain::{Model, NewModelFile};
-use crate::download::Quantization;
 use crate::ports::{
     CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RepositoryError,
 };
@@ -114,35 +112,13 @@ impl ModelRegistrarPort for ModelRegistrar {
 
         Ok(registered)
     }
-
-    async fn register_model_from_path(
-        &self,
-        repo_id: &str,
-        commit_sha: &str,
-        file_path: &Path,
-        quantization: &str,
-    ) -> Result<Model, RepositoryError> {
-        let download = CompletedDownload {
-            primary_path: file_path.to_path_buf(),
-            all_paths: vec![file_path.to_path_buf()],
-            quantization: Quantization::from_filename(quantization),
-            repo_id: repo_id.to_string(),
-            commit_sha: commit_sha.to_string(),
-            is_sharded: false,
-            total_bytes: 0,
-            file_paths: None,
-            hf_tags: vec![],
-            hf_file_entries: vec![],
-        };
-
-        self.register_model(&download).await
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::{Model, NewModel};
+    use crate::download::Quantization;
     use crate::ports::NoopGgufParser;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -243,7 +219,6 @@ mod tests {
             repo_id: "test/model".to_string(),
             commit_sha: "abc123".to_string(),
             is_sharded: false,
-            total_bytes: 1024,
             file_paths: None,
             hf_tags: vec![],
             hf_file_entries: vec![],
@@ -277,7 +252,6 @@ mod tests {
             repo_id: "test/llama".to_string(),
             commit_sha: "def456".to_string(),
             is_sharded: true,
-            total_bytes: 4096,
             file_paths: None,
             hf_tags: vec![],
             hf_file_entries: vec![],
@@ -289,25 +263,5 @@ mod tests {
         let model = result.unwrap();
         assert_eq!(model.quantization, Some("Q8_0".to_string()));
         assert_eq!(model.name, "llama");
-    }
-
-    #[tokio::test]
-    async fn test_register_model_from_path() {
-        let repo = Arc::new(MockModelRepo::new());
-        let parser = Arc::new(NoopGgufParser);
-        let registrar = ModelRegistrar::new(repo.clone(), parser, None);
-
-        let result = registrar
-            .register_model_from_path(
-                "test/repo",
-                "commit123",
-                Path::new("/models/test-q4_0.gguf"),
-                "Q4_0",
-            )
-            .await;
-
-        assert!(result.is_ok());
-        let model = result.unwrap();
-        assert_eq!(model.name, "repo");
     }
 }

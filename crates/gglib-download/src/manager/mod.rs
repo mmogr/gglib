@@ -920,7 +920,6 @@ impl DownloadManagerImpl {
             repo_id: complete.metadata.repo_id.clone(),
             commit_sha: complete.metadata.commit_sha.clone(),
             is_sharded: complete.ordered_paths.len() > 1,
-            total_bytes: 0, // TODO: track total bytes
             file_paths: if complete.ordered_paths.len() > 1 {
                 Some(complete.ordered_paths.clone())
             } else {

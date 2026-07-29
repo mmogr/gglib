@@ -5,10 +5,12 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
-use gglib_core::{repo_short_name, strip_gguf_suffix};
+use gglib_core::{Quantization, repo_short_name, strip_gguf_suffix};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use hf_hub::api::sync::Api;
+use reqwest::header::CONTENT_LENGTH;
 use std::path::Path;
+use std::time::Duration;
 
 use super::utils::format_number;
 
@@ -37,7 +39,7 @@ pub async fn list_quantizations(
 ) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
 
-    let api = create_hf_api(token, models_dir)?;
+    let api = create_hf_api(token.clone(), models_dir)?;
     let hf_api_repo = api.repo(hf_hub::Repo::with_revision(
         model_id.to_string(),
         hf_hub::RepoType::Model,
@@ -77,7 +79,9 @@ pub async fn list_quantizations(
                 }
                 Err(e) => {
                     println!("Failed to fetch quantizations: {e}");
-                    fallback_file_search(&hf_api_repo, model_id);
+                    if let Err(err) = fallback_file_search(&hf_api_repo, model_id, token).await {
+                        println!("Fallback pattern search also failed: {err}");
+                    }
                 }
             }
         }
@@ -90,34 +94,70 @@ pub async fn list_quantizations(
     Ok(())
 }
 
-/// Fallback method for when API listing fails.
-fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str) {
-    println!("\nFalling back to pattern matching...");
-    let mut found_files = Vec::new();
-
-    let model_name_clean = strip_gguf_suffix(repo_short_name(model_id));
-
-    let specific_patterns = vec![
-        format!("{}-Q8_0.gguf", model_name_clean),
-        format!("{}-Q4_K_M.gguf", model_name_clean),
-        format!("{}-F16.gguf", model_name_clean),
+/// Build the list of candidate GGUF filenames to probe when the primary
+/// `HuggingFace` quantization listing fails: one repo-name-prefixed
+/// candidate per canonical quantization pattern (the dominant
+/// `<repo>-<QUANT>.gguf` naming convention), plus a small set of bare,
+/// unprefixed filenames (both cases) for repos shipping a single,
+/// generically-named GGUF file.
+fn fallback_candidates(model_name_clean: &str) -> Vec<String> {
+    let mut candidates: Vec<String> = Quantization::canonical_patterns()
+        .map(|pattern| format!("{model_name_clean}-{pattern}.gguf"))
+        .collect();
+    candidates.extend([
         "q8_0.gguf".to_string(),
         "Q8_0.gguf".to_string(),
         "q4_k_m.gguf".to_string(),
         "Q4_K_M.gguf".to_string(),
         "f16.gguf".to_string(),
         "F16.gguf".to_string(),
-    ];
+    ]);
+    candidates
+}
 
-    for pattern in specific_patterns {
-        if let Ok(path) = repo.get(&pattern) {
-            #[allow(clippy::cast_precision_loss)]
-            let size_info = std::fs::metadata(&path).map_or_else(
-                |_| "size unknown".to_string(),
-                |metadata| format!("{:.1} MB", metadata.len() as f64 / 1_048_576.0),
-            );
-            println!("  ✓ {pattern} ({size_info})");
-            found_files.push(pattern);
+/// Fallback method for when API listing fails.
+///
+/// Probes candidate filenames via a HEAD request rather than downloading
+/// each one, since a repository can contain many GB of files and this path
+/// only needs to confirm existence.
+async fn fallback_file_search(
+    repo: &hf_hub::api::sync::ApiRepo,
+    model_id: &str,
+    token: Option<String>,
+) -> Result<()> {
+    println!("\nFalling back to pattern matching...");
+    let mut found_files = Vec::new();
+
+    let model_name_clean = strip_gguf_suffix(repo_short_name(model_id));
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+    for pattern in fallback_candidates(model_name_clean) {
+        let mut request = client.head(repo.url(&pattern));
+        if let Some(ref tok) = token {
+            request = request.header("Authorization", format!("Bearer {tok}"));
+        }
+
+        if let Ok(response) = request.send().await {
+            if response.status().is_success() {
+                let size_info = response
+                    .headers()
+                    .get(CONTENT_LENGTH)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .map_or_else(
+                        || "size unknown".to_string(),
+                        |bytes| {
+                            #[allow(clippy::cast_precision_loss)]
+                            let mb = bytes as f64 / 1_048_576.0;
+                            format!("{mb:.1} MB")
+                        },
+                    );
+                println!("  ✓ {pattern} ({size_info})");
+                found_files.push(pattern);
+            }
         }
     }
 
@@ -130,6 +170,8 @@ fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str) {
             found_files.len()
         );
     }
+
+    Ok(())
 }
 
 /// Search `HuggingFace` Hub for models.
@@ -307,4 +349,21 @@ pub async fn browse_models(category: String, limit: u32, size: Option<String>) -
     println!("💡 To see all quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_candidates_covers_legacy_and_new_patterns() {
+        let candidates = fallback_candidates("llama-3-8b");
+        assert!(candidates.contains(&"llama-3-8b-Q8_0.gguf".to_string()));
+        assert!(candidates.contains(&"llama-3-8b-Q4_K_M.gguf".to_string()));
+        assert!(candidates.contains(&"llama-3-8b-F16.gguf".to_string()));
+        assert!(candidates.contains(&"q4_k_m.gguf".to_string()));
+        // Previously missing from the old 9-pattern hardcoded list.
+        assert!(candidates.contains(&"llama-3-8b-IQ4_XS.gguf".to_string()));
+        assert!(candidates.contains(&"llama-3-8b-Q6_K.gguf".to_string()));
+    }
 }
