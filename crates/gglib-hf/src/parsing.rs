@@ -5,7 +5,7 @@
 
 use crate::error::{HfError, HfResult};
 use crate::models::{HfEntryType, HfFileEntry, HfModelSummary, HfQuantization, HfSearchResponse};
-use gglib_core::Quantization;
+use gglib_core::{Quantization, repo_short_name};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -48,7 +48,7 @@ pub fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
     let author = id.split('/').next().map(std::string::ToString::to_string);
 
     // Extract model name (last part of id)
-    let name = id.split('/').next_back().unwrap_or(&id).to_string();
+    let name = repo_short_name(&id).to_string();
 
     // Extract parameter count from gguf.total
     #[allow(clippy::cast_precision_loss)] // Precision loss acceptable for parameter display

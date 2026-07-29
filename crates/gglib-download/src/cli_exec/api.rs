@@ -5,6 +5,7 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
+use gglib_core::{repo_short_name, strip_gguf_suffix};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use hf_hub::api::sync::Api;
 use std::path::Path;
@@ -94,8 +95,7 @@ fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str) {
     println!("\nFalling back to pattern matching...");
     let mut found_files = Vec::new();
 
-    let model_name = model_id.split('/').next_back().unwrap_or("model");
-    let model_name_clean = model_name.strip_suffix("-GGUF").unwrap_or(model_name);
+    let model_name_clean = strip_gguf_suffix(repo_short_name(model_id));
 
     let specific_patterns = vec![
         format!("{}-Q8_0.gguf", model_name_clean),
