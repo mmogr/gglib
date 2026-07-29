@@ -30,10 +30,11 @@ pub use domain::{
     MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
     McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, Message, MessageContent, MessageRole, Model, ModelCapabilities,
-    ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus,
-    RangeValues, SEARCH_RESULTS_CAP, TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition,
-    ToolIndex, ToolResult, ToolSummary, UpdateMcpServer, capabilities_from_architecture,
-    infer_from_chat_template, transform_messages_for_capabilities,
+    ModelFilterOptions, NameSource, NewConversation, NewMcpServer, NewMessage, NewModel, NodeId,
+    NodeStatus, RangeValues, SEARCH_RESULTS_CAP, TaskGraph, TaskGraphError, TaskNode, ToolCall,
+    ToolDefinition, ToolIndex, ToolResult, ToolSummary, UNKNOWN_MODEL_NAME, UpdateMcpServer,
+    capabilities_from_architecture, declared_name, infer_from_chat_template, repo_short_name,
+    resolve_model_name, strip_gguf_suffix, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
