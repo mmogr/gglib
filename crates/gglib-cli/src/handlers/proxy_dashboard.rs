@@ -5,17 +5,24 @@
 //! `/v1/chat/completions` connections, per-slot context-window usage from
 //! llama.cpp's `/slots` endpoint, and a running request count.
 //!
-//! ## Decoupled JSON contract, not a shared Rust type
+//! ## Shared `SlotSnapshot`, local `DashboardSnapshot`
 //!
-//! This module does **not** depend on `gglib-proxy` (that would pull an
-//! Infrastructure-layer, axum-based crate into `gglib-cli`, which
-//! `scripts/check_boundaries.sh` treats as a web/gui dependency this crate
-//! must not have). Instead, [`DashboardSnapshot`] and friends are a local,
-//! `Deserialize`-only mirror of the JSON shape produced by
-//! `gglib_proxy::dashboard::DashboardSnapshot` — exactly the same relationship
-//! the TypeScript frontend has to that same endpoint. Unknown fields are
-//! ignored by default (no `deny_unknown_fields`), so this client tolerates
-//! additive changes to the server-side contract.
+//! [`DashboardSnapshot`] and friends stay a local, `Deserialize`-only mirror
+//! of the JSON shape produced by `gglib_proxy::dashboard::DashboardSnapshot`
+//! — the same relationship the TypeScript frontend has to that same
+//! endpoint. Unknown fields are ignored by default (no `deny_unknown_fields`),
+//! so this client tolerates additive changes to the server-side contract.
+//!
+//! `slots`, though, reuses [`gglib_proxy::slots::SlotSnapshot`] directly
+//! rather than a hand-copied mirror: llama.cpp's `/slots` schema has shifted
+//! shape more than once, and every shift previously meant editing the same
+//! `tokens_in_use()` fallback chain in two crates. `gglib-cli` already
+//! depends on `gglib-axum` — the one documented exception to
+//! CONTRIBUTING.md's surface-crate isolation rule, needed for `gglib web` —
+//! and was already pulling in `gglib-proxy` transitively via `gglib-runtime`
+//! and `gglib-app-services`, so a direct `gglib-proxy` dependency here adds
+//! nothing new to the build graph; it just lets this module use the
+//! canonical parser instead of maintaining its own.
 //!
 //! ## Redraw strategy: cursor movement, not raw mode
 //!
@@ -51,6 +58,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use crossterm::{cursor, execute, terminal};
 use futures_util::StreamExt;
+use gglib_proxy::slots::SlotSnapshot;
 use serde::Deserialize;
 
 /// Width (in bar cells) of every progress bar drawn by this dashboard.
@@ -149,89 +157,6 @@ impl ConnectionPhase {
             Self::ProcessingPrompt => "prompt",
             Self::Generating => "generating",
         }
-    }
-}
-
-/// Mirrors `gglib_proxy::slots::SlotSnapshot`'s wire shape, including its
-/// private-but-serialized legacy fields — see that type's doc comment for
-/// why `/slots`' schema needs this priority-fallback handling.
-#[derive(Debug, Deserialize)]
-struct SlotSnapshot {
-    id: i64,
-    #[serde(default)]
-    n_ctx: Option<u64>,
-    #[serde(default)]
-    n_past: Option<u64>,
-    #[serde(default)]
-    cache_tokens: Option<u64>,
-    #[serde(default)]
-    n_prompt_tokens: Option<u64>,
-    #[serde(default)]
-    n_prompt_tokens_processed: Option<u64>,
-    #[serde(default)]
-    n_prompt_tokens_cache: Option<u64>,
-    #[serde(default)]
-    next_token: Option<NextTokenField>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NextTokenInfo {
-    #[serde(default)]
-    n_decoded: Option<u64>,
-}
-
-/// Mirrors `gglib_proxy::slots::NextTokenField` — `next_token` is a single
-/// object on regular llama-server builds, but an array of objects on builds
-/// with Multi-Token Prediction ("draft-mtp") enabled.
-///
-/// `Many` must come before `Single` — see the server-side type's doc
-/// comment for why (a single-element array can otherwise falsely match
-/// `Single` via serde's struct-from-seq deserialization).
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum NextTokenField {
-    Many(Vec<NextTokenInfo>),
-    Single(NextTokenInfo),
-}
-
-impl NextTokenField {
-    /// See `gglib_proxy::slots::NextTokenField::primary` — element 0 is the
-    /// accepted/main decode stream on MTP builds.
-    fn primary(&self) -> Option<&NextTokenInfo> {
-        match self {
-            Self::Single(info) => Some(info),
-            Self::Many(items) => items.first(),
-        }
-    }
-}
-
-impl SlotSnapshot {
-    /// Same additive logic as the server's `SlotSnapshot::tokens_in_use`:
-    /// when `n_prompt_tokens_processed` is present, combine it with
-    /// `n_prompt_tokens_cache` (tokens reused from KV cache this round) plus
-    /// `next_token.n_decoded`. The grand-total `n_prompt_tokens` fallback
-    /// (used only when `_processed` is absent) already includes any cached
-    /// prefix, so cache is not added on top of it. Only falls back to the
-    /// legacy `n_past`/`cache_tokens` chain (no addition) when neither
-    /// prompt-side field is present.
-    fn tokens_in_use(&self) -> Option<u64> {
-        let n_decoded = self
-            .next_token
-            .as_ref()
-            .and_then(NextTokenField::primary)
-            .and_then(|nt| nt.n_decoded);
-
-        let prompt_component = if let Some(processed) = self.n_prompt_tokens_processed {
-            Some(processed + self.n_prompt_tokens_cache.unwrap_or(0))
-        } else {
-            self.n_prompt_tokens
-        };
-
-        if let Some(prompt_tokens) = prompt_component {
-            return Some(prompt_tokens + n_decoded.unwrap_or(0));
-        }
-
-        self.n_past.or(self.cache_tokens).or(n_decoded)
     }
 }
 
@@ -754,16 +679,10 @@ mod tests {
                 prompt_total: Some(100),
             }],
             slots_available: true,
-            slots: vec![SlotSnapshot {
-                id: 0,
-                n_ctx: Some(4096),
-                n_past: Some(2048),
-                cache_tokens: None,
-                n_prompt_tokens: None,
-                n_prompt_tokens_processed: None,
-                n_prompt_tokens_cache: None,
-                next_token: None,
-            }],
+            slots: vec![
+                serde_json::from_str(r#"{"id": 0, "n_ctx": 4096, "n_past": 2048}"#)
+                    .expect("should parse"),
+            ],
             slots_status: None,
             total_requests: 3,
             cache: None,
@@ -779,61 +698,6 @@ mod tests {
         assert!(frame.contains("50%")); // 50/100 prompt progress
         assert!(frame.contains("slot 0"));
         assert!(frame.contains("Total requests served: 3"));
-    }
-
-    #[test]
-    fn slot_snapshot_parses_mtp_array_next_token_shape() {
-        // Same wire shape the proxy re-serializes for an MTP ("draft-mtp")
-        // llama-server build — `next_token` is an array, not a bare object.
-        let json = r#"{
-            "id": 3,
-            "n_ctx": 131072,
-            "next_token": [
-                { "n_decoded": 89 }
-            ]
-        }"#;
-        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse MTP shape");
-        assert_eq!(slot.tokens_in_use(), Some(89));
-    }
-
-    #[test]
-    fn slot_snapshot_tokens_in_use_is_additive_with_prompt_tokens() {
-        // Real payload shape: n_prompt_tokens_processed (prompt usage) and
-        // next_token.n_decoded (generated tokens) must be summed, not just
-        // read as n_decoded alone (which previously showed ~0% used for a
-        // 20k+-token prompt).
-        let json = r#"{
-            "id": 3,
-            "n_ctx": 131072,
-            "n_prompt_tokens": 20994,
-            "n_prompt_tokens_processed": 20906,
-            "next_token": [
-                { "n_decoded": 89 }
-            ]
-        }"#;
-        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse");
-        assert_eq!(slot.tokens_in_use(), Some(20906 + 89));
-    }
-
-    #[test]
-    fn slot_snapshot_tokens_in_use_adds_cache_reused_tokens() {
-        // KV-cache-reuse scenario: a follow-up prompt where llama-server
-        // found a large cached prefix match and only newly processed a
-        // small delta. n_prompt_tokens_cache must be added to
-        // n_prompt_tokens_processed, or context usage falsely collapses to
-        // just the tiny newly-processed delta.
-        let json = r#"{
-            "id": 0,
-            "n_ctx": 131072,
-            "n_prompt_tokens": 7981,
-            "n_prompt_tokens_processed": 1245,
-            "n_prompt_tokens_cache": 6736,
-            "next_token": [
-                { "n_decoded": 12 }
-            ]
-        }"#;
-        let slot: SlotSnapshot = serde_json::from_str(json).expect("should parse");
-        assert_eq!(slot.tokens_in_use(), Some(1245 + 6736 + 12));
     }
 
     #[test]
