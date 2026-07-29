@@ -124,7 +124,6 @@ fn example() {
     let parser = GgufParser;
     let metadata = parser.parse(Path::new("/path/to/model.gguf")).unwrap();
 
-    println!("Model: {}", metadata.name.as_deref().unwrap_or("Unknown"));
     println!("Architecture: {:?}", metadata.architecture);
     println!("Context size: {}", metadata.context_length.unwrap_or(0));
     println!("Quantization: {:?}", metadata.quantization);

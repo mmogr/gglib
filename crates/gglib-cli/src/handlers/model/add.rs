@@ -10,6 +10,7 @@ use crate::bootstrap::CliContext;
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::utils::input;
 
+use gglib_core::domain::{NameSource, resolve_model_name};
 use gglib_core::utils::validation;
 
 /// Execute the add command.
@@ -41,9 +42,8 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
 
     // Display extracted metadata to the user
     println!("\nExtracted metadata:");
-    if let Some(ref name) = gguf_metadata.name {
-        println!("  Name: {name}");
-    }
+    let resolved_name = resolve_model_name(Some(&gguf_metadata), &path, NameSource::LocalFile);
+    println!("  Name: {resolved_name}");
     if let Some(ref arch) = gguf_metadata.architecture {
         println!("  Architecture: {arch}");
     }
