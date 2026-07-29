@@ -98,7 +98,6 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
     }
 
     // Extract fields
-    let name = extract_name(raw, file_path);
     let architecture = extract_architecture(raw);
     let context_length = extract_context_length(raw, architecture.as_ref());
     let param_count_b = extract_param_count(raw, file_path);
@@ -109,7 +108,6 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
         extract_moe_metadata(raw, architecture.as_ref());
 
     GgufMetadata {
-        name,
         architecture,
         param_count_b,
         quantization,
@@ -119,18 +117,6 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
         expert_shared_count,
         metadata: processed,
     }
-}
-
-/// Extract model name from metadata or filename.
-fn extract_name(raw: &RawMetadata, file_path: &Path) -> Option<String> {
-    raw.get("general.name")
-        .map(std::string::ToString::to_string)
-        .or_else(|| {
-            file_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(std::string::ToString::to_string)
-        })
 }
 
 /// Extract model architecture from metadata.

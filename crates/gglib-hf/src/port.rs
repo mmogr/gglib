@@ -8,6 +8,7 @@ use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
+use gglib_core::repo_short_name;
 
 use crate::client::HfClient;
 use crate::error::HfError;
@@ -216,11 +217,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
             .and_then(|v| v.as_str())
             .map_or_else(|| model_id.to_string(), String::from);
 
-        let name = model_id_str
-            .split('/')
-            .next_back()
-            .unwrap_or(&model_id_str)
-            .to_string();
+        let name = repo_short_name(&model_id_str).to_string();
 
         let author = model_id_str.split('/').next().map(String::from);
 

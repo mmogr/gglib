@@ -238,8 +238,6 @@ impl GgufValue {
 /// Parsing logic that produces this type lives in `gglib-gguf`.
 #[derive(Debug, Clone, Default)]
 pub struct GgufMetadata {
-    /// Model name from general.name metadata or filename.
-    pub name: Option<String>,
     /// Model architecture (e.g., "llama", "mistral").
     pub architecture: Option<String>,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").

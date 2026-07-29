@@ -12,6 +12,7 @@ pub mod kv_estimate;
 pub mod kv_memory;
 pub mod mcp;
 mod model;
+pub mod model_naming;
 pub mod query;
 mod server_config;
 pub mod slot_eviction;
@@ -76,6 +77,12 @@ pub use chat::{
 pub use gguf::{
     CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata, ReasoningDetection,
     ToolCallingDetection,
+};
+
+// Re-export model-naming types at the domain level for convenience
+pub use model_naming::{
+    NameSource, UNKNOWN_MODEL_NAME, declared_name, repo_short_name, resolve_model_name,
+    strip_gguf_suffix,
 };
 
 // Re-export agent types at the domain level for convenience

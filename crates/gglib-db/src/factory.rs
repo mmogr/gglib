@@ -97,6 +97,21 @@ impl CoreFactory {
     pub fn download_state_repository(pool: SqlitePool) -> Arc<SqliteDownloadStateRepository> {
         Arc::new(SqliteDownloadStateRepository::new(pool))
     }
+
+    /// Build a `ModelRegistrar` for tests.
+    ///
+    /// `gglib-bootstrap` is the sole production call site for
+    /// `ModelRegistrar::new` (enforced by `scripts/check_boundaries.sh`), so
+    /// integration tests that need a registrar go through this composition
+    /// point — itself an allowed caller — instead of constructing one
+    /// directly.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn model_registrar_for_test(
+        pool: SqlitePool,
+        gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
+    ) -> gglib_core::services::ModelRegistrar {
+        gglib_core::services::ModelRegistrar::new(Self::model_repository(pool), gguf_parser, None)
+    }
 }
 
 /// Test database helper for integration tests.

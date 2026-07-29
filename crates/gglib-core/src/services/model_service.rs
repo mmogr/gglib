@@ -1,5 +1,6 @@
 //! Model service - orchestrates model CRUD operations.
 
+use super::{ModelOrigin, build_new_model};
 use crate::domain::{Model, NewModel};
 use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
 use std::path::Path;
@@ -109,13 +110,10 @@ impl ModelService {
     ///
     /// # Design
     ///
-    /// This method orchestrates:
-    /// 1. File validation (existence, extension)
-    /// 2. GGUF metadata parsing (architecture, quantization, context)
-    /// 3. Capability detection (reasoning, tool-calling from metadata)
-    /// 4. Chat template inference (additional capability signals)
-    /// 5. Auto-tag generation from detected capabilities
-    /// 6. Model persistence with complete `NewModel` struct
+    /// This method validates and parses the GGUF file, then delegates
+    /// naming, capability detection, and tag generation to
+    /// [`build_new_model`] — the construction path shared with the
+    /// `HuggingFace` download path — before persisting the result.
     pub async fn import_from_file(
         &self,
         file_path: &Path,
@@ -131,61 +129,20 @@ impl ModelService {
         )
         .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {e}")))?;
 
-        // 2. Resolve parameter count (override > metadata > 0.0 fallback)
-        let param_count_b = param_count_override
-            .or(gguf_metadata.param_count_b)
-            .unwrap_or(0.0);
-
-        // 3. Detect capabilities from GGUF metadata
-        let gguf_capabilities = gguf_parser.detect_capabilities(&gguf_metadata);
-        let auto_tags = gguf_capabilities.to_tags();
-
-        // 4. Infer capabilities from chat template OR architecture, whichever
-        //    provides signal.  Architecture-based inference is the backstop for
-        //    models whose GGUF ships without a tokenizer section (common in
-        //    stripped quantisation builds, e.g. many Mistral/Devstral releases).
-        let template = gguf_metadata.metadata.get("tokenizer.chat_template");
-        let name = gguf_metadata.metadata.get("general.name");
-        let from_template = crate::domain::infer_from_chat_template(
-            template.map(String::as_str),
-            name.map(String::as_str),
-        );
-        let from_arch =
-            crate::domain::capabilities_from_architecture(gguf_metadata.architecture.as_deref());
-        let model_capabilities = from_template | from_arch;
-
-        // 5. Construct fully-populated NewModel
-        let new_model = NewModel {
-            name: name.cloned().unwrap_or_else(|| {
-                file_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Unknown Model")
-                    .to_string()
-            }),
-            file_path: file_path.to_path_buf(),
-            param_count_b,
-            architecture: gguf_metadata.architecture,
-            quantization: gguf_metadata.quantization,
-            context_length: gguf_metadata.context_length,
-            expert_count: gguf_metadata.expert_count,
-            expert_used_count: gguf_metadata.expert_used_count,
-            expert_shared_count: gguf_metadata.expert_shared_count,
-            metadata: gguf_metadata.metadata,
-            added_at: chrono::Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: auto_tags,
-            file_paths: None,
-            capabilities: model_capabilities,
-            inference_defaults: None,
-            server_defaults: None,
+        // 2. Build the model row via the naming/capability/tag policy shared
+        //    with the HuggingFace download path.
+        let origin = ModelOrigin::LocalFile {
+            param_count_override,
         };
+        let new_model = build_new_model(
+            file_path,
+            Some(&gguf_metadata),
+            gguf_parser,
+            &origin,
+            chrono::Utc::now(),
+        );
 
-        // 6. Persist to repository
+        // 3. Persist to repository
         self.repo.insert(&new_model).await.map_err(CoreError::from)
     }
 
@@ -480,6 +437,7 @@ impl ModelService {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // exact literal round-trip through param_count_b, no lossy conversion
 mod tests {
     use super::*;
     use crate::ports::{ModelRepository, RepositoryError};
@@ -581,6 +539,73 @@ mod tests {
                 Ok(())
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_names_from_stem() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        let model = service
+            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .await
+            .unwrap();
+
+        assert_eq!(model.name, "Qwen3-8B-Q4_K_M");
+        assert_eq!(model.hf_repo_id, None);
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_missing_path_is_validation_error() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let err = service
+            .import_from_file(
+                Path::new("/nonexistent/model.gguf"),
+                &crate::ports::NoopGgufParser,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_wrong_extension_is_validation_error() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("model.bin");
+        std::fs::File::create(&path).unwrap();
+
+        let err = service
+            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_param_override_reaches_new_model() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("model.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        let model = service
+            .import_from_file(&path, &crate::ports::NoopGgufParser, Some(13.0))
+            .await
+            .unwrap();
+
+        assert_eq!(model.param_count_b, 13.0);
     }
 
     #[tokio::test]

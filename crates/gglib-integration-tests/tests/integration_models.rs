@@ -142,7 +142,6 @@ fn test_gguf_metadata_structure() {
     metadata_map.insert("llama.vocab_size".to_string(), "32000".to_string());
 
     let gguf_metadata = GgufMetadata {
-        name: Some("Parsed Model Name".to_string()),
         architecture: Some("llama".to_string()),
         param_count_b: Some(7.0),
         quantization: Some("Q4_0".to_string()),
@@ -152,7 +151,6 @@ fn test_gguf_metadata_structure() {
     };
 
     // Test all fields are accessible
-    assert_eq!(gguf_metadata.name.unwrap(), "Parsed Model Name");
     assert_eq!(gguf_metadata.architecture.unwrap(), "llama");
     assert_eq!(gguf_metadata.param_count_b.unwrap(), 7.0);
     assert_eq!(gguf_metadata.quantization.unwrap(), "Q4_0");
@@ -165,7 +163,6 @@ fn test_gguf_metadata_with_all_none_values() {
     let gguf_metadata = GgufMetadata::default();
 
     // Should handle all None values gracefully
-    assert_eq!(gguf_metadata.name, None);
     assert_eq!(gguf_metadata.architecture, None);
     assert_eq!(gguf_metadata.param_count_b, None);
     assert_eq!(gguf_metadata.quantization, None);
@@ -300,7 +297,6 @@ fn test_model_cloning() {
 
     // GgufMetadata should be cloneable
     let gguf_metadata = GgufMetadata {
-        name: Some("Test".to_string()),
         architecture: Some("llama".to_string()),
         param_count_b: Some(7.0),
         quantization: Some("Q4_0".to_string()),
@@ -309,6 +305,5 @@ fn test_model_cloning() {
     };
 
     let cloned_metadata = gguf_metadata.clone();
-    assert_eq!(cloned_metadata.name, gguf_metadata.name);
     assert_eq!(cloned_metadata.architecture, gguf_metadata.architecture);
 }
