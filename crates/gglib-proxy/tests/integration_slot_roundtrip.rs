@@ -18,7 +18,7 @@ use serde_json::json;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use fixtures::slot_mocks::{
+use fixtures::common::{
     spawn_mock_upstream_with_slots, spawn_pinned_proxy_with_cache, spawn_proxy_with_cache,
     spawn_proxy_with_cache_for_model,
 };

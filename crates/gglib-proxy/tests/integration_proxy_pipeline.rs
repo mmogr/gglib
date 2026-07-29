@@ -17,208 +17,19 @@
 //! No `gglib_core::sse::*` types are used in the assertions; the tests speak
 //! pure HTTP + JSON, exactly like an external consumer.
 
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-use async_trait::async_trait;
-use axum::{Router, body::Body, response::Response, routing::post};
-use bytes::Bytes;
 use futures_util::StreamExt as _;
 use reqwest::Client;
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
-    ModelSummary, RunningTarget,
-};
-
 mod fixtures;
-use fixtures::common::{MockSettingsRepo, make_mcp_service, make_orchestrator_deps};
+use fixtures::common::{
+    assert_sse_canonical_envelope, parse_sse_frames, spawn_mock_upstream, spawn_proxy,
+};
 use fixtures::sse::{
     BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK, REASONING_ONLY,
     STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
 };
-
-// ─── Mock ports ────────────────────────────────────────────────────────────
-
-/// Runtime port that hands back a fixed upstream port.
-#[derive(Debug)]
-struct FixedUpstream {
-    port: u16,
-    model_name: String,
-}
-
-#[async_trait]
-impl ModelRuntimePort for FixedUpstream {
-    async fn ensure_model_running(
-        &self,
-        _model_name: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(
-            self.port,
-            1,
-            self.model_name.clone(),
-            4096,
-            false,
-        ))
-    }
-    async fn current_model(&self) -> Option<RunningTarget> {
-        None
-    }
-    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        Ok(())
-    }
-}
-
-/// Catalog port that always resolves the requested model with the given tags.
-#[derive(Debug)]
-struct TaggedCatalog {
-    name: String,
-    tags: Vec<String>,
-}
-
-#[async_trait]
-impl ModelCatalogPort for TaggedCatalog {
-    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(vec![self.summary()])
-    }
-    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        if name == self.name {
-            Ok(Some(self.summary()))
-        } else {
-            Ok(None)
-        }
-    }
-    async fn resolve_for_launch(
-        &self,
-        _name: &str,
-    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
-    }
-}
-
-impl TaggedCatalog {
-    fn summary(&self) -> ModelSummary {
-        ModelSummary {
-            id: 1,
-            name: self.name.clone(),
-            tags: self.tags.clone(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            server_defaults: None,
-        }
-    }
-}
-
-// ─── Mock upstream ─────────────────────────────────────────────────────────
-
-/// Spawn a mock upstream HTTP server that yields `chunks` (in order) when
-/// `POST /v1/chat/completions` is called.  Returns the bound port.
-///
-/// Each chunk is sent as a separate body frame so tests can deliberately
-/// split SSE frames across byte boundaries.
-async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: CancellationToken) -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let port = listener.local_addr().unwrap().port();
-
-    // Wrap chunks in a Mutex<Option<...>> so the handler can take them once
-    // (axum requires Fn handlers; we serve a single request per upstream).
-    let slot: Arc<Mutex<Option<Vec<&'static [u8]>>>> = Arc::new(Mutex::new(Some(chunks)));
-
-    let app = Router::new().route(
-        "/v1/chat/completions",
-        post(move || {
-            let slot = slot.clone();
-            async move {
-                let chunks = slot
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .unwrap_or_else(|| vec![b"data: [DONE]\n\n" as &[u8]]);
-                let stream = futures_util::stream::iter(
-                    chunks
-                        .into_iter()
-                        .map(|c| Ok::<Bytes, std::io::Error>(Bytes::from_static(c))),
-                );
-                Response::builder()
-                    .header("content-type", "text/event-stream")
-                    .header("cache-control", "no-cache")
-                    .body(Body::from_stream(stream))
-                    .unwrap()
-            }
-        }),
-    );
-
-    tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(cancel.cancelled_owned())
-            .await
-            .ok();
-    });
-
-    // Give the listener a moment to start accepting.
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    port
-}
-
-// ─── Proxy harness ─────────────────────────────────────────────────────────
-
-/// Spawn the real `gglib_proxy::serve` with the given upstream port and
-/// dialect tags.  Returns `(proxy_base_url, cancel)`.
-async fn spawn_proxy(
-    upstream_port: u16,
-    model_name: &str,
-    tags: Vec<String>,
-) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
-        port: upstream_port,
-        model_name: model_name.into(),
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
-        name: model_name.into(),
-        tags,
-    });
-    let mcp = make_mcp_service();
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            4096,
-            runtime,
-            catalog,
-            mcp,
-            make_orchestrator_deps(),
-            cancel_clone,
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            &gglib_core::CorsConfig::LocalOnly,
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
-}
 
 // ─── End-to-end driver ─────────────────────────────────────────────────────
 
@@ -267,64 +78,6 @@ async fn round_trip(
     String::from_utf8(body).expect("utf-8 body")
 }
 
-/// Parse `data:` payloads from the SSE-encoded body.  Returns one entry per
-/// frame; `[DONE]` is included as a literal `String` distinguished by the
-/// caller.
-fn parse_frames(body: &str) -> (Vec<Value>, bool) {
-    let mut frames = Vec::new();
-    let mut saw_done = false;
-    for raw in body.split("\n\n") {
-        let line = raw.trim_start();
-        let Some(payload) = line.strip_prefix("data: ") else {
-            continue;
-        };
-        if payload.trim() == "[DONE]" {
-            saw_done = true;
-            continue;
-        }
-        let v: Value = serde_json::from_str(payload).unwrap_or_else(|e| {
-            panic!("proxy emitted non-JSON data frame: {e}\nframe: {payload}");
-        });
-        frames.push(v);
-    }
-    (frames, saw_done)
-}
-
-/// Assert that every frame has the OpenAI canonical envelope and a stable
-/// `id` / `model` / `created` triple.  Returns the (id, model, created).
-fn assert_canonical_envelope(frames: &[Value], expected_model: &str) -> (String, String, u64) {
-    assert!(!frames.is_empty(), "expected at least one data frame");
-    let first = &frames[0];
-    let id = first["id"].as_str().expect("string id").to_owned();
-    let model = first["model"].as_str().expect("string model").to_owned();
-    let created = first["created"].as_u64().expect("u64 created");
-
-    assert!(
-        id.starts_with("chatcmpl-"),
-        "id should start with chatcmpl-, got {id}"
-    );
-    assert_eq!(model, expected_model, "advertised model name mismatch");
-
-    for f in frames {
-        // PromptProgress frames are top-level (no choices) — they still must
-        // share the envelope identity.
-        assert_eq!(f["object"], "chat.completion.chunk");
-        assert_eq!(f["id"], json!(id), "id must be stable across frames");
-        assert_eq!(
-            f["model"],
-            json!(model),
-            "model must be stable across frames"
-        );
-        assert_eq!(
-            f["created"],
-            json!(created),
-            "created must be stable across frames"
-        );
-    }
-
-    (id, model, created)
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // Tests
 // ═════════════════════════════════════════════════════════════════════════════
@@ -334,9 +87,9 @@ fn assert_canonical_envelope(frames: &[Value], expected_model: &str) -> (String,
 #[tokio::test]
 async fn basic_text_round_trip() {
     let body = round_trip(vec![BASIC_TEXT], "test-model", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done, "missing [DONE] terminator");
-    assert_canonical_envelope(&frames, "test-model");
+    assert_sse_canonical_envelope(&frames, "test-model");
 
     // Reconstruct the visible text from delta.content fields.
     let text: String = frames
@@ -363,9 +116,9 @@ async fn basic_text_round_trip() {
 #[tokio::test]
 async fn reasoning_content_round_trip() {
     let body = round_trip(vec![REASONING_DEEPSEEK], "r1-test", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done);
-    assert_canonical_envelope(&frames, "r1-test");
+    assert_sse_canonical_envelope(&frames, "r1-test");
 
     let reasoning: String = frames
         .iter()
@@ -385,7 +138,7 @@ async fn reasoning_content_round_trip() {
 #[tokio::test]
 async fn reasoning_only_response_is_promoted_to_content() {
     let body = round_trip(vec![REASONING_ONLY], "r1-test", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done);
 
     let reasoning: String = frames
@@ -426,9 +179,9 @@ async fn qwen_xml_tool_call_is_normalized() {
         vec!["format:qwen-xml".to_owned()],
     )
     .await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done);
-    assert_canonical_envelope(&frames, "qwen3-coder");
+    assert_sse_canonical_envelope(&frames, "qwen3-coder");
 
     // The literal Qwen markup MUST NOT appear in the wire output.
     assert!(
@@ -492,9 +245,9 @@ async fn qwen_xml_tool_call_is_normalized() {
 #[tokio::test]
 async fn standard_openai_tool_call_passthrough() {
     let body = round_trip(vec![STANDARD_OPENAI_TOOL_CALL], "strict-openai", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done);
-    assert_canonical_envelope(&frames, "strict-openai");
+    assert_sse_canonical_envelope(&frames, "strict-openai");
 
     let tc_frames: Vec<&Value> = frames
         .iter()
@@ -525,9 +278,9 @@ async fn standard_openai_tool_call_passthrough() {
 #[tokio::test]
 async fn split_frame_round_trip() {
     let body = round_trip(basic_text_split_chunks(), "split-model", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done, "missing [DONE] terminator after split chunks");
-    assert_canonical_envelope(&frames, "split-model");
+    assert_sse_canonical_envelope(&frames, "split-model");
 
     let text: String = frames
         .iter()
@@ -546,7 +299,7 @@ async fn split_frame_round_trip() {
 #[tokio::test]
 async fn malformed_json_terminates_cleanly() {
     let body = round_trip(vec![MALFORMED_JSON_RECOVERY], "noisy-model", vec![]).await;
-    let (frames, saw_done) = parse_frames(&body);
+    let (frames, saw_done) = parse_sse_frames(&body);
     assert!(saw_done, "missing [DONE] after malformed-json frame");
 
     // Pre-error content must have made it to the wire.

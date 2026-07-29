@@ -20,7 +20,7 @@ use reqwest::Client;
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use fixtures::slot_mocks::{spawn_mock_upstream_with_slots, spawn_proxy_with_cache};
+use fixtures::common::{spawn_mock_upstream_with_slots, spawn_proxy_with_cache};
 use gglib_proxy::slots::slot_bin_path;
 
 /// A slot file whose mtime predates the proxy's `server_start_time` must be
