@@ -3,6 +3,11 @@
 //! Handles starting the Axum HTTP server with optional static file serving.
 //! Discovers frontend build artifacts automatically from well-known paths,
 //! or falls back to API-only mode when no frontend is present.
+//!
+//! Bind-address and CORS resolution lives in [`bind`]; this module orchestrates
+//! it, prints the startup banner, and blocks on the server.
+
+mod bind;
 
 use std::path::PathBuf;
 
@@ -12,26 +17,29 @@ use crate::presentation::style;
 
 /// Execute the `web` command.
 ///
-/// Builds the Axum `ServerConfig`, resolves the static-files directory
-/// (explicit flag → auto-discovery → API-only), prints startup information,
-/// and then blocks until the server shuts down.
+/// Resolves the bind address and CORS policy from the flags, builds the Axum
+/// `ServerConfig`, resolves the static-files directory (explicit flag →
+/// auto-discovery → API-only), prints startup information, and then blocks
+/// until the server shuts down.
 ///
 /// # Arguments
 ///
 /// * `port`       — TCP port to listen on for HTTP requests.
+/// * `host`       — Explicit bind address; `None` uses the compiled-in default.
+/// * `share_lan`  — Expose on all LAN interfaces and relax CORS to allow all.
 /// * `base_port`  — Starting port range for llama-server subprocess allocation.
 /// * `api_only`   — When `true`, skip static-file serving regardless of flags.
 /// * `static_dir` — Explicit path to a built frontend; takes priority over
 ///   auto-discovery when `api_only` is `false`.
 pub async fn execute(
     port: u16,
-    host: String,
+    host: Option<String>,
+    share_lan: bool,
     base_port: u16,
     api_only: bool,
     static_dir: Option<PathBuf>,
 ) -> Result<()> {
     use gglib_axum::{ServerConfig, start_server};
-    use gglib_core::CorsConfig;
     use gglib_core::paths::llama_server_path;
 
     // Warn if the VITE env var is set but unparseable so the user knows
@@ -45,15 +53,17 @@ pub async fn execute(
         );
     }
 
+    let decision = bind::resolve_bind(host, share_lan)?;
+
     let mut config = ServerConfig {
-        host,
+        host: decision.host.clone(),
         port,
         base_port,
         llama_server_path: llama_server_path()?,
         max_concurrent: 4,
         max_concurrent_agent_loops: 4,
         static_dir: None,
-        cors: CorsConfig::LocalOnly,
+        cors: decision.cors,
     };
 
     // Resolve static directory: api-only flag > explicit flag > auto-discover > none
@@ -100,6 +110,24 @@ pub async fn execute(
         style::print_banner_close();
     }
 
+    if decision.share_lan {
+        print_share_lan_warning(&decision.host, port);
+    }
+
     start_server(config).await?;
     Ok(())
+}
+
+/// Print the LAN-exposure warning.
+///
+/// Sharing drops the server out of its localhost-only posture and allows every
+/// origin through CORS, so it is called out explicitly rather than buried in
+/// the startup log.
+fn print_share_lan_warning(host: &str, port: u16) {
+    eprintln!();
+    eprintln!("  \u{26a0}\u{fe0f}  LAN SHARING ENABLED (--share-lan)");
+    eprintln!("     Bound to {host}:{port} — reachable by every device on your network.");
+    eprintln!("     CORS is relaxed to allow all origins.");
+    eprintln!("     GGLib has no authentication: only use this on networks you trust.");
+    eprintln!();
 }

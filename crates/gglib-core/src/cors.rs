@@ -4,7 +4,7 @@
 //! by the Axum web server's CORS middleware.
 
 /// CORS configuration for the web server.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum CorsConfig {
     /// Allow all origins (development mode).
     AllowAll,
