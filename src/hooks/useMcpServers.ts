@@ -5,24 +5,9 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  listMcpServers,
-  addMcpServer,
-  updateMcpServer,
-  removeMcpServer,
-  startMcpServer,
-  stopMcpServer,
-  callMcpTool,
-} from "../services/clients/mcp";
-import type {
-  McpServer,
-  NewMcpServer,
-  McpServerInfo,
-  McpTool,
-  UpdateMcpServer,
-  McpServerId,
-} from "../services/clients/mcp";
 import { syncAllMcpTools } from "../services/tools";
+import { getTransport } from '../services/transport';
+import type { McpServer, NewMcpServer, McpServerInfo, McpTool, UpdateMcpServer, McpServerId } from '../services/transport';
 
 interface UseMcpServersResult {
   /** List of all MCP servers with their status */
@@ -79,7 +64,7 @@ export function useMcpServers(): UseMcpServersResult {
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      const result = await listMcpServers();
+      const result = await getTransport().listMcpServers();
       setServers(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load MCP servers");
@@ -97,7 +82,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (server: NewMcpServer) => {
       setError(null);
       try {
-        const result = await addMcpServer(server);
+        const result = await getTransport().addMcpServer(server);
         await refresh();
         return result;
       } catch (e) {
@@ -113,7 +98,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (id: McpServerId, updates: UpdateMcpServer) => {
       setError(null);
       try {
-        await updateMcpServer(id, updates);
+        await getTransport().updateMcpServer(id, updates);
         await refresh();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to update server";
@@ -128,7 +113,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (id: McpServerId) => {
       setError(null);
       try {
-        await removeMcpServer(id);
+        await getTransport().removeMcpServer(id);
         await refresh();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to remove server";
@@ -143,7 +128,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (id: McpServerId) => {
       setError(null);
       try {
-        const tools = await startMcpServer(id);
+        const tools = await getTransport().startMcpServer(id);
         await refresh();
         // Sync MCP tools to the tool registry so they're available for chat
         await syncAllMcpTools();
@@ -161,7 +146,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (id: McpServerId) => {
       setError(null);
       try {
-        await stopMcpServer(id);
+        await getTransport().stopMcpServer(id);
         await refresh();
         // Sync MCP tools to remove stopped server's tools from registry
         await syncAllMcpTools();
@@ -201,7 +186,7 @@ export function useMcpTools() {
     try {
       setError(null);
       // Get all servers and aggregate their tools
-      const servers = await listMcpServers();
+      const servers = await getTransport().listMcpServers();
       const flat: (McpTool & { server_id: McpServerId })[] = [];
       for (const info of servers) {
         for (const tool of info.tools) {
@@ -222,7 +207,7 @@ export function useMcpTools() {
 
   const callToolFn = useCallback(
     async (serverId: McpServerId, toolName: string, args: Record<string, unknown>) => {
-      return callMcpTool(serverId, toolName, args);
+      return getTransport().callMcpTool(serverId, toolName, args);
     },
     []
   );

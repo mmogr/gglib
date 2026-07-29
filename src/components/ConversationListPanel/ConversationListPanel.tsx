@@ -1,6 +1,5 @@
 import { FC } from 'react';
 import { Plus, X } from 'lucide-react';
-import type { ConversationSummary } from '../../services/clients/chat';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
@@ -8,6 +7,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import type { ConversationSummary } from '../../services/transport';
 
 interface ConversationListPanelProps {
   conversations: ConversationSummary[];

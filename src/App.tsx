@@ -13,7 +13,7 @@ import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
-import { startProxy, stopProxy } from "./services/clients/servers";
+import { getTransport } from "./services/transport";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
@@ -109,7 +109,7 @@ function AppContent() {
       },
       [MENU_EVENTS.PROXY_STOPPED]: async () => {
         try {
-          await stopProxy();
+          await getTransport().stopProxy();
           showToast('Proxy stopped', 'success');
         } catch (error) {
           showToast('Failed to stop proxy', 'error');
@@ -118,7 +118,7 @@ function AppContent() {
       },
       [MENU_EVENTS.START_PROXY]: async () => {
         try {
-          const status = await startProxy();
+          const status = await getTransport().startProxy();
           showToast(`Proxy started on port ${status.port}`, 'success');
         } catch (error) {
           showToast('Failed to start proxy', 'error');

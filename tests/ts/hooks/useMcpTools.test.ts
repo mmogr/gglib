@@ -8,14 +8,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 
-// Mock the client functions BEFORE importing the hook
-const mockListMcpServers = vi.fn();
-const mockCallMcpTool = vi.fn();
-
-vi.mock('../../../src/services/clients/mcp', () => ({
-  listMcpServers: (...args: any[]) => mockListMcpServers(...args),
-  callMcpTool: (...args: any[]) => mockCallMcpTool(...args),
+// Mock the transport BEFORE importing the hook
+const transport = vi.hoisted(() => ({
+  listMcpServers: vi.fn(),
+  callMcpTool: vi.fn(),
 }));
+
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const mockListMcpServers = transport.listMcpServers;
+const mockCallMcpTool = transport.callMcpTool;
 
 import { useMcpTools } from '../../../src/hooks/useMcpServers';
 

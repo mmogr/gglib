@@ -1,7 +1,7 @@
 import type { ThreadMessage, ThreadMessageLike } from '@assistant-ui/react';
 import { extractNonTextContentParts, extractReasoningText } from '../../utils/messages';
-import type { ChatMessageMetadata } from '../../services/clients/chat';
 import type { GglibMessageCustom } from '../../types/messages';
+import type { ChatMessageMetadata } from '../../services/transport';
 
 /**
  * Build the metadata payload for a DB save or update call.

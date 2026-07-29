@@ -2,8 +2,6 @@ import { useState, FC, useMemo } from "react";
 import { Brain, Package, Rocket, RotateCcw, Trash2, Wrench, X, Shield, CloudSync } from "lucide-react";
 import { appLogger } from '../services/platform';
 import { GgufModel } from "../types";
-import { removeModel } from "../services/clients/models";
-import { serveModel } from "../services/clients/servers";
 import { formatParamCount } from "../utils/format";
 import { TransportError, LlamaServerNotInstalledMetadata } from "../services/transport/errors";
 import { LlamaInstallModal } from "./LlamaInstallModal";
@@ -16,6 +14,7 @@ import { Row } from "./primitives";
 import { Input } from "./ui/Input";
 import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
+import { getTransport } from '../services/transport';
 
 interface ModelListProps {
   models: GgufModel[];
@@ -144,7 +143,7 @@ const ModelList: FC<ModelListProps> = ({
 
     try {
       setRemoving(model.id);
-      await removeModel(model.id);
+      await getTransport().removeModel(model.id);
       onModelRemoved();
     } catch (err) {
       showToast(`Failed to remove model: ${err}`, 'error');
@@ -187,7 +186,7 @@ const ModelList: FC<ModelListProps> = ({
         contextLength = servingModel.contextLength;
       }
       
-      await serveModel({
+      await getTransport().serveModel({
         id: servingModel.id,
         contextLength: contextLength,
         mlock: false,
@@ -213,8 +212,6 @@ const ModelList: FC<ModelListProps> = ({
       setIsServing(false);
     }
   };
-
-
 
   if (error) {
     return (

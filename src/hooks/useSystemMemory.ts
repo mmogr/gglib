@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SystemMemoryInfo, FitStatus } from "../types";
-import { getSystemMemory } from "../services/clients/system";
 import { useSettings } from "./useSettings";
+import { getTransport } from '../services/transport';
 
 /**
  * Estimate the memory required to run a model.
@@ -95,7 +95,7 @@ export function useSystemMemory(): UseSystemMemoryReturn {
     try {
       setLoading(true);
       setError(null);
-      const info = await getSystemMemory();
+      const info = await getTransport().getSystemMemory();
       setMemoryInfo(info);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
-import { getMessages, deleteMessage } from '../../../services/clients/chat';
-import type { ConversationSummary } from '../../../services/clients/chat';
 import { buildLoadedMessage, foldToolMessages } from '../../../hooks/useChatPersistence/buildLoadedMessage';
+import { getTransport } from '../../../services/transport';
+import type { ConversationSummary } from '../../../services/transport';
 
 /**
  * Options for the useChatPersistence hook.
@@ -74,7 +74,7 @@ export function useChatPersistence({
 
     const hydrate = async () => {
       try {
-        const messages = await getMessages(activeConversationId);
+        const messages = await getTransport().getMessages(activeConversationId);
         if (cancelled) return;
 
         // Fold CLI agent tool rows into assistant contentParts.
@@ -254,13 +254,13 @@ export function useMessageDelete({
       
       if (dbId) {
         // Delete from database (cascade deletes subsequent)
-        await deleteMessage(dbId);
+        await getTransport().deleteMessage(dbId);
       } else {
         appLogger.debug('hook.ui', 'Could not find DB ID for message', { messageId: deleteTargetId });
       }
       
       // Reload messages from DB and reset runtime
-      const messages = await getMessages(activeConversationId);
+      const messages = await getTransport().getMessages(activeConversationId);
       const folded = foldToolMessages(messages);
       
       const prompt = activeConversation?.system_prompt?.trim();

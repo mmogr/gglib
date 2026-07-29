@@ -16,7 +16,7 @@
  */
 
 import { subscribeSseEvent } from './transport/events/sse';
-import { getProxyStatus } from './clients/servers';
+import { getTransport } from './transport';
 import { ingestProxyEvent, resetProxyState } from './proxyRegistry';
 import type { Unsubscribe } from './transport/types/common';
 import type { ProxyEvent } from './transport/types/events';
@@ -41,7 +41,8 @@ export function initProxyEvents(): void {
 
   // 2. Hydration fetch — seed initial state from current backend status
   const versionBeforeFetch = eventVersion;
-  getProxyStatus()
+  getTransport()
+    .getProxyStatus()
     .then((status) => {
       // Drop stale hydration if a real event already arrived
       if (eventVersion !== versionBeforeFetch) return;

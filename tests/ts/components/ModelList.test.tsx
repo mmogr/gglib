@@ -2,19 +2,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ModelList from '../../../src/components/ModelList';
-import { removeModel } from '../../../src/services/clients/models';
-import { serveModel } from '../../../src/services/clients/servers';
 import type { GgufModel } from '../../../src/types';
 import { MOCK_BASE_PORT } from '../fixtures/ports';
 
-// Mock clients service functions
-vi.mock('../../../src/services/clients/models', () => ({
+const transport = vi.hoisted(() => ({
   removeModel: vi.fn(),
-}));
-
-vi.mock('../../../src/services/clients/servers', () => ({
   serveModel: vi.fn(),
 }));
+
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const { removeModel, serveModel } = transport;
 
 // Mock context providers used by ModelList
 const mockConfirm = vi.fn();

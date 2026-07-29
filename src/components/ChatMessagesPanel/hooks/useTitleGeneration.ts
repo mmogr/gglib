@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useConfirmContext } from '../../../contexts/ConfirmContext';
 import type { ThreadRuntime } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
-import { getMessages, generateChatTitle } from '../../../services/clients/chat';
-import type { ConversationSummary } from '../../../services/clients/chat';
 import type { ToastType } from '../../Toast';
+import { getTransport } from '../../../services/transport';
+import type { ConversationSummary } from '../../../services/transport';
 
 /**
  * Options for the useTitleGeneration hook.
@@ -128,18 +128,18 @@ export function useTitleGeneration({
     setIsGeneratingTitle(true);
     try {
       // Fetch fresh messages from the database
-      const messages = await getMessages(activeConversationId);
+      const messages = await getTransport().getMessages(activeConversationId);
       
       if (messages.length === 0) {
         showToast('Cannot generate title for empty conversation', 'warning');
         return;
       }
 
-      const generatedTitle = await generateChatTitle(
+      const generatedTitle = await getTransport().generateChatTitle({
         serverPort,
         messages,
-        titleGenerationPrompt,
-      );
+        prompt: titleGenerationPrompt,
+      });
 
       await onRenameConversation(generatedTitle);
       showToast('Title generated successfully', 'success');

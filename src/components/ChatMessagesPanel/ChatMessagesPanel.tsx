@@ -10,8 +10,6 @@ import {
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { getMessages, deleteMessage } from '../../services/clients/chat';
-import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ToolsPopover } from '../ToolsPopover';
@@ -38,7 +36,8 @@ import { getToolRegistry } from '../../services/tools';
 import type { GglibMessageCustom } from '../../types/messages';
 import { CouncilToggle } from '../CouncilToggle';
 import CouncilThread from '../Council/Thread/CouncilThread';
-
+import { getTransport } from '../../services/transport';
+import type { ConversationSummary } from '../../services/transport';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -280,13 +279,13 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       }
       
       if (dbId) {
-        await deleteMessage(dbId);
+        await getTransport().deleteMessage(dbId);
       } else {
         appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: deleteTargetId });
       }
       
       // Reload messages from DB and reset runtime
-      const messages = await getMessages(activeConversationId);
+      const messages = await getTransport().getMessages(activeConversationId);
       
       const prompt = activeConversation?.system_prompt?.trim();
       const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation

@@ -7,12 +7,9 @@
  * - Creating executors that call MCP servers
  */
 
-import {
-  listMcpServers,
-  callMcpTool,
-  isServerRunning,
-} from '../clients/mcp';
-import type { McpTool, McpServerId } from '../clients/mcp';
+import { getTransport } from '../transport';
+import type { McpTool, McpServerId } from '../transport';
+import { isServerRunning } from '../../utils/mcp';
 import { getToolRegistry, ToolSource } from './registry';
 import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
 import { sanitizeToolName, detectCollisions } from './nameUtils';
@@ -42,7 +39,7 @@ function mcpToolToDefinition(tool: McpTool): ToolDefinition {
 function createMcpExecutor(serverId: McpServerId, toolName: string): ToolExecutor {
   return async (args: Record<string, unknown>): Promise<ToolResult> => {
     try {
-      const result = await callMcpTool(serverId, toolName, args);
+      const result = await getTransport().callMcpTool(serverId, toolName, args);
       
       if (result.success) {
         return {
@@ -188,7 +185,7 @@ export async function syncAllMcpTools(): Promise<{ added: number; removed: numbe
   // Then, get all running servers and register their tools
   let added = 0;
   try {
-    const servers = await listMcpServers();
+    const servers = await getTransport().listMcpServers();
     for (const info of servers) {
       if (isServerRunning(info)) {
         added += registerMcpTools(info.server.id, info.tools);

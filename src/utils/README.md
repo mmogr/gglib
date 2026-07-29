@@ -17,6 +17,7 @@ Shared TypeScript helpers used across the React frontend.
 | `sse.ts` | Server-Sent Events client with reconnect logic |
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
+| `mcp.ts` | MCP server status predicates (running / error state) |
 | `messages/` | Chat message transformation helpers |
 
 For Rust-side utilities (paths, config, process management), see [gglib-core](../../crates/gglib-core/README.md) and [gglib-runtime](../../crates/gglib-runtime/README.md).

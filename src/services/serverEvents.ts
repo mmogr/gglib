@@ -9,8 +9,7 @@
 
 import { isDesktop } from './platform';
 import { initTauriServerEvents, cleanupTauriServerEvents } from './serverEvents.tauri';
-import { subscribeToEvent } from './clients/events';
-import { listServers } from './clients/servers';
+import { getTransport } from './transport';
 import type { Unsubscribe } from './transport/types/common';
 import { ingestServerEvent } from './serverRegistry';
 import { normalizeServerEventFromAppEvent } from './serverEvents.normalize';
@@ -38,7 +37,7 @@ export async function initServerEvents(): Promise<void> {
     webEventVersion = 0;
 
     // 1. Subscribe FIRST so no events are missed during hydration fetch
-    webUnsubscribe = subscribeToEvent('server', (payload) => {
+    webUnsubscribe = getTransport().subscribe('server', (payload) => {
       webEventVersion++;
       const normalized = normalizeServerEventFromAppEvent(payload as unknown);
       if (normalized) {
@@ -48,7 +47,8 @@ export async function initServerEvents(): Promise<void> {
 
     // 2. Hydration fetch — seed registry with servers already running on page load
     const versionBeforeFetch = webEventVersion;
-    listServers()
+    getTransport()
+      .listServers()
       .then((servers) => {
         // Drop stale hydration if a live server event already arrived
         if (webEventVersion !== versionBeforeFetch) return;
