@@ -10,7 +10,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 
-use crate::domain::{Model, NewModel, NewModelFile};
+use super::{HfOrigin, ModelOrigin, build_new_model};
+use crate::domain::{Model, NewModelFile};
 use crate::download::Quantization;
 use crate::ports::{
     CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RepositoryError,
@@ -58,49 +59,6 @@ impl ModelRegistrar {
             model_files_repo,
         }
     }
-
-    /// Filter `HuggingFace` tags using a blocklist.
-    ///
-    /// Removes noisy tags like `gguf`, `arxiv:*`, `region:*`, `license:*`, `dataset:*`.
-    fn filter_hf_tags(tags: &[String]) -> Vec<String> {
-        tags.iter()
-            .filter(|tag| {
-                let tag_lower = tag.to_lowercase();
-                !tag_lower.starts_with("arxiv:")
-                    && !tag_lower.starts_with("region:")
-                    && !tag_lower.starts_with("license:")
-                    && !tag_lower.starts_with("dataset:")
-                    && tag_lower != "gguf"
-            })
-            .cloned()
-            .collect()
-    }
-
-    /// Merge GGUF-derived tags with filtered HF tags, removing duplicates.
-    ///
-    /// GGUF-derived tags are prioritized (appear first in the result).
-    fn merge_tags(gguf_tags: Vec<String>, hf_tags: &[String]) -> Vec<String> {
-        use std::collections::HashSet;
-
-        let mut seen = HashSet::new();
-        let mut result = Vec::new();
-
-        // Add GGUF tags first
-        for tag in gguf_tags {
-            if seen.insert(tag.clone()) {
-                result.push(tag);
-            }
-        }
-
-        // Add filtered HF tags
-        for tag in Self::filter_hf_tags(hf_tags) {
-            if seen.insert(tag.clone()) {
-                result.push(tag);
-            }
-        }
-
-        result
-    }
 }
 
 #[async_trait]
@@ -111,73 +69,20 @@ impl ModelRegistrarPort for ModelRegistrar {
         // Parse GGUF metadata from the downloaded file
         let gguf_metadata = self.gguf_parser.parse(file_path).ok();
 
-        // Extract param_count_b from metadata, fall back to 0.0
-        let param_count_b = gguf_metadata
-            .as_ref()
-            .and_then(|m| m.param_count_b)
-            .unwrap_or(0.0);
-
-        let mut model = NewModel::new(
-            download.repo_id.clone(),
-            file_path.to_path_buf(),
-            param_count_b,
+        let origin = ModelOrigin::HuggingFace(HfOrigin {
+            repo_id: &download.repo_id,
+            commit_sha: &download.commit_sha,
+            hf_tags: &download.hf_tags,
+            quantization_fallback: download.quantization,
+            file_paths: download.file_paths.as_deref(),
+        });
+        let model = build_new_model(
+            file_path,
+            gguf_metadata.as_ref(),
+            self.gguf_parser.as_ref(),
+            &origin,
             Utc::now(),
         );
-
-        // Use extracted metadata where available, with fallbacks
-        model.quantization = gguf_metadata
-            .as_ref()
-            .and_then(|m| m.quantization.clone())
-            .or_else(|| Some(download.quantization.to_string()));
-        model.architecture = gguf_metadata.as_ref().and_then(|m| m.architecture.clone());
-        model.context_length = gguf_metadata.as_ref().and_then(|m| m.context_length);
-        model.expert_count = gguf_metadata.as_ref().and_then(|m| m.expert_count);
-        model.expert_used_count = gguf_metadata.as_ref().and_then(|m| m.expert_used_count);
-        model.expert_shared_count = gguf_metadata.as_ref().and_then(|m| m.expert_shared_count);
-        if let Some(ref meta) = gguf_metadata {
-            model.metadata.clone_from(&meta.metadata);
-        }
-        model.hf_repo_id = Some(download.repo_id.clone());
-        model.hf_commit_sha = Some(download.commit_sha.clone());
-        model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
-        model.download_date = Some(Utc::now());
-
-        // Pass through file_paths for sharded models
-        model.file_paths.clone_from(&download.file_paths);
-
-        // Auto-detect capabilities from metadata and merge with HF tags
-        let gguf_tags = gguf_metadata.as_ref().map_or_else(Vec::new, |meta| {
-            let capabilities = self.gguf_parser.detect_capabilities(meta);
-            capabilities.to_tags()
-        });
-
-        // Merge GGUF-derived tags with filtered HF tags (deduplicated)
-        model.tags = Self::merge_tags(gguf_tags, &download.hf_tags);
-
-        // Apply tag-based inference defaults for reasoning models.
-        // Only set when the model has no explicit defaults already — ensures
-        // that user-curated defaults are never clobbered by re-registration.
-        if model.inference_defaults.is_none()
-            && model
-                .tags
-                .iter()
-                .any(|t| t.eq_ignore_ascii_case("reasoning"))
-        {
-            model.inference_defaults = Some(crate::domain::InferenceConfig::reasoning_profile());
-        }
-
-        // Infer capabilities from chat template OR architecture — OR'd so
-        // either signal is sufficient.  Architecture is the backstop for models
-        // whose GGUF ships without a tokenizer section.
-        let template = model.metadata.get("tokenizer.chat_template");
-        let name = model.metadata.get("general.name");
-        let arch = model.metadata.get("general.architecture");
-        let from_template = crate::domain::infer_from_chat_template(
-            template.map(String::as_str),
-            name.map(String::as_str),
-        );
-        let from_arch = crate::domain::capabilities_from_architecture(arch.map(String::as_str));
-        model.capabilities = from_template | from_arch;
 
         let registered = self.model_repo.insert(&model).await?;
 
@@ -237,7 +142,7 @@ impl ModelRegistrarPort for ModelRegistrar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Model;
+    use crate::domain::{Model, NewModel};
     use crate::ports::NoopGgufParser;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -348,7 +253,7 @@ mod tests {
         assert!(result.is_ok());
 
         let model = result.unwrap();
-        assert_eq!(model.name, "test/model");
+        assert_eq!(model.name, "model");
         assert_eq!(model.hf_repo_id, Some("test/model".to_string()));
         assert_eq!(model.hf_commit_sha, Some("abc123".to_string()));
         assert_eq!(model.quantization, Some("Q4_K_M".to_string()));
@@ -383,6 +288,7 @@ mod tests {
 
         let model = result.unwrap();
         assert_eq!(model.quantization, Some("Q8_0".to_string()));
+        assert_eq!(model.name, "llama");
     }
 
     #[tokio::test]
@@ -402,6 +308,6 @@ mod tests {
 
         assert!(result.is_ok());
         let model = result.unwrap();
-        assert_eq!(model.name, "test/repo");
+        assert_eq!(model.name, "repo");
     }
 }
