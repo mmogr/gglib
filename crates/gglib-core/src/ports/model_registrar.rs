@@ -31,8 +31,6 @@ pub struct CompletedDownload {
     pub commit_sha: String,
     /// Whether this was a sharded download.
     pub is_sharded: bool,
-    /// Total bytes downloaded.
-    pub total_bytes: u64,
     /// Ordered list of all file paths for sharded models (None for single-file models).
     pub file_paths: Option<Vec<std::path::PathBuf>>,
     /// `HuggingFace` tags for the model.
