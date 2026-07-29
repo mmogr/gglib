@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
-use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort};
+use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, Quantization};
 
 use crate::capabilities;
 use crate::error::GgufResult;
@@ -277,15 +277,12 @@ fn parse_param_from_filename(filename: &str) -> Option<f64> {
 
 /// Extract quantization from filename.
 fn extract_quantization_from_filename(filename: &str) -> String {
-    let upper = filename.to_ascii_uppercase();
-
-    for q in quantization::KNOWN_PATTERNS {
-        if upper.contains(q) {
-            return q.to_string();
-        }
+    let quant = Quantization::from_filename(filename);
+    if quant.is_unknown() {
+        "Unknown".to_string()
+    } else {
+        quant.as_str().to_string()
     }
-
-    "Unknown".to_string()
 }
 
 /// Extract quantization from metadata or filename.
@@ -412,5 +409,16 @@ mod tests {
         );
         assert_eq!(extract_quantization_from_filename("model-f16.gguf"), "F16");
         assert_eq!(extract_quantization_from_filename("model.gguf"), "Unknown");
+        // Previously missed by the old 14-pattern hardcoded list, which had
+        // no Unsloth "UD-" dynamic-quant handling at all.
+        assert_eq!(
+            extract_quantization_from_filename("model-UD-Q4_K_M.gguf"),
+            "UD-Q4_K_M"
+        );
+        // Also previously missed: any IQ-family pattern.
+        assert_eq!(
+            extract_quantization_from_filename("model-IQ4_XS.gguf"),
+            "IQ4_XS"
+        );
     }
 }

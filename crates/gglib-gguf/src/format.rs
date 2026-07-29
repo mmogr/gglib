@@ -22,13 +22,6 @@ pub mod quantization {
             _ => None,
         }
     }
-
-    /// Known quantization patterns to search for in filenames.
-    /// Ordered with longer patterns first to avoid partial matches.
-    pub const KNOWN_PATTERNS: [&str; 14] = [
-        "Q8_K_XL", "Q8_K_L", "Q8_K_M", "Q4_K_M", "Q4_K_S", "Q5_K_M", "Q5_K_S", "Q8_K", "Q6_K",
-        "Q3_K", "Q2_K", "Q8_0", "F16", "BF16",
-    ];
 }
 
 /// Architecture-specific context length metadata keys.
