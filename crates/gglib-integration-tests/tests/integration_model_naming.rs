@@ -15,10 +15,8 @@ use std::sync::Arc;
 use common::setup_test_pool;
 
 use gglib_core::services::ModelService;
-use gglib_core::{
-    CompletedDownload, ModelRegistrar, ModelRegistrarPort, ModelRepository, Quantization,
-};
-use gglib_db::SqliteModelRepository;
+use gglib_core::{CompletedDownload, ModelRegistrarPort, ModelRepository, Quantization};
+use gglib_db::{CoreFactory, SqliteModelRepository};
 use gglib_gguf::GgufParser;
 
 /// Write a minimal valid GGUF file containing only the given string
@@ -62,8 +60,7 @@ async fn register_from_hf(
     quantization: &str,
 ) -> gglib_core::Model {
     let pool = setup_test_pool().await.unwrap();
-    let repo = Arc::new(SqliteModelRepository::new(pool));
-    let registrar = ModelRegistrar::new(repo, Arc::new(GgufParser::new()), None);
+    let registrar = CoreFactory::model_registrar_for_test(pool, Arc::new(GgufParser::new()));
     let download = CompletedDownload {
         primary_path: file_path.to_path_buf(),
         all_paths: vec![file_path.to_path_buf()],
@@ -123,16 +120,16 @@ async fn duplicate_names_from_distinct_repos_both_persist_and_resolve() {
     write_gguf_fixture(&path_b, &[("general.name", "Qwen3-8B")]);
 
     let pool = setup_test_pool().await.unwrap();
-    let repo = Arc::new(SqliteModelRepository::new(pool));
-    let registrar = ModelRegistrar::new(repo.clone(), Arc::new(GgufParser::new()), None);
+    let repo = Arc::new(SqliteModelRepository::new(pool.clone()));
+    let registrar = CoreFactory::model_registrar_for_test(pool, Arc::new(GgufParser::new()));
 
     for (path, repo_id) in [
         (&path_a, "bartowski/Qwen3-8B-GGUF"),
         (&path_b, "unsloth/Qwen3-8B-GGUF"),
     ] {
         let download = CompletedDownload {
-            primary_path: path.to_path_buf(),
-            all_paths: vec![path.to_path_buf()],
+            primary_path: path.clone(),
+            all_paths: vec![path.clone()],
             quantization: Quantization::from_filename("Q4_K_M"),
             repo_id: repo_id.to_string(),
             commit_sha: "abc123".to_string(),
