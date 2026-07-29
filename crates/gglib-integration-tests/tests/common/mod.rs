@@ -11,6 +11,11 @@ pub use gglib_db::setup_test_database as setup_test_pool;
 /// version `u32` LE, tensor count `u64` LE (0), metadata count `u64` LE,
 /// then per pair: key length `u64` LE + UTF-8 bytes, value type `u32` LE
 /// (`8` = String), value length `u64` LE + UTF-8 bytes.
+///
+/// `mod common` is compiled once per integration-test binary, and not every
+/// binary that includes it calls every helper -- allowed here rather than
+/// split into a per-consumer module.
+#[allow(dead_code)]
 pub fn write_gguf_fixture(path: &Path, pairs: &[(&str, &str)]) {
     let mut buf = Vec::new();
     buf.extend_from_slice(b"GGUF");

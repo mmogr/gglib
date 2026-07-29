@@ -483,7 +483,6 @@ impl Quantization {
     /// table: candidate generation only needs the string half, and the
     /// smaller surface avoids committing to more than the current caller
     /// needs.
-    #[must_use]
     pub fn canonical_patterns() -> impl Iterator<Item = &'static str> {
         QUANT_PATTERNS.iter().map(|(pattern, _)| *pattern)
     }
