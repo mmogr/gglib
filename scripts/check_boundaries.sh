@@ -71,6 +71,38 @@ check_crate_deps() {
     fi
 }
 
+check_surface_isolation() {
+    local crate=$1
+    local deps
+    deps=$(cargo tree -p "$crate" --depth 1 --prefix none 2>/dev/null | tail -n +2 | awk '{print $1}')
+
+    local violations=()
+    for dep in $deps; do
+        for sibling in "${SURFACE_CRATES[@]}"; do
+            if [[ "$dep" == "$sibling" && "$dep" != "$crate" ]]; then
+                local edge="$crate->$dep"
+                local allowed=0
+                for exception in "${SURFACE_ALLOWED_EXCEPTIONS[@]}"; do
+                    [[ "$edge" == "$exception" ]] && allowed=1
+                done
+                [[ $allowed -eq 0 ]] && violations+=("$dep")
+            fi
+        done
+    done
+
+    if [[ ${#violations[@]} -gt 0 ]]; then
+        log "${RED}FAIL${NC}: $crate"
+        log "  Undocumented surface-to-surface dependencies: ${violations[*]}"
+        local violations_json=$(printf '"%s",' "${violations[@]}" | sed 's/,$//')
+        RESULTS+=("{\"crate\": \"$crate-surface-isolation\", \"status\": \"fail\", \"violations\": [$violations_json]}")
+        return 1
+    else
+        log "${GREEN}PASS${NC}: $crate"
+        RESULTS+=("{\"crate\": \"$crate-surface-isolation\", \"status\": \"pass\", \"violations\": []}")
+        return 0
+    fi
+}
+
 main() {
     log "🔍 Checking workspace crate boundaries..."
     log ""
@@ -116,7 +148,23 @@ main() {
         FAILED=1
     fi
     log ""
-    
+
+    # Surface-to-surface isolation: CLI_FORBIDDEN/AXUM_FORBIDDEN/TAURI_FORBIDDEN
+    # above only match external crate names (e.g. `axum`), never sibling
+    # `gglib-*` crates, so they miss a direct surface-to-surface edge like
+    # `gglib-cli -> gglib-axum`. Check sibling names directly instead, with
+    # the one exception CONTRIBUTING.md documents.
+    SURFACE_CRATES=(gglib-cli gglib-axum gglib-tauri)
+    SURFACE_ALLOWED_EXCEPTIONS=("gglib-cli->gglib-axum")
+
+    log "📦 Surface-to-surface isolation (no undocumented cli/axum/tauri cross-deps)"
+    for surface_crate in "${SURFACE_CRATES[@]}"; do
+        if ! check_surface_isolation "$surface_crate"; then
+            FAILED=1
+        fi
+    done
+    log ""
+
     # Domain/service layer crates - no UI adapters
     DOMAIN_FORBIDDEN=(axum tower tower-http clap tauri hyper sqlx)
     
