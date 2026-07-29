@@ -89,7 +89,13 @@ impl ModelRepository for SqliteModelRepository {
     }
 
     async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
-        let query = format!("SELECT {} FROM models WHERE name = ?", MODEL_SELECT_COLUMNS);
+        // ORDER BY id makes resolution deterministic when two rows share a
+        // name (e.g. two quants of the same repo, or two repos that declare
+        // the same general.name) instead of depending on SQLite storage order.
+        let query = format!(
+            "SELECT {} FROM models WHERE name = ? ORDER BY models.id LIMIT 1",
+            MODEL_SELECT_COLUMNS
+        );
 
         let row = sqlx::query(&query)
             .bind(name)
@@ -150,7 +156,7 @@ impl ModelRepository for SqliteModelRepository {
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags,
                 capabilities = excluded.capabilities,
-                inference_defaults = excluded.inference_defaults
+                inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults)
             "#,
         )
         .bind(&model.name)
@@ -357,5 +363,45 @@ mod tests {
         repo.insert(&make_model("Zeta")).await.unwrap();
         repo.insert(&make_model("Zeta")).await.unwrap();
         assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn upsert_preserves_user_curated_inference_defaults() {
+        use gglib_core::domain::InferenceConfig;
+
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Eta")).await.unwrap();
+
+        // Simulate the user hand-tuning inference defaults after import.
+        let mut curated = inserted.clone();
+        curated.inference_defaults = Some(InferenceConfig {
+            temperature: Some(0.42),
+            ..Default::default()
+        });
+        repo.update(&curated).await.unwrap();
+
+        // Re-registering the same model (same model_key) must not clobber
+        // the curated defaults with the freshly-built NewModel's None.
+        repo.insert(&make_model("Eta")).await.unwrap();
+
+        let refetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(
+            refetched.inference_defaults.and_then(|c| c.temperature),
+            Some(0.42)
+        );
+    }
+
+    #[tokio::test]
+    async fn get_by_name_is_deterministic_for_duplicate_names() {
+        let repo = repo().await;
+        // Two distinct model_keys (different file paths) sharing one name.
+        let first = repo.insert(&make_model("Theta")).await.unwrap();
+        let mut second_source = make_model("Theta");
+        second_source.file_path = PathBuf::from("/models/Theta-2.gguf");
+        repo.insert(&second_source).await.unwrap();
+
+        // Deterministic: always resolves to the lowest id, not storage order.
+        let resolved = repo.get_by_name("Theta").await.unwrap();
+        assert_eq!(resolved.id, first.id);
     }
 }
