@@ -437,6 +437,7 @@ impl ModelService {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // exact literal round-trip through param_count_b, no lossy conversion
 mod tests {
     use super::*;
     use crate::ports::{ModelRepository, RepositoryError};

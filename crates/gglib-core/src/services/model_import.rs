@@ -25,7 +25,7 @@ pub enum ModelOrigin<'a> {
 }
 
 impl ModelOrigin<'_> {
-    fn name_source(&self) -> NameSource<'_> {
+    const fn name_source(&self) -> NameSource<'_> {
         match self {
             Self::LocalFile { .. } => NameSource::LocalFile,
             Self::HuggingFace(hf) => NameSource::HuggingFace {
@@ -174,6 +174,7 @@ pub fn build_new_model(
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // exact literal round-trip through param_count_b, no lossy conversion
 mod tests {
     use super::*;
     use crate::ports::NoopGgufParser;
