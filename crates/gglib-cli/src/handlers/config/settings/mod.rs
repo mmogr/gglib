@@ -151,6 +151,8 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             max_tool_iterations,
             max_stagnation_steps,
             show_memory_fit_indicators,
+            bind_host,
+            share_lan,
         } => {
             // Collect the kebab-case keys of every flag that was provided.
             let mut changed: BTreeSet<&str> = BTreeSet::new();
@@ -178,6 +180,12 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if show_memory_fit_indicators.is_some() {
                 changed.insert("show-memory-fit-indicators");
             }
+            if bind_host.is_some() {
+                changed.insert("bind-host");
+            }
+            if share_lan.is_some() {
+                changed.insert("share-lan");
+            }
 
             if changed.is_empty() {
                 println!("No settings provided. Use --help to see available options.");
@@ -198,6 +206,8 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 inference_profiles: None,
                 setup_completed: None,
                 title_generation_prompt: None,
+                bind_host: bind_host.map(Some),
+                share_lan: share_lan.map(Some),
             };
 
             // Pre-validate: merge the prospective update into a local copy and validate
@@ -226,6 +236,12 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.show_memory_fit_indicators {
                 prospective.show_memory_fit_indicators = Some(v);
+            }
+            if let Some(Some(v)) = &update.bind_host {
+                prospective.bind_host = Some(v.clone());
+            }
+            if let Some(Some(v)) = update.share_lan {
+                prospective.share_lan = Some(v);
             }
             validate_settings(&prospective)?;
 

@@ -145,6 +145,81 @@ mod tests {
         assert_eq!(loaded.proxy_port, Some(9090));
     }
 
+    /// The settings table is key-value, so a new field needs no DDL — it
+    /// round-trips as its own row keyed by the serde field name.
+    #[tokio::test]
+    async fn test_save_and_load_bind_host() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool.clone());
+        repo.ensure_table().await.unwrap();
+
+        let settings = Settings {
+            bind_host: Some("0.0.0.0".to_owned()),
+            ..Settings::default()
+        };
+        repo.save(&settings).await.unwrap();
+
+        assert_eq!(
+            repo.load().await.unwrap().bind_host,
+            Some("0.0.0.0".to_owned())
+        );
+
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT value FROM settings_kv WHERE key = 'bind_host'")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            row.map(|r| r.0),
+            Some("\"0.0.0.0\"".to_owned()),
+            "bind_host is stored under its serde field name as compact JSON"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_save_and_load_share_lan() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool);
+        repo.ensure_table().await.unwrap();
+
+        let mut settings = Settings {
+            share_lan: Some(true),
+            ..Settings::default()
+        };
+        repo.save(&settings).await.unwrap();
+        assert_eq!(repo.load().await.unwrap().share_lan, Some(true));
+
+        // `--share-lan false` must be persistable as a real value, not erased:
+        // it is the documented way to switch LAN sharing back off.
+        settings.share_lan = Some(false);
+        repo.save(&settings).await.unwrap();
+        assert_eq!(repo.load().await.unwrap().share_lan, Some(false));
+    }
+
+    /// A database written before these fields existed has no rows for them.
+    /// `Settings` is `#[serde(default)]` with `Option` fields, so the absent
+    /// rows deserialize to `None` rather than failing the whole load — which
+    /// is why no migration is needed for the new columns.
+    #[tokio::test]
+    async fn test_load_tolerates_rows_written_before_new_fields_existed() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool.clone());
+        repo.ensure_table().await.unwrap();
+
+        // Simulate a pre-existing DB: only an old key is present.
+        sqlx::query(
+            "INSERT INTO settings_kv (key, value, updated_at) VALUES ('proxy_port', '9090', '')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let loaded = repo.load().await.expect("older row sets still load");
+        assert_eq!(loaded.proxy_port, Some(9090));
+        assert_eq!(loaded.bind_host, None);
+        assert_eq!(loaded.share_lan, None);
+    }
+
     #[tokio::test]
     async fn test_none_fields_are_deleted_from_db() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -13,25 +13,28 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::presentation::style;
 
 /// Execute the `web` command.
 ///
-/// Resolves the bind address and CORS policy from the flags, builds the Axum
-/// `ServerConfig`, resolves the static-files directory (explicit flag →
-/// auto-discovery → API-only), prints startup information, and then blocks
-/// until the server shuts down.
+/// Resolves the bind address and CORS policy from the flags and stored
+/// settings, builds the Axum `ServerConfig`, resolves the static-files
+/// directory (explicit flag → auto-discovery → API-only), prints startup
+/// information, and then blocks until the server shuts down.
 ///
 /// # Arguments
 ///
+/// * `ctx`        — CLI context; supplies the stored binding preferences.
 /// * `port`       — TCP port to listen on for HTTP requests.
-/// * `host`       — Explicit bind address; `None` uses the compiled-in default.
+/// * `host`       — Explicit bind address; `None` falls back to settings.
 /// * `share_lan`  — Expose on all LAN interfaces and relax CORS to allow all.
 /// * `base_port`  — Starting port range for llama-server subprocess allocation.
 /// * `api_only`   — When `true`, skip static-file serving regardless of flags.
 /// * `static_dir` — Explicit path to a built frontend; takes priority over
 ///   auto-discovery when `api_only` is `false`.
 pub async fn execute(
+    ctx: &CliContext,
     port: u16,
     host: Option<String>,
     share_lan: bool,
@@ -53,7 +56,8 @@ pub async fn execute(
         );
     }
 
-    let decision = bind::resolve_bind(host, share_lan)?;
+    let settings = ctx.app.settings().get().await?;
+    let decision = bind::resolve_bind(host, share_lan, &settings)?;
 
     let mut config = ServerConfig {
         host: decision.host.clone(),

@@ -169,6 +169,14 @@ pub enum SettingsCommand {
         /// Show memory fit indicators in HuggingFace browser
         #[arg(long)]
         show_memory_fit_indicators: Option<bool>,
+        /// Host address `gglib web` binds to (an IP, e.g. 127.0.0.1 or 0.0.0.0).
+        /// The `--host` flag overrides this for a single run.
+        #[arg(long)]
+        bind_host: Option<String>,
+        /// Expose `gglib web` on all LAN interfaces and broadcast over mDNS.
+        /// WARNING: makes GGLib visible to every device on your network.
+        #[arg(long)]
+        share_lan: Option<bool>,
     },
     /// Reset all settings to defaults
     Reset {

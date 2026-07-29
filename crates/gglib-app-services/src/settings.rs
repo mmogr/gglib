@@ -117,6 +117,8 @@ impl SettingsOps {
             inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
             title_generation_prompt: settings.title_generation_prompt,
+            bind_host: settings.bind_host,
+            share_lan: settings.share_lan,
         })
     }
 
@@ -136,6 +138,8 @@ impl SettingsOps {
             inference_profiles: request.inference_profiles,
             setup_completed: request.setup_completed,
             title_generation_prompt: request.title_generation_prompt,
+            bind_host: request.bind_host,
+            share_lan: request.share_lan,
         };
 
         let settings = self
@@ -164,6 +168,8 @@ impl SettingsOps {
             inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
             title_generation_prompt: settings.title_generation_prompt,
+            bind_host: settings.bind_host,
+            share_lan: settings.share_lan,
         })
     }
 
@@ -317,6 +323,8 @@ mod tests {
             inference_profiles: Some(vec![profile("coding", 0.2)]),
             setup_completed: None,
             title_generation_prompt: None,
+            bind_host: None,
+            share_lan: None,
         };
 
         let json = serde_json::to_value(&settings).expect("serializes");
