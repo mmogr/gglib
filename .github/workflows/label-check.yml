@@ -6,11 +6,6 @@
 #   size:*       — estimated effort
 #
 # Automated PRs (version bumps, dependency updates) are exempt.
-#
-# After merging this file, add the status check to the ruleset:
-#   1. Go to Settings → Rules → ggRules → "Required status checks"
-#   2. Add: "Label Check" (integration: GitHub Actions)
-#   3. Save
 
 name: Label Check
 
