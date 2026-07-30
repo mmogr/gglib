@@ -9,12 +9,18 @@ vi.mock('../../../../src/services/serverRegistry', () => ({
   },
 }));
 
-vi.mock('../../../../src/services/clients/servers', () => ({
+const transport = vi.hoisted(() => ({
   stopServer: vi.fn(),
 }));
 
+vi.mock('../../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const { stopServer } = transport;
+
 import { safeStopServer } from '../../../../src/services/server/safeActions';
-import { stopServer } from '../../../../src/services/clients/servers';
 import { TransportError } from '../../../../src/services/transport/errors';
 
 describe('safeStopServer', () => {

@@ -1,8 +1,7 @@
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { reconstructContent } from '../../utils/messages';
 import type { SerializableContentPart, SerializableToolCallPart } from '../../utils/messages';
-import type { ChatMessage } from '../../services/clients/chat';
-
+import type { ChatMessage } from '../../services/transport';
 
 // ============================================================================
 // Tool-row folding (CLI agent conversations store tool results as separate rows)

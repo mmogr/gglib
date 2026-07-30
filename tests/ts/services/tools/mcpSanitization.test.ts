@@ -13,16 +13,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerMcpTools } from '../../../../src/services/tools/mcpIntegration';
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
-import type { McpTool } from '../../../../src/services/clients/mcp';
+import type { McpTool } from '../../../../src/services/transport';
 import type { ToolCall } from '../../../../src/services/tools/types';
 
 // =============================================================================
 // Module mocks (same pattern as mcpIntegration.test.ts)
 // =============================================================================
 
-vi.mock('../../../../src/services/clients/mcp', () => ({
+const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
   callMcpTool: vi.fn(),
+}));
+
+vi.mock('../../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+vi.mock('../../../../src/utils/mcp', () => ({
   isServerRunning: vi.fn(),
 }));
 
@@ -70,11 +78,10 @@ function makeToolCall(sanitizedName: string, args: Record<string, unknown> = {},
 describe('MCP tool name sanitization round-trip', () => {
   let callMcpTool: ReturnType<typeof vi.fn>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     resetToolRegistry();
     mockWarn.mockClear();
-    const mcp = await import('../../../../src/services/clients/mcp');
-    callMcpTool = vi.mocked(mcp.callMcpTool);
+    callMcpTool = transport.callMcpTool;
     callMcpTool.mockReset();
   });
 

@@ -8,7 +8,7 @@ import {
 import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
-import ThinkingBlock from '../ThinkingBlock';
+import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';

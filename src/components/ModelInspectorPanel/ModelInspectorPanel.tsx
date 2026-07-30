@@ -2,7 +2,6 @@ import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
-import { queueDownload } from '../../services/clients/downloads';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import { useSettings } from '../../hooks/useSettings';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -26,6 +25,7 @@ import {
   InspectorEmptyState,
   InspectorModals,
 } from './components';
+import { getTransport } from '../../services/transport';
 
 /**
  * Outer shell. `overflow-hidden` (not `auto`) so the header and footer stay
@@ -136,7 +136,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Download handler for HF models
   const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
     try {
-      await queueDownload({ modelId, quantization });
+      await getTransport().queueDownload({ modelId, quantization });
       showToast(`Download queued: ${modelId}`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start download';

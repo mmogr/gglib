@@ -486,6 +486,9 @@ pub struct AppSettings {
     pub setup_completed: Option<bool>,
     // Title generation
     pub title_generation_prompt: Option<String>,
+    // Network binding (see `gglib_core::Settings`)
+    pub bind_host: Option<String>,
+    pub share_lan: Option<bool>,
 }
 
 /// Request body for updating application settings.
@@ -529,6 +532,11 @@ pub struct UpdateSettingsRequest {
     // Title generation
     #[serde(default, with = "serde_with::rust::double_option")]
     pub title_generation_prompt: Option<Option<String>>,
+    // Network binding (see `gglib_core::Settings`)
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub bind_host: Option<Option<String>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub share_lan: Option<Option<bool>>,
 }
 
 // ============================================================================

@@ -4,9 +4,9 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { cn } from '../../utils/cn';
-import { Icon } from '../ui/Icon';
-import { useThinkingTiming } from './context/ThinkingTimingContext';
+import { cn } from '../../../utils/cn';
+import { Icon } from '../../ui/Icon';
+import { useThinkingTiming } from '../context/ThinkingTimingContext';
 
 /** Format duration for display: "5.2s" or "1m 23s". */
 function formatThinkingDuration(seconds: number): string {

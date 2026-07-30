@@ -1,6 +1,6 @@
 import { FC, useState, useRef } from "react";
 import { ChevronDown, ChevronUp, ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
-import { startProxy, stopProxy } from "../services/clients/servers";
+import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { useProxyState } from "../services/proxyRegistry";
@@ -68,7 +68,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       // Only include default_context when the user explicitly set one —
       // omitting it lets the backend resolve the default from settings.
       const { default_context, ...rest } = config;
-      await startProxy(
+      await getTransport().startProxy(
         default_context !== undefined ? { ...rest, default_context } : rest,
       );
     } catch (err) {
@@ -81,7 +81,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const handleStop = async () => {
     try {
       setLoading(true);
-      await stopProxy();
+      await getTransport().stopProxy();
     } catch (err) {
       showToast(`Failed to stop proxy: ${err}`, 'error');
     } finally {

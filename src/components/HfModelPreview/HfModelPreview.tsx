@@ -13,13 +13,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { HfModelSummary, HfQuantization, HfQuantizationsResponse, ToolSupportResponse, FitStatus } from '../../types';
-import { getHfQuantizations, getHfToolSupport } from '../../services/clients/huggingface';
 import { openUrl } from '../../services/platform';
 import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
 import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
+import { getTransport } from '../../services/transport';
 
 interface HfModelPreviewProps {
   /** The selected HuggingFace model to preview */
@@ -116,7 +116,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       setQuantError(null);
       
       try {
-        const response: HfQuantizationsResponse = await getHfQuantizations(model.id);
+        const response: HfQuantizationsResponse = await getTransport().getHfQuantizations(model.id);
         if (!cancelled) {
           // Sort by size ascending (smallest first)
           const sorted = [...response.quantizations].sort((a, b) => a.size_bytes - b.size_bytes);
@@ -149,7 +149,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       setToolSupport(null);
       
       try {
-        const response = await getHfToolSupport(model.id);
+        const response = await getTransport().getHfToolSupport(model.id);
         if (!cancelled) {
           setToolSupport(response);
         }

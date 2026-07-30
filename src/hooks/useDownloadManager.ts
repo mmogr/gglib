@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  cancelDownload,
-  cancelShardGroup,
-  clearFailedDownloads,
-  getDownloadQueue,
-  queueDownload,
-} from '../services/clients/downloads';
 import { appLogger } from '../services/platform';
-import { subscribeToEvent } from '../services/clients/events';
 import type { DownloadQueueStatus, DownloadQueueItem, DownloadCompletionInfo, QueueDownloadResponse } from '../services/transport/types/downloads';
 import type { DownloadEvent, DownloadSummary, QueueRunSummary } from '../services/transport/types/events';
 import { isDesktop } from '../services/platform';
+import { getTransport } from '../services/transport';
 
 /**
  * Returns true if a queue snapshot indicates active work (busy state).
@@ -294,7 +287,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
 
   const refreshQueue = useCallback(async () => {
     try {
-      const snapshot = await getDownloadQueue();
+      const snapshot = await getTransport().getDownloadQueue();
       setQueueStatus(snapshot);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
@@ -365,7 +358,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     };
 
     // Subscribe to download events via Transport (sync unsubscribe)
-    const unsubscribe = subscribeToEvent('download', handleEvent);
+    const unsubscribe = getTransport().subscribe('download', handleEvent);
     setConnectionMode(isDesktop() ? 'Desktop (Tauri)' : 'Web (SSE)');
 
     return () => {
@@ -374,7 +367,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
   }, [refreshQueue, cleanupTerminal]); // Only depend on refreshQueue, not handleEvent
 
   const queueModel = useCallback(async (modelId: string, quantization?: string) => {
-    const response = await queueDownload({ modelId, quantization });
+    const response = await getTransport().queueDownload({ modelId, quantization });
     await refreshQueue();
     return response;
   }, [refreshQueue]);
@@ -394,7 +387,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     }));
     
     try {
-      await cancelDownload(id);
+      await getTransport().cancelDownload(id);
       // Success - cleanup will happen via SSE event or we'll do it now
       cleanupTerminal(id);
     } catch (error) {
@@ -423,12 +416,12 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
   }, [refreshQueue, cleanupTerminal]);
 
   const cancelGroup = useCallback(async (groupId: string) => {
-    await cancelShardGroup(groupId);
+    await getTransport().cancelShardGroup(groupId);
     await refreshQueue();
   }, [refreshQueue]);
 
   const clearFailed = useCallback(async () => {
-    await clearFailedDownloads();
+    await getTransport().clearFailedDownloads();
     await refreshQueue();
   }, [refreshQueue]);
 

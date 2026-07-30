@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ModelsDirectoryInfo } from "../types";
-import {
-  getModelsDirectory,
-  setModelsDirectory,
-} from "../services/clients/system";
+import { getTransport } from '../services/transport';
 
 export function useModelsDirectory() {
   const [info, setInfo] = useState<ModelsDirectoryInfo | null>(null);
@@ -15,7 +12,7 @@ export function useModelsDirectory() {
     try {
       setLoading(true);
       setError(null);
-      const result = await getModelsDirectory();
+      const result = await getTransport().getModelsDirectory();
       setInfo(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -29,9 +26,9 @@ export function useModelsDirectory() {
     try {
       setSaving(true);
       setError(null);
-      await setModelsDirectory(path);
+      await getTransport().setModelsDirectory(path);
       // Reload the directory info after setting
-      const result = await getModelsDirectory();
+      const result = await getTransport().getModelsDirectory();
       setInfo(result);
       return result;
     } catch (err) {

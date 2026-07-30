@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GgufModel, InferenceConfig, ServerConfig } from '../types';
-import {
-  listModels,
-  addModel as addModelService,
-  removeModel as removeModelService,
-  updateModel as updateModelService,
-} from '../services/clients/models';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
+import { getTransport } from '../services/transport';
 
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -19,7 +14,7 @@ export function useModels() {
     try {
       setLoading(true);
       setError(null);
-      const modelList = await listModels();
+      const modelList = await getTransport().listModels();
       setModels(modelList);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -45,13 +40,13 @@ export function useModels() {
   const selectedModel = models.find(m => m.id === selectedModelId) || null;
 
   const addModel = useCallback(async (filePath: string) => {
-    await addModelService({ filePath });
+    await getTransport().addModel({ filePath });
     await loadModels();
   }, [loadModels]);
 
   const removeModel = useCallback(async (id: number, _force: boolean = false) => {
     // Note: 'force' param not supported by Transport - caller should handle confirmation
-    await removeModelService(id);
+    await getTransport().removeModel(id);
     if (selectedModelId === id) {
       setSelectedModelId(null);
     }
@@ -65,7 +60,7 @@ export function useModels() {
     inferenceDefaults?: InferenceConfig;
     serverDefaults?: ServerConfig | null;
   }) => {
-    await updateModelService({ 
+    await getTransport().updateModel({ 
       id, 
       name: updates.name,
       quantization: updates.quantization,

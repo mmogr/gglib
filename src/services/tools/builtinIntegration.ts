@@ -9,8 +9,8 @@
  * is a guard that should never be called in normal operation.
  */
 
-import { listBuiltinTools } from '../clients/builtin';
-import type { McpTool } from '../clients/builtin';
+import { getTransport } from '../transport';
+import type { McpTool } from '../transport';
 import { getToolRegistry } from './registry';
 import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
 import { timeRenderer } from './renderers/TimeRenderer';
@@ -71,7 +71,7 @@ export async function syncBuiltinTools(): Promise<{ added: number; removed: numb
 
   let added = 0;
   try {
-    const tools: McpTool[] = await listBuiltinTools();
+    const tools: McpTool[] = await getTransport().listBuiltinTools();
     for (const tool of tools) {
       const definition = builtinToolToDefinition(tool);
       const executor = createBuiltinExecutor(tool.name);

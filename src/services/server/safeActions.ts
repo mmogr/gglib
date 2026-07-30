@@ -9,7 +9,7 @@
  * UI components should use these instead of calling stopServer directly.
  */
 
-import { stopServer } from '../clients/servers';
+import { getTransport } from '../transport';
 import { TransportError } from '../transport/errors';
 
 /**
@@ -23,7 +23,7 @@ import { TransportError } from '../transport/errors';
  */
 export async function safeStopServer(modelId: number): Promise<void> {
   try {
-    await stopServer(modelId);
+    await getTransport().stopServer(modelId);
   } catch (error) {
     // Backend is the source of truth. If it reports the server is already stopped,
     // treat that as success (idempotent stop).

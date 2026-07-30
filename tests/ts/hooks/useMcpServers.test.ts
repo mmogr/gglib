@@ -7,10 +7,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useMcpServers } from '../../../src/hooks/useMcpServers';
-import type { McpServerInfo, McpTool } from '../../../src/services/clients/mcp';
+import type { McpServerInfo, McpTool } from '../../../src/services/transport';
 
-// Mock the MCP client functions
-vi.mock('../../../src/services/clients/mcp', () => ({
+const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
   addMcpServer: vi.fn(),
   updateMcpServer: vi.fn(),
@@ -20,13 +19,18 @@ vi.mock('../../../src/services/clients/mcp', () => ({
   callMcpTool: vi.fn(),
 }));
 
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
 // Mock syncAllMcpTools and syncBuiltinTools
 vi.mock('../../../src/services/tools', () => ({
   syncAllMcpTools: vi.fn().mockResolvedValue(undefined),
   syncBuiltinTools: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
+const {
   listMcpServers,
   addMcpServer,
   updateMcpServer,
@@ -34,7 +38,7 @@ import {
   startMcpServer,
   stopMcpServer,
   callMcpTool,
-} from '../../../src/services/clients/mcp';
+} = transport;
 import { syncAllMcpTools, syncBuiltinTools } from '../../../src/services/tools';
 
 // ==========================================================================

@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { browseHfModels, getHfModelSummary } from "../../../services/clients/huggingface";
 import {
   HfModelSummary,
   HfSearchRequest,
@@ -11,9 +10,9 @@ import {
   getButtonTextForIntent,
   ModelSearchIntent,
 } from "../../../utils/modelSearchParser";
-import { queueDownload } from "../../../services/clients/downloads";
 import { useToastContext } from "../../../contexts/ToastContext";
 import { useDebounce } from "../../../hooks/useDebounce";
+import { getTransport } from '../../../services/transport';
 
 // Sort options configuration
 interface SortOption {
@@ -158,7 +157,7 @@ export function useHuggingFaceSearch(
 
       try {
         const request = buildSearchRequest(page);
-        const response: HfSearchResponse = await browseHfModels(request);
+        const response: HfSearchResponse = await getTransport().browseHfModels(request);
 
         if (append) {
           setModels((prev) => [...prev, ...response.models]);
@@ -190,7 +189,7 @@ export function useHuggingFaceSearch(
     async (repo: string, quant: string) => {
       try {
         setLoading(true);
-        await queueDownload({ modelId: repo, quantization: quant });
+        await getTransport().queueDownload({ modelId: repo, quantization: quant });
         showToast(`Download started: ${repo} (${quant})`, "success");
         setSearchQuery(""); // Clear search after successful queue
       } catch (err) {
@@ -211,7 +210,7 @@ export function useHuggingFaceSearch(
       try {
         setLoading(true);
         // Fetch model directly by repo ID (not search)
-        const model = await getHfModelSummary(repo);
+        const model = await getTransport().getHfModelSummary(repo);
         onSelectModel?.(model);
         setSearchQuery(""); // Clear search after selecting
       } catch (err) {

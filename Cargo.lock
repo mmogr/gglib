@@ -1562,6 +1562,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flume"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e139bc46ca777eb5efaf62df0ab8cc5fd400866427e56c68b22e414e53bd3be"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "spin",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1896,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1919,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1945,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1977,7 +1988,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "axum",
@@ -2014,7 +2025,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2033,14 +2044,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2064,6 +2075,7 @@ dependencies = [
  "gglib-runtime",
  "hf-hub",
  "indicatif 0.18.6",
+ "mdns-sd",
  "reqwest 0.13.4",
  "rustyline",
  "serde",
@@ -2080,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2105,7 +2117,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2125,7 +2137,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2151,7 +2163,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2163,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2180,7 +2192,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2195,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2212,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2245,7 +2257,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2277,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "axum",
  "futures-util",
@@ -2290,7 +2302,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.10.4"
+version = "0.10.5"
 dependencies = [
  "anyhow",
  "gglib-app-services",
@@ -3371,9 +3383,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6970f50e31d6fc17d3fa27329444bfa74e196cf62e95052a3f6fee181dba6425"
+checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
 dependencies = [
  "bytes",
  "itoa",
@@ -3639,6 +3651,16 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3969,9 +3991,9 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex"
-version = "3.6.0"
+version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bae91019476d3ec7147de9aa291cadb6d870abf2f3015d2da73a90325ac1496"
+checksum = "4994ba703f78b083e2f7946dac9251abd83fd43a0365f030e99b69be5b4b9ef9"
 dependencies = [
  "lazy-regex-proc_macros",
  "once_cell",
@@ -3980,9 +4002,9 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex-proc_macros"
-version = "3.6.0"
+version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4de9c1e1439d8b7b3061b2d209809f447ca33241733d9a3c01eabf2dc8d94358"
+checksum = "fd97232314824e6dbef1918a871bb93f51070455e3715bf26e19a6d01aa977a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4167,6 +4189,21 @@ checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
 dependencies = [
  "cfg-if",
  "digest",
+]
+
+[[package]]
+name = "mdns-sd"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86dbb9f00c8c367f75ed3a775d3eb31d0375a72f58275ef64a1bc53c255a2ce2"
+dependencies = [
+ "fastrand",
+ "flume 0.12.0",
+ "if-addrs",
+ "log",
+ "mio",
+ "socket-pktinfo",
+ "socket2",
 ]
 
 [[package]]
@@ -5567,9 +5604,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.42"
+version = "0.23.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c54fcab019b409d04215d3a17cb438fd7fbf192ee61461f20f4fe18704bc138"
+checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -6132,6 +6169,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket-pktinfo"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "612942246d0cc239cfd83af1dfd39be47f649208a3524e5e9da651910128e0ac"
+dependencies = [
+ "libc",
+ "socket2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "socket2"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6396,7 +6444,7 @@ checksum = "c2d12fe70b2c1b4401038055f90f151b78208de1f9f89a7dbfd41587a10c3eea"
 dependencies = [
  "atoi",
  "chrono",
- "flume",
+ "flume 0.11.1",
  "futures-channel",
  "futures-core",
  "futures-executor",
@@ -6637,9 +6685,9 @@ dependencies = [
 
 [[package]]
 name = "tao-macros"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4e16beb8b2ac17db28eab8bca40e62dbfbb34c0fcdc6d9826b11b7b5d047dfd"
+checksum = "5f7eeb6d99155545da6150a1795945f16ac9c178deb2a5f2e74d776107bd5849"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7104,13 +7152,13 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]

@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
-import { getModelDetail } from '../services/clients/models';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
@@ -21,6 +20,7 @@ const BenchmarkPage = lazy(() => import('./BenchmarkPage'));
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
+import { getTransport } from '../services/transport';
 
 interface ChatSession {
   serverPort: number;
@@ -304,7 +304,7 @@ export default function ModelControlCenterPage({
               onUpdateModel={updateModel}
               onAddTag={addTagToModel}
               onRemoveTag={removeTagFromModel}
-              getModelDetail={getModelDetail}
+              getModelDetail={(id) => getTransport().getModelDetail(id)}
               onRefresh={handleRefreshAll}
               queueStatus={queueStatus}
               onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}

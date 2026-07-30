@@ -4,10 +4,10 @@ import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
-import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/clients/chat';
 import type { InferenceConfig } from '../../../types';
 import { Label } from '../../primitives';
 import { SettingField } from './SettingField';
+import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
 
 interface AdvancedSettingsProps {
   isOpen: boolean;

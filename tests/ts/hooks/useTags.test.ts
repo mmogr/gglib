@@ -8,20 +8,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useTags } from '../../../src/hooks/useTags';
 
-// Mock tags client (which delegates to Transport)
-vi.mock('../../../src/services/clients/tags', () => ({
+const transport = vi.hoisted(() => ({
   listTags: vi.fn(),
   addModelTag: vi.fn(),
   removeModelTag: vi.fn(),
   getModelTags: vi.fn(),
 }));
 
-import {
-  listTags,
-  addModelTag,
-  removeModelTag,
-  getModelTags,
-} from '../../../src/services/clients/tags';
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const { listTags, addModelTag, removeModelTag, getModelTags } = transport;
 
 const mockTags = ['chat', 'code', 'reasoning', 'vision'];
 

@@ -399,9 +399,22 @@ pub enum Commands {
         /// Port to serve the web GUI on
         #[arg(short, long, env = "VITE_GGLIB_WEB_PORT", default_value = "9887")]
         port: u16,
-        /// Host to bind the web server
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
+        /// Host address to bind the server to (overrides the stored `bind-host` setting)
+        ///
+        /// Falls back to the stored setting, then to 127.0.0.1 when neither is set.
+        /// This is a per-run override — it is not written back to settings.
+        #[arg(long)]
+        host: Option<String>,
+        /// Expose the server on all LAN interfaces (0.0.0.0) and enable mDNS broadcasting
+        ///
+        /// WARNING: Makes GGLib visible to every device on your local network and
+        /// relaxes CORS to allow all origins. Off by default.
+        ///
+        /// Combine with --host to share on one interface only. Combining it with a
+        /// loopback address is rejected, since nothing on the LAN could reach it.
+        /// Persist the preference with `gglib config settings set --share-lan true`.
+        #[arg(long)]
+        share_lan: bool,
         /// Base port for llama-server instances (Note: Port 5000 conflicts with macOS AirPlay)
         #[arg(long, default_value = "9000")]
         base_port: u16,

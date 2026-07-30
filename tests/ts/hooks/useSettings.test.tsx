@@ -10,13 +10,17 @@ import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import { AppSettings } from '../../../src/types';
 import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../fixtures/ports';
 
-// Mock the clients/settings service
-vi.mock('../../../src/services/clients/settings', () => ({
+const transport = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
 }));
 
-import { getSettings, updateSettings } from '../../../src/services/clients/settings';
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const { getSettings, updateSettings } = transport;
 // Alias for test compatibility
 const fetchSettings = getSettings;
 

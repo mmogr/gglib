@@ -20,17 +20,8 @@ import { useConfirmContext } from '../contexts/ConfirmContext';
 
 import { mkUserMessage, mkAssistantMessage } from '../types/messages';
 import { useServerState } from '../services/serverEvents';
-import { getServerToolSupport } from '../services/clients/servers';
-import {
-  listConversations,
-  createConversation,
-  deleteConversation,
-  updateConversationTitle,
-  updateConversationSystemPrompt,
-  getMessages,
-  DEFAULT_TITLE_GENERATION_PROMPT,
-} from '../services/clients/chat';
-import type { ConversationSummary } from '../services/clients/chat';
+import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
+import type { ConversationSummary } from '../services/transport';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -91,7 +82,7 @@ export default function ChatPage({
   const [toolFormat, setToolFormat] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    getServerToolSupport(modelId)
+    getTransport().getServerToolSupport(modelId)
       .then((data) => {
         if (!cancelled) {
           setSupportsToolCalls(data.supports_tool_calls);
@@ -103,7 +94,6 @@ export default function ChatPage({
       });
     return () => { cancelled = true; };
   }, [modelId]);
-
 
   // Orchestrator mode: ref filled by ChatMessagesPanel with the submit callback
   const councilSubmitRef = useRef<((text: string) => void) | null>(null);
@@ -172,17 +162,17 @@ export default function ChatPage({
         setConversationLoading(true);
       }
       try {
-        let list = await listConversations();
+        let list = await getTransport().listConversations();
         let preferredId = options.preferredId ?? null;
 
         // Create default conversation if none exist
         if (!list.length) {
-          preferredId = await createConversation(
-            DEFAULT_CONVERSATION_TITLE,
-            null,
-            DEFAULT_SYSTEM_PROMPT,
-          );
-          list = await listConversations();
+          preferredId = await getTransport().createConversation({
+            title: DEFAULT_CONVERSATION_TITLE,
+            modelId: null,
+            systemPrompt: DEFAULT_SYSTEM_PROMPT,
+          });
+          list = await getTransport().listConversations();
         }
 
         setConversations(list);
@@ -248,7 +238,7 @@ export default function ChatPage({
     if (!shouldDelete) return;
 
     try {
-      await deleteConversation(conversationId);
+      await getTransport().deleteConversation(conversationId);
       persistedMessageIds.current = new Set();
       await syncConversations();
     } catch (error) {
@@ -267,7 +257,7 @@ export default function ChatPage({
     try {
       const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
       const systemPrompt = newConversationPrompt.trim() || DEFAULT_SYSTEM_PROMPT;
-      const newId = await createConversation(title, null, systemPrompt);
+      const newId = await getTransport().createConversation({ title, modelId: null, systemPrompt });
       persistedMessageIds.current = new Set();
       
       // Insert new conversation locally before selecting it
@@ -304,7 +294,7 @@ export default function ChatPage({
         title,
         titleLength: title.length,
       });
-      await updateConversationTitle(activeConversation.id, title);
+      await getTransport().updateConversationTitle(activeConversation.id, title);
       appLogger.debug('component.chat', 'Title update succeeded, syncing');
       await syncConversations({ preferredId: activeConversation.id, silent: true });
       appLogger.debug('component.chat', 'Rename conversation completed successfully');
@@ -328,12 +318,12 @@ export default function ChatPage({
     if (!confirmed) return;
 
     try {
-      await deleteConversation(activeConversation.id);
-      const newId = await createConversation(
-        activeConversation.title,
-        null,
-        activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
-      );
+      await getTransport().deleteConversation(activeConversation.id);
+      const newId = await getTransport().createConversation({
+        title: activeConversation.title,
+        modelId: null,
+        systemPrompt: activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
+      });
       persistedMessageIds.current = new Set();
       await syncConversations({ preferredId: newId });
     } catch (error) {
@@ -344,7 +334,7 @@ export default function ChatPage({
   const handleExportConversation = async () => {
     if (!activeConversation) return;
     try {
-      const messages = await getMessages(activeConversation.id);
+      const messages = await getTransport().getMessages(activeConversation.id);
       const data = { conversation: activeConversation, messages };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -361,7 +351,7 @@ export default function ChatPage({
   const handleUpdateSystemPrompt = async (prompt: string | null) => {
     if (!activeConversation) return;
     try {
-      await updateConversationSystemPrompt(activeConversation.id, prompt);
+      await getTransport().updateConversationSystemPrompt(activeConversation.id, prompt);
       await syncConversations({ preferredId: activeConversation.id, silent: true });
     } catch (error) {
       setChatError(error instanceof Error ? error.message : String(error));
