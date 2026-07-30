@@ -244,7 +244,8 @@ mod tests {
 
     #[test]
     fn test_stored_bind_host_used_when_flag_absent() {
-        let decision = resolve_bind(None, false, &stored(Some("10.0.0.5"), None)).expect("resolves");
+        let decision =
+            resolve_bind(None, false, &stored(Some("10.0.0.5"), None)).expect("resolves");
         assert_eq!(decision.host, "10.0.0.5");
     }
 

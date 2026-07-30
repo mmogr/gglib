@@ -89,7 +89,10 @@ impl MdnsAdvertiser {
         match self.daemon.unregister(&self.fullname) {
             Ok(rx) => {
                 if let Err(e) = rx.recv_async().await {
-                    tracing::warn!("mDNS: unregister of {} was not confirmed ({e})", self.fullname);
+                    tracing::warn!(
+                        "mDNS: unregister of {} was not confirmed ({e})",
+                        self.fullname
+                    );
                 }
             }
             Err(e) => tracing::warn!("mDNS: could not unregister {} ({e})", self.fullname),

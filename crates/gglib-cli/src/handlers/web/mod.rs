@@ -1,14 +1,4 @@
-//! Web server command handler.
-//!
-//! Handles starting the Axum HTTP server with optional static file serving.
-//! Discovers frontend build artifacts automatically from well-known paths,
-//! or falls back to API-only mode when no frontend is present.
-//!
-//! Bind-address and CORS resolution lives in [`bind`]; this module orchestrates
-//! it, prints the startup banner, and blocks on the server. When LAN sharing is
-//! active it also advertises the server over mDNS ([`mdns`]) and races the
-//! server against a shutdown signal ([`shutdown`]) so the record is withdrawn
-//! on the way out.
+#![doc = include_str!("README.md")]
 
 mod bind;
 mod mdns;
