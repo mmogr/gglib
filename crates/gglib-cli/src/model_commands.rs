@@ -377,3 +377,4 @@ pub enum ModelCommand {
         json: bool,
     },
 }
+// scratch test: ambiguous multi-component touch

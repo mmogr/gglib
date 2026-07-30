@@ -1125,3 +1125,4 @@ mod tests {
         );
     }
 }
+// scratch test: ambiguous multi-component touch
