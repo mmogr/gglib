@@ -72,6 +72,19 @@ pub struct Settings {
 
     /// Custom prompt template for generating chat titles.
     pub title_generation_prompt: Option<String>,
+
+    // ── Network binding ─────────────────────────────────────────────
+    /// Override the bind host for `gglib web`.
+    ///
+    /// `None` → use the compiled-in default (`127.0.0.1`). The `--host` flag
+    /// takes precedence for a single run without changing this value.
+    pub bind_host: Option<String>,
+
+    /// Whether `gglib web` binds all LAN interfaces and broadcasts over mDNS.
+    ///
+    /// `None`/`Some(false)` → localhost-only. The `--share-lan` flag can turn
+    /// this on for a single run, but cannot turn it off — clear it here.
+    pub share_lan: Option<bool>,
 }
 
 impl Settings {
@@ -94,6 +107,8 @@ impl Settings {
             inference_profiles: None,
             setup_completed: None,
             title_generation_prompt: None,
+            bind_host: None,
+            share_lan: None,
         }
     }
 
@@ -156,6 +171,12 @@ impl Settings {
         if let Some(ref v) = other.title_generation_prompt {
             self.title_generation_prompt.clone_from(v);
         }
+        if let Some(ref v) = other.bind_host {
+            self.bind_host.clone_from(v);
+        }
+        if let Some(ref v) = other.share_lan {
+            self.share_lan = *v;
+        }
     }
 }
 
@@ -180,6 +201,8 @@ pub struct SettingsUpdate {
     pub inference_profiles: Option<Option<Vec<InferenceProfile>>>,
     pub setup_completed: Option<Option<bool>>,
     pub title_generation_prompt: Option<Option<String>>,
+    pub bind_host: Option<Option<String>>,
+    pub share_lan: Option<Option<bool>>,
 }
 
 /// Settings validation error.
@@ -202,6 +225,9 @@ pub enum SettingsError {
 
     #[error("Invalid inference profile: {0}")]
     InvalidInferenceProfile(String),
+
+    #[error("Bind host must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
+    InvalidBindHost(String),
 }
 
 /// Validate settings values.
@@ -241,6 +267,15 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         .is_some_and(|p| p.trim().is_empty())
     {
         return Err(SettingsError::EmptyDownloadPath);
+    }
+
+    // Validate the bind host if specified. Requiring a literal IP (rather than
+    // accepting a name) keeps the value unambiguous for both the TCP bind and
+    // the mDNS address record.
+    if let Some(ref host) = settings.bind_host
+        && host.parse::<std::net::IpAddr>().is_err()
+    {
+        return Err(SettingsError::InvalidBindHost(host.clone()));
     }
 
     // Validate inference defaults if specified
