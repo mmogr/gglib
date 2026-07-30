@@ -1,0 +1,79 @@
+# Enforce that every PR has at least one label from each required category.
+#
+# Categories (prefix-matched):
+#   component:*  — which subsystem is touched
+#   priority:*   — how urgent is this
+#   size:*       — estimated effort
+#
+# Automated PRs (version bumps, dependency updates) are exempt.
+#
+# After merging this file, add the status check to the ruleset:
+#   1. Go to Settings → Rules → ggRules → "Required status checks"
+#   2. Add: "Label Check" (integration: GitHub Actions)
+#   3. Save
+
+name: Label Check
+
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  label-check:
+    name: Label Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Check required labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // --- Configuration ---
+            const REQUIRED_PREFIXES = ['component:', 'priority:', 'size:'];
+
+            // Automated PR patterns — exempt from label requirements
+            const EXEMPT_PATTERNS = [
+              /^Bump version to /,
+              /^chore\(deps\):/,
+              /^fix\(deps\):/,
+            ];
+
+            // Labels that themselves mark a PR as exempt
+            const EXEMPT_LABELS = ['automated', 'version-bump'];
+
+            // --- Logic ---
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name);
+            const title = pr.title;
+
+            // Check if PR is exempt
+            const isExemptByTitle = EXEMPT_PATTERNS.some(pat => pat.test(title));
+            const isExemptByLabel = EXEMPT_LABELS.some(l => labels.includes(l));
+
+            if (isExemptByTitle || isExemptByLabel) {
+              core.info(`PR #${pr.number} is exempt (title: ${isExemptByTitle}, label: ${isExemptByLabel})`);
+              return;
+            }
+
+            // Check each required prefix
+            const missing = REQUIRED_PREFIXES.filter(prefix =>
+              !labels.some(l => l.startsWith(prefix))
+            );
+
+            if (missing.length > 0) {
+              const msg = [
+                `Missing required labels: ${missing.join(', ')}`,
+                '',
+                `Every PR needs at least one label from each category:`,
+                ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
+                '',
+                `Exempt patterns: ${EXEMPT_PATTERNS.map(p => p.source).join(', ')}`,
+              ].join('\n');
+              core.setFailed(msg);
+            } else {
+              core.info(`PR #${pr.number} has all required labels: ${labels.filter(l => l.startsWith('component:') || l.startsWith('priority:') || l.startsWith('size:')).join(', ')}`);
+            }
