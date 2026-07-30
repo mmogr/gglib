@@ -29,3 +29,4 @@ pub use config::HfClientConfig;
 use mockall as _;
 #[cfg(test)]
 use tokio_test as _;
+// scratch test: inheritance from linked issue
