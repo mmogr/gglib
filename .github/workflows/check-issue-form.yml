@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  issues: read # to list the repo's labels for the option-value check
 
 jobs:
   check:
@@ -26,4 +27,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: node scripts/check_issue_form_mapping.mjs
+      # Fetching the real label list lets the script also verify that every dropdown
+      # OPTION resolves to a label that exists. Without this it only checks field ids.
+      # Worth the extra step: the labels API auto-creates unknown labels instead of
+      # erroring, so a typo'd option would otherwise silently produce a junk grey label.
+      - name: Fetch repo labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh label list --repo "$GITHUB_REPOSITORY" --limit 300 --json name > /tmp/labels.json
+      - run: node scripts/check_issue_form_mapping.mjs /tmp/labels.json
