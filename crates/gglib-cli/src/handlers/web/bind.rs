@@ -49,14 +49,20 @@ fn is_loopback(host: &str) -> bool {
 /// Neither flag is written back to settings; both are per-run overrides.
 ///
 /// When sharing is on and no host was named anywhere, the bind widens to
-/// `0.0.0.0`; an explicitly named non-loopback host wins over that widening, so
-/// a multi-homed machine can share on a single interface.
+/// `0.0.0.0`; a named non-loopback host wins over that widening, so a
+/// multi-homed machine can share on a single interface.
+///
+/// A loopback host cannot be combined with sharing — nothing on the network
+/// could reach it, and mDNS would advertise a dead address. When the loopback
+/// host came from *stored settings* but sharing was asked for on the command
+/// line, the command line is the fresher intent: the stored host is dropped and
+/// the bind widens. A stale saved preference must not veto an explicit flag.
 ///
 /// # Errors
 ///
-/// Returns an error when LAN sharing is requested against a loopback address —
-/// nothing on the network could reach it, and mDNS would advertise a dead
-/// address.
+/// Returns an error when sharing is combined with a loopback host that the user
+/// named on the command line, or when both values come from stored settings and
+/// contradict each other.
 pub fn resolve_bind(
     cli_host: Option<String>,
     cli_share_lan: bool,
@@ -64,12 +70,10 @@ pub fn resolve_bind(
 ) -> Result<BindDecision> {
     let share_lan = cli_share_lan || settings.share_lan.unwrap_or(false);
 
-    // Only a host nobody named gets widened to the wildcard address; a stored
-    // `bind_host` counts as named, exactly like the flag.
-    let named_host = cli_host.or_else(|| settings.bind_host.clone());
-
-    let host = match (&named_host, share_lan) {
-        (Some(host), true) if is_loopback(host) => {
+    // A host nobody named gets widened to the wildcard when sharing.
+    let host = match (cli_host, settings.bind_host.clone()) {
+        // Named on the command line: authoritative, so a conflict is an error.
+        (Some(host), _) if share_lan && is_loopback(&host) => {
             bail!(
                 "--share-lan cannot be combined with the loopback address '{host}': \
                  no other device on the network could reach it. \
@@ -77,9 +81,33 @@ pub fn resolve_bind(
                  (e.g. --host 0.0.0.0)."
             );
         }
-        (Some(host), _) => host.clone(),
-        (None, true) => ALL_INTERFACES.to_owned(),
-        (None, false) => DEFAULT_BIND_HOST.to_owned(),
+        (Some(host), _) => host,
+
+        // Stored loopback host, sharing asked for on the command line: the flag
+        // wins over the saved fallback, exactly as --host would.
+        (None, Some(host)) if cli_share_lan && is_loopback(&host) => {
+            tracing::info!(
+                "ignoring stored bind-host '{host}' because --share-lan was passed; \
+                 binding {ALL_INTERFACES} instead"
+            );
+            ALL_INTERFACES.to_owned()
+        }
+
+        // Both stored and contradictory — the saved configuration cannot be
+        // satisfied, and no command-line input says which side to prefer.
+        (None, Some(host)) if share_lan && is_loopback(&host) => {
+            bail!(
+                "stored settings are contradictory: share-lan is enabled but \
+                 bind-host is the loopback address '{host}', which no other device \
+                 on the network can reach. \
+                 Fix with `gglib config settings set --bind-host 0.0.0.0`, or \
+                 `--share-lan false` for localhost-only access."
+            );
+        }
+        (None, Some(host)) => host,
+
+        (None, None) if share_lan => ALL_INTERFACES.to_owned(),
+        (None, None) => DEFAULT_BIND_HOST.to_owned(),
     };
 
     Ok(BindDecision {
@@ -196,12 +224,44 @@ mod tests {
         assert!(decision.share_lan);
     }
 
-    /// The loopback conflict applies to stored values too, so a bare
-    /// `gglib web` cannot silently advertise an unreachable address.
+    /// Two stored values that contradict each other cannot be satisfied, and
+    /// nothing on the command line says which to prefer — so a bare `gglib web`
+    /// errors rather than silently advertising an unreachable address.
     #[test]
-    fn test_stored_loopback_conflicts_with_share_lan() {
-        resolve_bind(None, false, &stored(Some("127.0.0.1"), Some(true)))
+    fn test_contradictory_stored_settings_are_rejected() {
+        let err = resolve_bind(None, false, &stored(Some("127.0.0.1"), Some(true)))
             .expect_err("stored loopback host must conflict with stored share_lan");
+        assert!(
+            err.to_string().contains("contradictory"),
+            "error should point at the saved configuration: {err}"
+        );
+    }
+
+    /// A stored loopback host is only a fallback for "no --host given", so it
+    /// must not veto an explicit `--share-lan`; the flag is the fresher intent
+    /// and the bind widens instead of erroring.
+    #[test]
+    fn test_cli_share_lan_overrides_stored_loopback_host() {
+        let decision = resolve_bind(None, true, &stored(Some("127.0.0.1"), None))
+            .expect("an explicit flag outranks a stale stored fallback");
+        assert_eq!(decision.host, "0.0.0.0");
+        assert!(decision.share_lan);
+        assert_eq!(decision.cors, CorsConfig::AllowAll);
+
+        // Also when the stored preference already had sharing on.
+        let decision = resolve_bind(None, true, &stored(Some("localhost"), Some(true)))
+            .expect("the flag still wins");
+        assert_eq!(decision.host, "0.0.0.0");
+    }
+
+    /// The override is narrow: a stored *non*-loopback host is still honoured
+    /// when --share-lan is passed, so single-interface sharing keeps working.
+    #[test]
+    fn test_cli_share_lan_keeps_stored_non_loopback_host() {
+        let decision =
+            resolve_bind(None, true, &stored(Some("192.168.1.50"), None)).expect("resolves");
+        assert_eq!(decision.host, "192.168.1.50");
+        assert!(decision.share_lan);
     }
 
     /// Setting `share-lan false` returns the server to localhost-only.

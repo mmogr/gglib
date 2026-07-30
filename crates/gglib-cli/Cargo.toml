@@ -51,6 +51,10 @@ tracing-subscriber = { workspace = true }
 # Streams the SSE body for `gglib proxy dashboard` (crossterm-based redraw,
 # no ratatui — see handlers/proxy_dashboard.rs module docs).
 futures-util = { workspace = true }
+# Pure-Rust mDNS/DNS-SD responder for `gglib web --share-lan`; no system daemon
+# dependency. Deliberately scoped to this crate — LAN advertising is a CLI
+# concern and must not reach the shared axum/app-services/Tauri layers.
+mdns-sd = "0.20"
 
 [dev-dependencies]
 tempfile = { workspace = true }

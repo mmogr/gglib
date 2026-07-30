@@ -5,9 +5,14 @@
 //! or falls back to API-only mode when no frontend is present.
 //!
 //! Bind-address and CORS resolution lives in [`bind`]; this module orchestrates
-//! it, prints the startup banner, and blocks on the server.
+//! it, prints the startup banner, and blocks on the server. When LAN sharing is
+//! active it also advertises the server over mDNS ([`mdns`]) and races the
+//! server against a shutdown signal ([`shutdown`]) so the record is withdrawn
+//! on the way out.
 
 mod bind;
+mod mdns;
+mod shutdown;
 
 use std::path::PathBuf;
 
@@ -114,11 +119,38 @@ pub async fn execute(
         style::print_banner_close();
     }
 
-    if decision.share_lan {
-        print_share_lan_warning(&decision.host, port);
+    if !decision.share_lan {
+        // Localhost-only: no advertising, and nothing to tear down, so the
+        // server owns the process until it exits.
+        start_server(config).await?;
+        return Ok(());
     }
 
-    start_server(config).await?;
+    print_share_lan_warning(&decision.host, port);
+
+    // Registered just before the listener opens. `start_server` owns the bind,
+    // so "after bind" is not observable from here; the resulting window where
+    // the service is advertised but not yet accepting is sub-millisecond, and
+    // closing it would mean threading a callback through gglib-axum, which the
+    // Tauri adapter also consumes.
+    let advertiser = mdns::MdnsAdvertiser::start(&decision.host, port);
+
+    let outcome = tokio::select! {
+        res = start_server(config) => res,
+        () = shutdown::shutdown_signal() => {
+            eprintln!();
+            eprintln!("  Shutting down web server...");
+            Ok(())
+        }
+    };
+
+    // Withdraw the record before propagating any server error, so a crash does
+    // not leave a stale `gglib.local` cached across the network.
+    if let Some(advertiser) = advertiser {
+        advertiser.shutdown().await;
+    }
+
+    outcome?;
     Ok(())
 }
 
