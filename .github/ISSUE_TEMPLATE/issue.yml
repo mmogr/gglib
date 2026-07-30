@@ -1,0 +1,96 @@
+name: Issue
+description: File a bug, feature, or other piece of work
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: >-
+        Which subsystem(s) does this touch? Select all that apply — many
+        issues here genuinely span several crates.
+      multiple: true
+      options:
+        - cli
+        - core
+        - axum
+        - runtime
+        - proxy
+        - db
+        - downloads
+        - hf
+        - mcp
+        - sse
+        - gui
+        - tauri
+        - frontend
+        - ci
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - low
+        - medium
+        - high
+        - critical
+    validations:
+      required: true
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: >-
+        Estimated effort: xs < 1 hour, s 1-4 hours, m 4-8 hours (half to
+        full day), l 1-3 days, xl > 3 days (needs breakdown).
+      options:
+        - xs
+        - s
+        - m
+        - l
+        - xl
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Select all that apply.
+      multiple: true
+      options:
+        - bug
+        - feature
+        - refactor
+        - chore
+        - test
+        - perf
+        - docs
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: epic
+    attributes:
+      label: Epic
+      description: >-
+        Check this only if the issue itself is a tracking issue for a
+        larger, multi-phase piece of work. Leave phases/ordering to GitHub's
+        native sub-issues (use "Create sub-issue" from this issue once it
+        exists) rather than inventing a new label per phase.
+      options:
+        - label: This issue tracks multi-phase work
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: >-
+        Whatever's most useful — summary, root cause, repro steps, proposed
+        fix, evidence. No fixed structure required.
+    validations:
+      required: true

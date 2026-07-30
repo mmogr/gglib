@@ -1,0 +1,29 @@
+# Fails CI if .github/ISSUE_TEMPLATE/issue.yml and .github/workflows/issue-labels.yml
+# drift apart — see scripts/check_issue_form_mapping.mjs for why this matters (a renamed
+# form field silently stops producing labels otherwise, with no error anywhere).
+
+name: Check Issue Form Mapping
+
+on:
+  pull_request:
+    paths:
+      - .github/ISSUE_TEMPLATE/issue.yml
+      - .github/workflows/issue-labels.yml
+      - scripts/check_issue_form_mapping.mjs
+  push:
+    branches: [main]
+    paths:
+      - .github/ISSUE_TEMPLATE/issue.yml
+      - .github/workflows/issue-labels.yml
+      - scripts/check_issue_form_mapping.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check Issue Form Mapping
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: node scripts/check_issue_form_mapping.mjs
