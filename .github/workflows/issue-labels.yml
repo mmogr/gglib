@@ -198,8 +198,13 @@ jobs:
                 await github.rest.issues.createComment({ owner, repo, issue_number, body });
               }
             } else if (existing) {
-              const body = `${MARKER}\n### Label triage\n\nResolved — all required labels are present.`;
-              if (existing.body !== body) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              // Nothing missing any more, so say nothing at all — the labels themselves
+              // convey that. Delete rather than leaving the comment: its text lists the
+              // categories that *were* missing and would now be actively wrong.
+              try {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+                core.info('Removed the triage comment — all required labels present.');
+              } catch (e) {
+                core.warning(`Could not delete the triage comment: ${e.message}`);
               }
             }

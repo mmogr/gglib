@@ -280,21 +280,34 @@ jobs:
               owner, repo, issue_number, per_page: 100,
             })).find(c => c.body?.includes(MARKER));
 
-            const body = asks.length
-              ? `${MARKER}\n### Label check\n\n${asks.join('\n\n---\n\n')}`
-              : `${MARKER}\n### Label check\n\nAll required labels are present.`;
-
+            // Only ever comment when something is actually needed. When nothing is
+            // missing, say nothing at all — a green check plus the labels themselves
+            // already convey "all present", so an extra comment is pure noise.
+            //
             // Update in place rather than posting again on every push. Comment edits
             // don't send notifications, so this stays quiet. (And comment activity fires
             // issue_comment, not pull_request, so it cannot re-trigger this workflow.)
-            if (existing) {
-              if (existing.body !== body) {
-                await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body,
-                });
+            if (asks.length) {
+              const body = `${MARKER}\n### Label check\n\n${asks.join('\n\n---\n\n')}`;
+              if (existing) {
+                if (existing.body !== body) {
+                  await github.rest.issues.updateComment({
+                    owner, repo, comment_id: existing.id, body,
+                  });
+                }
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
               }
-            } else if (asks.length) {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            } else if (existing) {
+              // Delete rather than leaving it: the stale text says "Needs a size: label"
+              // and would now be actively wrong. Deleting is what "say nothing" actually
+              // means once a comment already exists.
+              try {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+                core.info('Removed the assist comment — nothing left to ask for.');
+              } catch (e) {
+                core.warning(`Could not delete the assist comment: ${e.message}`);
+              }
             }
 
   label-check:
