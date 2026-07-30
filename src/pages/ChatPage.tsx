@@ -103,6 +103,10 @@ export default function ChatPage({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
+    // Non-fatal: the turn is still running, so this is a transient notice
+    // rather than `chatError`, which renders as a failed turn.
+    onSystemWarning: (message, suggestedAction) =>
+      showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
     maxToolIterations,
     supportsToolCalls,
     onCouncilSubmit: (text) => councilSubmitRef.current?.(text),

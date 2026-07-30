@@ -66,6 +66,7 @@ function makeDeps(
     timingTracker: undefined,
     makeNextMessage: overrides?.makeNextMessage ?? ((iter: number) => `msg-iter-${iter}`),
     cleanup: overrides?.cleanup ?? vi.fn(),
+    onSystemWarning: overrides?.onSystemWarning,
   };
 }
 
@@ -288,6 +289,83 @@ describe('dispatchAgentEvent — error', () => {
       ),
     ).toThrow('loop limit reached');
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// system_warning
+// ---------------------------------------------------------------------------
+
+describe('dispatchAgentEvent — system_warning', () => {
+  it('reports the warning and lets the stream continue', () => {
+    // Regression guard: this variant used to fall through to the
+    // forward-compatibility default and vanish, so retry notices — and the
+    // parallel-tool-limit warning that predates them — were invisible in the
+    // GUI while the CLI renderer showed them.
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const cleanup = vi.fn();
+    const onSystemWarning = vi.fn();
+    const deps = makeDeps(store.setMessages, { cleanup, onSystemWarning });
+
+    const done = dispatchAgentEvent(
+      { type: 'system_warning', message: 'Model unavailable — retrying in 2.0s (attempt 1)' },
+      state,
+      deps,
+    );
+
+    expect(done).toBe(false);
+    expect(onSystemWarning).toHaveBeenCalledWith(
+      'Model unavailable — retrying in 2.0s (attempt 1)',
+      undefined,
+    );
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('forwards a suggested action when the backend supplies one', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const onSystemWarning = vi.fn();
+    const deps = makeDeps(store.setMessages, { onSystemWarning });
+
+    dispatchAgentEvent(
+      {
+        type: 'system_warning',
+        message: 'too many parallel tool calls',
+        suggested_action: 'gglib config set max_parallel 8',
+      },
+      state,
+      deps,
+    );
+
+    expect(onSystemWarning).toHaveBeenCalledWith(
+      'too many parallel tool calls',
+      'gglib config set max_parallel 8',
+    );
+  });
+
+  it('does not require a handler to be wired', () => {
+    // The CLI-style caller passes no callback; dropping the notice is fine,
+    // throwing is not.
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+
+    expect(() =>
+      dispatchAgentEvent({ type: 'system_warning', message: 'heads up' }, state, deps),
+    ).not.toThrow();
+  });
+
+  it('leaves message content untouched', () => {
+    // The notice is transient UI, not part of the assistant's answer — it must
+    // never reach the persisted transcript.
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages, { onSystemWarning: vi.fn() });
+
+    dispatchAgentEvent({ type: 'system_warning', message: 'heads up' }, state, deps);
+
+    expect(partsOf(store.messages()[0])).toHaveLength(0);
   });
 });
 

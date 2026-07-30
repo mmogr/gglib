@@ -80,6 +80,13 @@ export interface StreamAgentChatOptions {
    * `null` / `undefined` → permissive (all tools available).
    */
   supportsToolCalls?: boolean | null;
+  /**
+   * Called for each non-fatal `system_warning` the loop emits — an upstream
+   * 503 being retried, a tool-call batch being trimmed. The stream continues
+   * either way; this is purely so the user is told what is happening rather
+   * than watching an idle cursor.
+   */
+  onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +115,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     setCurrentStreamingAssistantMessageId,
     config,
     supportsToolCalls,
+    onSystemWarning,
   } = options;
 
   // Build agent config: use null to let the backend apply defaults unless
@@ -196,7 +204,13 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   };
 
   // -- Process the SSE stream --------------------------------------------------
-  const dispatchDeps: DispatchDeps = { setMessages, timingTracker, makeNextMessage, cleanup };
+  const dispatchDeps: DispatchDeps = {
+    setMessages,
+    timingTracker,
+    makeNextMessage,
+    cleanup,
+    onSystemWarning,
+  };
   try {
     for await (const payload of readAgentSSE(response, abortSignal)) {
       let event: AgentEvent;
@@ -242,6 +256,8 @@ export interface DispatchDeps {
   timingTracker: ReasoningTimingTracker | undefined;
   makeNextMessage: (iter: number) => string;
   cleanup: () => void;
+  /** Surfaces non-fatal `system_warning` events; see {@link StreamAgentChatOptions}. */
+  onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
 }
 
 /**
@@ -256,9 +272,25 @@ export interface DispatchDeps {
  * {@link streamAgentChat} instead.
  */
 export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
-  const { setMessages, timingTracker, makeNextMessage, cleanup } = deps;
+  const { setMessages, timingTracker, makeNextMessage, cleanup, onSystemWarning } = deps;
 
   switch (event.type) {
+    case 'system_warning': {
+      // Non-fatal by definition: the loop is still running and more events
+      // follow, so this must not cleanup(), throw, or end the stream.
+      //
+      // Without this case the event fell through to the forward-compatibility
+      // default below and was discarded, which meant retry notices — and the
+      // parallel-tool-limit warning that predates them — were invisible in the
+      // GUI even though the CLI renderer had always shown them.
+      appLogger.warn('hook.runtime', 'streamAgentChat: system warning', {
+        message: event.message,
+        suggestedAction: event.suggested_action ?? undefined,
+      });
+      onSystemWarning?.(event.message, event.suggested_action);
+      return false;
+    }
+
     case 'reasoning_delta': {
       if (typeof event.content !== 'string') {
         appLogger.warn('hook.runtime', 'streamAgentChat: reasoning_delta missing content string', { event });

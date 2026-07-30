@@ -27,7 +27,9 @@ use std::sync::Arc;
 
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{AgentLoopPort, CacheMetricsSink, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::ports::{
+    AgentLoopPort, CacheMetricsSink, LlmCompletionPort, RetryObserver, ToolExecutorPort,
+};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
@@ -52,6 +54,10 @@ use crate::LlmCompletionAdapter;
 /// * `cache_metrics` — `Some(sink)` reports this loop's prompt-cache reuse
 ///   (e.g. the proxy process's agent-path store, for GUI chat); `None` when
 ///   there is no dashboard to report to.
+/// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
+///   consumer, so a user waiting on a contended model is told why. `None` when
+///   there is no stream to notify.
+#[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop(
     base_url: String,
     http_client: Client,
@@ -60,6 +66,7 @@ pub fn compose_agent_loop(
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    retry_observer: Option<Arc<dyn RetryObserver>>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -71,6 +78,7 @@ pub fn compose_agent_loop(
         None,
         None,
         cache_metrics,
+        retry_observer,
     )
 }
 
@@ -97,6 +105,9 @@ pub fn compose_agent_loop_with_sampling(
         sandbox_root,
         sampling,
         cache_metrics,
+        // The CLI renders the loop's events directly, so there is no separate
+        // consumer to notify — retries surface through the loop's own output.
+        None,
     )
 }
 
@@ -160,12 +171,14 @@ fn compose_agent_loop_inner(
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    retry_observer: Option<Arc<dyn RetryObserver>>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
             .with_model_context(model_context)
-            .with_cache_metrics_sink(cache_metrics),
+            .with_cache_metrics_sink(cache_metrics)
+            .with_retry_observer(retry_observer),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),

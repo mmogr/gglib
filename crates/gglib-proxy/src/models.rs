@@ -314,13 +314,18 @@ pub struct ModelInfo {
 // =============================================================================
 
 /// Error response matching OpenAI format.
-#[derive(Debug, Clone, Serialize)]
+///
+/// `Deserialize` is derived so in-process clients — the agent path's LLM
+/// completion adapter, which talks to this proxy over loopback HTTP — can
+/// classify a failure by reading the same struct the proxy wrote, rather than
+/// re-deriving the contract from a second hand-written DTO that could drift.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub error: ErrorDetail,
 }
 
 /// Error detail within an error response.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorDetail {
     pub message: String,
     pub r#type: String,
