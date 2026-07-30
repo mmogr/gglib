@@ -75,3 +75,65 @@ if (missingFromWorkflow.length || staleInWorkflow.length) {
 }
 
 console.log(`OK — issue.yml and issue-labels.yml agree on: ${mappableFormIds.join(', ')}`);
+
+// --- Optional second check: do the dropdown OPTIONS map to labels that exist? --------
+//
+// Field ids drifting is one failure mode; option values are another. The labels API
+// CREATES a label that doesn't exist rather than erroring (verified: POSTing an unknown
+// name returns 200 and yields a default-grey, description-less label), so an option like
+// `- clii` would silently manufacture a junk `component: clii`. issue-labels.yml now
+// refuses to create unknown labels at runtime, but catching it at PR time is better.
+//
+// Needs the repo's real label list, which this script can't know statically — so it's
+// opt-in via a JSON file argument (CI fetches it with `gh label list`). Without the
+// argument the check is skipped and the script stays pure/offline, runnable locally.
+const labelsFile = process.argv[2];
+if (!labelsFile) {
+  console.log('Skipping option-value check (no labels JSON passed — pass one to enable).');
+  process.exit(0);
+}
+
+const existingLabels = new Set(JSON.parse(readFileSync(labelsFile, 'utf8')).map(l => l.name ?? l));
+
+// Prefix per field id, mirroring issue-labels.yml's PREFIX_FIELDS.
+const OPTION_PREFIXES = { component: 'component: ', priority: 'priority: ', size: 'size: ', type: 'type: ' };
+
+function extractOptions(yamlText, fieldId) {
+  // Grab the `options:` list belonging to a given `id:`. Both live inside the same
+  // list item, so scan forward from the id until the next item at the same indent.
+  const lines = yamlText.split('\n');
+  const start = lines.findIndex(l => new RegExp(`^\\s{4}id:\\s*${fieldId}\\s*$`).test(l));
+  if (start === -1) return [];
+  const opts = [];
+  let inOptions = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s{2}- type:/.test(line)) break; // next field
+    if (/^\s+options:\s*$/.test(line)) { inOptions = true; continue; }
+    if (inOptions) {
+      const m = line.match(/^\s+-\s+(.+?)\s*$/);
+      if (m) opts.push(m[1]);
+      else if (line.trim() && !/^\s+-/.test(line)) inOptions = false;
+    }
+  }
+  return opts;
+}
+
+const formYaml = readFileSync(FORM_PATH, 'utf8');
+const badOptions = [];
+for (const [fieldId, prefix] of Object.entries(OPTION_PREFIXES)) {
+  for (const opt of extractOptions(formYaml, fieldId)) {
+    const label = prefix + opt;
+    if (!existingLabels.has(label)) badOptions.push(`${fieldId}: "${opt}" -> no such label "${label}"`);
+  }
+}
+
+if (badOptions.length) {
+  console.error('\nIssue form has dropdown option(s) with no matching repo label:\n');
+  for (const b of badOptions) console.error(`  ${b}`);
+  console.error('\nThese would be silently auto-created as untitled grey labels if applied.');
+  console.error('Either create the label or fix the option.');
+  process.exit(1);
+}
+
+console.log('OK — every dropdown option maps to an existing repo label.');

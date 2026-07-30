@@ -178,8 +178,31 @@ jobs:
             if (derived.size === 1) {
               toAdd = [...derived].filter(l => !names.includes(l));
               if (toAdd.length) {
-                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: toAdd });
-                core.info(`Applied: ${toAdd.join(', ')}`);
+                // Never let a stale COMPONENT_MAP entry invent a label. The labels API
+                // CREATES a nonexistent label rather than erroring (verified: POSTing an
+                // unknown name returns 200 and yields a default-grey, description-less
+                // label), so a renamed crate whose map row wasn't updated would silently
+                // manufacture junk. Filter to labels that exist; anything else warns and
+                // falls through to the ask-comment below, which is the safe direction.
+                //
+                // Inherited labels above need no such guard — they're read off a real
+                // issue, so they provably exist already.
+                const repoLabels = new Set((await github.paginate(
+                  github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 },
+                )).map(l => l.name));
+
+                const unknown = toAdd.filter(l => !repoLabels.has(l));
+                if (unknown.length) {
+                  core.warning(
+                    `COMPONENT_MAP refers to nonexistent label(s): ${unknown.join(', ')}. `
+                    + `Not creating them — update the map or create the labels.`);
+                }
+                toAdd = toAdd.filter(l => repoLabels.has(l));
+
+                if (toAdd.length) {
+                  await github.rest.issues.addLabels({ owner, repo, issue_number, labels: toAdd });
+                  core.info(`Applied: ${toAdd.join(', ')}`);
+                }
               }
             }
             const componentSatisfied = has('component:') || toAdd.length > 0;
@@ -257,21 +280,34 @@ jobs:
               owner, repo, issue_number, per_page: 100,
             })).find(c => c.body?.includes(MARKER));
 
-            const body = asks.length
-              ? `${MARKER}\n### Label check\n\n${asks.join('\n\n---\n\n')}`
-              : `${MARKER}\n### Label check\n\nAll required labels are present.`;
-
+            // Only ever comment when something is actually needed. When nothing is
+            // missing, say nothing at all — a green check plus the labels themselves
+            // already convey "all present", so an extra comment is pure noise.
+            //
             // Update in place rather than posting again on every push. Comment edits
             // don't send notifications, so this stays quiet. (And comment activity fires
             // issue_comment, not pull_request, so it cannot re-trigger this workflow.)
-            if (existing) {
-              if (existing.body !== body) {
-                await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body,
-                });
+            if (asks.length) {
+              const body = `${MARKER}\n### Label check\n\n${asks.join('\n\n---\n\n')}`;
+              if (existing) {
+                if (existing.body !== body) {
+                  await github.rest.issues.updateComment({
+                    owner, repo, comment_id: existing.id, body,
+                  });
+                }
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
               }
-            } else if (asks.length) {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            } else if (existing) {
+              // Delete rather than leaving it: the stale text says "Needs a size: label"
+              // and would now be actively wrong. Deleting is what "say nothing" actually
+              // means once a comment already exists.
+              try {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+                core.info('Removed the assist comment — nothing left to ask for.');
+              } catch (e) {
+                core.warning(`Could not delete the assist comment: ${e.message}`);
+              }
             }
 
   label-check:

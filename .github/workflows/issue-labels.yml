@@ -118,11 +118,37 @@ jobs:
                   toApply.add('type: epic');
                 }
 
+                // Never let a form-option typo invent a label. The labels API CREATES a
+                // label that doesn't exist rather than erroring — verified directly:
+                // POSTing a nonexistent name returns 200 and yields a new label with
+                // default grey (#ededed) and no description. So a stray dropdown option
+                // (say `- clii`) would silently produce a junk `component: clii` label
+                // that then satisfies the gate and pollutes the taxonomy.
+                //
+                // Filter to labels that already exist and warn loudly about the rest.
+                // The issue then falls through to needs-triage below — flagged for a
+                // human, which is the correct failure direction.
                 if (toApply.size) {
-                  await github.rest.issues.addLabels({
-                    owner, repo, issue_number, labels: [...toApply],
-                  });
-                  core.info(`Applied from form: ${[...toApply].join(', ')}`);
+                  const repoLabels = new Set((await github.paginate(
+                    github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 },
+                  )).map(l => l.name));
+
+                  const unknown = [...toApply].filter(l => !repoLabels.has(l));
+                  const known = [...toApply].filter(l => repoLabels.has(l));
+
+                  if (unknown.length) {
+                    core.warning(
+                      `Refusing to create nonexistent label(s): ${unknown.join(', ')}. `
+                      + `Check .github/ISSUE_TEMPLATE/issue.yml's dropdown options against `
+                      + `the repo's actual labels — an option with no matching label would `
+                      + `otherwise be auto-created as an untitled grey label.`);
+                  }
+                  if (known.length) {
+                    await github.rest.issues.addLabels({
+                      owner, repo, issue_number, labels: known,
+                    });
+                    core.info(`Applied from form: ${known.join(', ')}`);
+                  }
                 }
               }
             }
@@ -172,8 +198,13 @@ jobs:
                 await github.rest.issues.createComment({ owner, repo, issue_number, body });
               }
             } else if (existing) {
-              const body = `${MARKER}\n### Label triage\n\nResolved — all required labels are present.`;
-              if (existing.body !== body) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              // Nothing missing any more, so say nothing at all — the labels themselves
+              // convey that. Delete rather than leaving the comment: its text lists the
+              // categories that *were* missing and would now be actively wrong.
+              try {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+                core.info('Removed the triage comment — all required labels present.');
+              } catch (e) {
+                core.warning(`Could not delete the triage comment: ${e.message}`);
               }
             }
