@@ -38,6 +38,25 @@ fn is_loopback(host: &str) -> bool {
     host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
+/// Whether `host` is a wildcard ("all interfaces") address.
+///
+/// True for both `0.0.0.0` and its IPv6 equivalent `::`, so the two are treated
+/// alike when deciding how to describe the bind and how to advertise it.
+pub fn is_wildcard(host: &str) -> bool {
+    host.parse::<IpAddr>().is_ok_and(|ip| ip.is_unspecified())
+}
+
+/// Format `host:port` as an HTTP authority, bracketing IPv6 literals.
+///
+/// A bare IPv6 address is ambiguous in a URL (`http://::1:9887`), so anything
+/// that parses as IPv6 is wrapped: `http://[::1]:9887`.
+pub fn http_authority(host: &str, port: u16) -> String {
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V6(ip)) => format!("[{ip}]:{port}"),
+        _ => format!("{host}:{port}"),
+    }
+}
+
 /// Resolve the effective bind address and CORS policy.
 ///
 /// Host precedence is CLI flag → stored `bind_host` → [`DEFAULT_BIND_HOST`].
@@ -187,13 +206,38 @@ mod tests {
         }
     }
 
-    /// An explicit `0.0.0.0` is not loopback, so it passes the conflict check.
+    /// An explicit wildcard is not loopback, so it passes the conflict check —
+    /// for both address families.
     #[test]
     fn test_explicit_wildcard_is_allowed_with_share_lan() {
-        let decision =
-            resolve_bind(Some("0.0.0.0".to_owned()), true, &stored(None, None)).expect("resolves");
-        assert_eq!(decision.host, "0.0.0.0");
-        assert!(decision.share_lan);
+        for host in ["0.0.0.0", "::"] {
+            let decision =
+                resolve_bind(Some(host.to_owned()), true, &stored(None, None)).expect("resolves");
+            assert_eq!(decision.host, host);
+            assert!(decision.share_lan);
+        }
+    }
+
+    /// `::` is the IPv6 "all interfaces" address and must be classified the
+    /// same as `0.0.0.0` — it drives both the startup banner and whether mDNS
+    /// auto-detects addresses.
+    #[test]
+    fn test_is_wildcard_covers_both_families() {
+        assert!(is_wildcard("0.0.0.0"));
+        assert!(is_wildcard("::"));
+        assert!(!is_wildcard("127.0.0.1"));
+        assert!(!is_wildcard("::1"));
+        assert!(!is_wildcard("192.168.1.50"));
+        assert!(!is_wildcard("localhost"));
+    }
+
+    /// A bare IPv6 authority is ambiguous in a URL, so it gets bracketed.
+    #[test]
+    fn test_http_authority_brackets_ipv6() {
+        assert_eq!(http_authority("127.0.0.1", 9887), "127.0.0.1:9887");
+        assert_eq!(http_authority("localhost", 9887), "localhost:9887");
+        assert_eq!(http_authority("::1", 9887), "[::1]:9887");
+        assert_eq!(http_authority("::", 9887), "[::]:9887");
     }
 
     // ── Settings fallback ───────────────────────────────────────────────

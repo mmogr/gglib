@@ -95,10 +95,16 @@ pub async fn execute(
     if let Some(ref dir) = config.static_dir {
         style::print_info_banner("Web Server", "\u{1f680}");
         eprintln!("  \u{1f4c2} Serving UI from: {}", dir.display());
-        if config.host == "0.0.0.0" {
-            eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        if bind::is_wildcard(&config.host) {
+            eprintln!(
+                "  \u{1f310} Network: http://{}",
+                bind::http_authority(&config.host, port)
+            );
         } else {
-            eprintln!("  \u{1f310} Local:   http://{}:{}", config.host, port);
+            eprintln!(
+                "  \u{1f310} Local:   http://{}",
+                bind::http_authority(&config.host, port)
+            );
         }
         eprintln!(
             "  \u{1f4ca} Status:  http://localhost:{}/v1/proxy/status",
@@ -134,6 +140,15 @@ pub async fn execute(
     // closing it would mean threading a callback through gglib-axum, which the
     // Tauri adapter also consumes.
     let advertiser = mdns::MdnsAdvertiser::start(&decision.host, port);
+    if advertiser.is_none() {
+        // The technical cause is logged by the advertiser; say plainly here what
+        // it means, since the user asked for discovery and is not getting it.
+        eprintln!(
+            "  \u{26a0}\u{fe0f}  mDNS advertising unavailable — 'gglib.local' will not resolve."
+        );
+        eprintln!("     The server is still reachable at its IP address.");
+        eprintln!();
+    }
 
     let outcome = tokio::select! {
         res = start_server(config) => res,

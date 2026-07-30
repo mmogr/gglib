@@ -51,13 +51,9 @@ impl MdnsAdvertiser {
             }
         };
 
-        // An unspecified address means "every interface" — hand address
-        // selection to mdns-sd rather than guessing a primary NIC.
-        let wildcard = host
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|ip| ip.is_unspecified());
-
-        let service = if wildcard {
+        // A wildcard address (`0.0.0.0` or `::`) means "every interface" — hand
+        // address selection to mdns-sd rather than guessing a primary NIC.
+        let service = if super::bind::is_wildcard(host) {
             ServiceInfo::new(SERVICE_TYPE, INSTANCE_NAME, HOSTNAME, "", port, None)
                 .map(ServiceInfo::enable_addr_auto)
         } else {
