@@ -1,9 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react';
-import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
-import { appLogger } from '../../../services/platform';
-import { buildLoadedMessage, foldToolMessages } from '../../../hooks/useChatPersistence/buildLoadedMessage';
+import { useEffect, useRef } from 'react';
+import type { ThreadRuntime } from '@assistant-ui/react';
 import { getTransport } from '../../../services/transport';
 import type { ConversationSummary } from '../../../services/transport';
+import { buildThreadMessages } from './buildThreadMessages';
 
 /**
  * Options for the useChatPersistence hook.
@@ -36,13 +35,15 @@ export interface UseChatPersistenceResult {
 }
 
 /**
- * Hook that handles message persistence to/from the database.
- * 
+ * Hook that hydrates the thread runtime from the database.
+ *
  * Responsibilities:
- * - Hydrates messages from DB when conversation changes
- * - Persists new messages as they're added
- * - Detects message edits and cascades deletes appropriately
- * - Prevents race conditions during persist operations
+ * - Hydrates messages from DB when the conversation changes
+ * - Maintains the position -> DB ID map used for edit and delete lookups
+ *
+ * Saving new and changed messages is handled exclusively by the hooks-level
+ * useChatPersistence in `src/hooks/useChatPersistence.ts`; the persist effect
+ * was removed from here to prevent duplicate saves.
  */
 export function useChatPersistence({
   threadRuntime,
@@ -55,10 +56,10 @@ export function useChatPersistence({
   // Position tracking: maps runtime message index -> DB message ID
   // Used to detect edits and calculate cascade delete counts
   const dbIdByPosition = useRef<Map<number, number>>(new Map());
-  
+
   // Race condition protection for persist operations
   const isPersistingRef = useRef(false);
-  
+
   // Loading state for hydration
   const isLoadingRef = useRef(false);
 
@@ -67,49 +68,25 @@ export function useChatPersistence({
     if (!threadRuntime || !activeConversationId) {
       return;
     }
-    
+
     let cancelled = false;
     isLoadingRef.current = true;
     setChatError(null);
 
     const hydrate = async () => {
       try {
-        const messages = await getTransport().getMessages(activeConversationId);
+        const dbMessages = await getTransport().getMessages(activeConversationId);
         if (cancelled) return;
 
-        // Fold CLI agent tool rows into assistant contentParts.
-        const folded = foldToolMessages(messages);
+        const { messages, dbIdByPosition: positions, seededIds } = buildThreadMessages(
+          dbMessages,
+          activeConversation,
+          activeConversationId,
+        );
 
-        const prompt = activeConversation?.system_prompt?.trim();
-        const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation
-          ? [{
-              id: `system-${activeConversation.id}`,
-              role: 'system',
-              content: [{ type: 'text' as const, text: prompt }],
-              createdAt: new Date(activeConversation.created_at),
-            }]
-          : [];
-
-        const initialMessages: ThreadMessageLike[] = [
-          ...systemPromptMessage,
-          ...folded.map<ThreadMessageLike>((message) =>
-            buildLoadedMessage(message, activeConversationId)
-          ),
-        ];
-
-        // Build position -> DB ID mapping for edit detection and delete counting
-        // Position 0 may be system message, so we track from the actual DB messages
-        dbIdByPosition.current.clear();
-        const systemOffset = systemPromptMessage.length;
-        messages.forEach((msg, idx) => {
-          dbIdByPosition.current.set(systemOffset + idx, msg.id);
-        });
-
-        const seededIds = initialMessages
-          .map((msg) => msg.id)
-          .filter((value): value is string => Boolean(value));
-        persistedMessageIds.current = new Set(seededIds);
-        threadRuntime.reset(initialMessages);
+        dbIdByPosition.current = positions;
+        persistedMessageIds.current = seededIds;
+        threadRuntime.reset(messages);
       } catch (error) {
         if (!cancelled) {
           setChatError(error instanceof Error ? error.message : String(error));
@@ -138,181 +115,9 @@ export function useChatPersistence({
     persistedMessageIds,
   ]);
 
-  // Note: Message persistence (saving new/changed messages) is now handled
-  // exclusively by the hooks-level useChatPersistence in src/hooks/useChatPersistence.ts.
-  // This component-level hook only handles hydration and dbIdByPosition tracking.
-  // The persist effect was removed to prevent duplicate saves.
-
   return {
     isLoading: isLoadingRef.current,
     isPersisting: isPersistingRef.current,
     dbIdByPosition,
-  };
-}
-
-/**
- * Hook for handling message deletion with cascade.
- * Separated from persistence for cleaner mental model.
- */
-export interface UseMessageDeleteOptions {
-  threadRuntime: ThreadRuntime | null;
-  activeConversationId: number | null;
-  activeConversation: ConversationSummary | null;
-  persistedMessageIds: React.MutableRefObject<Set<string>>;
-  dbIdByPosition: React.MutableRefObject<Map<number, number>>;
-  syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
-  showToast: (message: string, type?: 'success' | 'error' | 'warning', duration?: number) => void;
-}
-
-export interface UseMessageDeleteResult {
-  /** Initiate delete flow for a message */
-  initiateDelete: (runtimeMessageId: string) => void;
-  /** Execute the delete after confirmation */
-  confirmDelete: () => Promise<void>;
-  /** Cancel the delete operation */
-  cancelDelete: () => void;
-  /** ID of message pending deletion */
-  deleteTargetId: string | null;
-  /** Whether delete modal should be shown */
-  isDeleteModalOpen: boolean;
-  /** Whether delete is in progress */
-  isDeleting: boolean;
-  /** Count of messages that will be deleted (including cascade) */
-  getSubsequentMessageCount: (runtimeMessageId: string) => number;
-}
-
-/**
- * Extract database ID from runtime message ID.
- * Runtime IDs follow the pattern "db-{id}" for hydrated messages.
- */
-const extractDbId = (runtimeId: string): number | null => {
-  const match = runtimeId.match(/^db-(\d+)$/);
-  return match ? parseInt(match[1], 10) : null;
-};
-
-/**
- * Hook for handling message deletion with confirmation modal.
- */
-export function useMessageDelete({
-  threadRuntime,
-  activeConversationId,
-  activeConversation,
-  persistedMessageIds,
-  dbIdByPosition,
-  syncConversations,
-  showToast,
-}: UseMessageDeleteOptions): UseMessageDeleteResult {
-  const deleteTargetIdRef = useRef<string | null>(null);
-  const isDeleteModalOpenRef = useRef(false);
-  const isDeletingRef = useRef(false);
-
-  const getSubsequentMessageCount = useCallback((runtimeMessageId: string): number => {
-    if (!threadRuntime) return 1;
-    
-    const state = threadRuntime.getState();
-    const messageIndex = state.messages.findIndex((m) => m.id === runtimeMessageId);
-    if (messageIndex === -1) return 1;
-    
-    // Count messages from this position to the end (excluding system messages)
-    let count = 0;
-    for (let i = messageIndex; i < state.messages.length; i++) {
-      if (state.messages[i].role !== 'system') {
-        count++;
-      }
-    }
-    return count;
-  }, [threadRuntime]);
-
-  const initiateDelete = useCallback((runtimeMessageId: string) => {
-    deleteTargetIdRef.current = runtimeMessageId;
-    isDeleteModalOpenRef.current = true;
-  }, []);
-
-  const cancelDelete = useCallback(() => {
-    isDeleteModalOpenRef.current = false;
-    deleteTargetIdRef.current = null;
-  }, []);
-
-  const confirmDelete = useCallback(async () => {
-    const deleteTargetId = deleteTargetIdRef.current;
-    if (!deleteTargetId || !threadRuntime || !activeConversationId) return;
-    
-    isDeletingRef.current = true;
-    try {
-      // Find the DB ID from the runtime message ID
-      let dbId = extractDbId(deleteTargetId);
-      
-      // If not found, look up by position (for newly created messages)
-      if (!dbId) {
-        const state = threadRuntime.getState();
-        const messages = state.messages;
-        const position = messages.findIndex(m => m.id === deleteTargetId);
-        if (position >= 0) {
-          dbId = dbIdByPosition.current.get(position) ?? null;
-        }
-      }
-      
-      if (dbId) {
-        // Delete from database (cascade deletes subsequent)
-        await getTransport().deleteMessage(dbId);
-      } else {
-        appLogger.debug('hook.ui', 'Could not find DB ID for message', { messageId: deleteTargetId });
-      }
-      
-      // Reload messages from DB and reset runtime
-      const messages = await getTransport().getMessages(activeConversationId);
-      const folded = foldToolMessages(messages);
-      
-      const prompt = activeConversation?.system_prompt?.trim();
-      const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation
-        ? [{
-            id: `system-${activeConversation.id}`,
-            role: 'system',
-            content: [{ type: 'text' as const, text: prompt }],
-            createdAt: new Date(activeConversation.created_at),
-          }]
-        : [];
-
-      const reloadedMessages: ThreadMessageLike[] = [
-        ...systemPromptMessage,
-        ...folded.map<ThreadMessageLike>((message) =>
-          buildLoadedMessage(message, activeConversationId)
-        ),
-      ];
-
-      // Rebuild position mapping
-      dbIdByPosition.current.clear();
-      const systemOffset = systemPromptMessage.length;
-      messages.forEach((msg, idx) => {
-        dbIdByPosition.current.set(systemOffset + idx, msg.id);
-      });
-
-      // Update persisted IDs and reset runtime
-      const seededIds = reloadedMessages
-        .map((msg) => msg.id)
-        .filter((value): value is string => Boolean(value));
-      persistedMessageIds.current = new Set(seededIds);
-      threadRuntime.reset(reloadedMessages);
-      
-      await syncConversations({ silent: true });
-      showToast('Message deleted', 'success');
-    } catch (error) {
-      appLogger.error('hook.ui', 'Failed to delete message', { error, conversationId: activeConversationId });
-      showToast('Failed to delete message', 'error');
-    } finally {
-      isDeletingRef.current = false;
-      isDeleteModalOpenRef.current = false;
-      deleteTargetIdRef.current = null;
-    }
-  }, [threadRuntime, activeConversationId, activeConversation, persistedMessageIds, dbIdByPosition, syncConversations, showToast]);
-
-  return {
-    initiateDelete,
-    confirmDelete,
-    cancelDelete,
-    deleteTargetId: deleteTargetIdRef.current,
-    isDeleteModalOpen: isDeleteModalOpenRef.current,
-    isDeleting: isDeletingRef.current,
-    getSubsequentMessageCount,
   };
 }

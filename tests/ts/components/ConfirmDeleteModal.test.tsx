@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ConfirmDeleteModal } from '../../../src/components/ChatMessagesPanel/ConfirmDeleteModal';
+import { ConfirmDeleteModal } from '../../../src/components/ChatMessagesPanel/components/ConfirmDeleteModal';
 
 describe('ConfirmDeleteModal', () => {
   const mockOnConfirm = vi.fn();
