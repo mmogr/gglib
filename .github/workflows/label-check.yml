@@ -1,11 +1,21 @@
-# Enforce that every PR has at least one label from each required category.
+# Enforce that every PR carries at least one label from each required category:
 #
-# Categories (prefix-matched):
 #   component:*  — which subsystem is touched
 #   priority:*   — how urgent is this
-#   size:*       — estimated effort
+#   size:*       — estimated effort (hours/days, NOT diff volume — see the note below)
 #
-# Automated PRs (version bumps, dependency updates) are exempt.
+# Two jobs in ONE workflow, deliberately:
+#   enrich       — applies what can be derived, and asks for what can't
+#   label-check  — the required status check; verifies and reports
+#
+# Why one workflow and not two: label changes made with GITHUB_TOKEN do NOT trigger new
+# workflow runs. A separate enrichment workflow would apply labels and leave this check
+# sitting on its stale red result forever. Sequencing with `needs:` is what lets
+# verification observe the enrichment.
+#
+# That same GITHUB_TOKEN property is what stops `labeled`/`unlabeled` from looping when
+# enrich writes a label. Swapping in a PAT or GitHub App token WOULD re-trigger, and
+# would reintroduce genuine loop risk. Don't.
 
 name: Label Check
 
@@ -13,62 +23,268 @@ on:
   pull_request:
     types: [opened, labeled, unlabeled, synchronize, reopened, ready_for_review]
 
-permissions:
-  pull-requests: read
+# Default to nothing; each job opts in to the minimum it needs.
+permissions: {}
+
+concurrency:
+  group: label-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
+  enrich:
+    name: Enrich labels
+    runs-on: ubuntu-latest
+    # Fork PRs get a read-only GITHUB_TOKEN, so label writes would fail. Skip cleanly
+    # instead — `label-check` below still runs (if: always()) and still reports, so a
+    # maintainer just applies labels by hand.
+    #
+    # Deliberately NOT pull_request_target: it would work today, since this job only
+    # reads API metadata and never checks out PR code. But it runs with a write token in
+    # base-repo context, so it is one careless future `actions/checkout` away from
+    # arbitrary code execution with write access. Not worth it for a repo whose PRs are
+    # all branch-based.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Derive component labels and request a size
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const issue_number = pr.number;
+
+            // Read labels from the API, never from context.payload — the payload is an
+            // event-time snapshot and goes stale the moment anything mutates labels.
+            const labelObjs = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const names = labelObjs.map(l => l.name);
+            const has = (prefix) => names.some(n => n.startsWith(prefix));
+
+            // --- Exemptions -----------------------------------------------------
+            // user.type is the durable signal (dependabot[bot], github-actions[bot], …)
+            // regardless of how the PR happens to be titled. Title patterns survive only
+            // as a secondary allowlist for human-authored mechanical PRs.
+            const EXEMPT_LABELS = ['automated', 'version-bump'];
+            const EXEMPT_TITLES = [/^Bump version to /, /^chore\(deps\):/, /^fix\(deps\):/];
+            if (pr.user?.type === 'Bot'
+                || EXEMPT_LABELS.some(l => names.includes(l))
+                || EXEMPT_TITLES.some(re => re.test(pr.title))) {
+              core.info(`PR #${issue_number} is exempt from label enrichment.`);
+              return;
+            }
+
+            // --- Changed files --------------------------------------------------
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: issue_number, per_page: 100,
+            });
+
+            // Generated/vendored churn inflates line counts without representing work.
+            // This is what made #436 measure 3340 lines when it was correctly size: xs.
+            const GENERATED =
+              /(^|\/)(Cargo\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|\.snap$|(^|\/)(dist|target|node_modules)\//;
+            const real = files.filter(f => !GENERATED.test(f.filename));
+            const lines = real.reduce((s, f) => s + f.additions + f.deletions, 0);
+            const excluded = files.length - real.length;
+
+            // --- component: derived from changed paths --------------------------
+            const COMPONENT_MAP = [
+              [/^crates\/gglib-cli\//,          'component: cli'],
+              [/^crates\/gglib-core\//,         'component: core'],
+              [/^crates\/gglib-axum\//,         'component: axum'],
+              [/^crates\/gglib-runtime\//,      'component: runtime'],
+              [/^crates\/gglib-proxy\//,        'component: proxy'],
+              [/^crates\/gglib-db\//,           'component: db'],
+              [/^crates\/gglib-download\//,     'component: downloads'],
+              [/^crates\/gglib-hf\//,           'component: hf'],
+              [/^crates\/gglib-mcp\//,          'component: mcp'],
+              [/^crates\/gglib-sse\//,          'component: sse'],
+              [/^crates\/gglib-app-services\//, 'component: gui'],
+              [/^crates\/gglib-tauri\//,        'component: tauri'],
+              [/^src-tauri\//,                  'component: tauri'],
+              [/^src\//,                        'component: frontend'],
+              [/^web_ui\//,                     'component: frontend'],
+              [/^\.github\//,                   'component: ci'],
+              [/^scripts\//,                    'component: ci'],
+            ];
+
+            const derived = new Set();
+            for (const f of files) {
+              for (const [re, label] of COMPONENT_MAP) {
+                if (re.test(f.filename)) derived.add(label);
+              }
+            }
+
+            // Auto-apply ONLY when derivation is unambiguous (exactly one component).
+            // scripts/backtest_label_heuristics.sh backtests this against merged PRs
+            // carrying human component labels: single-component-touch PRs matched the
+            // human's choice ~68% of the time, but multi-component-touch PRs matched only
+            // ~13% and over-labelled (added components the human didn't pick) ~63% of the
+            // time — e.g. #651 touched 8 crates mechanically (dead-code removal) but the
+            // human labelled just 4 that were the actual point of the change. Auto-applying
+            // "every touched crate" is confidently wrong on the majority case, so ambiguous
+            // PRs fall through to the comment below instead, same treatment as size:.
+            // Re-run the script if this ever needs re-checking — numbers drift slightly
+            // with sample size but the qualitative conclusion has been stable.
+            let toAdd = [];
+            if (derived.size === 1) {
+              toAdd = [...derived].filter(l => !names.includes(l));
+              if (toAdd.length) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: toAdd });
+                core.info(`Applied: ${toAdd.join(', ')}`);
+              }
+            }
+            const componentSatisfied = has('component:') || toAdd.length > 0;
+            const suggestedComponents = componentSatisfied ? [] : [...derived];
+
+            // --- size: ask, never guess ----------------------------------------
+            // scripts/backtest_label_heuristics.sh backtests this against 318 merged PRs
+            // and finds line count cannot predict this repo's size labels: 49% exact at
+            // the thresholds below, and only a 55% ceiling even grid-searched in-sample
+            // (i.e. best case, tuned on the same data it's scored against — real-world
+            // would be worse). The 430–560 line band alone spans all five labels —
+            // #386 (448 lines) is size: xs, #206 (444 lines) is size: xl. size: is
+            // denominated in hours, and effort does not track volume.
+            //
+            // So report the measurement plus honest base rates, and let a human decide.
+            // Never apply a computed size: since we would only apply when absent, a wrong
+            // guess would satisfy the gate and then never be corrected.
+            const BANDS = [
+              [0,    30,       '`xs` 82%, `s` 18%'],
+              [30,   80,       '`xs` 64%, `s` 29%'],
+              [80,   150,      '`s` 44%, `m` 30%'],
+              [150,  300,      '`m` 52%, `s` 27%'],
+              [300,  600,      '`m` 44%, `s` 22%, `l` 18%'],
+              [600,  1200,     '`m` 41%, `l` 40%'],
+              [1200, 2500,     '`l` 53%, `xl` 22%'],
+              [2500, Infinity, '`xl` 70%, `l` 20%'],
+            ];
+            const band = BANDS.find(([lo, hi]) => lines >= lo && lines < hi);
+
+            // --- One idempotent assist comment ---------------------------------
+            const MARKER = '<!-- label-check-assist -->';
+            const asks = [];
+
+            if (!has('size:')) {
+              asks.push([
+                `**Needs a \`size:\` label.**`,
+                ``,
+                `This PR changes **${lines} lines** across **${real.length} file(s)**`
+                  + (excluded ? ` (excluding ${excluded} generated file(s))` : ``) + `.`,
+                ``,
+                `Historically, PRs in this repo of that size were labelled ${band[2]}.`,
+                ``,
+                `> Weak evidence only. Line count predicts this repo's size labels just`,
+                `> 49–55% of the time, because \`size:\` measures hours, not volume.`,
+                `> Pick based on actual effort.`,
+              ].join('\n'));
+            }
+
+            if (!componentSatisfied) {
+              asks.push(suggestedComponents.length ? [
+                `**Needs a \`component:\` label.**`,
+                ``,
+                `This PR touches ${suggestedComponents.length} components — auto-labelling`,
+                `only kicks in for a single unambiguous match, since backtesting showed`,
+                `applying every touched component is wrong on the majority of multi-crate`,
+                `PRs (~63% over-labelled vs. what a human picked). Touched:`,
+                ``,
+                ...suggestedComponents.map(l => `- \`${l}\``),
+                ``,
+                `Pick the one(s) that were actually the point of the change.`,
+              ].join('\n') : [
+                `**Needs a \`component:\` label.**`,
+                ``,
+                `The changed paths don't map to a known component — \`gglib-agent\`,`,
+                `\`gglib-bootstrap\`, \`gglib-gguf\`, \`gglib-build-info\` and`,
+                `\`gglib-integration-tests\` have no component label — so this one needs`,
+                `a human. Changed paths:`,
+                ``,
+                ...real.slice(0, 10).map(f => `- \`${f.filename}\``),
+                real.length > 10 ? `- …and ${real.length - 10} more` : ``,
+              ].filter(Boolean).join('\n'));
+            }
+
+            const existing = (await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            })).find(c => c.body?.includes(MARKER));
+
+            const body = asks.length
+              ? `${MARKER}\n### Label check\n\n${asks.join('\n\n---\n\n')}`
+              : `${MARKER}\n### Label check\n\nAll required labels are present.`;
+
+            // Update in place rather than posting again on every push. Comment edits
+            // don't send notifications, so this stays quiet. (And comment activity fires
+            // issue_comment, not pull_request, so it cannot re-trigger this workflow.)
+            if (existing) {
+              if (existing.body !== body) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id, body,
+                });
+              }
+            } else if (asks.length) {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
   label-check:
     name: Label Check
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
-
+    needs: enrich
+    # always() is what makes this run when `enrich` is SKIPPED (fork PR) or errors.
+    # Never gate this job on the fork condition itself: a required status check whose job
+    # is skipped never posts a result at all, which blocks the merge permanently instead
+    # of failing cleanly.
+    if: always() && github.event.pull_request.draft == false
+    permissions:
+      pull-requests: read
     steps:
       - name: Check required labels
         uses: actions/github-script@v7
         with:
           script: |
-            // --- Configuration ---
             const REQUIRED_PREFIXES = ['component:', 'priority:', 'size:'];
-
-            // Automated PR patterns — exempt from label requirements
-            const EXEMPT_PATTERNS = [
-              /^Bump version to /,
-              /^chore\(deps\):/,
-              /^fix\(deps\):/,
-            ];
-
-            // Labels that themselves mark a PR as exempt
             const EXEMPT_LABELS = ['automated', 'version-bump'];
+            const EXEMPT_TITLES = [/^Bump version to /, /^chore\(deps\):/, /^fix\(deps\):/];
 
-            // --- Logic ---
             const pr = context.payload.pull_request;
-            const labels = pr.labels.map(l => l.name);
-            const title = pr.title;
+            const { owner, repo } = context.repo;
 
-            // Check if PR is exempt
-            const isExemptByTitle = EXEMPT_PATTERNS.some(pat => pat.test(title));
-            const isExemptByLabel = EXEMPT_LABELS.some(l => labels.includes(l));
+            // Fetch from the API — the event payload is a stale snapshot that won't
+            // include anything `enrich` just applied.
+            const labelObjs = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const names = labelObjs.map(l => l.name);
 
-            if (isExemptByTitle || isExemptByLabel) {
-              core.info(`PR #${pr.number} is exempt (title: ${isExemptByTitle}, label: ${isExemptByLabel})`);
+            if (pr.user?.type === 'Bot'
+                || EXEMPT_LABELS.some(l => names.includes(l))
+                || EXEMPT_TITLES.some(re => re.test(pr.title))) {
+              core.info(`PR #${pr.number} is exempt (author type: ${pr.user?.type}).`);
               return;
             }
 
-            // Check each required prefix
-            const missing = REQUIRED_PREFIXES.filter(prefix =>
-              !labels.some(l => l.startsWith(prefix))
-            );
-
-            if (missing.length > 0) {
-              const msg = [
-                `Missing required labels: ${missing.join(', ')}`,
-                '',
-                `Every PR needs at least one label from each category:`,
-                ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
-                '',
-                `Exempt patterns: ${EXEMPT_PATTERNS.map(p => p.source).join(', ')}`,
-              ].join('\n');
-              core.setFailed(msg);
-            } else {
-              core.info(`PR #${pr.number} has all required labels: ${labels.filter(l => l.startsWith('component:') || l.startsWith('priority:') || l.startsWith('size:')).join(', ')}`);
+            const missing = REQUIRED_PREFIXES.filter(p => !names.some(n => n.startsWith(p)));
+            if (!missing.length) {
+              core.info(`All required labels present: ${names.join(', ')}`);
+              return;
             }
+
+            const isFork = pr.head.repo.full_name !== `${owner}/${repo}`;
+            core.setFailed([
+              `Missing required labels: ${missing.join(', ')}`,
+              ``,
+              `Every PR needs at least one label from each category:`,
+              ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
+              ``,
+              isFork
+                // Say this plainly so an external contributor isn't left thinking they
+                // did something wrong. This is check output, so it needs no write access.
+                ? `This PR is from a fork, where automatic labelling can't run (fork`
+                  + ` tokens are read-only). A maintainer will apply these labels.`
+                : `component: auto-applies only when exactly one is touched; priority:`
+                  + ` and size: are human judgements — see the bot comment on this PR.`,
+            ].join('\n'));
