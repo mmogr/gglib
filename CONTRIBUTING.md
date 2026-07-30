@@ -18,7 +18,8 @@ This document is the definitive engineering guide for contributors. Read it befo
 10. [Badges Pipeline](#badges-pipeline)
 11. [Development Workflow](#development-workflow)
 12. [CI Pipeline](#ci-pipeline)
-13. [Pull Request Checklist](#pull-request-checklist)
+13. [Issue & PR Labeling](#issue--pr-labeling)
+14. [Pull Request Checklist](#pull-request-checklist)
 
 ---
 
@@ -614,6 +615,32 @@ After each successful CI run, `badges.yml` downloads the test/boundary/coverage 
 Coverage is measured on every push to `main` with `cargo-llvm-cov` and feeds into the same badge pipeline.
 
 Docs are deployed to GitHub Pages automatically when a release is published, via `docs.yml`.
+
+---
+
+## Issue & PR Labeling
+
+Every issue and PR needs at least one label from each of four categories: `component:`, `priority:`, `size:`, and `type:`. Most of this is automated — the manual part is smaller than it looks.
+
+### On issues
+
+Opening an issue through GitHub's "New Issue" form (`.github/ISSUE_TEMPLATE/issue.yml`) requires `component:`, `priority:`, `size:`, and `type:` before you can even submit — the fields are required dropdowns, and `component:`/`type:` allow selecting more than one (issues commonly span several crates, or are simultaneously e.g. a bug and a refactor).
+
+If an issue is created outside the form — a scripted `gh issue create`, or the raw API — the form's required fields can't apply, since GitHub only validates them in the web UI and `gh issue create`'s interactive prompts. `issue-labels.yml` is the actual backstop: it checks every issue for all four categories and applies `status: needs-triage` if any are missing, removing it automatically once the labels are added by hand. `is:issue is:open label:"status: needs-triage"` is the live worklist of anything that slipped through.
+
+**Epics:** check the optional "Epic" box on the form (applies `type: epic`) only for an issue that itself tracks multi-phase work. Don't invent a new label per phase — use GitHub's native sub-issues (the "Create sub-issue" button on the epic) to link and order the phases. It gives the epic a live progress checklist for free and has no ceiling on phase count, unlike a per-letter label scheme.
+
+### On PRs
+
+`label-check.yml`'s `enrich` job does three things automatically, before the required-label check even runs:
+
+- **Inherits `component:`/`priority:`/`type:`** from any issue the PR closes (`Closes #N`, `Fixes #N`, `Resolves #N`, or a full issue URL) — skipping any category the PR already carries, so a deliberate override always wins.
+- **Auto-applies `component:`** from changed file paths, but only when the touch maps to exactly one component. Backtesting showed this is reliable when unambiguous (~68% match) and wrong most of the time when several components are touched (~63% over-labelled) — so an ambiguous touch gets a comment listing the candidates instead of a guess.
+- **Never auto-applies `size:`.** Backtested against 318 merged PRs: line count predicts this repo's `size:` labels only ~49–55% of the time, because `size:` is an hours/days estimate and effort doesn't track diff volume (a 3000-line lockfile-churn PR can be `xs`; a 90-line dead-CSS removal can be `l`, because the work was figuring out what was safe to delete). Instead, the PR gets a comment with the measured diff size and the historical label distribution for PRs of that size, and a human picks.
+
+In practice: if your PR closes a fully-labelled issue, you'll rarely touch labels on the PR at all — everything but `size:` (or all four, if the issue itself had one) inherits automatically. `Label Check` is the required status check that gates merge; its failure message says exactly which category is missing and why it wasn't auto-filled.
+
+`scripts/backtest_label_heuristics.sh` reproduces the accuracy numbers above against current PR history, if the taxonomy or crate layout changes enough to warrant re-checking them.
 
 ---
 
