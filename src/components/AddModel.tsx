@@ -1,11 +1,11 @@
 import { useState, FC, FormEvent } from "react";
 import { FolderOpen } from "lucide-react";
 import { appLogger } from '../services/platform';
-import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
 import { Icon } from "./ui/Icon";
 import { Input } from "./ui/Input";
+import { getTransport } from '../services/transport';
 
 interface AddModelProps {
   onModelAdded: () => void;
@@ -42,7 +42,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
     try {
       setAdding(true);
       setError(null);
-      await addModel({ filePath: filePath.trim() });
+      await getTransport().addModel({ filePath: filePath.trim() });
       setFilePath("");
       onModelAdded();
     } catch (err) {

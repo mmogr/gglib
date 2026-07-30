@@ -5,13 +5,13 @@ import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
 import { useModels } from "../hooks/useModels";
 import { UpdateSettingsRequest, InferenceConfig } from "../types";
-import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
 import { Modal } from "./ui/Modal";
 import { cn } from '../utils/cn';
+import type { McpServerInfo } from '../services/transport';
 
 type SettingsTab = "general" | "profiles" | "mcp";
 

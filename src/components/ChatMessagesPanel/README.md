@@ -5,38 +5,38 @@
 
 <!-- module-docs:start -->
 
-Central chat interface managing the message thread, system prompt, conversation operations (rename, clear, export), AI title generation, and toggling between standard chat and council (multi-agent) modes. Integrates the `@assistant-ui/react` thread runtime and delegates persistence to `useChatPersistence`.
+Central chat interface managing the message thread, system prompt, conversation operations (rename, clear, export), AI title generation, and toggling between standard chat and council (multi-agent) modes. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.
 
 ## Architecture
 
 ```
-ChatMessagesPanel
+ChatMessagesPanel                 ← composition root; owns the thread runtime
+    ├── ChatPanelHeader           ← title, rename, AI title, status, tool support
+    ├── SystemPromptSection       ← prompt preview + editor (own draft state)
+    ├── ChatStatusBanners         ← chat error / server-down warning
     ├── ThinkingTimingProvider    ← context for live reasoning timers
-    ├── ThreadPrimitive           ← @assistant-ui message list
-    │     └── MessageBubbles     ← per-message rendering
-    │           ├── MarkdownMessageContent
-    │           ├── ThinkingBlock  (collapsible CoT with live timer)
-    │           └── ToolUsageBadge / ToolExecutionProgress
-    └── ComposerPrimitive         ← message input + controls
-          ├── system prompt editor
-          ├── orchestrator toggle
-          └── send / stop streaming
+    │     └── ThreadPrimitive     ← @assistant-ui message list
+    │           ├── MessageBubbles      ← per-message rendering
+    │           │     ├── MarkdownMessageContent
+    │           │     ├── ThinkingBlock  (collapsible CoT with live timer)
+    │           │     └── ToolUsageBadge / ToolExecutionProgress
+    │           ├── CouncilThread       ← orchestrator runs, inline in the viewport
+    │           └── ComposerFooter      ← input, council toggle, send / stop
+    └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `ChatMessagesPanel.tsx` | Root component; conversation hydration, title generation, cascade delete |
-| `ConfirmDeleteModal.tsx` | Warns about cascade deletion when removing a mid-thread message |
-| `ThinkingBlock.tsx` | Collapsible reasoning section with live duration during streaming |
+| `ChatMessagesPanel.tsx` | Composition root; wires the thread runtime, hooks, and child components together |
 
 ## Sub-directories
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | `MessageBubbles`, `MarkdownMessageContent`, `MessageActionsContext` |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
-| `hooks/` | `useChatPersistence`, `useSharedTicker`, `useTitleGeneration` |
+| `hooks/` | `useChatPersistence`, `useMessageDeletion`, `useCouncilMode`, `useSharedTicker`, `useTitleGeneration`, `buildThreadMessages` |
 
 <!-- module-docs:end -->

@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  listTags,
-  addModelTag,
-  removeModelTag,
-  getModelTags,
-} from '../services/clients/tags';
+import { getTransport } from '../services/transport';
 
 export function useTags() {
   const [tags, setTags] = useState<string[]>([]);
@@ -15,7 +10,7 @@ export function useTags() {
     try {
       setLoading(true);
       setError(null);
-      const tagList = await listTags();
+      const tagList = await getTransport().listTags();
       setTags(tagList);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -30,17 +25,17 @@ export function useTags() {
   }, [loadTags]);
 
   const addTagToModel = useCallback(async (modelId: number, tag: string) => {
-    await addModelTag(modelId, tag);
+    await getTransport().addModelTag(modelId, tag);
     await loadTags(); // Refresh tags list
   }, [loadTags]);
 
   const removeTagFromModel = useCallback(async (modelId: number, tag: string) => {
-    await removeModelTag(modelId, tag);
+    await getTransport().removeModelTag(modelId, tag);
     await loadTags(); // Refresh tags list
   }, [loadTags]);
 
   const fetchModelTags = useCallback(async (modelId: number): Promise<string[]> => {
-    return await getModelTags(modelId);
+    return await getTransport().getModelTags(modelId);
   }, []);
 
   return {

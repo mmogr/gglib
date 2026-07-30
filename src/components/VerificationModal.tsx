@@ -9,11 +9,11 @@ import { CheckCircle2, XCircle, AlertCircle, Loader2, Wrench, RefreshCw } from '
 import { Modal } from './ui/Modal';
 import { Icon } from './ui/Icon';
 import { Button } from './ui/Button';
-import { verifyModel, checkModelUpdates, repairModel, type VerificationReport, type UpdateCheckResult, type OverallHealth } from '../services/clients/verification';
 import { getTransport } from '../services/transport';
 import type { VerificationEvent } from '../services/transport/types/events';
 import { appLogger } from '../services/platform';
 import { useConfirmContext } from '../contexts/ConfirmContext';
+import type { VerificationReport, UpdateCheckResult, OverallHealth } from '../services/transport';
 
 interface VerificationModalProps {
   modelId: number;
@@ -57,7 +57,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     setProgress(null);
 
     try {
-      const result = await verifyModel(modelId);
+      const result = await getTransport().verifyModel(modelId);
       setReport(result);
       appLogger.info('component', 'Verification complete', { modelId, health: result.overall_health });
     } catch (err) {
@@ -75,7 +75,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     setUpdateResult(null);
 
     try {
-      const result = await checkModelUpdates(modelId);
+      const result = await getTransport().checkModelUpdates(modelId);
       setUpdateResult(result);
       appLogger.info('component', 'Update check complete', { modelId, updateAvailable: result.update_available });
     } catch (err) {
@@ -108,7 +108,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     try {
       // For updates, only repair changed shards if specified
       const shardsToRepair = updateResult?.details?.changes.map(c => c.index);
-      await repairModel(modelId, shardsToRepair);
+      await getTransport().repairModel(modelId, shardsToRepair);
       appLogger.info('component', 'Repair initiated', { modelId, mode });
       // Close modal and let user monitor downloads
       onClose();

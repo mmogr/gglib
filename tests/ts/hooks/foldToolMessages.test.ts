@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { foldToolMessages } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
-import type { ChatMessage } from '../../../src/services/clients/chat';
+import type { ChatMessage } from '../../../src/services/transport';
 
 function makeMsg(overrides: Partial<ChatMessage> & Pick<ChatMessage, 'role' | 'content'>): ChatMessage {
   return {

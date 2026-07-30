@@ -10,9 +10,7 @@ HTTP API transport implementations for all backend domains. Wraps `fetch` with a
 ## Request Flow
 
 ```
-clients/chat.ts: listConversations()
-       ▼
-getTransport().listConversations()
+ChatPage.tsx: getTransport().listConversations()
        ▼
 transport/api/chat.ts
        ▼

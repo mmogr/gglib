@@ -20,10 +20,10 @@ import { Icon } from '../../ui/Icon';
 import type { GgufModel } from '../../../types';
 import type { BenchmarkEvent, TuneCandidateResult, TuneConfig } from '../../../types/benchmark';
 import { startTuneRun } from '../../../services/clients/benchmark';
-import { updateModel } from '../../../services/clients/models';
 import { TuneConfigForm } from './TuneConfigForm';
 import { TuneLiveProgress, TuneTaskLogEntry, TunePrunedEntry } from './TuneLiveProgress';
 import { TuneLeaderboard } from './TuneLeaderboard';
+import { getTransport } from '../../../services/transport';
 
 interface TuneTabProps {
   models: GgufModel[];
@@ -130,7 +130,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models }) => {
   const handleApply = useCallback(async (result: TuneCandidateResult, modelId: number) => {
     setApplyMessage(null);
     try {
-      await updateModel({ id: modelId, inferenceDefaults: result.config });
+      await getTransport().updateModel({ id: modelId, inferenceDefaults: result.config });
       setApplyMessage(
         `Applied config (score ${result.composite_score.toFixed(3)}) to the model's inference defaults.`,
       );

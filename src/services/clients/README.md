@@ -5,48 +5,42 @@
 
 <!-- module-docs:start -->
 
-Domain-specific client facades exposing all backend capabilities to the React UI layer. Each module is a thin delegation wrapper over `getTransport()`, ensuring the UI never touches platform-specific code. All clients are platform-agnostic by design — transport selection happens once at composition root.
+Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: parse a streaming response by hand, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs on the transport interface and is called directly as `getTransport().method()`. There is no facade layer in between.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                 React Components                    │
-└──────────────────────────┬──────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────┐
-│            clients/  (Domain Facades)                │
-│  chat.ts  models.ts  servers.ts  downloads.ts  ...  │
-│             └── all call getTransport()             │
-└──────────────────────────┬──────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────┐
-│              transport/  (Platform Layer)            │
+└───────────────┬─────────────────────┬───────────────┘
+                │                     │
+                │                     ▼
+                │        ┌─────────────────────────┐
+                │        │  clients/               │
+                │        │  streaming + off-app    │
+                │        │  endpoints only         │
+                │        └────────────┬────────────┘
+                ▼                     │
+┌─────────────────────────────────────▼───────────────┐
+│              transport/  (Platform Layer)           │
 │         Tauri IPC  ──or──  HTTP + SSE               │
 └─────────────────────────────────────────────────────┘
 ```
+
+`council.ts` and `benchmark.ts` reach the backend through `transport/api/client`'s authenticated fetch helpers. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `chat.ts` | Conversations, messages, title generation |
-| `models.ts` | Local model CRUD, search, HuggingFace browse |
-| `downloads.ts` | Download queue management (queue, cancel, reorder) |
-| `servers.ts` | llama.cpp server lifecycle and proxy operations |
-| `settings.ts` | Application settings read/write |
-| `mcp.ts` | MCP server configuration and tool execution |
-| `events.ts` | Event subscription and unsubscribe |
-| `builtin.ts` | Built-in tool registry access |
-| `tags.ts` | Model tagging operations |
-| `benchmark.ts` | Benchmark execution and result retrieval |
-| `council.ts` | Council (multi-agent orchestrator) operations |
-| `huggingface.ts` | HuggingFace Hub model discovery |
-| `verification.ts` | Model/file verification |
-| `system.ts` | System information and capability probes |
+| `council.ts` | Council (multi-agent orchestrator) runs — manual SSE parser over a chunked `TextDecoder` buffer |
+| `benchmark.ts` | Benchmark and tune runs — REST endpoints plus an SSE progress stream |
+| `proxyDashboard.ts` | Live proxy dashboard — native `EventSource` against the running proxy's own HTTP port, not the app backend |
 
 ## Contract
 
-Every export follows `clientFn(...) → getTransport().method(...)`. No client module may import from `platform/` — platform exceptions are handled inside `transport/platform/`.
+A module belongs here only if it needs streaming or a non-backend origin. If a new operation is a plain call against the app's backend, add it to the `Transport` interface and call `getTransport()` from the consumer — do not add a wrapper module here.
+
+No client may import from `platform/` — platform exceptions are handled inside `transport/platform/`.
 
 <!-- module-docs:end -->

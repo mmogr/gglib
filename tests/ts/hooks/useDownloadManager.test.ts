@@ -7,34 +7,37 @@ vi.mock('../../../src/utils/platform', () => ({
   isTauriApp: false,
 }));
 
-// Mocks for queue operations (from clients/downloads)
-const mockQueueDownload = vi.fn();
-const mockCancelDownload = vi.fn();
-const mockCancelShardGroup = vi.fn();
-const mockClearFailedDownloads = vi.fn();
-const mockGetDownloadQueue = vi.fn();
-
-vi.mock('../../../src/services/clients/downloads', () => ({
-  queueDownload: (...args: any[]) => mockQueueDownload(...args),
-  getDownloadQueue: () => mockGetDownloadQueue(),
-  cancelDownload: (...args: any[]) => mockCancelDownload(...args),
-  cancelShardGroup: (...args: any[]) => mockCancelShardGroup(...args),
-  clearFailedDownloads: (...args: any[]) => mockClearFailedDownloads(...args),
-}));
-
-// Mocks for events (from clients/events - now sync)
+// Transport mock: queue operations plus the (sync) event subscription.
 let mockSubscribeHandler: ((event: any) => void) | null = null;
 let unsubscribeCalled = false;
-const mockSubscribeToEvent = vi.fn((eventType: string, handler: (event: any) => void) => {
+
+const transport = vi.hoisted(() => ({
+  queueDownload: vi.fn(),
+  getDownloadQueue: vi.fn(),
+  cancelDownload: vi.fn(),
+  cancelShardGroup: vi.fn(),
+  clearFailedDownloads: vi.fn(),
+  subscribe: vi.fn(),
+}));
+
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const mockQueueDownload = transport.queueDownload;
+const mockCancelDownload = transport.cancelDownload;
+const mockCancelShardGroup = transport.cancelShardGroup;
+const mockClearFailedDownloads = transport.clearFailedDownloads;
+const mockGetDownloadQueue = transport.getDownloadQueue;
+const mockSubscribeToEvent = transport.subscribe;
+
+mockSubscribeToEvent.mockImplementation((_eventType: string, handler: (event: any) => void) => {
   mockSubscribeHandler = handler;
   return () => {
     unsubscribeCalled = true;
   };
 });
-
-vi.mock('../../../src/services/clients/events', () => ({
-  subscribeToEvent: (...args: any[]) => mockSubscribeToEvent(...args),
-}));
 
 const emptySnapshot = { current: null, pending: [], failed: [], max_size: 3 };
 

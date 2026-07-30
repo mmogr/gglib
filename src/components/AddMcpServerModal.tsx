@@ -3,7 +3,6 @@
  */
 
 import { FC, useState, useCallback, useEffect, FormEvent } from "react";
-import type { NewMcpServer, McpServerInfo, McpEnvEntry } from "../services/clients/mcp";
 import type { McpServerType } from "../services/transport/types/mcp";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
@@ -12,6 +11,7 @@ import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/S
 import { ServerTypeConfig } from "./AddMcpServerModal/ServerTypeConfig";
 import { EnvVarManager } from "./AddMcpServerModal/EnvVarManager";
 import { Stack } from './primitives';
+import type { NewMcpServer, McpServerInfo, McpEnvEntry } from '../services/transport';
 
 interface AddMcpServerModalProps {
   isOpen: boolean;

@@ -1,8 +1,8 @@
 import { FC } from 'react';
 import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
-import { Button } from '../ui/Button';
-import { Icon } from '../ui/Icon';
-import { Modal } from '../ui/Modal';
+import { Button } from '../../ui/Button';
+import { Icon } from '../../ui/Icon';
+import { Modal } from '../../ui/Modal';
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;

@@ -7,25 +7,25 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useModels } from '../../../src/hooks/useModels';
 import { GgufModel } from '../../../src/types';
 
-// Mock the clients/models service functions
-vi.mock('../../../src/services/clients/models', () => ({
+const transport = vi.hoisted(() => ({
   listModels: vi.fn(),
   addModel: vi.fn(),
   removeModel: vi.fn(),
   updateModel: vi.fn(),
 }));
 
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+const { listModels, addModel, removeModel, updateModel } = transport;
+
 // Mock the desktop-specific setSelectedModel (now in services/platform)
 vi.mock('../../../src/services/platform', () => ({
   setSelectedModel: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  listModels,
-  addModel,
-  removeModel,
-  updateModel,
-} from '../../../src/services/clients/models';
 import { setSelectedModel } from '../../../src/services/platform';
 
 const mockModels: GgufModel[] = [

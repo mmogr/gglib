@@ -8,19 +8,15 @@
 import { FC, useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useMcpServers } from "../hooks/useMcpServers";
-import {
-  isServerRunning,
-  hasServerError,
-  getServerErrorMessage,
-  resolveMcpServerPath,
-} from "../services/clients/mcp";
-import type { McpServerInfo } from "../services/clients/mcp";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Stack } from './primitives';
 import { cn } from "../utils/cn";
 import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
+import { getTransport } from '../services/transport';
+import type { McpServerInfo } from '../services/transport';
+import { isServerRunning, hasServerError, getServerErrorMessage } from '../utils/mcp';
 
 const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
 
@@ -117,7 +113,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       setActionError(null);
       setActionLoading(id);
       try {
-        const result = await resolveMcpServerPath(id);
+        const result = await getTransport().resolveMcpServerPath(id);
         
         if (result.success) {
           showToast(`Resolved: ${result.resolved_path}`, 'success');

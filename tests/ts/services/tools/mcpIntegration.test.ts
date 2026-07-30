@@ -2,16 +2,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerMcpTools, unregisterMcpTools, getMcpSource } from '../../../../src/services/tools/mcpIntegration';
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
 import { mcpGenericRenderer } from '../../../../src/services/tools/renderers';
-import type { McpTool } from '../../../../src/services/clients/mcp';
+import type { McpTool } from '../../../../src/services/transport';
 
 // =============================================================================
 // Module mocks
 // =============================================================================
 
-// Mock the MCP client so we never make real Tauri IPC calls in unit tests.
-vi.mock('../../../../src/services/clients/mcp', () => ({
+// Mock the transport so we never make real IPC/HTTP calls in unit tests.
+const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
   callMcpTool: vi.fn(),
+}));
+
+vi.mock('../../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/services/transport')>()),
+  getTransport: () => transport,
+}));
+
+vi.mock('../../../../src/utils/mcp', () => ({
   isServerRunning: vi.fn(),
 }));
 
@@ -154,8 +162,7 @@ describe('registerMcpTools', () => {
   // ── Executor uses raw tool name ────────────────────────────────────────────
 
   it('executor calls callMcpTool with the raw original tool name, not the sanitized name', async () => {
-    const { callMcpTool } = await import('../../../../src/services/clients/mcp');
-    const mockCallMcpTool = vi.mocked(callMcpTool);
+    const mockCallMcpTool = transport.callMcpTool;
     mockCallMcpTool.mockResolvedValueOnce({ success: true, data: 'result' });
 
     registerMcpTools('my.server', [makeTool('get data!')]);

@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
 import type { GgufModel, ServeConfig, ServerInfo, AppSettings, InferenceConfig } from '../../../types';
-import { serveModel } from '../../../services/clients/servers';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
+import { getTransport } from '../../../services/transport';
 
 export interface ServerActionsConfig {
   model: GgufModel | null;
@@ -135,7 +135,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         repeatPenalty: inferenceParams?.repeatPenalty,
       };
 
-      const result = await serveModel(serveConfig);
+      const result = await getTransport().serveModel(serveConfig);
       closeServeModal();
       onStartServer();
       

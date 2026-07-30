@@ -2,13 +2,9 @@ import { FC, useRef, useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import {
-  cancelShardGroup,
-  removeFromQueue,
-  reorderQueueItem,
-} from '../../services/clients/downloads';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
+import { getTransport } from '../../services/transport';
 
 /**
  * Grouped queue item for display - sharded downloads are collapsed into one entry
@@ -99,10 +95,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     try {
       if (item.group_id) {
         // Cancel entire shard group
-        await cancelShardGroup(item.group_id);
+        await getTransport().cancelShardGroup(item.group_id);
       } else {
         // Remove single item
-        await removeFromQueue(item.id);
+        await getTransport().removeFromQueue(item.id);
       }
       onRefresh?.();;
     } catch (error) {
@@ -122,7 +118,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = item.position - 1; // Move to previous position
     
     try {
-      await reorderQueueItem(item.id, newPosition);
+      await getTransport().reorderQueueItem(item.id, newPosition);
       await onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });
@@ -141,7 +137,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = item.position + 1; // Move to next position
     
     try {
-      await reorderQueueItem(item.id, newPosition);
+      await getTransport().reorderQueueItem(item.id, newPosition);
       await onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });

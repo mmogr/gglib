@@ -10,11 +10,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { appLogger } from '../../services/platform';
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import { getMessages, saveMessage, updateMessage, deleteMessage } from '../../services/clients/chat';
 import { threadMessageToTranscriptMarkdown } from '../../utils/messages';
 import type { ReasoningTimingTracker } from '../useGglibRuntime/reasoningTiming';
 import { buildLoadedMessage, foldToolMessages } from './buildLoadedMessage';
 import { buildSaveMetadata } from './buildSaveMetadata';
+import { getTransport } from '../../services/transport';
 
 function getDbId(m: ThreadMessageLike): number | undefined {
   return (m.metadata as any)?.custom?.dbId;
@@ -91,7 +91,7 @@ export function useChatPersistence({
 
     const hydrate = async () => {
       try {
-        const dbMessages = await getMessages(activeConversationId);
+        const dbMessages = await getTransport().getMessages(activeConversationId);
         if (cancelled) return;
 
         // Fold CLI agent tool rows into assistant contentParts.
@@ -177,7 +177,7 @@ export function useChatPersistence({
       const dbIdToDelete = firstOrphanDbId;
       (async () => {
         try {
-          const result = await deleteMessage(dbIdToDelete);
+          const result = await getTransport().deleteMessage(dbIdToDelete);
           appLogger.info('hook.persistence', 'Cascade-deleted truncated messages from DB', {
             firstDeletedDbId: dbIdToDelete,
             deletedCount: result.deletedCount,
@@ -229,7 +229,10 @@ export function useChatPersistence({
           try {
             const text = threadMessageToTranscriptMarkdown(m as any);
             if (text.trim() && existingDbId) {
-              await updateMessage(existingDbId, text, buildSaveMetadata(m, getDurationForMessage(m, timingTracker)));
+              await getTransport().updateMessage(existingDbId, {
+                content: text,
+                metadata: buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
+              });
               await syncConversations({ silent: true });
 
               const isFinalized = (m.metadata as any)?.custom?.timingFinalized;
@@ -265,12 +268,12 @@ export function useChatPersistence({
             const messageId = m.id!;
             processingRef.current.add(messageId);
             try {
-              const dbId = await saveMessage(
+              const dbId = await getTransport().saveMessage({
                 conversationId,
-                m.role as 'user' | 'assistant' | 'system',
-                text,
-                buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
-              );
+                role: m.role as 'user' | 'assistant' | 'system',
+                content: text,
+                metadata: buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
+              });
               persistedByMessageId.current.set(messageId, dbId);
               lastDigestByMessageId.current.set(messageId, digest);
             } catch (error) {

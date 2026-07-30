@@ -1,44 +1,36 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import 'highlight.js/styles/github-dark.css';
-import { appLogger } from '../../services/platform';
 import {
   ThreadPrimitive,
-  ComposerPrimitive,
   useThreadRuntime,
   useThread,
 } from '@assistant-ui/react';
-import type { ThreadMessageLike } from '@assistant-ui/react';
-import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
-import { Button } from '../ui/Button';
-import { getMessages, deleteMessage } from '../../services/clients/chat';
-import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
-import { ConfirmDeleteModal } from './ConfirmDeleteModal';
-import { ToolsPopover } from '../ToolsPopover';
-import { Icon } from '../ui/Icon';
-import { Input } from '../ui/Input';
-import { Textarea } from '../ui/Textarea';
 import {
+  ChatPanelHeader,
+  SystemPromptSection,
+  ChatStatusBanners,
+  ComposerFooter,
+  ConfirmDeleteModal,
   MessageActionsContext,
   AssistantMessageBubble,
   UserMessageBubble,
   SystemMessageBubble,
   EditComposer,
-  extractDbId,
 } from './components';
 import type { MessageActionsContextValue } from './components';
-import { useChatPersistence, useTitleGeneration } from './hooks';
+import {
+  useChatPersistence,
+  useTitleGeneration,
+  useMessageDeletion,
+  useCouncilMode,
+} from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
-import { cn } from '../../utils/cn';
-import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
-import { ToolSupportIndicator } from '../ToolSupportIndicator';
-import { getToolRegistry } from '../../services/tools';
 import type { GglibMessageCustom } from '../../types/messages';
-import { CouncilToggle } from '../CouncilToggle';
 import CouncilThread from '../Council/Thread/CouncilThread';
-
+import type { ConversationSummary } from '../../services/transport';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -104,32 +96,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
 
-  // Orchestrator mode toggle state
-  const [isCouncilMode, setIsOrchestratorMode] = useState(false);
-
-  // Ref that CouncilThread fills so we can imperatively start a run.
-  const councilStartRef = React.useRef<((goal: string, hitlMode?: string) => void) | null>(null);
-  // Track the most-recently-submitted goal for the completion callback.
-  const pendingOrchestratorGoalRef = React.useRef<string>('');
-
-  // Register the orchestrator submit callback so the parent runtime can call it on submit.
-  useEffect(() => {
-    if (councilSubmitRef) {
-      councilSubmitRef.current = (text: string) => {
-        pendingOrchestratorGoalRef.current = text;
-        councilStartRef.current?.(text);
-        setIsOrchestratorMode(false); // Reset toggle after submit
-      };
-      return () => { councilSubmitRef.current = null; };
-    }
-  }, [councilSubmitRef]);
-
-  // Sync orchestrator mode flag to message metadata before each submission.
-  useEffect(() => {
-    if (setNextMessageMeta) {
-      setNextMessageMeta(isCouncilMode ? { isCouncilMode: true } : {});
-    }
-  }, [isCouncilMode, setNextMessageMeta]);
+  // Orchestrator mode: toggle state plus the run-start and goal refs
+  const { isCouncilMode, toggleCouncilMode, councilStartRef, pendingGoalRef } = useCouncilMode({
+    councilSubmitRef,
+    setNextMessageMeta,
+  });
 
   // Shared ticker for live timer updates (only runs while streaming)
   // Note: Updating tick triggers provider re-render, but messageComponents is stable
@@ -172,176 +143,30 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // System prompt editing state (kept local — simple UI state)
+  // Delete flow — lives here because the cascade reload resets the thread
+  // runtime this component owns
   // ─────────────────────────────────────────────────────────────────────────────
-  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
-  const [systemPromptDraft, setSystemPromptDraft] = useState(DEFAULT_SYSTEM_PROMPT);
-
-  const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
-  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Sync system prompt draft
-  useEffect(() => {
-    if (!isEditingPrompt) {
-      setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
-    }
-  }, [activeConversation?.system_prompt, isEditingPrompt]);
-
-  // Focus prompt textarea when editing
-  useEffect(() => {
-    if (isEditingPrompt) {
-      promptTextareaRef.current?.focus();
-    }
-  }, [isEditingPrompt]);
-
-  // Reset editing state when conversation changes
-  useEffect(() => {
-    setIsEditingPrompt(false);
-    setSavingSystemPrompt(false);
-  }, [activeConversationId]);
-
-  const promptPreview = useMemo(
-    () => activeConversation?.system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT,
-    [activeConversation?.system_prompt],
-  );
-
-  const promptHasChanges = useMemo(
-    () => systemPromptDraft.trim() !== promptPreview,
-    [systemPromptDraft, promptPreview],
-  );
-
-  const handleSaveSystemPrompt = async () => {
-    if (!promptHasChanges) {
-      setIsEditingPrompt(false);
-      return;
-    }
-    setSavingSystemPrompt(true);
-    try {
-      const trimmedPrompt = systemPromptDraft.trim();
-      await onUpdateSystemPrompt(trimmedPrompt.length ? trimmedPrompt : null);
-      setIsEditingPrompt(false);
-    } finally {
-      setSavingSystemPrompt(false);
-    }
-  };
-
-  const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleSaveSystemPrompt();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setIsEditingPrompt(false);
-      setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
-    }
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Delete message flow (kept local — tightly coupled to modal UI)
-  // ─────────────────────────────────────────────────────────────────────────────
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const getSubsequentMessageCount = useCallback((runtimeMessageId: string): number => {
-    if (!threadRuntime) return 1;
-    
-    const state = threadRuntime.getState();
-    const messageIndex = state.messages.findIndex((m) => m.id === runtimeMessageId);
-    if (messageIndex === -1) return 1;
-    
-    let count = 0;
-    for (let i = messageIndex; i < state.messages.length; i++) {
-      if (state.messages[i].role !== 'system') {
-        count++;
-      }
-    }
-    return count;
-  }, [threadRuntime]);
-
-  const handleDeleteMessage = useCallback((runtimeMessageId: string) => {
-    setDeleteTargetId(runtimeMessageId);
-    setDeleteModalOpen(true);
-  }, []);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTargetId || !threadRuntime || !activeConversationId) return;
-    
-    setIsDeleting(true);
-    try {
-      let dbId = extractDbId(deleteTargetId);
-      
-      if (!dbId) {
-        const state = threadRuntime.getState();
-        const position = state.messages.findIndex(m => m.id === deleteTargetId);
-        if (position >= 0) {
-          dbId = dbIdByPosition.current.get(position) ?? null;
-        }
-      }
-      
-      if (dbId) {
-        await deleteMessage(dbId);
-      } else {
-        appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: deleteTargetId });
-      }
-      
-      // Reload messages from DB and reset runtime
-      const messages = await getMessages(activeConversationId);
-      
-      const prompt = activeConversation?.system_prompt?.trim();
-      const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation
-        ? [{
-            id: `system-${activeConversation.id}`,
-            role: 'system',
-            content: [{ type: 'text' as const, text: prompt }],
-            createdAt: new Date(activeConversation.created_at),
-          }]
-        : [];
-
-      const reloadedMessages: ThreadMessageLike[] = [
-        ...systemPromptMessage,
-        ...messages.map<ThreadMessageLike>((message) => ({
-          id: `db-${message.id}`,
-          role: message.role as 'user' | 'assistant' | 'system',
-          content: message.content,
-          createdAt: new Date(message.created_at),
-        })),
-      ];
-
-      // Rebuild position mapping
-      dbIdByPosition.current.clear();
-      const systemOffset = systemPromptMessage.length;
-      messages.forEach((msg, idx) => {
-        dbIdByPosition.current.set(systemOffset + idx, msg.id);
-      });
-
-      const seededIds = reloadedMessages
-        .map((msg) => msg.id)
-        .filter((value): value is string => Boolean(value));
-      persistedMessageIds.current = new Set(seededIds);
-      threadRuntime.reset(reloadedMessages);
-      
-      await syncConversations({ silent: true });
-      showToast('Message deleted', 'success');
-    } catch (error) {
-      appLogger.error('component.chat', 'Failed to delete message', { error, messageId: deleteTargetId });
-      showToast('Failed to delete message', 'error');
-    } finally {
-      setIsDeleting(false);
-      setDeleteModalOpen(false);
-      setDeleteTargetId(null);
-    }
-  }, [deleteTargetId, threadRuntime, activeConversationId, activeConversation, dbIdByPosition, persistedMessageIds, syncConversations, showToast]);
-
-  const handleCancelDelete = useCallback(() => {
-    setDeleteModalOpen(false);
-    setDeleteTargetId(null);
-  }, []);
+  const {
+    initiateDelete,
+    confirmDelete,
+    cancelDelete,
+    isDeleteModalOpen,
+    isDeleting,
+    pendingDeleteCount,
+  } = useMessageDeletion({
+    threadRuntime,
+    activeConversationId,
+    activeConversation,
+    persistedMessageIds,
+    dbIdByPosition,
+    syncConversations,
+    showToast,
+  });
 
   // Context value for message actions
   const messageActionsValue = useMemo<MessageActionsContextValue>(
-    () => ({ onDeleteMessage: handleDeleteMessage }),
-    [handleDeleteMessage]
+    () => ({ onDeleteMessage: initiateDelete }),
+    [initiateDelete]
   );
 
   // Stable components map (component references don't change)
@@ -355,170 +180,47 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     []
   );
 
+  const generateTitleBlockedReason = !activeConversationId
+    ? 'No active conversation'
+    : !serverPort
+      ? 'Start a server to generate titles'
+      : null;
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col overflow-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
-      {/* Header */}
-      <div className="p-base border-b border-border bg-background shrink-0 flex flex-wrap justify-between items-center gap-md phone:flex-nowrap">
-        <div className="flex items-center gap-sm min-w-0 basis-full phone:basis-auto phone:flex-1">
-          {isRenaming ? (
-            <Input
-              className="text-lg font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"
-              value={titleDraft}
-              autoFocus
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
-                else if (e.key === 'Escape') cancelRenaming();
-              }}
-            />
-          ) : (
-            <h2 className="text-lg font-semibold m-0 overflow-hidden text-ellipsis whitespace-nowrap">{activeConversation?.title || 'New Chat'}</h2>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            title="Rename conversation"
-            onClick={startRenaming}
-            iconOnly
-          >
-            <Icon icon={Pencil} size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(isGeneratingTitle && 'pointer-events-none')}
-            title={
-              !activeConversationId
-                ? 'No active conversation'
-                : !serverPort
-                  ? 'Start a server to generate titles'
-                  : 'Generate title with AI'
-            }
-            onClick={() => generateTitle()}
-            disabled={!activeConversationId || !serverPort || isGeneratingTitle || isThreadRunning}
-            iconOnly
-          >
-            {isGeneratingTitle ? (
-              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-spin-360" aria-label="Generating title…" />
-            ) : (
-              <Icon icon={Sparkles} size={14} />
-            )}
-          </Button>
-          <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary/10 text-primary animate-research-pulse')}>
-            {isThreadRunning ? 'Responding…' : 'Idle'}
-          </span>
-          <ToolSupportIndicator
-            supports={supportsToolCalls ?? null}
-            hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
-            toolFormat={toolFormat}
-          />
-        </div>
-        <div className="flex gap-sm shrink-0">
-          <ToolsPopover />
-          <Button variant="ghost" size="sm" onClick={onClearConversation} title="Restart conversation" iconOnly>
-            <Icon icon={RotateCcw} size={14} />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onExportConversation} title="Export conversation" iconOnly>
-            <Icon icon={Download} size={14} />
-          </Button>
-        </div>
-      </div>
+      <ChatPanelHeader
+        title={activeConversation?.title || 'New Chat'}
+        isThreadRunning={isThreadRunning}
+        supportsToolCalls={supportsToolCalls}
+        toolFormat={toolFormat}
+        generateTitleBlockedReason={generateTitleBlockedReason}
+        isRenaming={isRenaming}
+        titleDraft={titleDraft}
+        isGeneratingTitle={isGeneratingTitle}
+        onStartRename={startRenaming}
+        onChangeTitleDraft={setTitleDraft}
+        onCommitRename={commitRename}
+        onCancelRename={cancelRenaming}
+        onGenerateTitle={() => generateTitle()}
+        onClearConversation={onClearConversation}
+        onExportConversation={onExportConversation}
+      />
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-        {/* System prompt card */}
-        <section className="border border-border rounded-base p-md bg-background flex flex-col gap-sm shrink-0">
-          <div className="flex justify-between gap-md items-start">
-            <div>
-              <p className="text-xs uppercase tracking-[1px] text-text-muted m-0 mb-xs">System prompt</p>
-              {!isEditingPrompt && (
-                <p className="m-0 text-text text-sm leading-[1.5] line-clamp-2">{promptPreview}</p>
-              )}
-            </div>
-            <div className="flex gap-sm items-center shrink-0">
-              {isEditingPrompt ? (
-                <span className="text-xs text-primary">Editing…</span>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
-                    setIsEditingPrompt(true);
-                  }}
-                  disabled={!activeConversation}
-                >
-                  Edit
-                </Button>
-              )}
-            </div>
-          </div>
-          {isEditingPrompt && (
-            <>
-              <Textarea
-                ref={promptTextareaRef}
-                className="w-full p-sm border border-border rounded-sm bg-surface text-text text-sm font-[inherit] resize-y min-h-[80px] focus:outline-none focus:border-primary"
-                value={systemPromptDraft}
-                onChange={(e) => setSystemPromptDraft(e.target.value)}
-                placeholder={DEFAULT_SYSTEM_PROMPT}
-                rows={4}
-                onKeyDown={handlePromptKeyDown}
-              />
-              <div className="flex justify-between items-center gap-sm">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSystemPromptDraft(DEFAULT_SYSTEM_PROMPT)}
-                >
-                  Reset
-                </Button>
-                <div className="flex gap-sm">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditingPrompt(false);
-                      setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
-                    }}
-                    disabled={savingSystemPrompt}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveSystemPrompt}
-                    disabled={savingSystemPrompt || !promptHasChanges}
-                  >
-                    {savingSystemPrompt ? 'Saving…' : 'Save'}
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
+        <SystemPromptSection
+          conversation={activeConversation}
+          onSave={onUpdateSystemPrompt}
+        />
 
-        {/* Error banner */}
-        {chatError && <div className="py-sm px-md bg-danger/10 border border-danger rounded-sm text-danger text-sm shrink-0">{chatError}</div>}
-
-        {/* Server stopped banner */}
-        {!isServerConnected && (
-          <div className="flex items-center justify-between gap-md py-sm px-md bg-warning-subtle border border-warning-border rounded-sm text-warning text-sm shrink-0">
-            <span className="inline-flex items-center gap-2">
-              <Icon icon={AlertTriangle} size={16} />
-              Server not running — Chat is read-only
-            </span>
-            {onClose && (
-              <Button variant="secondary" size="sm" onClick={onClose}>
-                Close
-              </Button>
-            )}
-          </div>
-        )}
+        <ChatStatusBanners
+          chatError={chatError}
+          isServerConnected={isServerConnected}
+          onClose={onClose}
+        />
 
         {/* Messages area */}
         <div className="flex-1 min-h-0 flex flex-col border border-border rounded-base bg-background overflow-hidden">
@@ -542,61 +244,24 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       onRunComplete={(runId, finalAnswer) => {
                         onCouncilRunComplete?.(
                           runId,
-                          pendingOrchestratorGoalRef.current,
+                          pendingGoalRef.current,
                           finalAnswer,
                         );
                       }}
                     />
-                  <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
-                    Jump to latest
-                  </ThreadPrimitive.ScrollToBottom>
-                </ThreadPrimitive.Viewport>
+                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
+                      Jump to latest
+                    </ThreadPrimitive.ScrollToBottom>
+                  </ThreadPrimitive.Viewport>
 
-                <div className="border-t border-border p-md shrink-0">
-                  {isThreadRunning && (
-                    <div className="text-sm text-primary mb-sm animate-research-pulse">Assistant is thinking…</div>
-                  )}
-                  <ComposerPrimitive.Root className="flex gap-sm items-end">
-                    <ComposerPrimitive.Input
-                      className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                      placeholder={
-                        isServerConnected
-                          ? isCouncilMode
-                            ? 'Describe the goal for the orchestrator…'
-                            : 'Type your message. Shift + Enter for newline'
-                          : 'Server not connected'
-                      }
-                      disabled={!isServerConnected}
-                    />
-                    <CouncilToggle
-                      active={isCouncilMode}
-                      onToggle={() => setIsOrchestratorMode((prev) => !prev)}
-                      disabled={!isServerConnected}
-                    />
-                    <div className="flex gap-sm shrink-0">
-                      {isThreadRunning && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => threadRuntime?.cancelRun()}
-                          title="Stop generation"
-                        >
-                          Stop
-                        </Button>
-                      )}
-                      <ComposerPrimitive.Send asChild>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          disabled={!isServerConnected}
-                        >
-                          Send ↵
-                        </Button>
-                      </ComposerPrimitive.Send>
-                    </div>
-                  </ComposerPrimitive.Root>
-                </div>
-              </ThreadPrimitive.Root>
+                  <ComposerFooter
+                    isServerConnected={isServerConnected}
+                    isThreadRunning={isThreadRunning}
+                    isCouncilMode={isCouncilMode}
+                    onToggleCouncil={toggleCouncilMode}
+                    onStopGeneration={() => threadRuntime?.cancelRun()}
+                  />
+                </ThreadPrimitive.Root>
               </ThinkingTimingProvider>
             </MessageActionsContext.Provider>
           )}
@@ -605,11 +270,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
       {/* Delete confirmation modal */}
       <ConfirmDeleteModal
-        isOpen={deleteModalOpen}
-        messageCount={deleteTargetId ? getSubsequentMessageCount(deleteTargetId) : 1}
+        isOpen={isDeleteModalOpen}
+        messageCount={pendingDeleteCount}
         isDeleting={isDeleting}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
     </div>
   );

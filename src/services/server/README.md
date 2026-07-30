@@ -11,7 +11,7 @@ Safe action wrappers around server lifecycle operations. Encapsulates error hand
 
 | File | Role |
 |------|------|
-| `safeActions.ts` | `safeStopServer(modelId)` — wraps `clients/servers.stopServer()`, catches errors, triggers toast on failure |
+| `safeActions.ts` | `safeStopServer(modelId)` — wraps `getTransport().stopServer()`, catches errors, triggers toast on failure |
 
 ## Flow
 
@@ -20,7 +20,7 @@ UI: onClick → safeStopServer(modelId)
        ▼
   Error boundary
        ▼
-  clients/servers.stopServer(modelId)
+  getTransport().stopServer(modelId)
        ▼
   transport → POST /api/servers/stop
        ▼
