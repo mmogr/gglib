@@ -21,6 +21,7 @@ pub mod model_registrar;
 pub mod model_repository;
 pub mod model_runtime;
 pub mod process_runner;
+pub mod retry_observer;
 pub mod server_health;
 pub mod server_log_sink;
 pub mod settings_repository;
@@ -69,6 +70,7 @@ pub use model_runtime::{
     RuntimeErrorEnvelope,
 };
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig};
+pub use retry_observer::RetryObserver;
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
 pub use settings_repository::SettingsRepository;
