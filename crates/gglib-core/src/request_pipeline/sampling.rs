@@ -12,7 +12,7 @@ use crate::domain::InferenceConfig;
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
 /// Grouped because they are only ever used together, at the single point where
-/// [`InferenceConfig::resolve_with_profile`] runs.
+/// [`resolve_sampling`] folds them through [`InferenceConfig::resolve_layers`].
 ///
 /// The per-model layer is deliberately absent: it arrives with the rest of the
 /// per-model facts, as
@@ -48,23 +48,16 @@ pub struct SamplingLayers {
 /// `presence_penalty` come from?" means probing llama-server's live `/slots`
 /// mid-generation — which is how the leak behind #621 had to be found.
 ///
-/// Mirrors the ladder in [`InferenceConfig::resolve_with_profile`], including
-/// the temperature coupling: once a layer declares a `temperature`, layers
-/// below it can no longer supply the parameters tuned against it, so those
-/// report `hardcoded` even though a lower layer names a value.
-fn describe_provenance(
-    client: &InferenceConfig,
-    model: Option<&InferenceConfig>,
-    layers: &SamplingLayers,
-) -> String {
-    let ordered: [(&str, Option<&InferenceConfig>); 5] = [
-        ("cli", layers.cli_override.as_ref()),
-        ("client", Some(client)),
-        ("profile", layers.profile.as_ref()),
-        ("model", model),
-        ("global", layers.global.as_ref()),
-    ];
-
+/// Takes the exact same ordered layer array [`resolve_sampling`] folds
+/// through [`InferenceConfig::resolve_layers`], so provenance can never
+/// drift from what was actually resolved — there is one ladder, read by both.
+/// Mirrors the coupling rule documented there: once a layer declares a
+/// `temperature`, layers below it can no longer supply the parameters tuned
+/// against it, so those report `floor` even though a lower layer names a
+/// value. A field with no layer naming it at all also reports `floor` — the
+/// two cases are indistinguishable from the wire body alone, which is the
+/// point: either way nothing above the floor spoke for it.
+fn describe_provenance(ordered: &[(&'static str, Option<&InferenceConfig>)]) -> String {
     // The highest layer naming a temperature; layers below it cannot supply
     // temperature-tuned parameters. `None` means nothing claimed it, so every
     // layer stays eligible.
@@ -78,7 +71,7 @@ fn describe_provenance(
             .iter()
             .take(limit)
             .find(|(_, c)| c.is_some_and(&declares))
-            .map_or("hardcoded", |(name, _)| name)
+            .map_or("floor", |(name, _)| name)
     };
 
     let all = ordered.len();
@@ -100,28 +93,46 @@ fn describe_provenance(
 ///
 /// # Force-insert, not `or_insert`
 ///
-/// The client's own parameters are extracted from `body` first, merged
-/// **beneath** profile / model / global by
-/// [`InferenceConfig::resolve_with_profile`], and the fully-resolved result is
-/// then written back over the top. Client parameters still win — they win by
-/// being the highest-priority layer *inside* the merge, not by surviving an
-/// `or_insert`. Rewriting this as `or_insert` looks equivalent and silently
-/// breaks the hierarchy: every layer below the client would stop applying to
-/// any key the client happened to send.
+/// The client's own parameters are extracted from `body` first, folded
+/// through [`InferenceConfig::resolve_layers`] alongside cli / profile /
+/// model / global, and the fully-resolved result is then written back over
+/// the top. Client parameters still win — they win by being the
+/// highest-priority *layer* in the fold, not by surviving an `or_insert`.
+/// Rewriting this as `or_insert` looks equivalent and silently breaks the
+/// hierarchy: every layer below the client would stop applying to any key
+/// the client happened to send.
 ///
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
     let client_params = InferenceConfig::from_openai_json(body);
-    // Operator flags sit above the client, everything else below it.
-    let top = layers.cli_override.as_ref().map_or_else(
-        || client_params.clone(),
-        |o| o.clone().stacked_over(&client_params),
-    );
-    let resolved = top.resolve_with_profile(
-        layers.profile.as_ref(),
-        ctx.inference_defaults.as_ref(),
-        layers.global.as_ref(),
-    );
+
+    // The `reasoning` tag selects the floor beneath every layer here — a
+    // model that degrades into repetitive loops under greedy decoding still
+    // gets a real anti-repetition guard when nothing above the floor sets
+    // one, rather than the universal neutral default. See
+    // `InferenceConfig::reasoning_floor`.
+    let model_is_reasoning = ctx
+        .tags
+        .iter()
+        .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
+    let floor = if model_is_reasoning {
+        InferenceConfig::reasoning_floor()
+    } else {
+        InferenceConfig::with_hardcoded_defaults()
+    };
+
+    // Highest priority first. The single ordering both resolution and
+    // provenance reporting read from, so they can never drift apart.
+    let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+        ("cli", layers.cli_override.as_ref()),
+        ("client", Some(&client_params)),
+        ("profile", layers.profile.as_ref()),
+        ("model", ctx.inference_defaults.as_ref()),
+        ("global", layers.global.as_ref()),
+    ];
+    let layer_configs: Vec<Option<&InferenceConfig>> =
+        ordered.iter().map(|(_, config)| *config).collect();
+    let resolved = InferenceConfig::resolve_layers(&layer_configs, &floor);
 
     if tracing::enabled!(tracing::Level::DEBUG) {
         debug!(
@@ -132,7 +143,7 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
             presence_penalty = ?resolved.presence_penalty,
             repeat_penalty = ?resolved.repeat_penalty,
             min_p = ?resolved.min_p,
-            from = %describe_provenance(&client_params, ctx.inference_defaults.as_ref(), layers),
+            from = %describe_provenance(&ordered),
             "sampling resolved"
         );
     }
@@ -288,27 +299,28 @@ mod tests {
     // ── Provenance ────────────────────────────────────────────────────────
 
     /// The `:coding` shape. The provenance string must say the penalty came
-    /// from the neutral floor, not from the model — otherwise the log would
-    /// assert exactly the leak the merge now prevents.
+    /// from the floor, not from the model — otherwise the log would assert
+    /// exactly the leak the merge now prevents.
     #[test]
-    fn provenance_reports_coupling_suppressed_layers_as_hardcoded() {
+    fn provenance_reports_coupling_suppressed_layers_as_floor() {
         let model = InferenceConfig {
             temperature: Some(1.0),
             presence_penalty: Some(1.5),
             top_k: Some(20),
             ..Default::default()
         };
-        let got = describe_provenance(
-            &InferenceConfig::default(),
-            Some(&model),
-            &SamplingLayers {
-                profile: Some(temp(0.2)),
-                ..Default::default()
-            },
-        );
+        let profile = temp(0.2);
+        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+            ("cli", None),
+            ("client", None),
+            ("profile", Some(&profile)),
+            ("model", Some(&model)),
+            ("global", None),
+        ];
+        let got = describe_provenance(&ordered);
 
         assert!(got.contains("temperature=profile"), "{got}");
-        assert!(got.contains("presence_penalty=hardcoded"), "{got}");
+        assert!(got.contains("presence_penalty=floor"), "{got}");
         // Untuned parameters are unaffected by the claim.
         assert!(got.contains("top_k=model"), "{got}");
     }
@@ -322,11 +334,14 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let got = describe_provenance(
-            &InferenceConfig::default(),
-            Some(&model),
-            &SamplingLayers::default(),
-        );
+        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+            ("cli", None),
+            ("client", None),
+            ("profile", None),
+            ("model", Some(&model)),
+            ("global", None),
+        ];
+        let got = describe_provenance(&ordered);
 
         assert!(got.contains("temperature=model"), "{got}");
         assert!(got.contains("presence_penalty=model"), "{got}");
@@ -335,14 +350,16 @@ mod tests {
     /// Operator flags are reported as their own layer, above the client.
     #[test]
     fn provenance_names_the_cli_layer() {
-        let got = describe_provenance(
-            &temp(0.9),
-            None,
-            &SamplingLayers {
-                cli_override: Some(temp(0.3)),
-                ..Default::default()
-            },
-        );
+        let cli = temp(0.3);
+        let client = temp(0.9);
+        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+            ("cli", Some(&cli)),
+            ("client", Some(&client)),
+            ("profile", None),
+            ("model", None),
+            ("global", None),
+        ];
+        let got = describe_provenance(&ordered);
 
         assert!(got.contains("temperature=cli"), "{got}");
     }
@@ -412,6 +429,46 @@ mod tests {
         );
 
         assert_param(&body, "temperature", 0.2);
+        assert_param(&body, "presence_penalty", 0.0);
+    }
+
+    /// The actual incident this refactor exists for: a client that always
+    /// sends `temperature: 0` (VS Code Copilot's LLM Gateway does, with no
+    /// user-facing control over it) must not silently zero out a reasoning
+    /// model's only anti-repetition guard. The client still wins the
+    /// temperature it asked for — it just doesn't also claim penalties it
+    /// never named an opinion on.
+    #[test]
+    fn client_temperature_zero_does_not_zero_a_reasoning_models_presence_penalty() {
+        let mut body = json!({"temperature": 0.0});
+        let ctx = ModelContext {
+            tags: vec!["reasoning".to_owned()],
+            inference_defaults: Some(InferenceConfig::reasoning_profile()),
+            ..ModelContext::passthrough()
+        };
+        resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+
+        assert_param(&body, "temperature", 0.0);
+        assert_param(&body, "presence_penalty", 1.0);
+    }
+
+    /// A non-reasoning model gets the plain neutral floor, not the reasoning
+    /// one — the class floor is opt-in via the tag, not a blanket change.
+    #[test]
+    fn client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_floor() {
+        let mut body = json!({"temperature": 0.0});
+        let model = InferenceConfig {
+            temperature: Some(0.8),
+            presence_penalty: Some(0.6),
+            ..Default::default()
+        };
+        resolve_sampling(
+            &mut body,
+            &model_ctx(Some(model)),
+            &SamplingLayers::default(),
+        );
+
+        assert_param(&body, "temperature", 0.0);
         assert_param(&body, "presence_penalty", 0.0);
     }
 
