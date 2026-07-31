@@ -14,12 +14,12 @@
 //! masking a genuinely dead upstream.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use gglib_core::ports::RetryObserver;
-use gglib_core::retry::{RetryDecision, RetryPolicy, decide};
+use gglib_core::retry::{RetryDecision, RetryPolicy, decide, jitter_unit};
 use reqwest::{Client, Response};
 use serde_json::Value;
 
@@ -115,19 +115,4 @@ async fn send_once(
         .await
         .map_err(|_| anyhow!("llama-server connection timed out after {secs}s"))?
         .map_err(|e| anyhow!("request to llama-server failed: {e}"))
-}
-
-/// Dependency-free jitter source in `[0.0, 1.0)`.
-///
-/// The policy takes jitter as a parameter, so the bar here is only
-/// "decorrelates concurrent clients", not statistical uniformity — two
-/// processes would have to retry within the same nanosecond to collide. Keeping
-/// it dependency-free avoids pulling a third `rand` into a workspace that
-/// already carries two versions of it.
-fn jitter_unit() -> f64 {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    f64::from(nanos) / 1_000_000_000.0
 }

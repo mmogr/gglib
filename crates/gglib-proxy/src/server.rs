@@ -28,6 +28,7 @@ use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
 use gglib_core::request_pipeline::SamplingLayers;
+use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
 
 use crate::cache_lifecycle::{StreamConfig, clear_cache, resolve_cache_triple, run_with_cache};
@@ -62,6 +63,13 @@ pub(crate) struct AppState {
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     default_ctx: u64,
+    /// How long to absorb model-startup contention before surfacing a 503.
+    ///
+    /// Resolved once from `GGLIB_CONTENTION_WAIT_SECS` rather than per request,
+    /// and deliberately not a `serve()` parameter — that signature already
+    /// carries fifteen. `Duration::ZERO` restores fail-fast. See the
+    /// `contention` module for why waiting is the better default.
+    contention_wait: std::time::Duration,
     /// Orchestrator services for virtual model routing.
     council: CouncilDeps,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
@@ -283,6 +291,7 @@ pub async fn serve(
         mcp,
         sessions: SessionManager::new(),
         default_ctx,
+        contention_wait: crate::contention::wait_from_env(),
         council,
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
@@ -759,11 +768,21 @@ async fn chat_completions(
         let _ = state.runtime_port.stop_current().await;
     }
 
-    // Ensure the model is running with specified context or default
-    let target = match state
-        .runtime_port
-        .ensure_model_running(&model_name, num_ctx, state.default_ctx)
-        .await
+    // Ensure the model is running with specified context or default.
+    //
+    // Startup contention is absorbed here for a bounded window instead of
+    // being surfaced immediately: an OpenAI-compatible client treats 503 as
+    // terminal (see the UpstreamDead path below, which already avoids 503 for
+    // that reason), so a slow 200 beats a fast 503. Every other error,
+    // ModelLoading included, is passed through untouched.
+    let target = match crate::contention::ensure_with_contention_wait(
+        &state.runtime_port,
+        &model_name,
+        num_ctx,
+        state.default_ctx,
+        state.contention_wait,
+    )
+    .await
     {
         Ok(target) => target,
         Err(e) => {
@@ -1025,19 +1044,40 @@ async fn chat_completions(
     }
 }
 
+/// Header naming *why* a 503 was returned, so a client or dashboard can tell
+/// startup contention from ordinary model loading — the two are identical on
+/// the wire otherwise, since both serialise to `service_unavailable`.
+const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
+
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
 fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let contended = matches!(err, ModelRuntimeError::ContentionTimeout(_));
     let error_response = ErrorResponse::from(err);
 
     let mut response = (status, Json(error_response)).into_response();
 
-    // Add Retry-After header for retryable errors (503)
-    if status == StatusCode::SERVICE_UNAVAILABLE
-        && let Ok(value) = "5".parse()
-    {
-        response.headers_mut().insert("retry-after", value);
+    if status == StatusCode::SERVICE_UNAVAILABLE {
+        // Derived from the shared policy rather than hardcoded, so the hint we
+        // advertise cannot drift from the backoff our own clients apply.
+        //
+        // `max_backoff` rather than `initial_backoff`: by the time a contention
+        // 503 escapes, the proxy has already waited out its whole window, so the
+        // collision is plainly not clearing quickly. Advertising the policy's
+        // *ceiling* — the longest single delay it would ever produce — tells
+        // honest clients to come back at a sensible remove. Advertising the
+        // opening delay instead would invite everyone who honours the header
+        // back within a second or two, all at once and none of them jittered.
+        let hint = RetryPolicy::default().max_backoff.as_secs().max(1);
+        if let Ok(value) = hint.to_string().parse() {
+            response
+                .headers_mut()
+                .insert(axum::http::header::RETRY_AFTER, value);
+        }
+        if contended && let Ok(value) = "contention".parse() {
+            response.headers_mut().insert(RETRY_REASON_HEADER, value);
+        }
     }
 
     response
@@ -1063,5 +1103,72 @@ mod tests {
                 .headers()
                 .contains_key(axum::http::header::RETRY_AFTER)
         );
+    }
+
+    /// The advertised hint must come from the shared policy, not a literal, so
+    /// it cannot drift from the backoff our own clients actually apply.
+    #[tokio::test]
+    async fn retry_after_is_a_delay_the_policy_could_produce() {
+        let response = handle_runtime_error(ModelRuntimeError::ContentionTimeout("c".to_string()));
+        let policy = RetryPolicy::default();
+
+        let advertised = response
+            .headers()
+            .get(axum::http::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .expect("Retry-After must be a whole number of seconds");
+
+        assert!(advertised >= 1, "a zero hint invites an immediate hot loop");
+        assert!(
+            advertised <= policy.max_backoff.as_secs(),
+            "advertising longer than the policy's own ceiling asks clients to \
+             wait longer than we ever would: {advertised}s"
+        );
+        assert!(
+            std::time::Duration::from_secs(advertised) < policy.total_deadline,
+            "a hint at or past the whole budget leaves no room for a retry"
+        );
+    }
+
+    /// Contention and ordinary loading are indistinguishable on the wire —
+    /// both serialise to `service_unavailable` — so the reason header is the
+    /// only way a dashboard can tell them apart.
+    #[tokio::test]
+    async fn only_contention_carries_the_retry_reason_header() {
+        let contended = handle_runtime_error(ModelRuntimeError::ContentionTimeout("c".to_string()));
+        assert_eq!(
+            contended
+                .headers()
+                .get(RETRY_REASON_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("contention")
+        );
+
+        let loading = handle_runtime_error(ModelRuntimeError::ModelLoading);
+        assert_eq!(loading.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            loading
+                .headers()
+                .contains_key(axum::http::header::RETRY_AFTER),
+            "loading is still retryable and still advertises a hint"
+        );
+        assert!(
+            !loading.headers().contains_key(RETRY_REASON_HEADER),
+            "only contention is labelled"
+        );
+    }
+
+    /// A terminal error must not invite a retry.
+    #[tokio::test]
+    async fn non_retryable_errors_carry_neither_header() {
+        let response = handle_runtime_error(ModelRuntimeError::ModelNotFound("nope".to_string()));
+        assert_ne!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            !response
+                .headers()
+                .contains_key(axum::http::header::RETRY_AFTER)
+        );
+        assert!(!response.headers().contains_key(RETRY_REASON_HEADER));
     }
 }
