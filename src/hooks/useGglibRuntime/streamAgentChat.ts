@@ -23,7 +23,7 @@ import { appLogger } from '../../services/platform';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
 import { getToolRegistry } from '../../services/tools';
 import type { GglibMessage, GglibMessageCustom } from '../../types/messages';
-import type { AgentEvent } from '../../types/events/agentEvent';
+import type { AgentEvent, AgentPromptProgressEvent } from '../../types/events/agentEvent';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { convertToWireMessages } from './wireMessages';
 import { readAgentSSE } from './agentSseReader';
@@ -258,6 +258,8 @@ export interface DispatchDeps {
   cleanup: () => void;
   /** Surfaces non-fatal `system_warning` events; see {@link StreamAgentChatOptions}. */
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
+  /** Surfaces transient `prompt_progress` events during pre-fill. */
+  onPromptProgress?: (event: AgentPromptProgressEvent) => void;
 }
 
 /**
@@ -272,7 +274,7 @@ export interface DispatchDeps {
  * {@link streamAgentChat} instead.
  */
 export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
-  const { setMessages, timingTracker, makeNextMessage, cleanup, onSystemWarning } = deps;
+  const { setMessages, timingTracker, makeNextMessage, cleanup, onSystemWarning, onPromptProgress } = deps;
 
   switch (event.type) {
     case 'system_warning': {
@@ -288,6 +290,20 @@ export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps
         suggestedAction: event.suggested_action ?? undefined,
       });
       onSystemWarning?.(event.message, event.suggested_action);
+      return false;
+    }
+
+    case 'prompt_progress': {
+      // Transient pre-fill progress — non-terminating, never reaches the
+      // persisted transcript.  Surfaces via callback for transient UI
+      // (e.g., "processing prompt: 2048 / 8192 tokens").
+      appLogger.debug('hook.runtime', 'streamAgentChat: prompt progress', {
+        processed: event.processed,
+        total: event.total,
+        cached: event.cached,
+        time_ms: event.time_ms,
+      });
+      onPromptProgress?.(event);
       return false;
     }
 

@@ -67,6 +67,7 @@ function makeDeps(
     makeNextMessage: overrides?.makeNextMessage ?? ((iter: number) => `msg-iter-${iter}`),
     cleanup: overrides?.cleanup ?? vi.fn(),
     onSystemWarning: overrides?.onSystemWarning,
+    onPromptProgress: overrides?.onPromptProgress,
   };
 }
 
@@ -366,6 +367,66 @@ describe('dispatchAgentEvent — system_warning', () => {
     dispatchAgentEvent({ type: 'system_warning', message: 'heads up' }, state, deps);
 
     expect(partsOf(store.messages()[0])).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// prompt_progress
+// ---------------------------------------------------------------------------
+
+describe('dispatchAgentEvent — prompt_progress', () => {
+  it('forwards the event object and lets the stream continue', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const cleanup = vi.fn();
+    const onPromptProgress = vi.fn();
+    const deps = makeDeps(store.setMessages, { cleanup, onPromptProgress });
+
+    const done = dispatchAgentEvent(
+      { type: 'prompt_progress', processed: 2048, total: 8192, cached: 512, time_ms: 340 },
+      state,
+      deps,
+    );
+
+    expect(done).toBe(false);
+    expect(onPromptProgress).toHaveBeenCalledWith({
+      type: 'prompt_progress',
+      processed: 2048,
+      total: 8192,
+      cached: 512,
+      time_ms: 340,
+    });
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('does not require a handler — no-op when callback is absent', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+
+    const done = dispatchAgentEvent(
+      { type: 'prompt_progress', processed: 100, total: 4096, cached: 0, time_ms: 50 },
+      state,
+      deps,
+    );
+
+    expect(done).toBe(false);
+  });
+
+  it('does not mutate message content', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages, { onPromptProgress: vi.fn() });
+
+    dispatchAgentEvent(
+      { type: 'prompt_progress', processed: 512, total: 2048, cached: 0, time_ms: 10 },
+      state,
+      deps,
+    );
+
+    const messages = store.messages();
+    expect(messages).toHaveLength(1);
+    expect(partsOf(messages[0])).toHaveLength(0);
   });
 });
 
