@@ -59,6 +59,9 @@ jobs:
       - name: Check transport branching
         run: ./scripts/check_transport_branching.sh
 
+      - name: Check module tables are current
+        run: ./scripts/generate_module_tables.sh --check
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest
