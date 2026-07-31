@@ -121,6 +121,9 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        // Serialize defaults_origin if present
+        let defaults_origin_str = model.defaults_origin.map(|o| o.to_string());
+
         // Serialize server_defaults if present
         let server_defaults_json = model
             .server_defaults
@@ -139,11 +142,11 @@ impl ModelRepository for SqliteModelRepository {
         // Use UPSERT to make registration idempotent
         let _result = sqlx::query(
             r#"INSERT INTO models (
-                name, file_path, param_count_b, architecture, quantization, 
+                name, file_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
-                metadata, added_at, hf_repo_id, hf_commit_sha, 
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, server_defaults
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                metadata, added_at, hf_repo_id, hf_commit_sha,
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
@@ -156,7 +159,8 @@ impl ModelRepository for SqliteModelRepository {
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags,
                 capabilities = excluded.capabilities,
-                inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults)
+                inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
+                defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
             "#,
         )
         .bind(&model.name)
@@ -180,6 +184,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&file_paths_json)
         .bind(model.capabilities.bits() as i64)
         .bind(&inference_defaults_json)
+        .bind(&defaults_origin_str)
         .bind(&server_defaults_json)
         .execute(&self.pool)
         .await
@@ -210,13 +215,15 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        let defaults_origin_str = model.defaults_origin.map(|o| o.to_string());
+
         let server_defaults_json = model
             .server_defaults
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, server_defaults = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ? WHERE id = ?"
         )
             .bind(&model.name)
             .bind(model.file_path.to_string_lossy().as_ref())
@@ -233,6 +240,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&tags_json)
             .bind(model.capabilities.bits() as i64)
             .bind(&inference_defaults_json)
+            .bind(&defaults_origin_str)
             .bind(&server_defaults_json)
             .bind(model.id)
             .execute(&self.pool)
@@ -388,6 +396,66 @@ mod tests {
         assert_eq!(
             refetched.inference_defaults.and_then(|c| c.temperature),
             Some(0.42)
+        );
+    }
+
+    /// `defaults_origin` must survive a re-import exactly like
+    /// `inference_defaults` does — it describes that field, so it has to
+    /// move with it, not get silently reset to whatever the fresh import
+    /// would have written.
+    #[tokio::test]
+    async fn upsert_preserves_defaults_origin_alongside_curated_defaults() {
+        use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
+
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Theta2")).await.unwrap();
+
+        let mut curated = inserted.clone();
+        curated.inference_defaults = Some(InferenceConfig {
+            temperature: Some(0.42),
+            ..Default::default()
+        });
+        curated.defaults_origin = Some(DefaultsOrigin::User);
+        repo.update(&curated).await.unwrap();
+
+        // Re-registering the same model must not reset the origin either.
+        repo.insert(&make_model("Theta2")).await.unwrap();
+
+        let refetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(refetched.defaults_origin, Some(DefaultsOrigin::User));
+    }
+
+    /// Rows written before the `defaults_origin` column existed have `NULL`
+    /// there forever — there is no batch backfill (see `setup.rs`). This
+    /// proves the read path derives the right answer anyway, through the
+    /// real repository rather than the isolated `resolve_defaults_origin`
+    /// unit tests in `row_mappers`.
+    #[tokio::test]
+    async fn a_legacy_row_with_the_reasoning_recipe_reads_back_as_auto_detected() {
+        use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
+
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("LegacyReasoning")).await.unwrap();
+
+        // Simulate a row written before this column existed: set
+        // inference_defaults directly via SQL, leaving defaults_origin NULL
+        // — bypassing the repository's own (already-informed) write path.
+        let recipe_json = serde_json::to_string(&InferenceConfig::reasoning_profile()).unwrap();
+        sqlx::query("UPDATE models SET inference_defaults = ? WHERE id = ?")
+            .bind(&recipe_json)
+            .bind(inserted.id)
+            .execute(repo.pool())
+            .await
+            .unwrap();
+
+        let refetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(
+            refetched.inference_defaults,
+            Some(InferenceConfig::reasoning_profile())
+        );
+        assert_eq!(
+            refetched.defaults_origin,
+            Some(DefaultsOrigin::AutoDetected)
         );
     }
 

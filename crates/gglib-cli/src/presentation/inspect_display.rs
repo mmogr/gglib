@@ -6,6 +6,7 @@
 
 use gglib_app_services::types::ModelDetailDto;
 use gglib_core::ModelCapabilities;
+use gglib_core::domain::DefaultsOrigin;
 
 use crate::presentation::{format_relative_time, print_separator};
 
@@ -118,8 +119,15 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
             || inf.min_p.is_some();
 
         if has_any {
+            let origin_suffix = match dto.defaults_origin {
+                Some(DefaultsOrigin::AutoDetected) => {
+                    " (auto-detected — ranks below global settings)"
+                }
+                Some(DefaultsOrigin::User) => " (user-set)",
+                None => "",
+            };
             println!();
-            println!("  Inference Defaults");
+            println!("  Inference Defaults{origin_suffix}");
             print_separator(SEP_WIDTH);
             print_opt_f32("  temperature      ", inf.temperature);
             print_opt_f32("  top_p            ", inf.top_p);

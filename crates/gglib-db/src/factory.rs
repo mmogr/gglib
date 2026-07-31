@@ -155,6 +155,7 @@ impl TestDb {
                 file_paths_json TEXT,
                 capabilities INTEGER DEFAULT 0,
                 inference_defaults TEXT,
+                defaults_origin TEXT,
                 server_defaults TEXT
             )
             "#,

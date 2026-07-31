@@ -392,7 +392,7 @@ pub async fn proxy_chat(
     let servers = state.servers.list_servers().await;
     let server = servers.iter().find(|s| s.port == request.port);
 
-    let (capabilities, model_defaults, model_is_reasoning) = if let Some(server) = server {
+    let (capabilities, model_defaults, model_ctx) = if let Some(server) = server {
         // Found the server, fetch the model to get its capabilities and inference_defaults
         match state.core.models().get_by_id(server.model_id).await {
             Ok(Some(model)) => {
@@ -405,11 +405,14 @@ pub async fn proxy_chat(
                     requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
                     "Model capabilities loaded for chat request"
                 );
-                let is_reasoning = model
-                    .tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
-                (model.capabilities, model.inference_defaults, is_reasoning)
+                let model_ctx = gglib_core::domain::ModelSamplingContext {
+                    is_reasoning: model
+                        .tags
+                        .iter()
+                        .any(|tag| tag.eq_ignore_ascii_case("reasoning")),
+                    defaults_origin: model.defaults_origin,
+                };
+                (model.capabilities, model.inference_defaults, model_ctx)
             }
             Ok(None) => {
                 tracing::warn!(
@@ -420,7 +423,7 @@ pub async fn proxy_chat(
                 (
                     gglib_core::domain::ModelCapabilities::default(),
                     None,
-                    false,
+                    gglib_core::domain::ModelSamplingContext::default(),
                 )
             }
             Err(e) => {
@@ -433,7 +436,7 @@ pub async fn proxy_chat(
                 (
                     gglib_core::domain::ModelCapabilities::default(),
                     None,
-                    false,
+                    gglib_core::domain::ModelSamplingContext::default(),
                 )
             }
         }
@@ -445,7 +448,7 @@ pub async fn proxy_chat(
         (
             gglib_core::domain::ModelCapabilities::default(),
             None,
-            false,
+            gglib_core::domain::ModelSamplingContext::default(),
         )
     };
 
@@ -469,11 +472,7 @@ pub async fn proxy_chat(
         presence_penalty: request.presence_penalty,
         min_p: request.min_p,
     }
-    .resolve_with_defaults(
-        model_defaults.as_ref(),
-        global_defaults.as_ref(),
-        model_is_reasoning,
-    );
+    .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref(), model_ctx);
 
     tracing::debug!(
         port = request.port,

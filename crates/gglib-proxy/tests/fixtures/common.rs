@@ -178,6 +178,7 @@ impl StaticCatalog {
             file_size: 0,
             context_length: Some(8192),
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         }
     }
@@ -452,6 +453,7 @@ impl TaggedCatalog {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         }
     }

@@ -151,6 +151,10 @@ impl ModelOps {
         }
         if let Some(inference_defaults) = request.inference_defaults {
             model.inference_defaults = Some(inference_defaults);
+            // A deliberate WebUI edit, so this is a user-set value from
+            // here on — even if it happens to land on the same numbers
+            // gglib would have guessed. See `DefaultsOrigin`.
+            model.defaults_origin = Some(gglib_core::domain::DefaultsOrigin::User);
         }
         match request.server_defaults {
             Some(Some(config)) => model.server_defaults = Some(config),

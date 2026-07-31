@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::{GgufMetadata, InferenceConfig, NameSource, NewModel, resolve_model_name};
+use crate::domain::{
+    DefaultsOrigin, GgufMetadata, InferenceConfig, NameSource, NewModel, resolve_model_name,
+};
 use crate::download::Quantization;
 use crate::ports::GgufParserPort;
 
@@ -147,6 +149,10 @@ pub fn build_new_model(
     // the model has no explicit defaults already (always true here, since
     // `model` was just constructed) — this is where a future caller that
     // starts pre-populating `inference_defaults` would need to add a guard.
+    //
+    // `defaults_origin: AutoDetected` marks this as gglib's own guess, never
+    // reviewed by a person — see `DefaultsOrigin` for why that changes how
+    // resolution ranks it relative to the user's global settings.
     if model.inference_defaults.is_none()
         && model
             .tags
@@ -154,6 +160,7 @@ pub fn build_new_model(
             .any(|t| t.eq_ignore_ascii_case("reasoning"))
     {
         model.inference_defaults = Some(InferenceConfig::reasoning_profile());
+        model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
     }
 
     // Infer capabilities from chat template OR architecture — OR'd so either
@@ -303,6 +310,11 @@ mod tests {
             hf_model.inference_defaults,
             Some(InferenceConfig::reasoning_profile())
         );
+        assert_eq!(
+            hf_model.defaults_origin,
+            Some(DefaultsOrigin::AutoDetected),
+            "gglib's own guess, not a user choice — must rank below global settings"
+        );
 
         let gguf = gguf_with(&[]);
         let local = ModelOrigin::LocalFile {
@@ -321,6 +333,7 @@ mod tests {
             Utc::now(),
         );
         assert_eq!(local_model.inference_defaults, None);
+        assert_eq!(local_model.defaults_origin, None);
     }
 
     #[test]

@@ -561,6 +561,7 @@ mod tests {
             last_update_check: None,
             tags: vec![],
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
             capabilities: gglib_core::domain::capabilities::ModelCapabilities::default(),
             benchmark_summary: None,

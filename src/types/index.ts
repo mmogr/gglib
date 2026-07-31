@@ -88,6 +88,13 @@ export interface GgufModel {
   port?: number;
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
+  /**
+   * Whether `inferenceDefaults` was set by the user or auto-detected at
+   * import time from the model's `reasoning` tag. Auto-detected values rank
+   * below the global inference defaults in the resolution hierarchy — see
+   * the `InferenceConfig` doc comment above.
+   */
+  defaultsOrigin?: 'user' | 'auto_detected' | null;
   // Per-model server defaults (overrides global settings for launch params)
   serverDefaults?: ServerConfig;
   // Benchmark summary (cached from benchmark_summaries table)
@@ -133,6 +140,8 @@ export interface ServeConfig {
   topK?: number;
   maxTokens?: number;
   repeatPenalty?: number;
+  presencePenalty?: number;
+  minP?: number;
 }
 
 export interface ServerInfo {
