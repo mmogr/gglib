@@ -35,12 +35,33 @@ still spread out, and the floor is clamped to `max_backoff` so a buggy upstream
 cannot park a request indefinitely.
 
 ```ignore
-let policy = RetryPolicy::default();
-match retry::decide(&policy, attempt, retry_after, elapsed, rng.random()) {
+let policy = RetryPolicy::from_env();
+match retry::decide(&policy, attempt, retry_after, elapsed, retry::jitter_unit()) {
     RetryDecision::Retry { after } => tokio::time::sleep(after).await,
     RetryDecision::GiveUp(reason) => return Err(anyhow!("{}", reason.as_str())),
 }
 ```
+
+# Configuration
+
+`RetryPolicy::default()` is the tuned budget — 4 attempts inside 60 s.
+`RetryPolicy::from_env()` layers the `GGLIB_*` escape hatches over it, resolved
+once per process:
+
+| Variable | Overrides |
+|---|---|
+| `GGLIB_LLM_RETRY_MAX_ATTEMPTS` | attempts, including the first |
+| `GGLIB_LLM_RETRY_DEADLINE_SECS` | wall-clock ceiling on the whole sequence |
+
+An unset or unparseable value leaves that field alone, so a typo degrades to
+standard behaviour rather than disabling retry. Shortening the deadline pulls
+`max_backoff` down with it, because otherwise the very first backoff would
+overrun the budget and silently turn retrying off for someone who thought they
+were only tightening it.
+
+`RetryPolicy::disabled()` is the one-attempt policy `gglib chat --no-retry`
+resolves to — asked for by name rather than by knowing that `max_attempts: 1`
+means "off".
 
 <!-- module-docs:end -->
 
@@ -50,6 +71,8 @@ match retry::decide(&policy, attempt, retry_after, elapsed, rng.random()) {
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`env.rs`](env.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env-coverage.json) |
+| [`env_tests.rs`](env_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-env_tests-coverage.json) |
 | [`jitter.rs`](jitter.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-jitter-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-jitter-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-jitter-coverage.json) |
 | [`policy.rs`](policy.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy-coverage.json) |
 | [`policy_tests.rs`](policy_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-policy_tests-coverage.json) |

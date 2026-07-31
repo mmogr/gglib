@@ -57,6 +57,8 @@ pub async fn execute(
         port,
         tools: tools.clone(),
         model_name: model_arg.clone(),
+        // `gglib q` takes no retry flag; the environment defaults apply.
+        retry_policy: gglib_core::retry::RetryPolicy::from_env(),
     };
 
     // If no model was specified, look up the default from settings

@@ -815,6 +815,48 @@ gglib proxy -v
 
 </details>
 
+<details>
+<summary><strong>Model contention & retry budgets</strong></summary>
+
+When a request arrives for one model while another is still starting, the two
+collide over the same startup slot. If the collision does not clear, the loser
+gets a `503`. This only happens with concurrent traffic for *different* models —
+a single client working with one model will never see it.
+
+Two layers absorb that, and they compose:
+
+| Layer | Budget | Tuning |
+|---|---|---|
+| Proxy waits out the collision | ≤ 30 s | `GGLIB_CONTENTION_WAIT_SECS` |
+| Client retries the resulting `503` | ≤ 60 s, 4 attempts | `GGLIB_LLM_RETRY_DEADLINE_SECS`, `GGLIB_LLM_RETRY_MAX_ATTEMPTS` |
+
+So a request that never succeeds fails after roughly **90 seconds**. The layers
+are deliberately independent — neither reads the other's state — so each can be
+tuned or switched off without disturbing the other.
+
+**Why the server waits at all.** OpenAI-compatible clients such as the VS Code
+LLM Gateway and Copilot treat `503` as terminal and abandon the request rather
+than backing off. For them a slow `200` is strictly better than a fast `503`, and
+no amount of client-side retry on our side helps, because the retry would have to
+happen in their code. Setting `GGLIB_CONTENTION_WAIT_SECS=0` restores immediate
+fail-fast.
+
+**Tuning.** Raise `GGLIB_CONTENTION_WAIT_SECS` if you routinely run several large
+models and would rather wait than fail. Lower it — or zero it — if you would
+rather see failures immediately, for instance when scripting. Shortening
+`GGLIB_LLM_RETRY_DEADLINE_SECS` pulls the client's backoff ceiling down with it,
+so a tightened budget still gets at least one retry rather than silently getting
+none. `gglib chat --no-retry` disables client-side retry for a single run.
+
+**Diagnosing.** A `503` caused by contention carries
+`x-gglib-retry-reason: contention`, distinguishing it from ordinary model
+loading — the two are otherwise identical on the wire, since both report
+`service_unavailable`. While a retry is in flight the CLI and GUI both show a
+non-fatal notice ("Model unavailable — retrying in Ns"); the full upstream reason
+is in the logs at `warn` level.
+
+</details>
+
 ## Documentation
 
 **[View Full API Documentation →](https://mmogr.github.io/gglib)**

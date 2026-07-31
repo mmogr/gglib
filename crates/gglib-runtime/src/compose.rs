@@ -31,6 +31,7 @@ use gglib_core::ports::{
     AgentLoopPort, CacheMetricsSink, LlmCompletionPort, RetryObserver, ToolExecutorPort,
 };
 use gglib_core::request_pipeline::ModelContext;
+use gglib_core::retry::RetryPolicy;
 use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
 
@@ -79,10 +80,15 @@ pub fn compose_agent_loop(
         None,
         cache_metrics,
         retry_observer,
+        // The GUI has no per-turn retry override; the environment defaults apply.
+        None,
     )
 }
 
 /// Like [`compose_agent_loop`] with optional sampling overrides and sandbox.
+///
+/// `retry_policy` bounds retrying of transient upstream failures; pass `None`
+/// to use the defaults with any `GGLIB_LLM_RETRY_*` overrides applied.
 #[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop_with_sampling(
     base_url: String,
@@ -94,6 +100,7 @@ pub fn compose_agent_loop_with_sampling(
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    retry_policy: Option<RetryPolicy>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -108,6 +115,7 @@ pub fn compose_agent_loop_with_sampling(
         // The CLI renders the loop's events directly, so there is no separate
         // consumer to notify — retries surface through the loop's own output.
         None,
+        retry_policy,
     )
 }
 
@@ -172,13 +180,15 @@ fn compose_agent_loop_inner(
     sampling: Option<InferenceConfig>,
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
+    retry_policy: Option<RetryPolicy>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
             .with_model_context(model_context)
             .with_cache_metrics_sink(cache_metrics)
-            .with_retry_observer(retry_observer),
+            .with_retry_observer(retry_observer)
+            .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env)),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),

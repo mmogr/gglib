@@ -14,6 +14,9 @@ pub struct ChatArgs {
     pub context: ContextArgs,
     pub system_prompt: Option<String>,
     pub sampling: SamplingArgs,
+    /// Budget for retrying transient upstream failures, already resolved from
+    /// `--no-retry` and the `GGLIB_LLM_RETRY_*` overrides.
+    pub retry_policy: gglib_core::retry::RetryPolicy,
     /// Disable tools — run as a plain LLM chat.
     pub no_tools: bool,
     pub port: Option<u16>,
