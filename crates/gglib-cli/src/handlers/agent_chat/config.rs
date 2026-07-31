@@ -44,6 +44,9 @@ pub struct AgentSessionParams {
     pub tools: Vec<String>,
     /// Model-name override forwarded to llama-server routing.
     pub model_name: Option<String>,
+    /// Budget for retrying transient upstream failures, already resolved from
+    /// `--no-retry` and the `GGLIB_LLM_RETRY_*` overrides.
+    pub retry_policy: gglib_core::retry::RetryPolicy,
 }
 
 /// Display metadata for the server-startup info banner.
@@ -75,6 +78,7 @@ impl From<&ChatArgs> for AgentSessionParams {
             port: args.port,
             tools,
             model_name: args.model.clone(),
+            retry_policy: args.retry_policy,
         }
     }
 }
@@ -149,6 +153,7 @@ pub async fn compose(
         resolved_sampling,
         // No proxy dashboard in the CLI process — nowhere to report reuse.
         None,
+        Some(params.retry_policy),
     );
 
     Ok((agent, maybe_handle))

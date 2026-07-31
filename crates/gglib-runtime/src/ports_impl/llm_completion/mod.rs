@@ -138,7 +138,7 @@ impl LlmCompletionAdapter {
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             model_context: ModelContext::passthrough(),
             cache_metrics: None,
-            retry_policy: RetryPolicy::default(),
+            retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
         }
     }

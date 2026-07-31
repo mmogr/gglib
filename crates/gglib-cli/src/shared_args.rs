@@ -51,6 +51,34 @@ pub struct ContextArgs {
     pub mlock: bool,
 }
 
+/// Retry behaviour for transient upstream failures.
+///
+/// Retrying is on by default; this exists to turn it off. Scripted callers
+/// generally want a failure reported at once rather than absorbed, and the
+/// budget itself is tuned by `GGLIB_LLM_RETRY_MAX_ATTEMPTS` /
+/// `GGLIB_LLM_RETRY_DEADLINE_SECS` rather than by more flags.
+#[derive(Args, Debug, Clone, Default)]
+pub struct RetryArgs {
+    /// Fail immediately on a transient upstream error instead of retrying.
+    #[arg(long)]
+    pub no_retry: bool,
+}
+
+impl RetryArgs {
+    /// The policy these flags resolve to.
+    ///
+    /// `--no-retry` yields a one-attempt policy; otherwise the defaults with
+    /// any `GGLIB_LLM_RETRY_*` overrides applied.
+    #[must_use]
+    pub fn into_policy(self) -> gglib_core::retry::RetryPolicy {
+        if self.no_retry {
+            gglib_core::retry::RetryPolicy::disabled()
+        } else {
+            gglib_core::retry::RetryPolicy::from_env()
+        }
+    }
+}
+
 impl SamplingArgs {
     /// Convert into an [`InferenceConfig`](gglib_core::domain::InferenceConfig).
     pub fn into_inference_config(self) -> gglib_core::domain::InferenceConfig {

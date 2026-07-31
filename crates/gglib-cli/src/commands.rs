@@ -12,7 +12,7 @@ use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
-use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions};
 
 /// Subcommands available under `gglib council`.
 #[derive(Subcommand)]
@@ -251,6 +251,8 @@ pub enum Commands {
         system_prompt: Option<String>,
         #[command(flatten)]
         sampling: SamplingArgs,
+        #[command(flatten)]
+        retry: RetryArgs,
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
         #[arg(long = "no-tools")]
         no_tools: bool,
