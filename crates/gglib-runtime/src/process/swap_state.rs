@@ -90,6 +90,35 @@ pub struct SwapState {
     pub(super) pinned: Option<String>,
 }
 
+/// Resolve one launch's [`ServerConfigOptions`] and context size together.
+///
+/// Pulled out of [`SwapState::startup_future`]'s async body so the
+/// context-resolution logic can be tested without spawning a process — this
+/// is the exact computation that was previously duplicated as a wrong
+/// `effective_ctx` (`num_ctx.unwrap_or(default_ctx)`, skipping
+/// `model_server_ctx` entirely) and a separate, correct
+/// `resolve_context_size` call used only for the KV-cache estimate. See
+/// #685.
+///
+/// The context chain is assigned onto the overlaid template rather than
+/// overlaid itself: the manager is authoritative for all three rungs, and a
+/// stale `model_server_ctx` inherited from `template` would silently size
+/// the launch for a different model than `model_server_ctx` names here.
+fn resolve_launch_opts(
+    template: &ServerConfigOptions,
+    per_call: &ServerConfigOptions,
+    num_ctx: Option<u64>,
+    default_ctx: u64,
+    model_server_ctx: Option<usize>,
+) -> (ServerConfigOptions, u64) {
+    let mut opts = template.overlay(per_call);
+    opts.context_size = num_ctx.or(opts.context_size);
+    opts.model_server_ctx = model_server_ctx;
+    opts.global_default_ctx = Some(default_ctx);
+    let resolved_ctx = resolve_context_size(&opts);
+    (opts, resolved_ctx)
+}
+
 impl SwapState {
     /// Create auto-swapping swap state with a standing options template.
     pub(super) fn new(
@@ -180,7 +209,6 @@ impl SwapState {
                 })?
                 .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.clone()))?;
 
-            let effective_ctx = num_ctx.unwrap_or(default_ctx);
             let model_path = &launch_spec.file_path;
 
             if !tokio::fs::try_exists(model_path).await.unwrap_or(false) {
@@ -189,11 +217,35 @@ impl SwapState {
                 ));
             }
 
+            // Resolved once, here, before anything else runs. This is the
+            // single source of truth for "what context is this launch/reuse
+            // decision about" — read by the cache-reuse check below, every
+            // log line, the tracked `CurrentModelState`, and the
+            // `RunningTarget` returned to the proxy. It used to be computed
+            // twice: an `effective_ctx` here that skipped the per-model tier
+            // (`num_ctx.unwrap_or(default_ctx)`), and a separate
+            // `resolve_context_size` call further down for the KV-cache
+            // estimate that did apply it. The two only agreed when no
+            // per-model context override was configured; with one
+            // configured, everything upstream of the actual `-c` flag
+            // — the reuse decision, `/v1/models`, and the proxy's
+            // prompt-truncation budget — silently reported the wrong number.
+            let (mut opts, resolved_ctx) = resolve_launch_opts(
+                &template,
+                &per_call,
+                num_ctx,
+                default_ctx,
+                launch_spec
+                    .server_defaults
+                    .as_ref()
+                    .and_then(|sc| sc.context_length),
+            );
+
             // --- Cached instance check (fast path: already running + healthy) ---
             let cached = {
                 let guard = current.read().await;
                 guard.as_ref().and_then(|c| {
-                    (c.model_id == launch_spec.id && c.context_size == effective_ctx)
+                    (c.model_id == launch_spec.id && c.context_size == resolved_ctx)
                         .then(|| (c.port, c.model_id, c.model_name.clone(), c.context_size))
                 })
             };
@@ -252,22 +304,9 @@ impl SwapState {
             info!(
                 model_id = %launch_spec.id,
                 model_name = %launch_spec.name,
-                context = %effective_ctx,
+                context = %resolved_ctx,
                 "Starting model"
             );
-
-            // Standing template, then this caller's overrides. The context
-            // chain is assigned rather than overlaid: the manager is
-            // authoritative for all three rungs, and a stale
-            // `model_server_ctx` inherited from the template would silently
-            // size the launch for a different model.
-            let mut opts = template.overlay(&per_call);
-            opts.context_size = num_ctx.or(opts.context_size);
-            opts.model_server_ctx = launch_spec
-                .server_defaults
-                .as_ref()
-                .and_then(|sc| sc.context_length);
-            opts.global_default_ctx = Some(default_ctx);
 
             // Resolve K/V cache types up front (rather than leaving it to
             // `build_server_config`) so the RAM budget below reflects the
@@ -281,12 +320,10 @@ impl SwapState {
             opts.cache_type_k = Some(kv_types.k);
             opts.cache_type_v = Some(kv_types.v);
 
-            // Size the host-RAM prompt cache. Deliberately uses
-            // `resolve_context_size` (the same 4-tier chain
-            // `build_server_config` applies, including the per-model tier)
-            // rather than `effective_ctx`, so the KV estimate matches the
-            // context the server actually launches with.
-            let launch_ctx = resolve_context_size(&opts);
+            // Size the host-RAM prompt cache against `resolved_ctx` — the
+            // same value `build_server_config` below resolves independently
+            // from the same `opts`, so the KV estimate matches the context
+            // the server actually launches with by construction.
             let kv_bytes_per_token = launch_spec
                 .kv_elems_per_token
                 .map(|elems| gglib_core::domain::kv_bytes_per_token(elems, kv_types.k, kv_types.v));
@@ -295,7 +332,7 @@ impl SwapState {
                 crate::system::total_system_ram_bytes(),
                 launch_spec.file_size_bytes,
                 kv_bytes_per_token,
-                launch_ctx,
+                resolved_ctx,
             );
             if let Some(explanation) = cache_ram.explain() {
                 info!("{explanation}");
@@ -360,7 +397,7 @@ impl SwapState {
                 *guard = Some(CurrentModelState {
                     model_id: launch_spec.id,
                     model_name: launch_spec.name.clone(),
-                    context_size: effective_ctx,
+                    context_size: resolved_ctx,
                     port,
                     model_path: launch_spec.file_path.clone(),
                     slot_restore_supported: slot_restore.enabled,
@@ -372,7 +409,7 @@ impl SwapState {
                 model_id = %launch_spec.id,
                 model_name = %launch_spec.name,
                 port = %port,
-                context = %effective_ctx,
+                context = %resolved_ctx,
                 "Model started successfully"
             );
 
@@ -380,7 +417,7 @@ impl SwapState {
                 port,
                 launch_spec.id,
                 launch_spec.name,
-                effective_ctx,
+                resolved_ctx,
                 true, // fresh spawn — cache slots are stale
             )
             .with_slot_restore_supported(slot_restore.enabled)
@@ -515,6 +552,86 @@ mod tests {
         assert_eq!(state.launch_overrides.mlock, template.mlock);
         assert_eq!(state.launch_overrides.cache_reuse, template.cache_reuse);
         assert_eq!(state.cache_ram, CacheRamSetting::ExplicitMb(4096));
+    }
+
+    // ── resolve_launch_opts (#685: the context-bookkeeping desync) ─────────
+
+    /// The actual regression: with no per-request `num_ctx` override, a
+    /// per-model `server_defaults.context_length` must still win over the
+    /// global default — this is what `effective_ctx` used to skip entirely
+    /// (`num_ctx.unwrap_or(default_ctx)` never consulted it), so the tracked
+    /// context silently disagreed with what `build_server_config` actually
+    /// launched llama-server with.
+    #[test]
+    fn resolve_launch_opts_applies_the_per_model_context_when_nothing_more_specific_is_set() {
+        let (opts, resolved_ctx) = resolve_launch_opts(
+            &ServerConfigOptions::default(),
+            &ServerConfigOptions::default(),
+            None,          // no per-request override
+            131_072,       // global default
+            Some(196_608), // per-model server_defaults.context_length
+        );
+
+        assert_eq!(resolved_ctx, 196_608, "per-model tier must win over global");
+        // `opts` is exactly what `build_server_config` resolves from — same
+        // fields must still be set on it, or the two callers could diverge.
+        assert_eq!(opts.model_server_ctx, Some(196_608));
+        assert_eq!(opts.global_default_ctx, Some(131_072));
+    }
+
+    /// A per-request `num_ctx` still outranks the per-model tier — the
+    /// 4-level chain (`resolve_context_size`) is unchanged by this
+    /// refactor, only how many times it runs and who reads the result.
+    #[test]
+    fn resolve_launch_opts_explicit_num_ctx_beats_the_per_model_tier() {
+        let (_, resolved_ctx) = resolve_launch_opts(
+            &ServerConfigOptions::default(),
+            &ServerConfigOptions::default(),
+            Some(8_192),
+            131_072,
+            Some(196_608),
+        );
+
+        assert_eq!(resolved_ctx, 8_192);
+    }
+
+    /// With nothing else set, the global default is what's left.
+    #[test]
+    fn resolve_launch_opts_falls_back_to_the_global_default() {
+        let (_, resolved_ctx) = resolve_launch_opts(
+            &ServerConfigOptions::default(),
+            &ServerConfigOptions::default(),
+            None,
+            131_072,
+            None,
+        );
+
+        assert_eq!(resolved_ctx, 131_072);
+    }
+
+    /// A stale `model_server_ctx` left over on `template` from a previous
+    /// model must not leak into this launch — `model_server_ctx` is always
+    /// assigned from this call's own parameter, never overlaid.
+    #[test]
+    fn resolve_launch_opts_never_inherits_a_stale_model_server_ctx_from_the_template() {
+        let stale_template = ServerConfigOptions {
+            model_server_ctx: Some(4_096), // some other model's context
+            ..Default::default()
+        };
+
+        let (opts, resolved_ctx) = resolve_launch_opts(
+            &stale_template,
+            &ServerConfigOptions::default(),
+            None,
+            131_072,
+            None,
+        );
+
+        assert_eq!(
+            opts.model_server_ctx, None,
+            "must not inherit the stale value"
+        );
+        assert_eq!(resolved_ctx, 131_072);
     }
 
     fn temp_dir(label: &str) -> PathBuf {
