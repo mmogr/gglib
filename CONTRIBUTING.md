@@ -169,12 +169,12 @@ Positive evidence wins: if a template contains `[SYSTEM_PROMPT]` **and** a gener
 
 If the architecture needs **response normalization** (e.g., XML-wrapped tool calls):
 
-1. Add a `format:myarch-xml` constant to `crates/gglib-proxy/src/normalize/tags.rs`.
-2. Add a parser module under `crates/gglib-proxy/src/normalize/parsers/`.
-3. Add an arm to `get_parser()` in `crates/gglib-proxy/src/normalize/registry.rs`.
+1. Add a `format:myarch-xml` constant to `crates/gglib-core/src/normalize/tags.rs`.
+2. Add a parser module under `crates/gglib-core/src/normalize/parsers/`.
+3. Add an arm to `get_parser()` in `crates/gglib-core/src/normalize/registry.rs`.
 4. Ensure models with this architecture receive the `format:myarch-xml` tag (add to `retag` logic if needed).
 
-No other files need to change.  The proxy's `normalize` pipeline picks up new parsers automatically via `get_parser()`.
+No other files need to change.  The `normalize` pipeline (shared by the proxy and the in-process agent path) picks up new parsers automatically via `get_parser()`.
 
 ### Capability overrides
 

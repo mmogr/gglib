@@ -27,8 +27,8 @@ use fixtures::common::{
     assert_sse_canonical_envelope, parse_sse_frames, spawn_mock_upstream, spawn_proxy,
 };
 use fixtures::sse::{
-    BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK, REASONING_ONLY,
-    STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
+    BASIC_TEXT, MALFORMED_JSON_RECOVERY, QWEN_FUNCTION_XML_TOOL_CALL, QWEN_XML_TOOL_CALL,
+    REASONING_DEEPSEEK, REASONING_ONLY, STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
 };
 
 // ─── End-to-end driver ─────────────────────────────────────────────────────
@@ -229,6 +229,78 @@ async fn qwen_xml_tool_call_is_normalized() {
     assert_eq!(parsed_args, json!({"city": "Paris"}));
 
     // Final chunk must announce finish_reason="tool_calls".
+    let stop = frames
+        .iter()
+        .find(|f| f["choices"][0]["finish_reason"] == "tool_calls")
+        .expect("missing tool_calls finish chunk");
+    assert!(
+        stop["choices"][0]["delta"]
+            .as_object()
+            .is_some_and(|o| o.is_empty())
+    );
+}
+
+/// The second `format:qwen-xml` body shape — Qwen3 + `--jinja`'s
+/// `<function=NAME><parameter=KEY>VALUE</parameter></function>` dialect,
+/// rather than [`qwen_xml_tool_call_is_normalized`]'s JSON body — must be
+/// rewritten into the same strict OpenAI `tool_calls` deltas, through the
+/// full proxy pipeline rather than just the parser's own unit tests.
+#[tokio::test]
+async fn qwen_function_xml_tool_call_is_normalized() {
+    let body = round_trip(
+        vec![QWEN_FUNCTION_XML_TOOL_CALL],
+        "qwen3.6",
+        vec!["format:qwen-xml".to_owned()],
+    )
+    .await;
+    let (frames, saw_done) = parse_sse_frames(&body);
+    assert!(saw_done);
+    assert_sse_canonical_envelope(&frames, "qwen3.6");
+
+    // The literal Qwen markup MUST NOT appear in the wire output.
+    assert!(
+        !body.contains("<tool_call>")
+            && !body.contains("</tool_call>")
+            && !body.contains("<function=")
+            && !body.contains("<parameter="),
+        "Qwen inner-XML markers leaked into wire output:\n{body}"
+    );
+
+    let content: String = frames
+        .iter()
+        .filter_map(|f| f["choices"][0]["delta"]["content"].as_str())
+        .collect();
+    assert_eq!(content, "Looking it up. ");
+
+    let tc_frames: Vec<&Value> = frames
+        .iter()
+        .filter(|f| f["choices"][0]["delta"]["tool_calls"].is_array())
+        .collect();
+    assert!(
+        !tc_frames.is_empty(),
+        "expected at least one tool_calls delta"
+    );
+
+    let first_tc = &tc_frames[0]["choices"][0]["delta"]["tool_calls"][0];
+    assert_eq!(first_tc["index"], json!(0));
+    assert!(
+        first_tc["id"].is_string(),
+        "first tool_call delta missing id"
+    );
+    assert_eq!(first_tc["type"], "function");
+    assert_eq!(first_tc["function"]["name"], "get_weather");
+
+    let mut args = String::new();
+    for f in &tc_frames {
+        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        {
+            args.push_str(s);
+        }
+    }
+    let parsed_args: Value =
+        serde_json::from_str(&args).expect("tool_call arguments should be JSON");
+    assert_eq!(parsed_args, json!({"city": "Paris"}));
+
     let stop = frames
         .iter()
         .find(|f| f["choices"][0]["finish_reason"] == "tool_calls")

@@ -28,9 +28,13 @@ pub enum NormalizationErrorKind {
     /// empty if only the open tag was seen).
     UnclosedToolCallTag { partial: String },
 
-    /// A dialect-specific marker was recognised but its surrounding shape
-    /// did not match any known schema.  Reserved for future parsers.
-    UnknownMarkup { raw: String },
+    /// Found a complete `<tool_call>...</tool_call>` block whose body began
+    /// with `<function=` (the Qwen3/Hermes inner-XML dialect) but did not
+    /// match that dialect's `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`
+    /// shape.
+    ///
+    /// `raw` holds the body bytes between the open and close tags.
+    MalformedFunctionXml { raw: String },
 }
 
 /// A non-fatal normalization issue surfaced from a parser.
@@ -67,6 +71,16 @@ impl NormalizationError {
                 partial: partial.clone(),
             },
             raw: partial,
+        }
+    }
+
+    /// Construct a `MalformedFunctionXml` error with the body as `raw`.
+    #[must_use]
+    pub fn malformed_function_xml(body: impl Into<String>) -> Self {
+        let raw = body.into();
+        Self {
+            kind: NormalizationErrorKind::MalformedFunctionXml { raw: raw.clone() },
+            raw,
         }
     }
 }
