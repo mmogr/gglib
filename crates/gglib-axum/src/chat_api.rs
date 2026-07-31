@@ -392,7 +392,7 @@ pub async fn proxy_chat(
     let servers = state.servers.list_servers().await;
     let server = servers.iter().find(|s| s.port == request.port);
 
-    let (capabilities, model_defaults) = if let Some(server) = server {
+    let (capabilities, model_defaults, model_is_reasoning) = if let Some(server) = server {
         // Found the server, fetch the model to get its capabilities and inference_defaults
         match state.core.models().get_by_id(server.model_id).await {
             Ok(Some(model)) => {
@@ -405,7 +405,11 @@ pub async fn proxy_chat(
                     requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
                     "Model capabilities loaded for chat request"
                 );
-                (model.capabilities, model.inference_defaults)
+                let is_reasoning = model
+                    .tags
+                    .iter()
+                    .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
+                (model.capabilities, model.inference_defaults, is_reasoning)
             }
             Ok(None) => {
                 tracing::warn!(
@@ -413,7 +417,11 @@ pub async fn proxy_chat(
                     model_id = server.model_id,
                     "Model not found for capability detection; assuming default"
                 );
-                (gglib_core::domain::ModelCapabilities::default(), None)
+                (
+                    gglib_core::domain::ModelCapabilities::default(),
+                    None,
+                    false,
+                )
             }
             Err(e) => {
                 tracing::warn!(
@@ -422,7 +430,11 @@ pub async fn proxy_chat(
                     error = %e,
                     "Failed to fetch model for capability detection; assuming default"
                 );
-                (gglib_core::domain::ModelCapabilities::default(), None)
+                (
+                    gglib_core::domain::ModelCapabilities::default(),
+                    None,
+                    false,
+                )
             }
         }
     } else {
@@ -430,7 +442,11 @@ pub async fn proxy_chat(
             port = request.port,
             "No server found for port; assuming default capabilities"
         );
-        (gglib_core::domain::ModelCapabilities::default(), None)
+        (
+            gglib_core::domain::ModelCapabilities::default(),
+            None,
+            false,
+        )
     };
 
     // Load global settings for inference defaults
@@ -453,7 +469,11 @@ pub async fn proxy_chat(
         presence_penalty: request.presence_penalty,
         min_p: request.min_p,
     }
-    .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref());
+    .resolve_with_defaults(
+        model_defaults.as_ref(),
+        global_defaults.as_ref(),
+        model_is_reasoning,
+    );
 
     tracing::debug!(
         port = request.port,

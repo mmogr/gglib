@@ -413,20 +413,36 @@ These tags are **auto-detected at import time** by `gglib-gguf::capabilities::de
 Sampling parameters are resolved through a **5-level merge hierarchy** on every request. Each level fills in only the fields left unset by the previous level:
 
 ```
-Request override  →  Inference profile  →  Per-model defaults  →  Global settings  →  Hardcoded fallback
+Request override  →  Inference profile  →  Per-model defaults  →  Global settings  →  Floor
 ```
 
 The full set of configurable parameters:
 
-| Parameter | CLI flag | Range | Hardcoded fallback | Notes |
-|-----------|----------|-------|--------------------|-------|
+| Parameter | CLI flag | Range | Floor | Notes |
+|-----------|----------|-------|-------|-------|
 | `temperature` | `--temperature` | 0.0 – 2.0 | 0.7 | |
 | `top_p` | `--top-p` | 0.0 – 1.0 | 0.95 | |
 | `top_k` | `--top-k` | int | 40 | |
 | `max_tokens` | `--max-tokens` | int | *(none)* | Deliberately unset — see below |
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
-| `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0 (disabled) | Recommended 1.5 for reasoning models |
+| `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0, or 1.0 on a `reasoning`-tagged model | See below |
 | `min_p` | `--min-p` | 0.0 – 1.0 | 0.0 (disabled) | 0.05 is llama.cpp built-in default when omitted |
+
+**`temperature`, `presence_penalty`, `repeat_penalty` and `min_p` are coupled.**
+The last three are only meaningful relative to how sharp `temperature` makes the
+sampling distribution, so they always come from whichever layer supplied the
+`temperature` — never a lower layer, which would apply a penalty tuned for a
+distribution nothing above it asked for. If that layer left one of the three
+unset (or if no layer names a temperature at all, in which case the pair-up
+doesn't apply), it falls to the floor rather than to a lower layer's value.
+
+The floor itself is class-aware for exactly one field: a plain `0.0`
+`presence_penalty` is fine for most models, but a `reasoning`-tagged model
+(Qwen3.6, DeepSeek-R1, QwQ, …) degrades into repetitive reasoning loops under
+greedy or near-greedy decoding, so its floor is `1.0` — a real guard, without
+asserting the model's full tuned recipe onto a temperature it wasn't chosen
+for. `top_p`, `top_k` and `max_tokens` are uncoupled and fill from any layer
+independently regardless of temperature.
 
 **`max_tokens` has no fallback, by design.** Resolution force-writes every set
 parameter into the outgoing request, so a fallback here would cap *every* request
@@ -490,8 +506,15 @@ Profiles are **global** — one `coding` profile applies to every model — and
 deliberately **sparse**: only the parameters you set override anything, and the
 rest fall through to that model's own defaults. That is what makes a single
 profile safe across models with different architectures; a `coding` profile
-setting only `temperature` still lets a thinking model contribute its own
-`presence_penalty`.
+setting only `top_k` still lets a thinking model contribute its own `top_p`
+and `max_tokens`.
+
+One exception: a `coding` profile that sets `temperature` does **not** also
+inherit the model's `presence_penalty` — see the coupling rule above. A
+profile is presumed to be choosing its own distribution sharpness, so it gets
+the floor for the coupled parameters it doesn't name, not the model's recipe
+tuned for a different temperature. Set `presence_penalty` explicitly on the
+profile if it needs one.
 
 Key behaviours:
 

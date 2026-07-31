@@ -199,73 +199,80 @@ impl InferenceConfig {
         }
     }
 
-    /// Fill `None` fields from `other`, except parameters tuned against a
-    /// temperature `self` has already claimed.
+    /// Resolve an ordered list of sampling layers (highest priority first)
+    /// into a single fully-resolved config, then fill anything still unset
+    /// from `floor`.
+    ///
+    /// This is the one fold every multi-layer resolution surface goes
+    /// through: [`resolve_with_profile`] wraps it for the simple
+    /// request/profile/model/global shape, and
+    /// [`crate::request_pipeline::sampling`] builds its own five-layer
+    /// (cli/client/profile/model/global) array and calls it directly. There
+    /// is exactly one place that decides what "wins" means.
+    ///
+    /// # Uncoupled parameters
+    ///
+    /// `top_p`, `top_k`, and `max_tokens` gap-fill independently: each takes
+    /// the first `Some` value found scanning the layers top to bottom.
+    ///
+    /// # Coupled parameters
     ///
     /// `presence_penalty`, `repeat_penalty` and `min_p` are only meaningful
     /// relative to how sharp the sampling distribution is, so they travel with
     /// the `temperature` they were chosen for. [`reasoning_profile`] pairs
     /// `temperature 1.0` with `presence_penalty 1.5` deliberately; a sparse
-    /// profile that sets `temperature 0.2` and leaves the penalty unset used to
-    /// inherit that 1.5 and run a recipe no layer ever intended — a penalty
-    /// tuned for a broad distribution applied to a near-greedy one.
+    /// profile that sets `temperature 0.2` and leaves the penalty unset must
+    /// not inherit that `1.5` — that would run a recipe no layer ever
+    /// intended, a penalty tuned for a broad distribution applied to a
+    /// near-greedy one.
     ///
-    /// So: once a layer declares a `temperature`, lower layers may no longer
-    /// contribute the parameters tuned against it. They fall through to the
-    /// neutral values in [`with_hardcoded_defaults`] instead, which is applied
-    /// with plain [`merge_with`] as an unconditional floor — it is a set of
-    /// neutral defaults, not a competing recipe.
+    /// So: `temperature` resolves to the first layer that sets one. If some
+    /// layer does, the coupled trio comes *only* from that same layer — never
+    /// a layer beneath it — falling to `floor` for anything that layer itself
+    /// left unset. If **no** layer sets a temperature at all, nothing has been
+    /// tuned against anything, so the coupled trio gap-fills normally, exactly
+    /// like the uncoupled parameters.
     ///
-    /// Parameters that do not interact with temperature this way (`top_p`,
-    /// `top_k`, `max_tokens`) are unaffected and still fill from any layer.
-    ///
-    /// [`reasoning_profile`]: Self::reasoning_profile
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
-    /// [`merge_with`]: Self::merge_with
-    const fn merge_layer(&mut self, other: &Self) {
-        // Checked before any field is written, so a layer supplying both a
-        // temperature and its penalties still contributes them as a set.
-        let temperature_claimed = self.temperature.is_some();
-
-        if self.top_p.is_none() {
-            self.top_p = other.top_p;
-        }
-        if self.top_k.is_none() {
-            self.top_k = other.top_k;
-        }
-        if self.max_tokens.is_none() {
-            self.max_tokens = other.max_tokens;
-        }
-
-        if !temperature_claimed {
-            self.temperature = other.temperature;
-            if self.repeat_penalty.is_none() {
-                self.repeat_penalty = other.repeat_penalty;
-            }
-            if self.presence_penalty.is_none() {
-                self.presence_penalty = other.presence_penalty;
-            }
-            if self.min_p.is_none() {
-                self.min_p = other.min_p;
-            }
-        }
-    }
-
-    /// Stack `self` as the higher-priority layer above `lower`.
-    ///
-    /// Same rules as the resolution ladder — `self` wins where it speaks,
-    /// `lower` fills the rest, and a `temperature` declared by `self` blocks
-    /// `lower`'s temperature-tuned parameters (see [`merge_layer`]). Used to
-    /// place a layer *above* the client's own request parameters, which
-    /// [`resolve_with_profile`] cannot express since it treats `self` as the
-    /// top.
-    ///
-    /// [`merge_layer`]: Self::merge_layer
     /// [`resolve_with_profile`]: Self::resolve_with_profile
+    /// [`reasoning_profile`]: Self::reasoning_profile
     #[must_use]
-    pub const fn stacked_over(mut self, lower: &Self) -> Self {
-        self.merge_layer(lower);
-        self
+    pub fn resolve_layers(layers: &[Option<&Self>], floor: &Self) -> Self {
+        let mut result = Self::default();
+
+        for layer in layers.iter().flatten() {
+            if result.top_p.is_none() {
+                result.top_p = layer.top_p;
+            }
+            if result.top_k.is_none() {
+                result.top_k = layer.top_k;
+            }
+            if result.max_tokens.is_none() {
+                result.max_tokens = layer.max_tokens;
+            }
+        }
+
+        result.temperature = layers.iter().flatten().find_map(|l| l.temperature);
+
+        if let Some(claim) = layers.iter().flatten().find(|l| l.temperature.is_some()) {
+            result.repeat_penalty = claim.repeat_penalty;
+            result.presence_penalty = claim.presence_penalty;
+            result.min_p = claim.min_p;
+        } else {
+            for layer in layers.iter().flatten() {
+                if result.repeat_penalty.is_none() {
+                    result.repeat_penalty = layer.repeat_penalty;
+                }
+                if result.presence_penalty.is_none() {
+                    result.presence_penalty = layer.presence_penalty;
+                }
+                if result.min_p.is_none() {
+                    result.min_p = layer.min_p;
+                }
+            }
+        }
+
+        result.merge_with(floor);
+        result
     }
 
     /// Create a new config with all fields set to sensible defaults.
@@ -302,6 +309,29 @@ impl InferenceConfig {
             repeat_penalty: Some(1.0),
             presence_penalty: Some(0.0),
             min_p: Some(0.0),
+        }
+    }
+
+    /// The coupled-trio floor for models tagged `reasoning`.
+    ///
+    /// [`resolve_layers`] falls back to a floor once it has decided which
+    /// layer (if any) claims the coupled trio and that layer left a field
+    /// unset. [`with_hardcoded_defaults`]'s neutral `presence_penalty: 0.0` is
+    /// the right floor for most models, but wrong for a `reasoning`-tagged
+    /// one: those degrade under greedy or near-greedy decoding into
+    /// repetitive reasoning loops (see [`reasoning_profile`], which pairs
+    /// `presence_penalty: 1.5` with `temperature: 1.0` specifically to
+    /// prevent this). `1.0` keeps a real guard in place at the floor without
+    /// asserting the full recipe tuned for a different temperature.
+    ///
+    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    /// [`reasoning_profile`]: Self::reasoning_profile
+    #[must_use]
+    pub const fn reasoning_floor() -> Self {
+        Self {
+            presence_penalty: Some(1.0),
+            ..Self::with_hardcoded_defaults()
         }
     }
 
@@ -407,6 +437,12 @@ impl InferenceConfig {
     /// have no notion of a named profile (`gglib serve`, `gglib chat`,
     /// `gglib q`, the Web UI chat API).
     ///
+    /// `model_is_reasoning` selects the floor beneath every layer: pass
+    /// `true` when the target model carries gglib's `reasoning` capability
+    /// tag, so a request that ends up with no anti-repetition guard at all
+    /// still gets one, rather than the neutral floor that is right for every
+    /// other model. See [`resolve_layers`] and [`reasoning_floor`].
+    ///
     /// # Example
     ///
     /// ```rust
@@ -415,16 +451,23 @@ impl InferenceConfig {
     /// let request = InferenceConfig { temperature: Some(0.9), ..Default::default() };
     /// let model   = InferenceConfig { temperature: Some(0.5), top_p: Some(0.8), ..Default::default() };
     ///
-    /// let resolved = request.resolve_with_defaults(Some(&model), None);
+    /// let resolved = request.resolve_with_defaults(Some(&model), None, false);
     /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
     /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
     /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
     /// ```
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
+    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`reasoning_floor`]: Self::reasoning_floor
     #[must_use]
-    pub const fn resolve_with_defaults(self, model: Option<&Self>, global: Option<&Self>) -> Self {
-        self.resolve_with_profile(None, model, global)
+    pub fn resolve_with_defaults(
+        self,
+        model: Option<&Self>,
+        global: Option<&Self>,
+        model_is_reasoning: bool,
+    ) -> Self {
+        self.resolve_with_profile(None, model, global, model_is_reasoning)
     }
 
     /// Resolve inference parameters using the full 5-level hierarchy.
@@ -436,11 +479,17 @@ impl InferenceConfig {
     /// 2. `profile` — the named profile the request selected, if any
     /// 3. `model` — per-model stored defaults
     /// 4. `global` — global settings defaults
-    /// 5. [`with_hardcoded_defaults`] — compile-time fallback values
+    /// 5. the model-class floor — [`reasoning_floor`] when `model_is_reasoning`,
+    ///    otherwise [`with_hardcoded_defaults`]
     ///
     /// This is the single source of truth for inference parameter resolution
-    /// across every gglib surface; [`resolve_with_defaults`] delegates here so
-    /// there is exactly one merge order to reason about and to test.
+    /// across every gglib surface that does not need its own layer set;
+    /// [`resolve_with_defaults`] delegates here so there is exactly one merge
+    /// order to reason about and to test.
+    /// [`crate::request_pipeline::sampling`] needs a sixth layer (the
+    /// client's own request, sitting between `self` and `profile`) and calls
+    /// the underlying [`resolve_layers`] directly for that reason — the merge
+    /// semantics are identical either way.
     ///
     /// # Why the profile sits above the model
     ///
@@ -454,12 +503,11 @@ impl InferenceConfig {
     ///
     /// # Temperature-tuned parameters do not fall through
     ///
-    /// The one exception, enforced by [`merge_layer`]: once a layer declares a
-    /// `temperature`, lower layers may not contribute `presence_penalty`,
-    /// `repeat_penalty` or `min_p`. Those are tuned against a particular
-    /// distribution sharpness, so inheriting them across a temperature change
-    /// assembles a recipe no layer intended. They resolve to the neutral
-    /// hardcoded values instead.
+    /// See [`resolve_layers`] for the full rule. In short: once a layer
+    /// declares a `temperature`, lower layers may not contribute
+    /// `presence_penalty`, `repeat_penalty` or `min_p` — those resolve from
+    /// the claiming layer alone, falling to the class floor if it left them
+    /// unset.
     ///
     /// # Example
     ///
@@ -477,35 +525,31 @@ impl InferenceConfig {
     /// };
     ///
     /// let resolved = InferenceConfig::default()
-    ///     .resolve_with_profile(Some(&profile), Some(&model), None);
+    ///     .resolve_with_profile(Some(&profile), Some(&model), None, true);
     ///
     /// assert_eq!(resolved.temperature,      Some(0.2)); // profile beats model
-    /// assert_eq!(resolved.presence_penalty, Some(0.0)); // NOT the model's 1.5
+    /// assert_eq!(resolved.presence_penalty, Some(1.0)); // reasoning floor, NOT the model's 1.5
     /// assert_eq!(resolved.top_k,            Some(20));  // untuned: still fills
     /// ```
     ///
-    /// [`merge_layer`]: Self::merge_layer
-    ///
+    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`reasoning_floor`]: Self::reasoning_floor
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`resolve_with_defaults`]: Self::resolve_with_defaults
     #[must_use]
-    pub const fn resolve_with_profile(
-        mut self,
+    pub fn resolve_with_profile(
+        self,
         profile: Option<&Self>,
         model: Option<&Self>,
         global: Option<&Self>,
+        model_is_reasoning: bool,
     ) -> Self {
-        if let Some(p) = profile {
-            self.merge_layer(p);
-        }
-        if let Some(m) = model {
-            self.merge_layer(m);
-        }
-        if let Some(g) = global {
-            self.merge_layer(g);
-        }
-        self.merge_with(&Self::with_hardcoded_defaults());
-        self
+        let floor = if model_is_reasoning {
+            Self::reasoning_floor()
+        } else {
+            Self::with_hardcoded_defaults()
+        };
+        Self::resolve_layers(&[Some(&self), profile, model, global], &floor)
     }
 
     /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
@@ -606,6 +650,60 @@ mod tests {
         assert_eq!(config.min_p, Some(0.0));
     }
 
+    /// The reasoning floor differs from the hardcoded floor in exactly one
+    /// field — a real anti-repetition guard where the neutral floor has none.
+    #[test]
+    fn test_reasoning_floor_differs_only_in_presence_penalty() {
+        let neutral = InferenceConfig::with_hardcoded_defaults();
+        let reasoning = InferenceConfig::reasoning_floor();
+
+        assert_eq!(reasoning.presence_penalty, Some(1.0));
+        assert_ne!(reasoning.presence_penalty, neutral.presence_penalty);
+
+        assert_eq!(reasoning.temperature, neutral.temperature);
+        assert_eq!(reasoning.top_p, neutral.top_p);
+        assert_eq!(reasoning.top_k, neutral.top_k);
+        assert_eq!(reasoning.max_tokens, neutral.max_tokens);
+        assert_eq!(reasoning.repeat_penalty, neutral.repeat_penalty);
+        assert_eq!(reasoning.min_p, neutral.min_p);
+    }
+
+    /// If nothing in the stack ever declares a temperature, nothing has been
+    /// "tuned" against anything — the coupled trio must gap-fill exactly like
+    /// any other parameter, from whichever layer sets it first, rather than
+    /// jump straight to the floor.
+    #[test]
+    fn test_coupled_trio_gap_fills_normally_when_no_layer_sets_temperature() {
+        let profile = InferenceConfig {
+            presence_penalty: Some(0.3),
+            ..Default::default()
+        };
+        let model = InferenceConfig {
+            presence_penalty: Some(0.5),
+            repeat_penalty: Some(1.2),
+            ..Default::default()
+        };
+
+        let resolved = InferenceConfig::default().resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            None,
+            false,
+        );
+
+        assert_eq!(resolved.temperature, Some(0.7), "hardcoded fallback");
+        assert_eq!(
+            resolved.presence_penalty,
+            Some(0.3),
+            "profile's own value, not suppressed just because no layer set a temperature"
+        );
+        assert_eq!(
+            resolved.repeat_penalty,
+            Some(1.2),
+            "model fills in what the profile left unset"
+        );
+    }
+
     /// The two ways an unset `max_tokens` could still reach llama-server and
     /// cap generation: as a `max_tokens` key in the forwarded request body, or
     /// as a `-n` flag on the launch command line. `-n` is the more dangerous of
@@ -613,7 +711,7 @@ mod tests {
     /// overrides even a per-request `-1`.
     #[test]
     fn test_unset_max_tokens_reaches_llama_server_by_neither_route() {
-        let resolved = InferenceConfig::default().resolve_with_defaults(None, None);
+        let resolved = InferenceConfig::default().resolve_with_defaults(None, None, false);
 
         assert!(
             !resolved.to_openai_json_patch().contains_key("max_tokens"),
@@ -633,7 +731,7 @@ mod tests {
             max_tokens: Some(512),
             ..Default::default()
         }
-        .resolve_with_defaults(None, None);
+        .resolve_with_defaults(None, None, false);
 
         assert_eq!(resolved.max_tokens, Some(512));
         assert_eq!(
@@ -713,7 +811,7 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved = request.resolve_with_defaults(Some(&model), Some(&global));
+        let resolved = request.resolve_with_defaults(Some(&model), Some(&global), false);
 
         assert_eq!(resolved.temperature, Some(0.9)); // request wins
         assert_eq!(resolved.top_p, Some(0.8)); // model fills in
@@ -725,7 +823,7 @@ mod tests {
     #[test]
     fn test_resolve_with_defaults_no_layers() {
         let base = InferenceConfig::default();
-        let resolved = base.resolve_with_defaults(None, None);
+        let resolved = base.resolve_with_defaults(None, None, false);
         // Should equal hardcoded defaults
         assert_eq!(resolved, InferenceConfig::with_hardcoded_defaults());
     }
@@ -754,7 +852,8 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved = request.resolve_with_profile(Some(&profile), Some(&model), Some(&global));
+        let resolved =
+            request.resolve_with_profile(Some(&profile), Some(&model), Some(&global), false);
 
         assert_eq!(resolved.temperature, Some(0.9)); // request beats profile
         assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
@@ -779,8 +878,12 @@ mod tests {
         };
         let model = InferenceConfig::reasoning_profile();
 
-        let resolved =
-            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+        let resolved = InferenceConfig::default().resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            None,
+            false,
+        );
 
         assert_eq!(resolved.temperature, Some(0.2)); // the profile's one opinion
         // Untuned parameters the profile stayed silent about still come from
@@ -797,6 +900,14 @@ mod tests {
     /// 1.5` deliberately. Applying that 1.5 to a near-greedy `temperature 0.2`
     /// request is a recipe no layer ever intended, and it reached production on
     /// every `:coding` request.
+    ///
+    /// The #621 fix originally floored `presence_penalty` to the universal
+    /// neutral `0.0` here — correct in that it stopped the wrong transplant,
+    /// but it also zeroed the model's only anti-repetition guard on a
+    /// reasoning model, which is a second failure mode of its own (see the
+    /// 2026-07-31 incident this floor was added for). `model_is_reasoning:
+    /// true` selects [`InferenceConfig::reasoning_floor`] instead, which keeps
+    /// a real, non-tuned-for-0.2 guard in place.
     #[test]
     fn test_profile_temperature_does_not_inherit_model_penalties() {
         let model = InferenceConfig::reasoning_profile();
@@ -813,11 +924,19 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved =
-            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+        let resolved = InferenceConfig::default().resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            None,
+            true,
+        );
 
         assert_eq!(resolved.temperature, Some(0.2));
-        assert_eq!(resolved.presence_penalty, Some(0.0), "must not inherit 1.5");
+        assert_eq!(
+            resolved.presence_penalty,
+            Some(1.0),
+            "must not inherit 1.5, but must not go silently to zero either"
+        );
         assert_eq!(
             resolved.repeat_penalty,
             Some(1.0),
@@ -838,8 +957,12 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved =
-            InferenceConfig::default().resolve_with_profile(Some(&profile), Some(&model), None);
+        let resolved = InferenceConfig::default().resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            None,
+            true,
+        );
 
         assert_eq!(resolved.temperature, model.temperature);
         assert_eq!(resolved.presence_penalty, model.presence_penalty);
@@ -864,8 +987,8 @@ mod tests {
         assert_eq!(
             request
                 .clone()
-                .resolve_with_defaults(Some(&model), Some(&global)),
-            request.resolve_with_profile(None, Some(&model), Some(&global)),
+                .resolve_with_defaults(Some(&model), Some(&global), false),
+            request.resolve_with_profile(None, Some(&model), Some(&global), false),
         );
     }
 

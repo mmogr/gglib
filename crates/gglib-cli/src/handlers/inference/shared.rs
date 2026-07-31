@@ -20,9 +20,14 @@ pub async fn resolve_inference_config(
     model: &gglib_core::Model,
 ) -> Result<InferenceConfig> {
     let settings = ctx.app.settings().get().await?;
+    let model_is_reasoning = model
+        .tags
+        .iter()
+        .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
     Ok(config.resolve_with_defaults(
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
+        model_is_reasoning,
     ))
 }
 
