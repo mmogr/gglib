@@ -27,7 +27,7 @@ mod stream;
 /// is therefore a **safety net** against a truly unreachable or hung server,
 /// not a pre-fill time limit.  The generous value avoids false positives
 /// while still bounding resource usage for a dead connection.
-const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
+pub const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
 
 // =============================================================================
 // Adapter struct
@@ -155,7 +155,7 @@ impl LlmCompletionAdapter {
     }
 
     /// Override the send-phase timeout (connect through first response
-    /// headers).  The default is [`DEFAULT_SEND_TIMEOUT_SECS`] (120 s).
+    /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     #[must_use]
     pub fn with_send_timeout(mut self, secs: u64) -> Self {
         self.send_timeout_secs = secs;
