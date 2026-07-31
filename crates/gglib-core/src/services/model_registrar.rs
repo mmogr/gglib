@@ -188,6 +188,7 @@ mod tests {
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
                 inference_defaults: model.inference_defaults.clone(),
+                defaults_origin: model.defaults_origin,
                 server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };

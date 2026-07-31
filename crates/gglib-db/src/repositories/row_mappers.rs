@@ -2,12 +2,13 @@
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use gglib_core::domain::benchmark::ModelBenchmarkSummary;
+use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
 use gglib_core::{Model, ModelCapabilities, RepositoryError};
 use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, server_defaults, model_key";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -59,6 +60,18 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
     let last_update_check_str: Option<String> = row
         .try_get("last_update_check")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+    let inference_defaults: Option<InferenceConfig> = row
+        .try_get::<Option<String>, _>("inference_defaults")
+        .ok()
+        .flatten()
+        .and_then(|json| serde_json::from_str(&json).ok());
+    let defaults_origin = resolve_defaults_origin(
+        row.try_get::<Option<String>, _>("defaults_origin")
+            .ok()
+            .flatten(),
+        inference_defaults.as_ref(),
+    );
 
     Ok(Model {
         id: row
@@ -112,11 +125,8 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .ok()
             .map(ModelCapabilities::from_bits_truncate)
             .unwrap_or_default(),
-        inference_defaults: row
-            .try_get::<Option<String>, _>("inference_defaults")
-            .ok()
-            .flatten()
-            .and_then(|json| serde_json::from_str(&json).ok()),
+        inference_defaults,
+        defaults_origin,
         server_defaults: row
             .try_get::<Option<String>, _>("server_defaults")
             .ok()
@@ -126,6 +136,37 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
         // when the query includes a LEFT JOIN with model_benchmark_summaries).
         benchmark_summary: try_read_summary(row),
     })
+}
+
+/// Resolve a model's `defaults_origin`, backfilling rows written before the
+/// column existed.
+///
+/// `stored` is whatever is actually in the `defaults_origin` column,
+/// unparsed. When it names a known origin, that's the answer — no
+/// backfill needed. When it's absent (every row written before this column
+/// existed; there is no batch migration for them, deliberately — see
+/// `crates/gglib-db/src/setup.rs`'s `defaults_origin` `ALTER TABLE` comment)
+/// this derives one from `inference_defaults` itself: gglib has only ever
+/// auto-written one exact recipe
+/// ([`InferenceConfig::reasoning_profile`]), so a stored value that matches
+/// it precisely is that guess; anything else is something a person set.
+///
+/// Always `None` when there is no `inference_defaults` to have an origin at
+/// all, regardless of what the column says — a stale/orphaned value there
+/// would be meaningless.
+fn resolve_defaults_origin(
+    stored: Option<String>,
+    inference_defaults: Option<&InferenceConfig>,
+) -> Option<DefaultsOrigin> {
+    let inference_defaults = inference_defaults?;
+    if let Some(origin) = stored.and_then(|s| s.parse::<DefaultsOrigin>().ok()) {
+        return Some(origin);
+    }
+    if *inference_defaults == InferenceConfig::reasoning_profile() {
+        Some(DefaultsOrigin::AutoDetected)
+    } else {
+        Some(DefaultsOrigin::User)
+    }
 }
 
 /// Try to read benchmark summary columns from a row.
@@ -182,4 +223,58 @@ pub fn map_model_file_row(
             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&Utc)),
     })
+}
+
+#[cfg(test)]
+mod defaults_origin_tests {
+    use super::*;
+
+    #[test]
+    fn stored_value_wins_when_present() {
+        let origin = resolve_defaults_origin(
+            Some("user".to_owned()),
+            Some(&InferenceConfig::reasoning_profile()),
+        );
+        assert_eq!(
+            origin,
+            Some(DefaultsOrigin::User),
+            "explicit column value must not be second-guessed, even though \
+             this inference_defaults matches the auto-detected recipe \
+             exactly — a user is free to set the same values by hand"
+        );
+    }
+
+    #[test]
+    fn legacy_row_matching_the_reasoning_recipe_backfills_to_auto_detected() {
+        let origin = resolve_defaults_origin(None, Some(&InferenceConfig::reasoning_profile()));
+        assert_eq!(origin, Some(DefaultsOrigin::AutoDetected));
+    }
+
+    #[test]
+    fn legacy_row_not_matching_the_reasoning_recipe_backfills_to_user() {
+        let custom = InferenceConfig {
+            temperature: Some(0.3),
+            ..Default::default()
+        };
+        let origin = resolve_defaults_origin(None, Some(&custom));
+        assert_eq!(origin, Some(DefaultsOrigin::User));
+    }
+
+    #[test]
+    fn no_inference_defaults_means_no_origin_regardless_of_the_column() {
+        assert_eq!(resolve_defaults_origin(Some("user".to_owned()), None), None);
+        assert_eq!(resolve_defaults_origin(None, None), None);
+    }
+
+    #[test]
+    fn unparseable_stored_value_falls_back_to_the_recipe_match() {
+        // A column value from some future, unrecognised variant must not
+        // panic or silently become `None` — it falls through to the same
+        // backfill a legacy NULL would get.
+        let origin = resolve_defaults_origin(
+            Some("not_a_real_variant".to_owned()),
+            Some(&InferenceConfig::reasoning_profile()),
+        );
+        assert_eq!(origin, Some(DefaultsOrigin::AutoDetected));
+    }
 }

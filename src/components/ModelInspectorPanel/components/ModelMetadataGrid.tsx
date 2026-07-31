@@ -114,6 +114,13 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model, detail })
 
       {hasInferenceDefaults && (
         <MetadataSection title="Inference Defaults">
+          {model.defaultsOrigin != null && (
+            <InfoRow label="Source">
+              {model.defaultsOrigin === 'auto_detected'
+                ? 'Auto-detected (ranks below global settings)'
+                : 'User-set'}
+            </InfoRow>
+          )}
           {inferenceDefaults.temperature != null && (
             <InfoRow label="Temperature">{inferenceDefaults.temperature}</InfoRow>
           )}
@@ -124,6 +131,12 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model, detail })
           )}
           {inferenceDefaults.repeatPenalty != null && (
             <InfoRow label="Repeat Penalty">{inferenceDefaults.repeatPenalty}</InfoRow>
+          )}
+          {inferenceDefaults.presencePenalty != null && (
+            <InfoRow label="Presence Penalty">{inferenceDefaults.presencePenalty}</InfoRow>
+          )}
+          {inferenceDefaults.minP != null && (
+            <InfoRow label="Min P">{inferenceDefaults.minP}</InfoRow>
           )}
         </MetadataSection>
       )}

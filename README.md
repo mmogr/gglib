@@ -419,6 +419,10 @@ Request override  →  Inference profile  →  Per-model defaults  →  Global s
 The "Request override" level is gated by `trust_client_sampling` (see below) — untrusted by
 default, it drops out of the hierarchy entirely except for `max_tokens`.
 
+"Per-model defaults" isn't always one rung: it sits *above* global settings when a person set
+it, and *below* global settings when gglib auto-detected it — see "Reasoning model
+auto-defaults" and "Where a model's defaults came from" further down.
+
 The full set of configurable parameters:
 
 | Parameter | CLI flag | Range | Floor | Notes |
@@ -478,6 +482,37 @@ gglib model update <id> --clear-inference-defaults
 
 All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
 per-invocation overrides that sit at the top of the hierarchy.
+
+**Where a model's defaults came from.** gglib tracks whether a model's stored
+`inference_defaults` were set by a person or written automatically by the auto-default
+behaviour above, and the two rank differently:
+
+```
+Request override → Inference profile → Per-model defaults (user-set) → Global settings
+  → Per-model defaults (auto-detected) → Floor
+```
+
+A deliberate per-model choice (`gglib model update --presence-penalty …`, or an edit in
+the WebUI) keeps outranking global settings — that's what "per-model" is supposed to
+mean. An unreviewed guess from the `reasoning` tag does not: it ranks *below* global
+settings instead of silently shadowing them. Without this, a model tagged `reasoning`
+would always resolve its full auto-written recipe over anything configured globally, with
+no way to tell the two apart in the resolved output.
+
+```bash
+# Shows whether the current defaults are user-set or auto-detected
+gglib model inspect <id>
+
+# Any explicit edit marks the defaults user-set from then on, even if the
+# values happen to match what gglib would have guessed
+gglib model update <id> --presence-penalty 0.8
+```
+
+Rows written before this distinction existed have nothing stored for it — there's no
+migration that goes back and stamps every existing row, since the two backend service
+processes (`gglib-axum`, standalone `gglib`) don't share a single startup hook to run one
+in. Instead, every read derives the answer on the spot: a stored value that matches the
+reasoning recipe byte-for-byte is treated as auto-detected, and anything else as user-set.
 
 #### Client sampling authority
 

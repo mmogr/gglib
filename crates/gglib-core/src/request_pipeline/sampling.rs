@@ -7,7 +7,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
-use crate::domain::InferenceConfig;
+use crate::domain::{DefaultsOrigin, InferenceConfig};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -149,14 +149,24 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
         InferenceConfig::with_hardcoded_defaults()
     };
 
+    // `model` occupies one of two rungs depending on how it was set — never
+    // both — so an auto-detected guess can't silently outrank global
+    // settings the way a deliberate per-model choice should. See
+    // `DefaultsOrigin` and `InferenceConfig::resolve_with_profile`.
+    let (user_model, auto_model) = match ctx.defaults_origin {
+        Some(DefaultsOrigin::AutoDetected) => (None, ctx.inference_defaults.as_ref()),
+        _ => (ctx.inference_defaults.as_ref(), None),
+    };
+
     // Highest priority first. The single ordering both resolution and
     // provenance reporting read from, so they can never drift apart.
-    let ordered: [(&str, Option<&InferenceConfig>); 5] = [
+    let ordered: [(&str, Option<&InferenceConfig>); 6] = [
         ("cli", layers.cli_override.as_ref()),
         ("client", Some(&client_layer)),
         ("profile", layers.profile.as_ref()),
-        ("model", ctx.inference_defaults.as_ref()),
+        ("model", user_model),
         ("global", layers.global.as_ref()),
+        ("model (auto-detected)", auto_model),
     ];
     let layer_configs: Vec<Option<&InferenceConfig>> =
         ordered.iter().map(|(_, config)| *config).collect();
@@ -560,6 +570,66 @@ mod tests {
 
         assert_param(&body, "temperature", 0.4); // client's 0.9 dropped
         assert_param(&body, "max_tokens", 999.0); // client's budget still honoured
+    }
+
+    // ── Model defaults provenance (Model.defaults_origin) ───────────────────
+
+    /// A user's own global settings must win over gglib's unreviewed guess —
+    /// this is the actual regression this feature exists for. Without it, a
+    /// `reasoning`-tagged model's auto-written recipe always wins over
+    /// anything configured globally, with no way to tell the two apart in
+    /// the resolved output.
+    #[test]
+    fn an_auto_detected_models_recipe_ranks_below_global_settings() {
+        let mut body = json!({});
+        let ctx = ModelContext {
+            inference_defaults: Some(InferenceConfig::reasoning_profile()), // temp 1.0, presence 1.5
+            defaults_origin: Some(DefaultsOrigin::AutoDetected),
+            ..ModelContext::passthrough()
+        };
+        let layers = SamplingLayers {
+            global: Some(InferenceConfig {
+                temperature: Some(0.2),
+                top_k: Some(20),
+                min_p: Some(0.05),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        resolve_sampling(&mut body, &ctx, &layers);
+
+        assert_param(&body, "temperature", 0.2); // global beats the auto-detected guess
+        assert_param(&body, "top_k", 20.0);
+        assert_param(&body, "min_p", 0.05);
+        // The claiming layer (global) left presence_penalty unset, so it
+        // falls to the floor — never to the auto-detected model's 1.5,
+        // which was tuned for a temperature global didn't choose.
+        assert_param(&body, "presence_penalty", 0.0);
+    }
+
+    /// The same model, but with a deliberate per-model choice instead of an
+    /// auto-detected one: it keeps outranking global settings exactly as
+    /// before this feature existed — that is what "per-model" is supposed
+    /// to mean.
+    #[test]
+    fn a_user_set_models_recipe_still_beats_global_settings() {
+        let mut body = json!({});
+        let ctx = ModelContext {
+            inference_defaults: Some(InferenceConfig::reasoning_profile()),
+            defaults_origin: Some(DefaultsOrigin::User),
+            ..ModelContext::passthrough()
+        };
+        let layers = SamplingLayers {
+            global: Some(InferenceConfig {
+                temperature: Some(0.2),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        resolve_sampling(&mut body, &ctx, &layers);
+
+        assert_param(&body, "temperature", 1.0); // the user's own choice wins
+        assert_param(&body, "presence_penalty", 1.5); // travels with it, intact
     }
 
     /// The force-insert. An `or_insert` implementation passes every test above

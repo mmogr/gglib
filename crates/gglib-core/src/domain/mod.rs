@@ -35,7 +35,7 @@ pub use benchmark::{
 };
 
 // Re-export inference types at the domain level for convenience
-pub use inference::InferenceConfig;
+pub use inference::{DefaultsOrigin, InferenceConfig, ModelSamplingContext};
 pub use inference_profile::{
     InferenceProfile, MAX_PROFILE_NAME_LEN, ProfileNameError, RESERVED_PROFILE_NAMES,
     builtin_templates, validate_name,

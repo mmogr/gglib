@@ -355,19 +355,18 @@ fn build_compare_request_body(
     model: &gglib_core::domain::Model,
     global_inf: Option<&InferenceConfig>,
 ) -> serde_json::Value {
-    let model_is_reasoning = model
-        .tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
+    let model_ctx = gglib_core::domain::ModelSamplingContext {
+        is_reasoning: model
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("reasoning")),
+        defaults_origin: model.defaults_origin,
+    };
     let resolved = config
         .inference
         .clone()
         .unwrap_or_default()
-        .resolve_with_defaults(
-            model.inference_defaults.as_ref(),
-            global_inf,
-            model_is_reasoning,
-        );
+        .resolve_with_defaults(model.inference_defaults.as_ref(), global_inf, model_ctx);
 
     let mut body = serde_json::json!({
         "model": model.name,

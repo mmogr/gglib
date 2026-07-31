@@ -111,6 +111,78 @@ pub struct InferenceConfig {
     pub min_p: Option<f32>,
 }
 
+/// Whether a model's stored `inference_defaults` were set by the user or
+/// written automatically at import time.
+///
+/// `Model.inference_defaults` is populated two ways: a user explicitly
+/// tunes it (`gglib model update --presence-penalty …`, or the `WebUI` edit
+/// form), or [`crate::services`]'s import path auto-writes
+/// [`InferenceConfig::reasoning_profile`] onto any model carrying the
+/// `reasoning` tag — a reasonable guess, not a user decision. Both end up in
+/// the same column with nothing distinguishing them, which meant an
+/// auto-written guess silently outranked the user's own global settings in
+/// the resolution ladder ([`InferenceConfig::resolve_with_profile`]) exactly
+/// as if the user had tuned it themselves.
+///
+/// This type tracks which one actually happened, so resolution can rank
+/// [`AutoDetected`](Self::AutoDetected) below global settings while a real
+/// [`User`](Self::User) choice keeps outranking them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DefaultsOrigin {
+    /// Set explicitly by the user — a CLI flag, a model-update request, or a
+    /// `WebUI` edit. Outranks global settings, same as before this type
+    /// existed.
+    User,
+    /// Written automatically at import time from the model's `reasoning`
+    /// tag, never reviewed by a person. Ranks below global settings.
+    AutoDetected,
+}
+
+impl std::fmt::Display for DefaultsOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::User => write!(f, "user"),
+            Self::AutoDetected => write!(f, "auto_detected"),
+        }
+    }
+}
+
+impl std::str::FromStr for DefaultsOrigin {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "user" => Ok(Self::User),
+            "auto_detected" => Ok(Self::AutoDetected),
+            other => Err(format!(
+                "unknown defaults origin '{other}'; expected user or auto_detected"
+            )),
+        }
+    }
+}
+
+/// Everything about the target model that changes how sampling resolves,
+/// independent of any specific request.
+///
+/// Bundled rather than passed as separate parameters because both
+/// [`InferenceConfig::resolve_with_profile`] and
+/// [`crate::request_pipeline::sampling::resolve_sampling`] need the same two
+/// facts about the same model, and the list has already grown once (see
+/// #685) — a named struct reads at call sites instead of two easily
+/// transposed booleans.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ModelSamplingContext {
+    /// Whether the model carries gglib's `reasoning` capability tag. Selects
+    /// the coupled-trio floor — see [`InferenceConfig::reasoning_floor`].
+    pub is_reasoning: bool,
+    /// Whether the model's `inference_defaults` were user-set or
+    /// auto-detected. `None` when the model has no stored
+    /// `inference_defaults` at all, in which case it has no effect either
+    /// way. See [`DefaultsOrigin`].
+    pub defaults_origin: Option<DefaultsOrigin>,
+}
+
 /// Convert a camelCase string to `snake_case`.
 ///
 /// Used internally to rename `InferenceConfig`'s serde camelCase output to the
@@ -437,21 +509,19 @@ impl InferenceConfig {
     /// have no notion of a named profile (`gglib serve`, `gglib chat`,
     /// `gglib q`, the Web UI chat API).
     ///
-    /// `model_is_reasoning` selects the floor beneath every layer: pass
-    /// `true` when the target model carries gglib's `reasoning` capability
-    /// tag, so a request that ends up with no anti-repetition guard at all
-    /// still gets one, rather than the neutral floor that is right for every
-    /// other model. See [`resolve_layers`] and [`reasoning_floor`].
+    /// `model_ctx` carries the two facts about the target model that change
+    /// how resolution behaves — see [`ModelSamplingContext`],
+    /// [`resolve_layers`] and [`reasoning_floor`].
     ///
     /// # Example
     ///
     /// ```rust
-    /// use gglib_core::domain::InferenceConfig;
+    /// use gglib_core::domain::{InferenceConfig, ModelSamplingContext};
     ///
     /// let request = InferenceConfig { temperature: Some(0.9), ..Default::default() };
     /// let model   = InferenceConfig { temperature: Some(0.5), top_p: Some(0.8), ..Default::default() };
     ///
-    /// let resolved = request.resolve_with_defaults(Some(&model), None, false);
+    /// let resolved = request.resolve_with_defaults(Some(&model), None, ModelSamplingContext::default());
     /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
     /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
     /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
@@ -465,9 +535,9 @@ impl InferenceConfig {
         self,
         model: Option<&Self>,
         global: Option<&Self>,
-        model_is_reasoning: bool,
+        model_ctx: ModelSamplingContext,
     ) -> Self {
-        self.resolve_with_profile(None, model, global, model_is_reasoning)
+        self.resolve_with_profile(None, model, global, model_ctx)
     }
 
     /// Resolve inference parameters using the full 5-level hierarchy.
@@ -477,16 +547,17 @@ impl InferenceConfig {
     ///
     /// 1. `self` — caller-supplied overrides (request params, CLI flags, etc.)
     /// 2. `profile` — the named profile the request selected, if any
-    /// 3. `model` — per-model stored defaults
+    /// 3. `model` — per-model stored defaults, *if user-set*
     /// 4. `global` — global settings defaults
-    /// 5. the model-class floor — [`reasoning_floor`] when `model_is_reasoning`,
-    ///    otherwise [`with_hardcoded_defaults`]
+    /// 5. `model` again, *if auto-detected* — see below
+    /// 6. the model-class floor — [`reasoning_floor`] when
+    ///    `model_ctx.is_reasoning`, otherwise [`with_hardcoded_defaults`]
     ///
     /// This is the single source of truth for inference parameter resolution
     /// across every gglib surface that does not need its own layer set;
     /// [`resolve_with_defaults`] delegates here so there is exactly one merge
     /// order to reason about and to test.
-    /// [`crate::request_pipeline::sampling`] needs a sixth layer (the
+    /// [`crate::request_pipeline::sampling`] needs a seventh layer (the
     /// client's own request, sitting between `self` and `profile`) and calls
     /// the underlying [`resolve_layers`] directly for that reason — the merge
     /// semantics are identical either way.
@@ -501,6 +572,20 @@ impl InferenceConfig {
     /// from the model, which is what keeps one global profile safe to apply
     /// across differing architectures.
     ///
+    /// # Why `model` can rank below `global`
+    ///
+    /// `model` is only ever a stand-in for `Model.inference_defaults`, which
+    /// gets written two different ways (see [`DefaultsOrigin`]): a person
+    /// tuning it deliberately, or gglib's own import-time guess for any
+    /// model tagged `reasoning`. Those deserve different authority. A
+    /// deliberate per-model choice should keep outranking the operator's
+    /// global defaults — that is what "per-model" means. A guess nobody
+    /// reviewed should not: it silently shadowed the user's own configured
+    /// global settings, which is how #685 happened. `model_ctx.defaults_origin`
+    /// decides which rung `model` occupies for this call — never both at
+    /// once, since only one of rungs 3 and 5 is ever populated for a given
+    /// model.
+    ///
     /// # Temperature-tuned parameters do not fall through
     ///
     /// See [`resolve_layers`] for the full rule. In short: once a layer
@@ -512,7 +597,7 @@ impl InferenceConfig {
     /// # Example
     ///
     /// ```rust
-    /// use gglib_core::domain::InferenceConfig;
+    /// use gglib_core::domain::{InferenceConfig, ModelSamplingContext};
     ///
     /// // A sparse profile: sets temperature, says nothing about anything else.
     /// let profile = InferenceConfig { temperature: Some(0.2), ..Default::default() };
@@ -523,9 +608,10 @@ impl InferenceConfig {
     ///     top_k: Some(20),
     ///     ..Default::default()
     /// };
+    /// let model_ctx = ModelSamplingContext { is_reasoning: true, ..Default::default() };
     ///
     /// let resolved = InferenceConfig::default()
-    ///     .resolve_with_profile(Some(&profile), Some(&model), None, true);
+    ///     .resolve_with_profile(Some(&profile), Some(&model), None, model_ctx);
     ///
     /// assert_eq!(resolved.temperature,      Some(0.2)); // profile beats model
     /// assert_eq!(resolved.presence_penalty, Some(1.0)); // reasoning floor, NOT the model's 1.5
@@ -542,14 +628,21 @@ impl InferenceConfig {
         profile: Option<&Self>,
         model: Option<&Self>,
         global: Option<&Self>,
-        model_is_reasoning: bool,
+        model_ctx: ModelSamplingContext,
     ) -> Self {
-        let floor = if model_is_reasoning {
+        let floor = if model_ctx.is_reasoning {
             Self::reasoning_floor()
         } else {
             Self::with_hardcoded_defaults()
         };
-        Self::resolve_layers(&[Some(&self), profile, model, global], &floor)
+        let (user_model, auto_model) = match model_ctx.defaults_origin {
+            Some(DefaultsOrigin::AutoDetected) => (None, model),
+            _ => (model, None),
+        };
+        Self::resolve_layers(
+            &[Some(&self), profile, user_model, global, auto_model],
+            &floor,
+        )
     }
 
     /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
@@ -688,7 +781,7 @@ mod tests {
             Some(&profile),
             Some(&model),
             None,
-            false,
+            ModelSamplingContext::default(),
         );
 
         assert_eq!(resolved.temperature, Some(0.7), "hardcoded fallback");
@@ -711,7 +804,11 @@ mod tests {
     /// overrides even a per-request `-1`.
     #[test]
     fn test_unset_max_tokens_reaches_llama_server_by_neither_route() {
-        let resolved = InferenceConfig::default().resolve_with_defaults(None, None, false);
+        let resolved = InferenceConfig::default().resolve_with_defaults(
+            None,
+            None,
+            ModelSamplingContext::default(),
+        );
 
         assert!(
             !resolved.to_openai_json_patch().contains_key("max_tokens"),
@@ -731,7 +828,7 @@ mod tests {
             max_tokens: Some(512),
             ..Default::default()
         }
-        .resolve_with_defaults(None, None, false);
+        .resolve_with_defaults(None, None, ModelSamplingContext::default());
 
         assert_eq!(resolved.max_tokens, Some(512));
         assert_eq!(
@@ -811,7 +908,11 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved = request.resolve_with_defaults(Some(&model), Some(&global), false);
+        let resolved = request.resolve_with_defaults(
+            Some(&model),
+            Some(&global),
+            ModelSamplingContext::default(),
+        );
 
         assert_eq!(resolved.temperature, Some(0.9)); // request wins
         assert_eq!(resolved.top_p, Some(0.8)); // model fills in
@@ -823,7 +924,7 @@ mod tests {
     #[test]
     fn test_resolve_with_defaults_no_layers() {
         let base = InferenceConfig::default();
-        let resolved = base.resolve_with_defaults(None, None, false);
+        let resolved = base.resolve_with_defaults(None, None, ModelSamplingContext::default());
         // Should equal hardcoded defaults
         assert_eq!(resolved, InferenceConfig::with_hardcoded_defaults());
     }
@@ -852,8 +953,12 @@ mod tests {
             ..Default::default()
         };
 
-        let resolved =
-            request.resolve_with_profile(Some(&profile), Some(&model), Some(&global), false);
+        let resolved = request.resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            Some(&global),
+            ModelSamplingContext::default(),
+        );
 
         assert_eq!(resolved.temperature, Some(0.9)); // request beats profile
         assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
@@ -882,7 +987,7 @@ mod tests {
             Some(&profile),
             Some(&model),
             None,
-            false,
+            ModelSamplingContext::default(),
         );
 
         assert_eq!(resolved.temperature, Some(0.2)); // the profile's one opinion
@@ -928,7 +1033,10 @@ mod tests {
             Some(&profile),
             Some(&model),
             None,
-            true,
+            ModelSamplingContext {
+                is_reasoning: true,
+                ..Default::default()
+            },
         );
 
         assert_eq!(resolved.temperature, Some(0.2));
@@ -961,7 +1069,10 @@ mod tests {
             Some(&profile),
             Some(&model),
             None,
-            true,
+            ModelSamplingContext {
+                is_reasoning: true,
+                ..Default::default()
+            },
         );
 
         assert_eq!(resolved.temperature, model.temperature);
@@ -985,10 +1096,17 @@ mod tests {
         };
 
         assert_eq!(
-            request
-                .clone()
-                .resolve_with_defaults(Some(&model), Some(&global), false),
-            request.resolve_with_profile(None, Some(&model), Some(&global), false),
+            request.clone().resolve_with_defaults(
+                Some(&model),
+                Some(&global),
+                ModelSamplingContext::default()
+            ),
+            request.resolve_with_profile(
+                None,
+                Some(&model),
+                Some(&global),
+                ModelSamplingContext::default()
+            ),
         );
     }
 

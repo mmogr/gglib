@@ -133,6 +133,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         topK: inferenceParams?.topK,
         maxTokens: inferenceParams?.maxTokens,
         repeatPenalty: inferenceParams?.repeatPenalty,
+        presencePenalty: inferenceParams?.presencePenalty,
+        minP: inferenceParams?.minP,
       };
 
       const result = await getTransport().serveModel(serveConfig);

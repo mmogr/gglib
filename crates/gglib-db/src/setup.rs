@@ -118,6 +118,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             quantization TEXT,
             context_length INTEGER,
             inference_defaults TEXT,
+            defaults_origin TEXT,
             server_defaults TEXT,
             expert_count INTEGER,
             expert_used_count INTEGER,
@@ -138,6 +139,20 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration: add defaults_origin to models — tracks whether
+    // `inference_defaults` was set by the user or auto-detected at import
+    // time (see `gglib_core::domain::DefaultsOrigin`), so resolution can
+    // rank an auto-detected guess below the user's own global settings
+    // instead of silently outranking them. No batch backfill for rows
+    // written before this column existed — `row_to_model` derives an answer
+    // for those from `inference_defaults` itself on every read instead (see
+    // `row_mappers::resolve_defaults_origin`), so a backfill pass would only
+    // duplicate work every row already gets for free.
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN defaults_origin TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
 
     // Index on file path for lookups (no longer unique)
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")

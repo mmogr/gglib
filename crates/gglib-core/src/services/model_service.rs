@@ -504,6 +504,7 @@ mod tests {
                 tags: model.tags.clone(),
                 capabilities: model.capabilities,
                 inference_defaults: model.inference_defaults.clone(),
+                defaults_origin: model.defaults_origin,
                 server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };

@@ -1,20 +1,24 @@
 //! The resolved per-model context every request pipeline is built from.
 
 use super::truncation::CHARS_PER_TOKEN_APPROX;
-use crate::domain::{InferenceConfig, ModelCapabilities};
+use crate::domain::{DefaultsOrigin, InferenceConfig, ModelCapabilities};
 use crate::ports::ModelSummary;
 
 /// Everything a request pipeline needs to know about the target model,
 /// gathered in a single catalog round-trip.
 ///
-/// The four fields feed four different stages, which is why they travel
-/// together rather than being looked up where each is needed:
+/// The five fields feed the resolution and shaping stages, which is why they
+/// travel together rather than being looked up where each is needed:
 ///
 /// * [`capabilities`](Self::capabilities) — request-side transforms
 ///   (strict-turn coalescing and friends).
-/// * [`tags`](Self::tags) — response-stream parser selection.
+/// * [`tags`](Self::tags) — response-stream parser selection, and (via the
+///   `reasoning` tag) the sampling floor.
 /// * [`inference_defaults`](Self::inference_defaults) — the per-model layer of
 ///   the sampling hierarchy.
+/// * [`defaults_origin`](Self::defaults_origin) — which rung
+///   [`inference_defaults`](Self::inference_defaults) occupies in that
+///   hierarchy.
 /// * [`context_length`](Self::context_length) — the history-truncation budget.
 ///
 /// Before this type was shared, the proxy resolved all of them while every
@@ -28,6 +32,9 @@ pub struct ModelContext {
     pub tags: Vec<String>,
     /// Per-model inference defaults to merge into each request.
     pub inference_defaults: Option<InferenceConfig>,
+    /// Whether [`inference_defaults`](Self::inference_defaults) was set by
+    /// the user or auto-detected. See [`DefaultsOrigin`].
+    pub defaults_origin: Option<DefaultsOrigin>,
     /// Maximum context the model supports, in tokens — the history-truncation
     /// budget for every surface that cannot measure a live serving context.
     pub context_length: Option<u64>,
@@ -73,6 +80,7 @@ impl From<&ModelSummary> for ModelContext {
             capabilities: summary.capabilities,
             tags: summary.tags.clone(),
             inference_defaults: summary.inference_defaults.clone(),
+            defaults_origin: summary.defaults_origin,
             context_length: summary.context_length,
         }
     }
@@ -100,6 +108,7 @@ mod tests {
             temperature: Some(0.5),
             ..Default::default()
         });
+        summary.defaults_origin = Some(DefaultsOrigin::AutoDetected);
         summary.context_length = Some(32_768);
 
         let ctx = ModelContext::from(&summary);
@@ -109,6 +118,7 @@ mod tests {
             ctx.inference_defaults.and_then(|c| c.temperature),
             Some(0.5)
         );
+        assert_eq!(ctx.defaults_origin, Some(DefaultsOrigin::AutoDetected));
         assert_eq!(ctx.context_length, Some(32_768));
     }
 

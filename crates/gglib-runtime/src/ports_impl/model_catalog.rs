@@ -45,6 +45,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         file_size,
         context_length: m.context_length,
         inference_defaults: m.inference_defaults.clone(),
+        defaults_origin: m.defaults_origin,
         server_defaults: m.server_defaults.clone(),
     }
 }
@@ -168,6 +169,7 @@ mod tests {
                 tags: vec!["format:qwen".to_string()],
                 capabilities: ModelCapabilities::default(),
                 inference_defaults: None,
+                defaults_origin: None,
                 server_defaults: None,
                 benchmark_summary: None,
             }

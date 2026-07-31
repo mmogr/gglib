@@ -149,6 +149,10 @@ pub struct GuiModel {
     pub port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Whether [`Self::inference_defaults`] was set by the user or
+    /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
     /// Per-model server defaults (port, URL overrides, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_defaults: Option<gglib_core::domain::ServerConfig>,
@@ -183,6 +187,7 @@ impl GuiModel {
             is_serving,
             port,
             inference_defaults: model.inference_defaults,
+            defaults_origin: model.defaults_origin,
             server_defaults: model.server_defaults,
             capabilities: model.capabilities,
             benchmark_summary: model.benchmark_summary,
@@ -272,6 +277,10 @@ pub struct ModelDetailDto {
     /// Per-model inference parameter overrides.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    /// Whether [`Self::inference_defaults`] was set by the user or
+    /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
     // ── Timestamps ────────────────────────────────────────────────────────────
     /// When the model was first added to the database (`"%Y-%m-%d %H:%M:%S"`).
     pub added_at: String,
@@ -320,6 +329,7 @@ impl ModelDetailDto {
             tags: model.tags,
             capabilities: model.capabilities,
             inference_defaults: model.inference_defaults,
+            defaults_origin: model.defaults_origin,
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
             is_serving,
             port,

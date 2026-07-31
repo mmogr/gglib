@@ -117,6 +117,7 @@ mod tests {
             tags: vec![],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
             benchmark_summary: None,
         }

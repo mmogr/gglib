@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use anyhow::{Result, anyhow};
-use gglib_core::{Model, domain::InferenceConfig};
+use gglib_core::{
+    Model,
+    domain::{DefaultsOrigin, InferenceConfig},
+};
 
 use crate::bootstrap::CliContext;
 
@@ -183,8 +186,10 @@ pub fn create_updated_model(
 
     // Handle inference parameter defaults
     if args.clear_inference_defaults {
-        // Clear all inference defaults (revert to inherit mode)
+        // Clear all inference defaults (revert to inherit mode). No value
+        // left to have an origin either.
         updated.inference_defaults = None;
+        updated.defaults_origin = None;
     } else {
         // Check if any inference parameters were provided
         let has_inference_updates = args.temperature.is_some()
@@ -221,6 +226,11 @@ pub fn create_updated_model(
             if let Some(min_p) = args.min_p {
                 inference_config.min_p = Some(min_p);
             }
+
+            // A deliberate flag from the user, so this is a user-set value
+            // from here on — even if it happens to land on the same
+            // numbers gglib would have guessed. See `DefaultsOrigin`.
+            updated.defaults_origin = Some(DefaultsOrigin::User);
 
             updated.inference_defaults = Some(inference_config);
         }
@@ -467,6 +477,7 @@ mod tests {
             file_path: PathBuf::from("/test/model.gguf"),
             param_count_b: 7.0,
             inference_defaults: None,
+            defaults_origin: None,
             architecture: Some("llama".to_string()),
             quantization: Some("Q4_0".to_string()),
             context_length: Some(4096),

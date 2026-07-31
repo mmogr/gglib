@@ -87,6 +87,7 @@ impl NamedCatalog {
             file_size: 0,
             context_length: None,
             inference_defaults: self.inference_defaults.clone(),
+            defaults_origin: None,
             server_defaults: None,
         }
     }

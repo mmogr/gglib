@@ -195,6 +195,7 @@ fn models_response_from_summaries_maps_fields() {
             file_size: 4_000_000_000,
             context_length: Some(8192),
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         },
         ModelSummary {
@@ -209,6 +210,7 @@ fn models_response_from_summaries_maps_fields() {
             file_size: 7_000_000_000,
             context_length: None,
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         },
     ];
@@ -237,6 +239,7 @@ fn models_response_serializes_to_openai_format() {
             file_size: 0,
             context_length: None,
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         }],
         DEFAULT_CONTEXT_SIZE,
@@ -267,6 +270,7 @@ fn model_info_description_includes_arch_and_quant() {
         file_size: 0,
         context_length: None,
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: None,
     };
     let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
@@ -291,6 +295,7 @@ fn model_info_handles_missing_arch_and_quant() {
         file_size: 0,
         context_length: None,
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: None,
     };
     let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
@@ -316,6 +321,7 @@ fn model_info_maps_context_length_to_context_window() {
         file_size: 0,
         context_length: Some(32_768),
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: None,
     };
     let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
@@ -338,6 +344,7 @@ fn model_info_context_window_none_when_unknown() {
         file_size: 0,
         context_length: None,
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: None,
     };
     let resp = ModelsResponse::from_summaries(vec![summary], DEFAULT_CONTEXT_SIZE);
@@ -360,6 +367,7 @@ fn models_response_respects_server_defaults_context_length() {
         file_size: 0,
         context_length: Some(32_768), // GGUF ceiling is large
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: Some(ServerConfig {
             context_length: Some(8192),
         }),
@@ -386,6 +394,7 @@ fn models_response_falls_through_when_server_defaults_context_length_none() {
         file_size: 0,
         context_length: Some(32_768),
         inference_defaults: None,
+        defaults_origin: None,
         server_defaults: Some(ServerConfig {
             context_length: None, // exists but context_length is None
         }),

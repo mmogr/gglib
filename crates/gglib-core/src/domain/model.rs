@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
-use super::inference::InferenceConfig;
+use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::server_config::ServerConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +118,14 @@ pub struct Model {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// Whether [`Self::inference_defaults`] was set by the user or
+    /// auto-detected at import time from the `reasoning` tag.
+    ///
+    /// Always `None` when [`Self::inference_defaults`] is `None` — there is
+    /// nothing to have an origin. See [`DefaultsOrigin`] for why this
+    /// changes how resolution ranks the field.
+    #[serde(default)]
+    pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server-level defaults (`context_length`, etc.).
     ///
     /// Stored as JSON in the database. Overrides global settings but can
@@ -183,6 +191,9 @@ pub struct NewModel {
     /// If not set, falls back to global settings or hardcoded defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
+    /// See [`Model::defaults_origin`].
+    #[serde(default)]
+    pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server startup defaults.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
@@ -281,6 +292,7 @@ impl NewModel {
             file_paths: None,
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
         }
     }
@@ -313,6 +325,7 @@ impl Model {
             file_paths: None, // Not preserved in conversion
             capabilities: self.capabilities,
             inference_defaults: self.inference_defaults.clone(),
+            defaults_origin: self.defaults_origin,
             server_defaults: self.server_defaults.clone(),
         }
     }
@@ -362,6 +375,7 @@ mod tests {
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
             inference_defaults: None,
+            defaults_origin: None,
             server_defaults: None,
             benchmark_summary: None,
         };
