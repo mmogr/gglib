@@ -251,6 +251,14 @@ impl LlmCompletionAdapter {
         // settings layer is already folded into `sampling` by the callers that
         // have one.
         //
+        // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
+        // gates an *external* client's request body against a boilerplate value it
+        // may have no user-facing control over (VS Code Copilot's hardcoded
+        // `temperature: 0`, for one). `self.sampling` is not that — it is gglib's own
+        // typed caller config (CLI flags, the agent loop's resolved settings), built by
+        // trusted in-process code, so it must always resolve as the top layer
+        // regardless of that setting.
+        //
         // The truncation budget comes from the model itself. There is no live
         // serving context to measure here and no learned chars-per-token ratio
         // — those belong to the proxy, which observes usage frames — so an
@@ -258,7 +266,10 @@ impl LlmCompletionAdapter {
         let report = request_pipeline::apply(
             &mut body,
             &self.model_context,
-            &SamplingLayers::default(),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
             self.model_context.context_budget_chars(),
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;

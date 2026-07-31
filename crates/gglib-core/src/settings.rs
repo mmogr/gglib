@@ -85,6 +85,30 @@ pub struct Settings {
     /// `None`/`Some(false)` → localhost-only. The `--share-lan` flag can turn
     /// this on for a single run, but cannot turn it off — clear it here.
     pub share_lan: Option<bool>,
+
+    // ── Sampling authority ──────────────────────────────────────────
+    /// Whether a client's own sampling parameters (`temperature`, `top_p`,
+    /// `top_k`, `presence_penalty`, `repeat_penalty`, `min_p`) are honoured
+    /// by the proxy at all.
+    ///
+    /// `None`/`Some(false)` → the client's sampling opinions are dropped from
+    /// the resolution hierarchy entirely; the request falls straight through
+    /// to the profile / per-model / global / floor layers as if the client
+    /// had sent none of them. `max_tokens` is unaffected either way — it is
+    /// a budget, not a taste, and a client that names one still gets it
+    /// honoured; ignoring it would silently truncate that client's own
+    /// turns.
+    ///
+    /// Defaults to distrust because most clients that talk to this proxy
+    /// send fixed sampling values with no user-facing control behind them —
+    /// boilerplate the client always sends, not a deliberate choice by
+    /// whoever is using it (VS Code Copilot's LLM Gateway hardcodes
+    /// `temperature: 0` on every request, for one). Letting that boilerplate
+    /// silently outrank a model's own tuned defaults and this server's
+    /// global settings defeats the point of configuring either. Set `true`
+    /// for a client that does expose real sampling controls to its user
+    /// (`OpenWebUI`'s sliders, for instance).
+    pub trust_client_sampling: Option<bool>,
 }
 
 impl Settings {
@@ -109,6 +133,7 @@ impl Settings {
             title_generation_prompt: None,
             bind_host: None,
             share_lan: None,
+            trust_client_sampling: None,
         }
     }
 
@@ -177,6 +202,9 @@ impl Settings {
         if let Some(ref v) = other.share_lan {
             self.share_lan = *v;
         }
+        if let Some(ref v) = other.trust_client_sampling {
+            self.trust_client_sampling = *v;
+        }
     }
 }
 
@@ -203,6 +231,7 @@ pub struct SettingsUpdate {
     pub title_generation_prompt: Option<Option<String>>,
     pub bind_host: Option<Option<String>>,
     pub share_lan: Option<Option<bool>>,
+    pub trust_client_sampling: Option<Option<bool>>,
 }
 
 /// Settings validation error.
@@ -572,6 +601,25 @@ mod tests {
         assert_eq!(settings.default_context_size, Some(8192));
         assert_eq!(settings.proxy_port, None);
         assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT)); // Unchanged
+    }
+
+    #[test]
+    fn test_trust_client_sampling_defaults_to_none_and_merges_like_any_bool_setting() {
+        let defaults = Settings::with_defaults();
+        assert_eq!(defaults.trust_client_sampling, None);
+
+        let mut settings = Settings::with_defaults();
+        settings.merge(&SettingsUpdate {
+            trust_client_sampling: Some(Some(true)),
+            ..Default::default()
+        });
+        assert_eq!(settings.trust_client_sampling, Some(true));
+
+        settings.merge(&SettingsUpdate {
+            trust_client_sampling: Some(None),
+            ..Default::default()
+        });
+        assert_eq!(settings.trust_client_sampling, None);
     }
 
     #[test]

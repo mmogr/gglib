@@ -18,6 +18,8 @@ interface AdvancedSettingsProps {
   setTitlePromptInput: (value: string) => void;
   inferenceDefaultsInput: InferenceConfig | undefined;
   setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
+  trustClientSampling: boolean;
+  setTrustClientSampling: (value: boolean) => void;
   saving: boolean;
 }
 
@@ -34,6 +36,8 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
   setTitlePromptInput,
   inferenceDefaultsInput,
   setInferenceDefaultsInput,
+  trustClientSampling,
+  setTrustClientSampling,
   saving,
 }) => (
   <>
@@ -102,6 +106,28 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           Default inference parameters for all models. Can be overridden per-model in the model
           inspector.
         </p>
+
+        <div className="border-t border-border my-md" />
+        <div>
+          <label className="flex items-center gap-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-[18px] h-[18px] accent-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              checked={trustClientSampling}
+              onChange={(event) => setTrustClientSampling(event.target.checked)}
+              disabled={saving}
+            />
+            <span className="font-semibold text-text">Trust client sampling parameters</span>
+          </label>
+          <p className="text-text-secondary text-sm mt-xs">
+            Off by default: most clients (VS Code Copilot's LLM Gateway, for one) send fixed
+            sampling values with no user-facing control behind them, so this server's own
+            per-model and global defaults apply instead of a request&apos;s temperature, top-p,
+            top-k, presence-penalty, repeat-penalty, or min-p. Max tokens is always honoured.
+            Turn this on only for a client that exposes real sampling controls to its user (e.g.
+            OpenWebUI).
+          </p>
+        </div>
       </div>
     )}
   </>

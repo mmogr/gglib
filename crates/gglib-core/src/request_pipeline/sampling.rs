@@ -39,6 +39,13 @@ pub struct SamplingLayers {
     pub profile: Option<InferenceConfig>,
     /// Global defaults from settings.
     pub global: Option<InferenceConfig>,
+    /// Whether the client's own sampling parameters are honoured at all.
+    /// From `Settings.trust_client_sampling`. `false` (the default) drops
+    /// everything the client sent except `max_tokens` — see the field doc on
+    /// `Settings` for why. This is read from the same settings snapshot as
+    /// [`Self::global`], which is why it lives here rather than as a
+    /// separate parameter threaded through every caller.
+    pub trust_client_sampling: bool,
 }
 
 /// Which layer supplied each resolved sampling value, as `field=layer` pairs.
@@ -102,9 +109,30 @@ fn describe_provenance(ordered: &[(&'static str, Option<&InferenceConfig>)]) -> 
 /// hierarchy: every layer below the client would stop applying to any key
 /// the client happened to send.
 ///
+/// # Client trust
+///
+/// `layers.trust_client_sampling` gates which of the client's own fields
+/// enter that layer at all. When `false` (the default — see
+/// `Settings::trust_client_sampling`), only `max_tokens` survives; the rest
+/// of `body`'s sampling keys are read but discarded before the fold, so a
+/// client with a hardcoded `temperature` can no longer outrank this
+/// server's own configuration, and every field it left unset still
+/// gap-fills from below exactly as if it had never sent that key.
+///
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
     let client_params = InferenceConfig::from_openai_json(body);
+    // `max_tokens` stays client-authoritative regardless of trust: it is a
+    // budget, not a taste, and dropping it would silently truncate the
+    // client's own turns. See `Settings::trust_client_sampling`.
+    let client_layer = if layers.trust_client_sampling {
+        client_params
+    } else {
+        InferenceConfig {
+            max_tokens: client_params.max_tokens,
+            ..InferenceConfig::default()
+        }
+    };
 
     // The `reasoning` tag selects the floor beneath every layer here — a
     // model that degrades into repetitive loops under greedy decoding still
@@ -125,7 +153,7 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // provenance reporting read from, so they can never drift apart.
     let ordered: [(&str, Option<&InferenceConfig>); 5] = [
         ("cli", layers.cli_override.as_ref()),
-        ("client", Some(&client_params)),
+        ("client", Some(&client_layer)),
         ("profile", layers.profile.as_ref()),
         ("model", ctx.inference_defaults.as_ref()),
         ("global", layers.global.as_ref()),
@@ -260,6 +288,11 @@ mod tests {
                 cli_override: cli.map(temp),
                 profile: profile.map(temp),
                 global: global.map(temp),
+                // This table is specifically about layer precedence, not
+                // about the trust gate — trust it here so the "client beats
+                // profile" / "cli beats client" rows still exercise the
+                // client layer at all. See `client_sampling_is_ignored_by_default`.
+                trust_client_sampling: true,
             };
             resolve_sampling(&mut body, &model_ctx(model.map(temp)), &layers);
             assert_param(&body, "temperature", expected);
@@ -288,6 +321,7 @@ mod tests {
                 cli_override: None,
                 profile: Some(temp(0.2)),
                 global: None,
+                trust_client_sampling: false,
             },
         );
 
@@ -425,6 +459,7 @@ mod tests {
                 cli_override: None,
                 profile: Some(temp(0.2)),
                 global: None,
+                trust_client_sampling: false,
             },
         );
 
@@ -432,30 +467,39 @@ mod tests {
         assert_param(&body, "presence_penalty", 0.0);
     }
 
-    /// The actual incident this refactor exists for: a client that always
-    /// sends `temperature: 0` (VS Code Copilot's LLM Gateway does, with no
-    /// user-facing control over it) must not silently zero out a reasoning
-    /// model's only anti-repetition guard. The client still wins the
-    /// temperature it asked for — it just doesn't also claim penalties it
-    /// never named an opinion on.
+    /// When the client IS trusted (`trust_client_sampling: true` — an
+    /// `OpenWebUI`-style client with real sampling controls exposed to its
+    /// user), a client that sends `temperature: 0` must still not silently
+    /// zero out a reasoning model's only anti-repetition guard. The client
+    /// still wins the temperature it asked for — it just doesn't also claim
+    /// penalties it never named an opinion on. See `resolve_layers`'s
+    /// coupling rule.
     #[test]
-    fn client_temperature_zero_does_not_zero_a_reasoning_models_presence_penalty() {
+    fn trusted_client_temperature_zero_does_not_zero_a_reasoning_models_presence_penalty() {
         let mut body = json!({"temperature": 0.0});
         let ctx = ModelContext {
             tags: vec!["reasoning".to_owned()],
             inference_defaults: Some(InferenceConfig::reasoning_profile()),
             ..ModelContext::passthrough()
         };
-        resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+        resolve_sampling(
+            &mut body,
+            &ctx,
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
+        );
 
         assert_param(&body, "temperature", 0.0);
         assert_param(&body, "presence_penalty", 1.0);
     }
 
-    /// A non-reasoning model gets the plain neutral floor, not the reasoning
-    /// one — the class floor is opt-in via the tag, not a blanket change.
+    /// Same as above, but a non-reasoning model gets the plain neutral floor,
+    /// not the reasoning one — the class floor is opt-in via the tag, not a
+    /// blanket change.
     #[test]
-    fn client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_floor() {
+    fn trusted_client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_floor() {
         let mut body = json!({"temperature": 0.0});
         let model = InferenceConfig {
             temperature: Some(0.8),
@@ -465,15 +509,62 @@ mod tests {
         resolve_sampling(
             &mut body,
             &model_ctx(Some(model)),
-            &SamplingLayers::default(),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
         );
 
         assert_param(&body, "temperature", 0.0);
         assert_param(&body, "presence_penalty", 0.0);
     }
 
+    // ── Client sampling authority (Settings.trust_client_sampling) ─────────
+
+    /// The default. This is the actual fix for the incident that motivated
+    /// this whole refactor: without a client-trust escape hatch, a client
+    /// hardcoding `temperature: 0` with no way for its user to change it (VS
+    /// Code Copilot's LLM Gateway) claims the coupled trio on every request
+    /// and supplies none of it — so the model's own tuned recipe never has a
+    /// chance to apply, no matter what `resolve_layers`'s coupling rule does.
+    /// With the client out of the ladder entirely, the model's full recipe —
+    /// temperature *and* the penalties tuned for it — resolves untouched.
+    #[test]
+    fn client_sampling_is_ignored_by_default() {
+        let mut body = json!({"temperature": 0.0});
+        let ctx = ModelContext {
+            tags: vec!["reasoning".to_owned()],
+            inference_defaults: Some(InferenceConfig::reasoning_profile()),
+            ..ModelContext::passthrough()
+        };
+        resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+
+        assert_param(&body, "temperature", 1.0); // the model's own, not the client's 0.0
+        assert_param(&body, "presence_penalty", 1.5); // the model's tuned recipe, intact
+    }
+
+    /// `max_tokens` is a budget, not a taste — it stays client-authoritative
+    /// even when nothing else about the client's request is trusted, because
+    /// dropping it would silently truncate that client's own turns.
+    #[test]
+    fn max_tokens_is_still_honoured_when_client_sampling_is_untrusted() {
+        let mut body = json!({"temperature": 0.9, "max_tokens": 999});
+        resolve_sampling(
+            &mut body,
+            &model_ctx(Some(InferenceConfig {
+                temperature: Some(0.4),
+                ..Default::default()
+            })),
+            &SamplingLayers::default(),
+        );
+
+        assert_param(&body, "temperature", 0.4); // client's 0.9 dropped
+        assert_param(&body, "max_tokens", 999.0); // client's budget still honoured
+    }
+
     /// The force-insert. An `or_insert` implementation passes every test above
-    /// and fails this one.
+    /// and fails this one. Trusted explicitly: this test is about force-insert
+    /// semantics, not about the trust gate.
     #[test]
     fn resolution_overwrites_a_partial_client_value_from_lower_layers() {
         // The client named only `temperature`. Every other key must still be
@@ -485,7 +576,10 @@ mod tests {
                 top_p: Some(0.42),
                 ..Default::default()
             })),
-            &SamplingLayers::default(),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
         );
 
         assert_param(&body, "temperature", 0.11);

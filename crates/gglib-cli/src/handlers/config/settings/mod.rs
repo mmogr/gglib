@@ -153,6 +153,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             show_memory_fit_indicators,
             bind_host,
             share_lan,
+            trust_client_sampling,
         } => {
             // Collect the kebab-case keys of every flag that was provided.
             let mut changed: BTreeSet<&str> = BTreeSet::new();
@@ -186,6 +187,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if share_lan.is_some() {
                 changed.insert("share-lan");
             }
+            if trust_client_sampling.is_some() {
+                changed.insert("trust-client-sampling");
+            }
 
             if changed.is_empty() {
                 println!("No settings provided. Use --help to see available options.");
@@ -208,6 +212,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 title_generation_prompt: None,
                 bind_host: bind_host.map(Some),
                 share_lan: share_lan.map(Some),
+                trust_client_sampling: trust_client_sampling.map(Some),
             };
 
             // Pre-validate: merge the prospective update into a local copy and validate
@@ -242,6 +247,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.share_lan {
                 prospective.share_lan = Some(v);
+            }
+            if let Some(Some(v)) = update.trust_client_sampling {
+                prospective.trust_client_sampling = Some(v);
             }
             validate_settings(&prospective)?;
 

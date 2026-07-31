@@ -416,6 +416,9 @@ Sampling parameters are resolved through a **5-level merge hierarchy** on every 
 Request override  →  Inference profile  →  Per-model defaults  →  Global settings  →  Floor
 ```
 
+The "Request override" level is gated by `trust_client_sampling` (see below) — untrusted by
+default, it drops out of the hierarchy entirely except for `max_tokens`.
+
 The full set of configurable parameters:
 
 | Parameter | CLI flag | Range | Floor | Notes |
@@ -475,6 +478,40 @@ gglib model update <id> --clear-inference-defaults
 
 All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
 per-invocation overrides that sit at the top of the hierarchy.
+
+#### Client sampling authority
+
+By default, an external client's own sampling parameters (`temperature`, `top_p`,
+`top_k`, `presence_penalty`, `repeat_penalty`, `min_p`) are **not honoured** — they
+are read off the incoming request and then dropped, so the request resolves exactly
+as if the client had sent none of them. `max_tokens` is the one exception: it is a
+budget, not a taste, and ignoring it would silently truncate the client's own turns,
+so it is always forwarded regardless of this setting.
+
+This is the default because many OpenAI-compatible clients send fixed sampling
+values with no user-facing control behind them. VS Code Copilot's LLM Gateway, for
+one, hardcodes `temperature: 0` on every agent request — that is boilerplate the
+extension always sends, not a deliberate choice by whoever is using it. Trusting it
+by default would let that boilerplate silently outrank a model's own tuned defaults
+and this server's global settings, defeating the point of configuring either.
+
+```bash
+# Inspect the current setting
+gglib config settings show
+
+# Trust clients that expose real sampling controls to their user (e.g. OpenWebUI)
+gglib config settings set --trust-client-sampling true
+
+# Back to the default
+gglib config settings set --trust-client-sampling false
+```
+
+`{model}:{profile}` selection is unaffected either way — that is not a client
+sampling parameter, it is part of the requested model name, and profiles remain the
+sanctioned way for a client to express a sampling preference without needing to be
+trusted (see below). In-process callers (`gglib chat`, `gglib q`, council) are also
+unaffected: their sampling parameters are gglib's own typed configuration, not an
+external client's request body, so they are always honoured.
 
 #### Inference profiles (`<model>:<profile>`)
 

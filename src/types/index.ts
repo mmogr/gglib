@@ -170,6 +170,17 @@ export interface AppSettings {
   inferenceProfiles?: InferenceProfile[] | null;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null;
+  /**
+   * Whether a client's own sampling parameters (temperature, topP, topK,
+   * presencePenalty, repeatPenalty, minP) are honoured by the proxy at all.
+   * `false`/unset (the default) drops them from the resolution hierarchy —
+   * only `maxTokens` still comes from the request. Most clients that talk to
+   * this proxy send fixed sampling values with no user-facing control behind
+   * them (VS Code Copilot's LLM Gateway, for one), so trusting them by
+   * default would let that boilerplate silently outrank this server's own
+   * per-model and global defaults.
+   */
+  trustClientSampling?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -194,6 +205,8 @@ export interface UpdateSettingsRequest {
   inferenceProfiles?: InferenceProfile[] | null | undefined;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null | undefined;
+  /** See `AppSettings.trustClientSampling`. */
+  trustClientSampling?: boolean | null | undefined;
 }
 
 // ============================================================================
