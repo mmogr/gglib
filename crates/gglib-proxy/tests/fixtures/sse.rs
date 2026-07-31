@@ -47,6 +47,17 @@ data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":172900000
 data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
 data: [DONE]\n\n";
 
+/// Qwen3 + `--jinja` inner-XML tool call — the Hermes-style
+/// `<function=NAME><parameter=KEY>VALUE</parameter></function>` body inside
+/// the same `<tool_call>` wrapper, as opposed to [`QWEN_XML_TOOL_CALL`]'s
+/// JSON body.  Exercises `qwen_xml`'s second dialect through the full
+/// pipeline, not just the parser's own unit tests.
+pub const QWEN_FUNCTION_XML_TOOL_CALL: &[u8] = b"\
+data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Looking it up. \"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"<tool_call><function=get_weather><parameter=city>Paris</parameter></function></tool_call>\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
+data: [DONE]\n\n";
+
 /// Standard OpenAI tool call (already strict / no dialect rewriting).  The
 /// proxy must round-trip this preserving `id`, `type:"function"`, `name`,
 /// `arguments`, and the `index`.

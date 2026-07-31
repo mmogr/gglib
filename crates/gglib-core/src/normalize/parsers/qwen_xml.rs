@@ -1,9 +1,16 @@
 //! Qwen-style XML tool-call parser.
 //!
-//! Rewrites embedded `<tool_call>{json}</tool_call>` markup — emitted by
-//! Qwen 2 / 2.5 / 3 family models in either the text or reasoning channel —
-//! into proper [`ToolCall`] values.  Bytes outside of `<tool_call>` regions
-//! are forwarded verbatim on the channel they arrived on.
+//! Rewrites `<tool_call>...</tool_call>` markup — emitted by Qwen 2 / 2.5 / 3
+//! family models in either the text or reasoning channel — into proper
+//! [`ToolCall`] values.  Bytes outside of `<tool_call>` regions are forwarded
+//! verbatim on the channel they arrived on.
+//!
+//! Two body dialects are accepted inside the wrapper, tried in order — see
+//! `finalize_tool_call` for the detail:
+//! 1. **JSON** — `{"name":"foo","arguments":{...}}` (Qwen 2 / 2.5).
+//! 2. **Inner XML** — `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`,
+//!    one or more back-to-back inside a single wrapper (Qwen 3 + `--jinja`,
+//!    Hermes-style).
 //!
 //! ## Chunk safety
 //!
@@ -189,29 +196,43 @@ fn forward(out: &mut ParserOutput, channel: Channel, bytes: &str) {
     }
 }
 
-/// Parse the accumulated tool-call body and push the resulting [`ToolCall`]
+/// Parse the accumulated tool-call body and push the resulting [`ToolCall`]s
 /// (or a [`NormalizationError`]) onto `out`.
 ///
 /// Two body shapes are accepted, in order:
 /// 1. **JSON** — `{"name":"foo","arguments":{...}}` (Qwen2/2.5 native).
-/// 2. **Inner XML** — `<function=NAME><parameter=KEY>VAL</parameter>...</function>`
+/// 2. **Inner XML** — one or more back-to-back
+///    `<function=NAME><parameter=KEY>VAL</parameter>...</function>` blocks
 ///    (Qwen3 + `--jinja`, Hermes-style).
 ///
 /// JSON is tried first because it is the historical Qwen format and is
 /// unambiguous; the XML form is the documented fallback for Qwen3 chat
 /// templates that emit nested function/parameter markup inside `<tool_call>`.
+///
+/// On failure, the error kind reflects which dialect was attempted: a body
+/// that looks like it opened the XML dialect (`<function=`) but didn't match
+/// its shape reports [`NormalizationErrorKind::MalformedFunctionXml`]
+/// instead of the generic JSON failure, since the two dialects fail for
+/// unrelated reasons and a log reader should not have to guess which one was
+/// in play.
+///
+/// [`NormalizationErrorKind::MalformedFunctionXml`]: crate::normalize::error::NormalizationErrorKind::MalformedFunctionXml
 fn finalize_tool_call(body: &str, out: &mut ParserOutput, mut mint_id: impl FnMut() -> String) {
     let trimmed = body.trim();
     if let Some(call) = parse_json_body(trimmed, &mut mint_id) {
         out.tool_calls.push(call);
         return;
     }
-    if let Some(call) = parse_function_xml_body(trimmed, &mut mint_id) {
-        out.tool_calls.push(call);
+    if let Some(calls) = parse_function_xml_body(trimmed, &mut mint_id) {
+        out.tool_calls.extend(calls);
         return;
     }
-    out.errors
-        .push(NormalizationError::malformed_tool_call(body.to_owned()));
+    let error = if trimmed.starts_with("<function=") {
+        NormalizationError::malformed_function_xml(body.to_owned())
+    } else {
+        NormalizationError::malformed_tool_call(body.to_owned())
+    };
+    out.errors.push(error);
 }
 
 /// Try to interpret `body` as a Qwen JSON tool call.
@@ -230,54 +251,108 @@ fn parse_json_body(body: &str, mint_id: &mut impl FnMut() -> String) -> Option<T
     })
 }
 
-/// Try to interpret `body` as the Hermes/Qwen3 inner-XML tool call:
-/// `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`.
+/// Try to interpret `body` as one or more back-to-back Hermes/Qwen3
+/// inner-XML tool calls:
+/// `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`, repeated.
 ///
-/// Whitespace between tags is tolerated.  Each parameter value is parsed as
+/// Whitespace between tags is tolerated. Each parameter value is parsed as
 /// JSON when it looks like a JSON literal (`{`, `[`, quoted string, number,
 /// `true`/`false`/`null`); otherwise it is forwarded as a string after
-/// trimming surrounding whitespace.
-fn parse_function_xml_body(body: &str, mint_id: &mut impl FnMut() -> String) -> Option<ToolCall> {
-    let body = body.trim();
-    let after_open = body.strip_prefix("<function=")?;
-    let name_end = after_open.find('>')?;
-    let name = after_open[..name_end].trim();
-    if name.is_empty() {
-        return None;
-    }
-    let inner = &after_open[name_end + 1..];
-    let inner = inner.strip_suffix("</function>")?.trim();
+/// trimming surrounding whitespace — see [`parse_param_value`]'s doc comment
+/// for the coercion's known limitation.
+///
+/// Returns `None` (not `Some(vec![])`) when `body` doesn't open with
+/// `<function=` at all or the very first block is malformed, so the caller
+/// can fall through to a "no dialect matched" error. A body that opens
+/// correctly but has a malformed *later* block currently stops at that point
+/// and returns `None` for the whole body, discarding any calls already
+/// parsed — the same fail-shut behaviour the single-call parser always had.
+fn parse_function_xml_body(
+    body: &str,
+    mint_id: &mut impl FnMut() -> String,
+) -> Option<Vec<ToolCall>> {
+    let mut calls = Vec::new();
+    let mut cursor = body.trim();
 
-    let mut args = serde_json::Map::new();
-    let mut cursor = inner;
     while !cursor.is_empty() {
-        cursor = cursor.trim_start();
-        if cursor.is_empty() {
-            break;
-        }
-        let after_param = cursor.strip_prefix("<parameter=")?;
-        let key_end = after_param.find('>')?;
-        let key = after_param[..key_end].trim().to_owned();
-        if key.is_empty() {
+        let after_open = cursor.strip_prefix("<function=")?;
+        let name_end = after_open.find('>')?;
+        let name = after_open[..name_end].trim();
+        if name.is_empty() {
             return None;
         }
-        let rest = &after_param[key_end + 1..];
-        let close_at = rest.find("</parameter>")?;
-        let raw_value = rest[..close_at].trim();
-        let value = parse_param_value(raw_value);
-        args.insert(key, value);
-        cursor = &rest[close_at + "</parameter>".len()..];
+        let after_name = &after_open[name_end + 1..];
+
+        // This block's own `</function>` is the LAST occurrence before the
+        // next sibling `<function=`, if any — never the first occurrence
+        // found anywhere in the remainder, which could belong to a
+        // parameter's own value (e.g. a `content` parameter whose text
+        // happens to mention "</function>"). See `find_own_close` for the
+        // same rule applied to `</parameter>`.
+        let close_at = find_own_close(after_name, "</function>", "<function=")?;
+        let inner = after_name[..close_at].trim();
+        let after_function = &after_name[close_at + "</function>".len()..];
+
+        let mut args = serde_json::Map::new();
+        let mut param_cursor = inner;
+        while !param_cursor.is_empty() {
+            param_cursor = param_cursor.trim_start();
+            if param_cursor.is_empty() {
+                break;
+            }
+            let after_param = param_cursor.strip_prefix("<parameter=")?;
+            let key_end = after_param.find('>')?;
+            let key = after_param[..key_end].trim().to_owned();
+            if key.is_empty() {
+                return None;
+            }
+            let rest = &after_param[key_end + 1..];
+            let close_at = find_own_close(rest, "</parameter>", "<parameter=")?;
+            let raw_value = rest[..close_at].trim();
+            args.insert(key, parse_param_value(raw_value));
+            param_cursor = &rest[close_at + "</parameter>".len()..];
+        }
+
+        calls.push(ToolCall {
+            id: mint_id(),
+            name: name.to_owned(),
+            arguments: Value::Object(args),
+        });
+
+        cursor = after_function.trim_start();
     }
 
-    Some(ToolCall {
-        id: mint_id(),
-        name: name.to_owned(),
-        arguments: Value::Object(args),
-    })
+    (!calls.is_empty()).then_some(calls)
 }
 
-/// Best-effort coercion of a `<parameter>` body to a JSON value.  Falls
-/// back to a string literal when the body is not valid JSON.
+/// Find this tag's own closing marker inside `rest`: the LAST occurrence of
+/// `close` before the next sibling `next_open` marker (or before the end of
+/// `rest`, if there is no next sibling).
+///
+/// A naive `rest.find(close)` truncates the value early whenever it happens
+/// to contain the literal closing-tag text — a real risk for a `content` or
+/// `code` parameter carrying anything that looks like markup. The tag's true
+/// close is always the one immediately before its next sibling opens (or the
+/// end of the block), never an earlier occurrence, so searching backward
+/// from that boundary finds it correctly even when the value embeds the
+/// marker text. This is not a complete fix — a value that also happens to
+/// contain the *next sibling's* open marker is still ambiguous, since this
+/// dialect has no escaping mechanism — but it is strictly more often correct
+/// than a forward search from the start.
+fn find_own_close(rest: &str, close: &str, next_open: &str) -> Option<usize> {
+    let boundary = rest.find(next_open).unwrap_or(rest.len());
+    rest[..boundary].rfind(close)
+}
+
+/// Best-effort coercion of a `<parameter>` body to a JSON value. Falls back
+/// to a string literal when the body is not valid JSON.
+///
+/// This is inherently lossy: the dialect gives no way to distinguish a
+/// parameter that is genuinely meant to be the *string* `"true"` or `"123"`
+/// from one meant to be the boolean or the number — both coerce to the typed
+/// value. There is no tool `input_schema` available here to disambiguate
+/// against (the parser has no access to the tool definitions that produced
+/// this call), so this is a best-effort guess, not a guarantee.
 fn parse_param_value(raw: &str) -> Value {
     if raw.is_empty() {
         return Value::String(String::new());
@@ -566,5 +641,119 @@ mod tests {
         assert_eq!(out.tool_calls.len(), 1);
         assert_eq!(out.tool_calls[0].name, "ping");
         assert_eq!(out.tool_calls[0].arguments, json!({}));
+    }
+
+    /// Multiple `<function=...>` blocks back-to-back inside one `<tool_call>`
+    /// wrapper (Hermes-style multi-call) must all be extracted, in order,
+    /// with distinct synthesised IDs.
+    #[test]
+    fn multiple_function_blocks_in_one_wrapper_are_all_extracted() {
+        let mut p = QwenXmlParser::new();
+        let body = concat!(
+            "<tool_call>",
+            "<function=get_weather><parameter=city>Paris</parameter></function>",
+            "<function=get_time><parameter=zone>UTC</parameter></function>",
+            "</tool_call>",
+        );
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+        assert_eq!(out.tool_calls.len(), 2);
+        assert_eq!(out.tool_calls[0].name, "get_weather");
+        assert_eq!(out.tool_calls[0].arguments, json!({"city": "Paris"}));
+        assert_eq!(out.tool_calls[1].name, "get_time");
+        assert_eq!(out.tool_calls[1].arguments, json!({"zone": "UTC"}));
+        assert_ne!(
+            out.tool_calls[0].id, out.tool_calls[1].id,
+            "each call in the block needs its own ID"
+        );
+    }
+
+    /// A value that happens to contain the literal text `</parameter>` must
+    /// not truncate the value early — the true close is the last occurrence
+    /// before the next sibling tag, not the first occurrence anywhere. This
+    /// is the naive-`find` bug: the old implementation would have stopped at
+    /// "Use ", left `to close a param` dangling as unparsed cursor bytes, and
+    /// failed the whole block.
+    #[test]
+    fn a_parameter_value_containing_the_literal_close_marker_does_not_truncate() {
+        let mut p = QwenXmlParser::new();
+        let body = concat!(
+            "<tool_call><function=write_doc>",
+            "<parameter=text>Use </parameter> to close a param</parameter>",
+            "<parameter=lang>en</parameter>",
+            "</function></tool_call>",
+        );
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({"text": "Use </parameter> to close a param", "lang": "en"})
+        );
+    }
+
+    /// Same rule at the `</function>` boundary: a parameter value containing
+    /// the literal text `</function>` must not truncate the function body
+    /// early when another sibling function follows.
+    #[test]
+    fn a_parameter_value_containing_the_literal_function_close_does_not_truncate() {
+        let mut p = QwenXmlParser::new();
+        let body = concat!(
+            "<tool_call>",
+            "<function=write_doc><parameter=text>end with </function> tag</parameter></function>",
+            "<function=ping></function>",
+            "</tool_call>",
+        );
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+        assert_eq!(out.tool_calls.len(), 2);
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({"text": "end with </function> tag"})
+        );
+        assert_eq!(out.tool_calls[1].name, "ping");
+    }
+
+    /// A body that opens the XML dialect (`<function=`) but is structurally
+    /// broken must be reported with the XML-specific error kind, not the
+    /// generic JSON one — the two dialects fail for unrelated reasons.
+    #[test]
+    fn malformed_function_xml_gets_its_own_error_kind() {
+        let mut p = QwenXmlParser::new();
+        let out = collect(
+            &mut p,
+            &["<tool_call><function=oops(no closing angle</tool_call>"],
+        );
+        assert!(out.tool_calls.is_empty());
+        assert_eq!(out.errors.len(), 1);
+        assert!(matches!(
+            out.errors[0].kind,
+            crate::normalize::error::NormalizationErrorKind::MalformedFunctionXml { .. }
+        ));
+    }
+
+    /// Pinning the type-coercion limitation documented on
+    /// `parse_param_value`: a parameter meant to be the literal string
+    /// `"true"` or `"123"` is indistinguishable from one meant to be the
+    /// boolean or the number, since the dialect carries no schema. This is
+    /// not a bug to fix here — the parser has no `input_schema` to consult —
+    /// but the behaviour must not change silently.
+    #[test]
+    fn parameter_values_that_look_like_json_literals_are_coerced_not_kept_as_strings() {
+        let mut p = QwenXmlParser::new();
+        let body = concat!(
+            "<tool_call><function=configure>",
+            "<parameter=enabled>true</parameter>",
+            "<parameter=count>123</parameter>",
+            "<parameter=label>plain text</parameter>",
+            "</function></tool_call>",
+        );
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty());
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({"enabled": true, "count": 123, "label": "plain text"}),
+            "bool- and number-shaped strings coerce; only non-JSON-shaped text stays a string"
+        );
     }
 }
