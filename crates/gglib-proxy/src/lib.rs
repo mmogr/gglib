@@ -4,6 +4,7 @@
 pub mod cache_lifecycle;
 pub mod canonicalization;
 pub mod connections;
+pub mod contention;
 pub mod council_proxy;
 pub mod dashboard;
 pub mod forward;
