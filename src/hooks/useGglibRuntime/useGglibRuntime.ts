@@ -27,6 +27,13 @@ export interface UseGglibRuntimeOptions {
   maxToolIterations?: number;
   onError?: (error: Error) => void;
   /**
+   * Called for each non-fatal `system_warning` the loop emits — an upstream
+   * 503 being retried, a tool-call batch being trimmed. Unlike `onError` this
+   * does not mean the turn failed: the loop is still running. Wire it to a
+   * transient notice so the user knows why the response is slow.
+   */
+  onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
+  /**
    * Whether the active model supports tool/function calling.
    * - `true`  → tools sent normally
    * - `false` → tools stripped (defense-in-depth)
@@ -60,6 +67,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     selectedServerPort,
     maxToolIterations,
     onError,
+    onSystemWarning,
     supportsToolCalls,
     onCouncilSubmit,
   } = options;
@@ -160,6 +168,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
         },
         supportsToolCalls,
+        onSystemWarning,
       });
     } catch (error) {
       if (isAbortError(error)) {

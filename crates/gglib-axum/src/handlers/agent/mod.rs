@@ -1,11 +1,13 @@
 #![doc = include_str!("README.md")]
 mod dto;
 mod guard;
+mod retry_notice;
 
 pub use dto::{AgentChatRequest, AgentRequestConfig};
 
 use std::collections::HashSet;
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
@@ -20,11 +22,12 @@ use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
-use gglib_core::ports::AgentError;
+use gglib_core::ports::{AgentError, RetryObserver};
 use gglib_core::request_pipeline;
 use gglib_runtime::compose_agent_loop;
 
 use guard::AgentTaskGuard;
+use retry_notice::RetryNotice;
 
 /// `POST /api/agent/chat` — start an agentic conversation with SSE streaming.
 ///
@@ -81,6 +84,14 @@ pub async fn chat(
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
     let model_context =
         request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
+
+    // Created before the loop is composed so the completion adapter can report
+    // its retries onto the same stream the loop emits through — otherwise a
+    // contended model is indistinguishable from a hung one for as long as the
+    // retry budget lasts.
+    let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
+    let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
+
     let agent_loop = compose_agent_loop(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
@@ -91,12 +102,11 @@ pub async fn chat(
         // GUI chat runs in the same process as the embedded proxy; report its
         // reuse to the shared agent-path store behind `agent_usage`.
         Some(state.proxy.agent_metrics()),
+        Some(retry_observer),
     );
 
     let messages = req.messages;
     let config: AgentConfig = req.config.unwrap_or_default().into();
-
-    let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
     // Move the semaphore permit into the spawned task so it is held for the
     // full duration of the agent loop.  When the task completes (or is

@@ -10,11 +10,13 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{CacheMetricsSink, LlmCompletionPort, ResponseFormat},
+    ports::{CacheMetricsSink, LlmCompletionPort, ResponseFormat, RetryObserver},
     request_pipeline::{self, ModelContext, SamplingLayers},
+    retry::RetryPolicy,
 };
 
 mod body;
+mod retry;
 mod stream;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
@@ -68,6 +70,24 @@ pub struct LlmCompletionAdapter {
     /// (the default) means nowhere to report, so recording is skipped: the
     /// case for CLI `gglib chat`/`q`, which run in a process with no dashboard.
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    /// Bounds on retrying a transient upstream failure — see
+    /// [`retry`](self::retry) for why that is safe to do here.
+    ///
+    /// The default budget is deliberately modest: the proxy already absorbs
+    /// `ModelLoading` server-side, so what reaches this adapter is startup
+    /// *contention*, which by definition means something upstream has already
+    /// waited a long time.
+    retry_policy: RetryPolicy,
+    /// Optional destination for this request's retry activity.
+    ///
+    /// When set, each backoff and the eventual give-up are reported here — the
+    /// agent HTTP handler turns them into
+    /// [`AgentEvent::SystemWarning`](gglib_core::domain::agent::AgentEvent::SystemWarning)
+    /// frames so a waiting user sees "retrying" rather than a frozen cursor.
+    /// `None` (the default) means nowhere to report, so the calls are no-ops:
+    /// the case for CLI `gglib chat`/`q`, which render the loop's events
+    /// directly.
+    retry_observer: Option<Arc<dyn RetryObserver>>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -118,6 +138,8 @@ impl LlmCompletionAdapter {
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             model_context: ModelContext::passthrough(),
             cache_metrics: None,
+            retry_policy: RetryPolicy::default(),
+            retry_observer: None,
         }
     }
 
@@ -167,6 +189,28 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_cache_metrics_sink(mut self, sink: Option<Arc<dyn CacheMetricsSink>>) -> Self {
         self.cache_metrics = sink;
+        self
+    }
+
+    /// Override the retry budget for transient upstream failures.
+    ///
+    /// Pass `RetryPolicy { max_attempts: 1, .. }` to disable retrying — that is
+    /// what the CLI's `--no-retry` resolves to.
+    #[must_use]
+    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.retry_policy = policy;
+        self
+    }
+
+    /// Report this adapter's retry activity to `observer`.
+    ///
+    /// Pass an observer when there is a live stream to notify, so a user
+    /// waiting on a contended model is told the request is being retried rather
+    /// than watching a stalled cursor. Pass `None` (the default) when there is
+    /// nothing to notify — reporting then costs nothing.
+    #[must_use]
+    pub fn with_retry_observer(mut self, observer: Option<Arc<dyn RetryObserver>>) -> Self {
+        self.retry_observer = observer;
         self
     }
 
@@ -244,30 +288,30 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         tools: &[ToolDefinition],
         response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        // Shaped once, outside the retry loop: the pipeline runs truncation and
+        // logs what it trimmed, and neither should repeat per attempt. The body
+        // is deterministic, so every attempt sends identical bytes.
         let body = self.shaped_body(messages, tools, response_format)?;
 
-        // Gate the connect + first-byte phase with a hard timeout so a
-        // stalled or unresponsive llama-server doesn't hang the agent task
-        // indefinitely.  The timeout covers `.send()` — TCP connect through
-        // HTTP response headers — which includes prompt pre-fill because
-        // llama-server doesn't send headers until pre-fill finishes.
-        let timeout_secs = self.send_timeout_secs;
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            self.client.post(&self.url).json(&body).send(),
+        // Each attempt's connect + first-byte phase is bounded by the send
+        // timeout, and the whole sequence by the policy's own deadline, so a
+        // stalled llama-server can neither hang the agent task nor multiply the
+        // timeout by the attempt count. The timeout covers `.send()` — TCP
+        // connect through HTTP response headers — which includes prompt
+        // pre-fill because llama-server doesn't send headers until pre-fill
+        // finishes.
+        //
+        // Retrying is safe only because it all happens here, before a single
+        // body byte is read: see the `retry` module docs.
+        let response = retry::send_with_retry(
+            &self.client,
+            &self.url,
+            &body,
+            std::time::Duration::from_secs(self.send_timeout_secs),
+            &self.retry_policy,
+            self.retry_observer.as_ref(),
         )
-        .await
-        .map_err(|_| anyhow!("llama-server connection timed out after {timeout_secs}s"))?
-        .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<body read error: {e}>"));
-            return Err(anyhow!("llama-server returned {status}: {text}"));
-        }
+        .await?;
 
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
         Ok(stream::normalized_event_stream(

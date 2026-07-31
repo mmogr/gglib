@@ -189,6 +189,31 @@ impl ModelRuntimeError {
     }
 }
 
+/// Canonical `error.type` discriminants, shared by every surface.
+///
+/// `gglib_proxy::models::ErrorResponse` carries one of these over HTTP and
+/// [`RuntimeErrorEnvelope`] carries the same vocabulary over Tauri IPC and SSE,
+/// so a client that learns it once understands both.
+pub mod error_type {
+    /// Transient unavailability — the same request may succeed if retried.
+    pub const SERVICE_UNAVAILABLE: &str = "service_unavailable";
+    /// The caller asked for something that does not exist or is not permitted.
+    pub const INVALID_REQUEST: &str = "invalid_request_error";
+    /// The server failed in a way that retrying will not fix.
+    pub const SERVER_ERROR: &str = "server_error";
+}
+
+/// Whether a wire `error.type` discriminant denotes a retryable condition.
+///
+/// The single definition of retryability keyed on the wire vocabulary. An HTTP
+/// client parsing an error body and an IPC consumer reading a
+/// [`RuntimeErrorEnvelope`] both route through here, so the two cannot drift
+/// into disagreeing about what is worth retrying.
+#[must_use]
+pub fn is_retryable_error_type(discriminant: &str) -> bool {
+    discriminant == error_type::SERVICE_UNAVAILABLE
+}
+
 /// Structured, serializable view of a [`ModelRuntimeError`].
 ///
 /// For IPC boundaries (Tauri events, SSE) that need machine-readable type +
@@ -208,20 +233,20 @@ pub struct RuntimeErrorEnvelope {
 
 impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     fn from(err: &ModelRuntimeError) -> Self {
-        let error_type = match err {
+        let discriminant = match err {
             ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_) => {
-                "service_unavailable"
+                error_type::SERVICE_UNAVAILABLE
             }
             ModelRuntimeError::ModelNotFound(_)
             | ModelRuntimeError::ModelFileNotFound(_)
-            | ModelRuntimeError::PinnedModelMismatch { .. } => "invalid_request_error",
+            | ModelRuntimeError::PinnedModelMismatch { .. } => error_type::INVALID_REQUEST,
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
-            | ModelRuntimeError::Internal(_) => "server_error",
+            | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,
         };
         Self {
             message: err.to_string(),
-            r#type: error_type.to_string(),
+            r#type: discriminant.to_string(),
             retryable: err.is_retryable(),
         }
     }
@@ -503,5 +528,48 @@ mod tests {
         let envelope = RuntimeErrorEnvelope::from(&pinned_mismatch());
         assert_eq!(envelope.r#type, "invalid_request_error");
         assert!(!envelope.retryable);
+    }
+
+    /// The wire-vocabulary predicate must agree with `is_retryable()` for every
+    /// variant.
+    ///
+    /// An HTTP client only ever sees the `type` discriminant — it has no
+    /// `ModelRuntimeError` to ask. This is what stops the two from drifting
+    /// into disagreeing about which failures are worth retrying, and it is
+    /// exhaustive so a new variant cannot quietly skip the check.
+    #[test]
+    fn retryable_predicate_agrees_with_the_error_itself() {
+        let all = [
+            ModelRuntimeError::ModelLoading,
+            ModelRuntimeError::ContentionTimeout("contended".to_string()),
+            ModelRuntimeError::ModelNotFound("m".to_string()),
+            ModelRuntimeError::ModelFileNotFound("f".to_string()),
+            pinned_mismatch(),
+            ModelRuntimeError::SpawnFailed("boom".to_string()),
+            ModelRuntimeError::HealthCheckFailed("unhealthy".to_string()),
+            ModelRuntimeError::Internal("internal".to_string()),
+        ];
+
+        for err in all {
+            let envelope = RuntimeErrorEnvelope::from(&err);
+            assert_eq!(
+                is_retryable_error_type(&envelope.r#type),
+                err.is_retryable(),
+                "wire type {:?} disagrees with is_retryable() for {err:?}",
+                envelope.r#type
+            );
+        }
+    }
+
+    /// A 503 is the only status the retryable discriminant maps to, so the
+    /// HTTP-status fallback used by clients that receive a non-gglib error
+    /// body stays consistent with the discriminant path.
+    #[test]
+    fn retryable_discriminant_lines_up_with_status_503() {
+        let retryable = ModelRuntimeError::ContentionTimeout("c".to_string());
+        assert!(is_retryable_error_type(error_type::SERVICE_UNAVAILABLE));
+        assert_eq!(retryable.suggested_status_code(), 503);
+        assert!(!is_retryable_error_type(error_type::SERVER_ERROR));
+        assert!(!is_retryable_error_type(error_type::INVALID_REQUEST));
     }
 }

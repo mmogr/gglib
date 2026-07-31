@@ -100,6 +100,23 @@ export interface AgentErrorEvent {
   message: string;
 }
 
+/**
+ * A non-fatal condition the loop recovered from, or is recovering from.
+ *
+ * Unlike {@link AgentErrorEvent} this does **not** end the stream — more
+ * events follow. Emitted for things like an upstream 503 being retried after
+ * backoff, or the model requesting more parallel tool calls than the limit
+ * allows.
+ *
+ * `suggested_action`, when present, is an actionable hint (often a CLI
+ * command) that can be rendered verbatim.
+ */
+export interface AgentSystemWarningEvent {
+  type: 'system_warning';
+  message: string;
+  suggested_action?: string | null;
+}
+
 /** Prompt pre-fill progress from the LLM backend. */
 export interface AgentPromptProgressEvent {
   type: 'prompt_progress';
@@ -123,4 +140,5 @@ export type AgentEvent =
   | AgentIterationCompleteEvent
   | AgentFinalAnswerEvent
   | AgentErrorEvent
+  | AgentSystemWarningEvent
   | AgentPromptProgressEvent;
