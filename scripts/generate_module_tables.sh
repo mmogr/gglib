@@ -10,6 +10,7 @@
 #   ./scripts/generate_module_tables.sh --dry-run # Show what would change
 
 set -euo pipefail
+export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
