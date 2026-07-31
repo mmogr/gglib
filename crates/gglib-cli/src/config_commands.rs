@@ -177,6 +177,14 @@ pub enum SettingsCommand {
         /// WARNING: makes GGLib visible to every device on your network.
         #[arg(long)]
         share_lan: Option<bool>,
+        /// Honour a client's own sampling parameters (temperature, top_p,
+        /// top_k, presence_penalty, repeat_penalty, min_p). Defaults to
+        /// false: most clients (e.g. VS Code Copilot) send fixed sampling
+        /// values with no user-facing control behind them, so this server's
+        /// own per-model and global defaults apply instead. `max_tokens` is
+        /// always honoured regardless of this setting.
+        #[arg(long)]
+        trust_client_sampling: Option<bool>,
     },
     /// Reset all settings to defaults
     Reset {

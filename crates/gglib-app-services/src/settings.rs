@@ -119,6 +119,7 @@ impl SettingsOps {
             title_generation_prompt: settings.title_generation_prompt,
             bind_host: settings.bind_host,
             share_lan: settings.share_lan,
+            trust_client_sampling: settings.trust_client_sampling,
         })
     }
 
@@ -140,6 +141,7 @@ impl SettingsOps {
             title_generation_prompt: request.title_generation_prompt,
             bind_host: request.bind_host,
             share_lan: request.share_lan,
+            trust_client_sampling: request.trust_client_sampling,
         };
 
         let settings = self
@@ -170,6 +172,7 @@ impl SettingsOps {
             title_generation_prompt: settings.title_generation_prompt,
             bind_host: settings.bind_host,
             share_lan: settings.share_lan,
+            trust_client_sampling: settings.trust_client_sampling,
         })
     }
 
@@ -325,6 +328,7 @@ mod tests {
             title_generation_prompt: None,
             bind_host: None,
             share_lan: None,
+            trust_client_sampling: None,
         };
 
         let json = serde_json::to_value(&settings).expect("serializes");

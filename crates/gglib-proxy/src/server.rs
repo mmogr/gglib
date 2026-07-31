@@ -853,6 +853,7 @@ async fn chat_completions(
         cli_override: state.inference_override.clone(),
         profile: request_profile.clone(),
         global: settings.inference_defaults.clone(),
+        trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
     };
 
     // Clone body before forwarding — Bytes is reference-counted so this is
@@ -970,10 +971,12 @@ async fn chat_completions(
             // Re-read settings for the retry: the model was just relaunched,
             // so this is a fresh point in time. The profile is deliberately
             // not re-resolved — the client asked for a specific one.
+            let retry_settings = state.settings.get().await;
             let retry_sampling = SamplingLayers {
                 cli_override: state.inference_override.clone(),
                 profile: request_profile.clone(),
-                global: state.settings.get().await.inference_defaults.clone(),
+                global: retry_settings.inference_defaults.clone(),
+                trust_client_sampling: retry_settings.trust_client_sampling.unwrap_or(false),
             };
 
             // Fresh connection for the retried attempt — the original guard

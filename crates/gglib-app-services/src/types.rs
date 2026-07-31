@@ -489,6 +489,8 @@ pub struct AppSettings {
     // Network binding (see `gglib_core::Settings`)
     pub bind_host: Option<String>,
     pub share_lan: Option<bool>,
+    // Sampling authority (see `gglib_core::Settings`)
+    pub trust_client_sampling: Option<bool>,
 }
 
 /// Request body for updating application settings.
@@ -537,6 +539,9 @@ pub struct UpdateSettingsRequest {
     pub bind_host: Option<Option<String>>,
     #[serde(default, with = "serde_with::rust::double_option")]
     pub share_lan: Option<Option<bool>>,
+    // Sampling authority (see `gglib_core::Settings`)
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub trust_client_sampling: Option<Option<bool>>,
 }
 
 // ============================================================================

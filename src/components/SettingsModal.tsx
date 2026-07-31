@@ -39,6 +39,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [titlePromptInput, setTitlePromptInput] = useState("");
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
+  const [trustClientSampling, setTrustClientSampling] = useState(false);
   const [defaultModelInput, setDefaultModelInput] = useState("");
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -69,6 +70,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setTitlePromptInput(settings.titleGenerationPrompt || "");
       setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
       setShowFitIndicators(settings.showMemoryFitIndicators !== false);
+      setTrustClientSampling(settings.trustClientSampling === true);
       setDefaultModelInput(settings.defaultModelId?.toString() || "");
       setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
     }
@@ -103,10 +105,11 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           showMemoryFitIndicators: showFitIndicators,
           defaultModelId: parseNumericInput(defaultModelInput),
           inferenceDefaults: inferenceDefaultsInput,
+          trustClientSampling,
         };
 
         // Check if any updates were made
-        const hasUpdates = 
+        const hasUpdates =
           updates.defaultContextSize !== undefined ||
           updates.proxyPort !== undefined ||
           updates.llamaBasePort !== undefined ||
@@ -115,7 +118,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.maxToolIterations !== undefined ||
           updates.showMemoryFitIndicators !== undefined ||
           updates.defaultModelId !== undefined ||
-          updates.inferenceDefaults !== undefined;
+          updates.inferenceDefaults !== undefined ||
+          updates.trustClientSampling !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -137,6 +141,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       showFitIndicators,
       defaultModelInput,
       inferenceDefaultsInput,
+      trustClientSampling,
       info,
       saveDir,
       saveSettings,
@@ -154,6 +159,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() ?? "");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
+      setTrustClientSampling(false); // Default is disabled
     }
   }, [info, settings]);
 
@@ -242,6 +248,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setTitlePromptInput={setTitlePromptInput}
             inferenceDefaultsInput={inferenceDefaultsInput}
             setInferenceDefaultsInput={setInferenceDefaultsInput}
+            trustClientSampling={trustClientSampling}
+            setTrustClientSampling={setTrustClientSampling}
             onSubmit={handleSubmit}
             onReset={handleReset}
             onRefresh={handleRefresh}

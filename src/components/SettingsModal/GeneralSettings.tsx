@@ -46,6 +46,8 @@ interface GeneralSettingsProps {
   // Inference defaults
   inferenceDefaultsInput: InferenceConfig | undefined;
   setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
+  trustClientSampling: boolean;
+  setTrustClientSampling: (value: boolean) => void;
 
   // Actions
   onSubmit: (event: FormEvent) => Promise<void>;
@@ -87,6 +89,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setTitlePromptInput,
   inferenceDefaultsInput,
   setInferenceDefaultsInput,
+  trustClientSampling,
+  setTrustClientSampling,
   onSubmit,
   onReset,
   onRefresh,
@@ -157,6 +161,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         setTitlePromptInput={setTitlePromptInput}
         inferenceDefaultsInput={inferenceDefaultsInput}
         setInferenceDefaultsInput={setInferenceDefaultsInput}
+        trustClientSampling={trustClientSampling}
+        setTrustClientSampling={setTrustClientSampling}
         saving={saving}
       />
 

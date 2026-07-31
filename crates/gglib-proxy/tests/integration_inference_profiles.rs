@@ -115,6 +115,7 @@ impl ModelCatalogPort for NamedCatalog {
 /// Settings repository serving a fixed profile list.
 struct ProfileSettings {
     profiles: Vec<InferenceProfile>,
+    trust_client_sampling: bool,
 }
 
 #[async_trait]
@@ -122,6 +123,7 @@ impl SettingsRepository for ProfileSettings {
     async fn load(&self) -> Result<Settings, RepositoryError> {
         Ok(Settings {
             inference_profiles: Some(self.profiles.clone()),
+            trust_client_sampling: Some(self.trust_client_sampling),
             ..Settings::with_defaults()
         })
     }
@@ -181,6 +183,7 @@ async fn spawn(
     profiles: Vec<InferenceProfile>,
     catalog_names: &[&str],
     model_defaults: Option<InferenceConfig>,
+    trust_client_sampling: bool,
 ) -> Harness {
     let forwarded: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
     let cancel = CancellationToken::new();
@@ -241,7 +244,10 @@ async fn spawn(
             mcp,
             make_orchestrator_deps(),
             proxy_cancel,
-            Arc::new(ProfileSettings { profiles }),
+            Arc::new(ProfileSettings {
+                profiles,
+                trust_client_sampling,
+            }),
             None, // inference_override
             false,
             None,
@@ -306,7 +312,7 @@ fn assert_param(body: &Value, key: &str, expected: f64) {
 /// what reaches llama-server.
 #[tokio::test]
 async fn profile_suffix_applies_its_sampling() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     let resp = h.post(chat_request("qwen:coding")).await;
     assert_eq!(resp.status(), 200);
@@ -324,7 +330,7 @@ async fn profile_suffix_applies_its_sampling() {
 /// asked for rather than a silently rewritten one.
 #[tokio::test]
 async fn profile_suffix_is_stripped_before_the_model_is_launched() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     h.post(chat_request("qwen:coding")).await;
 
@@ -339,7 +345,7 @@ async fn profile_suffix_is_stripped_before_the_model_is_launched() {
 /// A bare model name must behave exactly as before profiles existed.
 #[tokio::test]
 async fn bare_model_name_is_unaffected_by_a_configured_profile() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     h.post(chat_request(MODEL)).await;
 
@@ -347,16 +353,35 @@ async fn bare_model_name_is_unaffected_by_a_configured_profile() {
     assert_param(&h.only_forwarded(), "temperature", 0.7);
 }
 
-/// The client's own parameters sit above the profile in the hierarchy.
+/// When the client is trusted (`Settings.trust_client_sampling: true` — an
+/// explicit choice by whoever operates this proxy, not the default), the
+/// client's own parameters sit above the profile in the hierarchy.
 #[tokio::test]
-async fn client_supplied_temperature_beats_the_profile() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+async fn a_trusted_clients_temperature_beats_the_profile() {
+    let h = spawn(vec![coding_profile()], &[MODEL], None, true).await;
 
     let mut body = chat_request("qwen:coding");
     body["temperature"] = json!(1.5);
     h.post(body).await;
 
     assert_param(&h.only_forwarded(), "temperature", 1.5);
+}
+
+/// The default (`trust_client_sampling` unset). A client's own `temperature`
+/// must NOT beat the profile — it is dropped from the hierarchy entirely, so
+/// the profile applies exactly as if the client had sent no sampling
+/// parameters at all. This is the actual end-to-end fix for a client that
+/// hardcodes a sampling value with no user-facing control behind it (VS Code
+/// Copilot's LLM Gateway sends `temperature: 0` on every request).
+#[tokio::test]
+async fn an_untrusted_clients_temperature_does_not_beat_the_profile() {
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
+
+    let mut body = chat_request("qwen:coding");
+    body["temperature"] = json!(1.5);
+    h.post(body).await;
+
+    assert_param(&h.only_forwarded(), "temperature", 0.2); // the profile's own value
 }
 
 /// The invariant that makes one global profile safe across models: a
@@ -370,7 +395,13 @@ async fn sparse_profile_leaves_model_defaults_intact() {
         top_k: Some(20),
         ..Default::default()
     };
-    let h = spawn(vec![coding_profile()], &[MODEL], Some(model_defaults)).await;
+    let h = spawn(
+        vec![coding_profile()],
+        &[MODEL],
+        Some(model_defaults),
+        false,
+    )
+    .await;
 
     h.post(chat_request("qwen:coding")).await;
 
@@ -392,7 +423,13 @@ async fn sparse_profile_does_not_forward_model_penalties() {
         presence_penalty: Some(1.5),
         ..Default::default()
     };
-    let h = spawn(vec![coding_profile()], &[MODEL], Some(model_defaults)).await;
+    let h = spawn(
+        vec![coding_profile()],
+        &[MODEL],
+        Some(model_defaults),
+        false,
+    )
+    .await;
 
     h.post(chat_request("qwen:coding")).await;
 
@@ -406,7 +443,7 @@ async fn sparse_profile_does_not_forward_model_penalties() {
 /// feature exists to prevent.
 #[tokio::test]
 async fn unknown_profile_suffix_is_rejected_without_calling_the_upstream() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     let resp = h.post(chat_request("qwen:codeing")).await;
     assert_eq!(resp.status(), 404);
@@ -436,7 +473,7 @@ async fn unknown_profile_suffix_is_rejected_without_calling_the_upstream() {
 /// reinterpreted as a profile reference.
 #[tokio::test]
 async fn colon_bearing_model_name_still_resolves() {
-    let h = spawn(vec![coding_profile()], &["qwen:27b"], None).await;
+    let h = spawn(vec![coding_profile()], &["qwen:27b"], None, false).await;
 
     let resp = h.post(chat_request("qwen:27b")).await;
     assert_eq!(resp.status(), 200);
@@ -448,7 +485,7 @@ async fn colon_bearing_model_name_still_resolves() {
 /// setting it, no cap may be forwarded.
 #[tokio::test]
 async fn no_max_tokens_is_forwarded_when_nothing_sets_one() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     h.post(chat_request("qwen:coding")).await;
 
@@ -465,7 +502,7 @@ async fn no_max_tokens_is_forwarded_when_nothing_sets_one() {
 async fn opted_in_profiles_are_listed_alongside_the_bare_model() {
     let mut listed = coding_profile();
     listed.list_in_models = true;
-    let h = spawn(vec![listed], &[MODEL], None).await;
+    let h = spawn(vec![listed], &[MODEL], None, false).await;
 
     let body = h.models().await;
     let ids: Vec<&str> = body["data"]
@@ -490,7 +527,7 @@ async fn opted_in_profiles_are_listed_alongside_the_bare_model() {
 async fn an_advertised_variant_can_be_selected_and_used() {
     let mut listed = coding_profile();
     listed.list_in_models = true;
-    let h = spawn(vec![listed], &[MODEL], None).await;
+    let h = spawn(vec![listed], &[MODEL], None, false).await;
 
     let ids: Vec<String> = h.models().await["data"]
         .as_array()
@@ -512,7 +549,7 @@ async fn an_advertised_variant_can_be_selected_and_used() {
 /// feature existed.
 #[tokio::test]
 async fn unlisted_profiles_do_not_appear_in_the_model_list() {
-    let h = spawn(vec![coding_profile()], &[MODEL], None).await;
+    let h = spawn(vec![coding_profile()], &[MODEL], None, false).await;
 
     let body = h.models().await;
     let ids: Vec<&str> = body["data"]
