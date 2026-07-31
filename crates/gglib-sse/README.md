@@ -67,3 +67,13 @@ let broadcaster = Arc::new(Broadcaster::<MyEvent>::new(256));
 
 broadcaster.send(MyEvent { message: "hello".into() });
 ```
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+<!-- module-table:end -->
+
+</details>
