@@ -97,6 +97,7 @@ export default function ChatPage({
 
   // Orchestrator mode: ref filled by ChatMessagesPanel with the submit callback
   const councilSubmitRef = useRef<((text: string) => void) | null>(null);
+  const promptProgressThrottleRef = useRef<{ lastEmit: number }>({ lastEmit: 0 });
 
   // Runtime - now with external message state
   const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
@@ -107,6 +108,12 @@ export default function ChatPage({
     // rather than `chatError`, which renders as a failed turn.
     onSystemWarning: (message, suggestedAction) =>
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
+    onPromptProgress: (event) => {
+      const now = Date.now();
+      if (now - promptProgressThrottleRef.current.lastEmit < 250) return;
+      promptProgressThrottleRef.current.lastEmit = now;
+      showToast(`Processing prompt: ${event.processed} / ${event.total} tokens`, 'info');
+    },
     maxToolIterations,
     supportsToolCalls,
     onCouncilSubmit: (text) => councilSubmitRef.current?.(text),

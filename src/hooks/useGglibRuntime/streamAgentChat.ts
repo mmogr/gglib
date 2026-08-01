@@ -87,6 +87,11 @@ export interface StreamAgentChatOptions {
    * than watching an idle cursor.
    */
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
+  /**
+   * Called during prompt pre-fill with progress events from the LLM backend.
+   * Transient — never reaches the persisted transcript.
+   */
+  onPromptProgress?: (event: AgentPromptProgressEvent) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +121,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     config,
     supportsToolCalls,
     onSystemWarning,
+    onPromptProgress,
   } = options;
 
   // Build agent config: use null to let the backend apply defaults unless
@@ -210,6 +216,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     makeNextMessage,
     cleanup,
     onSystemWarning,
+    onPromptProgress,
   };
   try {
     for await (const payload of readAgentSSE(response, abortSignal)) {

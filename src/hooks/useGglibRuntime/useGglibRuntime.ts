@@ -20,6 +20,7 @@ import { streamAgentChat } from './streamAgentChat';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { isAbortError } from '../../utils/errors';
+import type { AgentPromptProgressEvent } from '../../types/events/agentEvent';
 
 export interface UseGglibRuntimeOptions {
   conversationId?: number;
@@ -33,6 +34,12 @@ export interface UseGglibRuntimeOptions {
    * transient notice so the user knows why the response is slow.
    */
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
+  /**
+   * Called during prompt pre-fill with progress events from the LLM backend.
+   * Transient — never reaches the persisted transcript. Wire it to a
+   * transient UI indicator (e.g., "processing prompt: 2048 / 8192 tokens").
+   */
+  onPromptProgress?: (event: AgentPromptProgressEvent) => void;
   /**
    * Whether the active model supports tool/function calling.
    * - `true`  → tools sent normally
@@ -68,6 +75,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     maxToolIterations,
     onError,
     onSystemWarning,
+    onPromptProgress,
     supportsToolCalls,
     onCouncilSubmit,
   } = options;
@@ -169,6 +177,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         },
         supportsToolCalls,
         onSystemWarning,
+        onPromptProgress,
       });
     } catch (error) {
       if (isAbortError(error)) {
