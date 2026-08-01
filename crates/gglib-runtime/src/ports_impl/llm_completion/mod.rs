@@ -27,6 +27,7 @@ mod stream;
 /// is therefore a **safety net** against a truly unreachable or hung server,
 /// not a pre-fill time limit.  The generous value avoids false positives
 /// while still bounding resource usage for a dead connection.
+/// Public for rustdoc linking and external reference.
 pub const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
 
 // =============================================================================
