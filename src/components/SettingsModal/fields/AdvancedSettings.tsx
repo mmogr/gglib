@@ -7,6 +7,7 @@ import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { InferenceConfig } from '../../../types';
 import { Label } from '../../primitives';
 import { SettingField } from './SettingField';
+import { ToggleField } from './ToggleField';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
 
 interface AdvancedSettingsProps {
@@ -108,26 +109,20 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
         </p>
 
         <div className="border-t border-border my-md" />
-        <div>
-          <label className="flex items-center gap-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="w-[18px] h-[18px] accent-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              checked={trustClientSampling}
-              onChange={(event) => setTrustClientSampling(event.target.checked)}
-              disabled={saving}
-            />
-            <span className="font-semibold text-text">Trust client sampling parameters</span>
-          </label>
-          <p className="text-text-secondary text-sm mt-xs">
-            Off by default: most clients (VS Code Copilot's LLM Gateway, for one) send fixed
-            sampling values with no user-facing control behind them, so this server's own
-            per-model and global defaults apply instead of a request&apos;s temperature, top-p,
-            top-k, presence-penalty, repeat-penalty, or min-p. Max tokens is always honoured.
-            Turn this on only for a client that exposes real sampling controls to its user (e.g.
-            OpenWebUI).
-          </p>
-        </div>
+        <ToggleField
+          id="trust-client-sampling-input"
+          label="Trust client sampling parameters"
+          checked={trustClientSampling}
+          onChange={setTrustClientSampling}
+          disabled={saving}
+        >
+          Off by default: most clients (VS Code Copilot&apos;s LLM Gateway, for one) send fixed
+          sampling values with no user-facing control behind them, so this server&apos;s own
+          per-model and global defaults apply instead of a request&apos;s temperature, top-p,
+          top-k, presence-penalty, repeat-penalty, or min-p. Max tokens is always honoured. Turn
+          this on only for a client that exposes real sampling controls to its user (e.g.
+          OpenWebUI).
+        </ToggleField>
       </div>
     )}
   </>

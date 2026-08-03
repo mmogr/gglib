@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { Row } from '../../primitives';
+import { ToggleField } from './ToggleField';
 
 interface DisplaySettingsProps {
   showFitIndicators: boolean;
@@ -17,22 +17,14 @@ export const DisplaySettings: FC<DisplaySettingsProps> = ({
   setShowFitIndicators,
   saving,
 }) => (
-  <div>
-    <label className="flex items-center gap-sm cursor-pointer select-none">
-      <input
-        type="checkbox"
-        className="w-[18px] h-[18px] accent-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-        checked={showFitIndicators}
-        onChange={(e) => setShowFitIndicators(e.target.checked)}
-        disabled={saving}
-      />
-      <span className="font-semibold text-text">Show memory fit indicators</span>
-    </label>
-    <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-      <span>
-        Display fit status indicators in the HuggingFace browser showing if models fit in your
-        system memory
-      </span>
-    </Row>
-  </div>
+  <ToggleField
+    id="show-fit-indicators-input"
+    label="Show memory fit indicators"
+    checked={showFitIndicators}
+    onChange={setShowFitIndicators}
+    disabled={saving}
+  >
+    Display fit status indicators in the HuggingFace browser showing if models fit in your system
+    memory
+  </ToggleField>
 );

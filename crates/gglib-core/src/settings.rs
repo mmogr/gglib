@@ -109,6 +109,37 @@ pub struct Settings {
     /// for a client that does expose real sampling controls to its user
     /// (`OpenWebUI`'s sliders, for instance).
     pub trust_client_sampling: Option<bool>,
+
+    // ── Always-on proxy (desktop app) ───────────────────────────────
+    /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
+    /// it launches, rather than waiting for the user to switch it on.
+    ///
+    /// This is what makes the proxy a background service rather than a
+    /// feature you remember to enable: combined with [`Self::start_at_login`]
+    /// and [`Self::close_to_tray`], the endpoint is simply always there for
+    /// clients like VS Code Copilot, with no terminal held open.
+    ///
+    /// Read by the desktop app only. `gglib proxy` and `gglib serve` are
+    /// explicit foreground commands — starting a second proxy underneath them
+    /// would contend for the same port.
+    pub proxy_autostart: Option<bool>,
+
+    /// Whether closing the desktop app's window hides it to the system tray
+    /// instead of quitting.
+    ///
+    /// `None`/`Some(false)` → closing the window shuts the app down, stopping
+    /// the proxy and any running llama-server with it (the historical
+    /// behaviour). `Some(true)` → the window hides and the app keeps serving;
+    /// quitting is then an explicit action from the tray menu.
+    pub close_to_tray: Option<bool>,
+
+    /// Whether the desktop app registers itself to launch on login.
+    ///
+    /// Backed by the OS autostart mechanism for each platform (macOS login
+    /// item, Windows `Run` key, XDG autostart entry on Linux). Toggling this
+    /// registers or unregisters immediately rather than at next launch, so the
+    /// stored value and the OS state cannot drift apart.
+    pub start_at_login: Option<bool>,
 }
 
 impl Settings {
@@ -134,6 +165,9 @@ impl Settings {
             bind_host: None,
             share_lan: None,
             trust_client_sampling: None,
+            proxy_autostart: None,
+            close_to_tray: None,
+            start_at_login: None,
         }
     }
 
@@ -205,6 +239,15 @@ impl Settings {
         if let Some(ref v) = other.trust_client_sampling {
             self.trust_client_sampling = *v;
         }
+        if let Some(ref v) = other.proxy_autostart {
+            self.proxy_autostart = *v;
+        }
+        if let Some(ref v) = other.close_to_tray {
+            self.close_to_tray = *v;
+        }
+        if let Some(ref v) = other.start_at_login {
+            self.start_at_login = *v;
+        }
     }
 }
 
@@ -232,6 +275,9 @@ pub struct SettingsUpdate {
     pub bind_host: Option<Option<String>>,
     pub share_lan: Option<Option<bool>>,
     pub trust_client_sampling: Option<Option<bool>>,
+    pub proxy_autostart: Option<Option<bool>>,
+    pub close_to_tray: Option<Option<bool>>,
+    pub start_at_login: Option<Option<bool>>,
 }
 
 /// Settings validation error.

@@ -13,6 +13,7 @@ Application settings modal: models directory path, base port configuration, per-
 |------|------|
 | `GeneralSettings.tsx` | Form body; directory, basic settings, default model, advanced section (collapsible), inference defaults |
 | `InferenceProfiles.tsx` | Profiles tab: lists named sampling profiles with add/edit/delete. Self-contained — loads and saves settings itself rather than threading state through `SettingsModal`, matching `McpServersPanel` |
+| `useDesktopSettings.ts` | State for the three always-on proxy toggles, kept out of `SettingsModal` so the group owns its own state and update payload |
 | `InferenceProfileEditor.tsx` | Form for one profile. A blank parameter field is omitted from the payload rather than sent as `0`, so it falls through to the model's own default |
 
 The advanced section is gated behind an `isAdvancedOpen` toggle to reduce visual complexity for new users.

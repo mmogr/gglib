@@ -11,10 +11,12 @@ Single-responsibility field groups for the General Settings form, plus the `Sett
 | File | Role |
 |------|------|
 | `SettingField.tsx` | Label + control + hint/default/action row |
+| `ToggleField.tsx` | Checkbox + bold label + explanatory paragraph; every boolean setting renders through it |
 | `PathSettings.tsx` | Models directory field and its exists/writable status pills |
 | `ModelDefaults.tsx` | Default context size and default model selector |
 | `PortSettings.tsx` | Proxy port, base server port, download queue size |
 | `DisplaySettings.tsx` | Display-only toggles (currently: memory-fit indicators) |
+| `DesktopSettings.tsx` | Always-on proxy group: autostart, close-to-tray, start-at-login |
 | `AdvancedSettings.tsx` | Collapsible section: tool-iteration cap, title prompt, inference defaults |
 | `SetupWizardRow.tsx` | Re-run the first-run setup wizard |
 
