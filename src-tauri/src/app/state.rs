@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use gglib_app_services::{DownloadOps, ServerOps};
+use gglib_app_services::{DownloadOps, ProxyOps, ServerOps};
+use gglib_core::services::AppCore;
 use gglib_axum::EmbeddedApiInfo;
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
@@ -18,6 +19,11 @@ pub struct AppState {
     pub servers: Arc<ServerOps>,
     /// Download queue operations.
     pub downloads: Arc<DownloadOps>,
+    /// Proxy lifecycle operations, shared with the embedded Axum server so
+    /// the tray and the UI drive the same supervisor.
+    pub proxy: Arc<ProxyOps>,
+    /// Core application facade, for reading settings outside a request.
+    pub core: Arc<AppCore>,
     /// Embedded API server info (port and auth token)
     pub embedded_api: EmbeddedApiInfo,
     /// Menu state for dynamic updates
@@ -45,11 +51,15 @@ impl AppState {
     pub fn new(
         servers: Arc<ServerOps>,
         downloads: Arc<DownloadOps>,
+        proxy: Arc<ProxyOps>,
+        core: Arc<AppCore>,
         embedded_api: EmbeddedApiInfo,
     ) -> Self {
         Self {
             servers,
             downloads,
+            proxy,
+            core,
             embedded_api,
             menu: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),

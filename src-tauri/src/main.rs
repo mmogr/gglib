@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod autostart;
 mod commands;
 mod lifecycle;
 mod menu;
@@ -33,6 +34,10 @@ fn main() {
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(move |app| {
             // Bootstrap inside setup() where we have AppHandle for real event emission
             let config = TauriConfig::with_defaults()
@@ -79,7 +84,13 @@ fn main() {
             });
 
             // Create and manage app state
-            let app_state = AppState::new(ctx.servers.clone(), ctx.downloads.clone(), embedded_api);
+            let app_state = AppState::new(
+                ctx.servers.clone(),
+                ctx.downloads.clone(),
+                ctx.proxy.clone(),
+                ctx.app.clone(),
+                embedded_api,
+            );
 
             // Store the embedded server handle for cleanup
             {
@@ -123,6 +134,15 @@ fn main() {
 
             // Continue with rest of setup
             setup_app(app)?;
+
+            // Apply the always-on proxy settings once the window exists, so a
+            // slow or failing start delays nothing the user is waiting on.
+            {
+                let handle_for_autostart = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    autostart::apply(&handle_for_autostart).await;
+                });
+            }
 
             Ok(())
         })
