@@ -93,6 +93,9 @@ open = "5"
 # with Tauri's or the GtkWindow types will not unify.
 gtk = "0.18"
 libloading = "0.7"
+# StatusNotifierItem tray. Default features pull zbus/tokio, matching Tauri's
+# runtime rather than starting a second one.
+ksni = "0.3"
 
 # System info
 sysinfo = "0.37"

@@ -1,18 +1,31 @@
 //! Where the tray panel appears, and the one place that knows platforms differ.
 //!
 //! Callers describe *what they know about the tray icon* — a rectangle from a
-//! click, or nothing — and this module turns that into a position by
+//! click, a point, or nothing — and this module turns that into a position by
 //! whatever means the platform offers. Keeping the `#[cfg]` here means
 //! [`super::window`], [`super::build`] and [`super::handlers`] need none of
 //! their own.
 
-use tauri::{PhysicalPosition, Rect, WebviewWindow};
+use tauri::WebviewWindow;
+#[cfg(not(target_os = "linux"))]
+use tauri::{PhysicalPosition, Rect};
 
 /// What the caller knows about where the tray icon is.
 #[derive(Debug, Clone, Copy)]
 pub enum Anchor {
     /// The icon's rectangle, from a click event that carried one.
+    ///
+    /// Only the `muda` backend reports these; Linux's tray fires no click
+    /// events, which is why the variant does not exist there.
+    #[cfg(not(target_os = "linux"))]
     Rect(Rect),
+    /// A screen point, from a `StatusNotifierItem` activation.
+    ///
+    /// The SNI spec defines these as "a hint to the item where to show eventual
+    /// windows", which is exactly the tray icon's position. Linux-only for the
+    /// mirror-image reason `Rect` is not.
+    #[cfg(target_os = "linux")]
+    Point { x: i32, y: i32 },
     /// Nothing was reported.
     ///
     /// A menu item was used rather than the icon, so there is no gesture to
@@ -52,7 +65,13 @@ pub fn prepare(_panel: &WebviewWindow) -> bool {
 /// known rectangle is used to drop the panel directly beneath the icon.
 pub fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
     match anchor {
+        #[cfg(not(target_os = "linux"))]
         Anchor::Rect(rect) => position_near(panel, rect),
+        #[cfg(target_os = "linux")]
+        Anchor::Point { x, y } => {
+            super::layer_shell::anchor_at(panel, x, y);
+            Ok(())
+        }
         // Guessing is worse than leaving it: `cursor_position` reports (0, 0)
         // on Wayland rather than failing, which would fling the panel into the
         // corner of the screen. The startup anchor still applies.
@@ -62,8 +81,12 @@ pub fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
 
 /// Place the panel under the tray icon, horizontally centred on it.
 ///
+/// The `Rect` path only, so it compiles where that anchor exists. Wayland has
+/// its own route in [`super::layer_shell`], and cannot honour `set_position`.
+///
 /// Clamped to the monitor's work area so an icon near the right-hand edge —
 /// where menu bar items usually are — does not push the panel off-screen.
+#[cfg(not(target_os = "linux"))]
 fn position_near(panel: &WebviewWindow, anchor: Rect) -> tauri::Result<()> {
     let scale = panel.scale_factor().unwrap_or(1.0);
     let anchor_position: PhysicalPosition<f64> = anchor.position.to_physical(scale);

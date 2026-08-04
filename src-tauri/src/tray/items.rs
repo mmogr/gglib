@@ -71,6 +71,8 @@ pub const ITEMS: &[Item] = &[
 #[must_use]
 pub fn is_enabled(id: &str, proxy_running: bool) -> bool {
     match id {
+        // A label, not a command — never clickable on any backend.
+        ids::STATUS => false,
         ids::START_PROXY => !proxy_running,
         // Copying an endpoint that is not serving hands out a dead URL.
         ids::STOP_PROXY | ids::COPY_PROXY_URL => proxy_running,
@@ -81,6 +83,13 @@ pub fn is_enabled(id: &str, proxy_running: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The header is a label; enabling it would make it look like an action.
+    #[test]
+    fn the_status_header_is_never_enabled() {
+        assert!(!is_enabled(ids::STATUS, true));
+        assert!(!is_enabled(ids::STATUS, false));
+    }
 
     #[test]
     fn starting_is_offered_only_while_stopped() {

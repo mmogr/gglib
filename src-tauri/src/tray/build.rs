@@ -1,32 +1,22 @@
-//! Tray construction for the `muda` backend used on macOS and Windows.
+//! Tray construction for the `muda` backend, used on macOS and Windows.
 //!
-//! Renders [`super::items::ITEMS`] rather than listing the menu itself, so the
-//! Linux backend cannot drift from it.
+//! Renders [`super::items::ITEMS`] and routes through
+//! [`super::handlers::dispatch`], both shared with the Linux backend so the
+//! two cannot drift. Not compiled on Linux, which talks `StatusNotifierItem`
+//! directly — see [`super::linux`].
 
 use std::collections::HashMap;
 
-use tauri::image::Image;
+use tauri::menu::MenuEvent;
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Wry};
 use tracing::error;
 
+use crate::tray::icon::{self, TrayVisual};
 use crate::tray::items::{ITEMS, Item, is_enabled};
 use crate::tray::placement::Anchor;
-use crate::tray::{handlers, icon, ids, window};
-
-/// Identifier used to look the tray back up via `AppHandle::tray_by_id`.
-pub const TRAY_ID: &str = "gglib";
-
-/// Decoded idle icon (proxy stopped).
-pub fn idle_icon() -> tauri::Result<Image<'static>> {
-    Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
-}
-
-/// Decoded active icon (proxy serving).
-pub fn active_icon() -> tauri::Result<Image<'static>> {
-    Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
-}
+use crate::tray::{handlers, ids, window};
 
 /// The built menu items, keyed by id so `sync` can find them again.
 ///
@@ -38,7 +28,7 @@ pub struct TrayMenu {
 
 impl TrayMenu {
     /// Apply proxy state to every item that tracks it.
-    pub fn sync(&self, status: &str, proxy_running: bool) -> tauri::Result<()> {
+    fn apply(&self, status: &str, proxy_running: bool) -> tauri::Result<()> {
         for (id, item) in &self.items {
             if *id == ids::STATUS {
                 item.set_text(status)?;
@@ -51,7 +41,38 @@ impl TrayMenu {
 }
 
 /// Build the tray icon, its menu, and its click behaviour.
-pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
+/// A built tray, kept alive for as long as the icon should exist.
+pub struct Handle {
+    tray: TrayIcon,
+    menu: TrayMenu,
+}
+
+/// Apply proxy state to the icon, tooltip and menu.
+pub async fn sync(handle: &Handle, visual: &TrayVisual, proxy_running: bool) -> Result<(), String> {
+    let image =
+        icon::for_state(visual.active).map_err(|e| format!("Failed to decode tray icon: {e}"))?;
+
+    handle
+        .tray
+        .set_icon(Some(image))
+        .map_err(|e| format!("Failed to set tray icon: {e}"))?;
+    handle
+        .tray
+        .set_tooltip(Some(&visual.status))
+        .map_err(|e| format!("Failed to set tray tooltip: {e}"))?;
+
+    handle
+        .menu
+        .apply(&visual.status, proxy_running)
+        .map_err(|e| format!("Failed to sync tray menu: {e}"))
+}
+
+/// Build the tray icon, its menu, and its click behaviour.
+pub fn build(app: &AppHandle) -> Result<Handle, String> {
+    build_inner(app).map_err(|e| format!("Failed to build system tray: {e}"))
+}
+
+fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let mut items: HashMap<&'static str, MenuItem<Wry>> = HashMap::new();
     // Separators are positional and never looked up again, so they are kept
     // only to be borrowed into the menu below.
@@ -67,7 +88,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
                     app,
                     ids::STATUS,
                     icon::derive(false, None).status,
-                    false,
+                    is_enabled(ids::STATUS, false),
                     None::<&str>,
                 )?;
                 items.insert(ids::STATUS, status);
@@ -97,8 +118,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
     let menu = Menu::with_items(app, &refs)?;
     drop(refs);
 
-    let tray = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(idle_icon()?)
+    let tray = TrayIconBuilder::with_id(icon::TRAY_ID)
+        .icon(icon::idle_icon()?)
         // macOS recolours template images for light and dark menu bars. The
         // icons are pure black with the glyph carried by alpha, which is what
         // that mode expects.
@@ -108,11 +129,22 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
         // Left click opens the panel; the menu stays on right click, so the
         // common action does not require reading a list first.
         .show_menu_on_left_click(false)
-        .on_menu_event(handlers::handle)
+        .on_menu_event(on_menu_event)
         .on_tray_icon_event(on_icon_event)
         .build(app)?;
 
-    Ok((tray, TrayMenu { items }))
+    Ok(Handle {
+        tray,
+        menu: TrayMenu { items },
+    })
+}
+
+/// Adapt a `muda` menu event to the shared router.
+///
+/// Lives here rather than in `handlers` because `MenuEvent` is this backend's
+/// type; the Linux backend delivers ids straight to `dispatch`.
+fn on_menu_event(app: &AppHandle, event: MenuEvent) {
+    handlers::dispatch(app, event.id().as_ref());
 }
 
 /// Open the panel on a completed left click.

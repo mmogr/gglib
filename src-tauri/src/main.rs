@@ -287,13 +287,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the tray before the menu: on Linux and Windows it is the only
     // persistent UI once the window is hidden.
-    let tray_available = match tray::build(&handle) {
-        Ok((_tray, tray_menu)) => {
+    let tray_available = match tray::Tray::build(&handle) {
+        Ok(tray) => {
             info!("System tray initialized");
             let state: tauri::State<AppState> = app.state();
-            let slot = state.tray_menu.clone();
+            let slot = state.tray.clone();
             tauri::async_runtime::spawn(async move {
-                *slot.write().await = Some(tray_menu);
+                *slot.write().await = Some(tray);
             });
             true
         }

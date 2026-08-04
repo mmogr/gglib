@@ -12,9 +12,11 @@ a question nobody asked.
 # Module Structure
 
 - `ids` — tray menu item ID constants
-- `icon` — pure `MenuState` → icon/tooltip derivation, unit-tested without a running app
-- `build` — tray icon, menu and click behaviour
-- `handlers` — thin dispatch to `proxy_actions`, `window` and `lifecycle`
+- `items` — the menu itself: order, labels, and the one enabled rule
+- `icon` — the tray id, the decoded icons, and pure state → appearance derivation
+- `handlers` — `dispatch(app, id)`, the single router every backend calls
+- `build` — the `muda` backend (macOS, Windows)
+- `linux` — the `StatusNotifierItem` backend (Linux)
 - `window` — showing and hiding the panel and the main window
 - `placement` — where the panel appears; the only module that branches on platform
 - `layer_shell` — Linux-only Wayland placement, loaded at runtime
@@ -81,28 +83,42 @@ process, so hiding the window has already removed it. Starting hidden at login
 is not: `should_start_hidden` is platform-independent, and the login item
 carries `--from-autostart` on all three platforms.
 
-## Platform differences
+## Two backends, one menu
 
-What the tray backend actually supports, which is why the menu carries
-everything:
+Tauri's tray goes through `libappindicator` on Linux, which registers its item
+with `ItemIsMenu` and delivers no click events at all — `on_tray_icon_event`
+never fires, `TrayIcon::rect` is always `None`, and `set_tooltip` is a silent
+no-op. So Linux talks `StatusNotifierItem` directly instead, via `ksni`:
 
-| | macOS / Windows | Linux (AppIndicator) |
+| | `build` (macOS, Windows) | `linux` (Linux) |
 |---|---|---|
-| Menu | yes | yes |
-| Click events (`on_tray_icon_event`) | yes | **never fire** |
-| `set_tooltip` | yes | **silent no-op** |
-| `TrayIcon::rect` | yes | **always `None`** |
+| Library | `muda` / Tauri tray | `ksni` over D-Bus |
+| Left click | `on_tray_icon_event` | `Tray::activate(x, y)` |
+| Icon position | `rect` from the event | the activation's coordinates |
+| Icon format | `Image` | ARGB32 pixmap |
 
-Two consequences shape this module.
+Only `mod.rs` names either one. Both expose the same `Handle`, `build` and
+`sync`, so `AppState`, `main` and `menu::state_sync` hold a `tray::Tray` and
+carry no `#[cfg]` at all.
 
-**Every action is on the menu**, on every platform. The click gesture that
-opens the panel is a shortcut, never the only route to a feature, because on
-Linux there is no click gesture at all.
+What must not diverge is shared outright rather than by convention:
 
-**The endpoint is a menu item, not just a tooltip.** `set_tooltip` does nothing
-on Linux, so hover text alone would leave the port invisible on exactly the
-platform where the tray is the whole interface. `icon::derive` produces one
-string and `sync` sends it to both, so they cannot disagree.
+- **`items::ITEMS`** is the menu — order and labels — and `items::is_enabled`
+  is the single rule for what is greyed out, including that the status header
+  is never clickable. Both are pure and both are tested.
+- **`handlers::dispatch(app, id)`** performs the action. `muda` adapts its
+  `MenuEvent` to it in `build`; `ksni` calls it straight from an item callback.
+  Either way the tray reaches `proxy_actions` and `lifecycle::request_shutdown`
+  by the same path as the WebUI and the CLI.
+- **`icon::derive`** produces one status string for the tooltip and the menu
+  header, so they cannot disagree.
+
+The icons are decoded once in `icon` and reused: `ksni` wants ARGB32 in network
+byte order and Tauri hands back RGBA, so the conversion is moving the alpha byte
+to the front of each pixel — no image dependency for a byte swap.
+
+**Every action is on the menu**, on both backends. The click gesture is a
+shortcut, never the only route to a feature.
 
 ## Where the panel appears
 
@@ -111,13 +127,13 @@ Three different mechanisms, one per session type, all behind `placement`:
 | Session | Mechanism | Result |
 |---|---|---|
 | macOS / Windows | `set_position` from the click's `rect` | Directly under the icon |
-| Wayland + `zwlr_layer_shell_v1` | `layer_shell`, anchored bottom-right | Beside the system tray |
+| Wayland + `zwlr_layer_shell_v1` | `layer_shell`, anchored to the activation point | Beside the icon |
 | X11, or Wayland without the protocol | none | Wherever the compositor decides |
 
-`place` is called with an [`placement::Anchor`] describing *what the caller knows*
-— a rectangle, or nothing — rather than with coordinates, because what is
-knowable differs per platform. Linux reports `Unknown`: no click event fires and
-`rect` is always `None`.
+`place` takes an `Anchor` describing *what the caller knows*, and the vocabulary
+itself differs per backend: `Rect` exists only where click events carry one,
+`Point` only where SNI reports activation coordinates. A menu entry reports
+`Unknown`, because no gesture located the icon, and the startup anchor stands.
 
 Guessing is deliberately avoided. `cursor_position` looks like a fallback but
 returns `(0, 0)` on Wayland rather than failing, so anchoring to it would fling
@@ -125,9 +141,14 @@ the panel into the corner of the screen.
 
 Wayland forbids a client from placing its own toplevels, which is why the
 Wayland path is not `set_position` at all: `zwlr_layer_shell_v1` positions a
-surface by anchoring it to screen edges and pushing it away with margins. The
-anchor is set once at startup rather than per-toggle, because the system tray
-does not move.
+surface by anchoring it to screen edges and pushing it away with margins.
+
+A startup anchor puts the panel in the tray's corner before any coordinates are
+known; `activate` then re-anchors it to the icon itself. Only the margins
+change, so the surface is never re-initialised. `margins_for` converts a screen
+point into distances from the two anchored edges, clamped so an icon near an
+edge cannot push the panel off-screen — and floored so a panel larger than the
+display cannot invert the clamp's bounds, which would panic.
 
 `libgtk-layer-shell` is **loaded at runtime, not linked**. Linking would make it
 a launch requirement for every Linux user, including X11 users who gain nothing

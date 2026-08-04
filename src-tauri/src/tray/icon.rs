@@ -4,6 +4,26 @@
 //! the app is doing" to "what the icon looks like" is directly testable
 //! without a running Tauri application.
 
+use tauri::image::Image;
+
+/// Identifier the tray registers under.
+pub const TRAY_ID: &str = "gglib";
+
+/// Decoded idle icon (proxy stopped).
+pub fn idle_icon() -> tauri::Result<Image<'static>> {
+    Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
+}
+
+/// Decoded active icon (proxy serving).
+pub fn active_icon() -> tauri::Result<Image<'static>> {
+    Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
+}
+
+/// The icon for a state, already decoded.
+pub fn for_state(active: bool) -> tauri::Result<Image<'static>> {
+    if active { active_icon() } else { idle_icon() }
+}
+
 /// How the tray should look for a given application state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayVisual {

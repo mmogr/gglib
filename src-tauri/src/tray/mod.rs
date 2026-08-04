@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+#[cfg(not(target_os = "linux"))]
 mod build;
 mod handlers;
 mod icon;
@@ -6,51 +7,75 @@ mod ids;
 mod items;
 #[cfg(target_os = "linux")]
 mod layer_shell;
+#[cfg(target_os = "linux")]
+mod linux;
 pub mod placement;
 pub mod window;
 
-pub use build::{TRAY_ID, TrayMenu, build};
 pub use icon::derive;
 
 use tauri::{AppHandle, Manager};
 
 use crate::app::AppState;
 
-/// Apply proxy state to the tray icon, tooltip and menu.
+#[cfg(not(target_os = "linux"))]
+use build as backend;
+/// The backend that actually owns the tray on this platform.
 ///
-/// A no-op until the tray has been built, so the initial sync during setup is
-/// harmless. Called from `menu::state_sync::sync_all_state` rather than
-/// directly, so the tray cannot fall out of step with the application menu.
+/// Selected here and nowhere else. Both modules expose the same three items —
+/// `Handle`, `build` and `sync` — so everything above this line is written
+/// once, and no `#[cfg]` reaches `main`, `menu::state_sync` or `AppState`.
+#[cfg(target_os = "linux")]
+use linux as backend;
+
+/// A live tray, kept for as long as the icon should exist.
+///
+/// Dropping this removes the icon, so it is owned by [`AppState`] rather than
+/// left to fall out of scope at the end of setup.
+pub struct Tray(backend::Handle);
+
+impl Tray {
+    /// Build the tray and register it with the desktop.
+    ///
+    /// # Errors
+    ///
+    /// When the platform refuses to give us one — no tray host on Linux, or a
+    /// failed icon decode anywhere. Callers treat that as a degraded app, not
+    /// a broken one.
+    pub fn build(app: &AppHandle) -> Result<Self, String> {
+        backend::build(app).map(Self)
+    }
+
+    /// Apply proxy state to this tray.
+    ///
+    /// # Errors
+    ///
+    /// When the backend cannot update the icon, tooltip or menu.
+    pub async fn sync(&self, proxy_running: bool, proxy_port: Option<u16>) -> Result<(), String> {
+        let visual = derive(proxy_running, proxy_port);
+        backend::sync(&self.0, &visual, proxy_running).await
+    }
+}
+
+/// Apply proxy state to the tray, if one was built.
+///
+/// A no-op until then, so the initial sync during setup is harmless. Called
+/// from `menu::state_sync::sync_all_state` rather than directly, so the tray
+/// cannot fall out of step with the macOS application menu.
+///
+/// # Errors
+///
+/// Propagates whatever the backend reports.
 pub async fn sync(
     app: &AppHandle,
     proxy_running: bool,
     proxy_port: Option<u16>,
 ) -> Result<(), String> {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
-        return Ok(());
-    };
-
-    let visual = derive(proxy_running, proxy_port);
-
-    let image = if visual.active {
-        build::active_icon()
-    } else {
-        build::idle_icon()
-    }
-    .map_err(|e| format!("Failed to decode tray icon: {e}"))?;
-
-    tray.set_icon(Some(image))
-        .map_err(|e| format!("Failed to set tray icon: {e}"))?;
-    // A no-op on Linux, where the menu's status item carries this instead.
-    tray.set_tooltip(Some(&visual.status))
-        .map_err(|e| format!("Failed to set tray tooltip: {e}"))?;
-
     let state = app.state::<AppState>();
-    let menu_guard = state.tray_menu.read().await;
-    if let Some(menu) = menu_guard.as_ref() {
-        menu.sync(&visual.status, proxy_running)
-            .map_err(|e| format!("Failed to sync tray menu: {e}"))?;
-    }
+    let guard = state.tray.read().await;
 
-    Ok(())
+    match guard.as_ref() {
+        Some(tray) => tray.sync(proxy_running, proxy_port).await,
+        None => Ok(()),
+    }
 }

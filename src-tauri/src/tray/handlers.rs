@@ -5,7 +5,6 @@
 //! diverge, and the quit path stays in [`crate::lifecycle`] so the tray gets
 //! the same hardened shutdown as every other exit.
 
-use tauri::menu::MenuEvent;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tracing::{debug, error};
@@ -16,15 +15,6 @@ use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::placement::Anchor;
 use crate::tray::{ids, window};
-
-/// Route a `muda` menu event.
-///
-/// Unwraps the event and hands the id to [`dispatch`]. The routing itself is
-/// shared because the Linux backend delivers activations as ids rather than as
-/// `MenuEvent`s, and the two must not drift.
-pub fn handle(app: &AppHandle, event: MenuEvent) {
-    dispatch(app, event.id().as_ref());
-}
 
 /// Perform the action a menu item id names.
 ///
