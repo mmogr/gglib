@@ -25,6 +25,12 @@ pub fn toggle_panel(app: &AppHandle, anchor: Option<Rect>) -> tauri::Result<()> 
         return panel.hide();
     }
 
+    // No anchor means no positioning, which is the whole story on Linux: the
+    // click event that carries the icon's rectangle never fires there, and
+    // `TrayIcon::rect` is documented as always `None`. Falling back to the
+    // cursor would be worse than leaving placement to the window manager —
+    // under Wayland `cursor_position` returns (0, 0) rather than an error, so
+    // the panel would jump to the top-left corner of the screen.
     if let Some(anchor) = anchor {
         position_near(&panel, anchor)?;
     }

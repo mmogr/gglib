@@ -37,14 +37,16 @@ pub async fn sync(
 
     tray.set_icon(Some(image))
         .map_err(|e| format!("Failed to set tray icon: {e}"))?;
-    tray.set_tooltip(Some(&visual.tooltip))
+    // A no-op on Linux, where the menu's status item carries this instead.
+    tray.set_tooltip(Some(&visual.status))
         .map_err(|e| format!("Failed to set tray tooltip: {e}"))?;
 
     let state = app.state::<AppState>();
     let menu_guard = state.tray_menu.read().await;
     if let Some(menu) = menu_guard.as_ref() {
-        menu.start_proxy
-            .set_enabled(!proxy_running)
+        menu.status
+            .set_text(&visual.status)
+            .and_then(|()| menu.start_proxy.set_enabled(!proxy_running))
             .and_then(|()| menu.stop_proxy.set_enabled(proxy_running))
             .and_then(|()| menu.copy_proxy_url.set_enabled(proxy_running))
             .map_err(|e| format!("Failed to sync tray menu: {e}"))?;

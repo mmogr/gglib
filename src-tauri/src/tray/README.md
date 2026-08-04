@@ -68,10 +68,33 @@ carries `--from-autostart` on all three platforms.
 
 ## Platform differences
 
-Linux's AppIndicator delivers no click events, so `on_tray_icon_event` never
-fires there and the panel opens from the "Proxy Panel" menu item instead. Every
-action is on the menu on all platforms for exactly this reason — the click
-gesture is a shortcut, never the only route to a feature.
+What the tray backend actually supports, which is why the menu carries
+everything:
+
+| | macOS / Windows | Linux (AppIndicator) |
+|---|---|---|
+| Menu | yes | yes |
+| Click events (`on_tray_icon_event`) | yes | **never fire** |
+| `set_tooltip` | yes | **silent no-op** |
+| `TrayIcon::rect` | yes | **always `None`** |
+
+Two consequences shape this module.
+
+**Every action is on the menu**, on every platform. The click gesture that
+opens the panel is a shortcut, never the only route to a feature, because on
+Linux there is no click gesture at all.
+
+**The endpoint is a menu item, not just a tooltip.** `set_tooltip` does nothing
+on Linux, so hover text alone would leave the port invisible on exactly the
+platform where the tray is the whole interface. `icon::derive` produces one
+string and `sync` sends it to both, so they cannot disagree.
+
+The panel is also not anchored to the icon on Linux: with no click event there
+is no rectangle to anchor to, and `rect` is `None`. Falling back to the cursor
+would be worse than leaving placement to the window manager — under Wayland
+`cursor_position` returns `(0, 0)` rather than an error, which would throw the
+panel into the top-left corner of the screen. Wayland forbids client-side
+window placement outright, so there is nothing to recover here.
 
 macOS recolours template images for light and dark menu bars. Both icons are
 pure black with the glyph carried entirely by the alpha channel, which is what

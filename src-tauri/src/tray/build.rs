@@ -6,7 +6,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, Tray
 use tauri::{AppHandle, Wry};
 use tracing::error;
 
-use crate::tray::{handlers, ids, window};
+use crate::tray::{handlers, icon, ids, window};
 
 /// Identifier used to look the tray back up via `AppHandle::tray_by_id`.
 pub const TRAY_ID: &str = "gglib";
@@ -21,8 +21,10 @@ pub fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// Items whose enabled state tracks the proxy.
+/// Items whose state tracks the proxy.
 pub struct TrayMenu {
+    /// Disabled header showing where the endpoint is, updated by `tray::sync`.
+    pub status: MenuItem<Wry>,
     pub start_proxy: MenuItem<Wry>,
     pub stop_proxy: MenuItem<Wry>,
     pub copy_proxy_url: MenuItem<Wry>,
@@ -34,6 +36,16 @@ pub struct TrayMenu {
 /// gesture. Linux's AppIndicator delivers no click events at all, so a feature
 /// reachable only by clicking would simply not exist there.
 pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
+    // Disabled: a label, not a command. It carries the endpoint into the one
+    // surface every platform renders — tooltips are a documented no-op on
+    // Linux, so without this the port is simply invisible there.
+    let status = MenuItem::with_id(
+        app,
+        ids::STATUS,
+        icon::derive(false, None).status,
+        false,
+        None::<&str>,
+    )?;
     let open_panel = MenuItem::with_id(app, ids::OPEN_PANEL, "Proxy Panel", true, None::<&str>)?;
     let start_proxy = MenuItem::with_id(app, ids::START_PROXY, "Start Proxy", true, None::<&str>)?;
     let stop_proxy = MenuItem::with_id(app, ids::STOP_PROXY, "Stop Proxy", false, None::<&str>)?;
@@ -51,6 +63,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
     let menu = Menu::with_items(
         app,
         &[
+            &status,
+            &PredefinedMenuItem::separator(app)?,
             &open_panel,
             &PredefinedMenuItem::separator(app)?,
             &start_proxy,
@@ -82,6 +96,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
     Ok((
         tray,
         TrayMenu {
+            status,
             start_proxy,
             stop_proxy,
             copy_proxy_url,

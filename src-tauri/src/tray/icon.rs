@@ -9,8 +9,13 @@
 pub struct TrayVisual {
     /// Whether to use the active (proxy serving) icon rather than the idle one.
     pub active: bool,
-    /// Hover text.
-    pub tooltip: String,
+    /// Hover text, and the label of the menu's status item.
+    ///
+    /// One string for both on purpose. It is the same sentence, and the menu
+    /// is the only place Linux can show it: `set_tooltip` is a documented
+    /// no-op there, so on a machine with no hover text the status item is
+    /// what tells you where the endpoint is.
+    pub status: String,
 }
 
 /// Derive the tray's appearance.
@@ -20,13 +25,13 @@ pub struct TrayVisual {
 /// the tray exists. An icon that lit up merely because gglib was running would
 /// be answering a question nobody asked.
 ///
-/// The tooltip reports where the endpoint is, not what it is doing. Live
+/// The status reports where the endpoint is, not what it is doing. Live
 /// request counts belong to the panel, which subscribes to the proxy's
 /// dashboard stream; the count is not available on this side without
 /// threading the connection registry out of the running proxy.
 #[must_use]
 pub fn derive(proxy_running: bool, port: Option<u16>) -> TrayVisual {
-    let tooltip = if proxy_running {
+    let status = if proxy_running {
         port.map_or_else(
             || "gglib — proxy running".to_owned(),
             |port| format!("gglib — proxy on :{port}"),
@@ -37,7 +42,7 @@ pub fn derive(proxy_running: bool, port: Option<u16>) -> TrayVisual {
 
     TrayVisual {
         active: proxy_running,
-        tooltip,
+        status,
     }
 }
 
@@ -50,17 +55,17 @@ mod tests {
         let visual = derive(false, None);
 
         assert!(!visual.active);
-        assert_eq!(visual.tooltip, "gglib — proxy stopped");
+        assert_eq!(visual.status, "gglib — proxy stopped");
     }
 
     /// The port is the thing a user came to the tray to find out, so it
-    /// belongs in the tooltip rather than only in the popover.
+    /// belongs in the status rather than only in the popover.
     #[test]
     fn running_proxy_reports_its_port() {
         let visual = derive(true, Some(8080));
 
         assert!(visual.active);
-        assert_eq!(visual.tooltip, "gglib — proxy on :8080");
+        assert_eq!(visual.status, "gglib — proxy on :8080");
     }
 
     /// The proxy can be up before its bound port has been recorded; say it is
@@ -70,7 +75,7 @@ mod tests {
         let visual = derive(true, None);
 
         assert!(visual.active);
-        assert_eq!(visual.tooltip, "gglib — proxy running");
+        assert_eq!(visual.status, "gglib — proxy running");
     }
 
     /// A port left over from a previous run must not make a stopped proxy
@@ -80,6 +85,6 @@ mod tests {
         let visual = derive(false, Some(8080));
 
         assert!(!visual.active);
-        assert_eq!(visual.tooltip, "gglib — proxy stopped");
+        assert_eq!(visual.status, "gglib — proxy stopped");
     }
 }
