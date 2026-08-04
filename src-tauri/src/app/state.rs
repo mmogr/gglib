@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use gglib_app_services::{DownloadOps, ProxyOps, ServerOps};
-use gglib_core::services::AppCore;
 use gglib_axum::EmbeddedApiInfo;
 use gglib_axum::sse::SseBroadcaster;
+use gglib_core::services::AppCore;
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
 

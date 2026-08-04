@@ -68,7 +68,11 @@ fn copy_endpoint_url(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
         let port = state.proxy_port.read().await.unwrap_or(8080);
-        emit_or_log(&app, names::MENU_COPY_TO_CLIPBOARD, format!("http://127.0.0.1:{port}/v1"));
+        emit_or_log(
+            &app,
+            names::MENU_COPY_TO_CLIPBOARD,
+            format!("http://127.0.0.1:{port}/v1"),
+        );
     });
 }
 

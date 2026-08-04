@@ -327,7 +327,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 tauri::async_runtime::spawn(async move {
                     *menu_arc.write().await = Some(app_menu);
                 });
-
             }
             Err(e) => {
                 error!(error = %e, "Failed to build app menu");
