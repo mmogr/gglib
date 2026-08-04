@@ -81,6 +81,14 @@ pub(crate) struct AppState {
     /// Application settings, snapshotted so the per-request read does not hit
     /// the database every time. See `settings_cache` module docs.
     pub(crate) settings: Arc<SettingsCache>,
+    /// Fires when `serve` has been asked to shut down.
+    ///
+    /// Only long-lived responses need this, to end themselves instead of
+    /// holding a connection open: `with_graceful_shutdown` waits for every
+    /// in-flight connection to close, so an endless stream stops the server
+    /// from ever returning. Request/response handlers ignore it entirely —
+    /// they finish on their own and the drain takes care of them.
+    shutdown: CancellationToken,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -295,6 +303,7 @@ pub async fn serve(
         council,
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
+        shutdown: cancel.clone(),
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
@@ -490,8 +499,17 @@ async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse
 /// the next tick to see the current state.
 async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoResponse {
     let current = state.dashboard.snapshot();
-    Arc::clone(&state.dashboard.broadcaster)
-        .subscribe_with_hydration(current, SseOptions::default())
+    // Bounded by the shutdown token: this stream is the one response on the
+    // proxy that would otherwise never end, and `with_graceful_shutdown` waits
+    // for every connection to close before `serve` returns. Left unbounded, a
+    // single dashboard subscriber — the tray panel keeps one open the whole
+    // time the proxy runs — stops the proxy from ever stopping cleanly, until
+    // the supervisor gives up and aborts the task.
+    Arc::clone(&state.dashboard.broadcaster).subscribe_with_hydration_until(
+        current,
+        SseOptions::default(),
+        state.shutdown.clone().cancelled_owned(),
+    )
 }
 
 /// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
