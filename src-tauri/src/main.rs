@@ -305,6 +305,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // Before the panel is ever shown, and on the main thread: layer-shell can
+    // only claim a GTK window that has not been realized yet, and the panel is
+    // declared hidden precisely so it still qualifies here.
+    if let Some(panel) = handle.get_webview_window(tray::window::PANEL_LABEL)
+        && !tray::placement::prepare(&panel)
+    {
+        debug!("Tray panel placement left to the compositor");
+    }
+
     // The main window is declared hidden, so something has to show it. Done
     // here rather than in the `autostart::apply` task below because that one
     // also starts the proxy, and the window should not wait behind that.

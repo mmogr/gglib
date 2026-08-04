@@ -15,7 +15,9 @@ a question nobody asked.
 - `icon` — pure `MenuState` → icon/tooltip derivation, unit-tested without a running app
 - `build` — tray icon, menu and click behaviour
 - `handlers` — thin dispatch to `proxy_actions`, `window` and `lifecycle`
-- `window` — showing, hiding and positioning the panel
+- `window` — showing and hiding the panel and the main window
+- `placement` — where the panel appears; the only module that branches on platform
+- `layer_shell` — Linux-only Wayland placement, loaded at runtime
 
 State is applied by `sync`, which is called from `menu::state_sync::sync_all_state`
 rather than directly, so the tray cannot fall out of step with the macOS
@@ -89,12 +91,43 @@ on Linux, so hover text alone would leave the port invisible on exactly the
 platform where the tray is the whole interface. `icon::derive` produces one
 string and `sync` sends it to both, so they cannot disagree.
 
-The panel is also not anchored to the icon on Linux: with no click event there
-is no rectangle to anchor to, and `rect` is `None`. Falling back to the cursor
-would be worse than leaving placement to the window manager — under Wayland
-`cursor_position` returns `(0, 0)` rather than an error, which would throw the
-panel into the top-left corner of the screen. Wayland forbids client-side
-window placement outright, so there is nothing to recover here.
+## Where the panel appears
+
+Three different mechanisms, one per session type, all behind `placement`:
+
+| Session | Mechanism | Result |
+|---|---|---|
+| macOS / Windows | `set_position` from the click's `rect` | Directly under the icon |
+| Wayland + `zwlr_layer_shell_v1` | `layer_shell`, anchored bottom-right | Beside the system tray |
+| X11, or Wayland without the protocol | none | Wherever the compositor decides |
+
+`place` is called with an [`placement::Anchor`] describing *what the caller knows*
+— a rectangle, or nothing — rather than with coordinates, because what is
+knowable differs per platform. Linux reports `Unknown`: no click event fires and
+`rect` is always `None`.
+
+Guessing is deliberately avoided. `cursor_position` looks like a fallback but
+returns `(0, 0)` on Wayland rather than failing, so anchoring to it would fling
+the panel into the corner of the screen.
+
+Wayland forbids a client from placing its own toplevels, which is why the
+Wayland path is not `set_position` at all: `zwlr_layer_shell_v1` positions a
+surface by anchoring it to screen edges and pushing it away with margins. The
+anchor is set once at startup rather than per-toggle, because the system tray
+does not move.
+
+`libgtk-layer-shell` is **loaded at runtime, not linked**. Linking would make it
+a launch requirement for every Linux user, including X11 users who gain nothing
+from it. Absent library or absent protocol — Mutter does not implement it —
+means `prepare` reports `false` and the panel simply keeps the compositor's
+placement. `gglib config check-deps` lists it as optional and names the right
+package per distribution.
+
+The timing is not incidental: `gtk_layer_init_for_window` has to run before the
+window is realized, and the panel is declared `"visible": false`, so tao calls
+`hide()` rather than `show_all()` on it and it stays unrealized until first
+shown. That is why `prepare` is called from `setup_app` — on the main thread,
+where GTK requires it — rather than on the first toggle.
 
 macOS recolours template images for light and dark menu bars. Both icons are
 pure black with the glyph carried entirely by the alpha channel, which is what

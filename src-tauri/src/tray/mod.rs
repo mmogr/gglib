@@ -3,6 +3,9 @@ mod build;
 mod handlers;
 mod icon;
 mod ids;
+#[cfg(target_os = "linux")]
+mod layer_shell;
+pub mod placement;
 pub mod window;
 
 pub use build::{TRAY_ID, TrayMenu, build};

@@ -1980,6 +1980,8 @@ dependencies = [
  "gglib-mcp",
  "gglib-runtime",
  "gglib-tauri",
+ "gtk",
+ "libloading",
  "open",
  "reqwest 0.13.4",
  "serde",

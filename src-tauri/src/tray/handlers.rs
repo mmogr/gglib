@@ -14,6 +14,7 @@ use crate::app::AppState;
 use crate::app::events::{emit_or_log, names};
 use crate::lifecycle;
 use crate::proxy_actions;
+use crate::tray::placement::Anchor;
 use crate::tray::{ids, window};
 
 /// Route a tray menu click.
@@ -22,7 +23,11 @@ pub fn handle(app: &AppHandle, event: MenuEvent) {
     debug!(tray_id = %id, "Tray menu event received");
 
     match id {
-        ids::OPEN_PANEL => spawn_ui(app.clone(), |app| window::toggle_panel(&app, None)),
+        ids::OPEN_PANEL => {
+            spawn_ui(app.clone(), |app| {
+                window::toggle_panel(&app, Anchor::Unknown)
+            });
+        }
         ids::OPEN_MAIN => spawn_ui(app.clone(), |app| window::show_main(&app)),
         ids::START_PROXY => spawn_proxy(app.clone(), true),
         ids::STOP_PROXY => spawn_proxy(app.clone(), false),

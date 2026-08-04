@@ -6,6 +6,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, Tray
 use tauri::{AppHandle, Wry};
 use tracing::error;
 
+use crate::tray::placement::Anchor;
 use crate::tray::{handlers, icon, ids, window};
 
 /// Identifier used to look the tray back up via `AppHandle::tray_by_id`.
@@ -120,7 +121,7 @@ fn on_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
     };
 
     let app = tray.app_handle();
-    if let Err(e) = window::toggle_panel(app, Some(rect)) {
+    if let Err(e) = window::toggle_panel(app, Anchor::Rect(rect)) {
         error!(error = %e, "Failed to open tray panel");
     }
 }

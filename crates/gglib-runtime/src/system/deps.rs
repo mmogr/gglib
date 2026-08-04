@@ -145,6 +145,16 @@ pub fn check_libappindicator() -> Option<String> {
     check_pkg_config_lib("appindicator3-0.1")
 }
 
+/// Check if gtk-layer-shell is installed.
+///
+/// Optional, unlike the rest of this module: without it the tray panel opens
+/// wherever the compositor puts it instead of beside the system tray, which is
+/// a worse panel rather than a broken build.
+#[cfg(target_os = "linux")]
+pub fn check_gtk_layer_shell() -> Option<String> {
+    check_pkg_config_lib("gtk-layer-shell-0")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

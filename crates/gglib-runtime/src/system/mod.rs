@@ -19,8 +19,8 @@ use commands::{
 use deps::check_libssl;
 #[cfg(target_os = "linux")]
 use deps::{
-    check_libappindicator, check_libasound, check_libclang, check_libcurl, check_librsvg,
-    check_libsqlite3, check_webkit2gtk,
+    check_gtk_layer_shell, check_libappindicator, check_libasound, check_libclang, check_libcurl,
+    check_librsvg, check_libsqlite3, check_webkit2gtk,
 };
 use gpu::{detect_gpu_info, get_system_memory_info};
 
@@ -121,6 +121,23 @@ fn hosted_dep(
 ) -> Dependency {
     Dependency::required(name, description)
         .with_hint(url)
+        .with_status(version.map_or(DependencyStatus::Missing, |version| {
+            DependencyStatus::Present { version }
+        }))
+}
+
+/// A dependency whose absence degrades a feature rather than breaking the build.
+///
+/// Reported so `check-deps` can name it and give the right install command, but
+/// marked optional so a missing one is not a failure.
+fn optional_dep(
+    name: &'static str,
+    description: &'static str,
+    distro: LinuxDistro,
+    version: Option<String>,
+) -> Dependency {
+    Dependency::optional(name, description)
+        .with_hint(hint_for(name, distro))
         .with_status(version.map_or(DependencyStatus::Missing, |version| {
             DependencyStatus::Present { version }
         }))
@@ -270,6 +287,12 @@ impl SystemProbePort for DefaultSystemProbe {
                     "Required for Tauri system tray support",
                     distro,
                     check_libappindicator(),
+                ),
+                optional_dep(
+                    "gtk-layer-shell",
+                    "Anchors the tray panel beside the system tray on Wayland",
+                    distro,
+                    check_gtk_layer_shell(),
                 ),
                 system_dep(
                     "libasound2-dev",

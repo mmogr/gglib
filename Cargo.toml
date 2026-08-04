@@ -88,6 +88,12 @@ tauri-plugin-autostart = "2"
 dotenvy = "0.15"
 open = "5"
 
+# Linux tray panel placement. Versions match what Tauri already resolves, so
+# these add no new copies to the tree; `gtk` in particular must stay in step
+# with Tauri's or the GtkWindow types will not unify.
+gtk = "0.18"
+libloading = "0.7"
+
 # System info
 sysinfo = "0.37"
 

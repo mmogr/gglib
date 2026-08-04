@@ -215,6 +215,19 @@ const PACKAGES: &[(&str, PackageNames)] = &[
         },
     ),
     (
+        // Optional, unlike its neighbours here: the tray panel is loaded at
+        // runtime and falls back to compositor placement when this is absent,
+        // so a missing entry degrades the panel's position rather than the app.
+        "gtk-layer-shell",
+        PackageNames {
+            debian: "libgtk-layer-shell-dev",
+            fedora: "gtk-layer-shell-devel",
+            arch: "gtk-layer-shell",
+            suse: "gtk-layer-shell-devel",
+            generic: "gtk-layer-shell",
+        },
+    ),
+    (
         "libasound2-dev",
         PackageNames {
             debian: "libasound2-dev",
@@ -485,6 +498,24 @@ SUPPORT_URL=\"https://example.org/research/support\"
         assert_eq!(
             install_hint("libappindicator-gtk3", LinuxDistro::Arch).as_deref(),
             Some("pacman -S libayatana-appindicator")
+        );
+    }
+
+    /// The panel-placement library is packaged under four different names, and
+    /// the Arch one is the reason this row exists at all.
+    #[test]
+    fn gtk_layer_shell_resolves_on_every_family() {
+        assert_eq!(
+            install_hint("gtk-layer-shell", LinuxDistro::Arch).as_deref(),
+            Some("pacman -S gtk-layer-shell")
+        );
+        assert_eq!(
+            install_hint("gtk-layer-shell", LinuxDistro::Debian).as_deref(),
+            Some("apt install libgtk-layer-shell-dev")
+        );
+        assert_eq!(
+            install_hint("gtk-layer-shell", LinuxDistro::Fedora).as_deref(),
+            Some("dnf install gtk-layer-shell-devel")
         );
     }
 
