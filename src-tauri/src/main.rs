@@ -170,14 +170,15 @@ fn main() {
                 let app_handle = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if close_to_tray_enabled(&app_handle).await {
+                        // Nothing is torn down here on purpose: the embedded
+                        // API server has to outlive the window, or the tray
+                        // panel would be left talking to a dead port.
                         info!("Window closed to tray - proxy left running");
                         return;
                     }
 
                     info!("Window close requested - performing graceful shutdown");
-                    let state: tauri::State<AppState> = app_handle.state();
-                    lifecycle::perform_shutdown(&state).await;
-                    app_handle.exit(0);
+                    lifecycle::request_shutdown(&app_handle);
                 });
             }
             // Dismiss the panel when it loses focus, the way a menu does.
@@ -217,6 +218,15 @@ fn main() {
         .run(|app_handle, event| {
             match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
+                    // The exit `request_shutdown` itself asks for comes back
+                    // through here. Preventing that one is what used to strand
+                    // the app: alive, but with its embedded API server already
+                    // aborted, so every window's HTTP call failed from then on.
+                    if !lifecycle::should_prevent_exit(lifecycle::is_shutting_down()) {
+                        info!("Shutdown complete - letting the app exit");
+                        return;
+                    }
+
                     info!("App exit requested (Cmd+Q) - performing graceful shutdown");
                     api.prevent_exit();
 
@@ -225,13 +235,7 @@ fn main() {
                         let _ = window.hide();
                     }
 
-                    let handle_for_exit = app_handle.clone();
-
-                    tauri::async_runtime::spawn(async move {
-                        let state: tauri::State<AppState> = handle_for_exit.state();
-                        lifecycle::perform_shutdown(&state).await;
-                        handle_for_exit.exit(0);
-                    });
+                    lifecycle::request_shutdown(app_handle);
                 }
                 // Dock icon clicked with no window on screen: bring it back
                 // rather than leaving the click doing nothing.

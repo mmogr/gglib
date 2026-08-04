@@ -187,7 +187,7 @@ The Rust backend is organized into three main modules:
 | Module | Purpose | Key Components |
 |--------|---------|----------------|
 | **app/** | Central state & event infrastructure | `AppState` (managed state), `BackgroundTasks` (task handles), `emit_or_log()` (event helper), event constants |
-| **lifecycle.rs** | Application startup & hardened shutdown | `perform_shutdown()` (10s watchdog), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
+| **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
 | **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, `sync_all_state` (drives both the menu and the tray) |
 | **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `window` (panel show/hide/position) |
 | **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; publishes state and broadcasts the lifecycle event the HTTP handler would have |

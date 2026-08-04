@@ -12,6 +12,7 @@ use tracing::{debug, error};
 
 use crate::app::AppState;
 use crate::app::events::{emit_or_log, names};
+use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::{ids, window};
 
@@ -114,8 +115,8 @@ fn confirm_quit(app: &AppHandle) {
             }
         }
 
-        // Goes through the normal exit path so lifecycle::perform_shutdown
-        // still runs, taking llama-server down with it.
-        app.exit(0);
+        // The same entry point Cmd+Q and window close use, so there is exactly
+        // one shutdown sequence however the user asked to quit.
+        lifecycle::request_shutdown(&app);
     });
 }

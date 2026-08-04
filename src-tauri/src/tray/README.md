@@ -26,6 +26,18 @@ for the frontend to act on, the way the application menu does. The tray is
 reachable when no window is visible and during autostart before any webview
 exists, so it cannot assume something is loaded and listening.
 
+Quit goes through [`crate::lifecycle::request_shutdown`], the same entry point
+Cmd+Q and window close use, so there is exactly one shutdown sequence however
+the user asked to quit.
+
+## What the panel depends on staying alive
+
+The panel reaches the backend over HTTP, through the embedded Axum server the
+main window uses. That server has to outlive the window: closing to the tray
+must hide it and tear down nothing, or the panel is left holding a dead port
+and every button on it fails. `lifecycle::request_shutdown` is therefore the
+*only* thing that runs cleanup, and close-to-tray never calls it.
+
 ## Platform differences
 
 Linux's AppIndicator delivers no click events, so `on_tray_icon_event` never
