@@ -51,11 +51,19 @@ pub const fn should_start_hidden(
     launched_by_login_item && matches!(close_to_tray, Some(true)) && tray_available
 }
 
-/// Show the main window, unless this launch belongs in the menu bar.
+/// Hide the main window when this launch belongs in the menu bar.
 ///
-/// The window is declared `"visible": false` so this decision is made before
-/// anything is drawn. The alternative — showing then hiding — is a window that
-/// appears and is snatched away at every login.
+/// Hides rather than shows, which is the opposite of the obvious design and is
+/// load-bearing on Wayland. A window created hidden and shown later never gets
+/// a correct `xdg_surface` configure round-trip from KWin, so its server-side
+/// titlebar buttons are dead until a resize forces one — the app looks broken
+/// on every ordinary launch to buy tidiness on the rare automatic one.
+///
+/// Declaring it visible and hiding it here costs nothing, because nothing has
+/// been drawn yet either way: `tauri::app::setup` creates the config windows
+/// immediately before calling this hook, both inside `build()`, and GTK only
+/// completes a queued map once `run()` pumps the event loop. So the window is
+/// still unmapped at this point and hiding it cancels the map outright.
 pub async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
     let state = app.state::<AppState>();
 
@@ -71,15 +79,23 @@ pub async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
         }
     };
 
-    if should_start_hidden(launched_by_login_item(), close_to_tray, tray_available) {
-        dock::hide(app);
-        info!("Launched at login with close-to-tray - starting in the menu bar");
+    if !should_start_hidden(launched_by_login_item(), close_to_tray, tray_available) {
         return;
     }
 
-    if let Err(e) = tray::window::show_main(app) {
-        error!(error = %e, "Failed to show the main window");
+    dock::hide(app);
+
+    if let Some(main) = app.get_webview_window(tray::window::MAIN_LABEL)
+        && let Err(e) = main.hide()
+    {
+        // Left visible on failure, deliberately: a window nobody asked for is a
+        // papercut, and this is the branch where the alternative is an app with
+        // no window and no way to tell something went wrong.
+        error!(error = %e, "Could not hide the main window; leaving it visible");
+        return;
     }
+
+    info!("Launched at login with close-to-tray - starting in the menu bar");
 }
 
 /// Bring the proxy up when `proxy_autostart` is set, and register or

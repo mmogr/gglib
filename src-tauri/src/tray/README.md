@@ -58,9 +58,22 @@ the only way back, and two rules follow from that:
   terminal, so `autostart::should_start_hidden` requires all three conditions
   and everything else shows the window.
 
-That last rule is why the main window is declared `"visible": false` in
-`tauri.conf.json`: the decision is made once, before anything is drawn, instead
-of showing a window at every login only to snatch it away.
+The main window is nonetheless declared **visible**, and
+`autostart::apply_initial_visibility` *hides* it for the login case rather than
+showing it for every other one. That is the opposite of the obvious design and
+it is load-bearing: a window created hidden and shown later never gets a correct
+`xdg_surface` configure round-trip from KWin, leaving its server-side titlebar
+buttons dead until a resize forces one. Declaring it hidden made every ordinary
+launch look broken in order to tidy up the rare automatic one.
+
+Hiding it in the setup hook costs nothing, because nothing has been drawn yet
+either way. `tauri::app::setup` creates the config windows immediately before
+calling that hook, both inside `build()`, and GTK only completes a queued map
+once `run()` pumps the event loop — so the window is still unmapped and hiding
+it cancels the map outright.
+
+The tray panel keeps `"visible": false`, for an unrelated reason that is just as
+load-bearing: layer-shell can only claim a window that has not been realized.
 
 Only the Dock half is macOS-specific — [`crate::dock`] compiles to no-ops
 elsewhere, because a taskbar entry belongs to a window rather than to the
