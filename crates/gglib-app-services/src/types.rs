@@ -476,7 +476,11 @@ pub struct ModelsDirectoryInfo {
 }
 
 /// Application settings for the settings UI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` is "nothing configured" — every field is optional, so it stands
+/// for a fresh install with no saved values, which is what callers resolving
+/// their own fallbacks need to test against.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub default_download_path: Option<String>,

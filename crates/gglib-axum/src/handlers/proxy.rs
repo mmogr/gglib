@@ -3,6 +3,7 @@
 use axum::{Json, extract::State};
 
 use crate::{error::HttpError, state::AppState};
+use gglib_app_services::types::AppSettings;
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::settings::DEFAULT_PROXY_PORT;
@@ -67,11 +68,19 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
     to_api_status(s)
 }
 
-/// Convert handler config to runtime config with defaults.
-fn to_runtime_config(cfg: &StartProxyConfig, settings_default: Option<u64>) -> RuntimeProxyConfig {
+/// Convert handler config to runtime config, resolving anything omitted from
+/// the user's saved settings.
+///
+/// An omitted field means "use what is configured", not "use the compile-time
+/// default" — a caller that sends no port, as the tray panel does, must land on
+/// the same port as the desktop app, `gglib proxy` and
+/// `ProxyOps::ensure_running`. Going straight to `DEFAULT_PROXY_PORT` here
+/// would silently ignore a changed `proxy_port` for every client of this
+/// endpoint.
+fn to_runtime_config(cfg: &StartProxyConfig, settings: &AppSettings) -> RuntimeProxyConfig {
     let default_context = resolve_context_size(&ServerConfigOptions {
         context_size: cfg.default_context,
-        global_default_ctx: settings_default,
+        global_default_ctx: settings.default_context_size,
         ..Default::default()
     });
 
@@ -89,7 +98,11 @@ fn to_runtime_config(cfg: &StartProxyConfig, settings_default: Option<u64>) -> R
 
     RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
-        port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
+        // Same fallback chain as `Settings::effective_proxy_port`.
+        port: cfg
+            .port
+            .or(settings.proxy_port)
+            .unwrap_or(DEFAULT_PROXY_PORT),
         default_context,
         cache_enabled,
         slot_dir,
@@ -112,7 +125,7 @@ pub async fn start(
     // Resolve context size through the shared 3-level fallback chain
     // (flag > settings default > hard-coded default), matching CLI behavior.
     let settings = state.settings.get().await?;
-    let runtime_cfg = to_runtime_config(&cfg, settings.default_context_size);
+    let runtime_cfg = to_runtime_config(&cfg, &settings);
 
     // Idempotent: if already running (Conflict), treat as success
     match state.proxy.start(runtime_cfg).await {
@@ -164,12 +177,48 @@ pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, Ht
 mod tests {
     use super::*;
 
+    /// An omitted port must come from settings, not from the compile-time
+    /// default. The tray panel sends no port at all, and starting it on 8080
+    /// while every other surface used the configured port is exactly the
+    /// split-brain this endpoint has to avoid.
+    #[test]
+    fn an_omitted_port_comes_from_settings() {
+        let settings = AppSettings {
+            proxy_port: Some(18080),
+            ..AppSettings::default()
+        };
+        let runtime_cfg = to_runtime_config(&StartProxyConfig::default(), &settings);
+        assert_eq!(runtime_cfg.port, 18080);
+    }
+
+    /// An explicit port still wins: settings are the fallback, not an override.
+    #[test]
+    fn an_explicit_port_beats_the_setting() {
+        let settings = AppSettings {
+            proxy_port: Some(18080),
+            ..AppSettings::default()
+        };
+        let cfg = StartProxyConfig {
+            port: Some(9999),
+            ..Default::default()
+        };
+        assert_eq!(to_runtime_config(&cfg, &settings).port, 9999);
+    }
+
+    /// With neither a request port nor a saved one, the hard-coded default is
+    /// still the floor.
+    #[test]
+    fn no_port_anywhere_falls_back_to_the_default() {
+        let runtime_cfg = to_runtime_config(&StartProxyConfig::default(), &AppSettings::default());
+        assert_eq!(runtime_cfg.port, DEFAULT_PROXY_PORT);
+    }
+
     /// Omitting `cache` must mean disabled, matching the CLI's own default —
     /// and, with cache off, no slot dir even if one were supplied.
     #[test]
     fn cache_omitted_defaults_to_disabled() {
         let cfg = StartProxyConfig::default();
-        let runtime_cfg = to_runtime_config(&cfg, None);
+        let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
         assert!(!runtime_cfg.cache_enabled);
         assert_eq!(runtime_cfg.slot_dir, None);
     }
@@ -184,7 +233,7 @@ mod tests {
             slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None);
+        let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
         assert!(!runtime_cfg.cache_enabled);
         assert_eq!(runtime_cfg.slot_dir, None);
     }
@@ -199,7 +248,7 @@ mod tests {
             slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None);
+        let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
         assert!(runtime_cfg.cache_enabled);
         assert_eq!(
             runtime_cfg.slot_dir,
@@ -217,7 +266,7 @@ mod tests {
             cache: Some(true),
             ..Default::default()
         };
-        let runtime_cfg = to_runtime_config(&cfg, None);
+        let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
         assert!(runtime_cfg.cache_enabled);
         assert_eq!(
             runtime_cfg.slot_dir,
@@ -230,7 +279,11 @@ mod tests {
     #[test]
     fn default_context_falls_through_to_settings() {
         let cfg = StartProxyConfig::default();
-        let runtime_cfg = to_runtime_config(&cfg, Some(16_384));
+        let settings = AppSettings {
+            default_context_size: Some(16_384),
+            ..AppSettings::default()
+        };
+        let runtime_cfg = to_runtime_config(&cfg, &settings);
         assert_eq!(runtime_cfg.default_context, 16_384);
     }
 }
