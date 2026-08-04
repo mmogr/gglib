@@ -44,7 +44,8 @@ export const DesktopSettings: FC<DesktopSettingsProps> = ({ values, onChange, sa
       disabled={saving}
     >
       Closing the window hides gglib to the system tray instead of quitting, leaving the proxy
-      serving. Quit explicitly from the tray menu to stop it.
+      serving. Quit explicitly from the tray menu to stop it. On macOS it also leaves the Dock
+      and the app switcher while hidden, so the menu bar icon is the way back.
     </ToggleField>
 
     <ToggleField

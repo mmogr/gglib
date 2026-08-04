@@ -38,6 +38,23 @@ must hide it and tear down nothing, or the panel is left holding a dead port
 and every button on it fails. `lifecycle::request_shutdown` is therefore the
 *only* thing that runs cleanup, and close-to-tray never calls it.
 
+## Menu-bar-only mode on macOS
+
+With `close_to_tray` on, closing the window also drops gglib out of the Dock —
+[`crate::dock`] switches the activation policy to `Accessory` — and `show_main`
+puts it back. Otherwise the app reads as one you merely hid, rather than the
+background service it is.
+
+An `Accessory` app leaves the **Cmd+Tab switcher** as well as the Dock; macOS
+offers no way to have one without the other. So while hidden, the tray icon is
+the only way back, which is why the Dock icon is restored in `window::show_main`
+— the single chokepoint every route back shares — rather than at each of its
+callers.
+
+None of this applies off macOS, where [`crate::dock`] compiles to no-ops. A
+taskbar entry belongs to a window rather than to the process, so hiding the
+window has already removed it and there is nothing left to hide.
+
 ## Platform differences
 
 Linux's AppIndicator delivers no click events, so `on_tray_icon_event` never

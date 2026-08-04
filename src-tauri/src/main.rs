@@ -4,6 +4,7 @@
 mod app;
 mod autostart;
 mod commands;
+mod dock;
 mod lifecycle;
 mod menu;
 mod proxy_actions;
@@ -173,6 +174,11 @@ fn main() {
                         // Nothing is torn down here on purpose: the embedded
                         // API server has to outlive the window, or the tray
                         // panel would be left talking to a dead port.
+                        //
+                        // The window is already hidden, so dropping out of the
+                        // Dock now leaves gglib living entirely in the menu
+                        // bar rather than looking like an app with no windows.
+                        dock::hide(&app_handle);
                         info!("Window closed to tray - proxy left running");
                         return;
                     }

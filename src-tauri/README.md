@@ -129,6 +129,7 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/tray/`: System tray icon, menu and popover panel (all platforms)
   - `src/proxy_actions.rs`: Proxy start/stop shared by the tray and autostart
   - `src/autostart.rs`: Always-on proxy startup and OS login-item registration
+  - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
 
@@ -192,6 +193,7 @@ The Rust backend is organized into three main modules:
 | **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `window` (panel show/hide/position) |
 | **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; publishes state and broadcasts the lifecycle event the HTTP handler would have |
 | **autostart.rs** | Always-on proxy settings | `proxy_autostart` startup, `start_at_login` login item |
+| **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
 | **commands/** | 6 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management) |
 
 ### Communication Flow
