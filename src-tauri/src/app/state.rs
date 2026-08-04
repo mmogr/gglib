@@ -5,10 +5,13 @@ use std::sync::Arc;
 use gglib_app_services::{DownloadOps, ProxyOps, ServerOps};
 use gglib_core::services::AppCore;
 use gglib_axum::EmbeddedApiInfo;
+use gglib_axum::sse::SseBroadcaster;
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
 
+#[cfg(target_os = "macos")]
 use crate::menu::AppMenu;
+use crate::tray::TrayMenu;
 
 /// Application state with shared backend.
 ///
@@ -26,8 +29,14 @@ pub struct AppState {
     pub core: Arc<AppCore>,
     /// Embedded API server info (port and auth token)
     pub embedded_api: EmbeddedApiInfo,
-    /// Menu state for dynamic updates
+    /// Lifecycle event broadcaster, shared with the embedded Axum server so
+    /// proxy changes driven from the tray still reach the UI.
+    pub sse: Arc<SseBroadcaster>,
+    /// Menu state for dynamic updates (macOS application menu only)
+    #[cfg(target_os = "macos")]
     pub menu: Arc<RwLock<Option<AppMenu>>>,
+    /// Tray menu items whose enabled state tracks the proxy
+    pub tray_menu: Arc<RwLock<Option<TrayMenu>>>,
     /// Currently selected model ID (for menu state sync)
     pub selected_model_id: Arc<RwLock<Option<i64>>>,
     /// Proxy server enabled state (for menu sync)
@@ -54,6 +63,7 @@ impl AppState {
         proxy: Arc<ProxyOps>,
         core: Arc<AppCore>,
         embedded_api: EmbeddedApiInfo,
+        sse: Arc<SseBroadcaster>,
     ) -> Self {
         Self {
             servers,
@@ -61,7 +71,10 @@ impl AppState {
             proxy,
             core,
             embedded_api,
+            sse,
+            #[cfg(target_os = "macos")]
             menu: Arc::new(RwLock::new(None)),
+            tray_menu: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),
             proxy_enabled: Arc::new(RwLock::new(false)),
             proxy_port: Arc::new(RwLock::new(None)),

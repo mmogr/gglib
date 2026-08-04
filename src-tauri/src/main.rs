@@ -6,6 +6,8 @@ mod autostart;
 mod commands;
 mod lifecycle;
 mod menu;
+mod proxy_actions;
+mod tray;
 
 use app::AppState;
 use app::events::{emit_or_log, names};
@@ -14,8 +16,7 @@ use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_download::cli_exec::preflight_fast_helper;
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
-#[cfg(target_os = "macos")]
-use menu::state_sync::sync_menu_state_or_log;
+use menu::state_sync::sync_all_state_logged;
 use std::sync::Arc;
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
@@ -48,6 +49,10 @@ fn main() {
                 bootstrap(config, app_handle).await
             }).expect("Failed to bootstrap application");
 
+            // Shared with AppState so proxy changes driven from the tray
+            // broadcast the same lifecycle events an HTTP call would.
+            let sse = Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults());
+
             // Build AxumContext for the embedded server using the 7 domain ops from ctx
             let axum_ctx = gglib_axum::AxumContext {
                 models: ctx.models.clone(),
@@ -60,7 +65,7 @@ fn main() {
                 core: ctx.app.clone(),
                 mcp: ctx.mcp.clone(),
                 hf_client: ctx.hf_client.clone(),
-                sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
+                sse: sse.clone(),
                 http_client: reqwest::Client::new(),
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
                 approval_registry: ctx.approval_registry.clone(),
@@ -90,6 +95,7 @@ fn main() {
                 ctx.proxy.clone(),
                 ctx.app.clone(),
                 embedded_api,
+                sse,
             );
 
             // Store the embedded server handle for cleanup
@@ -146,22 +152,41 @@ fn main() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                info!("Window close requested - performing graceful shutdown");
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
 
-                // Hide window immediately so user sees instant feedback
+                // The panel is a popover, not a window anyone closes on
+                // purpose; hide it and leave the app alone.
+                if window.label() == tray::window::PANEL_LABEL {
+                    let _ = window.hide();
+                    return;
+                }
+
+                // Hide immediately either way, so the click feels instant
+                // whether it ends in a shutdown or not.
                 let _ = window.hide();
 
                 let app_handle = window.app_handle().clone();
-
                 tauri::async_runtime::spawn(async move {
+                    if close_to_tray_enabled(&app_handle).await {
+                        info!("Window closed to tray - proxy left running");
+                        return;
+                    }
+
+                    info!("Window close requested - performing graceful shutdown");
                     let state: tauri::State<AppState> = app_handle.state();
                     lifecycle::perform_shutdown(&state).await;
                     app_handle.exit(0);
                 });
             }
+            // Dismiss the panel when it loses focus, the way a menu does.
+            tauri::WindowEvent::Focused(false)
+                if window.label() == tray::window::PANEL_LABEL =>
+            {
+                let _ = window.hide();
+            }
+            _ => {}
         })
         ;
 
@@ -208,6 +233,14 @@ fn main() {
                         handle_for_exit.exit(0);
                     });
                 }
+                // Dock icon clicked with no window on screen: bring it back
+                // rather than leaving the click doing nothing.
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => {
+                    if let Err(e) = tray::window::show_main(app_handle) {
+                        error!(error = %e, "Failed to reopen main window");
+                    }
+                }
                 tauri::RunEvent::Exit => {
                     // This is called after ExitRequested completes, or if the process exits unexpectedly
                     info!("App exiting");
@@ -217,9 +250,55 @@ fn main() {
         });
 }
 
+/// Whether closing the window should hide to the tray instead of quitting.
+///
+/// Read at close time rather than cached at startup, so toggling the setting
+/// takes effect on the very next close.
+async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
+    let state: tauri::State<AppState> = app.state();
+    match state.core.settings().get().await {
+        Ok(settings) => settings.close_to_tray == Some(true),
+        Err(e) => {
+            // Falling back to quitting keeps the historical behaviour; a
+            // hidden window with no way back would be worse.
+            error!(error = %e, "Could not read close_to_tray; quitting instead");
+            false
+        }
+    }
+}
+
 /// Application setup hook.
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
+
+    // Build the tray before the menu: on Linux and Windows it is the only
+    // persistent UI once the window is hidden.
+    match tray::build(&handle) {
+        Ok((_tray, tray_menu)) => {
+            info!("System tray initialized");
+            let state: tauri::State<AppState> = app.state();
+            let slot = state.tray_menu.clone();
+            tauri::async_runtime::spawn(async move {
+                *slot.write().await = Some(tray_menu);
+            });
+        }
+        Err(e) => {
+            // A missing tray is a degraded app, not a broken one: the window
+            // still works, so log and carry on rather than refusing to start.
+            error!(error = %e, "Failed to build system tray");
+        }
+    }
+
+    // Initial paint for every surface. Runs on all platforms: even where
+    // there is no application menu, the tray still needs its first sync.
+    {
+        let handle_for_sync = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            let state: tauri::State<AppState> = handle_for_sync.state();
+            sync_all_state_logged(&handle_for_sync, &state).await;
+        });
+    }
 
     // Open devtools for debugging (Tauri 2.x always includes devtools in debug builds)
     #[cfg(debug_assertions)]
@@ -249,13 +328,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     *menu_arc.write().await = Some(app_menu);
                 });
 
-                // Perform initial menu state sync
-                let handle_clone = handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let state: tauri::State<AppState> = handle_clone.state();
-                    sync_menu_state_or_log(&handle_clone, &state).await;
-                });
             }
             Err(e) => {
                 error!(error = %e, "Failed to build app menu");

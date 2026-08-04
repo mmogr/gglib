@@ -1,43 +1,58 @@
-//! Menu state synchronization.
+//! Menu and tray state synchronization.
 //!
-//! This module is the single owner of menu sync logic.
-//! All menu state updates flow through `sync_menu_state_internal`.
+//! This module is the single owner of state sync. Everything that changes
+//! something a user can see in the application menu or the tray funnels
+//! through [`sync_all_state`], so there is one place that decides what the app
+//! currently looks like.
+//!
+//! Two surfaces with different lifetimes: the application menu exists on macOS
+//! only, while the tray runs everywhere. Rather than build one combined state
+//! object and leave half of it unread on Linux, each surface gathers what it
+//! needs — the shared part is just the proxy, which is all the tray displays.
 
 use crate::app::AppState;
-use crate::menu::MenuState;
-use gglib_runtime::llama::check_llama_installed;
+use crate::tray;
 use tauri::AppHandle;
-#[cfg(target_os = "macos")]
 use tracing::warn;
 
-/// Sync menu state based on current application state.
+/// Sync every surface that displays application state.
 ///
-/// This is the single source of truth for menu state synchronization.
-/// Called by:
-/// - `commands::util::sync_menu_state` (Tauri command)
-/// - `commands::util::set_selected_model` (after model selection)
-/// - Menu handlers (after proxy toggle)
-/// - App setup (initial sync)
-pub async fn sync_menu_state_internal(
-    _app: &AppHandle,
+/// Called by `commands::util` (frontend-driven changes), `proxy_actions`
+/// (tray- and autostart-driven changes), and app setup for the initial paint.
+pub async fn sync_all_state(
+    app: &AppHandle,
     state: &tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    let proxy_running = *state.proxy_enabled.read().await;
+    let proxy_port = *state.proxy_port.read().await;
+
+    sync_app_menu(state, proxy_running).await?;
+    tray::sync(app, proxy_running, proxy_port).await?;
+
+    Ok(())
+}
+
+/// Apply state to the macOS application menu.
+///
+/// Gathers the model and llama.cpp state the menu needs but the tray does not,
+/// so those reads do not happen on platforms with no menu to show them in.
+#[cfg(target_os = "macos")]
+async fn sync_app_menu(
+    state: &tauri::State<'_, AppState>,
+    proxy_running: bool,
+) -> Result<(), String> {
+    use crate::menu::MenuState;
+    use gglib_runtime::llama::check_llama_installed;
+
     let menu_guard = state.menu.read().await;
     let Some(menu) = menu_guard.as_ref() else {
-        // Menu not yet initialized, skip
+        // Menu not built yet; the initial sync in setup will cover it.
         return Ok(());
     };
 
-    // Gather current state
-    let llama_installed = check_llama_installed();
-
-    // Get real proxy state from app state
-    let proxy_running = *state.proxy_enabled.read().await;
-
     let selected_id = *state.selected_model_id.read().await;
-    let model_selected = selected_id.is_some();
 
-    // Check if selected model has a running server
+    // A selected model with a running server enables Stop rather than Start.
     let selected_model_server_active = if let Some(id) = selected_id {
         let servers = state.servers.list_servers().await;
         servers.iter().any(|s| s.model_id == id)
@@ -45,32 +60,31 @@ pub async fn sync_menu_state_internal(
         false
     };
 
-    let menu_state = MenuState {
-        llama_installed,
+    menu.sync_state(&MenuState {
+        llama_installed: check_llama_installed(),
         proxy_running,
-        model_selected,
+        model_selected: selected_id.is_some(),
         selected_model_server_active,
-    };
+    })
+    .map_err(|e| format!("Failed to sync menu state: {e}"))
+}
 
-    // Update menu items
-    menu.sync_state(&menu_state)
-        .map_err(|e| format!("Failed to sync menu state: {}", e))?;
-
+/// No application menu exists off macOS — the other platforms are given an
+/// empty one at startup precisely so no menu bar appears.
+#[cfg(not(target_os = "macos"))]
+#[allow(clippy::unused_async)] // Mirrors the macOS signature.
+async fn sync_app_menu(
+    _state: &tauri::State<'_, AppState>,
+    _proxy_running: bool,
+) -> Result<(), String> {
     Ok(())
 }
 
-/// Sync menu state, logging any errors.
+/// Sync every surface, logging rather than returning any failure.
 ///
-/// Convenience wrapper for fire-and-forget sync from async contexts.
-#[cfg(target_os = "macos")]
-pub async fn sync_menu_state_logged(app: &AppHandle, state: &tauri::State<'_, AppState>) {
-    if let Err(e) = sync_menu_state_internal(app, state).await {
-        warn!("Failed to sync menu state: {}", e);
+/// For fire-and-forget callers with nowhere useful to send an error.
+pub async fn sync_all_state_logged(app: &AppHandle, state: &tauri::State<'_, AppState>) {
+    if let Err(e) = sync_all_state(app, state).await {
+        warn!("Failed to sync menu and tray state: {e}");
     }
-}
-
-/// Alias for sync_menu_state_logged (backward compatibility).
-#[cfg(target_os = "macos")]
-pub async fn sync_menu_state_or_log(app: &AppHandle, state: &tauri::State<'_, AppState>) {
-    sync_menu_state_logged(app, state).await;
 }

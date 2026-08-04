@@ -81,7 +81,7 @@ tower-http = { version = "0.6", features = ["cors", "fs"] }
 uuid = { version = "1.10", features = ["v4"] }
 
 # Tauri
-tauri = { version = "2.8.5", features = ["devtools"] }
+tauri = { version = "2.8.5", features = ["devtools", "tray-icon", "image-png"] }
 tauri-build = { version = "2.4.1", features = [] }
 tauri-plugin-dialog = "2.6"
 tauri-plugin-autostart = "2"

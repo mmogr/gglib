@@ -1,0 +1,85 @@
+//! Deriving the tray's appearance from application state.
+//!
+//! Pure functions with no `AppHandle` and no I/O, so the mapping from "what
+//! the app is doing" to "what the icon looks like" is directly testable
+//! without a running Tauri application.
+
+/// How the tray should look for a given application state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayVisual {
+    /// Whether to use the active (proxy serving) icon rather than the idle one.
+    pub active: bool,
+    /// Hover text.
+    pub tooltip: String,
+}
+
+/// Derive the tray's appearance.
+///
+/// The icon tracks the **proxy**, not the app: the app being open says nothing
+/// about whether anything is being served, and the proxy is the whole reason
+/// the tray exists. An icon that lit up merely because gglib was running would
+/// be answering a question nobody asked.
+///
+/// The tooltip reports where the endpoint is, not what it is doing. Live
+/// request counts belong to the panel, which subscribes to the proxy's
+/// dashboard stream; the count is not available on this side without
+/// threading the connection registry out of the running proxy.
+#[must_use]
+pub fn derive(proxy_running: bool, port: Option<u16>) -> TrayVisual {
+    let tooltip = if proxy_running {
+        port.map_or_else(
+            || "gglib — proxy running".to_owned(),
+            |port| format!("gglib — proxy on :{port}"),
+        )
+    } else {
+        "gglib — proxy stopped".to_owned()
+    };
+
+    TrayVisual {
+        active: proxy_running,
+        tooltip,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stopped_proxy_uses_the_idle_icon() {
+        let visual = derive(false, None);
+
+        assert!(!visual.active);
+        assert_eq!(visual.tooltip, "gglib — proxy stopped");
+    }
+
+    /// The port is the thing a user came to the tray to find out, so it
+    /// belongs in the tooltip rather than only in the popover.
+    #[test]
+    fn running_proxy_reports_its_port() {
+        let visual = derive(true, Some(8080));
+
+        assert!(visual.active);
+        assert_eq!(visual.tooltip, "gglib — proxy on :8080");
+    }
+
+    /// The proxy can be up before its bound port has been recorded; say it is
+    /// running rather than inventing a port number.
+    #[test]
+    fn running_without_a_known_port_still_reads_as_running() {
+        let visual = derive(true, None);
+
+        assert!(visual.active);
+        assert_eq!(visual.tooltip, "gglib — proxy running");
+    }
+
+    /// A port left over from a previous run must not make a stopped proxy
+    /// look reachable.
+    #[test]
+    fn stopped_proxy_ignores_a_stale_port() {
+        let visual = derive(false, Some(8080));
+
+        assert!(!visual.active);
+        assert_eq!(visual.tooltip, "gglib — proxy stopped");
+    }
+}

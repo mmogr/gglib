@@ -58,7 +58,8 @@ export type AppLogCategory =
   | 'component.download'
   | 'component.chat'
   | 'component.settings'
-  
+  | 'component.tray'
+
   // UI layers - Hooks
   | 'hook'
   | 'hook.ui'

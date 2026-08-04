@@ -16,7 +16,7 @@ use tauri_plugin_autostart::ManagerExt;
 use tracing::{error, info};
 
 use crate::app::AppState;
-use crate::menu::state_sync::sync_menu_state_internal;
+use crate::proxy_actions;
 
 /// Bring the proxy up when `proxy_autostart` is set, and register or
 /// unregister the login item to match `start_at_login`.
@@ -37,7 +37,7 @@ pub async fn apply(app: &AppHandle) {
     apply_login_item(app, settings.start_at_login == Some(true));
 
     if settings.proxy_autostart == Some(true) {
-        start_proxy(app, &state).await;
+        start_proxy(app).await;
     }
 }
 
@@ -46,20 +46,11 @@ pub async fn apply(app: &AppHandle) {
 /// Uses `ensure_running`, which is idempotent and reads the saved
 /// `proxy_port`: a user with a standing `gglib proxy` on that port gets their
 /// own process left alone rather than a bind conflict at every launch.
-async fn start_proxy(app: &AppHandle, state: &tauri::State<'_, AppState>) {
-    match state.proxy.ensure_running().await {
-        Ok(address) => {
-            info!(port = address.port(), "Proxy started automatically");
-            *state.proxy_enabled.write().await = true;
-            *state.proxy_port.write().await = Some(address.port());
-
-            // The webview has not loaded yet, so the frontend's usual
-            // `set_proxy_state` round-trip has not run. Publish directly or
-            // the tray would show the proxy as stopped while it is serving.
-            if let Err(e) = sync_menu_state_internal(app, state).await {
-                error!(error = %e, "Failed to sync menu state after proxy autostart");
-            }
-        }
+async fn start_proxy(app: &AppHandle) {
+    // Shared with the tray, so an automatic start and a manual one leave the
+    // app in exactly the same state.
+    match proxy_actions::start(app).await {
+        Ok(port) => info!(port, "Proxy started automatically"),
         Err(e) => {
             // A failure here is recoverable: the user can still start the
             // proxy by hand, and the most likely cause is a port already

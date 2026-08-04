@@ -19,6 +19,19 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false
+      },
+      {
+        "label": "tray",
+        "title": "gglib Proxy",
+        "url": "tray.html",
+        "width": 360,
+        "height": 480,
+        "resizable": false,
+        "decorations": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {
