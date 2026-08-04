@@ -739,6 +739,26 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `127.0.0.1:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 | **Pinned endpoint** | `gglib serve <id>` | The same proxy locked to one model — `/v1/models` advertises only that model, for clients that cannot switch |
+| **Always-on proxy** | Desktop GUI, in the tray | The proxy as a background service — see below |
+
+**Always-on proxy** — the desktop app can keep the endpoint up without a terminal
+or a visible window, which is the usual way to feed a client like VS Code Copilot.
+Three settings, in the GUI's Settings dialog, the Web UI, or `gglib config settings set`:
+
+| Setting | Effect |
+|---------|--------|
+| `--proxy-autostart` | Start the proxy as soon as the app launches |
+| `--close-to-tray` | Closing the window hides it, leaving the proxy serving |
+| `--start-at-login` | Register the app with your OS autostart |
+
+With all three on, the endpoint is there from the moment you log in. The tray icon
+shows whether the **proxy** is running — not merely whether gglib is open — and its
+panel gives you the endpoint URL, live connections and context usage, and start/stop.
+Right-click the icon for the full menu.
+
+`gglib proxy` and `gglib serve` are unaffected: they stay explicit foreground
+commands. If one of them already holds the port, the desktop app leaves it alone
+rather than fighting it for the bind.
 
 **Shell completions** — enable tab completion for your shell:
 
@@ -789,6 +809,7 @@ make setup   # check deps → build frontend → install CLI → offer llama.cpp
 - **Node.js** 20.19+ (matches the `package.json` `engines` field) — [nodejs.org](https://nodejs.org/) (for web UI)
 - **SQLite** 3.x
 - **Build tools**: macOS `xcode-select --install` + `brew install cmake` · Ubuntu `build-essential cmake git` · Windows VS 2022 C++ + CMake
+- **Linux desktop app**: `libwebkit2gtk-4.1-dev` for the WebView and `libayatana-appindicator3-dev` for the system tray. `gglib config check-deps` reports both.
 
 llama.cpp is managed by GGLib — no separate install needed.
 
