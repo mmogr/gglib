@@ -45,7 +45,7 @@ pub async fn set_selected_model(
     *state.selected_model_id.write().await = model_id;
 
     // Sync menu state
-    state_sync::sync_menu_state_internal(&app, &state).await
+    state_sync::sync_all_state(&app, &state).await
 }
 
 /// Sync menu state based on current application state.
@@ -54,7 +54,7 @@ pub async fn sync_menu_state(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    state_sync::sync_menu_state_internal(&app, &state).await
+    state_sync::sync_all_state(&app, &state).await
 }
 
 /// Update proxy running state and sync menu.
@@ -72,5 +72,5 @@ pub async fn set_proxy_state(
     *state.proxy_port.write().await = port;
 
     // Sync menu state
-    state_sync::sync_menu_state_internal(&app, &state).await
+    state_sync::sync_all_state(&app, &state).await
 }

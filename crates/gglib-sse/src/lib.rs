@@ -16,6 +16,7 @@
 //! hexagonal architecture (see `crates/README.md`).
 
 use std::convert::Infallible;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -93,11 +94,17 @@ where
     }
 
     /// Subscribe to the live event stream only (no hydration event).
+    ///
+    /// The stream never ends on its own. Behind
+    /// [`axum::serve`]'s `with_graceful_shutdown`, which waits for every
+    /// in-flight connection to close, that means one subscriber is enough to
+    /// stop the server ever shutting down — prefer [`Self::subscribe_until`]
+    /// on any server that shuts down gracefully.
     pub fn subscribe(
         self: Arc<Self>,
         opts: SseOptions,
     ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-        Self::to_sse(self.raw_stream(None), opts)
+        self.subscribe_until(opts, std::future::pending())
     }
 
     /// Subscribe, first emitting one synthetic `initial` event (e.g. a full
@@ -106,12 +113,51 @@ where
     /// This gives new subscribers the current state immediately, instead of
     /// waiting for the next broadcast - the "subscribe-first-then-hydrate"
     /// pattern used by this codebase's SSE consumers.
+    ///
+    /// Unbounded, with the same shutdown caveat as [`Self::subscribe`]; see
+    /// [`Self::subscribe_with_hydration_until`].
     pub fn subscribe_with_hydration(
         self: Arc<Self>,
         initial: T,
         opts: SseOptions,
     ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-        Self::to_sse(self.raw_stream(Some(initial)), opts)
+        self.subscribe_with_hydration_until(initial, opts, std::future::pending())
+    }
+
+    /// Subscribe to live events, ending the stream when `shutdown` resolves.
+    ///
+    /// An SSE stream is a connection that never closes by itself, so a server
+    /// using `with_graceful_shutdown` cannot finish shutting down while one is
+    /// open: it waits for in-flight connections to drain, and this one never
+    /// drains. Ending the stream is what lets the connection close and the
+    /// server return.
+    ///
+    /// `shutdown` is a plain future rather than a `CancellationToken` so this
+    /// crate stays a dependency-free leaf (see the module docs) — pass
+    /// `token.cancelled_owned()` from a caller that has one.
+    pub fn subscribe_until<F>(
+        self: Arc<Self>,
+        opts: SseOptions,
+        shutdown: F,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Self::to_sse(self.raw_stream_until(None, shutdown), opts)
+    }
+
+    /// Subscribe with a hydration event, ending the stream when `shutdown`
+    /// resolves. See [`Self::subscribe_until`] for why that matters.
+    pub fn subscribe_with_hydration_until<F>(
+        self: Arc<Self>,
+        initial: T,
+        opts: SseOptions,
+        shutdown: F,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Self::to_sse(self.raw_stream_until(Some(initial), shutdown), opts)
     }
 
     /// Raw, unencoded event stream: optionally prefixed with one `initial`
@@ -129,6 +175,31 @@ where
             }
         });
         stream::iter(initial).chain(live)
+    }
+
+    /// [`Self::raw_stream`], ending when `shutdown` resolves.
+    ///
+    /// Split out from the `*_until` subscribe methods for the same reason
+    /// `raw_stream` is: the termination behaviour can then be unit tested
+    /// without going through Axum's SSE/`Event` types.
+    fn raw_stream_until<F>(
+        &self,
+        initial: Option<T>,
+        shutdown: F,
+    ) -> impl Stream<Item = T> + Send + 'static + use<T, F>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        // Boxed so the resulting stream is `Unpin` whatever the caller passes:
+        // an `async` block and `CancellationToken::cancelled_owned` are both
+        // `!Unpin`, which would otherwise force every consumer to pin it.
+        // One allocation per subscription is nothing next to a live connection.
+        let shutdown = Box::pin(shutdown);
+
+        // Called fully qualified: `take_until` only exists on futures_util's
+        // StreamExt, and importing that trait alongside tokio_stream's — which
+        // the rest of this module uses — makes every shared method ambiguous.
+        futures_util::StreamExt::take_until(self.raw_stream(initial), shutdown)
     }
 
     fn to_sse(
@@ -178,6 +249,70 @@ mod tests {
 
         assert_eq!(stream.next().await, Some(TestEvent(0)));
         assert_eq!(stream.next().await, Some(TestEvent(1)));
+    }
+
+    /// A bounded stream behaves exactly like an unbounded one until shutdown:
+    /// hydration first, then live events.
+    #[tokio::test]
+    async fn a_bounded_stream_delivers_events_normally() {
+        let broadcaster = Broadcaster::<TestEvent>::new(8);
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let mut stream = broadcaster.raw_stream_until(Some(TestEvent(0)), async {
+            let _ = rx.await;
+        });
+        broadcaster.send(TestEvent(1));
+
+        assert_eq!(stream.next().await, Some(TestEvent(0)));
+        assert_eq!(stream.next().await, Some(TestEvent(1)));
+        drop(tx);
+    }
+
+    /// The whole point: the stream *ends*. An SSE response that never ends is
+    /// a connection that never closes, and `axum::serve`'s graceful shutdown
+    /// waits for every connection to close before it returns — so without this
+    /// one subscriber is enough to hang shutdown until something aborts it.
+    #[tokio::test]
+    async fn shutdown_ends_the_stream() {
+        let broadcaster = Broadcaster::<TestEvent>::new(8);
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let mut stream = broadcaster.raw_stream_until(None, async {
+            let _ = rx.await;
+        });
+
+        broadcaster.send(TestEvent(1));
+        assert_eq!(stream.next().await, Some(TestEvent(1)));
+
+        tx.send(()).expect("receiver still alive");
+
+        assert_eq!(
+            stream.next().await,
+            None,
+            "stream must terminate once shutdown fires"
+        );
+    }
+
+    /// Subscribing during shutdown must not produce a stream that outlives it.
+    #[tokio::test]
+    async fn a_stream_created_after_shutdown_ends_immediately() {
+        let broadcaster = Broadcaster::<TestEvent>::new(8);
+        let mut stream = broadcaster.raw_stream_until(Some(TestEvent(0)), std::future::ready(()));
+
+        assert_eq!(stream.next().await, None);
+    }
+
+    /// Shutdown must not depend on traffic: an idle stream with no events at
+    /// all still has to end, since that is the common case during a stop.
+    #[tokio::test]
+    async fn an_idle_stream_still_ends_on_shutdown() {
+        let broadcaster = Broadcaster::<TestEvent>::new(8);
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let mut stream = broadcaster.raw_stream_until(None, async {
+            let _ = rx.await;
+        });
+
+        tx.send(()).expect("receiver still alive");
+
+        assert_eq!(stream.next().await, None);
     }
 
     #[tokio::test]

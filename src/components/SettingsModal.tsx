@@ -9,6 +9,7 @@ import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
+import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { Modal } from "./ui/Modal";
 import { cn } from '../utils/cn';
 import type { McpServerInfo } from '../services/transport';
@@ -40,6 +41,12 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
   const [trustClientSampling, setTrustClientSampling] = useState(false);
+  const {
+    values: desktopValues,
+    setValue: setDesktopSetting,
+    reset: resetDesktop,
+    updates: desktopUpdates,
+  } = useDesktopSettings(settings);
   const [defaultModelInput, setDefaultModelInput] = useState("");
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -106,6 +113,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           defaultModelId: parseNumericInput(defaultModelInput),
           inferenceDefaults: inferenceDefaultsInput,
           trustClientSampling,
+          ...desktopUpdates,
         };
 
         // Check if any updates were made
@@ -119,7 +127,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.showMemoryFitIndicators !== undefined ||
           updates.defaultModelId !== undefined ||
           updates.inferenceDefaults !== undefined ||
-          updates.trustClientSampling !== undefined;
+          updates.trustClientSampling !== undefined ||
+          updates.proxyAutostart !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -142,6 +151,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       defaultModelInput,
       inferenceDefaultsInput,
       trustClientSampling,
+      desktopUpdates,
       info,
       saveDir,
       saveSettings,
@@ -160,8 +170,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
       setTrustClientSampling(false); // Default is disabled
+      resetDesktop();
     }
-  }, [info, settings]);
+  }, [info, settings, resetDesktop]);
 
   const handleRefresh = useCallback(() => {
     refreshDir();
@@ -248,6 +259,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setTitlePromptInput={setTitlePromptInput}
             inferenceDefaultsInput={inferenceDefaultsInput}
             setInferenceDefaultsInput={setInferenceDefaultsInput}
+            desktopSettings={desktopValues}
+            setDesktopSetting={setDesktopSetting}
             trustClientSampling={trustClientSampling}
             setTrustClientSampling={setTrustClientSampling}
             onSubmit={handleSubmit}

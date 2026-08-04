@@ -1,5 +1,5 @@
 import { FC, useState, useRef } from "react";
-import { ChevronDown, ChevronUp, ClipboardCopy, LayoutDashboard, Power, Repeat2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutDashboard, Repeat2, Trash2 } from "lucide-react";
 import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -12,6 +12,7 @@ import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
 import { useToastContext } from '../contexts/ToastContext';
 import { ProxyDashboardModal } from './ProxyDashboardModal';
+import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton } from './proxy';
 
 interface ProxyConfig {
   host: string;
@@ -89,11 +90,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
     }
   };
 
-  const copyProxyUrl = () => {
-    const url = `http://${config.host}:${proxyState.port ?? config.port}/v1`;
-    navigator.clipboard.writeText(url);
-    showToast('Proxy URL copied to clipboard!', 'success');
-  };
+  const activePort = proxyState.port ?? config.port;
+
+  const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
   const buttonClasses = cn(
     buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-surface-elevated border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all relative hover:bg-surface-hover hover:border-border-hover',
@@ -123,16 +122,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-background-overlay rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">
           <div className="flex justify-between items-center mb-base pb-md border-b border-border">
             <h3 className="m-0 text-lg text-text">OpenAI Proxy</h3>
-            {/* Stopped is idle, not an error — danger red is reserved for
-                failures. See --color-offline in styles/base/variables.css. */}
-            <span className={cn(
-              'px-md py-xs rounded-lg text-xs font-semibold uppercase',
-              proxyState.running
-                ? 'bg-success-subtle text-success'
-                : 'bg-background-hover text-offline'
-            )}>
-              {proxyState.running ? 'Running' : 'Stopped'}
-            </span>
+            <ProxyStatusPill running={proxyState.running} />
           </div>
 
           {proxyState.running ? (
@@ -140,19 +130,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               <div className="mb-base">
                 <Stack gap="xs" className="mb-sm">
                   <Label size="xs" muted>URL:</Label>
-                  <div className="flex gap-sm items-center">
-                    <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm border border-border font-mono">http://{config.host}:{proxyState.port ?? config.port}/v1</code>
-                    <Button 
-                      variant="ghost"
-                      size="sm"
-                      onClick={copyProxyUrl}
-                      className="bg-primary border-none rounded-base p-sm cursor-pointer text-base text-white transition-all hover:bg-primary-hover hover:scale-105"
-                      title="Copy URL"
-                      iconOnly
-                    >
-                      <Icon icon={ClipboardCopy} size={14} />
-                    </Button>
-                  </div>
+                  <EndpointCopyBar host={config.host} port={activePort} onCopied={handleCopied} />
                 </Stack>
               </div>
 
@@ -177,10 +155,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   setClearing(true);
                   setClearMessage(null);
                   try {
-                    const result = await clearProxyCache(
-                      config.host,
-                      proxyState.port ?? config.port
-                    );
+                    const result = await clearProxyCache(config.host, activePort);
                     setClearMessage(result.message || 'Cache cleared');
                   } catch (err: any) {
                     setClearMessage(`Failed: ${err.message}`);
@@ -195,15 +170,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 {clearing ? 'Clearing...' : 'Clear Cache'}
               </Button>
 
-              <Button
-                variant="danger"
-                className="w-full p-md border-none rounded-md text-sm font-semibold cursor-pointer transition-all bg-danger text-white hover:bg-danger-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={handleStop}
-                disabled={loading}
-                leftIcon={<Icon icon={Power} size={14} />}
-              >
-                {loading ? 'Stopping...' : 'Stop Proxy'}
-              </Button>
+              <ProxyToggleButton
+                running
+                pending={loading}
+                onStart={handleStart}
+                onStop={handleStop}
+              />
             </>
           ) : (
             <>
@@ -252,15 +224,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 {showSettings ? 'Hide' : 'Show'} Settings
               </Button>
 
-              <Button
-                variant="primary"
-                className="w-full p-md border-none rounded-md text-sm font-semibold cursor-pointer transition-all bg-primary text-white hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={handleStart}
-                disabled={loading}
-                leftIcon={<Icon icon={Power} size={14} />}
-              >
-                {loading ? 'Starting...' : 'Start Proxy'}
-              </Button>
+              <ProxyToggleButton
+                running={false}
+                pending={loading}
+                onStart={handleStart}
+                onStop={handleStop}
+              />
 
               <div className="mt-md pt-md border-t border-border">
                 <small className="text-text-muted text-xs leading-normal">
@@ -277,7 +246,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
         isOpen={showDashboard}
         onClose={() => setShowDashboard(false)}
         host={config.host}
-        port={proxyState.port ?? config.port}
+        port={activePort}
       />
     </div>
   );

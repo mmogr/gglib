@@ -6,9 +6,11 @@ import {
   ModelDefaults,
   PortSettings,
   DisplaySettings,
+  DesktopSettings,
   AdvancedSettings,
   SetupWizardRow,
 } from "./fields";
+import type { DesktopSettingsValues } from "./useDesktopSettings";
 
 interface GeneralSettingsProps {
   // Directory state
@@ -28,6 +30,13 @@ interface GeneralSettingsProps {
   setMaxQueueSizeInput: (value: string) => void;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
+
+  // Always-on proxy (desktop app)
+  desktopSettings: DesktopSettingsValues;
+  setDesktopSetting: <K extends keyof DesktopSettingsValues>(
+    key: K,
+    value: DesktopSettingsValues[K],
+  ) => void;
 
   // Default model state
   defaultModelInput: string;
@@ -77,6 +86,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setMaxQueueSizeInput,
   showFitIndicators,
   setShowFitIndicators,
+  desktopSettings,
+  setDesktopSetting,
   defaultModelInput,
   setDefaultModelInput,
   models,
@@ -147,6 +158,14 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       <DisplaySettings
         showFitIndicators={showFitIndicators}
         setShowFitIndicators={setShowFitIndicators}
+        saving={saving}
+      />
+
+      <div className="border-t border-border my-md" />
+
+      <DesktopSettings
+        values={desktopSettings}
+        onChange={setDesktopSetting}
         saving={saving}
       />
 

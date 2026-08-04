@@ -12,12 +12,17 @@ pub mod state_sync;
 #[cfg(target_os = "macos")]
 pub use build::build_app_menu;
 
+#[cfg(target_os = "macos")]
 use tauri::{Wry, menu::MenuItem};
 
 /// Holds references to menu items that need dynamic state updates.
 ///
+/// macOS only: the other platforms are given an empty menu at startup so no
+/// menu bar appears, leaving nothing to hold references to.
+///
 /// This struct is stored in the application state and used to
 /// enable/disable or check/uncheck menu items based on app state.
+#[cfg(target_os = "macos")]
 pub struct AppMenu {
     // Model menu items (enabled based on selection/server state)
     pub start_server: MenuItem<Wry>,
@@ -34,6 +39,7 @@ pub struct AppMenu {
 }
 
 /// State used to synchronize menu item enabled/checked status
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Default)]
 pub struct MenuState {
     pub llama_installed: bool,
@@ -42,6 +48,7 @@ pub struct MenuState {
     pub selected_model_server_active: bool,
 }
 
+#[cfg(target_os = "macos")]
 impl AppMenu {
     /// Update all stateful menu items based on current application state.
     ///

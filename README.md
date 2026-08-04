@@ -739,6 +739,36 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `127.0.0.1:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 | **Pinned endpoint** | `gglib serve <id>` | The same proxy locked to one model — `/v1/models` advertises only that model, for clients that cannot switch |
+| **Always-on proxy** | Desktop GUI, in the tray | The proxy as a background service — see below |
+
+**Always-on proxy** — the desktop app can keep the endpoint up without a terminal
+or a visible window, which is the usual way to feed a client like VS Code Copilot.
+Three settings, in the GUI's Settings dialog, the Web UI, or `gglib config settings set`:
+
+| Setting | Effect |
+|---------|--------|
+| `--proxy-autostart` | Start the proxy as soon as the app launches |
+| `--close-to-tray` | Closing the window hides it, leaving the proxy serving |
+| `--start-at-login` | Register the app with your OS autostart |
+
+With all three on, the endpoint is there from the moment you log in — gglib comes up
+in the menu bar with no window at all. The tray icon shows whether the **proxy** is
+running — not merely whether gglib is open — and its panel gives you the endpoint URL,
+live connections and context usage, and start/stop. Right-click the icon for the full
+menu.
+
+On macOS, `--close-to-tray` also drops gglib out of the Dock while it is hidden. That
+necessarily takes it out of the Cmd+Tab switcher too, so the menu bar icon is the way
+back — click it, or use its Open gglib item. Windows and Linux need no equivalent: a
+taskbar button belongs to a window, so hiding the window already removes it.
+
+If the tray icon fails to appear, gglib shows its window rather than starting hidden —
+on Linux that failure usually means `libayatana-appindicator3` is missing, or a bar
+without StatusNotifierItem support under Wayland.
+
+`gglib proxy` and `gglib serve` are unaffected: they stay explicit foreground
+commands. If one of them already holds the port, the desktop app leaves it alone
+rather than fighting it for the bind.
 
 **Shell completions** — enable tab completion for your shell:
 
@@ -789,6 +819,7 @@ make setup   # check deps → build frontend → install CLI → offer llama.cpp
 - **Node.js** 20.19+ (matches the `package.json` `engines` field) — [nodejs.org](https://nodejs.org/) (for web UI)
 - **SQLite** 3.x
 - **Build tools**: macOS `xcode-select --install` + `brew install cmake` · Ubuntu `build-essential cmake git` · Windows VS 2022 C++ + CMake
+- **Linux desktop app**: WebKit2GTK 4.1 and libayatana-appindicator (the system tray). Package names differ by distribution — `libwebkit2gtk-4.1-dev` and `libayatana-appindicator3-dev` on Debian/Ubuntu, `webkit2gtk-4.1` and `libayatana-appindicator` on Arch. Run `gglib config check-deps`, which detects your distribution and prints the exact command.
 
 llama.cpp is managed by GGLib — no separate install needed.
 

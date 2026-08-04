@@ -15,6 +15,7 @@ tauri-build.workspace = true
 [dependencies]
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
+tauri-plugin-autostart.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
@@ -33,6 +34,14 @@ tokio.workspace = true
 dotenvy.workspace = true
 tracing.workspace = true
 open.workspace = true
+
+# Only the tray panel's layer-shell placement needs these, and only on Linux.
+# `libgtk-layer-shell` itself is loaded at runtime rather than linked, so it is
+# not required to build or to launch — see `tray::layer_shell`.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk.workspace = true
+ksni.workspace = true
+libloading.workspace = true
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem

@@ -1,224 +1,93 @@
 //! Linux installation instructions.
 
 use super::common::{BOLD, RESET, print_command, print_header, print_subsection};
-use crate::handlers::config::check_deps::platform::LinuxDistro;
-use gglib_core::utils::system::Dependency;
+use gglib_core::utils::system::{Dependency, LinuxDistro, packages_for};
 
 /// Print Linux-specific installation instructions.
 pub fn print_instructions(missing: &[&Dependency], distro: LinuxDistro) {
-    let distro_name = match distro {
-        LinuxDistro::Debian => "Debian/Ubuntu",
-        LinuxDistro::Fedora => "Fedora/RHEL",
-        LinuxDistro::Arch => "Arch Linux",
-        LinuxDistro::Suse => "openSUSE",
-        LinuxDistro::Unknown => "Linux",
-    };
+    print_header(distro.label());
 
-    print_header(distro_name);
-
-    match distro {
-        LinuxDistro::Debian => print_debian_instructions(missing),
-        LinuxDistro::Fedora => print_fedora_instructions(missing),
-        LinuxDistro::Arch => print_arch_instructions(missing),
-        LinuxDistro::Suse => print_suse_instructions(missing),
-        LinuxDistro::Unknown => print_generic_instructions(missing),
-    }
+    print_package_instructions(missing, distro);
 
     // Common instructions for Rust and Node.js
     print_common_linux_instructions(missing);
 
     // GPU notes
-    print_gpu_notes(&distro);
+    print_gpu_notes(distro);
 }
 
-fn print_debian_instructions(missing: &[&Dependency]) {
-    let apt_packages: Vec<&str> = missing
+/// Print the one command that installs every missing system package.
+///
+/// This used to be four near-identical functions — one per distribution —
+/// each mapping the same dependency names to their own package names. Keeping
+/// them in step was manual, and they had already drifted: three of them still
+/// named the pre-Ayatana `libappindicator-gtk3`, which on Arch cannot be
+/// installed at all. One table now answers for every distribution.
+fn print_package_instructions(missing: &[&Dependency], distro: LinuxDistro) {
+    let Some(installer) = distro.installer() else {
+        print_unidentified_distro_instructions(missing);
+        return;
+    };
+
+    let mut packages: Vec<&str> = missing
         .iter()
-        .filter_map(|d| match d.name.as_str() {
-            "git" => Some("git"),
-            "cmake" => Some("cmake"),
-            "python3" => Some("python3"),
-            "curl" => Some("curl"),
-            "make" | "gcc" | "g++" | "cc" => Some("build-essential"),
-            "pkg-config" => Some("pkg-config"),
-            "libssl-dev" => Some("libssl-dev"),
-            "libclang-dev" => Some("libclang-dev"),
-            "libsqlite3-dev" => Some("libsqlite3-dev"),
-            "libasound2-dev" => Some("libasound2-dev"),
-            "libcurl-dev" => Some("libcurl4-openssl-dev"),
-            "webkit2gtk-4.1" => Some("libwebkit2gtk-4.1-dev"),
-            "librsvg" => Some("librsvg2-dev"),
-            "libappindicator-gtk3" => Some("libayatana-appindicator3-dev"),
-            "patchelf" => Some("patchelf"),
-            _ => None,
-        })
+        .filter_map(|dep| packages_for(&dep.name).and_then(|names| names.for_distro(distro)))
         .collect();
 
-    if !apt_packages.is_empty() {
-        // Deduplicate (build-essential might appear twice)
-        let mut unique_packages: Vec<&str> = apt_packages.clone();
-        unique_packages.sort();
-        unique_packages.dedup();
+    if packages.is_empty() {
+        return;
+    }
 
-        print_subsection("Install via apt");
+    // `make`, `gcc` and `g++` all arrive in one toolchain package, so without
+    // this the command would name it up to three times.
+    packages.sort_unstable();
+    packages.dedup();
+
+    let manager = installer.split_whitespace().next().unwrap_or(installer);
+    print_subsection(&format!("Install via {manager}"));
+
+    // apt is the one that needs its index refreshed first.
+    if distro == LinuxDistro::Debian {
         print_command("sudo apt update");
-        print_command(&format!(
-            "sudo apt install -y {}",
-            unique_packages.join(" ")
-        ));
     }
+
+    print_command(&format!("sudo {installer} {}", packages.join(" ")));
 }
 
-fn print_fedora_instructions(missing: &[&Dependency]) {
-    let dnf_packages: Vec<&str> = missing
-        .iter()
-        .filter_map(|d| match d.name.as_str() {
-            "git" => Some("git"),
-            "cmake" => Some("cmake"),
-            "python3" => Some("python3"),
-            "curl" => Some("curl"),
-            "make" | "gcc" | "g++" | "cc" => Some("gcc gcc-c++ make"),
-            "pkg-config" => Some("pkgconfig"),
-            "libssl-dev" => Some("openssl-devel"),
-            "libclang-dev" => Some("clang-devel"),
-            "libsqlite3-dev" => Some("sqlite-devel"),
-            "libasound2-dev" => Some("alsa-lib-devel"),
-            "libcurl-dev" => Some("libcurl-devel"),
-            "webkit2gtk-4.1" => Some("webkit2gtk4.1-devel"),
-            "librsvg" => Some("librsvg2-devel"),
-            "libappindicator-gtk3" => Some("libappindicator-gtk3-devel"),
-            "patchelf" => Some("patchelf"),
-            _ => None,
-        })
-        .collect();
-
-    if !dnf_packages.is_empty() {
-        print_subsection("Install via dnf");
-        print_command(&format!("sudo dnf install -y {}", dnf_packages.join(" ")));
-    }
-
-    // Development tools group
-    if missing
-        .iter()
-        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
-    {
-        println!();
-        println!("  Or install the development tools group:");
-        print_command(r#"sudo dnf groupinstall -y "Development Tools""#);
-    }
-}
-
-fn print_arch_instructions(missing: &[&Dependency]) {
-    let pacman_packages: Vec<&str> = missing
-        .iter()
-        .filter_map(|d| match d.name.as_str() {
-            "git" => Some("git"),
-            "cmake" => Some("cmake"),
-            "python3" => Some("python"),
-            "curl" => Some("curl"),
-            "make" | "gcc" | "g++" | "cc" => Some("base-devel"),
-            "pkg-config" => Some("pkgconf"),
-            "libssl-dev" => Some("openssl"),
-            "libclang-dev" => Some("clang"),
-            "libsqlite3-dev" => Some("sqlite"),
-            "libasound2-dev" => Some("alsa-lib"),
-            "libcurl-dev" => Some("curl"),
-            "webkit2gtk-4.1" => Some("webkit2gtk-4.1"),
-            "librsvg" => Some("librsvg"),
-            "libappindicator-gtk3" => Some("libappindicator-gtk3"),
-            "patchelf" => Some("patchelf"),
-            _ => None,
-        })
-        .collect();
-
-    if !pacman_packages.is_empty() {
-        let mut unique_packages: Vec<&str> = pacman_packages.clone();
-        unique_packages.sort();
-        unique_packages.dedup();
-
-        print_subsection("Install via pacman");
-        print_command(&format!(
-            "sudo pacman -S --needed {}",
-            unique_packages.join(" ")
-        ));
-    }
-}
-
-fn print_suse_instructions(missing: &[&Dependency]) {
-    let zypper_packages: Vec<&str> = missing
-        .iter()
-        .filter_map(|d| match d.name.as_str() {
-            "git" => Some("git"),
-            "cmake" => Some("cmake"),
-            "python3" => Some("python3"),
-            "curl" => Some("curl"),
-            "make" | "gcc" | "g++" | "cc" => Some("gcc gcc-c++ make"),
-            "pkg-config" => Some("pkg-config"),
-            "libssl-dev" => Some("libopenssl-devel"),
-            "libclang-dev" => Some("clang-devel"),
-            "libsqlite3-dev" => Some("sqlite3-devel"),
-            "libasound2-dev" => Some("alsa-devel"),
-            "libcurl-dev" => Some("libcurl-devel"),
-            "webkit2gtk-4.1" => Some("webkit2gtk3-devel"),
-            "librsvg" => Some("librsvg-devel"),
-            "libappindicator-gtk3" => Some("libappindicator3-devel"),
-            "patchelf" => Some("patchelf"),
-            _ => None,
-        })
-        .collect();
-
-    if !zypper_packages.is_empty() {
-        print_subsection("Install via zypper");
-        print_command(&format!(
-            "sudo zypper install -y {}",
-            zypper_packages.join(" ")
-        ));
-    }
-
-    // Pattern for development
-    if missing
-        .iter()
-        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
-    {
-        println!();
-        println!("  Or install the development pattern:");
-        print_command("sudo zypper install -t pattern devel_basis");
-    }
-}
-
-fn print_generic_instructions(missing: &[&Dependency]) {
+/// Name what is missing when we cannot name the packages.
+///
+/// Reached when `/etc/os-release` identified nothing recognised. Describing
+/// the dependency ("OpenSSL development headers") beats guessing a package
+/// name: a wrong name is typed in and fails, a description is searched for.
+fn print_unidentified_distro_instructions(missing: &[&Dependency]) {
     print_subsection("Package Installation");
-    println!("  Your distribution was not auto-detected.");
-    println!("  Please install the following packages using your package manager:");
+    println!("  Your distribution was not recognised.");
+    println!("  Please install the following using your package manager:");
     println!();
 
-    for dep in missing {
-        match dep.name.as_str() {
-            "git" | "cmake" | "python3" | "curl" | "make" | "pkg-config" => {
-                println!("  - {}", dep.name);
-            }
-            "gcc" | "g++" | "cc" => {
-                println!("  - gcc/g++ (C/C++ compiler)");
-            }
-            "libssl-dev" => println!("  - OpenSSL development headers"),
-            "libclang-dev" => println!("  - libclang development headers"),
-            "libsqlite3-dev" => println!("  - SQLite3 development headers"),
-            "libasound2-dev" => println!("  - ALSA development headers"),
-            "libcurl-dev" => println!("  - libcurl development headers"),
-            "webkit2gtk-4.1" => println!("  - WebKit2GTK 4.1 development headers"),
-            "librsvg" => println!("  - librsvg development headers"),
-            "libappindicator-gtk3" => println!("  - libappindicator-gtk3 development headers"),
-            "patchelf" => println!("  - patchelf"),
-            _ => {}
-        }
+    let mut described: Vec<&str> = missing
+        .iter()
+        .filter_map(|dep| packages_for(&dep.name).map(|names| names.generic))
+        .collect();
+    described.sort_unstable();
+    described.dedup();
+
+    for description in described {
+        println!("  - {description}");
     }
 
     println!();
     println!("  Common package manager commands:");
-    println!("  - Debian/Ubuntu: sudo apt install <package>");
-    println!("  - Fedora/RHEL:   sudo dnf install <package>");
-    println!("  - Arch Linux:    sudo pacman -S <package>");
-    println!("  - openSUSE:      sudo zypper install <package>");
+    for distro in [
+        LinuxDistro::Debian,
+        LinuxDistro::Fedora,
+        LinuxDistro::Arch,
+        LinuxDistro::Suse,
+    ] {
+        if let Some(installer) = distro.installer() {
+            println!("  - {:<14} sudo {installer} <package>", distro.label());
+        }
+    }
 }
 
 fn print_common_linux_instructions(missing: &[&Dependency]) {
@@ -248,7 +117,12 @@ fn print_common_linux_instructions(missing: &[&Dependency]) {
     }
 }
 
-fn print_gpu_notes(distro: &LinuxDistro) {
+/// GPU driver notes.
+///
+/// These stay hand-written rather than moving into the package table: they are
+/// vendor driver stacks with their own repositories and setup steps, not
+/// single packages a dependency name maps onto.
+fn print_gpu_notes(distro: LinuxDistro) {
     println!("\n{}GPU Support:{}", BOLD, RESET);
 
     println!();
@@ -281,17 +155,14 @@ fn print_gpu_notes(distro: &LinuxDistro) {
     println!("  {}AMD GPU:{}", BOLD, RESET);
     println!("  Install Vulkan drivers for GPU acceleration:");
 
-    match distro {
-        LinuxDistro::Debian => {
-            print_command("sudo apt install mesa-vulkan-drivers vulkan-tools");
-        }
-        LinuxDistro::Fedora => {
-            print_command("sudo dnf install mesa-vulkan-drivers vulkan-tools");
-        }
-        LinuxDistro::Arch => {
-            print_command("sudo pacman -S vulkan-radeon vulkan-tools");
-        }
-        _ => {}
+    // The same Vulkan row the dependency check hints with, so the two cannot
+    // recommend different packages for the same thing.
+    match (
+        distro.installer(),
+        packages_for("Vulkan").and_then(|names| names.for_distro(distro)),
+    ) {
+        (Some(installer), Some(packages)) => print_command(&format!("sudo {installer} {packages}")),
+        _ => println!("  Install your GPU vendor's Vulkan driver, plus vulkan-tools"),
     }
 
     println!();

@@ -4,7 +4,10 @@ mod deps;
 pub(crate) mod gpu;
 
 use gglib_core::ports::SystemProbePort;
-use gglib_core::utils::system::{Dependency, DependencyStatus, GpuInfo, SystemMemoryInfo};
+use gglib_core::utils::system::{
+    Dependency, DependencyStatus, GpuInfo, LinuxDistro, SystemMemoryInfo, install_hint,
+    packages_for, parse_os_release,
+};
 
 #[cfg(target_os = "linux")]
 use commands::get_patchelf_version;
@@ -16,8 +19,8 @@ use commands::{
 use deps::check_libssl;
 #[cfg(target_os = "linux")]
 use deps::{
-    check_libappindicator, check_libasound, check_libclang, check_libcurl, check_librsvg,
-    check_libsqlite3, check_webkit2gtk,
+    check_gtk_layer_shell, check_libappindicator, check_libasound, check_libclang, check_libcurl,
+    check_librsvg, check_libsqlite3, check_webkit2gtk,
 };
 use gpu::{detect_gpu_info, get_system_memory_info};
 
@@ -61,6 +64,100 @@ pub(crate) fn is_truthy_flag(v: &str) -> bool {
     )
 }
 
+/// Identify the running distribution from `/etc/os-release`.
+///
+/// The I/O half of [`gglib_core::utils::system::parse_os_release`]: this layer
+/// reads the file, the domain layer decides what it means. A file that is
+/// missing or unreadable — which includes every non-Linux host — yields
+/// [`LinuxDistro::Unknown`], the same answer as one that is simply not
+/// recognised, because callers treat both the same way.
+#[must_use]
+pub fn detect_linux_distro() -> LinuxDistro {
+    std::fs::read_to_string("/etc/os-release")
+        .map(|contents| parse_os_release(&contents))
+        .unwrap_or(LinuxDistro::Unknown)
+}
+
+/// The install hint for a dependency on this machine.
+///
+/// Falls back to prose when there is no command to give — an unidentified
+/// distribution, or a dependency like `cargo` that does not come from the
+/// system package manager at all. Prose is deliberately preferred over a
+/// plausible-looking guess: a wrong command gets run and fails, whereas
+/// "OpenSSL development headers" gets looked up.
+fn hint_for(dependency: &str, distro: LinuxDistro) -> String {
+    install_hint(dependency, distro).unwrap_or_else(|| {
+        packages_for(dependency).map_or_else(
+            || format!("install {dependency}"),
+            |names| format!("install {}", names.generic),
+        )
+    })
+}
+
+/// A dependency installed through the system package manager.
+///
+/// Collapses the builder chain that was repeated for all twenty-odd entries
+/// below, so a dependency is one line and its install hint comes from the
+/// shared package table rather than a hardcoded `apt` string.
+fn system_dep(
+    name: &'static str,
+    description: &'static str,
+    distro: LinuxDistro,
+    version: Option<String>,
+) -> Dependency {
+    Dependency::required(name, description)
+        .with_hint(hint_for(name, distro))
+        .with_status(version.map_or(DependencyStatus::Missing, |version| {
+            DependencyStatus::Present { version }
+        }))
+}
+
+/// A dependency with its own installer, pointed at rather than packaged.
+fn hosted_dep(
+    name: &'static str,
+    description: &'static str,
+    url: &'static str,
+    version: Option<String>,
+) -> Dependency {
+    Dependency::required(name, description)
+        .with_hint(url)
+        .with_status(version.map_or(DependencyStatus::Missing, |version| {
+            DependencyStatus::Present { version }
+        }))
+}
+
+/// A dependency whose absence degrades a feature rather than breaking the build.
+///
+/// Reported so `check-deps` can name it and give the right install command, but
+/// marked optional so a missing one is not a failure.
+fn optional_dep(
+    name: &'static str,
+    description: &'static str,
+    distro: LinuxDistro,
+    version: Option<String>,
+) -> Dependency {
+    Dependency::optional(name, description)
+        .with_hint(hint_for(name, distro))
+        .with_status(version.map_or(DependencyStatus::Missing, |version| {
+            DependencyStatus::Present { version }
+        }))
+}
+
+/// A dependency detected by probe rather than by version string.
+fn probed_dep(
+    name: &'static str,
+    description: &'static str,
+    distro: LinuxDistro,
+    present: bool,
+) -> Dependency {
+    system_dep(
+        name,
+        description,
+        distro,
+        present.then(|| "available".to_owned()),
+    )
+}
+
 pub struct DefaultSystemProbe;
 
 impl DefaultSystemProbe {
@@ -80,159 +177,147 @@ impl SystemProbePort for DefaultSystemProbe {
     fn check_all_dependencies(&self) -> Vec<Dependency> {
         let gpu_info = self.detect_gpu_info();
 
+        // Read once and thread it through: every install hint below keys off
+        // the same answer, and re-reading the file per dependency would be
+        // twenty syscalls to learn the same thing.
+        let distro = detect_linux_distro();
+
         let mut deps = vec![
             // Core Rust toolchain (required)
-            Dependency::required("cargo", "Required for building Rust code")
-                .with_hint("https://rustup.rs")
-                .with_status(
-                    get_cargo_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("rustc", "Rust compiler")
-                .with_hint("https://rustup.rs")
-                .with_status(
-                    get_rustc_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
+            hosted_dep(
+                "cargo",
+                "Required for building Rust code",
+                "https://rustup.rs",
+                get_cargo_version(),
+            ),
+            hosted_dep(
+                "rustc",
+                "Rust compiler",
+                "https://rustup.rs",
+                get_rustc_version(),
+            ),
             // Node.js ecosystem (required for GUI)
-            Dependency::required("node", "Required for building web UI and Tauri")
-                .with_hint("https://nodejs.org")
-                .with_status(
-                    get_node_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("npm", "Node package manager")
-                .with_hint("https://nodejs.org")
-                .with_status(
-                    get_npm_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
+            hosted_dep(
+                "node",
+                "Required for building web UI and Tauri",
+                "https://nodejs.org",
+                get_node_version(),
+            ),
+            hosted_dep(
+                "npm",
+                "Node package manager",
+                "https://nodejs.org",
+                get_npm_version(),
+            ),
             // Build tools (required)
-            Dependency::required("git", "Required for llama.cpp installation")
-                .with_hint("apt install git")
-                .with_status(
-                    get_git_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("make", "Required for llama.cpp build")
-                .with_hint("apt install build-essential")
-                .with_status(
-                    get_make_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("gcc", "Required for llama.cpp compilation")
-                .with_hint("apt install build-essential")
-                .with_status(
-                    get_gcc_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("g++", "Required for llama.cpp compilation")
-                .with_hint("apt install build-essential")
-                .with_status(
-                    get_gxx_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("pkg-config", "Required for building with system libraries")
-                .with_hint("apt install pkg-config")
-                .with_status(
-                    get_pkgconfig_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("libssl-dev", "Required for HTTPS support")
-                .with_hint("apt install libssl-dev")
-                .with_status(
-                    check_libssl()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("cmake", "Required for llama.cpp build")
-                .with_hint("apt install cmake")
-                .with_status(
-                    get_cmake_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
-            Dependency::required("python3", "Required for hf_xet fast download helper")
-                .with_hint("apt install python3")
-                .with_status(
-                    get_python3_version()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
-                ),
+            system_dep(
+                "git",
+                "Required for llama.cpp installation",
+                distro,
+                get_git_version(),
+            ),
+            system_dep(
+                "make",
+                "Required for llama.cpp build",
+                distro,
+                get_make_version(),
+            ),
+            system_dep(
+                "gcc",
+                "Required for llama.cpp compilation",
+                distro,
+                get_gcc_version(),
+            ),
+            system_dep(
+                "g++",
+                "Required for llama.cpp compilation",
+                distro,
+                get_gxx_version(),
+            ),
+            system_dep(
+                "pkg-config",
+                "Required for building with system libraries",
+                distro,
+                get_pkgconfig_version(),
+            ),
+            system_dep(
+                "libssl-dev",
+                "Required for HTTPS support",
+                distro,
+                check_libssl(),
+            ),
+            system_dep(
+                "cmake",
+                "Required for llama.cpp build",
+                distro,
+                get_cmake_version(),
+            ),
+            system_dep(
+                "python3",
+                "Required for hf_xet fast download helper",
+                distro,
+                get_python3_version(),
+            ),
         ];
 
         // Add GTK/Tauri dependencies for Linux only
         #[cfg(target_os = "linux")]
         {
             deps.extend(vec![
-                Dependency::required("patchelf", "Required for Tauri AppImage bundling")
-                    .with_hint("apt install patchelf")
-                    .with_status(
-                        get_patchelf_version()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required("webkit2gtk-4.1", "Required for Tauri desktop app (WebView)")
-                    .with_hint("apt install libwebkit2gtk-4.1-dev")
-                    .with_status(
-                        check_webkit2gtk()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required("librsvg", "Required for Tauri desktop app (SVG rendering)")
-                    .with_hint("apt install librsvg2-dev")
-                    .with_status(
-                        check_librsvg()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required(
+                system_dep(
+                    "patchelf",
+                    "Required for Tauri AppImage bundling",
+                    distro,
+                    get_patchelf_version(),
+                ),
+                system_dep(
+                    "webkit2gtk-4.1",
+                    "Required for Tauri desktop app (WebView)",
+                    distro,
+                    check_webkit2gtk(),
+                ),
+                system_dep(
+                    "librsvg",
+                    "Required for Tauri desktop app (SVG rendering)",
+                    distro,
+                    check_librsvg(),
+                ),
+                system_dep(
                     "libappindicator-gtk3",
                     "Required for Tauri system tray support",
-                )
-                .with_hint("apt install libayatana-appindicator3-dev")
-                .with_status(
-                    check_libappindicator()
-                        .map(|v| DependencyStatus::Present { version: v })
-                        .unwrap_or(DependencyStatus::Missing),
+                    distro,
+                    check_libappindicator(),
                 ),
-                Dependency::required("libasound2-dev", "Required for voice/audio support")
-                    .with_hint("apt install libasound2-dev")
-                    .with_status(
-                        check_libasound()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required("libcurl-dev", "Required for llama.cpp HTTP/HTTPS support")
-                    .with_hint("apt install libcurl4-openssl-dev")
-                    .with_status(
-                        check_libcurl()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required("libsqlite3-dev", "Required for database support")
-                    .with_hint("apt install libsqlite3-dev")
-                    .with_status(
-                        check_libsqlite3()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
-                Dependency::required("libclang-dev", "Required for Rust FFI bindings (bindgen)")
-                    .with_hint("apt install libclang-dev")
-                    .with_status(
-                        check_libclang()
-                            .map(|v| DependencyStatus::Present { version: v })
-                            .unwrap_or(DependencyStatus::Missing),
-                    ),
+                optional_dep(
+                    "gtk-layer-shell",
+                    "Anchors the tray panel beside the system tray on Wayland",
+                    distro,
+                    check_gtk_layer_shell(),
+                ),
+                system_dep(
+                    "libasound2-dev",
+                    "Required for voice/audio support",
+                    distro,
+                    check_libasound(),
+                ),
+                system_dep(
+                    "libcurl-dev",
+                    "Required for llama.cpp HTTP/HTTPS support",
+                    distro,
+                    check_libcurl(),
+                ),
+                system_dep(
+                    "libsqlite3-dev",
+                    "Required for database support",
+                    distro,
+                    check_libsqlite3(),
+                ),
+                system_dep(
+                    "libclang-dev",
+                    "Required for Rust FFI bindings (bindgen)",
+                    distro,
+                    check_libclang(),
+                ),
             ]);
         }
 
@@ -280,53 +365,32 @@ impl SystemProbePort for DefaultSystemProbe {
             // are *required* — auto-detect picks Vulkan and the build
             // would fail without them, so flag them as hard misses
             // rather than silently degrading to a CPU build.
-            deps.push(
-                Dependency::required(
-                    "Vulkan headers",
-                    "Development headers required to build with -DGGML_VULKAN=ON",
-                )
-                .with_hint("apt install libvulkan-dev")
-                .with_status(if gpu_info.vulkan_headers {
-                    DependencyStatus::Present {
-                        version: "available".to_string(),
-                    }
-                } else {
-                    DependencyStatus::Missing
-                }),
-            );
+            deps.push(probed_dep(
+                "Vulkan headers",
+                "Development headers required to build with -DGGML_VULKAN=ON",
+                distro,
+                gpu_info.vulkan_headers,
+            ));
 
-            deps.push(
-                Dependency::required("glslc", "SPIR-V shader compiler required for Vulkan builds")
-                    .with_hint("apt install glslc")
-                    .with_status(if gpu_info.vulkan_glslc {
-                        DependencyStatus::Present {
-                            version: "available".to_string(),
-                        }
-                    } else {
-                        DependencyStatus::Missing
-                    }),
-            );
+            deps.push(probed_dep(
+                "glslc",
+                "SPIR-V shader compiler required for Vulkan builds",
+                distro,
+                gpu_info.vulkan_glslc,
+            ));
 
-            deps.push(
-                Dependency::required(
-                    "SPIR-V headers",
-                    "spirv/unified1/spirv.hpp required to build with -DGGML_VULKAN=ON",
-                )
-                .with_hint("apt install spirv-headers")
-                .with_status(if gpu_info.vulkan_spirv_headers {
-                    DependencyStatus::Present {
-                        version: "available".to_string(),
-                    }
-                } else {
-                    DependencyStatus::Missing
-                }),
-            );
+            deps.push(probed_dep(
+                "SPIR-V headers",
+                "spirv/unified1/spirv.hpp required to build with -DGGML_VULKAN=ON",
+                distro,
+                gpu_info.vulkan_spirv_headers,
+            ));
         } else if !gpu_info.has_metal {
             // Only suggest Vulkan on non-macOS (macOS uses Metal)
             #[cfg(not(target_os = "macos"))]
             deps.push(
                 Dependency::optional("Vulkan", "Install Vulkan drivers for GPU acceleration")
-                    .with_hint("apt install mesa-vulkan-drivers vulkan-tools")
+                    .with_hint(hint_for("Vulkan", distro))
                     .with_status(DependencyStatus::Optional),
             );
         }

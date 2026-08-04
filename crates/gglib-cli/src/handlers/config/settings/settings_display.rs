@@ -230,6 +230,22 @@ mod tests {
         );
     }
 
+    /// The always-on proxy settings are configurable from the GUI and the Web
+    /// UI, so `settings show` has to list them too — otherwise the CLI is the
+    /// one interface that cannot tell you why the proxy came up on its own.
+    #[test]
+    fn always_on_proxy_settings_are_listed() {
+        let settings = Settings::default();
+        let rows = settings_display_rows(&settings, None);
+
+        for expected in ["proxy-autostart", "close-to-tray", "start-at-login"] {
+            assert!(
+                rows.iter().any(|(k, _)| k == expected),
+                "{expected} must appear in display rows"
+            );
+        }
+    }
+
     #[test]
     fn settings_display_rows_model_display_override() {
         let settings = Settings {

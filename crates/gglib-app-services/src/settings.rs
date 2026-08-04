@@ -103,46 +103,12 @@ impl SettingsOps {
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to get settings: {e}")))?;
 
-        Ok(AppSettings {
-            default_download_path: settings.default_download_path,
-            default_context_size: settings.default_context_size,
-            proxy_port: settings.proxy_port,
-            llama_base_port: settings.llama_base_port,
-            max_download_queue_size: settings.max_download_queue_size,
-            show_memory_fit_indicators: settings.show_memory_fit_indicators,
-            max_tool_iterations: settings.max_tool_iterations,
-            max_stagnation_steps: settings.max_stagnation_steps,
-            default_model_id: settings.default_model_id,
-            inference_defaults: settings.inference_defaults,
-            inference_profiles: settings.inference_profiles,
-            setup_completed: settings.setup_completed,
-            title_generation_prompt: settings.title_generation_prompt,
-            bind_host: settings.bind_host,
-            share_lan: settings.share_lan,
-            trust_client_sampling: settings.trust_client_sampling,
-        })
+        Ok(settings.into())
     }
 
     /// Update application settings with validation.
     pub async fn update(&self, request: UpdateSettingsRequest) -> Result<AppSettings, GuiError> {
-        let update = SettingsUpdate {
-            default_download_path: request.default_download_path,
-            default_context_size: request.default_context_size,
-            proxy_port: request.proxy_port,
-            llama_base_port: request.llama_base_port,
-            max_download_queue_size: request.max_download_queue_size,
-            show_memory_fit_indicators: request.show_memory_fit_indicators,
-            max_tool_iterations: request.max_tool_iterations,
-            max_stagnation_steps: request.max_stagnation_steps,
-            default_model_id: request.default_model_id,
-            inference_defaults: request.inference_defaults,
-            inference_profiles: request.inference_profiles,
-            setup_completed: request.setup_completed,
-            title_generation_prompt: request.title_generation_prompt,
-            bind_host: request.bind_host,
-            share_lan: request.share_lan,
-            trust_client_sampling: request.trust_client_sampling,
-        };
+        let update: SettingsUpdate = request.clone().into();
 
         let settings = self
             .deps
@@ -156,24 +122,7 @@ impl SettingsOps {
             let _ = self.deps.downloads.set_max_queue_size(queue_size).await;
         }
 
-        Ok(AppSettings {
-            default_download_path: settings.default_download_path,
-            default_context_size: settings.default_context_size,
-            proxy_port: settings.proxy_port,
-            llama_base_port: settings.llama_base_port,
-            max_download_queue_size: settings.max_download_queue_size,
-            show_memory_fit_indicators: settings.show_memory_fit_indicators,
-            max_tool_iterations: settings.max_tool_iterations,
-            max_stagnation_steps: settings.max_stagnation_steps,
-            default_model_id: settings.default_model_id,
-            inference_defaults: settings.inference_defaults,
-            inference_profiles: settings.inference_profiles,
-            setup_completed: settings.setup_completed,
-            title_generation_prompt: settings.title_generation_prompt,
-            bind_host: settings.bind_host,
-            share_lan: settings.share_lan,
-            trust_client_sampling: settings.trust_client_sampling,
-        })
+        Ok(settings.into())
     }
 
     /// Get system memory information.
@@ -329,6 +278,9 @@ mod tests {
             bind_host: None,
             share_lan: None,
             trust_client_sampling: None,
+            proxy_autostart: None,
+            close_to_tray: None,
+            start_at_login: None,
         };
 
         let json = serde_json::to_value(&settings).expect("serializes");

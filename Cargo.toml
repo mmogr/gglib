@@ -81,11 +81,21 @@ tower-http = { version = "0.6", features = ["cors", "fs"] }
 uuid = { version = "1.10", features = ["v4"] }
 
 # Tauri
-tauri = { version = "2.8.5", features = ["devtools"] }
+tauri = { version = "2.8.5", features = ["devtools", "tray-icon", "image-png"] }
 tauri-build = { version = "2.4.1", features = [] }
 tauri-plugin-dialog = "2.6"
+tauri-plugin-autostart = "2"
 dotenvy = "0.15"
 open = "5"
+
+# Linux tray panel placement. Versions match what Tauri already resolves, so
+# these add no new copies to the tree; `gtk` in particular must stay in step
+# with Tauri's or the GtkWindow types will not unify.
+gtk = "0.18"
+libloading = "0.7"
+# StatusNotifierItem tray. Default features pull zbus/tokio, matching Tauri's
+# runtime rather than starting a second one.
+ksni = "0.3"
 
 # System info
 sysinfo = "0.37"

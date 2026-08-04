@@ -185,6 +185,23 @@ pub enum SettingsCommand {
         /// always honoured regardless of this setting.
         #[arg(long)]
         trust_client_sampling: Option<bool>,
+        /// Start the OpenAI-compatible proxy as soon as the desktop app
+        /// launches, instead of waiting for it to be switched on. Combined
+        /// with --start-at-login and --close-to-tray this keeps the endpoint
+        /// permanently available with no terminal held open. Desktop app only;
+        /// `gglib proxy` and `gglib serve` remain explicit foreground commands.
+        #[arg(long)]
+        proxy_autostart: Option<bool>,
+        /// Closing the desktop app's window hides it to the system tray
+        /// instead of quitting, leaving the proxy serving. Quitting is then an
+        /// explicit action from the tray menu.
+        #[arg(long)]
+        close_to_tray: Option<bool>,
+        /// Register the desktop app to launch on login (macOS login item,
+        /// Windows Run key, XDG autostart entry on Linux). Applied
+        /// immediately, so the stored value and the OS state stay in step.
+        #[arg(long)]
+        start_at_login: Option<bool>,
     },
     /// Reset all settings to defaults
     Reset {

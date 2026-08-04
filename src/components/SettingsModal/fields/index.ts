@@ -1,4 +1,6 @@
 export { SettingField } from './SettingField';
+export { ToggleField } from './ToggleField';
+export { DesktopSettings } from './DesktopSettings';
 export { PathSettings } from './PathSettings';
 export { ModelDefaults } from './ModelDefaults';
 export { PortSettings } from './PortSettings';

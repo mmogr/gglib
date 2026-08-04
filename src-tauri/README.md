@@ -34,13 +34,15 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/voice/*` - Voice pipeline: models, devices, audio control, WebSocket audio data plane
    - `/api/events` - Server-Sent Events for real-time updates
 
-4. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to 6 OS integration functions**:
+4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the embedded API through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged.
+
+5. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to 6 OS integration functions**:
    - `get_embedded_api_info` - Discover API port and auth token
    - `open_url` - Open URLs in system browser
    - `set_selected_model`, `sync_menu_state` - Native menu synchronization
    - `check_llama_status`, `install_llama` - llama.cpp binary management
 
-5. **Real-Time Events**: The `/api/events` endpoint streams Server-Sent Events with Bearer authentication:
+6. **Real-Time Events**: The `/api/events` endpoint streams Server-Sent Events with Bearer authentication:
    - `server:*` events - Server lifecycle updates
    - `download:*` events - Download progress
    - `log:*` events - Server console output
@@ -123,7 +125,11 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/main.rs`: Tauri application entry point
   - `src/app/`: Application state and event infrastructure
   - `src/lifecycle.rs`: Hardened shutdown orchestration with watchdog
-  - `src/menu/`: Native menu bar with stateful items
+  - `src/menu/`: Native menu bar with stateful items (macOS only)
+  - `src/tray/`: System tray icon, menu and popover panel (all platforms)
+  - `src/proxy_actions.rs`: Proxy start/stop shared by the tray and autostart
+  - `src/autostart.rs`: Always-on proxy startup and OS login-item registration
+  - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
 
@@ -133,37 +139,37 @@ The Rust backend is organized into three main modules:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           TAURI APPLICATION                              │
+│                           TAURI APPLICATION                             │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                          main.rs                                   │ │
 │  │  • Tauri app setup (plugins, window, menu)                         │ │
 │  │  • Embedded API server startup                                     │ │
 │  │  • Command handler registration                                    │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
-│                                    │                                     │
+│                                    │                                    │
 │          ┌─────────────────────────┼─────────────────────────┐          │
-│          ▼                         ▼                         ▼          │
-│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐    │
-│  │    app/      │         │    menu/     │         │  commands/   │    │
-│  │              │         │              │         │              │    │
-│  │ • AppState   │◄───────►│ • AppMenu    │         │ • util       │    │
-│  │ • Events     │         │ • MenuState  │         │ • llama      │    │
-│  │ • emit_or_log│         │ • build      │         │   (OS-only)  │    │
-│  │              │         │ • handlers   │         │              │    │
-│  │              │         │ • state_sync │         │              │    │
-│  │              │         │              │         │              │    │
-│  └──────┬───────┘         └──────────────┘         └──────┬───────┘    │
-│         │                                                  │            │
-│         └──────────────────────┬───────────────────────────┘            │
-│                                │                                         │
-│                                ▼                                         │
+│          ▼                ▼             ▼                    ▼          │
+│  ┌──────────────┐  ┌────────────┐  ┌────────────┐   ┌──────────────┐    │
+│  │    app/      │  │   menu/    │  │   tray/    │   │  commands/   │    │
+│  │              │  │  (macOS)   │  │  (all OS)  │   │              │    │
+│  │ • AppState   │◄─┤ • AppMenu  │  │ • build    │   │ • util       │    │
+│  │ • Events     │  │ • MenuState│  │ • icon     │   │ • llama      │    │
+│  │ • emit_or_log│  │ • build    │  │ • handlers │   │   (OS-only)  │    │
+│  │              │  │ • handlers │  │ • window   │   │              │    │
+│  │              │  │ • state_sync──►│ • sync    │   │              │    │
+│  │              │  │            │  │            │   │              │    │
+│  └──────┬───────┘  └────────────┘  └─────┬──────┘   └──────┬───────┘    │
+│         │                             │                   │             │
+│         └─────────────────────┬─────────┴───────────────────┘           │
+│                                │                                        │
+│                                ▼                                        │
 │                    ┌───────────────────────┐                            │
 │                    │      GuiBackend       │                            │
 │                    │   (from gglib crate)  │                            │
 │                    └───────────┬───────────┘                            │
-│                                │                                         │
+│                                │                                        │
 └────────────────────────────────┼─────────────────────────────────────────┘
                                  │
                                  ▼
@@ -182,8 +188,12 @@ The Rust backend is organized into three main modules:
 | Module | Purpose | Key Components |
 |--------|---------|----------------|
 | **app/** | Central state & event infrastructure | `AppState` (managed state), `BackgroundTasks` (task handles), `emit_or_log()` (event helper), event constants |
-| **lifecycle.rs** | Application startup & hardened shutdown | `perform_shutdown()` (10s watchdog), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
-| **menu/** | Native menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, state synchronization |
+| **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
+| **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, `sync_all_state` (drives both the menu and the tray) |
+| **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `window` (panel show/hide/position) |
+| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; publishes state and broadcasts the lifecycle event the HTTP handler would have |
+| **autostart.rs** | Always-on proxy settings & launch visibility | `proxy_autostart` startup, `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible) |
+| **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
 | **commands/** | 6 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management) |
 
 ### Communication Flow
@@ -228,5 +238,6 @@ The Rust backend is organized into three main modules:
 For detailed documentation on each module, see:
 - [app/README.md](src/app/README.md) — State and event infrastructure
 - [LIFECYCLE.md](LIFECYCLE.md) — Application startup and hardened shutdown architecture
-- [menu/README.md](src/menu/README.md) — Native menu implementation
+- [menu/README.md](src/menu/README.md) — Native menu implementation (macOS)
+- [tray/README.md](src/tray/README.md) — System tray, popover panel, and platform differences
 - [commands/README.md](src/commands/README.md) — Tauri command reference

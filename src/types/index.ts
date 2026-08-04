@@ -190,6 +190,16 @@ export interface AppSettings {
    * per-model and global defaults.
    */
   trustClientSampling?: boolean | null;
+  /**
+   * Whether the desktop app starts the proxy as soon as it launches. Desktop
+   * app only — `gglib proxy` and `gglib serve` stay explicit foreground
+   * commands.
+   */
+  proxyAutostart?: boolean | null;
+  /** Whether closing the desktop window hides to the tray instead of quitting. */
+  closeToTray?: boolean | null;
+  /** Whether the desktop app registers itself to launch on login. */
+  startAtLogin?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -216,6 +226,12 @@ export interface UpdateSettingsRequest {
   setupCompleted?: boolean | null | undefined;
   /** See `AppSettings.trustClientSampling`. */
   trustClientSampling?: boolean | null | undefined;
+  /** See `AppSettings.proxyAutostart`. */
+  proxyAutostart?: boolean | null | undefined;
+  /** See `AppSettings.closeToTray`. */
+  closeToTray?: boolean | null | undefined;
+  /** See `AppSettings.startAtLogin`. */
+  startAtLogin?: boolean | null | undefined;
 }
 
 // ============================================================================

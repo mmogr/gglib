@@ -154,6 +154,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             bind_host,
             share_lan,
             trust_client_sampling,
+            proxy_autostart,
+            close_to_tray,
+            start_at_login,
         } => {
             // Collect the kebab-case keys of every flag that was provided.
             let mut changed: BTreeSet<&str> = BTreeSet::new();
@@ -190,6 +193,15 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if trust_client_sampling.is_some() {
                 changed.insert("trust-client-sampling");
             }
+            if proxy_autostart.is_some() {
+                changed.insert("proxy-autostart");
+            }
+            if close_to_tray.is_some() {
+                changed.insert("close-to-tray");
+            }
+            if start_at_login.is_some() {
+                changed.insert("start-at-login");
+            }
 
             if changed.is_empty() {
                 println!("No settings provided. Use --help to see available options.");
@@ -213,6 +225,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 bind_host: bind_host.map(Some),
                 share_lan: share_lan.map(Some),
                 trust_client_sampling: trust_client_sampling.map(Some),
+                proxy_autostart: proxy_autostart.map(Some),
+                close_to_tray: close_to_tray.map(Some),
+                start_at_login: start_at_login.map(Some),
             };
 
             // Pre-validate: merge the prospective update into a local copy and validate
@@ -250,6 +265,15 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.trust_client_sampling {
                 prospective.trust_client_sampling = Some(v);
+            }
+            if let Some(Some(v)) = update.proxy_autostart {
+                prospective.proxy_autostart = Some(v);
+            }
+            if let Some(Some(v)) = update.close_to_tray {
+                prospective.close_to_tray = Some(v);
+            }
+            if let Some(Some(v)) = update.start_at_login {
+                prospective.start_at_login = Some(v);
             }
             validate_settings(&prospective)?;
 
