@@ -32,6 +32,26 @@ const PROXY_HOST = '127.0.0.1';
 /** How long the "copied" confirmation stays up, in ms. */
 const COPIED_FEEDBACK_MS = 1500;
 
+/** Longest error detail the popover shows before trimming. */
+const MAX_ERROR_CHARS = 160;
+
+/**
+ * Reduce a thrown value to something worth showing in the popover.
+ *
+ * The detail earns its space: a bare "Could not start the proxy" makes a
+ * refused connection look exactly like a port conflict or a bad config, which
+ * is the difference between a bug in the app and a port already in use.
+ */
+function describeError(err: unknown): string {
+  const text = (err instanceof Error ? err.message : String(err)).trim();
+
+  if (!text) {
+    return 'No further detail was reported.';
+  }
+
+  return text.length > MAX_ERROR_CHARS ? `${text.slice(0, MAX_ERROR_CHARS - 1)}…` : text;
+}
+
 export const TrayPanel: FC = () => {
   const proxy = useProxyState();
   const [pending, setPending] = useState(false);
@@ -64,7 +84,7 @@ export const TrayPanel: FC = () => {
       await action();
     } catch (err) {
       // The popover has no toast host, so failures are shown in place.
-      setError(`Could not ${verb} the proxy.`);
+      setError(`Could not ${verb} the proxy. ${describeError(err)}`);
       appLogger.error('component.tray', `Failed to ${verb} proxy`, { error: err });
     } finally {
       setPending(false);
@@ -107,7 +127,7 @@ export const TrayPanel: FC = () => {
         )}
 
         {error && (
-          <p className="text-sm text-danger" role="alert">
+          <p className="text-sm text-danger break-words" role="alert">
             {error}
           </p>
         )}

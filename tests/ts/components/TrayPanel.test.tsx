@@ -115,6 +115,42 @@ describe('TrayPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not start the proxy/i);
   });
 
+  /**
+   * The cause has to survive to the screen. Collapsing every failure into one
+   * sentence is what made a refused connection — the app having torn down its
+   * own API server — indistinguishable from a port conflict.
+   */
+  it('shows why the start failed, not just that it did', async () => {
+    transport.startProxy.mockRejectedValueOnce(new Error('Failed to fetch'));
+    render(<TrayPanel />);
+
+    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/failed to fetch/i);
+  });
+
+  /** A thrown non-Error must not render as "[object Object]". */
+  it('still says something useful when the failure has no message', async () => {
+    transport.startProxy.mockRejectedValueOnce(new Error(''));
+    render(<TrayPanel />);
+
+    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no further detail/i);
+  });
+
+  /** A long backend error must not blow the 360px popover open. */
+  it('trims a very long failure message', async () => {
+    transport.startProxy.mockRejectedValueOnce(new Error('x'.repeat(500)));
+    render(<TrayPanel />);
+
+    await userEvent.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent?.length ?? 0).toBeLessThan(240);
+    expect(alert).toHaveTextContent(/…$/);
+  });
+
   it('confirms a copied endpoint inline', async () => {
     proxyState.current = { running: true, port: 9000 };
     dashboard.current = { snapshot: snapshot(), connected: true };
