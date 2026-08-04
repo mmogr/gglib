@@ -38,7 +38,11 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            // Marks launches the OS started, so those can go straight to the
+            // menu bar. `apply_login_item` re-registers on every run and the
+            // plugin rewrites the entry unconditionally, so existing login
+            // items pick this up on their next launch with nothing to migrate.
+            Some(vec![autostart::LOGIN_ITEM_FLAG]),
         ))
         .setup(move |app| {
             // Bootstrap inside setup() where we have AppHandle for real event emission
@@ -283,7 +287,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the tray before the menu: on Linux and Windows it is the only
     // persistent UI once the window is hidden.
-    match tray::build(&handle) {
+    let tray_available = match tray::build(&handle) {
         Ok((_tray, tray_menu)) => {
             info!("System tray initialized");
             let state: tauri::State<AppState> = app.state();
@@ -291,13 +295,23 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             tauri::async_runtime::spawn(async move {
                 *slot.write().await = Some(tray_menu);
             });
+            true
         }
         Err(e) => {
             // A missing tray is a degraded app, not a broken one: the window
             // still works, so log and carry on rather than refusing to start.
             error!(error = %e, "Failed to build system tray");
+            false
         }
-    }
+    };
+
+    // The main window is declared hidden, so something has to show it. Done
+    // here rather than in the `autostart::apply` task below because that one
+    // also starts the proxy, and the window should not wait behind that.
+    //
+    // After the tray build, never before: whether there is a tray icon decides
+    // whether staying hidden is recoverable.
+    tauri::async_runtime::block_on(autostart::apply_initial_visibility(&handle, tray_available));
 
     // Initial paint for every surface. Runs on all platforms: even where
     // there is no application menu, the tray still needs its first sync.

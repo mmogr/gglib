@@ -17,6 +17,70 @@ use tracing::{error, info};
 
 use crate::app::AppState;
 use crate::proxy_actions;
+use crate::{dock, tray};
+
+/// Argument the login item passes, marking a launch as automatic.
+///
+/// Registered with the autostart plugin at build time and read back out of
+/// `std::env::args`. macOS's `LaunchAgent` writes it into the plist's
+/// `ProgramArguments` alongside the executable path, and the equivalent happens
+/// on Windows and Linux.
+pub const LOGIN_ITEM_FLAG: &str = "--from-autostart";
+
+/// Whether this process was started by the OS login item rather than by hand.
+fn launched_by_login_item() -> bool {
+    std::env::args().any(|arg| arg == LOGIN_ITEM_FLAG)
+}
+
+/// Whether this launch should go straight to the menu bar, with no window and
+/// no Dock icon.
+///
+/// Pure so the truth table can be tested without a running app — including the
+/// case that matters most, which is every input that must still yield a window.
+///
+/// `tray_available` is not a formality. Building the tray is allowed to fail
+/// without stopping the launch, and starting hidden without one would leave an
+/// app with no window, no Dock icon and nothing to click: unreachable short of
+/// killing it from a terminal. Requiring a tray means the worst outcome is a
+/// window someone did not want, which they can close.
+pub const fn should_start_hidden(
+    launched_by_login_item: bool,
+    close_to_tray: Option<bool>,
+    tray_available: bool,
+) -> bool {
+    launched_by_login_item && matches!(close_to_tray, Some(true)) && tray_available
+}
+
+/// Show the main window, unless this launch belongs in the menu bar.
+///
+/// The window is declared `"visible": false` so this decision is made before
+/// anything is drawn. The alternative — showing then hiding — is a window that
+/// appears and is snatched away at every login.
+pub async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
+    let state = app.state::<AppState>();
+
+    let close_to_tray = match state.core.settings().get().await {
+        Ok(settings) => settings.close_to_tray,
+        Err(e) => {
+            // Fail visible, deliberately. A window shown to someone who wanted
+            // it hidden is a papercut they can fix with one click; a hidden
+            // window is only recoverable through the tray, and this branch runs
+            // precisely when the app is least healthy.
+            error!(error = %e, "Could not read close_to_tray; showing the window");
+            None
+        }
+    };
+
+    if should_start_hidden(launched_by_login_item(), close_to_tray, tray_available) {
+        dock::hide(app);
+        info!("Launched at login with close-to-tray - starting in the menu bar");
+        return;
+    }
+
+    if let Err(e) = tray::window::show_main(app) {
+        error!(error = %e, "Failed to show the main window");
+    }
+}
 
 /// Bring the proxy up when `proxy_autostart` is set, and register or
 /// unregister the login item to match `start_at_login`.
@@ -77,5 +141,49 @@ fn apply_login_item(app: &AppHandle, enabled: bool) {
     match result {
         Ok(()) => info!(enabled, "Login item synchronised"),
         Err(e) => error!(error = %e, enabled, "Could not update login item"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one case that hides: the OS started us, and the user asked for
+    /// gglib to live in the menu bar.
+    #[test]
+    fn a_login_launch_with_close_to_tray_starts_hidden() {
+        assert!(should_start_hidden(true, Some(true), true));
+    }
+
+    /// Launching by hand always shows, whatever close-to-tray says. Someone
+    /// who just double-clicked the app wants to see it.
+    #[test]
+    fn opening_the_app_yourself_always_shows_it() {
+        assert!(!should_start_hidden(false, Some(true), true));
+        assert!(!should_start_hidden(false, Some(false), true));
+        assert!(!should_start_hidden(false, None, true));
+    }
+
+    /// Close-to-tray is the opt-in. Without it a login launch behaves the way
+    /// it always has, so nobody who has not asked for this sees a change.
+    #[test]
+    fn a_login_launch_without_close_to_tray_still_shows() {
+        assert!(!should_start_hidden(true, Some(false), true));
+        assert!(!should_start_hidden(true, None, true));
+    }
+
+    /// No tray, no hiding — the guard against the one unrecoverable state,
+    /// where nothing is on screen and there is nothing to click either.
+    #[test]
+    fn nothing_hides_without_a_tray_icon_to_come_back_from() {
+        assert!(!should_start_hidden(true, Some(true), false));
+    }
+
+    /// The flag has to match what the plugin registers, or the login item
+    /// writes one string into the plist and the app looks for another — and
+    /// every launch would silently show the window.
+    #[test]
+    fn the_login_flag_is_the_one_the_plugin_registers() {
+        assert_eq!(LOGIN_ITEM_FLAG, "--from-autostart");
     }
 }

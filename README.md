@@ -751,10 +751,20 @@ Three settings, in the GUI's Settings dialog, the Web UI, or `gglib config setti
 | `--close-to-tray` | Closing the window hides it, leaving the proxy serving |
 | `--start-at-login` | Register the app with your OS autostart |
 
-With all three on, the endpoint is there from the moment you log in. The tray icon
-shows whether the **proxy** is running — not merely whether gglib is open — and its
-panel gives you the endpoint URL, live connections and context usage, and start/stop.
-Right-click the icon for the full menu.
+With all three on, the endpoint is there from the moment you log in — gglib comes up
+in the menu bar with no window at all. The tray icon shows whether the **proxy** is
+running — not merely whether gglib is open — and its panel gives you the endpoint URL,
+live connections and context usage, and start/stop. Right-click the icon for the full
+menu.
+
+On macOS, `--close-to-tray` also drops gglib out of the Dock while it is hidden. That
+necessarily takes it out of the Cmd+Tab switcher too, so the menu bar icon is the way
+back — click it, or use its Open gglib item. Windows and Linux need no equivalent: a
+taskbar button belongs to a window, so hiding the window already removes it.
+
+If the tray icon fails to appear, gglib shows its window rather than starting hidden —
+on Linux that failure usually means `libayatana-appindicator3` is missing, or a bar
+without StatusNotifierItem support under Wayland.
 
 `gglib proxy` and `gglib serve` are unaffected: they stay explicit foreground
 commands. If one of them already holds the port, the desktop app leaves it alone

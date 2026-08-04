@@ -47,13 +47,24 @@ background service it is.
 
 An `Accessory` app leaves the **Cmd+Tab switcher** as well as the Dock; macOS
 offers no way to have one without the other. So while hidden, the tray icon is
-the only way back, which is why the Dock icon is restored in `window::show_main`
-— the single chokepoint every route back shares — rather than at each of its
-callers.
+the only way back, and two rules follow from that:
 
-None of this applies off macOS, where [`crate::dock`] compiles to no-ops. A
-taskbar entry belongs to a window rather than to the process, so hiding the
-window has already removed it and there is nothing left to hide.
+- The Dock icon is restored in `window::show_main`, the single chokepoint every
+  route back shares, rather than at each of its callers.
+- gglib never starts hidden unless the tray was built successfully. A launch
+  with no window, no Dock icon and no tray icon could only be recovered from a
+  terminal, so `autostart::should_start_hidden` requires all three conditions
+  and everything else shows the window.
+
+That last rule is why the main window is declared `"visible": false` in
+`tauri.conf.json`: the decision is made once, before anything is drawn, instead
+of showing a window at every login only to snatch it away.
+
+Only the Dock half is macOS-specific — [`crate::dock`] compiles to no-ops
+elsewhere, because a taskbar entry belongs to a window rather than to the
+process, so hiding the window has already removed it. Starting hidden at login
+is not: `should_start_hidden` is platform-independent, and the login item
+carries `--from-autostart` on all three platforms.
 
 ## Platform differences
 
