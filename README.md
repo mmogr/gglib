@@ -819,7 +819,7 @@ make setup   # check deps → build frontend → install CLI → offer llama.cpp
 - **Node.js** 20.19+ (matches the `package.json` `engines` field) — [nodejs.org](https://nodejs.org/) (for web UI)
 - **SQLite** 3.x
 - **Build tools**: macOS `xcode-select --install` + `brew install cmake` · Ubuntu `build-essential cmake git` · Windows VS 2022 C++ + CMake
-- **Linux desktop app**: `libwebkit2gtk-4.1-dev` for the WebView and `libayatana-appindicator3-dev` for the system tray. `gglib config check-deps` reports both.
+- **Linux desktop app**: WebKit2GTK 4.1 and libayatana-appindicator (the system tray). Package names differ by distribution — `libwebkit2gtk-4.1-dev` and `libayatana-appindicator3-dev` on Debian/Ubuntu, `webkit2gtk-4.1` and `libayatana-appindicator` on Arch. Run `gglib config check-deps`, which detects your distribution and prints the exact command.
 
 llama.cpp is managed by GGLib — no separate install needed.
 

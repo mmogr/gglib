@@ -77,25 +77,24 @@ fn print_installation_instructions() {
 
     #[cfg(target_os = "linux")]
     {
-        // Detect Linux distribution
-        if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
-            if os_release.contains("Ubuntu") || os_release.contains("Debian") {
-                println!("Ubuntu/Debian:");
-                println!("  sudo apt update");
-                println!("  sudo apt install build-essential cmake git");
-            } else if os_release.contains("Fedora") || os_release.contains("Red Hat") {
-                println!("Fedora/RHEL:");
-                println!("  sudo dnf install gcc-c++ cmake git");
-            } else if os_release.contains("Arch") {
-                println!("Arch Linux:");
-                println!("  sudo pacman -S base-devel cmake git");
-            } else {
-                println!("Linux:");
-                println!("  Install: build-essential (or equivalent), cmake, git");
-            }
-        } else {
-            println!("Linux:");
-            println!("  Install: build-essential (or equivalent), cmake, git");
+        // The build needs a compiler, cmake and git; the shared package table
+        // knows what each is called here. Naming them through it rather than
+        // inline is what keeps this in step with `gglib config check-deps`,
+        // which used to print different package names for the same thing.
+        let distro = crate::system::detect_linux_distro();
+        println!("{}:", distro.label());
+
+        let packages: Vec<&str> = ["gcc", "cmake", "git"]
+            .iter()
+            .filter_map(|dependency| {
+                gglib_core::utils::system::packages_for(dependency)
+                    .and_then(|names| names.for_distro(distro))
+            })
+            .collect();
+
+        match (distro.installer(), packages.is_empty()) {
+            (Some(installer), false) => println!("  sudo {installer} {}", packages.join(" ")),
+            _ => println!("  Install: a C/C++ toolchain, cmake, git"),
         }
     }
 
