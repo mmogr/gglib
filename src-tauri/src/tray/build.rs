@@ -1,11 +1,17 @@
-//! Tray construction.
+//! Tray construction for the `muda` backend used on macOS and Windows.
+//!
+//! Renders [`super::items::ITEMS`] rather than listing the menu itself, so the
+//! Linux backend cannot drift from it.
+
+use std::collections::HashMap;
 
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Wry};
 use tracing::error;
 
+use crate::tray::items::{ITEMS, Item, is_enabled};
 use crate::tray::placement::Anchor;
 use crate::tray::{handlers, icon, ids, window};
 
@@ -22,62 +28,74 @@ pub fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
-/// Items whose state tracks the proxy.
+/// The built menu items, keyed by id so `sync` can find them again.
+///
+/// A map rather than named fields because the item list lives in `items` now;
+/// naming them here would be a second copy of the same structure.
 pub struct TrayMenu {
-    /// Disabled header showing where the endpoint is, updated by `tray::sync`.
-    pub status: MenuItem<Wry>,
-    pub start_proxy: MenuItem<Wry>,
-    pub stop_proxy: MenuItem<Wry>,
-    pub copy_proxy_url: MenuItem<Wry>,
+    items: HashMap<&'static str, MenuItem<Wry>>,
+}
+
+impl TrayMenu {
+    /// Apply proxy state to every item that tracks it.
+    pub fn sync(&self, status: &str, proxy_running: bool) -> tauri::Result<()> {
+        for (id, item) in &self.items {
+            if *id == ids::STATUS {
+                item.set_text(status)?;
+            } else {
+                item.set_enabled(is_enabled(id, proxy_running))?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Build the tray icon, its menu, and its click behaviour.
-///
-/// Every action lives on the menu, including the ones that also have a click
-/// gesture. Linux's AppIndicator delivers no click events at all, so a feature
-/// reachable only by clicking would simply not exist there.
 pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
-    // Disabled: a label, not a command. It carries the endpoint into the one
-    // surface every platform renders — tooltips are a documented no-op on
-    // Linux, so without this the port is simply invisible there.
-    let status = MenuItem::with_id(
-        app,
-        ids::STATUS,
-        icon::derive(false, None).status,
-        false,
-        None::<&str>,
-    )?;
-    let open_panel = MenuItem::with_id(app, ids::OPEN_PANEL, "Proxy Panel", true, None::<&str>)?;
-    let start_proxy = MenuItem::with_id(app, ids::START_PROXY, "Start Proxy", true, None::<&str>)?;
-    let stop_proxy = MenuItem::with_id(app, ids::STOP_PROXY, "Stop Proxy", false, None::<&str>)?;
-    let copy_proxy_url = MenuItem::with_id(
-        app,
-        ids::COPY_PROXY_URL,
-        "Copy Endpoint URL",
-        false,
-        None::<&str>,
-    )?;
-    let open_main = MenuItem::with_id(app, ids::OPEN_MAIN, "Open gglib", true, None::<&str>)?;
-    let preferences = MenuItem::with_id(app, ids::PREFERENCES, "Preferences…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, ids::QUIT, "Quit gglib", true, None::<&str>)?;
+    let mut items: HashMap<&'static str, MenuItem<Wry>> = HashMap::new();
+    // Separators are positional and never looked up again, so they are kept
+    // only to be borrowed into the menu below.
+    let mut separators = Vec::new();
+    let mut order: Vec<(Option<&'static str>, usize)> = Vec::new();
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &status,
-            &PredefinedMenuItem::separator(app)?,
-            &open_panel,
-            &PredefinedMenuItem::separator(app)?,
-            &start_proxy,
-            &stop_proxy,
-            &copy_proxy_url,
-            &PredefinedMenuItem::separator(app)?,
-            &open_main,
-            &preferences,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
+    for item in ITEMS {
+        match item {
+            // Disabled: a label, not a command. It carries the endpoint into
+            // the one surface every platform renders.
+            Item::Status => {
+                let status = MenuItem::with_id(
+                    app,
+                    ids::STATUS,
+                    icon::derive(false, None).status,
+                    false,
+                    None::<&str>,
+                )?;
+                items.insert(ids::STATUS, status);
+                order.push((Some(ids::STATUS), 0));
+            }
+            Item::Action { id, label } => {
+                let built =
+                    MenuItem::with_id(app, *id, label, is_enabled(id, false), None::<&str>)?;
+                items.insert(id, built);
+                order.push((Some(id), 0));
+            }
+            Item::Separator => {
+                separators.push(PredefinedMenuItem::separator(app)?);
+                order.push((None, separators.len() - 1));
+            }
+        }
+    }
+
+    let refs: Vec<&dyn IsMenuItem<Wry>> = order
+        .iter()
+        .map(|(id, index)| match id {
+            Some(id) => &items[id] as &dyn IsMenuItem<Wry>,
+            None => &separators[*index] as &dyn IsMenuItem<Wry>,
+        })
+        .collect();
+
+    let menu = Menu::with_items(app, &refs)?;
+    drop(refs);
 
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(idle_icon()?)
@@ -94,21 +112,14 @@ pub fn build(app: &AppHandle) -> tauri::Result<(TrayIcon, TrayMenu)> {
         .on_tray_icon_event(on_icon_event)
         .build(app)?;
 
-    Ok((
-        tray,
-        TrayMenu {
-            status,
-            start_proxy,
-            stop_proxy,
-            copy_proxy_url,
-        },
-    ))
+    Ok((tray, TrayMenu { items }))
 }
 
 /// Open the panel on a completed left click.
 ///
 /// Only `Up` is acted on so the panel does not appear under a button that is
-/// still held down. Never fires on Linux — see the module README.
+/// still held down. Never fires on Linux, which is why that platform uses a
+/// different backend entirely — see the module README.
 fn on_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
     let TrayIconEvent::Click {
         button: MouseButton::Left,

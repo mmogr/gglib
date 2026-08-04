@@ -3,6 +3,7 @@ mod build;
 mod handlers;
 mod icon;
 mod ids;
+mod items;
 #[cfg(target_os = "linux")]
 mod layer_shell;
 pub mod placement;
@@ -47,11 +48,7 @@ pub async fn sync(
     let state = app.state::<AppState>();
     let menu_guard = state.tray_menu.read().await;
     if let Some(menu) = menu_guard.as_ref() {
-        menu.status
-            .set_text(&visual.status)
-            .and_then(|()| menu.start_proxy.set_enabled(!proxy_running))
-            .and_then(|()| menu.stop_proxy.set_enabled(proxy_running))
-            .and_then(|()| menu.copy_proxy_url.set_enabled(proxy_running))
+        menu.sync(&visual.status, proxy_running)
             .map_err(|e| format!("Failed to sync tray menu: {e}"))?;
     }
 

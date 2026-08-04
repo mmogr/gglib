@@ -17,9 +17,20 @@ use crate::proxy_actions;
 use crate::tray::placement::Anchor;
 use crate::tray::{ids, window};
 
-/// Route a tray menu click.
+/// Route a `muda` menu event.
+///
+/// Unwraps the event and hands the id to [`dispatch`]. The routing itself is
+/// shared because the Linux backend delivers activations as ids rather than as
+/// `MenuEvent`s, and the two must not drift.
 pub fn handle(app: &AppHandle, event: MenuEvent) {
-    let id = event.id().as_ref();
+    dispatch(app, event.id().as_ref());
+}
+
+/// Perform the action a menu item id names.
+///
+/// The single entry point for every tray backend, so the tray reaches the same
+/// code as the WebUI and the CLI however the click arrived.
+pub fn dispatch(app: &AppHandle, id: &str) {
     debug!(tray_id = %id, "Tray menu event received");
 
     match id {

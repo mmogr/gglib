@@ -1,7 +1,7 @@
 //! Where the tray panel appears, and the one place that knows platforms differ.
 //!
 //! Callers describe *what they know about the tray icon* — a rectangle from a
-//! click, a point, or nothing — and this module turns that into a position by
+//! click, or nothing — and this module turns that into a position by
 //! whatever means the platform offers. Keeping the `#[cfg]` here means
 //! [`super::window`], [`super::build`] and [`super::handlers`] need none of
 //! their own.
@@ -15,8 +15,8 @@ pub enum Anchor {
     Rect(Rect),
     /// Nothing was reported.
     ///
-    /// The normal case on Linux, where no click event fires and
-    /// `TrayIcon::rect` is always `None`.
+    /// A menu item was used rather than the icon, so there is no gesture to
+    /// anchor to.
     Unknown,
 }
 
@@ -55,7 +55,7 @@ pub fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
         Anchor::Rect(rect) => position_near(panel, rect),
         // Guessing is worse than leaving it: `cursor_position` reports (0, 0)
         // on Wayland rather than failing, which would fling the panel into the
-        // corner of the screen.
+        // corner of the screen. The startup anchor still applies.
         Anchor::Unknown => Ok(()),
     }
 }
