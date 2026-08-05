@@ -95,15 +95,37 @@ impl ProxyOps {
         }
     }
 
-    /// Start the proxy server.
+    /// Start the proxy server, optionally pinned to a single model.
     ///
     /// Delegates to the supervisor using the shared `ModelRuntimePort`
     /// that was injected at construction time. Returns the bound address.
     ///
+    /// A fresh start defines the runtime's pinned mode outright: `Some` is
+    /// `gglib serve` (every other model refused), `None` the auto-swapping
+    /// proxy. The pin is applied *before* the supervisor starts accepting so
+    /// no request can slip a foreign model in between, and it is only
+    /// applied on a fresh start — when the proxy is already running the
+    /// start fails as a conflict and the standing pin is left untouched.
+    ///
     /// # Arguments
     ///
     /// * `config` - Proxy server configuration (host, port, default context)
-    pub async fn start(&self, config: ProxyConfig) -> Result<SocketAddr, GuiError> {
+    /// * `pin` - Pin the runtime to one model for this proxy run
+    pub async fn start(
+        &self,
+        config: ProxyConfig,
+        pin: Option<gglib_core::ports::PinnedSpec>,
+    ) -> Result<SocketAddr, GuiError> {
+        if let ProxyStatus::Running { address } = self.supervisor.status().await {
+            return Err(GuiError::Conflict(format!(
+                "Proxy already running at {address}"
+            )));
+        }
+        if let Err(e) = self.runtime.set_pin(pin) {
+            return Err(GuiError::Internal(format!(
+                "could not apply model pin: {e}"
+            )));
+        }
         self.start_raw(config).await.map_err(Self::map_start_error)
     }
 
@@ -229,7 +251,14 @@ impl ProxyOps {
     }
 
     /// Stop the proxy server.
+    ///
+    /// Clears any model pin: the pin belongs to one proxy run, and leaving
+    /// it set would make the next unpinned start refuse models for no
+    /// visible reason.
     pub async fn stop(&self) -> Result<(), GuiError> {
+        if let Err(e) = self.runtime.set_pin(None) {
+            tracing::debug!("could not clear model pin on stop: {e}");
+        }
         self.supervisor.stop().await.map_err(|e| match e {
             SupervisorError::NotRunning => GuiError::Conflict("Proxy is not running".to_string()),
             SupervisorError::AlreadyRunning(addr) => {
@@ -245,6 +274,15 @@ impl ProxyOps {
     /// Get the current proxy status.
     pub async fn status(&self) -> ProxyStatus {
         self.supervisor.status().await
+    }
+
+    /// The model the shared runtime is currently pinned to, if any.
+    ///
+    /// `Some` while a pinned proxy run (`gglib serve`) is active; surfaced in
+    /// `GET /api/proxy/status` so clients can tell the two modes apart.
+    #[must_use]
+    pub fn pinned_model(&self) -> Option<String> {
+        self.runtime.pinned_model()
     }
 
     /// The agent-path prompt-cache reuse sink shared with the proxy dashboard.

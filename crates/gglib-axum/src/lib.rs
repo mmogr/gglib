@@ -31,6 +31,7 @@ use uuid as _; // Will be used by embedded module
 
 pub mod bootstrap;
 pub mod chat_api;
+pub mod daemon;
 pub mod dto;
 pub mod embedded;
 pub mod error;

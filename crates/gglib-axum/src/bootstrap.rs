@@ -147,6 +147,10 @@ pub struct AxumContext {
     /// capabilities, tags and inference defaults; resolving them through this
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
+    /// Cancellation token that stops the daemon when this context is hosted
+    /// by [`run_daemon`](crate::daemon::run_daemon). `None` in every other
+    /// host (tests, embedded), where `POST /api/daemon/shutdown` answers 409.
+    pub daemon_shutdown: Option<tokio_util::sync::CancellationToken>,
 }
 
 /// Bootstrap the Axum server with all services.
@@ -299,6 +303,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         benchmark,
         runtime,
         catalog,
+        daemon_shutdown: None,
     })
 }
 
@@ -311,13 +316,14 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
     use tracing::info;
 
     let ctx = bootstrap(config.clone()).await?;
+    let state: crate::state::AppState = Arc::new(ctx);
 
     // Choose router based on whether static serving is configured
     let app = if let Some(ref static_dir) = config.static_dir {
         info!("Serving static assets from: {}", static_dir.display());
-        crate::routes::create_spa_router(ctx, static_dir, &config.cors)
+        crate::routes::create_spa_router(state, static_dir, &config.cors)
     } else {
-        crate::routes::create_router(ctx, &config.cors)
+        crate::routes::create_router(state, &config.cors)
     };
 
     let addr = format!("{}:{}", config.host, config.port);

@@ -34,7 +34,7 @@ async fn local_only_rejects_remote_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -64,7 +64,7 @@ async fn local_only_allows_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -95,7 +95,7 @@ async fn local_only_allows_127_0_0_1_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -121,7 +121,7 @@ async fn local_only_allows_ipv6_localhost() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -155,7 +155,7 @@ async fn local_only_allows_tauri_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(

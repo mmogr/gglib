@@ -106,16 +106,12 @@ sysinfo = "0.37"
 # Testing
 tempfile = "3.8"
 mockall = "0.14"
-
-# Internal crates (for migration)
-gglib-bootstrap = { path = "crates/gglib-bootstrap" }
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
 gglib-download = { path = "crates/gglib-download" }
 gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-mcp = { path = "crates/gglib-mcp" }
-gglib-agent = { path = "crates/gglib-agent" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-sse = { path = "crates/gglib-sse" }
 gglib-axum = { path = "crates/gglib-axum" }

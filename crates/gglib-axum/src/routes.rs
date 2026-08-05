@@ -9,11 +9,9 @@ use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
-use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::bootstrap::AxumContext;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
@@ -101,6 +99,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))
         .route("/proxy/stop", post(handlers::proxy::stop))
+        // Daemon lifecycle
+        .route("/daemon/shutdown", post(handlers::daemon::shutdown))
         // Events (SSE)
         .route("/events", get(handlers::events::stream))
         // Agent (server-side agentic loop with SSE streaming)
@@ -299,8 +299,7 @@ fn config_routes() -> Router<AppState> {
 ///
 /// # Path Parameter Syntax
 /// Axum 0.8 uses brace syntax for path parameters: `{id}`, `{tag}`
-pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
-    let state: AppState = Arc::new(ctx);
+pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
     let cors = build_cors_layer(cors_config);
 
     Router::new()
@@ -327,13 +326,13 @@ pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
 ///
 /// # Example
 /// ```no_run
-/// # use gglib_axum::{CorsConfig, bootstrap::AxumContext};
-/// # async fn example(ctx: AxumContext) {
-/// let router = gglib_axum::routes::create_spa_router(ctx, "./dist", &CorsConfig::AllowAll);
+/// # use gglib_axum::{CorsConfig, state::AppState};
+/// # async fn example(state: AppState) {
+/// let router = gglib_axum::routes::create_spa_router(state, "./dist", &CorsConfig::AllowAll);
 /// # }
 /// ```
 pub fn create_spa_router<P: AsRef<Path>>(
-    ctx: AxumContext,
+    state: AppState,
     static_dir: P,
     cors_config: &CorsConfig,
 ) -> Router {
@@ -345,7 +344,7 @@ pub fn create_spa_router<P: AsRef<Path>>(
     let serve_dir = ServeDir::new(static_path).fallback(ServeFile::new(&index_path));
 
     // API routes (without fallback - they should 404 on unknown API paths)
-    let api = create_router(ctx, cors_config);
+    let api = create_router(state, cors_config);
 
     // Merge API routes with static serving as fallback
     // API routes take priority, then fallback to static/SPA serving

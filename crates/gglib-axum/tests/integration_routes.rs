@@ -36,7 +36,7 @@ async fn health_endpoint_returns_ok() {
         Err(_) => return, // Skip test if bootstrap fails
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -64,7 +64,7 @@ async fn models_endpoint_returns_json() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -95,7 +95,7 @@ async fn servers_endpoint_returns_json_array() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -120,7 +120,7 @@ async fn downloads_endpoint_returns_queue_snapshot() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -148,7 +148,7 @@ async fn events_endpoint_returns_sse_stream() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -191,7 +191,11 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
     // Use create_spa_router which includes the SPA fallback
-    let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
+    let app = create_spa_router(
+        std::sync::Arc::new(ctx),
+        temp_dir.path(),
+        &CorsConfig::AllowAll,
+    );
 
     let response = app
         .oneshot(
@@ -232,7 +236,7 @@ async fn nonexistent_route_returns_not_found() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -264,7 +268,11 @@ async fn spa_fallback_returns_index_html() {
     let mut file = std::fs::File::create(&index_path).unwrap();
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
-    let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
+    let app = create_spa_router(
+        std::sync::Arc::new(ctx),
+        temp_dir.path(),
+        &CorsConfig::AllowAll,
+    );
 
     // Request a non-existent client-side route (not under /api/)
     let response = app
@@ -299,7 +307,7 @@ async fn hf_search_endpoint_accepts_post_and_returns_valid_response() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Minimal valid request body for HF search
     let request_body = r#"{"query": "test", "page": 1}"#;
@@ -341,7 +349,7 @@ async fn settings_endpoint_accepts_get() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -364,7 +372,7 @@ async fn settings_endpoint_accepts_put() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Empty update request (no changes)
     let request_body = r#"{}"#;
@@ -396,7 +404,7 @@ async fn settings_endpoint_accepts_patch() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Empty update request (no changes)
     let request_body = r#"{}"#;
@@ -432,7 +440,7 @@ async fn servers_start_collection_route_accepts_post() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Request with model_id in body (matches frontend transport contract)
     let request_body = format!(r#"{{"model_id": 999, "port": {}}}"#, TEST_MODEL_PORT);
@@ -474,7 +482,7 @@ async fn servers_stop_collection_route_accepts_post() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Request with model_id in body (matches frontend transport contract)
     let request_body = r#"{"model_id": 999}"#;
@@ -520,7 +528,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -560,7 +568,7 @@ async fn proxy_start_accepts_json_config() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let request_body = r#"null"#;
 
@@ -595,7 +603,7 @@ async fn proxy_stop_is_idempotent() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -631,7 +639,7 @@ async fn downloads_queue_accepts_get() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -677,7 +685,11 @@ async fn model_get_by_id_returns_json_not_html() {
     let mut file = std::fs::File::create(&index_path).unwrap();
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
-    let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
+    let app = create_spa_router(
+        std::sync::Arc::new(ctx),
+        temp_dir.path(),
+        &CorsConfig::AllowAll,
+    );
 
     let response = app
         .oneshot(
@@ -719,7 +731,11 @@ async fn model_tags_by_id_returns_json_not_html() {
     let mut file = std::fs::File::create(&index_path).unwrap();
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
-    let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
+    let app = create_spa_router(
+        std::sync::Arc::new(ctx),
+        temp_dir.path(),
+        &CorsConfig::AllowAll,
+    );
 
     let response = app
         .oneshot(
@@ -760,7 +776,11 @@ async fn mcp_server_tools_by_id_returns_json_not_html() {
     let mut file = std::fs::File::create(&index_path).unwrap();
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
-    let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
+    let app = create_spa_router(
+        std::sync::Arc::new(ctx),
+        temp_dir.path(),
+        &CorsConfig::AllowAll,
+    );
 
     let response = app
         .oneshot(
@@ -796,7 +816,7 @@ async fn model_tags_accepts_post_with_body() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Frontend POSTs to /api/models/{id}/tags with { tag: "..." } in body
     let response = app
@@ -828,7 +848,7 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // First, set a non-default context size in settings (8192 instead of 4096)
     let settings_response = app
@@ -880,7 +900,7 @@ async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     // Clear any settings default by explicitly setting null
     let settings_response = app

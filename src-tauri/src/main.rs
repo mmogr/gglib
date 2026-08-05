@@ -77,6 +77,7 @@ fn main() {
                 benchmark: ctx.benchmark.clone(),
                 runtime: ctx.runtime.clone(),
                 catalog: ctx.catalog.clone(),
+                daemon_shutdown: None,
             };
 
             // Start embedded API server with auth and ephemeral port

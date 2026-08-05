@@ -18,6 +18,9 @@ pub struct ProxyStatus {
     pub port: Option<u16>,
     pub current_model: Option<String>,
     pub model_port: Option<u16>,
+    /// The model this proxy run is pinned to, when started in pinned mode
+    /// (`gglib serve`). `None` for the ordinary auto-swapping proxy.
+    pub pinned_model: Option<String>,
 }
 
 /// Optional configuration for starting the proxy.
@@ -36,28 +39,37 @@ pub struct StartProxyConfig {
     /// `true`; omitted falls back to `<data-root>/slots`, same as the CLI.
     #[serde(default)]
     pub slot_dir: Option<std::path::PathBuf>,
+    /// Pin this proxy run to a single model (`gglib serve`). Carries the
+    /// model name and its fully-cascaded launch options; every request for
+    /// another model is refused while the pin holds. Omitted means the
+    /// ordinary auto-swapping proxy.
+    #[serde(default)]
+    pub pinned: Option<gglib_core::ports::PinnedSpec>,
 }
 
 /// Convert runtime ProxyStatus to API ProxyStatus.
-fn to_api_status(s: RuntimeProxyStatus) -> ProxyStatus {
+fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Stopped => ProxyStatus {
             running: false,
             port: None,
             current_model: None,
             model_port: None,
+            pinned_model: None,
         },
         RuntimeProxyStatus::Running { address } => ProxyStatus {
             running: true,
             port: Some(address.port()),
             current_model: None,
             model_port: None,
+            pinned_model,
         },
         RuntimeProxyStatus::Crashed => ProxyStatus {
             running: false,
             port: None,
             current_model: None,
             model_port: None,
+            pinned_model: None,
         },
     }
 }
@@ -65,7 +77,8 @@ fn to_api_status(s: RuntimeProxyStatus) -> ProxyStatus {
 /// Fetch current proxy status from backend.
 async fn fetch_status(state: &AppState) -> ProxyStatus {
     let s = state.proxy.status().await;
-    to_api_status(s)
+    let pinned = state.proxy.pinned_model();
+    to_api_status(s, pinned)
 }
 
 /// Convert handler config to runtime config, resolving anything omitted from
@@ -128,7 +141,7 @@ pub async fn start(
     let runtime_cfg = to_runtime_config(&cfg, &settings);
 
     // Idempotent: if already running (Conflict), treat as success
-    match state.proxy.start(runtime_cfg).await {
+    match state.proxy.start(runtime_cfg, cfg.pinned.clone()).await {
         Ok(_addr) => {}
         Err(e) => {
             let http: HttpError = e.into();
