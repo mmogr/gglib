@@ -111,7 +111,6 @@ gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
 gglib-download = { path = "crates/gglib-download" }
 gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
-gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-sse = { path = "crates/gglib-sse" }
 gglib-axum = { path = "crates/gglib-axum" }

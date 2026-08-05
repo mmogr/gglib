@@ -2043,9 +2043,7 @@ dependencies = [
  "gglib-axum",
  "gglib-build-info",
  "gglib-core",
- "gglib-db",
  "gglib-download",
- "gglib-mcp",
  "gglib-runtime",
  "gglib-tauri",
  "gtk",
@@ -2126,7 +2124,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -2409,20 +2406,8 @@ dependencies = [
 name = "gglib-tauri"
 version = "0.11.0"
 dependencies = [
- "anyhow",
- "gglib-app-services",
- "gglib-bootstrap",
- "gglib-core",
- "gglib-db",
- "gglib-gguf",
- "gglib-mcp",
- "gglib-runtime",
  "serde",
- "serde_json",
  "tauri",
- "thiserror 2.0.19",
- "tokio",
- "tokio-test",
  "tracing",
 ]
 

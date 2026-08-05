@@ -6,16 +6,11 @@
 //! when the window is hidden, and during autostart it runs before any webview
 //! exists at all.
 //!
-//! So these go straight to the same [`ProxyOps`] the embedded Axum server
-//! uses, and then do by hand what the HTTP handler would have done for them —
-//! publish the new state to `AppState` and broadcast the lifecycle event.
-//! Skipping that broadcast is what leaves the UI showing a stopped proxy while
-//! it is serving.
-//!
-//! [`ProxyOps`]: gglib_app_services::ProxyOps
+//! So these call the daemon's `/api/proxy/*` routes directly — the same
+//! routes the frontend uses — and then publish the new state to `AppState`
+//! so the menu and tray repaint. The lifecycle SSE event is the daemon's to
+//! broadcast; it does so from the handler these calls hit.
 
-use gglib_core::events::AppEvent;
-use gglib_core::ports::AppEventEmitter;
 use tauri::{AppHandle, Manager};
 use tracing::error;
 
@@ -24,39 +19,37 @@ use crate::menu::state_sync::sync_all_state;
 
 /// Start the proxy if it is not already running, returning the bound port.
 ///
-/// Idempotent, via `ProxyOps::ensure_running`: a proxy this app already
-/// started is reported as success rather than as a conflict, and the saved
-/// `proxy_port` is honoured so a standing `gglib proxy` on that port is left
-/// alone instead of collected as a bind failure.
+/// Idempotent: the daemon's start route treats an already-running proxy as
+/// success, and honours the saved `proxy_port` setting.
 pub async fn start(app: &AppHandle) -> Result<u16, String> {
     let state = app.state::<AppState>();
 
-    let address = state
-        .proxy
-        .ensure_running()
-        .await
-        .map_err(|e| e.to_string())?;
+    let status = state
+        .daemon
+        .post_json("/api/proxy/start", &serde_json::json!({}))
+        .await?;
+    let port = status
+        .get("port")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|p| u16::try_from(p).ok())
+        .ok_or_else(|| "daemon reported no proxy port".to_string())?;
 
-    publish(app, true, Some(address.port())).await;
-    state.sse.emit(AppEvent::proxy_started(address.port()));
+    publish(app, true, Some(port)).await;
 
-    Ok(address.port())
+    Ok(port)
 }
 
-/// Stop the proxy, treating an already-stopped proxy as success.
+/// Stop the proxy, treating an already-stopped proxy as success (the
+/// daemon's stop route is idempotent).
 pub async fn stop(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
 
-    // A stopped proxy is the state the caller asked for, so a NotRunning
-    // conflict is not worth surfacing as a failure.
-    if let Err(e) = state.proxy.stop().await
-        && !matches!(e, gglib_app_services::GuiError::Conflict(_))
-    {
-        return Err(e.to_string());
-    }
+    state
+        .daemon
+        .post_json("/api/proxy/stop", &serde_json::json!({}))
+        .await?;
 
     publish(app, false, None).await;
-    state.sse.emit(AppEvent::proxy_stopped());
 
     Ok(())
 }

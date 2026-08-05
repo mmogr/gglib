@@ -4,26 +4,31 @@
 
 use crate::app::AppState;
 use crate::menu::state_sync;
-use gglib_app_services::types::ServerLogEntry;
-use gglib_axum::EmbeddedApiInfo;
 use tauri::AppHandle;
 
-/// Get embedded API server info (port and auth token).
+/// Where the frontend reaches the backend API.
 ///
-/// The frontend should call this once at startup to discover the embedded
-/// server's ephemeral port and authentication token for API requests.
-#[tauri::command]
-pub fn get_embedded_api_info(state: tauri::State<'_, AppState>) -> EmbeddedApiInfo {
-    state.embedded_api.clone()
+/// The name and shape predate the daemon: the WebView used to talk to an
+/// embedded server on an ephemeral port with a bearer token. It now points
+/// at the gglib daemon's fixed loopback port; the empty token means "send no
+/// Authorization header".
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ApiInfo {
+    /// Port of the daemon's management API.
+    pub port: u16,
+    /// Always empty — the daemon's loopback API is unauthenticated.
+    pub token: String,
 }
 
-/// Get buffered server logs for a specific port.
+/// Get backend API info (port and auth token).
 ///
-/// TRANSPORT_EXCEPTION: The GUI console needs a startup log snapshot on desktop.
-/// Web mode uses the HTTP API (`/api/servers/{port}/logs`).
+/// The frontend calls this once at startup to discover where the API lives.
 #[tauri::command]
-pub fn get_server_logs(port: u16, state: tauri::State<'_, AppState>) -> Vec<ServerLogEntry> {
-    state.servers.get_logs(port)
+pub fn get_embedded_api_info() -> ApiInfo {
+    ApiInfo {
+        port: gglib_core::DAEMON_PORT,
+        token: String::new(),
+    }
 }
 
 /// Open a URL in the system's default browser.
