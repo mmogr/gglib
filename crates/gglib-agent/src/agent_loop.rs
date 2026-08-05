@@ -275,7 +275,7 @@ impl AgentLoopPort for AgentLoop {
                 // Soft recovery (was: hard `Err(ParallelToolLimitExceeded)`).
                 //
                 // Modern reasoning models occasionally request very large
-                // parallel batches; aborting the entire turn made the council
+                // parallel batches; aborting the entire turn made the caller
                 // appear to "stall" with no visible cause.  Instead we:
                 //
                 // 1. Emit a visible `SystemWarning` to the SSE stream so the
