@@ -216,7 +216,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <ThreadPrimitive.Messages
                       components={messageComponents}
                     />
-                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
+                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                       Jump to latest
                     </ThreadPrimitive.ScrollToBottom>
                   </ThreadPrimitive.Viewport>

@@ -19,7 +19,7 @@ const baseStyles =
 
 const variantStyles: Record<ButtonVariant, string> = {
   // Level 1 — Primary CTA. One per surface maximum.
-  primary: "bg-primary text-white hover:bg-primary-hover",
+  primary: "bg-primary text-text-inverse hover:bg-primary-hover",
   // Level 2 — Default action. White-alpha fill lifts off any surface level.
   secondary: "bg-white/5 border-border text-text hover:bg-white/10 hover:border-border-hover",
   // Level 3 — Emphasis without fill. Stronger rest border than secondary, fills on hover.

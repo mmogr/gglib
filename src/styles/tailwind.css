@@ -373,7 +373,7 @@
   /* Selection */
   ::selection {
     background-color: var(--color-primary);
-    color: white;
+    color: var(--color-text-inverse);
   }
 
   /* Headings */

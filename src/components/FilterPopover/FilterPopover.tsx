@@ -184,7 +184,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-white"
+            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-text-inverse"
             onClick={onClearFilters}
             title="Clear all filters (sort preference is kept)"
           >
@@ -204,7 +204,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
                 className={cn(
                   "py-[4px] px-[10px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150",
                   filters.sortBy === value
-                    ? "bg-primary border-primary text-white"
+                    ? "bg-primary border-primary text-text-inverse"
                     : "text-text-secondary bg-surface-elevated border-border hover:border-primary hover:text-text"
                 )}
                 onClick={() => onFiltersChange({ ...filters, sortBy: value })}
@@ -326,7 +326,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
                   key={tag}
                   className={cn(
                     "py-[4px] px-[10px] text-xs font-medium text-text-secondary bg-surface-elevated border border-border rounded-lg cursor-pointer transition-all duration-150 hover:border-primary hover:text-text",
-                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-white"
+                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-text-inverse"
                   )}
                   onClick={() => handleTagToggle(tag)}
                 >

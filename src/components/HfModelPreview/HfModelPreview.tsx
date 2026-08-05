@@ -208,7 +208,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
         {/* Stats row */}
         <div className="flex flex-wrap gap-md items-center mt-sm">
           {model.parameters_b && (
-            <span className="bg-primary text-white px-sm py-xs rounded-base text-xs font-semibold">
+            <span className="bg-primary text-text-inverse px-sm py-xs rounded-base text-xs font-semibold">
               {model.parameters_b.toFixed(1)}B params
             </span>
           )}
@@ -301,7 +301,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
                   )}
                   <span className="text-right">
                     <button
-                      className="px-md py-xs text-xs font-medium text-white bg-primary border-none rounded-base cursor-pointer transition-[background-color,opacity] duration-150 ease-linear hover:not-disabled:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-md py-xs text-xs font-medium text-text-inverse bg-primary border-none rounded-base cursor-pointer transition-[background-color,opacity] duration-150 ease-linear hover:not-disabled:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={() => handleDownload(quant)}
                       disabled={downloadsDisabled}
                       title={downloadsDisabled ? disabledReason : `Download ${quant.name}`}

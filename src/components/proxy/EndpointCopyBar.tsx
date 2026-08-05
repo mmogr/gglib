@@ -42,7 +42,7 @@ export const EndpointCopyBar: FC<EndpointCopyBarProps> = ({ host, port, onCopied
         variant="ghost"
         size="sm"
         onClick={copy}
-        className="bg-primary border-none rounded-base p-sm cursor-pointer text-base text-white transition-all hover:bg-primary-hover hover:scale-105"
+        className="bg-primary border-none rounded-base p-sm cursor-pointer text-base text-text-inverse transition-all hover:bg-primary-hover hover:scale-105"
         title="Copy URL"
         iconOnly
       >
