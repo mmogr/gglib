@@ -74,23 +74,21 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         .map_or(CacheRamSetting::Auto, CacheRamSetting::ExplicitMb);
     let llama_path = llama_server_path.to_string_lossy().into_owned();
 
-    let process_manager = Arc::new(match &pinned {
-        Some(model) => ProcessManager::new_pinned(
-            model.name.clone(),
-            llama_base_port,
-            llama_path,
-            Arc::clone(&catalog_port),
-            launch_overrides,
-            cache_ram,
-        ),
-        None => ProcessManager::new_single_swap(
-            llama_base_port,
-            llama_path,
-            Arc::clone(&catalog_port),
-            launch_overrides,
-            cache_ram,
-        ),
-    });
+    let process_manager = Arc::new(ProcessManager::new_single_swap(
+        llama_base_port,
+        llama_path,
+        Arc::clone(&catalog_port),
+        launch_overrides,
+        cache_ram,
+    ));
+    if let Some(model) = &pinned {
+        process_manager.set_pin(Some(gglib_core::ports::PinnedSpec {
+            name: model.name.clone(),
+            // Already folded into `launch_overrides` above; the pin here only
+            // narrows admission.
+            launch_overrides: Default::default(),
+        }));
+    }
 
     // Create runtime port
     let runtime_port: Arc<dyn gglib_core::ports::ModelRuntimePort> =

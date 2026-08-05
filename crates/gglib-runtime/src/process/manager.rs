@@ -48,7 +48,8 @@ pub enum ProcessStrategy {
 /// Unified process manager for llama-server instances.
 ///
 /// One strategy today — `SingleSwap`, one model at a time, auto-swap — built
-/// via `new_single_swap` or `new_pinned`. See [`ProcessStrategy`].
+/// via `new_single_swap`, optionally pinned afterwards with
+/// [`ProcessManager::set_pin`]. See [`ProcessStrategy`].
 pub struct ProcessManager {
     core: Arc<RwLock<GuiProcessCore>>,
     strategy: ProcessStrategy,
@@ -86,8 +87,8 @@ impl ProcessManager {
     ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
     ///   benchmark launches, where a large prompt cache would perturb results.
     ///
-    /// Use [`Self::new_pinned`] instead when the manager must refuse every
-    /// model but one.
+    /// Use [`Self::set_pin`] afterwards when the manager must refuse every
+    /// model but one (`gglib serve`).
     pub fn new_single_swap(
         base_port: u16,
         llama_server_path: impl Into<String>,
@@ -106,11 +107,12 @@ impl ProcessManager {
         }
     }
 
-    /// Create a `ProcessManager` pinned to a single model (`gglib serve`).
+    /// Pin this manager to a single model, or clear the pin (`gglib serve`).
     ///
-    /// Behaves exactly like [`Self::new_single_swap`] for the pinned model —
-    /// same startup coordination, same cache handling, same launch options
-    /// template — but rejects every other model with
+    /// While pinned, the manager behaves exactly like the auto-swapping one
+    /// for the pinned model — same startup coordination, same cache handling,
+    /// same launch options template, with the pin's own overrides layered on
+    /// top — but rejects every other model with
     /// [`ModelRuntimeError::PinnedModelMismatch`] instead of swapping to it.
     ///
     /// That refusal is the feature. `gglib serve <model>` exists to give
@@ -118,28 +120,12 @@ impl ProcessManager {
     /// endpoint that cannot change model underneath them; silently honouring a
     /// foreign request would defeat the guarantee they are relying on.
     ///
-    /// # Arguments
-    ///
-    /// Identical to [`Self::new_single_swap`], plus `model_name` — the model
-    /// to pin to, matched exactly against each request's model name.
-    pub fn new_pinned(
-        model_name: impl Into<String>,
-        base_port: u16,
-        llama_server_path: impl Into<String>,
-        catalog: Arc<dyn ModelCatalogPort>,
-        launch_overrides: ServerConfigOptions,
-        cache_ram: CacheRamSetting,
-    ) -> Self {
-        let core = GuiProcessCore::new(base_port, llama_server_path);
-        Self {
-            core: Arc::new(RwLock::new(core)),
-            strategy: ProcessStrategy::SingleSwap(Box::new(SwapState::pinned_to(
-                model_name,
-                catalog,
-                launch_overrides,
-                cache_ram,
-            ))),
-        }
+    /// Runtime-mutable rather than a constructor because the daemon owns one
+    /// long-lived manager: the pin is applied when a pinned proxy run starts
+    /// and cleared when it stops.
+    pub fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) {
+        let ProcessStrategy::SingleSwap(state) = &self.strategy;
+        state.set_pin(pin);
     }
 
     /// Ensure a model is running.
@@ -349,9 +335,10 @@ impl ProcessManager {
     /// The single model this manager is pinned to, if any.
     ///
     /// `Some(name)` is `gglib serve`: every other model is refused rather
-    /// than swapped to.
+    /// than swapped to. Owned because the pin is runtime-mutable state
+    /// behind a lock (see [`Self::set_pin`]).
     #[must_use]
-    pub fn pinned_model(&self) -> Option<&str> {
+    pub fn pinned_model(&self) -> Option<String> {
         let ProcessStrategy::SingleSwap(state) = &self.strategy;
         state.pinned_name()
     }
@@ -408,14 +395,18 @@ mod tests {
     }
 
     fn pinned_manager() -> ProcessManager {
-        ProcessManager::new_pinned(
-            "qwen2.5",
+        let manager = ProcessManager::new_single_swap(
             9000,
             "llama-server",
             Arc::new(StubCatalog),
             ServerConfigOptions::default(),
             CacheRamSetting::Auto,
-        )
+        );
+        manager.set_pin(Some(gglib_core::ports::PinnedSpec {
+            name: "qwen2.5".to_string(),
+            launch_overrides: ServerConfigOptions::default(),
+        }));
+        manager
     }
 
     /// The guard has to sit on the real entry point, not just on SwapState —
@@ -492,7 +483,7 @@ mod tests {
     /// only be refused — need the name without attempting a request.
     #[test]
     fn pinned_manager_reports_its_model() {
-        assert_eq!(pinned_manager().pinned_model(), Some("qwen2.5"));
+        assert_eq!(pinned_manager().pinned_model().as_deref(), Some("qwen2.5"));
     }
 
     /// Reporting must agree with admission: a manager that admits any model

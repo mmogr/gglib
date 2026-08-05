@@ -76,7 +76,14 @@ pub fn parse_ctx_size_flag(raw: Option<&str>) -> Result<Option<CtxSizeArg>> {
 /// Caller-supplied overrides for [`resolve_context_size`].
 ///
 /// All fields default to `None`, which means "fall through to next tier".
-#[derive(Debug, Clone, Default)]
+///
+/// Serialized as part of the daemon's HTTP contract: a pinned proxy start
+/// (`POST /api/proxy/start`) carries the model's fully-cascaded options in
+/// the request body. `#[serde(default)]` keeps that contract stable when a
+/// field is added — an older client's body simply resolves the new field to
+/// `None`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ServerConfigOptions {
     /// Override the context window size forwarded to llama-server.
     /// `None` lets llama-server use its built-in default.
