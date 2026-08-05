@@ -32,11 +32,11 @@ The download module handles interactions with the HuggingFace Hub, including sea
 
 When a GGUF file is downloaded and added to the database, `model_ops.rs` automatically analyzes the model's metadata to detect reasoning/thinking capabilities. Models with chat templates containing `<think>`, `<reasoning>`, or similar tags (e.g., DeepSeek R1, Qwen3, QwQ) receive a `reasoning` tag automatically. This enables optimal configuration when serving via `llama-server --reasoning-format`.
 
-### Fast-path helper overview
+### Download backends
 
-The download flow always invokes `scripts/hf_xet_downloader.py` inside the managed Miniconda environment (`<data_root>/.conda/gglib-hf-xet`). `gglib config check-deps`/`make setup` ensure that environment exists with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`. The helper pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing.
+Downloads run natively over HTTP by default: a `reqwest`-based streaming downloader with resumable `.part` transfers, SHA-256 verification against `X-Linked-Etag`, and atomic rename on completion. No Python is required for a download to succeed.
 
-Fast mode is now mandatory: if the helper is missing or fails, the command returns an error with remediation steps and does not fall back to the legacy Rust HTTP downloader.
+The `hf_xet` accelerator is opt-in. When its environment has already been provisioned (`gglib config check-deps --setup-fast-downloads`), the flow invokes `hf_xet_downloader.py` inside the managed environment (`<data_root>/.conda/gglib-hf-xet`, with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`), which pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing. The environment is never provisioned implicitly, and if the accelerator is present but fails, the download falls back to the native path rather than erroring.
 
 ## Deep Dive: Quantization Filter
 

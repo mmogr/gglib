@@ -23,9 +23,10 @@ benchmark/
 
 `BenchmarkDeps::runtime` is the **same** [`ModelRuntimePort`] instance
 shared with `ProxyOps` at the composition root (created once in
-`bootstrap.rs`).  Both operations go through the same `SingleSwap`
-[`ProcessManager`], which guarantees only one llama-server runs at a time
-system-wide.  `run_perf()` additionally calls `stop_current()` before
+`bootstrap.rs`).  Both operations go through the same
+[`ProcessManager`] and its admission queue, which guarantees every
+llama-server on the machine lives in the same bounded resident set.
+`run_perf()` additionally calls `stop_current()` before
 spawning `llama-bench` so that the GPU is free when the binary loads the
 model directly.
 

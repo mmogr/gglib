@@ -3,10 +3,11 @@
 //! Wraps the ProxySupervisor to provide start/stop/status operations
 //! for the OpenAI-compatible proxy.
 //!
-//! The `ModelRuntimePort` (wrapping a shared `SingleSwap` `ProcessManager`) is
-//! injected at construction time from the composition root, ensuring that the
-//! proxy and any other service that drives llama-server (e.g. benchmarking)
-//! share a single manager — preventing VRAM contention.
+//! The `ModelRuntimePort` (wrapping the shared `ProcessManager`) is injected
+//! at construction time from the composition root, ensuring that the proxy and
+//! any other service that drives llama-server (e.g. benchmarking) share a
+//! single manager — one admission queue over one resident set — preventing
+//! VRAM contention.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -65,8 +66,8 @@ pub struct ProxyDeps {
     pub mcp: Arc<McpService>,
     pub core: Arc<AppCore>,
     /// Shared runtime port — injected from the composition root so proxy and
-    /// benchmark share the same `SingleSwap` `ProcessManager`, enforcing the
-    /// invariant that only one llama-server runs at a time system-wide.
+    /// benchmark share the same `ProcessManager`, enforcing the invariant
+    /// that every llama-server on this machine lives in the same resident set.
     pub runtime: Arc<dyn ModelRuntimePort>,
 }
 
@@ -74,7 +75,8 @@ pub struct ProxyDeps {
 ///
 /// Provides GUI-friendly interface to proxy lifecycle management.
 /// The `ModelRuntimePort` is shared with other services (e.g. benchmarking)
-/// via the composition root, so only one llama-server can run system-wide.
+/// via the composition root, so every llama-server runs inside the same
+/// admission-controlled resident set.
 pub struct ProxyOps {
     supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,

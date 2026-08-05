@@ -107,8 +107,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **CLI Chat** — Direct terminal chat via llama-cli
 - **`OpenAI` Proxy** — Transparent proxy that routes to appropriate model instances
 - **Auto Model Swap** — Proxy automatically loads/unloads models based on requests
-- **Pinned Mode** — `ProcessManager::new_pinned` serves exactly one model and refuses all others, backing `gglib serve`
-- **Concurrent Startup Coordination** — SingleSwap strategy uses watch channels so concurrent requests during model startup wait for the result rather than failing immediately.
+- **Pinned Mode** — `ProcessManager::set_pin` restricts the resident set to exactly one model and refuses all others, backing `gglib serve`
+- **Admission & Startup Coordination** — concurrent requests during a model's launch wait in the admission queue and are served when the launch completes, rather than failing immediately.
 - **Health Monitoring** — Polls server health endpoints for readiness
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases

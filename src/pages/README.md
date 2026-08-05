@@ -9,37 +9,37 @@ Top-level page components for the gglib GUI application.
 
 ## Architecture
 
+Two entry points build two windows from this directory:
+
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                     App.tsx                                         │
-│                                        │                                            │
-│                     ┌──────────────────┼──────────────────┐                         │
-│                     ▼                  ▼                  ▼                         │
-│   ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐         │
-│   │  ModelControlCenter │  │      ChatPage       │  │    (future pages)   │         │
-│   │       Page          │  │                     │  │                     │         │
-│   └──────────┬──────────┘  └──────────┬──────────┘  └─────────────────────┘         │
-│              │                        │                                             │
-│              ▼                        ▼                                             │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                              components/                                    │   │
-│   │                        (Shared UI Components)                               │   │
-│   └─────────────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+main.tsx ──► App.tsx                        tray-main.tsx ──► TrayPanel.tsx
+                │                           (separate "tray" Tauri window:
+                ▼                            proxy status, endpoint, metrics)
+  ┌────────────────────────┐
+  │ ModelControlCenterPage │──swaps to──► ChatPage / BenchmarkPage
+  └───────────┬────────────┘
+              ▼
+        components/
+   (Shared UI Components)
 ```
 
 ## Pages
 
 | Page | Description |
 |------|-------------|
-| [`ModelControlCenterPage.tsx`](ModelControlCenterPage.tsx) | Main dashboard for model management, server control, and downloads |
+| [`ModelControlCenterPage.tsx`](ModelControlCenterPage.tsx) | Model catalog and control: library, server control, and downloads — the main window's landing page |
 | [`ChatPage.tsx`](ChatPage.tsx) | Chat interface for interacting with running models |
+| [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune |
+| [`TrayPanel.tsx`](TrayPanel.tsx) | Proxy tray window — is the endpoint up, and what is it doing (status, endpoint copy bar, connections, slots) |
+
+`ChatPageSkeleton.tsx` and `chatTabs.tsx` are supporting pieces of `ChatPage`,
+not routed pages.
 
 ### Model Control Center
 
-The primary page containing:
+The main window's landing page containing:
 - Model list with metadata display
-- Server start/stop controls
+- Server start/stop controls and proxy control (with the Proxy Dashboard modal)
 - Download queue management
 - MCP server configuration
 - Settings management
@@ -57,12 +57,6 @@ Interactive chat interface featuring:
 | Directory | Description |
 |-----------|-------------|
 | [`modelControlCenter/`](modelControlCenter/) | Components specific to the Model Control Center page |
-
-## Styling
-
-Each page has a corresponding CSS file:
-- `ModelControlCenterPage.css` — Control center layout and styling
-- `ChatPage.css` — Chat interface styling
 
 ## Design Principles
 

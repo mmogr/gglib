@@ -41,8 +41,8 @@ pub struct BenchmarkDeps {
     pub model_repo: Arc<dyn ModelRepository>,
     /// Shared [`ModelRuntimePort`] — same instance used by `ProxyOps`.
     ///
-    /// Sharing this ensures SingleSwap semantics: only one llama-server can
-    /// run at any time system-wide.
+    /// Sharing this ensures every launch goes through the same admission
+    /// queue, so the benchmark can never fight the proxy for VRAM.
     pub runtime: Arc<dyn ModelRuntimePort>,
     /// Benchmark persistence (runs, results, summaries).
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,

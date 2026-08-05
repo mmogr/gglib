@@ -2,8 +2,9 @@
 //!
 //! Runs the same prompt through N models **sequentially** (one at a time) and
 //! emits [`BenchmarkEvent`]s on `tx`.  Sequential execution is intentional:
-//! a single GPU cannot run two models in VRAM simultaneously, and the shared
-//! [`ModelRuntimePort`] (`SingleSwap`) enforces this at the process level.
+//! a single GPU cannot fit two large models in VRAM simultaneously, and the
+//! shared [`ModelRuntimePort`]'s admission queue enforces this at the process
+//! level — each model waits for the slot its predecessor holds.
 //!
 //! # Cancellation
 //!
