@@ -1,7 +1,7 @@
 //! ModelRuntimePort implementation using ProcessManager.
 //!
-//! This adapter wraps the ProcessManager (SingleSwap strategy) to implement
-//! the ModelRuntimePort interface from gglib-core.
+//! This adapter wraps the ProcessManager — an admission queue over a bounded
+//! resident set — to implement the ModelRuntimePort interface from gglib-core.
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;

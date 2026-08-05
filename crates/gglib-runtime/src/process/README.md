@@ -11,32 +11,37 @@ with integrated log streaming and event broadcasting for GUI use cases.
 
 - `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs)
 - `ProcessManager` - High-level orchestration; dispatch only
-- `SwapState` - Single-model-at-a-time state and the startup driver itself
+- `ResidentSet` (`residency/`) - The VRAM slots and the launch driver that fills them
+- `AdmissionQueue` (`admission/`) - Decides who gets the GPU next, and for how long
 - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
 - `ServerLogManager` - Log streaming infrastructure
 - Health check utilities
 
-# Strategies
+# Residency and admission
 
-`ProcessStrategy` has one shape today:
+`ProcessManager` routes; [`ResidentSet`] (`residency/`) owns the state. M9
+replaced the old single-swap strategy with a bounded resident set — a small
+number of VRAM slots filled by an `AdmissionQueue` (`admission/`) that decides,
+per request: serve from a resident model, launch into a free or evictable
+slot, wait, or give up.
 
-- **SingleSwap** — one model at a time, holding a [`SwapState`]. Optionally
-  *pinned*: `ProcessManager::new_pinned` serves exactly one model and returns
-  `PinnedModelMismatch` for any other, rather than swapping. Pinning changes
-  only which models are admitted — startup coordination, cache handling and
-  launch options are identical either way.
+A set may be *pinned*: `ProcessManager::set_pin` restricts admission to
+exactly one model (backing `gglib serve`) and returns `PinnedModelMismatch`
+for any other, rather than swapping. Pinning changes only which models are
+admitted — startup coordination, cache handling and launch options are
+identical either way.
 
-Every launch surface — the CLI, the proxy, both GUIs — shares one
-`SingleSwap` manager built by `build_service_graph`, which is what makes
-"only one llama-server runs at a time system-wide" an invariant. A
-`Concurrent` strategy existed here for the GUI's earlier direct-spawn path;
-epic #630 routed the GUI through the proxy's manager instead, so it was
-deleted along with the rest of that path.
+Every launch surface — the CLI, the proxy, both GUIs — shares one manager
+built by `build_service_graph` inside the daemon, which is what makes "gglib
+owns every llama-server on this machine" an invariant. A `Concurrent`
+strategy existed here for the GUI's earlier direct-spawn path; epic #630
+routed the GUI through the proxy's manager instead, so it was deleted along
+with the rest of that path.
 
 # Launch options
 
-`SwapState` carries a standing `ServerConfigOptions` template rather than a
-hand-picked list of fields. Each launch resolves to
+The `ResidentSet` carries a standing `ServerConfigOptions` template rather
+than a hand-picked list of fields. Each launch resolves to
 
 ```text
 template  ⊕  per-call overrides  ⊕  this request's context chain
