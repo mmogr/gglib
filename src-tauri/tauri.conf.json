@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GGLib - GGUF Model Manager",
+        "title": "GGLib — Local Model Runtime",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
