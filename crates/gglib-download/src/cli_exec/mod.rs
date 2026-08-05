@@ -13,3 +13,7 @@ pub use exec::python_bridge::{
     FastDownloadRequest, NoticeCallback, ProgressCallback, PythonBridgeError,
     ensure_fast_helper_ready, preflight_fast_helper, run_fast_download,
 };
+
+// Whether the optional hf_xet accelerator is already provisioned. Read by the
+// executor to choose a backend, and by the GUI to render setup status.
+pub use exec::python_env::fast_helper_provisioned;

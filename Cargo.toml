@@ -53,6 +53,9 @@ chrono-tz = "0.10"
 # Encoding
 base64 = "0.22"
 
+# Hashing (download checksum verification)
+sha2 = "0.10"
+
 # Error handling
 thiserror = "2.0"
 anyhow = "1.0"

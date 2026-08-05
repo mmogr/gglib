@@ -1,7 +1,7 @@
 #![doc = include_str!("README.md")]
 mod progress;
 pub mod python_bridge;
-mod python_env;
+pub mod python_env;
 mod python_protocol;
 mod xet_poller;
 
@@ -12,9 +12,8 @@ use gglib_core::ports::QuantizationResolver;
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
 use super::utils::model_directory;
+use crate::executor::{DownloadPlan, download_files};
 use crate::resolver::HfQuantizationResolver;
-
-pub use python_bridge::{FastDownloadRequest, run_fast_download};
 
 /// Execute a download request and return the result.
 ///
@@ -72,23 +71,26 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         fs::create_dir_all(&model_dir)?;
     }
 
-    // Download files
-    let fast_request = FastDownloadRequest {
+    // Download files. `expected_total` is the summed size of everything being
+    // fetched, which is only attributable to a single file when there is one.
+    let expected_total = (files.len() == 1)
+        .then(|| resolution.files.first().and_then(|f| f.size))
+        .flatten();
+
+    let plan = DownloadPlan {
         repo_id: &request.model_id,
         revision: &commit_sha,
-        repo_type: "model",
         destination: &model_dir,
         files: &files,
         token: request.token.as_deref(),
         force: request.force,
         progress: None,
         notice: None,
-        expected_total: None,
-        cancel_token: None,
+        expected_total,
+        cancel: None,
     };
 
-    run_fast_download(&fast_request).await?;
-    gglib_core::telemetry::console_println("⚡ Downloaded via fast helper");
+    download_files(&plan).await?;
 
     let primary_path = model_dir.join(&files[0]);
     let all_paths: Vec<_> = files.iter().map(|f| model_dir.join(f)).collect();

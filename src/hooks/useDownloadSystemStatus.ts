@@ -14,10 +14,12 @@ type DownloadSystemErrorPayload = {
 };
 
 /**
- * Tracks whether the backend download subsystem (Python fast helper) is usable.
+ * Tracks whether the backend download subsystem is usable.
  *
- * On desktop (Tauri), the backend emits explicit init events on app startup.
- * On web, this is always ready (fast helper not applicable).
+ * On desktop (Tauri), the backend emits an init event on app startup. Downloads
+ * run natively over HTTP, so that resolves to ready regardless of whether the
+ * optional hf_xet accelerator is installed — a missing accelerator is not an
+ * error state. On web, this is always ready.
  */
 export function useDownloadSystemStatus(): DownloadSystemStatus {
   const [state, setState] = useState<DownloadSystemStatus>({

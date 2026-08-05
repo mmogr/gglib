@@ -14,9 +14,10 @@ between the worker (core download logic) and bridges (event emission).
 - **Worker**: Executes downloads, writes only to `watch::Sender` (no events) —
   with one narrow, deliberate exception: `WorkerDeps.event_emitter` lets
   `execute_download` emit `DownloadEvent::DownloadNotice` directly for
-  transient, cosmetic setup notes (e.g. building the fast downloader's
-  first-run Python venv) that aren't part of the progress or completion state
-  the manager sequences. See the doc comment on `WorkerDeps` in `worker.rs`.
+  transient, cosmetic notes (e.g. the optional `hf_xet` accelerator being
+  unavailable, so the transfer falls back to the native path) that aren't part
+  of the progress or completion state the manager sequences. See the doc
+  comment on `WorkerDeps` in `worker.rs`.
 - **Bridge tasks**: Subscribe to watch channels, emit events with rate-limiting
 
 # Concurrency Model

@@ -11,7 +11,7 @@ pub fn print_instructions(missing: &[&Dependency]) {
     let needs_brew = missing.iter().any(|d| {
         matches!(
             d.name.as_str(),
-            "git" | "cmake" | "python3" | "curl" | "pkg-config" | "libssl-dev"
+            "git" | "cmake" | "curl" | "pkg-config" | "libssl-dev"
         )
     });
 
@@ -28,7 +28,6 @@ pub fn print_instructions(missing: &[&Dependency]) {
         .filter_map(|d| match d.name.as_str() {
             "git" => Some("git"),
             "cmake" => Some("cmake"),
-            "python3" => Some("python3"),
             "curl" => Some("curl"),
             "pkg-config" => Some("pkg-config"),
             "libssl-dev" => Some("openssl"),

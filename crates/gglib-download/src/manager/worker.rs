@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use gglib_core::download::{DownloadError, DownloadEvent, DownloadId, Quantization};
 use gglib_core::ports::{DownloadEventEmitterPort, DownloadManagerConfig};
 
-use crate::cli_exec::{FastDownloadRequest, PythonBridgeError, run_fast_download};
+use crate::executor::{DownloadPlan, download_files};
 
 use super::paths::DownloadDestination;
 
@@ -212,9 +212,10 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             });
         });
 
-    // Notice callback: surfaces transient setup notes (e.g. first-run Python
-    // venv creation) on the bar instead of leaving it looking frozen for the
-    // tens of seconds that can take. See the doc comment on `WorkerDeps`.
+    // Notice callback: surfaces transient notes that carry no byte progress of
+    // their own — e.g. the accelerator being unavailable and the transfer
+    // falling back — instead of leaving the bar looking frozen. See the doc
+    // comment on `WorkerDeps`.
     let notice_id = job.id.to_string();
     let notice_emitter = Arc::clone(&deps.event_emitter);
     let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
@@ -224,11 +225,10 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         });
     });
 
-    // Build download request
-    let request = FastDownloadRequest {
+    // Build download plan
+    let plan = DownloadPlan {
         repo_id: job.id.model_id(),
         revision: "main",
-        repo_type: "model",
         destination: &job.destination.model_dir,
         files: &job.destination.files,
         token: deps.config.hf_token.as_deref(),
@@ -236,7 +236,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         progress: Some(Arc::clone(&progress_callback)),
         notice: Some(notice_callback),
         expected_total: job.expected_total,
-        cancel_token: Some(job.cancel.clone()),
+        cancel: Some(job.cancel.clone()),
     };
 
     // Execute with cancellation support via select
@@ -247,12 +247,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             Err(DownloadError::Cancelled)
         }
 
-        result = run_fast_download(&request) => {
-            result.map_err(|e| match e {
-                PythonBridgeError::Cancelled => DownloadError::Cancelled,
-                other => DownloadError::other(other.to_string()),
-            })
-        }
+        result = download_files(&plan) => result,
     }
 }
 

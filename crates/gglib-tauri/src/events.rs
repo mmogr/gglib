@@ -15,7 +15,12 @@ pub mod names {
     // Download events
     pub const DOWNLOAD_PROGRESS: &str = "download-progress";
 
-    // Download system initialization events (fast Python helper availability)
+    // Download system initialization.
+    //
+    // Downloads run natively over HTTP and need nothing provisioned, so startup
+    // always resolves to READY. ERROR is reserved for a subsystem that genuinely
+    // cannot download — the absence of the optional hf_xet accelerator is not
+    // that, and must not be reported here.
     pub const DOWNLOAD_SYSTEM_READY: &str = "download-system:ready";
     pub const DOWNLOAD_SYSTEM_ERROR: &str = "download-system:error";
 

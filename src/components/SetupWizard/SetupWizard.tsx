@@ -539,13 +539,13 @@ const PythonSetupStep: FC<{
         <div>
           <h2 className="text-xl font-semibold text-text mb-2">Fast Downloads</h2>
           <p className="text-text-secondary leading-relaxed">
-            The Python fast-download helper is ready. Large model downloads will
-            use optimized transfer for maximum speed.
+            The hf_xet accelerator is ready. Large model downloads will use
+            optimized transfer for maximum speed.
           </p>
         </div>
         <div className="bg-success/10 border border-success/30 rounded-lg p-4 flex items-center gap-3">
           <Icon icon={CheckCircle2} size={20} className="text-success shrink-0" />
-          <span className="text-sm text-text">Fast download helper is ready</span>
+          <span className="text-sm text-text">Download accelerator is ready</span>
         </div>
         <StepNavigation onBack={onBack} onNext={onNext} />
       </div>
@@ -557,9 +557,10 @@ const PythonSetupStep: FC<{
       <div>
         <h2 className="text-xl font-semibold text-text mb-2">Fast Downloads</h2>
         <p className="text-text-secondary leading-relaxed">
-          gglib can use a Python helper for{' '}
+          Downloads already work &mdash; gglib fetches models directly. If you have
+          Python 3, it can also install a helper for{' '}
           <span className="text-text font-medium">significantly faster</span>{' '}
-          model downloads from Hugging Face (via hf_xet). This is optional but recommended.
+          transfers from Hugging Face (via hf_xet). Entirely optional.
         </p>
       </div>
 
@@ -569,8 +570,9 @@ const PythonSetupStep: FC<{
           <div>
             <p className="text-sm font-medium text-warning mb-1">Python not found</p>
             <p className="text-xs text-text-secondary">
-              Python 3 is required for fast downloads. Install Python 3 and restart the wizard,
-              or skip this step to use standard downloads.
+              The accelerator needs Python 3. Skip this step and downloads will run
+              directly, which needs nothing installed. To use it later, install
+              Python 3 and re-run this wizard from Settings.
             </p>
           </div>
         </div>
@@ -601,7 +603,7 @@ const PythonSetupStep: FC<{
       {setting && (
         <div className="flex items-center gap-2 text-sm text-text-secondary">
           <Icon icon={Loader2} className="animate-spin" size={16} />
-          <span>Setting up Python environment... This may take a minute.</span>
+          <span>Installing the download accelerator... This may take a minute.</span>
         </div>
       )}
 
@@ -654,7 +656,9 @@ const CompleteStep: FC<{ status: SetupStatus; onFinish: () => void }> = ({ statu
     <div className="grid grid-cols-1 gap-2">
       <SummaryRow label="Models directory" ok={status.modelsDirectory.exists} value={status.modelsDirectory.path} />
       <SummaryRow label="llama.cpp" ok={status.llamaInstalled} value={status.llamaInstalled ? 'Installed' : 'Not installed'} />
-      <SummaryRow label="Fast downloads" ok={status.fastDownloadReady} value={status.fastDownloadReady ? 'Ready' : 'Not configured'} />
+      {/* Always ok: downloads work either way, so an absent accelerator is a
+          choice of transport, not a failure to flag. */}
+      <SummaryRow label="Downloads" ok value={status.fastDownloadReady ? 'Accelerated (hf_xet)' : 'Direct'} />
     </div>
 
     <div className="flex justify-center pt-4">

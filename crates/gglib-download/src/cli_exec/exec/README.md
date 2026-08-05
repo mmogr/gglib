@@ -2,23 +2,29 @@
 
 <!-- module-docs:start -->
 
-Download execution module.
+The optional `hf_xet` download accelerator: the Python environment that backs
+it, and the subprocess bridge that drives it. Kept separate from queue
+management, and from the default download path — that is `crate::executor`,
+which is native Rust and reaches this module only when
+[`python_env::fast_helper_provisioned`] says the environment is already here.
 
-This module handles the actual model download execution using the Python helper.
-It is intentionally kept separate from queue management.
+**Nothing in this module runs implicitly.** `python_env.rs` builds the venv, but
+`PythonEnvironment::prepare` is reachable only from `ensure_fast_helper_ready`,
+which in turn is only called by an explicit opt-in:
+`gglib config check-deps --setup-fast-downloads` or the GUI setup wizard. A
+download never provisions anything; if the environment is absent, the native
+path runs instead. Putting a Python toolchain in the critical path of a first
+download is the failure mode this arrangement exists to prevent.
 
-`python_env.rs` builds the fast downloader's Python venv on first run — a
-one-time, tens-of-seconds operation with no byte progress to show for it.
 `PythonEnvironment::prepare` takes an optional `NoticeCallback`
-(`Option<&NoticeCallback>`, aliased in `python_bridge.rs`): with one
-supplied — the queued-download path, via `FastDownloadRequest::notice` — venv
-creation and dependency install surface as a `DownloadEvent::DownloadNotice`
-on that download's bar instead of a console line; without one (preflight,
-`model upgrade`) they fall back to `gglib_core::telemetry::console_println`.
-`python -m venv` runs via `.output()`, not `.status()`, so its own stdio is
-captured rather than inherited — an inherited handle would write straight to
-the terminal, outside any bar's bookkeeping, the same way a stray `println!`
-would.
+(`Option<&NoticeCallback>`, aliased in `python_bridge.rs`): with one supplied,
+venv creation and dependency install surface as a
+`DownloadEvent::DownloadNotice` on a progress bar instead of a console line;
+without one (preflight, `model upgrade`) they fall back to
+`gglib_core::telemetry::console_println`. `python -m venv` runs via `.output()`,
+not `.status()`, so its own stdio is captured rather than inherited — an
+inherited handle would write straight to the terminal, outside any bar's
+bookkeeping, the same way a stray `println!` would.
 
 `progress.rs`'s `CliProgressPrinter` (the no-callback path, e.g. `model
 upgrade`) draws to **stderr**, matching `CliDownloadEventEmitter`'s

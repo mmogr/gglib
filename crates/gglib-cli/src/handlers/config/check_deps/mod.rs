@@ -12,7 +12,7 @@ mod platform;
 use anyhow::{Context, Result};
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{Dependency, DependencyStatus};
-use gglib_download::cli_exec::ensure_fast_helper_ready;
+use gglib_download::cli_exec::{ensure_fast_helper_ready, fast_helper_provisioned};
 
 use display::{print_dependency, print_gpu_status};
 use instructions::print_installation_instructions;
@@ -28,12 +28,15 @@ use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 /// # Arguments
 ///
 /// * `probe` - System probe implementation for dependency detection
+/// * `setup_fast_downloads` - Provision the optional `hf_xet` accelerator.
+///   Reporting is side-effect free; this is the only thing that installs
+///   anything, and it is off unless the user asks for it.
 ///
 /// # Returns
 ///
 /// Returns `Ok(())` if all required dependencies are present.
 /// Returns an error if any required dependencies are missing.
-pub async fn execute(probe: &dyn SystemProbePort) -> Result<()> {
+pub async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: bool) -> Result<()> {
     println!("{}{}Checking system dependencies...{}\n", BOLD, INFO, RESET);
 
     let dependencies = probe.check_all_dependencies();
@@ -68,14 +71,22 @@ pub async fn execute(probe: &dyn SystemProbePort) -> Result<()> {
             SUCCESS, RESET, present_required, total_required
         );
 
-        println!(
-            "{}Ensuring fast download helper is installed...{}",
-            BOLD, RESET
-        );
-        ensure_fast_helper_ready()
-            .await
-            .context("Failed to set up the Python fast download helper")?;
-        println!("{}✓ Fast download helper ready{}", SUCCESS, RESET);
+        if setup_fast_downloads {
+            println!(
+                "{}Provisioning the hf_xet download accelerator...{}",
+                BOLD, RESET
+            );
+            ensure_fast_helper_ready()
+                .await
+                .context("Failed to set up the hf_xet download accelerator")?;
+            println!("{}✓ Download accelerator ready{}", SUCCESS, RESET);
+        } else if !fast_helper_provisioned() {
+            println!(
+                "{}Downloads run natively over HTTP. To enable the optional hf_xet \
+                 accelerator, run:{} gglib config check-deps --setup-fast-downloads",
+                INFO, RESET
+            );
+        }
 
         print_gpu_status(probe);
 

@@ -115,9 +115,14 @@ get_version() {
     echo "$version_output" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]/) {print $i; exit}}'
 }
 
-# Dedicated Python 3 checker (accepts python3/python/py -3)
+# Dedicated Python 3 checker (accepts python3/python/py -3).
+#
+# Optional, not required: model downloads run natively over HTTP. Python only
+# enables the hf_xet accelerator, and only when the user opts in with
+# `gglib config check-deps --setup-fast-downloads`. A machine with no Python
+# must still pass this script.
 check_python() {
-    local description="Required for hf_xet fast download helper"
+    local description="Optional: enables the hf_xet download accelerator"
     local cmd=""
     local version=""
 
@@ -139,14 +144,13 @@ check_python() {
         local major=${version%%.*}
         if [ "$major" -ge 3 ] 2>/dev/null; then
             printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "python3" "✓" "$version" "$description"
-            PRESENT_REQUIRED+=("python3")
             return 0
         fi
     fi
 
-    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "python3" "✗" "MISSING" "$description"
-    MISSING_REQUIRED+=("python3")
-    return 1
+    printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "python3" "⚠" "optional" "$description"
+    MISSING_OPTIONAL+=("python3")
+    return 0
 }
 
 # Dedicated Node.js checker that validates version meets the project minimum:

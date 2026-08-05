@@ -24,6 +24,9 @@ pub use client::DefaultHfClient;
 // Configuration
 pub use config::HfClientConfig;
 
+// URL construction
+pub use url::build_file_url;
+
 // Silence unused dev-dependency warnings
 #[cfg(test)]
 use mockall as _;
