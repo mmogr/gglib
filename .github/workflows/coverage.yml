@@ -12,6 +12,12 @@ jobs:
       contents: write
     env:
       RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
+    # `… | tee` reports tee's exit status, not the test runner's, under
+    # GitHub's default `bash -e`. `shell: bash` adds pipefail so a failing
+    # suite fails the job here too — see the note in ci.yml's `test` job.
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main

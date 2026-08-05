@@ -1,10 +1,14 @@
 //! Bounded wait for model-startup contention.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gglib_core::ports::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
 use gglib_core::retry::{RetryDecision, RetryPolicy, decide, jitter_unit};
+// Tokio's clock rather than `std`'s: identical in a normal runtime, but it is
+// the one `tokio::time::pause()` advances, which is what lets the tests below
+// drive a whole wait window without sleeping through it.
+use tokio::time::Instant;
 use tracing::{debug, warn};
 
 /// Environment override for the contention window, in seconds.
@@ -77,6 +81,38 @@ pub async fn ensure_with_contention_wait(
     default_ctx: u64,
     window: Duration,
 ) -> Result<RunningTarget, ModelRuntimeError> {
+    ensure_with(
+        runtime,
+        model_name,
+        num_ctx,
+        default_ctx,
+        window,
+        jitter_unit,
+    )
+    .await
+}
+
+/// [`ensure_with_contention_wait`], with the randomness supplied by the caller.
+///
+/// The same seam [`decide`] and
+/// [`RetryPolicy::with_env_overrides`](gglib_core::retry::RetryPolicy) already
+/// have: the impurity is a parameter, so a test states the draw it wants and
+/// asserts the resulting delays exactly instead of hoping the dice fall its way.
+/// Production passes [`jitter_unit`] and behaves as before.
+///
+/// Full jitter can return a delay of zero, so a caller that pins `jitter` at
+/// `0.0` against a permanently contended runtime will never advance `elapsed`
+/// and never reach the deadline — `polling_policy` sets no attempt ceiling on
+/// purpose. Real jitter makes that a measure-zero event; a fixed draw makes it
+/// reachable, so tests use a non-zero one.
+async fn ensure_with<J: Fn() -> f64>(
+    runtime: &Arc<dyn ModelRuntimePort>,
+    model_name: &str,
+    num_ctx: Option<u64>,
+    default_ctx: u64,
+    window: Duration,
+    jitter: J,
+) -> Result<RunningTarget, ModelRuntimeError> {
     let started = Instant::now();
     let policy = polling_policy(window);
     let mut attempt: u32 = 0;
@@ -97,7 +133,7 @@ pub async fn ensure_with_contention_wait(
         }
 
         let elapsed = started.elapsed();
-        match decide(&policy, attempt, None, elapsed, jitter_unit()) {
+        match decide(&policy, attempt, None, elapsed, jitter()) {
             RetryDecision::Retry { after } => {
                 debug!(
                     attempt,
