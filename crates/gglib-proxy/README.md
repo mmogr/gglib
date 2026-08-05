@@ -44,7 +44,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 This crate provides an OpenAI-compatible HTTP server that:
 
-1. **Receives requests** in OpenAI API format (`/v1/chat/completions`, `/v1/models`)
+1. **Receives requests** in OpenAI API format (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`)
 2. **Routes to llama-server** instances managed by gglib-runtime
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
@@ -120,6 +120,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`connections.rs`](src/connections.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-coverage.json) |
 | [`council_proxy.rs`](src/council_proxy.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-coverage.json) |
 | [`dashboard.rs`](src/dashboard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-coverage.json) |
+| [`embeddings.rs`](src/embeddings.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-coverage.json) |
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
@@ -144,6 +145,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
+- **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
 - **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout) llama-server; feeds `DashboardSnapshot.upstream_health`
@@ -223,6 +225,7 @@ including `/health`; see the [`access`](src/access/) module.
 | `/health` | GET | open | Health check (always 200) |
 | `/v1/models` | GET | bearer | List available models |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
+| `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |
 | `/mcp` | DELETE | bearer | Terminate MCP session by `Mcp-Session-Id` |
@@ -259,6 +262,7 @@ flags — no extra configuration required:
 | `"mtp"` | Enables MTP speculative decoding (`--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75`) |
 | `"reasoning"` | Enables reasoning format extraction (`--reasoning-format deepseek` or equivalent) |
 | `"agent"` | Enables Jinja template support (`--jinja`) |
+| `"embedding"` | Enables embedding mode (`--embeddings`) — see [Embeddings](#embeddings) |
 
 Tags are detected automatically at model import time from GGUF metadata and
 stored in the model catalog. This parity is architecturally enforced: the proxy,
@@ -278,6 +282,48 @@ is never offered a model the endpoint would refuse. Its `{model}:{profile}`
 variants and the council virtuals remain listed: a profile changes only the
 request body, and a council run dispatches to whatever model is loaded, so
 neither reaches the pinned guard.
+
+### Embeddings
+
+`POST /v1/embeddings` routes through the same
+`ModelRuntimePort::ensure_model_running` path as chat completions, so model
+swap, the bounded contention wait, launch narration and the dashboard all
+apply unchanged.  `input` accepts both OpenAI shapes — a bare string and an
+array of strings — along with `encoding_format` and anything llama-server
+grows later, because the proxy reads only `model` out of the body and forwards
+the rest as raw bytes.
+
+Which models can serve it is advertised by `/v1/models`: an embedding model's
+entry carries `"capabilities": ["embeddings"]`.  A chat model's entry is
+unchanged — the field is omitted entirely rather than sent as an empty array.
+
+#### Embedding mode is exclusive, and that has a cost
+
+llama-server reads `--embeddings` as *restrict to only the embedding use
+case*.  A server started with it **refuses chat completions**; a server
+started without it answers `/v1/embeddings` with a 501.  The mode is therefore
+a property of the launch, not of the request, and gglib decides it from the
+model's `"embedding"` tag — detected at import time from the GGUF's
+`{arch}.pooling_type` or an encoder-only `general.architecture`, and
+re-derivable at any point with `gglib model retag`.
+
+Two consequences follow, both deliberate:
+
+- **An embeddings request for a model that is not loaded costs a full swap**,
+  and the server it leaves running cannot serve chat until something swaps
+  back.  A workload that interleaves retrieval and generation therefore
+  thrashes.  This is inherent to the single-model-at-a-time strategy; lifting
+  it is M9's job, not this endpoint's.
+- **Neither endpoint will swap to a model it cannot use.**  An embeddings
+  request naming a model without the tag is refused with 400
+  (`not_an_embedding_model`), and a chat completion naming a tagged model is
+  refused with 400 (`embedding_model_cannot_chat`) — both *before*
+  `ensure_model_running` is called.  Forwarding either would unload whatever
+  is currently serving requests in order to start a server that could only
+  reply 501.
+
+If a genuine embedding model is missing the tag, `gglib model retag <id>`
+re-derives it from the persisted GGUF metadata without re-reading the file.
 
 ### Inference Defaults Auto-Injection
 
