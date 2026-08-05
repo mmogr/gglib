@@ -275,16 +275,12 @@ pub(crate) async fn test_core() -> Arc<AppCore> {
 /// the state the lifecycle tests exercise.
 #[allow(dead_code)]
 pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
-    use gglib_core::ports::{
-        CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort, ModelRuntimePort,
-    };
+    use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
     use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
     use gglib_mcp::McpService;
     use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
     use gglib_runtime::process::ProcessManager;
-    use gglib_runtime::proxy::{
-        InMemoryApprovalRegistry, InMemoryCouncilRepository, ProxySupervisor,
-    };
+    use gglib_runtime::proxy::ProxySupervisor;
 
     let pool = setup_test_database().await.expect("in-memory DB");
     let repos = CoreFactory::build_repos(pool);
@@ -309,12 +305,6 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
             Arc::new(gglib_core::ports::NoopEmitter::new()),
         )),
         core: Arc::clone(&core),
-        // The runtime's in-memory backends, not the SQLite ones: the latter's
-        // in-memory constructor blocks on a runtime of its own, which panics
-        // inside an async test.
-        approval_registry: Arc::new(InMemoryApprovalRegistry::new())
-            as Arc<dyn CouncilApprovalRegistryPort>,
-        council_repo: Arc::new(InMemoryCouncilRepository::new()) as Arc<dyn CouncilRepositoryPort>,
         runtime,
     }));
 

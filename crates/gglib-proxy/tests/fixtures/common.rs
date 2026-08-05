@@ -11,21 +11,18 @@ use axum::{Router, body::Body, http::Response, routing::post};
 use bytes::Bytes;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::inference_profile::InferenceProfile;
 use gglib_core::ports::{
-    ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
-    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
-    RepositoryError, RunningTarget, SettingsRepository,
+    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
+    ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
-use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 
 // ─── ModelRuntimePort mock ────────────────────────────────────────────────
 
@@ -250,83 +247,6 @@ impl SettingsRepository for ProfileSettingsRepo {
     }
 }
 
-// ─── Council mocks (verified against trait definitions) ───────────────────
-
-/// No-op council runner — `run` immediately returns Ok.
-#[derive(Debug)]
-pub struct NoopRunner;
-
-#[async_trait]
-impl CouncilRunnerPort for NoopRunner {
-    async fn run(
-        &self,
-        _: &str,
-        _: CouncilRunParams,
-        _: mpsc::Sender<CouncilEvent>,
-        _: CancellationToken,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-/// No-op approval registry — all operations are no-ops.
-pub struct NoopApprovalRegistry;
-
-impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
-    fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
-    fn resolve(&self, _: &str, _: ApprovalDecision) -> bool {
-        false
-    }
-    fn is_pending(&self, _: &str) -> bool {
-        false
-    }
-}
-
-/// No-op council repository — all operations return empty/Ok.
-pub struct NoopOrchestratorRepo;
-
-#[async_trait]
-impl CouncilRepositoryPort for NoopOrchestratorRepo {
-    async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn update_run_status(&self, _: &str, _: CouncilRunStatus) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
-        Ok(None)
-    }
-
-    async fn list_runs(
-        &self,
-        _: Option<CouncilRunStatus>,
-    ) -> Result<Vec<CouncilRun>, RepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-
-    async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
-        Ok(0)
-    }
-}
-
 // ─── McpServerRepository mock (includes update_last_connected) ────────────
 
 /// Empty MCP repository — list returns empty, lookups return NotFound.
@@ -364,15 +284,6 @@ impl McpServerRepository for EmptyMcpRepo {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
-
-/// Build a `CouncilDeps` with all no-op implementations.
-pub fn make_orchestrator_deps() -> CouncilDeps {
-    CouncilDeps {
-        runner: Arc::new(NoopRunner),
-        approval_registry: Arc::new(NoopApprovalRegistry),
-        council_repo: Arc::new(NoopOrchestratorRepo),
-    }
-}
 
 /// Build an `McpService` backed by an empty repository and no-op emitter.
 pub fn make_mcp_service() -> Arc<McpService> {
@@ -874,7 +785,6 @@ pub async fn spawn_proxy_with_runtime(
             runtime,
             catalog,
             mcp,
-            make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None, // inference_override
@@ -926,7 +836,6 @@ pub async fn spawn_proxy_with_cache_for_model(
             runtime,
             catalog,
             mcp,
-            make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None, // inference_override

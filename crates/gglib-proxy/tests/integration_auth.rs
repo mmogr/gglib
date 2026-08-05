@@ -25,9 +25,7 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 mod fixtures;
-use fixtures::common::{
-    EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service, make_orchestrator_deps,
-};
+use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
 
 // ─── Proxy harness ─────────────────────────────────────────────────────────
 
@@ -55,7 +53,6 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationTok
             runtime,
             catalog,
             make_mcp_service(),
-            make_orchestrator_deps(),
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None,  // inference_override

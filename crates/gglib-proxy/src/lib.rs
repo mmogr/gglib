@@ -6,7 +6,6 @@ pub mod cache_lifecycle;
 pub mod canonicalization;
 pub mod connections;
 pub mod contention;
-pub mod council_proxy;
 pub mod dashboard;
 pub mod embeddings;
 pub mod forward;
@@ -24,5 +23,4 @@ pub mod token_calibration;
 
 pub mod upstream_health;
 
-pub use council_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 pub use server::serve;

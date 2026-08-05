@@ -29,7 +29,6 @@ use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_core::{ApiKeySource, CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
-use gglib_proxy::CouncilDeps;
 use gglib_proxy::slot_eviction::DiskBudget;
 
 /// Handle to a running proxy server.
@@ -261,7 +260,7 @@ impl ProxySupervisor {
     /// The agent-path prompt-cache reuse store shared with the proxy dashboard.
     ///
     /// The embedded axum server (GUI chat) records into this so its reuse lands
-    /// on `/v1/proxy/status`'s `agent_usage` alongside council runs. Cloning is
+    /// on `/v1/proxy/status`'s `agent_usage`. Cloning is
     /// cheap; the store lives for the supervisor's lifetime.
     #[must_use]
     pub fn agent_metrics(&self) -> Arc<CacheMetricsStore> {
@@ -288,7 +287,6 @@ impl ProxySupervisor {
     /// * `runtime_port` - Port for managing model runtime
     /// * `catalog_port` - Port for listing and resolving models
     /// * `mcp` - MCP service for tool gateway
-    /// * `orchestrator` - Orchestrator services for virtual model routing
     /// * `settings_repo` - Settings repository for global inference defaults
     ///
     /// # Errors
@@ -300,7 +298,6 @@ impl ProxySupervisor {
         runtime_port: Arc<dyn ModelRuntimePort>,
         catalog_port: Arc<dyn ModelCatalogPort>,
         mcp: Arc<McpService>,
-        orchestrator: CouncilDeps,
         settings_repo: Arc<dyn SettingsRepository>,
     ) -> Result<ProxyBind, SupervisorError> {
         let mut guard = self.handle.lock().await;
@@ -376,7 +373,6 @@ impl ProxySupervisor {
                 runtime_port,
                 catalog_port,
                 mcp,
-                orchestrator,
                 cancel_clone,
                 settings_repo,
                 inference_override,
@@ -522,96 +518,12 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use gglib_core::NoopEmitter;
-    use gglib_core::domain::council::{
-        CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus,
-    };
     use gglib_core::domain::mcp::{McpServer, NewMcpServer};
-    use gglib_core::ports::{
-        ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
-        SettingsRepository,
-    };
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
     };
     use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-    use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
-    use tokio::sync::{mpsc, oneshot};
-    use tokio_util::sync::CancellationToken;
-
-    /// No-op runner for tests — never actually executes.
-    #[derive(Debug)]
-    struct NoopRunner;
-
-    #[async_trait]
-    impl CouncilRunnerPort for NoopRunner {
-        async fn run(
-            &self,
-            _goal: &str,
-            _params: CouncilRunParams,
-            _tx: mpsc::Sender<CouncilEvent>,
-            _cancel: CancellationToken,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    struct NoopApprovalRegistry;
-    impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
-        fn register(&self, _id: String, _tx: oneshot::Sender<ApprovalDecision>) {}
-        fn resolve(&self, _id: &str, _decision: ApprovalDecision) -> bool {
-            false
-        }
-        fn is_pending(&self, _id: &str) -> bool {
-            false
-        }
-    }
-
-    struct NoopOrchestratorRepo;
-    #[async_trait]
-    impl CouncilRepositoryPort for NoopOrchestratorRepo {
-        async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
-            Ok(())
-        }
-        async fn update_run_status(
-            &self,
-            _: &str,
-            _: CouncilRunStatus,
-        ) -> Result<(), RepositoryError> {
-            Ok(())
-        }
-        async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
-            Ok(())
-        }
-        async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
-            Ok(())
-        }
-        async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
-            Ok(None)
-        }
-        async fn list_runs(
-            &self,
-            _: Option<CouncilRunStatus>,
-        ) -> Result<Vec<CouncilRun>, RepositoryError> {
-            Ok(vec![])
-        }
-        async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
-            Ok(vec![])
-        }
-        async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
-            Ok(())
-        }
-        async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
-            Ok(0)
-        }
-    }
-
-    fn make_orchestrator() -> CouncilDeps {
-        CouncilDeps {
-            runner: Arc::new(NoopRunner),
-            approval_registry: Arc::new(NoopApprovalRegistry),
-            council_repo: Arc::new(NoopOrchestratorRepo),
-        }
-    }
+    use gglib_core::ports::{RepositoryError, SettingsRepository};
 
     /// Empty MCP repository for testing — all reads return empty/not-found.
     #[derive(Debug)]
@@ -745,7 +657,6 @@ mod tests {
                 runtime.clone(),
                 catalog.clone(),
                 mcp,
-                make_orchestrator(),
                 make_settings_repo(),
             )
             .await
@@ -762,14 +673,7 @@ mod tests {
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
             supervisor
-                .start(
-                    config,
-                    runtime2,
-                    catalog2,
-                    make_mcp(),
-                    make_orchestrator(),
-                    make_settings_repo()
-                )
+                .start(config, runtime2, catalog2, make_mcp(), make_settings_repo())
                 .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
@@ -808,7 +712,6 @@ mod tests {
                 runtime,
                 catalog,
                 make_mcp(),
-                make_orchestrator(),
                 make_settings_repo(),
             )
             .await
@@ -820,14 +723,7 @@ mod tests {
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
         let addr2 = supervisor
-            .start(
-                config,
-                runtime2,
-                catalog2,
-                make_mcp(),
-                make_orchestrator(),
-                make_settings_repo(),
-            )
+            .start(config, runtime2, catalog2, make_mcp(), make_settings_repo())
             .await
             .unwrap();
 

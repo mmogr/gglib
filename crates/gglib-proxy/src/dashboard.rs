@@ -16,7 +16,7 @@
 //! ## Live updates without spreading broadcast plumbing everywhere
 //!
 //! An alternative design would thread a broadcast call into every mutation
-//! site across `forward.rs`, `council_proxy.rs`, and `connections.rs`
+//! site across `forward.rs` and `connections.rs`
 //! (firing a `DashboardEvent` on every progress tick, connection start/end,
 //! and slots poll). That would work, but it spreads dashboard-specific
 //! concerns into modules that otherwise have nothing to do with it.
@@ -278,7 +278,7 @@ const BROADCAST_CAPACITY: usize = 8;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DashboardSnapshot {
     /// Every currently in-flight model request — direct `/v1/chat/completions`
-    /// completions, council/virtual-model runs, and `/v1/embeddings`.
+    /// completions and `/v1/embeddings`.
     pub active_connections: Vec<ActiveConnectionSnapshot>,
     /// `true` if the running llama-server's `/slots` endpoint is reachable
     /// and enabled. `false` if it's disabled (`--no-slots`) or currently

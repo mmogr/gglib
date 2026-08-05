@@ -28,7 +28,7 @@ use tokio_util::sync::CancellationToken;
 
 use fixtures::common::{
     EnforcingPinnedRuntime, MockSettingsRepo, NoopRuntime, PinnedRuntime, ProfileSettingsRepo,
-    StaticCatalog, make_mcp_service, make_orchestrator_deps,
+    StaticCatalog, make_mcp_service,
 };
 
 const PINNED: &str = "qwen2.5";
@@ -52,7 +52,6 @@ async fn spawn(
             runtime,
             catalog,
             make_mcp_service(),
-            make_orchestrator_deps(),
             proxy_cancel,
             settings,
             None, // inference_override
@@ -162,29 +161,6 @@ async fn pinned_proxy_keeps_variants_of_the_pinned_model_only() {
         !ids.contains(&format!("{FOREIGN}:coding")),
         "foreign model's profile variant advertised: {ids:?}"
     );
-
-    cancel.cancel();
-}
-
-/// Council runs dispatch to whatever model is loaded, which under pinning is
-/// the pinned model — so the virtuals stay servable and stay listed.
-#[tokio::test]
-async fn pinned_proxy_still_advertises_the_council_virtuals() {
-    let (base, cancel) = spawn(
-        Arc::new(PinnedRuntime(PINNED)),
-        Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
-        Arc::new(MockSettingsRepo),
-    )
-    .await;
-
-    let ids = model_ids(&base).await;
-
-    for virtual_model in ["gglib-council", "gglib-council:interactive"] {
-        assert!(
-            ids.contains(&virtual_model.to_owned()),
-            "pinning dropped {virtual_model}, which it can still serve: {ids:?}"
-        );
-    }
 
     cancel.cancel();
 }

@@ -11,16 +11,11 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use gglib_core::ports::{
-    CacheMetricsSink, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
-    ModelRepository, ModelRuntimePort,
-};
+use gglib_core::ports::{CacheMetricsSink, ModelCatalogPort, ModelRepository, ModelRuntimePort};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
-use gglib_proxy::CouncilDeps;
-use gglib_runtime::CouncilRunnerAdapter;
 use gglib_runtime::ports_impl::CatalogPortImpl;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 use tracing::info;
@@ -69,10 +64,6 @@ pub struct ProxyDeps {
     pub model_repo: Arc<dyn ModelRepository>,
     pub mcp: Arc<McpService>,
     pub core: Arc<AppCore>,
-    /// Shared approval registry for HITL gates (shared with Axum orchestrator handler).
-    pub approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
-    /// Shared run repository for interactive-mode persistence.
-    pub council_repo: Arc<dyn CouncilRepositoryPort>,
     /// Shared runtime port — injected from the composition root so proxy and
     /// benchmark share the same `SingleSwap` `ProcessManager`, enforcing the
     /// invariant that only one llama-server runs at a time system-wide.
@@ -89,8 +80,6 @@ pub struct ProxyOps {
     model_repo: Arc<dyn ModelRepository>,
     mcp: Arc<McpService>,
     core: Arc<AppCore>,
-    approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
-    council_repo: Arc<dyn CouncilRepositoryPort>,
     runtime: Arc<dyn ModelRuntimePort>,
 }
 
@@ -102,8 +91,6 @@ impl ProxyOps {
             model_repo: deps.model_repo,
             mcp: deps.mcp,
             core: deps.core,
-            approval_registry: deps.approval_registry,
-            council_repo: deps.council_repo,
             runtime: deps.runtime,
         }
     }
@@ -134,32 +121,12 @@ impl ProxyOps {
 
         let runtime = Arc::clone(&self.runtime);
 
-        // Create CouncilDeps — shares approval_registry and council_repo
-        // with the main Axum server so interactive-mode runs appear in
-        // GET /api/council/runs and can be approved via the Axum API.
-        let http_client = reqwest::Client::builder()
-            .pool_max_idle_per_host(10)
-            .build()
-            .map_err(|e| SupervisorError::Internal(format!("Failed to build HTTP client: {e}")))?;
-        let orch_runner = Arc::new(CouncilRunnerAdapter::new(
-            Arc::clone(&runtime),
-            Arc::clone(&catalog),
-            http_client,
-            Arc::clone(&self.mcp),
-        ));
-        let orchestrator = CouncilDeps {
-            runner: orch_runner as Arc<dyn gglib_proxy::CouncilRunnerPort>,
-            approval_registry: Arc::clone(&self.approval_registry),
-            council_repo: Arc::clone(&self.council_repo),
-        };
-
         self.supervisor
             .start(
                 config,
                 runtime,
                 catalog,
                 self.mcp.clone(),
-                orchestrator,
                 self.core.settings().repo(),
             )
             .await
@@ -282,8 +249,8 @@ impl ProxyOps {
 
     /// The agent-path prompt-cache reuse sink shared with the proxy dashboard.
     ///
-    /// Handlers that run agent or council loops in this process (GUI chat, GUI
-    /// council) record their reuse here so it lands on the proxy's `agent_usage`.
+    /// Handlers that run agent loops in this process (GUI chat) record their
+    /// reuse here so it lands on the proxy's `agent_usage`.
     /// Always available: the store lives on the supervisor for the process
     /// lifetime, whether or not the proxy is currently running.
     #[must_use]

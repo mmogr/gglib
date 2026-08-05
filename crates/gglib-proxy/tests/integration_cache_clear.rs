@@ -72,7 +72,6 @@ async fn spawn_proxy(
             runtime,
             catalog,
             mcp,
-            fixtures::common::make_orchestrator_deps(),
             cancel_clone,
             Arc::new(fixtures::common::MockSettingsRepo),
             None, // inference_override

@@ -118,7 +118,6 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`cache_lifecycle.rs`](src/cache_lifecycle.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-cache_lifecycle-coverage.json) |
 | [`canonicalization.rs`](src/canonicalization.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-canonicalization-coverage.json) |
 | [`connections.rs`](src/connections.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-connections-coverage.json) |
-| [`council_proxy.rs`](src/council_proxy.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-council_proxy-coverage.json) |
 | [`dashboard.rs`](src/dashboard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-dashboard-coverage.json) |
 | [`embeddings.rs`](src/embeddings.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-embeddings-coverage.json) |
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
@@ -150,14 +149,13 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
 - **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
-- **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request (direct and council/virtual-model) through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
+- **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`) and background LRU eviction
 - **`canonicalization.rs`** — System prompt normalization and `tools[]` order canonicalization for cache key stability, plus content-hash session-id fallback derivation
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
-- **`council_proxy.rs`** — Routes virtual-model (council/orchestrator) requests; registers active connections and forwards `AgentEvent::PromptProgress` the same way `forward.rs` does for direct completions
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
@@ -279,9 +277,8 @@ opt-in on both.
 
 In pinned mode `GET /v1/models` advertises only the pinned model, so a client
 is never offered a model the endpoint would refuse. Its `{model}:{profile}`
-variants and the council virtuals remain listed: a profile changes only the
-request body, and a council run dispatches to whatever model is loaded, so
-neither reaches the pinned guard.
+variants remain listed: a profile changes only the request body, never which
+model actually runs, so it never reaches the pinned guard.
 
 ### Embeddings
 
@@ -381,8 +378,6 @@ temperature.  That branch cannot distinguish a deleted profile from a model tag
 that was never in the catalog, so the error names both readings and lists the
 profiles that do exist.
 
-Routing runs **after** the council virtual-model interception, since
-`gglib-council:interactive` must be matched whole before anything splits it.
 Everything downstream — the model launch, dashboard registration, metrics, cache
 keys — uses the base name, so a profile never launches a second llama-server or
 invalidates the KV cache.
@@ -643,7 +638,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `active_connections` | array | Every currently in-flight `/v1/chat/completions` request (direct and council/virtual-model) |
+| `active_connections` | array | Every currently in-flight `/v1/chat/completions` request |
 | `slots_available` | `bool` | `true` if the running llama-server's `/slots` endpoint is reachable and enabled |
 | `slots` | array | Per-slot context usage; empty unless `slots_available` is `true` |
 | `slots_status` | `string \| null` | Reason `slots` is empty (disabled via `--no-slots`, or the poller's last connect/timeout/parse error); `null` when `slots_available` |
@@ -714,7 +709,7 @@ one hook. Top-level rather than nested under `cache` because it does not depend
 on the proxy's cache configuration and surfaces even before a proxied request
 has resolved a model.
 
-CLI `gglib chat`/`q` (and standalone `gglib web`/`gglib council`) run in a
+CLI `gglib chat`/`q` (and standalone `gglib web`) run in a
 separate process with no dashboard, so their reuse is not reported here; the
 same `CacheMetricsSink` seam would let a future cross-process reporter fill that
 gap without changing the adapter.
@@ -724,10 +719,10 @@ gap without changing the adapter.
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | `string` (UUID) | Assigned at registration |
-| `model_name` | `string` | Model (or virtual council model) serving this connection |
+| `model_name` | `string` | Model serving this connection |
 | `started_at_secs` | `u64` | Unix timestamp when registered |
 | `is_streaming` | `bool` | `true` for a streaming (SSE) request |
-| `num_ctx` | `u64 \| null` | Effective context size, when known (`null` for council virtual-model runs) |
+| `num_ctx` | `u64 \| null` | Effective context size, when known |
 | `phase` | `"queued" \| "processing_prompt" \| "generating"` | Lifecycle phase |
 | `prompt_processed` | `u32 \| null` | Tokens processed so far (from the most recent prompt-progress frame) |
 | `prompt_total` | `u32 \| null` | Total prompt tokens |

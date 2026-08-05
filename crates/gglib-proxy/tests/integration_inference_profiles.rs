@@ -26,7 +26,7 @@ use gglib_core::ports::{
 };
 
 mod fixtures;
-use fixtures::common::{make_mcp_service, make_orchestrator_deps};
+use fixtures::common::make_mcp_service;
 
 const MODEL: &str = "qwen";
 
@@ -243,7 +243,6 @@ async fn spawn(
             runtime,
             catalog,
             mcp,
-            make_orchestrator_deps(),
             proxy_cancel,
             Arc::new(ProfileSettings {
                 profiles,
@@ -538,7 +537,7 @@ async fn an_advertised_variant_can_be_selected_and_used() {
         .collect();
     let advertised = ids
         .iter()
-        .find(|id| id.contains(':') && !id.starts_with("gglib-council"))
+        .find(|id| id.contains(':'))
         .expect("a variant is advertised");
 
     let resp = h.post(chat_request(advertised)).await;

@@ -119,55 +119,6 @@ pub fn compose_agent_loop_with_sampling(
     )
 }
 
-/// Return type for [`compose_council_ports`].
-pub struct CouncilPorts {
-    /// LLM completion port shared across all agent turns in the council.
-    pub llm: Arc<dyn LlmCompletionPort>,
-    /// Tool executor shared across all agent turns in the council.
-    pub tool_executor: Arc<dyn ToolExecutorPort>,
-}
-
-/// Compose the raw infrastructure ports needed by the council orchestrator.
-///
-/// Unlike [`compose_agent_loop`] — which returns a fully-assembled
-/// [`AgentLoopPort`] — this returns the underlying [`LlmCompletionPort`] and
-/// [`ToolExecutorPort`] separately, because
-/// [`gglib_agent::council::run_council`] creates per-agent `AgentLoop`
-/// instances internally (each with its own tool filter).
-///
-/// `sampling` applies to every LLM call made during the council run (planning,
-/// worker turns, synthesis, compaction).  Pass `None` to use llama-server
-/// defaults.
-///
-/// When `sandbox_root` is `Some`, filesystem tools (`read_file`,
-/// `list_directory`, `grep_search`) are enabled and scoped to that path.
-///
-/// `cache_metrics` reports every LLM call's prompt-cache reuse to a sink when
-/// the council runs in the proxy process; `None` when there is no dashboard.
-#[allow(clippy::too_many_arguments)]
-pub fn compose_council_ports(
-    base_url: String,
-    http_client: Client,
-    model: Option<String>,
-    model_context: ModelContext,
-    mcp: Arc<McpService>,
-    sandbox_root: Option<PathBuf>,
-    sampling: Option<InferenceConfig>,
-    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
-) -> CouncilPorts {
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(base_url, http_client, model)
-            .with_sampling(sampling)
-            .with_model_context(model_context)
-            .with_cache_metrics_sink(cache_metrics),
-    );
-    let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
-        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
-        None => Arc::new(CombinedToolExecutor::new(mcp)),
-    };
-    CouncilPorts { llm, tool_executor }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn compose_agent_loop_inner(
     base_url: String,
