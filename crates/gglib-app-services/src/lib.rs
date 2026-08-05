@@ -42,7 +42,7 @@ pub use proxy::{ProxyDeps, ProxyOps};
 pub use servers::{ServerDeps, ServerOps};
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::{SettingsDeps, SettingsOps};
-pub use setup::{SetupDeps, SetupOps};
+pub use setup::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
 
 // Re-export commonly used types from gglib-core for convenience
 pub use gglib_core::ModelFilterOptions;

@@ -25,6 +25,11 @@ use crate::handlers;
 ///   handlers that expose a verbosity knob.
 pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Result<()> {
     match command {
+        // ── Getting started ─────────────────────────────────────────────────
+        Commands::Up { yes, model, port } => {
+            handlers::up::execute(ctx, handlers::up::UpArgs { yes, model, port }).await?;
+        }
+
         // ── Grouped: model management ───────────────────────────────────────
         Commands::Model { command } => {
             handlers::model::dispatch(ctx, command).await?;

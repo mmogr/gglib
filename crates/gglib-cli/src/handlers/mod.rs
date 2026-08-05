@@ -10,6 +10,7 @@
 //! - [`model`]     — add, list, remove, update, download, verify, search, browse
 //!
 //! Top-level handlers for commands that stand alone:
+//! - [`up`]        — first-run: hardware → llama.cpp → model → proxy → endpoint
 //! - [`gui`]       — Tauri desktop GUI launcher
 //! - [`web`]       — Axum web-server GUI launcher
 //! - [`proxy_dashboard`] — live terminal view of a running proxy's dashboard stream
@@ -27,4 +28,5 @@ pub mod model;
 pub mod plan;
 pub mod proxy_cache_clear;
 pub mod proxy_dashboard;
+pub mod up;
 pub mod web;

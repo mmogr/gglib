@@ -17,7 +17,9 @@ use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
-use gglib_runtime::llama::{ensure_llama_initialized, resolve_llama_server, resolve_mtp_args};
+use gglib_runtime::llama::{
+    CliPrompt, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
+};
 use gglib_runtime::proxy::{
     PinnedModel, ProxyCacheOptions, StandaloneProxyParams, start_proxy_standalone,
 };
@@ -40,7 +42,7 @@ pub async fn execute(
     verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
-    ensure_llama_initialized().await?;
+    ensure_llama_initialized(&CliPrompt::new()).await?;
 
     let llama_server_path = resolve_llama_server().map_err(|e| {
         anyhow::anyhow!(
