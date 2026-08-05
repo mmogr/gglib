@@ -9,8 +9,8 @@
 //! to stop any currently-running llama-server via `stop_current()`.  Without
 //! this drain, the llama-server and `llama-bench` would compete for GPU
 //! memory, likely causing an OOM or silent performance degradation.  Because
-//! the [`ModelRuntimePort`] is the same `SingleSwap` instance shared with
-//! `ProxyOps`, stopping the proxy server here is both safe and intentional.
+//! the [`ModelRuntimePort`] is the same shared instance `ProxyOps` uses,
+//! stopping the proxy's server here is both safe and intentional.
 //!
 //! # Process Spawning
 //!
