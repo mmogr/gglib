@@ -114,7 +114,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <Input
             id="context-input"
             type="number"
-            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10"
             placeholder={
               settings?.defaultContextSize
                 ? `Default: ${settings.defaultContextSize.toLocaleString()}`
@@ -142,7 +142,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <Input
             id="port-input"
             type="number"
-            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10"
             placeholder={
               settings?.llamaBasePort
                 ? `Auto (from ${settings.llamaBasePort})`

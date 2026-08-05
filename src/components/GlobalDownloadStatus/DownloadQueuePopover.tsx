@@ -152,7 +152,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   return (
     <div
-      className="absolute top-full left-0 mt-xs bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[280px] max-w-[360px] z-popover overflow-hidden"
+      className="absolute top-full left-0 mt-xs bg-surface border border-border rounded-md shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden"
       ref={popoverRef}
     >
       <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
@@ -168,7 +168,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             {/* Reorder buttons */}
             <div className="flex flex-col gap-[2px] shrink-0">
               <button
-                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-[3px] text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-sm text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
                 onClick={() => handleMoveUp(index)}
                 disabled={isProcessing || index === 0}
                 title="Move up"
@@ -177,7 +177,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
                 <Icon icon={ChevronUp} size={16} />
               </button>
               <button
-                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-[3px] text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-sm text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
                 onClick={() => handleMoveDown(index)}
                 disabled={isProcessing || index === groupedItems.length - 1}
                 title="Move down"
@@ -203,7 +203,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Cancel button */}
             <button
-              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-[12px] transition-all duration-150 hover:not-disabled:bg-danger-subtle hover:not-disabled:text-danger hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-xs transition-all duration-150 hover:not-disabled:bg-danger-subtle hover:not-disabled:text-danger hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
               onClick={() => handleCancel(item)}
               disabled={isProcessing}
               title="Remove from queue"

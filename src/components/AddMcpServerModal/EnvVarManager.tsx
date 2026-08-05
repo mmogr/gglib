@@ -62,7 +62,7 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
               />
               <button
                 type="button"
-                className="flex items-center justify-center w-6 h-6 bg-none border-none text-[1.25rem] text-text-muted cursor-pointer rounded-[0.25rem] hover:bg-danger-subtle hover:text-danger"
+                className="flex items-center justify-center w-6 h-6 bg-none border-none text-xl text-text-muted cursor-pointer rounded-sm hover:bg-danger-subtle hover:text-danger"
                 onClick={() => onRemove(index)}
                 disabled={disabled}
                 aria-label="Remove variable"

@@ -61,7 +61,7 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-sm font-semibold text-text">{used != null && total ? `${pct}%` : '—'}</span>
-        {label && <span className="text-[10px] text-text-muted">{label}</span>}
+        {label && <span className="text-2xs text-text-muted">{label}</span>}
       </div>
     </div>
   );

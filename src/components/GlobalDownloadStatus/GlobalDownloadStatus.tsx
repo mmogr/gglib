@@ -77,7 +77,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
       <div className="bg-background border-b border-border rounded-none p-base mb-0">
         <div className="flex flex-col gap-sm">
           <div className="flex items-center gap-sm">
-            <span className="text-[1.25rem]" aria-hidden>
+            <span className="text-xl" aria-hidden>
               <Icon icon={CheckCircle2} size={16} />
             </span>
             <span className="text-base font-semibold text-success">
@@ -150,7 +150,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
       <div className="flex flex-col gap-sm">
         <div className="flex items-center justify-between gap-md">
           <div className="flex items-center gap-sm">
-            <span className="text-[1.1rem]" aria-hidden>
+            <span className="text-lg" aria-hidden>
               <Icon icon={Download} size={16} />
             </span>
             <span className="text-sm font-medium text-text">
@@ -235,9 +235,9 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                 </span>
               )}
             </div>
-            <div className="h-1 bg-surface-hover rounded-[2px] overflow-hidden">
+            <div className="h-1 bg-surface-hover rounded-sm overflow-hidden">
               <div
-                className="h-full bg-warning rounded-[2px] transition-[width] duration-200 ease-linear"
+                className="h-full bg-warning rounded-sm transition-[width] duration-200 ease-linear"
                 style={{
                   width:
                     shard.totalBytes && shard.totalBytes > 0

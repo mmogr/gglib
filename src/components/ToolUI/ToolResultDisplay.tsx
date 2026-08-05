@@ -67,7 +67,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
   };
 
   return (
-    <div className="border border-border rounded-lg bg-background overflow-hidden my-2 text-[13px]">
+    <div className="border border-border rounded-lg bg-background overflow-hidden my-2 text-sm">
       {/* Header — always visible, toggles body */}
       <button
         type="button"
@@ -79,7 +79,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
           <Icon icon={isExpanded ? ChevronDown : ChevronRight} size={14} />
         </span>
 
-        <span className="flex-1 truncate font-mono text-[11px] text-text-secondary">
+        <span className="flex-1 truncate font-mono text-2xs text-text-secondary">
           {summary}
         </span>
 

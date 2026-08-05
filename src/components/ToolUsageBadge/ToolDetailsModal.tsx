@@ -100,7 +100,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
         </span>
         <div>
           <p className="m-0 text-text font-semibold">Tool calls</p>
-          <p className="mt-[0.2rem] mb-0 text-text-secondary text-[0.95rem]">Inspect arguments and results from each tool execution.</p>
+          <p className="mt-[0.2rem] mb-0 text-text-secondary text-base">Inspect arguments and results from each tool execution.</p>
         </div>
       </div>
 
@@ -116,7 +116,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
           const StatusIcon = getStatusIcon(call);
 
           return (
-            <div key={call.toolCallId || index} className="bg-background-secondary border border-border rounded-[10px] p-md flex flex-col gap-sm">
+            <div key={call.toolCallId || index} className="bg-background-secondary border border-border rounded-lg p-md flex flex-col gap-sm">
               <div className="flex items-center gap-sm">
                 <span className={cn(
                   'w-5 h-5 inline-flex items-center justify-center rounded-full bg-background-tertiary border border-border text-text',
@@ -127,9 +127,9 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                   <Icon icon={StatusIcon} size={16} className={StatusIcon === Loader2 ? 'animate-spin' : ''} />
                 </span>
                 <span className="font-semibold text-text">{formatToolName(call)}</span>
-                <span className="text-[0.85rem] text-text-secondary font-mono">({call.toolName})</span>
+                <span className="text-sm text-text-secondary font-mono">({call.toolName})</span>
                 {durationMs !== undefined && (
-                  <span className="ml-auto text-[0.8rem] text-text-muted font-mono">
+                  <span className="ml-auto text-sm text-text-muted font-mono">
                     {durationMs < 1000
                       ? `${Math.round(durationMs)}ms`
                       : `${(durationMs / 1000).toFixed(1)}s`}
@@ -162,7 +162,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                     {copiedId === argsId ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
-                {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
+                {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-base leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
               </Stack>
 
               <ToolResultDisplay toolName={call.toolName} result={result} toolCallId={call.toolCallId} />

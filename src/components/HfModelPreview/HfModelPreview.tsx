@@ -195,7 +195,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
         <div className="flex items-center justify-between gap-md">
           <h2 className="m-0 text-xl font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap flex-1">{model.name}</h2>
           <button
-            className="shrink-0 bg-transparent border-none text-[1.25rem] cursor-pointer px-sm py-xs rounded-base transition-colors duration-150 ease-linear hover:bg-surface-hover"
+            className="shrink-0 bg-transparent border-none text-xl cursor-pointer px-sm py-xs rounded-base transition-colors duration-150 ease-linear hover:bg-surface-hover"
             onClick={handleOpenHuggingFace}
             title="Open on HuggingFace"
             aria-label="Open on HuggingFace"
@@ -222,7 +222,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
                 <Icon icon={Wrench} size={14} />
               </span>
               <span>Tools</span>
-              <span className="text-[0.7rem] opacity-70 ml-[0.15rem]" aria-hidden="true">
+              <span className="text-2xs opacity-70 ml-[0.15rem]" aria-hidden="true">
                 <Icon icon={Info} size={12} />
               </span>
             </span>

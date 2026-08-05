@@ -59,12 +59,12 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
           </span>
           <div>
             <h2 className="m-0 text-base font-semibold text-text">Delete this message?</h2>
-            <p className="mt-[0.15rem] mb-0 text-text-secondary text-[0.95rem]">This action is permanent.</p>
+            <p className="mt-[0.15rem] mb-0 text-text-secondary text-base">This action is permanent.</p>
           </div>
         </div>
 
         {messageCount > 1 && (
-          <div className="flex gap-sm items-start p-3 rounded-lg bg-danger-subtle border border-danger-border text-text text-[0.95rem]">
+          <div className="flex gap-sm items-start p-3 rounded-lg bg-danger-subtle border border-danger-border text-text text-base">
             <Icon icon={AlertTriangle} size={16} className="text-danger" />
             <span>
               This will also delete <strong>{messageCount - 1}</strong> subsequent{' '}

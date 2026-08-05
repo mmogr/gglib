@@ -274,15 +274,15 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
             <Stack gap="xs">
               <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/chat/completions</code>
-                <span className="text-[10px] text-text-muted">OpenAI-compatible chat</span>
+                <span className="text-2xs text-text-muted">OpenAI-compatible chat</span>
               </div>
               <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/completions</code>
-                <span className="text-[10px] text-text-muted">Text completion</span>
+                <span className="text-2xs text-text-muted">Text completion</span>
               </div>
               <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>GET /health</code>
-                <span className="text-[10px] text-text-muted">Health check</span>
+                <span className="text-2xs text-text-muted">Health check</span>
               </div>
             </Stack>
           </section>

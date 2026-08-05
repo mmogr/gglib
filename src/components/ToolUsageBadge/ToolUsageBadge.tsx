@@ -73,7 +73,7 @@ const ToolUsageBadge: React.FC = () => {
     <>
       <button
         className={cn(
-          'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium border-none rounded-[10px] cursor-pointer transition-all duration-150 ml-2 hover:scale-105 hover:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:scale-[0.98]',
+          'inline-flex items-center gap-1 py-[2px] px-2 text-2xs font-medium border-none rounded-full cursor-pointer transition-all duration-150 ml-2 hover:scale-105 active:scale-[0.98]',
           status === 'running' && 'bg-primary-subtle text-primary border border-primary-border hover:bg-primary/20 animate-pulse',
           status === 'success' && 'bg-success-subtle text-success border border-success-border hover:bg-success/20',
           status === 'error' && 'bg-danger-subtle text-danger border border-danger-border hover:bg-danger/20',
@@ -84,7 +84,7 @@ const ToolUsageBadge: React.FC = () => {
         aria-live="polite"
         aria-label={ariaLabel}
       >
-        <span className="text-[12px] leading-none" aria-hidden="true">
+        <span className="text-xs leading-none" aria-hidden="true">
           <Icon icon={Wrench} size={14} />
         </span>
         <span className="leading-none whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{displayNames}</span>

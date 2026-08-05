@@ -234,7 +234,7 @@ const StepIndicator: FC<{ steps: readonly WizardStep[]; current: WizardStep }> =
             ) : (
               <span
                 className={cn(
-                  'w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border',
+                  'w-5 h-5 rounded-full flex items-center justify-center text-2xs font-bold border',
                   i === currentIndex
                     ? 'border-primary bg-primary/20 text-primary'
                     : 'border-text-muted text-text-muted',
@@ -451,7 +451,7 @@ const LlamaInstallStep: FC<{
         <div className="flex flex-col gap-2">
           <div className="h-2 bg-background-tertiary rounded overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-primary to-[#74c7ec] rounded transition-[width] duration-300"
+              className="h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300"
               style={{ width: progress.total > 0 ? `${(progress.downloaded / progress.total) * 100}%` : '0%' }}
             />
           </div>

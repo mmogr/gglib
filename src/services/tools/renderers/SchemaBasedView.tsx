@@ -50,7 +50,7 @@ function renderPrimitive(data: unknown, schema: JSONSchemaProperty | JSONSchema)
     return <span className="text-text font-mono">{data.toLocaleString()}</span>;
   }
 
-  return <span className="text-text font-mono text-[12px]">{String(data ?? '')}</span>;
+  return <span className="text-text font-mono text-xs">{String(data ?? '')}</span>;
 }
 
 /**
@@ -87,7 +87,7 @@ export const SchemaBasedView: FC<SchemaBasedViewProps> = ({ data, schema, level 
     return (
       <ul className="list-none m-0 p-0 flex flex-col gap-0.5">
         {(data as unknown[]).map((item, i) => (
-          <li key={i} className="font-mono text-[12px] text-text">
+          <li key={i} className="font-mono text-xs text-text">
             {String(item ?? '')}
           </li>
         ))}
@@ -103,11 +103,11 @@ export const SchemaBasedView: FC<SchemaBasedViewProps> = ({ data, schema, level 
     const keys = Array.from(new Set([...Object.keys(properties), ...Object.keys(obj)]));
 
     if (keys.length === 0) {
-      return <span className="text-text-muted italic text-[12px]">(empty)</span>;
+      return <span className="text-text-muted italic text-xs">(empty)</span>;
     }
 
     return (
-      <div className="overflow-x-auto rounded-lg border border-border my-1 text-[12px]">
+      <div className="overflow-x-auto rounded-lg border border-border my-1 text-xs">
         <table className="border-collapse w-full">
           <tbody>
             {keys.map((key) => {
@@ -122,7 +122,7 @@ export const SchemaBasedView: FC<SchemaBasedViewProps> = ({ data, schema, level 
                     {propSchema ? (
                       <SchemaBasedView data={val} schema={propSchema as unknown as Record<string, unknown>} level={level + 1} />
                     ) : (
-                      <span className="font-mono text-[12px]">{String(val ?? '')}</span>
+                      <span className="font-mono text-xs">{String(val ?? '')}</span>
                     )}
                   </td>
                 </tr>

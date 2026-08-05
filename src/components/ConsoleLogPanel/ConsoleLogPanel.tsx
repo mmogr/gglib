@@ -110,12 +110,12 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
 
       <div 
         ref={scrollContainerRef}
-        className="console-log-content flex-1 overflow-y-auto overflow-x-auto bg-[#1e1e1e] rounded-sm font-mono text-[12px] leading-[1.5] p-sm"
+        className="console-log-content flex-1 overflow-y-auto overflow-x-auto bg-[#1e1e1e] rounded-sm font-mono text-xs leading-[1.5] p-sm"
         onScroll={handleScroll}
       >
         {logs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-[#808080] text-center gap-sm">
-            <span className="text-[48px] opacity-50" aria-hidden>
+            <span className="opacity-50" aria-hidden>
               <Icon icon={Monitor} size={28} />
             </span>
             <p className="m-0">Waiting for server output...</p>

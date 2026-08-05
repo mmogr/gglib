@@ -37,12 +37,12 @@ function renderCell(value: unknown): React.ReactNode {
     return <span className="text-text-muted italic">—</span>;
   }
   if (typeof value === 'boolean') {
-    return <span className="font-mono text-[11px]">{String(value)}</span>;
+    return <span className="font-mono text-2xs">{String(value)}</span>;
   }
   if (typeof value === 'object') {
     try {
       return (
-        <span className="font-mono text-[11px] text-text-secondary">
+        <span className="font-mono text-2xs text-text-secondary">
           {JSON.stringify(value)}
         </span>
       );
@@ -102,7 +102,7 @@ export const SortableTable: React.FC<SortableTableProps> = ({ rows, columns: col
   if (columns.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border my-1 text-[12px]">
+    <div className="overflow-x-auto rounded-lg border border-border my-1 text-xs">
       <table className="border-collapse w-full">
         <thead>
           <tr className="bg-background-tertiary">
@@ -145,7 +145,7 @@ export const SortableTable: React.FC<SortableTableProps> = ({ rows, columns: col
       </table>
 
       {truncated && (
-        <p className="px-3 py-1.5 text-[11px] text-text-muted border-t border-border bg-background-secondary">
+        <p className="px-3 py-1.5 text-2xs text-text-muted border-t border-border bg-background-secondary">
           Showing {MAX_ROWS} of {rows.length} rows.
         </p>
       )}
