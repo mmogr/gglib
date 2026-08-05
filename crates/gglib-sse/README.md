@@ -7,6 +7,10 @@
 
 Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`.
 
+Streaming is the default shape of everything users watch here — tokens, download
+progress, dashboard updates — so the fan-out lives in one dependency-free place
+rather than being reimplemented per surface.
+
 ## Architecture
 
 This crate is a pure, dependency-free **leaf** utility - it depends on nothing but `axum`'s SSE

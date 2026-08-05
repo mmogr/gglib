@@ -7,6 +7,11 @@
 
 Process management and system probes for gglib — manages llama.cpp server instances and proxy routing.
 
+Every llama-server on the machine is owned here. This crate decides what gets
+loaded and when (admission over a bounded resident set), what flags each model
+launches with, and narrates those decisions at startup — the work that makes
+the runtime feel smarter than llama.cpp on its own.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it manages external processes and provides system information.

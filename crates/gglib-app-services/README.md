@@ -7,6 +7,10 @@
 
 Shared GUI backend facade for gglib adapters (Tauri desktop, Axum web).
 
+One implementation behind both GUIs, so the desktop app and the web UI cannot
+drift apart: a capability added here appears on both at once, and both drive the
+same shared runtime rather than competing for the GPU.
+
 ## Architecture
 
 This crate is a **Shared Facade** — sitting between adapters and infrastructure, providing a unified orchestration layer.

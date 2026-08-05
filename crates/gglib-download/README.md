@@ -7,6 +7,10 @@
 
 Download queue and manager for `HuggingFace` model files.
 
+Transfers run natively over HTTP — resumable and checksum-verified — so a new
+user's first download needs no Python toolchain. The `hf_xet` accelerator is an
+opt-in upgrade that falls back to the native path rather than failing.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it orchestrates downloads using `gglib-hf` for file resolution.

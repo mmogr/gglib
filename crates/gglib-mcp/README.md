@@ -7,6 +7,10 @@
 
 MCP (Model Context Protocol) server management for gglib.
 
+Tools are what make a local model useful for real work rather than just chat.
+This crate manages the MCP servers that provide them, and backs the gateway the
+proxy exposes at `/mcp`.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it manages MCP server lifecycle and protocol handling.

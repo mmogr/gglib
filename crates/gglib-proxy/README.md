@@ -5,7 +5,11 @@
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json)
 
-**Single Active Backend Proxy** - OpenAI-compatible proxy server for gglib with an integrated MCP Streamable HTTP gateway.
+**OpenAI-compatible proxy** — the front door to your local models, with an integrated MCP Streamable HTTP gateway.
+
+Everything between the OpenAI request and llama-server happens here: dialect
+normalization, context defense, sampling authority, and admission. This is the
+crate that makes a local model behave like an API provider.
 
 ## Architecture
 

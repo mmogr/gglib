@@ -4,7 +4,7 @@ This directory contains the Tauri-based desktop application for GGLib.
 
 ## Overview
 
-The GGLib Desktop GUI is one of three complementary interfaces for managing GGUF models (along with the CLI and Web UI). All interfaces share the same backend architecture, ensuring consistent functionality and behavior.
+The GGLib Desktop GUI is a client of the daemon that owns the runtime — a place to watch the proxy and manage the model library, not the thing serving requests. It launches or connects to a daemon and can run it as a background service from the tray, so the endpoint keeps serving after the window closes. The CLI and Web UI are clients of the same daemon, sharing one backend and one database.
 
 For a complete overview of all interfaces and the shared architecture, see the main [README.md](../README.md#interfaces).
 

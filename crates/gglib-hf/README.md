@@ -7,6 +7,10 @@
 
 `HuggingFace` Hub client for gglib — searching, browsing, and resolving GGUF models on the Hub. Implements `HfClientPort` from `gglib-core`.
 
+Resolving a repository to the right quantization is the step that turns "I want
+this model" into a concrete file to fetch — including the sizing judgement
+behind `gglib up`'s recommendation.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it implements the `HfClientPort` trait from `gglib-core`.

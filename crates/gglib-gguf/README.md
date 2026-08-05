@@ -7,6 +7,10 @@
 
 GGUF file format parser for gglib — extracts metadata from GGUF model files.
 
+What this crate reads out of a file is what lets the runtime configure it
+without asking: architecture, chat template, and layer counts become capability
+tags, and those tags become llama-server flags. No per-model setup.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it implements the `GgufParser` port from `gglib-core`.

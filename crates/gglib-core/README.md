@@ -7,6 +7,10 @@
 
 Pure domain types, ports, and traits for gglib — the foundation of the hexagonal architecture.
 
+The product's judgment lives here as pure logic: sampling resolution, dialect
+normalization, GGUF capability detection, and residency policy — all decidable
+without a GPU, a network, or a running llama-server, and therefore testable.
+
 ## Architecture
 
 This crate is the **Core Layer** — the innermost ring of the architecture. All other crates depend on it; it depends on none.
