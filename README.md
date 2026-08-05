@@ -492,6 +492,9 @@ These are baked into the database at download time and are fully user-overridabl
 # Inspect all stored details for a model (arch, quant, capabilities, inference defaults)
 gglib model inspect <id>
 
+# Show every resolved parameter and which layer supplied it
+gglib model explain <id>
+
 # Override individual params
 gglib model update <id> --presence-penalty 0.8 --max-tokens 32768
 
@@ -522,9 +525,29 @@ no way to tell the two apart in the resolved output.
 # Shows whether the current defaults are user-set or auto-detected
 gglib model inspect <id>
 
+# Shows the rung each parameter actually resolved from, for this model
+gglib model explain <id>
+
+# ...and how selecting a profile changes that resolution
+gglib model explain <id> --profile coding
+
 # Any explicit edit marks the defaults user-set from then on, even if the
 # values happen to match what gglib would have guessed
 gglib model update <id> --presence-penalty 0.8
+```
+
+`gglib model explain` is the direct answer to "why is this parameter this
+value?". It resolves through the same code the proxy does and labels each
+result with the layer it came from — including the cases that surprise people:
+a parameter sitting on the floor because a higher layer claimed the
+temperature, and a `reasoning` model's auto-written recipe losing to global
+settings.
+
+```
+temperature      0.2     ← profile 'coding'
+top_k            20      ← global settings
+presence_penalty 1.0     ← reasoning floor (coupled to temperature layer)
+max_tokens       —       ← unset by design
 ```
 
 Rows written before this distinction existed have nothing stored for it — there's no

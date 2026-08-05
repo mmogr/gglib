@@ -321,7 +321,7 @@ fn summarize(config: &InferenceConfig) -> String {
 }
 
 /// Error text for a name that does not match a configured profile.
-fn not_found_message(name: &str, profiles: &[InferenceProfile]) -> String {
+pub(crate) fn not_found_message(name: &str, profiles: &[InferenceProfile]) -> String {
     if profiles.is_empty() {
         return format!(
             "no profile named '{name}'; none are configured \

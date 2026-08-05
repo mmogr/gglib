@@ -2,6 +2,7 @@
 pub mod add;
 pub mod capabilities;
 pub mod download;
+pub mod explain;
 pub mod inspect;
 pub mod list;
 pub mod remove;
@@ -165,6 +166,12 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             json,
         } => {
             inspect::execute(ctx, &identifier, metadata, json).await?;
+        }
+        ModelCommand::Explain {
+            identifier,
+            profile,
+        } => {
+            explain::execute(ctx, &identifier, profile.as_deref()).await?;
         }
     }
     Ok(())

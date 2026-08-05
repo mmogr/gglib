@@ -376,4 +376,29 @@ pub enum ModelCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// Show every resolved inference parameter and which layer supplied it.
+    ///
+    /// Sampling resolves through a five-level hierarchy — request parameters,
+    /// the selected profile, per-model defaults, global settings, and a class
+    /// floor — under two rules that are hard to predict from the numbers
+    /// alone.  Parameters tuned against a temperature travel only with the
+    /// layer that set that temperature, and a model's defaults rank below
+    /// global settings when gglib auto-detected them rather than a person
+    /// setting them.  This command shows the outcome of both.
+    ///
+    /// # Examples
+    ///
+    ///   gglib model explain 3
+    ///   gglib model explain "Qwen3-30B"
+    ///   gglib model explain 3 --profile coding   # how a profile changes it
+    Explain {
+        /// Name or ID of the model to explain
+        identifier: String,
+        /// Resolve as if this named profile were selected.
+        ///
+        /// Profiles are managed with `gglib config profile`.
+        #[arg(long, value_name = "NAME")]
+        profile: Option<String>,
+    },
 }

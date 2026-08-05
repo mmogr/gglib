@@ -260,3 +260,46 @@ fn omitted_flags_express_no_opinion() {
     assert_eq!(sampling.temperature, None);
     assert_eq!(sampling.top_p, None);
 }
+
+/// `model explain` takes an identifier and an optional profile, and the
+/// profile must land on the field rather than being swallowed as a second
+/// positional.
+#[test]
+fn model_explain_parses_the_identifier_and_profile() {
+    use gglib_cli::model_commands::ModelCommand;
+
+    let cli = Cli::try_parse_from(["gglib", "model", "explain", "3", "--profile", "coding"])
+        .expect("model explain should parse");
+
+    let Some(Commands::Model {
+        command: ModelCommand::Explain {
+            identifier,
+            profile,
+        },
+    }) = cli.command
+    else {
+        panic!("expected a Model::Explain command");
+    };
+
+    assert_eq!(identifier, "3");
+    assert_eq!(profile.as_deref(), Some("coding"));
+}
+
+/// Without `--profile` the resolution is the unprofiled one, so the field
+/// must stay `None` rather than defaulting to some named profile.
+#[test]
+fn model_explain_leaves_the_profile_unset_when_omitted() {
+    use gglib_cli::model_commands::ModelCommand;
+
+    let cli = Cli::try_parse_from(["gglib", "model", "explain", "Qwen3-30B"])
+        .expect("bare model explain should parse");
+
+    let Some(Commands::Model {
+        command: ModelCommand::Explain { profile, .. },
+    }) = cli.command
+    else {
+        panic!("expected a Model::Explain command");
+    };
+
+    assert_eq!(profile, None);
+}
