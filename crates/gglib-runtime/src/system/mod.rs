@@ -535,4 +535,35 @@ mod tests {
         // RAM should always be > 1GB
         assert!(mem.total_ram_bytes > 1_000_000_000);
     }
+
+    /// The free-VRAM probe runs on every admission that considers a co-load, so
+    /// it has to be safe on hardware it knows nothing about. `None` is a real
+    /// answer here — it means gglib keeps one model resident, which is always
+    /// correct — and a panic or a hang would take the request path with it.
+    #[test]
+    fn free_gpu_memory_is_answerable_on_any_machine() {
+        let first = free_gpu_memory_bytes();
+
+        // A reading, if there is one, must be a plausible figure rather than a
+        // wrapped or zeroed one.
+        if let Some(bytes) = first {
+            assert!(bytes > 0, "a zero reading would refuse every co-load");
+        }
+
+        // Cached for `FREE_VRAM_TTL`, so a burst of admissions costs one probe.
+        // Two calls this close together must agree by construction.
+        assert_eq!(first, free_gpu_memory_bytes());
+    }
+
+    /// A machine that cannot report free VRAM must say so rather than guessing,
+    /// because a guess in the optimistic direction co-loads a model that then
+    /// OOMs the primary mid-generation. CPU-only and Vulkan-only hosts — this
+    /// CI runner among them — take this path.
+    #[test]
+    fn an_unreadable_budget_reports_nothing_rather_than_a_guess() {
+        let source = detect_free_vram_source();
+        if source == FreeVramSource::Unavailable {
+            assert_eq!(free_gpu_memory_bytes(), None);
+        }
+    }
 }
