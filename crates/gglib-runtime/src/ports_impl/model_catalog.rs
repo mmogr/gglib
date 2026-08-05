@@ -64,6 +64,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         file_path: m.file_path,
         tags: m.tags,
         architecture: m.architecture,
+        quantization: m.quantization,
         context_length: m.context_length,
         server_defaults: m.server_defaults,
         file_size_bytes,

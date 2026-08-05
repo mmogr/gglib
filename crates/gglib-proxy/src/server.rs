@@ -856,6 +856,12 @@ async fn chat_completions(
         target.cache_ram_health,
     ));
 
+    // Same rationale, same meeting point: the launch decided all of this in
+    // the runtime, and this is where the dashboard first sees the result.
+    if let Some(narration) = target.narration.clone() {
+        state.dashboard.launch.set(narration);
+    }
+
     // Register this request in the active-connections dashboard registry.
     // The returned guard unregisters on drop (see `connections` module docs)
     // — normal completion, early return, client disconnect, or panic all

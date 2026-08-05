@@ -10,7 +10,7 @@ use std::fmt;
 use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
-use crate::domain::CacheRamHealth;
+use crate::domain::{CacheRamHealth, LaunchNarration};
 use crate::ports::ProcessHandle;
 use crate::server_config::ServerConfigOptions;
 
@@ -73,6 +73,15 @@ pub struct RunningTarget {
     /// user-facing surfaces can report it without re-deriving thresholds. See
     /// [`crate::domain::classify_cache_ram`].
     pub cache_ram_health: CacheRamHealth,
+    /// What this launch decided, and why (see
+    /// [`crate::domain::LaunchNarration`]).
+    ///
+    /// Carried on the target for the same reason as
+    /// [`Self::cache_ram_health`]: the resolutions and their provenance exist
+    /// only at spawn, so anything downstream that wants to explain the
+    /// running model has no way to recover them otherwise. `None` for targets
+    /// that did not come from a gglib launch.
+    pub narration: Option<LaunchNarration>,
 }
 
 impl RunningTarget {
@@ -100,7 +109,15 @@ impl RunningTarget {
             just_started,
             slot_restore_supported: true,
             cache_ram_health: CacheRamHealth::LlamaDefault,
+            narration: None,
         }
+    }
+
+    /// Attach the narration of the launch that produced this target.
+    #[must_use]
+    pub fn with_narration(mut self, narration: LaunchNarration) -> Self {
+        self.narration = Some(narration);
+        self
     }
 
     /// Set whether disk slot restore can resume this model.

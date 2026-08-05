@@ -173,6 +173,39 @@ export interface CacheStatus {
   usage: CacheUsage;
 }
 
+/**
+ * Mirrors `gglib_core::domain::LaunchDecision` — one resolved launch decision
+ * and the reason it was chosen.
+ *
+ * `source` is the point of the type: a value alone says what happened, never
+ * why. `null` only for decisions whose value states its own origin.
+ */
+export interface LaunchDecision {
+  /** Stable key: `ctx`, `backend`, `kv`, `cache`, `mtp`, `flags`, `dialect`. */
+  label: string;
+  /** Display-ready value. */
+  value: string;
+  /** Provenance, rendered in parentheses. */
+  source?: string | null;
+}
+
+/**
+ * Mirrors `gglib_core::domain::LaunchNarration` — what the runtime decided
+ * when it launched the running model, and why.
+ *
+ * The same record the CLI banner prints at startup. `decisions` arrives in
+ * display order; consumers render it as given rather than re-sorting, so the
+ * GUI and the banner cannot disagree about what a launch decided.
+ */
+export interface LaunchNarration {
+  model_name: string;
+  /** Quantization label (`Q4_K_M`); `null` when the catalog recorded none. */
+  quantization?: string | null;
+  /** On-disk weight size in bytes; `0` when unknown. */
+  weights_bytes: number;
+  decisions: LaunchDecision[];
+}
+
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
 export interface DashboardSnapshot {
   active_connections: ActiveConnectionSnapshot[];
@@ -196,4 +229,9 @@ export interface DashboardSnapshot {
    * on a proxy older than this field.
    */
   agent_usage?: CacheUsage | null;
+  /**
+   * What the running model's launch decided, and why. `null` until a request
+   * resolves a model, and absent on a proxy older than this field.
+   */
+  launch?: LaunchNarration | null;
 }

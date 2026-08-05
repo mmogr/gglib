@@ -27,6 +27,10 @@ mod validate;
 
 // Error types
 pub use error::{LlamaError, LlamaResult};
+
+// The installed build's recorded configuration. Exposed so a launch can name
+// which acceleration the binary it is about to spawn was compiled for.
+pub use config::BuildConfig;
 pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama_server};
 
 // Progress and prompt traits

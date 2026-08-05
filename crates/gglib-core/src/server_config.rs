@@ -228,16 +228,70 @@ impl ServerConfigOptions {
 // Resolver
 // =============================================================================
 
+/// Which rung of the context fallback chain supplied the resolved value.
+///
+/// Exists so a launch can state *why* it runs at a given context rather than
+/// only what that context is — the number alone cannot distinguish a value
+/// the user asked for from one inherited from the model's stored defaults or
+/// from the 4096 floor. See [`crate::domain::LaunchNarration`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextSizeSource {
+    /// Runtime request or CLI flag (`opts.context_size`).
+    Explicit,
+    /// Per-model server defaults from the database (`opts.model_server_ctx`).
+    ModelServerDefaults,
+    /// Global app setting (`opts.global_default_ctx`).
+    GlobalDefault,
+    /// The hardcoded [`DEFAULT_CONTEXT_SIZE`] floor — nothing else was set.
+    BuiltInDefault,
+}
+
+impl ContextSizeSource {
+    /// Short label for display, e.g. `model server_defaults`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Explicit => "explicit",
+            Self::ModelServerDefaults => "model server_defaults",
+            Self::GlobalDefault => "global default",
+            Self::BuiltInDefault => "built-in default",
+        }
+    }
+}
+
+/// Resolve context size using the 4-level fallback chain, reporting which
+/// rung won.
+///
+/// 1. Runtime request / CLI flag (`opts.context_size`) — highest priority
+/// 2. Per-model server defaults (`opts.model_server_ctx`) — from DB
+/// 3. Global app setting (`opts.global_default_ctx`)
+/// 4. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
+///
+/// [`resolve_context_size`] delegates here and discards the source, so the
+/// chain exists in exactly one place: a second copy that drifted would make
+/// the banner explain a decision the launch did not actually take.
+pub const fn resolve_context_size_with_source(
+    opts: &ServerConfigOptions,
+) -> (u64, ContextSizeSource) {
+    if let Some(ctx) = opts.context_size {
+        return (ctx, ContextSizeSource::Explicit);
+    }
+    if let Some(ctx) = opts.model_server_ctx {
+        return (ctx as u64, ContextSizeSource::ModelServerDefaults);
+    }
+    if let Some(ctx) = opts.global_default_ctx {
+        return (ctx, ContextSizeSource::GlobalDefault);
+    }
+    (DEFAULT_CONTEXT_SIZE, ContextSizeSource::BuiltInDefault)
+}
+
 /// Resolve context size using the 4-level fallback chain.
 /// 1. Runtime request / CLI flag (`opts.context_size`) — highest priority
 /// 2. Per-model server defaults (`opts.model_server_ctx`) — from DB
 /// 3. Global app setting (`opts.global_default_ctx`)
 /// 4. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
-pub fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
-    opts.context_size
-        .or_else(|| opts.model_server_ctx.map(|v| v as u64))
-        .or(opts.global_default_ctx)
-        .unwrap_or(DEFAULT_CONTEXT_SIZE)
+pub const fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
+    resolve_context_size_with_source(opts).0
 }
 
 // =============================================================================
@@ -267,6 +321,63 @@ mod tests {
     fn test_resolve_context_size_default_when_all_none() {
         let opts = ServerConfigOptions::default();
         assert_eq!(resolve_context_size(&opts), DEFAULT_CONTEXT_SIZE);
+    }
+
+    use crate::server_config::{ContextSizeSource, resolve_context_size_with_source};
+
+    /// Each rung wins in turn as the one above it is removed — this is the
+    /// precedence the banner claims to be reporting.
+    #[test]
+    fn context_source_names_the_winning_rung_at_each_level() {
+        let full = ServerConfigOptions {
+            context_size: Some(32_768),
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(8192),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_context_size_with_source(&full),
+            (32_768, ContextSizeSource::Explicit)
+        );
+
+        let no_explicit = ServerConfigOptions {
+            context_size: None,
+            ..full.clone()
+        };
+        assert_eq!(
+            resolve_context_size_with_source(&no_explicit),
+            (16_384, ContextSizeSource::ModelServerDefaults)
+        );
+
+        let global_only = ServerConfigOptions {
+            context_size: None,
+            model_server_ctx: None,
+            ..full
+        };
+        assert_eq!(
+            resolve_context_size_with_source(&global_only),
+            (8192, ContextSizeSource::GlobalDefault)
+        );
+
+        assert_eq!(
+            resolve_context_size_with_source(&ServerConfigOptions::default()),
+            (DEFAULT_CONTEXT_SIZE, ContextSizeSource::BuiltInDefault)
+        );
+    }
+
+    /// The bare resolver must stay a projection of the sourced one, or the
+    /// banner would explain a decision the launch did not take.
+    #[test]
+    fn bare_resolver_agrees_with_the_sourced_one() {
+        let opts = ServerConfigOptions {
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(8192),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_context_size(&opts),
+            resolve_context_size_with_source(&opts).0
+        );
     }
 
     // Cache-RAM budget math tests now live in
