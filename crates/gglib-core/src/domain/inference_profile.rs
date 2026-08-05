@@ -7,9 +7,8 @@
 //! conversational UIs want something warmer. Both hit the same model name, so
 //! per-model `inference_defaults` alone cannot tell them apart.
 //!
-//! The `{name}:{variant}` shape follows the existing council virtual models
-//! (`gglib-council:interactive`) and Ollama's universal `name:tag` convention,
-//! which is what makes the variants render and select correctly in
+//! The `{name}:{variant}` shape follows Ollama's universal `name:tag`
+//! convention, which is what makes the variants render and select correctly in
 //! OpenAI-compatible clients like `OpenWebUI`.
 //!
 //! # Profiles are sparse
@@ -40,12 +39,11 @@ pub const MAX_PROFILE_NAME_LEN: usize = 32;
 /// Names that cannot be used for a profile because they already mean something
 /// as a `:{suffix}` on a model id.
 ///
-/// These are the council virtual-model variants (`gglib-council:interactive`,
-/// `gglib-council:native`). Those names are matched *whole* by the proxy before
-/// any profile splitting happens, so a profile sharing a suffix with one would
-/// never be reachable on that model — confusing rather than dangerous, but
-/// worth rejecting at the point of creation instead of leaving the user to
-/// discover it.
+/// The list is held over from the removed council virtual models, whose
+/// `:interactive` and `:native` suffixes the proxy matched whole. Nothing
+/// claims these suffixes today, so the guard is a namespace reservation
+/// rather than a correctness requirement — kept because it is user-visible
+/// (the settings editor rejects them by name) and costs nothing.
 pub const RESERVED_PROFILE_NAMES: &[&str] = &["interactive", "native"];
 
 /// Why a profile name was rejected.
@@ -239,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_council_virtual_model_suffixes() {
+    fn rejects_reserved_profile_names() {
         for name in RESERVED_PROFILE_NAMES {
             assert_eq!(
                 validate_name(name),

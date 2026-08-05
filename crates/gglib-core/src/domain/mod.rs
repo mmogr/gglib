@@ -4,7 +4,6 @@ pub mod benchmark;
 pub mod cache_budget;
 pub mod capabilities;
 pub mod chat;
-pub mod council;
 pub mod gguf;
 pub mod inference;
 pub mod inference_profile;
@@ -110,10 +109,4 @@ pub use agent::{
 pub use capabilities::{
     ChatMessage, MessageContent, ModelCapabilities, capabilities_from_architecture,
     infer_from_chat_template, transform_messages_for_capabilities,
-};
-
-// Re-export orchestrator types at the domain level for convenience
-pub use council::{
-    ApprovalKind, CouncilEvent, HitlMode, MAX_DEPTH, MAX_NODES, NodeId, NodeStatus, TaskGraph,
-    TaskGraphError, TaskNode,
 };

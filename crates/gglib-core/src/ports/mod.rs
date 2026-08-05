@@ -3,8 +3,6 @@ pub mod agent;
 pub mod benchmark;
 pub mod cache_metrics_sink;
 pub mod chat_history;
-pub mod council_approvals;
-pub mod council_repository;
 pub mod download;
 pub mod download_event_emitter;
 pub mod download_manager;
@@ -46,8 +44,6 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 pub use benchmark::BenchmarkRepositoryPort;
 pub use cache_metrics_sink::CacheMetricsSink;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
-pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
-pub use council_repository::CouncilRepositoryPort;
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
 pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
