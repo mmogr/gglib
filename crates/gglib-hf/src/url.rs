@@ -86,12 +86,22 @@ pub fn build_model_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
 
 /// Build a URL for downloading a file from a repository.
 pub fn build_download_url(repo: &HfRepoRef, file_path: &str, revision: Option<&str>) -> Url {
+    Url::parse(&build_file_url(&repo.id(), file_path, revision))
+        .expect("download URL construction should not fail")
+}
+
+/// Build the URL that serves a file's bytes, from a bare `owner/name` repo ID.
+///
+/// This is the resolve endpoint: `HuggingFace` answers it with a redirect to the
+/// CDN for LFS objects, and the CDN honours `Range` requests. `revision` may be
+/// a branch, tag, or commit SHA; `None` means `main`.
+///
+/// Takes the repo ID as a string rather than an [`HfRepoRef`] so callers outside
+/// this crate — the native downloader in `gglib-download` — can reach it without
+/// the repo types becoming public API.
+pub fn build_file_url(repo_id: &str, file_path: &str, revision: Option<&str>) -> String {
     let rev = revision.unwrap_or("main");
-    Url::parse(&format!(
-        "https://huggingface.co/{}/resolve/{rev}/{file_path}",
-        repo.id(),
-    ))
-    .expect("download URL construction should not fail")
+    format!("https://huggingface.co/{repo_id}/resolve/{rev}/{file_path}")
 }
 
 #[cfg(test)]

@@ -10,10 +10,9 @@ pub fn print_instructions(missing: &[&Dependency]) {
     // Check for winget/choco packages
     let needs_git = missing.iter().any(|d| d.name == "git");
     let needs_cmake = missing.iter().any(|d| d.name == "cmake");
-    let needs_python = missing.iter().any(|d| d.name == "python3");
     let needs_curl = missing.iter().any(|d| d.name == "curl");
 
-    if needs_git || needs_cmake || needs_python || needs_curl {
+    if needs_git || needs_cmake || needs_curl {
         print_subsection("Install via winget (recommended)");
 
         if needs_git {
@@ -21,9 +20,6 @@ pub fn print_instructions(missing: &[&Dependency]) {
         }
         if needs_cmake {
             print_command("winget install Kitware.CMake");
-        }
-        if needs_python {
-            print_command("winget install Python.Python.3.11");
         }
         if needs_curl {
             println!("  Note: curl is included with Windows 10/11");
@@ -38,9 +34,6 @@ pub fn print_instructions(missing: &[&Dependency]) {
         }
         if needs_cmake {
             choco_packages.push("cmake");
-        }
-        if needs_python {
-            choco_packages.push("python");
         }
 
         if !choco_packages.is_empty() {

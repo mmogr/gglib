@@ -808,14 +808,13 @@ git clone https://github.com/mmogr/gglib.git && cd gglib
 make setup   # check deps → build frontend → install CLI → offer llama.cpp install
 ```
 
-`make setup` checks for Rust, Node.js, and build tools; provisions the Miniconda environment for the `hf_xet` fast download helper; builds the web UI; and installs the CLI to `~/.cargo/bin/`. It exits with an error if Python/Miniconda is missing — run it first on new machines.
+`make setup` checks for Rust, Node.js, and build tools; builds the web UI; and installs the CLI to `~/.cargo/bin/`. It needs no Python — model downloads are native Rust HTTP.
 
 > **Developer Mode:** When installed via `make setup`, the database (`gglib.db`), config (`.env`), and llama.cpp binaries live inside your repo folder. Downloaded models default to `~/.local/share/llama_models`.
 
 ### Prerequisites
 
 - **Rust** 1.70+ (MSRV). Tooling/CI currently pins Rust **1.97.1** via `rust-toolchain.toml` — using that version is recommended. — [rustup.rs](https://rustup.rs/)
-- **Python 3 via Miniconda** — [miniconda](https://docs.conda.io/en/latest/miniconda.html) (for hf_xet fast downloads)
 - **Node.js** 20.19+ (matches the `package.json` `engines` field) — [nodejs.org](https://nodejs.org/) (for web UI)
 - **SQLite** 3.x
 - **Build tools**: macOS `xcode-select --install` + `brew install cmake` · Ubuntu `build-essential cmake git` · Windows VS 2022 C++ + CMake
@@ -909,7 +908,17 @@ cargo run --package gglib-cli -- web --port 9887 --static-dir ./web_ui  # single
 <details>
 <summary><strong>Accelerated downloads (hf_xet)</strong></summary>
 
-gglib bundles a managed Python helper for [hf_xet](https://github.com/huggingface/hf-xet) fast downloads. On first run (or after `make setup` / `gglib config check-deps`), it provisions a Miniconda environment under `<data_root>/.conda/gglib-hf-xet` and installs `huggingface_hub>=1.1.5` + `hf_xet>=0.6`. There is no legacy Rust HTTP fallback — if the helper is missing, `gglib model download` will fail until the environment is repaired.
+Downloads run natively in Rust by default: a resumable ranged GET straight to the Hugging Face CDN, verified against the object's SHA-256 and renamed into place only once it checks out. This needs nothing installed beyond gglib itself.
+
+[hf_xet](https://github.com/huggingface/hf-xet) is available as an **optional** accelerator on top of that. It is never provisioned implicitly — you opt in explicitly:
+
+```bash
+gglib config check-deps --setup-fast-downloads   # CLI
+```
+
+or the **Fast Downloads** step of the setup wizard in the GUI. Either builds a Python environment under `<data_root>/.conda/gglib-hf-xet` with `huggingface_hub>=1.1.5` + `hf_xet>=0.6`, and needs Python 3 on `PATH`.
+
+Once that environment exists, downloads use it automatically. If it is absent — or present but failing — downloads fall back to the native path rather than erroring.
 
 </details>
 

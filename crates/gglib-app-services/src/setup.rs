@@ -1,7 +1,7 @@
 //! Setup wizard operations for GUI backend.
 //!
 //! Handles first-run system status checks, llama.cpp installation,
-//! and Python fast-download helper provisioning.
+//! and provisioning of the optional `hf_xet` download accelerator.
 
 use std::sync::Arc;
 
@@ -30,9 +30,10 @@ pub struct SetupStatus {
     pub gpu_info: GpuInfoDto,
     /// Models directory information.
     pub models_directory: ModelsDirectoryDto,
-    /// Whether Python 3 is available on the system.
+    /// Whether Python 3 is available, i.e. whether the optional `hf_xet`
+    /// accelerator *could* be provisioned. Downloading does not depend on it.
     pub python_available: bool,
-    /// Whether the fast download helper (hf_xet venv) is ready.
+    /// Whether the `hf_xet` accelerator is already provisioned.
     pub fast_download_ready: bool,
     /// System memory information.
     pub system_memory: Option<SystemMemoryDto>,
@@ -141,13 +142,14 @@ impl SetupOps {
                 writable: false,
             });
 
-        // Python / fast download helper
+        // Optional hf_xet accelerator. Neither of these gates downloading —
+        // that runs natively over HTTP — they only tell the wizard whether the
+        // accelerator can be offered and whether it is already set up.
         let python_available = gglib_download::cli_exec::preflight_fast_helper()
             .await
             .is_ok();
 
-        // Check if the venv python exists (fast check, no process spawn)
-        let fast_download_ready = python_available && is_python_venv_ready();
+        let fast_download_ready = gglib_download::cli_exec::fast_helper_provisioned();
 
         // System memory
         let mem_info = self.deps.system_probe.get_system_memory_info();
@@ -206,30 +208,17 @@ impl SetupOps {
             .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
     }
 
-    /// Provision the Python fast-download helper environment.
+    /// Provision the optional `hf_xet` download accelerator.
     ///
-    /// Creates a venv and installs huggingface_hub + hf_xet packages.
+    /// Creates a venv and installs `huggingface_hub` + `hf_xet`. This is the
+    /// only path that builds that environment — nothing provisions it
+    /// implicitly, and downloads work without it.
+    ///
     /// Returns an error with details if Python is not available or setup fails.
     pub async fn setup_python_env(&self) -> Result<(), GuiError> {
         gglib_download::cli_exec::ensure_fast_helper_ready()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to setup Python environment: {e}")))
-    }
-}
-
-/// Check if the Python fast-download venv is already provisioned.
-///
-/// Does a quick file-existence check for the venv Python binary
-/// at the well-known path `data_root()/.conda/gglib-hf-xet/bin/python3`.
-fn is_python_venv_ready() -> bool {
-    let Ok(root) = gglib_core::paths::data_root() else {
-        return false;
-    };
-    let venv_dir = root.join(".conda").join("gglib-hf-xet");
-    if cfg!(windows) {
-        venv_dir.join("Scripts").join("python.exe").exists()
-    } else {
-        venv_dir.join("bin").join("python3").exists()
     }
 }
 

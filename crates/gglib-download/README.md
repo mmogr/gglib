@@ -20,8 +20,8 @@ gglib-core (types)          gglib-download            External
 └──────────────────┘        └───────┬──────────┘                 
                                     │                            
                             ┌───────▼──────────┐        ┌──────────────────┐
-                            │    gglib-hf      │        │   hf_xet helper  │
-                            │  (HfClientPort)  │        │  (fast-path DL)  │
+                            │    gglib-hf      │        │  hf_xet helper   │
+                            │  (HfClientPort)  │        │ (opt-in accel.)  │
                             └──────────────────┘        └──────────────────┘
 ```
 
@@ -42,8 +42,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
 │  │  resolver/  │     │  cli_exec/  │                                                │
-│  │ File URL &  │     │  hf_xet CLI │                                                │
-│  │ shard logic │     │  subprocess │                                                │
+│  │ File URL &  │     │ OPTIONAL    │                                                │
+│  │ shard logic │     │ hf_xet accel│                                                │
 │  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -83,7 +83,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`progress/`** — `ProgressThrottle`, an emission rate limiter for callers
   whose progress callbacks are driven by raw byte chunks rather than a tick
 - **`resolver/`** — File URL resolution and shard detection
-- **`cli_exec/`** — Python `hf_xet` subprocess for fast-path downloads
+- **`executor/`** — The download backends: `native.rs` (default, `reqwest`) and
+  the dispatch that picks between it and the optional accelerator
+- **`cli_exec/`** — The optional `hf_xet` Python subprocess accelerator
 - **`manager/`** — High-level download manager facade
 
 ## Features
@@ -104,14 +106,19 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
 - **Resume Support** — Partial download resumption on failure
 - **Shard Handling** — Automatic detection and download of sharded models
-- **Fast-Path Downloads** — Uses `hf_xet` Python helper for multi-gigabyte files.
-  When the `hf-xet` transport bypasses Python `tqdm`, a stat-based fallback
-  poller (`cli_exec/exec/xet_poller.rs`) emits synthetic progress events so
-  the bar keeps moving instead of freezing at `0 B / 0 B`.
+- **Native Downloads** — The default path is Rust `reqwest`: a resumable ranged
+  GET verified against the object's SHA-256, written to `<dest>.part` and
+  renamed into place only once it checks out. Needs nothing installed.
+- **Optional Acceleration** — `hf_xet` is used for multi-gigabyte files when its
+  environment is already provisioned; it is never provisioned implicitly, and
+  its absence or failure falls back to the native path. When the `hf-xet`
+  transport bypasses Python `tqdm`, a stat-based fallback poller
+  (`cli_exec/exec/xet_poller.rs`) emits synthetic progress events so the bar
+  keeps moving instead of freezing at `0 B / 0 B`.
 - **Bounded Drain on Cancel** — `cancel_all()` signals cancel tokens and
   then waits up to 5 s for in-flight jobs to finalize before returning,
-  so callers (CLI, Tauri, Axum) don't exit while Python helper subprocesses
-  are still cleaning up.
+  so callers (CLI, Tauri, Axum) don't exit while in-flight transfers (or an
+  accelerator subprocess) are still cleaning up.
 - **Retry Logic** — Automatic retry with exponential backoff
 
 ## Usage
@@ -149,6 +156,6 @@ let snapshot = manager.get_queue_snapshot().await?;
 
 1. **Async Queue** — Downloads run in background with status polling/events
 2. **HF Client Injection** — Uses `gglib-hf` via trait for testability
-3. **Dual Download Paths** — Native Rust for small files, `hf_xet` for large ones
+3. **Native by Default** — Rust HTTP always works; `hf_xet` is an opt-in accelerator layered on top, never a prerequisite
 4. **Event-Driven** — Progress updates via `AppEventEmitter` for UI decoupling
 5. **Automatic Registration** — `ModelRegistrarPort` injected for seamless database integration on download completion

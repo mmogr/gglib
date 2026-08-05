@@ -113,30 +113,27 @@ fn main() {
 
             app.manage(app_state);
 
-            // Download system init: preflight the Python fast downloader helper.
-            // This runs on startup so the frontend can render a clear error state
-            // instead of waiting indefinitely if Python is broken/missing.
+            // Download system init: report the optional hf_xet accelerator.
+            //
+            // Downloads themselves need nothing here — they run natively over
+            // HTTP. So the subsystem is always ready, and a missing or broken
+            // Python is an unavailable accelerator, not an error state: it is
+            // logged, not surfaced as a failure the user has to act on.
             {
                 let app_handle_for_init = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     match preflight_fast_helper().await {
                         Ok(python_exe) => {
-                            info!(python = %python_exe, "Fast download helper preflight OK");
-                            emit_or_log(&app_handle_for_init, names::DOWNLOAD_SYSTEM_READY, true);
+                            info!(python = %python_exe, "hf_xet accelerator preflight OK");
                         }
                         Err(e) => {
-                            error!(error = %e, "Fast download helper preflight failed");
-                            let msg = format!(
-                                "Fast downloads are unavailable: {e}. Please install Python 3 (python3) or set {} to a working interpreter.",
-                                "GGLIB_PYTHON"
-                            );
-                            emit_or_log(
-                                &app_handle_for_init,
-                                names::DOWNLOAD_SYSTEM_ERROR,
-                                gglib_tauri::events::DownloadSystemErrorPayload { message: msg },
+                            info!(
+                                error = %e,
+                                "hf_xet accelerator unavailable; downloads will use the native HTTP path"
                             );
                         }
                     }
+                    emit_or_log(&app_handle_for_init, names::DOWNLOAD_SYSTEM_READY, true);
                 });
             }
 

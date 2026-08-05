@@ -252,9 +252,12 @@ impl SystemProbePort for DefaultSystemProbe {
                 distro,
                 get_cmake_version(),
             ),
-            system_dep(
+            // Optional, not required: downloads run natively over HTTP. Python
+            // only enables the hf_xet accelerator, and only if the user opts in
+            // to provisioning it.
+            optional_dep(
                 "python3",
-                "Required for hf_xet fast download helper",
+                "Optional: enables the hf_xet download accelerator",
                 distro,
                 get_python3_version(),
             ),

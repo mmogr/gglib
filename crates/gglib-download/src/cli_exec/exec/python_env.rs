@@ -171,17 +171,7 @@ impl PythonEnvironment {
 
     /// Get the path to the Python interpreter in this environment.
     pub fn python_path(&self) -> PathBuf {
-        if cfg!(windows) {
-            self.env_dir.join("Scripts").join("python.exe")
-        } else {
-            let bin = self.env_dir.join("bin");
-            let python3 = bin.join("python3");
-            if python3.exists() {
-                python3
-            } else {
-                bin.join("python")
-            }
-        }
+        venv_python_path(&self.env_dir)
     }
 
     /// Get the path to the helper script.
@@ -344,6 +334,31 @@ impl PythonEnvironment {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/// Path to the interpreter inside a venv rooted at `env_dir`.
+fn venv_python_path(env_dir: &Path) -> PathBuf {
+    if cfg!(windows) {
+        env_dir.join("Scripts").join("python.exe")
+    } else {
+        let bin = env_dir.join("bin");
+        let python3 = bin.join("python3");
+        if python3.exists() {
+            python3
+        } else {
+            bin.join("python")
+        }
+    }
+}
+
+/// Whether the `hf_xet` accelerator's environment is already provisioned.
+///
+/// A file-existence check, deliberately: this decides whether a download uses
+/// the accelerator, and it must not spawn a process, touch the network, or
+/// create anything. A machine with no Python answers `false` and gets the
+/// native download path — which is the whole point.
+pub fn fast_helper_provisioned() -> bool {
+    get_env_directory().is_ok_and(|dir| venv_python_path(&dir).exists())
+}
 
 /// Find a Python interpreter suitable for bootstrapping the venv.
 async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {

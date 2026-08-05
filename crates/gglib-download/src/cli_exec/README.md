@@ -11,8 +11,11 @@ separated from the queue-based [`DownloadManagerPort`] path.
 
 - [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`
 - [`check_update`] / [`update_model`] — update path for `model upgrade`
-- Python bridge helpers ([`ensure_fast_helper_ready`], [`run_fast_download`]) shared
-  with the async download manager
+- The optional `hf_xet` accelerator: [`ensure_fast_helper_ready`] provisions it
+  (only from an explicit opt-in — never from a download),
+  [`fast_helper_provisioned`] reports whether it is already here, and
+  [`run_fast_download`] drives it. `crate::executor` owns the choice of when to
+  use it; the default download path is native Rust and needs none of this.
 
 # What moved out
 

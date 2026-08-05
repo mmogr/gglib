@@ -46,7 +46,14 @@ pub enum ConfigCommand {
         command: AssistantUiCommand,
     },
     /// Check system dependencies required for gglib
-    CheckDeps,
+    CheckDeps {
+        /// Also provision the optional hf_xet download accelerator.
+        ///
+        /// Downloads work without this. It builds a Python environment under
+        /// the gglib data directory and needs Python 3 on PATH.
+        #[arg(long)]
+        setup_fast_downloads: bool,
+    },
     /// Show resolved paths for all gglib directories
     Paths,
 }
