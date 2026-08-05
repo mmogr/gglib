@@ -32,7 +32,7 @@ Tokens follow a **semantic layering** approach:
 
 ```css
 /* Foundation tokens (primitives) */
---color-primary: #3b82f6;
+--color-primary: #6c8cff;
 --spacing-base: 1rem;
 
 /* Semantic aliases (purpose-based) */

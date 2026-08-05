@@ -6,73 +6,73 @@
   /* ==================
      Color Palette
      ================== */
-  
+
   /* Primary Colors */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #60a5fa;
-  --color-primary-dark: #1e40af;
-  --color-primary-subtle: rgba(59, 130, 246, 0.12);
-  --color-primary-border: rgba(59, 130, 246, 0.28);
-  
+  --color-primary: #6c8cff;
+  --color-primary-hover: #5878ec;
+  --color-primary-light: #93aaff;
+  --color-primary-dark: #3d55b8;
+  --color-primary-subtle: rgba(108, 140, 255, 0.12);
+  --color-primary-border: rgba(108, 140, 255, 0.3);
+
   /* Semantic Colors */
-  --color-success: #10b981;
-  --color-success-hover: #059669;
-  --color-success-subtle: rgba(16, 185, 129, 0.12);
-  --color-success-border: rgba(16, 185, 129, 0.28);
-  --color-warning: #f59e0b;
-  --color-warning-hover: #d97706;
-  --color-warning-subtle: rgba(245, 158, 11, 0.12);
-  --color-warning-border: rgba(245, 158, 11, 0.28);
-  --color-danger: #ef4444;
-  --color-danger-hover: #dc2626;
-  --color-danger-subtle: rgba(239, 68, 68, 0.12);
-  --color-danger-border: rgba(239, 68, 68, 0.28);
-  --color-info: #3b82f6;
-  
-  /* Neutral Colors - Dark Theme */
-  --color-background: #0a0a0a;
-  --color-background-elevated: #151515;
-  --color-background-overlay: #1a1a1a;
-  --color-background-hover: #1e1e1e;
-  --color-background-active: #252525;
-  --color-background-input: #1a1a1a;
-  
+  --color-success: #3fc48f;
+  --color-success-hover: #2fa878;
+  --color-success-subtle: rgba(63, 196, 143, 0.12);
+  --color-success-border: rgba(63, 196, 143, 0.3);
+  --color-warning: #d9a23c;
+  --color-warning-hover: #c08b2b;
+  --color-warning-subtle: rgba(217, 162, 60, 0.12);
+  --color-warning-border: rgba(217, 162, 60, 0.3);
+  --color-danger: #e0655a;
+  --color-danger-hover: #c94f44;
+  --color-danger-subtle: rgba(224, 101, 90, 0.12);
+  --color-danger-border: rgba(224, 101, 90, 0.3);
+  --color-info: #6c8cff;
+
+  /* Neutral Colors - Dark Theme (cool slate-tinted ramp) */
+  --color-background: #0c0e12;
+  --color-background-elevated: #12151a;
+  --color-background-overlay: #161a21;
+  --color-background-hover: #1b202a;
+  --color-background-active: #222836;
+  --color-background-input: #0f1218;
+
   /* Surface Colors */
-  --color-surface: #1a1a1a;
-  --color-surface-elevated: #252525;
-  --color-surface-hover: #2a2a2a;
+  --color-surface: #161a21;
+  --color-surface-elevated: #1d222c;
+  --color-surface-hover: #242b37;
   /* Alias: fixes broken bg-surface-raised references in components */
   --color-surface-raised: var(--color-surface-elevated);
-  
-  /* Border Colors */
-  --color-border: #333333;
-  --color-border-light: #2a2a2a;
-  --color-border-hover: #3a3a3a;
+
+  /* Border Colors (white-alpha hairlines so they read on every surface level) */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-light: rgba(255, 255, 255, 0.05);
+  --color-border-hover: rgba(255, 255, 255, 0.14);
   --color-border-focus: var(--color-primary);
-  
+
   /* Text Colors */
-  --color-text: #e0e0e0;
-  --color-text-secondary: #a0a0a0;
-  --color-text-muted: #888888;
-  --color-text-disabled: #666666;
-  --color-text-inverse: #0a0a0a;
-  
+  --color-text: #e7eaf0;
+  --color-text-secondary: #a9b1bf;
+  --color-text-muted: #7e8795;
+  --color-text-disabled: #58606d;
+  --color-text-inverse: #0c0e12;
+
   /* Semantic Aliases - for component consistency */
   --color-background-secondary: var(--color-background-elevated);
   --color-background-tertiary: var(--color-surface-elevated);
   --color-text-primary: var(--color-text);
   --color-accent: var(--color-primary-light);
-  
+
   /* Status Colors */
-  --color-online: #10b981;
-  --color-offline: #6b7280;
-  --color-error: #ef4444;
-  
+  --color-online: #3fc48f;
+  --color-offline: #7e8795;
+  --color-error: #e0655a;
+
   /* ==================
      Spacing Scale
      ================== */
-  
+
   --spacing-xs: 0.25rem;    /* 4px */
   --spacing-sm: 0.5rem;     /* 8px */
   --spacing-md: 0.75rem;    /* 12px */
@@ -81,72 +81,73 @@
   --spacing-xl: 2rem;       /* 32px */
   --spacing-2xl: 3rem;      /* 48px */
   --spacing-3xl: 4rem;      /* 64px */
-  
+
   /* ==================
      Typography Scale
      ================== */
-  
-  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+
+  --font-family-base: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code',
     'Fira Mono', 'Roboto Mono', monospace;
-  
-  /* Font Sizes */
+
+  /* Font Sizes (desktop-density scale: 14px base UI type) */
+  --font-size-2xs: 0.6875rem; /* 11px */
   --font-size-xs: 0.75rem;    /* 12px */
-  --font-size-sm: 0.875rem;   /* 14px */
-  --font-size-base: 1rem;     /* 16px */
-  --font-size-lg: 1.125rem;   /* 18px */
-  --font-size-xl: 1.25rem;    /* 20px */
-  --font-size-2xl: 1.5rem;    /* 24px */
-  --font-size-3xl: 1.875rem;  /* 30px */
-  --font-size-4xl: 2.25rem;   /* 36px */
-  
+  --font-size-sm: 0.8125rem;  /* 13px */
+  --font-size-base: 0.875rem; /* 14px */
+  --font-size-lg: 1rem;       /* 16px */
+  --font-size-xl: 1.125rem;   /* 18px */
+  --font-size-2xl: 1.375rem;  /* 22px */
+  --font-size-3xl: 1.75rem;   /* 28px */
+  --font-size-4xl: 2rem;      /* 32px */
+
   /* Font Weights */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  
+
   /* Line Heights */
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
-  
+
   /* ==================
      Border Radius
      ================== */
-  
+
   --radius-sm: 4px;
   --radius-base: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
-  
+
   /* ==================
-     Shadows
+     Shadows (dark-tuned: soft black plus a hairline ring for elevation)
      ================== */
-  
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-  
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-2xl: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+
   /* ==================
      Transitions
      ================== */
-  
+
   --transition-fast: 0.1s ease;
   --transition-base: 0.2s ease;
   --transition-slow: 0.3s ease;
   --transition-all: all 0.2s ease;
-  
+
   /* ==================
      Z-Index Scale
      ================== */
-  
+
   --z-base: 0;
   --z-dropdown: 100;
   --z-sticky: 200;
@@ -156,24 +157,24 @@
   --z-popover: 600;
   --z-tooltip: 700;
   --z-notification: 800;
-  
+
   /* ==================
      Layout
      ================== */
-  
-  --header-height: 64px;
+
+  --header-height: 52px;
   --sidebar-width: 280px;
   --sidebar-collapsed-width: 60px;
-  
+
   /* ==================
-     Component Sizes
+     Component Sizes (desktop density)
      ================== */
-  
-  --input-height-sm: 32px;
-  --input-height-base: 40px;
-  --input-height-lg: 48px;
-  
-  --button-height-sm: 36px;
-  --button-height-base: 44px;
-  --button-height-lg: 48px;
+
+  --input-height-sm: 28px;
+  --input-height-base: 32px;
+  --input-height-lg: 36px;
+
+  --button-height-sm: 28px;
+  --button-height-base: 32px;
+  --button-height-lg: 40px;
 }
