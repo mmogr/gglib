@@ -11,6 +11,8 @@ such as reasoning/thinking support and tool/function calling.
 
 - `reasoning` - Reasoning/thinking model detection
 - `tool_calling` - Tool/function calling detection
+- `mtp` - Multi-Token Prediction draft head detection
+- `embedding` - Embedding-model detection, from pooling type or an encoder-only architecture
 - `patterns` - Pattern constants shared across detection modules
 
 <!-- module-docs:end -->

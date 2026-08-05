@@ -403,7 +403,8 @@ impl ModelService {
 
         if full {
             // Drop every tag in the auto-generated namespace, then re-add.
-            const AUTO_TAG_NAMES: &[&str] = &["reasoning", "agent", "vision", "code", "moe"];
+            const AUTO_TAG_NAMES: &[&str] =
+                &["reasoning", "agent", "vision", "code", "moe", "embedding"];
             model.tags.retain(|t| {
                 !AUTO_TAG_NAMES.contains(&t.as_str()) && !crate::domain::is_system_tag(t)
             });

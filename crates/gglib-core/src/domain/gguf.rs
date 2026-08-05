@@ -32,6 +32,13 @@ bitflags::bitflags! {
         /// Detected via the `{arch}.nextn_predict_layers > 0` GGUF metadata key.
         /// Enables `--spec-type draft-mtp` speculative decoding in llama-server.
         const MTP = 0b0010_0000;
+        /// Model produces embeddings rather than generated text.
+        ///
+        /// Detected from a non-none `{arch}.pooling_type` or an encoder-only
+        /// `general.architecture`. Enables `--embeddings` in llama-server,
+        /// which restricts that server to the embedding use case — it will
+        /// refuse chat completions.
+        const EMBEDDING = 0b0100_0000;
     }
 }
 
@@ -81,6 +88,12 @@ impl GgufCapabilities {
         self.flags.contains(CapabilityFlags::MTP)
     }
 
+    /// Check if this model produces embeddings rather than generated text.
+    #[must_use]
+    pub const fn has_embedding(&self) -> bool {
+        self.flags.contains(CapabilityFlags::EMBEDDING)
+    }
+
     /// Convert capabilities to tag strings for model metadata.
     ///
     /// Returns tags like "reasoning", "agent" (for tool calling), etc.
@@ -107,6 +120,10 @@ impl GgufCapabilities {
         if self.has_mtp() {
             // "mtp" tag triggers --spec-type draft-mtp auto-enable
             tags.push("mtp".to_string());
+        }
+        if self.has_embedding() {
+            // "embedding" tag triggers --embeddings auto-enable
+            tags.push("embedding".to_string());
         }
 
         // Add extension tags
