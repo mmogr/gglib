@@ -9,9 +9,8 @@ Client-side retry for transient upstream failures on the completions request.
 
 The proxy fails fast on model-startup contention, answering `503` with a
 `Retry-After` header so the caller owns the backoff. This module is that caller.
-It covers every in-process consumer at once — CLI agent chat, council,
-structured output, and the GUI's server-side agent loop all reach the upstream
-through this one adapter.
+It covers every in-process consumer at once — CLI agent chat and the GUI's
+server-side agent loop both reach the upstream through this one adapter.
 
 Backoff shape is not decided here: it comes from
 [`gglib_core::retry`](gglib_core::retry), which the proxy's own contention wait

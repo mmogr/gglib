@@ -293,7 +293,7 @@ async fn a_stream_that_starts_is_never_retried() {
     }];
 
     let stream = adapter
-        .chat_stream(&messages, &[], None)
+        .chat_stream(&messages, &[])
         .await
         .expect("stream should open");
     let events: Vec<_> = stream.collect().await;

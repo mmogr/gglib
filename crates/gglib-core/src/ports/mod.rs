@@ -23,7 +23,6 @@ pub mod retry_observer;
 pub mod server_health;
 pub mod server_log_sink;
 pub mod settings_repository;
-pub mod structured_llm;
 pub mod system_probe;
 pub mod tool_executor_filter;
 pub mod tool_support;
@@ -34,9 +33,7 @@ use thiserror::Error;
 // Re-export agent port types for convenience
 pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
-pub use llm_completion::{LlmCompletionPort, ResponseFormat};
-// Re-export structured output error
-pub use structured_llm::StructuredOutputError;
+pub use llm_completion::LlmCompletionPort;
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 

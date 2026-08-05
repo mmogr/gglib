@@ -10,7 +10,7 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{CacheMetricsSink, LlmCompletionPort, ResponseFormat, RetryObserver},
+    ports::{CacheMetricsSink, LlmCompletionPort, RetryObserver},
     request_pipeline::{self, ModelContext, SamplingLayers},
     retry::RetryPolicy,
 };
@@ -66,7 +66,7 @@ pub struct LlmCompletionAdapter {
     ///
     /// When set, the completed response's trailing `usage` is recorded into
     /// this sink — the single point that covers every agent-path consumer of
-    /// the stream (both `stream_collector` and `structured_output`). `None`
+    /// the stream. `None`
     /// (the default) means nowhere to report, so recording is skipped: the
     /// case for CLI `gglib chat`/`q`, which run in a process with no dashboard.
     cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
@@ -181,7 +181,7 @@ impl LlmCompletionAdapter {
     /// Report this adapter's prompt-cache reuse to `sink`.
     ///
     /// Pass the process's agent-path [`CacheMetricsStore`] when the caller runs
-    /// in the proxy process (council, GUI chat) so reuse lands on the dashboard
+    /// in the proxy process (GUI chat) so reuse lands on the dashboard
     /// alongside the proxied figure. Pass `None` (the default) when there is no
     /// dashboard to report to — recording then costs nothing.
     ///
@@ -230,15 +230,8 @@ impl LlmCompletionAdapter {
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
-        response_format: Option<&ResponseFormat>,
     ) -> Result<serde_json::Value> {
-        let mut body = body::build_chat_body(
-            &self.model,
-            messages,
-            tools,
-            self.sampling.as_ref(),
-            response_format,
-        );
+        let mut body = body::build_chat_body(&self.model, messages, tools, self.sampling.as_ref());
 
         // The same pipeline, in the same order, that the proxy runs.
         // `build_chat_body` has already written the caller's sampling
@@ -297,12 +290,11 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
-        response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Shaped once, outside the retry loop: the pipeline runs truncation and
         // logs what it trimmed, and neither should repeat per attempt. The body
         // is deterministic, so every attempt sends identical bytes.
-        let body = self.shaped_body(messages, tools, response_format)?;
+        let body = self.shaped_body(messages, tools)?;
 
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a
