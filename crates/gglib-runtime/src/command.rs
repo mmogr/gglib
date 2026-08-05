@@ -200,6 +200,14 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("--jinja");
     }
 
+    // Embedding mode. Not additive — llama-server reads `--embeddings` as
+    // "restrict to only the embedding use case", so this server will refuse
+    // chat completions. Resolved from the model's "embedding" tag, so the two
+    // modes never collide on one model.
+    if config.embeddings {
+        cmd.arg("--embeddings");
+    }
+
     // Add reasoning format if specified
     if let Some(ref format) = config.reasoning_format {
         cmd.arg("--reasoning-format").arg(format);
@@ -354,6 +362,7 @@ mod tests {
             cache_type_k: None,
             cache_type_v: None,
             mlock: false,
+            embeddings: false,
         }
     }
 
@@ -363,6 +372,23 @@ mod tests {
         cmd.get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect()
+    }
+
+    #[test]
+    fn embeddings_flag_omitted_by_default() {
+        let config = minimal_config();
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        assert!(!args_of(&cmd).contains(&"--embeddings".to_string()));
+    }
+
+    #[test]
+    fn embeddings_config_emits_the_flag() {
+        let config = ServerConfig {
+            embeddings: true,
+            ..minimal_config()
+        };
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        assert!(args_of(&cmd).contains(&"--embeddings".to_string()));
     }
 
     #[test]
@@ -531,6 +557,7 @@ mod tests {
             cache_type_k: None,
             cache_type_v: None,
             mlock: false,
+            embeddings: false,
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)

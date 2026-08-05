@@ -228,6 +228,13 @@ fn flags_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
         parts.push(format!("--reasoning-format {format} ({why})"));
     }
 
+    if caps.embeddings {
+        // Worth naming even though it is the only flag with one possible
+        // reason: it is also the only flag that takes chat completions away,
+        // so a user staring at a 501 needs to see it in the banner.
+        parts.push("--embeddings (embedding tag)".to_string());
+    }
+
     (!parts.is_empty()).then(|| LaunchDecision::bare("flags", parts.join(" \u{b7} ")))
 }
 
@@ -295,6 +302,7 @@ mod tests {
                 draft_p_min: 0.0,
                 source: MtpResolutionSource::Default,
             },
+            embeddings: false,
         }
     }
 
@@ -492,6 +500,20 @@ mod tests {
         assert_eq!(
             n.decision("flags").unwrap().value,
             "--jinja (agent tag) \u{b7} --reasoning-format deepseek (reasoning tag)"
+        );
+    }
+
+    /// The one flag that takes chat completions away has to be visible in the
+    /// banner, or a user staring at a 501 has nothing to go on.
+    #[test]
+    fn flags_line_names_embedding_mode() {
+        let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
+        let mut c = caps();
+        c.embeddings = true;
+        let n = narrate(&inputs(&s, &c, &r));
+        assert_eq!(
+            n.decision("flags").unwrap().value,
+            "--embeddings (embedding tag)"
         );
     }
 
