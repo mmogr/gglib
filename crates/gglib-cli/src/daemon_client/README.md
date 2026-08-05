@@ -19,6 +19,7 @@ instantiating a local runtime: single process ownership is the point.
 <!-- module-docs:end -->
 
 <!-- module-table:start -->
-| Module | Tests | Coverage | LOC | Complexity |
-|--------|-------|----------|-----|------------|
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`sse.rs`](sse.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon_client-sse-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon_client-sse-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon_client-sse-coverage.json) |
 <!-- module-table:end -->

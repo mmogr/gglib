@@ -17,6 +17,7 @@ signals, teardown — lives in `gglib-axum`'s `daemon` module.
 <!-- module-docs:end -->
 
 <!-- module-table:start -->
-| Module | Tests | Coverage | LOC | Complexity |
-|--------|-------|----------|-----|------------|
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`mdns.rs`](mdns.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon-mdns-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon-mdns-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-daemon-mdns-coverage.json) |
 <!-- module-table:end -->

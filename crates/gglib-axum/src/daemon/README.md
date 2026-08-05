@@ -37,6 +37,8 @@ binary can be found — still behind the same lock.
 <!-- module-docs:end -->
 
 <!-- module-table:start -->
-| Module | Tests | Coverage | LOC | Complexity |
-|--------|-------|----------|-----|------------|
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`lock.rs`](lock.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-lock-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-lock-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-lock-coverage.json) |
+| [`shutdown.rs`](shutdown.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-shutdown-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-shutdown-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-daemon-shutdown-coverage.json) |
 <!-- module-table:end -->
