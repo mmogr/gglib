@@ -128,11 +128,12 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
 | [`settings_cache.rs`](src/settings_cache.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-settings_cache-coverage.json) |
 | [`slot_eviction.rs`](src/slot_eviction.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slot_eviction-coverage.json) |
-| [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
 | [`slots_poller.rs`](src/slots_poller.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots_poller-coverage.json) |
+| [`slots.rs`](src/slots.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-slots-coverage.json) |
 | [`sse_stream.rs`](src/sse_stream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-sse_stream-coverage.json) |
 | [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
 | [`upstream_health.rs`](src/upstream_health.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-coverage.json) |
+| [`access/`](src/access/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-coverage.json) |
 | [`contention/`](src/contention/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-coverage.json) |
 | [`mcp/`](src/mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-coverage.json) |
 <!-- module-table:end -->
@@ -212,17 +213,22 @@ gglib proxy cache-clear --host 127.0.0.1 --port 8080 --session-id my-session
 
 ### Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check (always 200) |
-| `/v1/models` | GET | List available models |
-| `/v1/chat/completions` | POST | Chat completion (streaming/non-streaming) |
-| `/mcp` | POST | MCP Streamable HTTP — JSON-RPC dispatch |
-| `/mcp` | GET | Returns 405 (server-push not yet supported) |
-| `/mcp` | DELETE | Terminate MCP session by `Mcp-Session-Id` |
-| `/v1/proxy/status` | GET | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
-| `/v1/proxy/status/stream` | GET | Proxy dashboard live updates (SSE, hydrate-then-stream) |
-| `/v1/proxy/cache/clear` | POST | Clear KV cache for a session or all sessions (optional `X-Gglib-Session-Id` header) |
+"Auth" is whether the endpoint requires `Authorization: Bearer <key>` *when a
+key is configured*. With no key configured — the loopback default — nothing on
+this table requires one. The Host allowlist applies to every row regardless,
+including `/health`; see the [`access`](src/access/) module.
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/health` | GET | open | Health check (always 200) |
+| `/v1/models` | GET | bearer | List available models |
+| `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
+| `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
+| `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |
+| `/mcp` | DELETE | bearer | Terminate MCP session by `Mcp-Session-Id` |
+| `/v1/proxy/status` | GET | bearer | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
+| `/v1/proxy/status/stream` | GET | bearer | Proxy dashboard live updates (SSE, hydrate-then-stream) |
+| `/v1/proxy/cache/clear` | POST | bearer | Clear KV cache for a session or all sessions (optional `X-Gglib-Session-Id` header) |
 
 ### Model Resolution
 

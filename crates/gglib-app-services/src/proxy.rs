@@ -163,6 +163,11 @@ impl ProxyOps {
                 self.core.settings().repo(),
             )
             .await
+            // The token the supervisor settled on is deliberately dropped here.
+            // These callers are the GUI and the desktop tray, which read it
+            // back from settings — the same place the supervisor persisted it —
+            // rather than being handed a credential through a start response.
+            .map(|bind| bind.addr)
     }
 
     /// Translate a [`SupervisorError`] into the [`GuiError`] a caller sees.

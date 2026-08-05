@@ -86,6 +86,18 @@ pub struct Settings {
     /// this on for a single run, but cannot turn it off — clear it here.
     pub share_lan: Option<bool>,
 
+    /// Bearer token required on the proxy's `/v1/*` and `/mcp` routes.
+    ///
+    /// `None` leaves the endpoint unauthenticated, which is the historical
+    /// behaviour and remains the default for a loopback bind. The proxy mints
+    /// one here automatically the first time it binds a non-loopback host, so
+    /// an endpoint that reaches a network is never left open by omission.
+    ///
+    /// `--api-key` and `GGLIB_API_KEY` override this for a single run without
+    /// changing it. The desktop app reads it from here — that is how the GUI
+    /// dashboard authenticates against the proxy it started.
+    pub proxy_api_key: Option<String>,
+
     // ── Sampling authority ──────────────────────────────────────────
     /// Whether a client's own sampling parameters (`temperature`, `top_p`,
     /// `top_k`, `presence_penalty`, `repeat_penalty`, `min_p`) are honoured
@@ -164,6 +176,7 @@ impl Settings {
             title_generation_prompt: None,
             bind_host: None,
             share_lan: None,
+            proxy_api_key: None,
             trust_client_sampling: None,
             proxy_autostart: None,
             close_to_tray: None,
@@ -236,6 +249,9 @@ impl Settings {
         if let Some(ref v) = other.share_lan {
             self.share_lan = *v;
         }
+        if let Some(ref v) = other.proxy_api_key {
+            self.proxy_api_key.clone_from(v);
+        }
         if let Some(ref v) = other.trust_client_sampling {
             self.trust_client_sampling = *v;
         }
@@ -274,6 +290,7 @@ pub struct SettingsUpdate {
     pub title_generation_prompt: Option<Option<String>>,
     pub bind_host: Option<Option<String>>,
     pub share_lan: Option<Option<bool>>,
+    pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
@@ -303,6 +320,9 @@ pub enum SettingsError {
 
     #[error("Bind host must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
     InvalidBindHost(String),
+
+    #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
+    BlankProxyApiKey,
 }
 
 /// Validate settings values.
@@ -351,6 +371,16 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         && host.parse::<std::net::IpAddr>().is_err()
     {
         return Err(SettingsError::InvalidBindHost(host.clone()));
+    }
+
+    // A stored blank would read as "authentication is on" while accepting
+    // `Bearer ` from anyone. Clearing the field is the way to turn it off.
+    if settings
+        .proxy_api_key
+        .as_ref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        return Err(SettingsError::BlankProxyApiKey);
     }
 
     // Validate inference defaults if specified

@@ -189,6 +189,39 @@ pub struct CacheArgs {
     pub cache_type_v: Option<KvCacheType>,
 }
 
+/// Who may reach the endpoint this run puts up.
+///
+/// Flattened into both `Serve` and `Proxy` for the same reason [`CacheArgs`]
+/// is: they are one stack in two modes, and an access control only one of them
+/// could express would be a hole in whichever lacked it.
+///
+/// Neither value is written back to settings — both are per-run overrides. The
+/// stored `proxy_api_key` is the layer beneath `--api-key`, and the proxy
+/// writes to it only when it mints a key itself.
+#[derive(Args, Debug, Clone, Default)]
+pub struct AccessArgs {
+    /// Require `Authorization: Bearer <key>` on `/v1/*` and `/mcp`.
+    ///
+    /// `/health` stays open so a supervisor can poll it. Omit to fall back to
+    /// the stored `proxy_api_key` setting; with neither, a loopback bind runs
+    /// unauthenticated and a non-loopback bind generates a key and prints it.
+    ///
+    /// Prefer `GGLIB_API_KEY` (e.g. in a `.env` file) over the flag — a key on
+    /// the command line is visible to every process on the machine via the
+    /// process list, and lands in shell history.
+    #[arg(long, env = "GGLIB_API_KEY")]
+    pub api_key: Option<String>,
+    /// Accept this value in the `Host` header, in addition to loopback and the
+    /// address bound with `--host`. Repeatable.
+    ///
+    /// The proxy rejects requests naming any other host, which is what stops a
+    /// malicious page from reaching it by DNS rebinding. A wildcard bind
+    /// (`--host 0.0.0.0`) names no reachable address, so reaching it as
+    /// `gglib.lan` or `192.168.1.5` needs that name given here.
+    #[arg(long = "allowed-host", value_name = "HOST")]
+    pub allowed_hosts: Vec<String>,
+}
+
 /// Value parser for `--cache-type-k`/`--cache-type-v`.
 ///
 /// Built from [`KvCacheType::ALL`] so `--help` and shell completions list the
@@ -236,8 +269,10 @@ pub struct ServeOptions {
     pub jinja: bool,
     /// Host the OpenAI-compatible endpoint binds to.
     ///
-    /// Defaults to loopback. `0.0.0.0` accepts LAN clients — the endpoint
-    /// has no authentication, so only do that on a network you trust.
+    /// Defaults to loopback. `0.0.0.0` accepts LAN clients, and binding off
+    /// loopback generates an API key if none is configured. A wildcard bind
+    /// names no reachable address, so clients reaching it by hostname or LAN
+    /// IP need that value passed to `--allowed-host`.
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
     /// Port the OpenAI-compatible endpoint listens on.

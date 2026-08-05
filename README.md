@@ -799,15 +799,87 @@ rather than fighting it for the bind.
 | elvish | `gglib completions elvish > ~/.config/elvish/lib/gglib.elv` |
 | powershell | `gglib completions powershell >> $PROFILE` |
 
-<details>
-<summary><strong>Security notes</strong></summary>
+## Security
 
-- Web server binds `127.0.0.1` (local only) by default; use `--host 0.0.0.0` for LAN access. `gglib proxy` and `gglib serve` also bind `127.0.0.1` by default — `serve` runs the proxy stack, so it inherits the same hardened defaults (`--host 127.0.0.1`, `--metrics`, `--parallel 1`) rather than the bare llama-server invocation it used before.
-- `gglib web`, `gglib proxy` and `gglib serve` use `CorsConfig::LocalOnly` by default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes (`tauri://localhost`, `http://tauri.localhost`) are accepted as valid CORS origins.
-- No authentication — designed for trusted networks
-- Use firewall rules, private subnets, or VPN; do not expose to the public internet without additional auth
+The proxy endpoint has an MCP gateway attached to it (`POST /mcp`) whose
+`invoke_tool` executes filesystem tools and whatever external MCP servers you
+have configured. Everything below is about who is allowed to reach that port.
 
-</details>
+### Binding
+
+`gglib proxy`, `gglib serve`, `gglib up` and `gglib web` all bind `127.0.0.1`
+by default. Binding anywhere else is opt-in and never inherited.
+
+### API key
+
+Optional, and off by default for a loopback bind — an endpoint only your own
+machine can reach does not need a password, and requiring one would break every
+existing local setup for nothing.
+
+| Source | How |
+|---|---|
+| Flag | `gglib proxy --api-key <key>` |
+| Environment | `GGLIB_API_KEY` (e.g. in `<data-dir>/.env`) |
+| Setting | `gglib config settings set --proxy-api-key <key>`, or the GUI's Settings dialog |
+
+Highest wins. Prefer the environment variable or the setting over the flag: a
+key on the command line is visible to every process on the machine through the
+process list, and lands in your shell history.
+
+When set, `Authorization: Bearer <key>` is required on `/v1/*` and `/mcp`.
+`/health` stays open so a supervisor or container healthcheck can poll it
+without credentials.
+
+```bash
+curl -H "Authorization: Bearer $GGLIB_API_KEY" http://127.0.0.1:8080/v1/models
+```
+
+**Binding off loopback generates a key automatically.** The first time the proxy
+binds anything other than a loopback address without a key configured, it mints
+one, saves it to settings, and prints it in the startup banner — so an endpoint
+that reaches a network is never left open because someone forgot. It is reused
+on subsequent starts; recover it with `gglib config settings show`.
+
+### Host allowlist (DNS-rebinding guard)
+
+Always on, independent of the API key. The proxy rejects any request whose
+`Host` header is not one it answers to, with `403 host_not_allowed`.
+
+| Bind | Accepted `Host` |
+|---|---|
+| `127.0.0.1` / `localhost` / `::1` | any loopback name or address |
+| `192.168.1.5` | loopback, plus `192.168.1.5` |
+| `0.0.0.0` / `::` | loopback only |
+
+A wildcard bind names no reachable address, so it grants nothing on its own —
+add `--allowed-host` for each name clients will actually use:
+
+```bash
+gglib proxy --host 0.0.0.0 --allowed-host 192.168.1.5 --allowed-host gglib.lan
+```
+
+**Why this exists, precisely.** DNS rebinding does not change the attacker's
+`Origin` — it changes which IP a hostname resolves to. The `Origin` header stays
+`https://evil.com`, so `CorsConfig::LocalOnly` does reject it. What CORS does
+not do is stop the request from being *sent*; it governs whether the response
+may be *read*. Preflighted requests (anything sending `Content-Type:
+application/json`, which is every `/v1/chat/completions` and `/mcp` call) are
+genuinely blocked, but a simple `GET` is sent and runs to completion with only
+its response withheld. The `Host` header is the part rebinding cannot forge.
+Checking it closes that gap, covers any route that is not preflighted, and stops
+the endpoint depending on CORS being configured correctly.
+
+### CORS
+
+`gglib web`, `gglib proxy` and `gglib serve` use `CorsConfig::LocalOnly` by
+default — only `localhost`, `127.0.0.1`, `::1`, and Tauri custom schemes
+(`tauri://localhost`, `http://tauri.localhost`) are accepted as origins.
+
+### What is still not covered
+
+There is no multi-tenancy, no per-client authorization, no rate limiting, and
+no audit log. One key is one key. Use firewall rules, private subnets, or a VPN;
+do not expose this to the public internet.
 
 ## Installation
 

@@ -48,9 +48,10 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             sampling,
             mtp,
             cache,
+            access,
         } => {
             handlers::inference::serve::execute(
-                ctx, id, context, options, sampling, mtp, cache, verbose,
+                ctx, id, context, options, sampling, mtp, cache, access, verbose,
             )
             .await?;
         }
@@ -268,6 +269,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             default_context,
             sampling,
             cache,
+            access,
             command,
         } => {
             // Subcommand takes priority (e.g. `gglib proxy dashboard`) — it
@@ -277,18 +279,24 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     crate::commands::ProxyCommand::Dashboard {
                         host: dash_host,
                         port: dash_port,
+                        api_key,
                     } => {
-                        handlers::proxy_dashboard::execute(dash_host, dash_port).await?;
+                        let key = resolve_client_api_key(ctx, api_key).await;
+                        handlers::proxy_dashboard::execute(dash_host, dash_port, key.as_deref())
+                            .await?;
                     }
                     crate::commands::ProxyCommand::CacheClear {
                         host: clear_host,
                         port: clear_port,
                         session_id,
+                        api_key,
                     } => {
+                        let key = resolve_client_api_key(ctx, api_key).await;
                         handlers::proxy_cache_clear::execute(
                             &clear_host,
                             clear_port,
                             session_id.as_deref(),
+                            key.as_deref(),
                         )
                         .await?;
                     }
@@ -304,6 +312,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 default_context,
                 sampling,
                 cache,
+                access,
             )
             .await?;
         }
@@ -325,4 +334,28 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
     }
 
     Ok(())
+}
+
+/// The key a `gglib proxy` subcommand should present to an already-running
+/// proxy.
+///
+/// `--api-key`/`GGLIB_API_KEY` first, then the stored `proxy_api_key`. The
+/// stored fallback is what makes `gglib proxy dashboard` keep working with no
+/// extra flag against a proxy that generated its own key — the same settings
+/// row the proxy wrote it to.
+///
+/// An unreadable settings store yields `None` rather than an error: the target
+/// proxy may well be unauthenticated, and failing the command outright would
+/// turn a maybe-irrelevant local problem into a hard stop.
+async fn resolve_client_api_key(ctx: &CliContext, flag: Option<String>) -> Option<String> {
+    if flag.is_some() {
+        return flag;
+    }
+    ctx.app
+        .settings()
+        .get()
+        .await
+        .ok()
+        .and_then(|s| s.proxy_api_key)
+        .filter(|key| !key.trim().is_empty())
 }

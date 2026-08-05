@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
 
+pub mod access;
 pub mod cache_config;
 pub mod cache_metrics;
 pub mod contracts;
@@ -22,6 +23,7 @@ pub mod telemetry;
 pub mod utils;
 
 // Re-export commonly used types for convenience
+pub use access::{ApiKeySource, ProxyAccessConfig};
 pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,

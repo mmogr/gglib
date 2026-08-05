@@ -16,6 +16,9 @@ const transport = vi.hoisted(() => ({
   startProxy: vi.fn().mockResolvedValue(undefined),
   stopProxy: vi.fn().mockResolvedValue(undefined),
   getProxyStatus: vi.fn().mockResolvedValue({ running: false, port: null }),
+  // The panel reads the proxy's API key on mount so its dashboard stream can
+  // authenticate. Unset is the loopback default.
+  getSettings: vi.fn().mockResolvedValue({ proxyApiKey: null }),
 }));
 
 const proxyState = vi.hoisted(() => ({

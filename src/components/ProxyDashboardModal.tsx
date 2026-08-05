@@ -4,7 +4,7 @@
  * Self-contained live view of a running proxy's dashboard: active
  * connections (with per-request prompt-processing progress bars) and
  * inference slots (with per-slot context-usage donuts), backed by
- * `useProxyDashboard()`'s native `EventSource` subscription.
+ * `useProxyDashboard()`'s SSE subscription.
  *
  * Triggered from `ProxyControl.tsx`'s "View Dashboard" button, following the
  * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`/
@@ -31,6 +31,8 @@ export interface ProxyDashboardModalProps {
   onClose: () => void;
   host: string;
   port: number;
+  /** The proxy's API key, when it requires one. See `useProxyDashboard`. */
+  apiKey?: string | null;
 }
 
 export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
@@ -38,8 +40,13 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
   onClose,
   host,
   port,
+  apiKey,
 }) => {
-  const { snapshot, connected } = useProxyDashboard({ host, port: isOpen ? port : null });
+  const { snapshot, connected } = useProxyDashboard({
+    host,
+    port: isOpen ? port : null,
+    apiKey,
+  });
 
   return (
     <Modal

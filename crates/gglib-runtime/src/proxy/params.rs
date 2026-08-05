@@ -154,9 +154,27 @@ pub struct StandaloneProxyParams {
     pub inference_override: Option<InferenceConfig>,
     /// KV cache configuration.
     pub cache: ProxyCacheOptions,
+    /// Who may reach the endpoint: the operator's `--api-key` and
+    /// `--allowed-host` values, before resolution against settings.
+    pub access: ProxyAccessOptions,
     /// `Some` runs the proxy pinned to one model (`gglib serve`); `None` runs
     /// the ordinary auto-swapping proxy (`gglib proxy`).
     pub pinned: Option<PinnedModel>,
+}
+
+/// Access controls a standalone proxy run was launched with.
+///
+/// Deliberately the *unresolved* values: the supervisor decides what the token
+/// finally is, because only it knows the bind host and holds the settings
+/// repository. This carries what the command line said and nothing more.
+#[derive(Debug, Clone, Default)]
+pub struct ProxyAccessOptions {
+    /// `--api-key` / `GGLIB_API_KEY`. `None` defers to settings, then to
+    /// generating one for a non-loopback bind.
+    pub api_key: Option<String>,
+    /// `--allowed-host`, repeatable. Host header values to accept beyond
+    /// loopback and the bound address.
+    pub allowed_hosts: Vec<String>,
 }
 
 impl StandaloneProxyParams {

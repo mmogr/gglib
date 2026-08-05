@@ -503,6 +503,7 @@ pub struct AppSettings {
     // Network binding (see `gglib_core::Settings`)
     pub bind_host: Option<String>,
     pub share_lan: Option<bool>,
+    pub proxy_api_key: Option<String>,
     // Sampling authority (see `gglib_core::Settings`)
     pub trust_client_sampling: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
@@ -529,6 +530,7 @@ impl From<gglib_core::Settings> for AppSettings {
             title_generation_prompt: settings.title_generation_prompt,
             bind_host: settings.bind_host,
             share_lan: settings.share_lan,
+            proxy_api_key: settings.proxy_api_key,
             trust_client_sampling: settings.trust_client_sampling,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
@@ -583,6 +585,8 @@ pub struct UpdateSettingsRequest {
     pub bind_host: Option<Option<String>>,
     #[serde(default, with = "serde_with::rust::double_option")]
     pub share_lan: Option<Option<bool>>,
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub proxy_api_key: Option<Option<String>>,
     // Sampling authority (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub trust_client_sampling: Option<Option<bool>>,
@@ -613,6 +617,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             title_generation_prompt: request.title_generation_prompt,
             bind_host: request.bind_host,
             share_lan: request.share_lan,
+            proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,

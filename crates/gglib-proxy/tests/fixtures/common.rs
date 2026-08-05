@@ -757,7 +757,7 @@ pub async fn spawn_proxy(
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            &gglib_core::CorsConfig::LocalOnly,
+            &gglib_core::ProxyAccessConfig::default(),
         )
         .await
         .ok();
@@ -809,7 +809,7 @@ pub async fn spawn_proxy_with_cache_for_model(
             Some(slot_dir),
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            &gglib_core::CorsConfig::LocalOnly,
+            &gglib_core::ProxyAccessConfig::default(),
         )
         .await
         .ok();

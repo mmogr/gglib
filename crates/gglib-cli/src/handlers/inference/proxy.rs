@@ -9,14 +9,19 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::shared_args::{CacheArgs, SamplingArgs};
+use crate::shared_args::{AccessArgs, CacheArgs, SamplingArgs};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::{StandaloneProxyParams, start_proxy_standalone};
+use gglib_runtime::proxy::{ProxyAccessOptions, StandaloneProxyParams, start_proxy_standalone};
 
 /// Execute the proxy command.
 ///
 /// Starts the proxy unpinned — serving the whole catalog and auto-swapping
 /// on request — and blocks until Ctrl-C.
+///
+/// The parameters are the `Commands::Proxy` variant's fields, forwarded one
+/// for one — the same shape [`serve::execute`](super::serve::execute) carries
+/// for the pinned mode.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     host: String,
@@ -25,6 +30,7 @@ pub async fn execute(
     default_context: Option<String>,
     sampling: SamplingArgs,
     cache: CacheArgs,
+    access: AccessArgs,
 ) -> Result<()> {
     let settings = ctx.app.settings().get().await?;
     let effective_context = resolve_context_size(&ServerConfigOptions {
@@ -47,6 +53,10 @@ pub async fn execute(
         default_context: effective_context,
         inference_override,
         cache: cache.into_proxy_cache_options(),
+        access: ProxyAccessOptions {
+            api_key: access.api_key,
+            allowed_hosts: access.allowed_hosts,
+        },
         // `gglib proxy` serves the whole catalog and swaps on demand;
         // `gglib serve` is the pinned mode of this same entry point.
         pinned: None,

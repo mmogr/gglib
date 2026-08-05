@@ -27,7 +27,7 @@ Clients that own real request logic of their own. Each one exists because it doe
 └─────────────────────────────────────────────────────┘
 ```
 
-`council.ts` and `benchmark.ts` reach the backend through `transport/api/client`'s authenticated fetch helpers. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port.
+`council.ts` and `benchmark.ts` reach the backend through `transport/api/client`'s authenticated fetch helpers. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port, and carries that proxy's own credential (the `proxyApiKey` setting, passed in by callers) rather than the backend session's.
 
 ## Key Files
 
@@ -35,7 +35,7 @@ Clients that own real request logic of their own. Each one exists because it doe
 |------|------|
 | `council.ts` | Council (multi-agent orchestrator) runs — manual SSE parser over a chunked `TextDecoder` buffer |
 | `benchmark.ts` | Benchmark and tune runs — REST endpoints plus an SSE progress stream |
-| `proxyDashboard.ts` | Live proxy dashboard — native `EventSource` against the running proxy's own HTTP port, not the app backend |
+| `proxyDashboard.ts` | Live proxy dashboard — fetch-based SSE (`utils/sse`) against the running proxy's own HTTP port, not the app backend. Not `EventSource`: it cannot send the `Authorization` header the proxy requires |
 
 ## Contract
 

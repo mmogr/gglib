@@ -54,6 +54,7 @@ function describeError(err: unknown): string {
 
 export const TrayPanel: FC = () => {
   const proxy = useProxyState();
+  const [proxyApiKey, setProxyApiKey] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -65,10 +66,31 @@ export const TrayPanel: FC = () => {
     return cleanupProxyEvents;
   }, []);
 
+  // Read the proxy's key straight off the transport rather than through
+  // `useSettings`: this entry point has none of `App`'s providers by design,
+  // and one string does not justify introducing one. A failure here leaves the
+  // key null, which is correct for the unauthenticated case and merely leaves
+  // the dashboard blank for the other — the panel's start/stop still work.
+  useEffect(() => {
+    let cancelled = false;
+    void getTransport()
+      .getSettings()
+      .then((settings) => {
+        if (!cancelled) setProxyApiKey(settings.proxyApiKey ?? null);
+      })
+      .catch((err) => {
+        appLogger.error('service.server', 'Tray panel could not read the proxy API key', { err });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Only stream while the proxy is up; `null` keeps the hook idle.
   const { snapshot, connected } = useProxyDashboard({
     host: PROXY_HOST,
     port: proxy.running ? proxy.port : null,
+    apiKey: proxyApiKey,
   });
 
   useEffect(() => {

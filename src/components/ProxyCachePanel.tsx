@@ -10,7 +10,7 @@
  * `gglib_core::cache_metrics` for the same reasoning on the backend.
  *
  * Extracted from `ProxyDashboardModal` to keep both files small and to make
- * the formatting logic testable without mounting the modal's `EventSource`
+ * the formatting logic testable without mounting the modal's dashboard stream
  * subscription.
  *
  * @module components/ProxyCachePanel

@@ -4,6 +4,7 @@ export { DesktopSettings } from './DesktopSettings';
 export { PathSettings } from './PathSettings';
 export { ModelDefaults } from './ModelDefaults';
 export { PortSettings } from './PortSettings';
+export { SecuritySettings } from './SecuritySettings';
 export { DisplaySettings } from './DisplaySettings';
 export { AdvancedSettings } from './AdvancedSettings';
 export { SetupWizardRow } from './SetupWizardRow';

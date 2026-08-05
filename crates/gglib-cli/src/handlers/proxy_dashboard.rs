@@ -480,12 +480,23 @@ impl Drop for TerminalGuard {
 /// Connects to `http://{host}:{port}/v1/proxy/status/stream`, prints the
 /// hydration snapshot immediately, then redraws in place on every subsequent
 /// tick until `Ctrl+C` is pressed or the connection is closed by the server.
-pub async fn execute(host: String, port: u16) -> Result<()> {
+pub async fn execute(host: String, port: u16, api_key: Option<&str>) -> Result<()> {
     let url = format!("http://{host}:{port}/v1/proxy/status/stream");
 
-    let response = reqwest::get(&url)
+    let mut request = reqwest::Client::new().get(&url);
+    if let Some(key) = api_key {
+        request = request.bearer_auth(key);
+    }
+    let response = request
+        .send()
         .await
         .with_context(|| format!("failed to connect to {url} — is the proxy running?"))?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!(
+            "the proxy at {host}:{port} requires an API key. Pass --api-key, set \
+             GGLIB_API_KEY, or store one with `gglib config settings set --proxy-api-key <key>`."
+        );
+    }
     if !response.status().is_success() {
         anyhow::bail!(
             "proxy dashboard stream at {url} returned HTTP {}",

@@ -12,7 +12,9 @@ use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
-use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{
+    AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
+};
 
 /// Subcommands available under `gglib council`.
 #[derive(Subcommand)]
@@ -160,6 +162,10 @@ pub enum ProxyCommand {
         /// Port of the already-running proxy to connect to
         #[arg(short, long, default_value = "8080")]
         port: u16,
+        /// API key of the target proxy, if it requires one.
+        /// Omit to use the stored `proxy_api_key` setting.
+        #[arg(long, env = "GGLIB_API_KEY")]
+        api_key: Option<String>,
     },
     /// Clear KV cache on an already-running proxy
     ///
@@ -179,6 +185,10 @@ pub enum ProxyCommand {
         /// Optional session ID to target (without --session-id, clears all sessions)
         #[arg(long)]
         session_id: Option<String>,
+        /// API key of the target proxy, if it requires one.
+        /// Omit to use the stored `proxy_api_key` setting.
+        #[arg(long, env = "GGLIB_API_KEY")]
+        api_key: Option<String>,
     },
 }
 
@@ -247,8 +257,9 @@ pub enum Commands {
     /// normalization and upstream health monitoring.
     ///
     /// `--port` is the endpoint clients connect to; `--llama-port` is the
-    /// upstream llama-server behind it. `--host` defaults to loopback; the
-    /// endpoint has no authentication, so only widen it on a trusted network.
+    /// upstream llama-server behind it. `--host` defaults to loopback; widening
+    /// it generates an API key and prints it, and any host clients will reach
+    /// the endpoint by must be named with `--allowed-host`.
     #[command(display_order = 10)]
     Serve {
         /// ID of the model to serve
@@ -263,6 +274,8 @@ pub enum Commands {
         mtp: MtpArgs,
         #[command(flatten)]
         cache: CacheArgs,
+        #[command(flatten)]
+        access: AccessArgs,
     },
 
     /// Chat with a model interactively, or manage chat history
@@ -516,6 +529,8 @@ pub enum Commands {
         sampling: SamplingArgs,
         #[command(flatten)]
         cache: CacheArgs,
+        #[command(flatten)]
+        access: AccessArgs,
         /// Subcommand (e.g. `dashboard`)
         #[command(subcommand)]
         command: Option<ProxyCommand>,

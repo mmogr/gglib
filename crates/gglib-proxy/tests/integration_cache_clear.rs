@@ -80,7 +80,7 @@ async fn spawn_proxy(
             slot_dir,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            &gglib_core::CorsConfig::LocalOnly,
+            &gglib_core::ProxyAccessConfig::default(),
         )
         .await
         .ok();

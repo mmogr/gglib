@@ -7,7 +7,10 @@
 use std::net::IpAddr;
 
 use anyhow::{Result, bail};
+use gglib_core::access::is_loopback_host;
 use gglib_core::{CorsConfig, Settings};
+
+pub use gglib_core::access::is_wildcard_host as is_wildcard;
 
 /// Compiled-in fallback used when the flag says nothing.
 /// Matches `ServerConfig::with_defaults`.
@@ -25,25 +28,6 @@ pub struct BindDecision {
     pub share_lan: bool,
     /// CORS policy implied by `share_lan`.
     pub cors: CorsConfig,
-}
-
-/// Whether `host` refers to the loopback interface.
-///
-/// Covers the literal `localhost` alongside any address that parses as an IP
-/// and is loopback, so `::1` and `127.0.0.2` are caught as well as `127.0.0.1`.
-fn is_loopback(host: &str) -> bool {
-    if host.eq_ignore_ascii_case("localhost") {
-        return true;
-    }
-    host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
-}
-
-/// Whether `host` is a wildcard ("all interfaces") address.
-///
-/// True for both `0.0.0.0` and its IPv6 equivalent `::`, so the two are treated
-/// alike when deciding how to describe the bind and how to advertise it.
-pub fn is_wildcard(host: &str) -> bool {
-    host.parse::<IpAddr>().is_ok_and(|ip| ip.is_unspecified())
 }
 
 /// Format `host:port` as an HTTP authority, bracketing IPv6 literals.
@@ -92,7 +76,7 @@ pub fn resolve_bind(
     // A host nobody named gets widened to the wildcard when sharing.
     let host = match (cli_host, settings.bind_host.clone()) {
         // Named on the command line: authoritative, so a conflict is an error.
-        (Some(host), _) if share_lan && is_loopback(&host) => {
+        (Some(host), _) if share_lan && is_loopback_host(&host) => {
             bail!(
                 "--share-lan cannot be combined with the loopback address '{host}': \
                  no other device on the network could reach it. \
@@ -104,7 +88,7 @@ pub fn resolve_bind(
 
         // Stored loopback host, sharing asked for on the command line: the flag
         // wins over the saved fallback, exactly as --host would.
-        (None, Some(host)) if cli_share_lan && is_loopback(&host) => {
+        (None, Some(host)) if cli_share_lan && is_loopback_host(&host) => {
             tracing::info!(
                 "ignoring stored bind-host '{host}' because --share-lan was passed; \
                  binding {ALL_INTERFACES} instead"
@@ -114,7 +98,7 @@ pub fn resolve_bind(
 
         // Both stored and contradictory — the saved configuration cannot be
         // satisfied, and no command-line input says which side to prefer.
-        (None, Some(host)) if share_lan && is_loopback(&host) => {
+        (None, Some(host)) if share_lan && is_loopback_host(&host) => {
             bail!(
                 "stored settings are contradictory: share-lan is enabled but \
                  bind-host is the loopback address '{host}', which no other device \

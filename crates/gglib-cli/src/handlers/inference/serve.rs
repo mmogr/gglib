@@ -15,13 +15,14 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
-use crate::shared_args::{CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
 use gglib_runtime::llama::{
     CliPrompt, ensure_llama_initialized, resolve_llama_server, resolve_mtp_args,
 };
 use gglib_runtime::proxy::{
-    PinnedModel, ProxyCacheOptions, StandaloneProxyParams, start_proxy_standalone,
+    PinnedModel, ProxyAccessOptions, ProxyCacheOptions, StandaloneProxyParams,
+    start_proxy_standalone,
 };
 use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 
@@ -39,6 +40,7 @@ pub async fn execute(
     sampling: SamplingArgs,
     mtp: MtpArgs,
     cache: CacheArgs,
+    access: AccessArgs,
     verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
@@ -103,6 +105,8 @@ pub async fn execute(
             default_ctx: settings.default_context_size,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),
+            api_key: access.api_key.clone(),
+            allowed_hosts: access.allowed_hosts.clone(),
             ..Default::default()
         },
     };
@@ -157,6 +161,10 @@ pub async fn execute(
         cache: ProxyCacheOptions {
             slot_dir: proxy_config.slot_dir,
             ..cache.into_proxy_cache_options()
+        },
+        access: ProxyAccessOptions {
+            api_key: proxy_config.api_key,
+            allowed_hosts: proxy_config.allowed_hosts,
         },
         pinned: Some(PinnedModel {
             id: model.id,
