@@ -432,6 +432,58 @@ impl ModelRuntimePort for FixedUpstream {
     }
 }
 
+/// Runtime port that counts how many times a launch was requested.
+///
+/// The pre-swap guards are only worth anything if they run *before*
+/// `ensure_model_running`. A 4xx alone cannot show that — it would look the
+/// same if the proxy had already unloaded a model to discover the request was
+/// hopeless. This makes the distinction assertable.
+#[derive(Debug)]
+pub struct CountingRuntime {
+    pub port: u16,
+    pub model_name: String,
+    pub ensure_calls: Arc<AtomicU64>,
+}
+
+impl CountingRuntime {
+    pub fn new(port: u16, model_name: &str) -> (Arc<Self>, Arc<AtomicU64>) {
+        let ensure_calls = Arc::new(AtomicU64::new(0));
+        let runtime = Arc::new(Self {
+            port,
+            model_name: model_name.into(),
+            ensure_calls: ensure_calls.clone(),
+        });
+        (runtime, ensure_calls)
+    }
+}
+
+#[async_trait]
+impl ModelRuntimePort for CountingRuntime {
+    async fn ensure_model_running(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+    ) -> Result<RunningTarget, ModelRuntimeError> {
+        self.ensure_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(RunningTarget::local(
+            self.port,
+            1,
+            self.model_name.clone(),
+            4096,
+            false,
+        ))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+}
+
 /// Catalog port that always resolves the requested model with the given tags.
 #[derive(Debug)]
 pub struct TaggedCatalog {
@@ -787,15 +839,26 @@ pub async fn spawn_proxy(
     model_name: &str,
     tags: Vec<String>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
         port: upstream_port,
         model_name: model_name.into(),
         slot_restore_supported: true,
         pinned: false,
     });
+    spawn_proxy_with_runtime(runtime, model_name, tags).await
+}
+
+/// [`spawn_proxy`] with the runtime port supplied by the caller — for tests
+/// that need to observe what the proxy asked the runtime to do (see
+/// [`CountingRuntime`]).
+pub async fn spawn_proxy_with_runtime(
+    runtime: Arc<dyn ModelRuntimePort>,
+    model_name: &str,
+    tags: Vec<String>,
+) -> (String, CancellationToken) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags,

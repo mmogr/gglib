@@ -828,6 +828,31 @@ async fn chat_completions(
     let model_context =
         gglib_core::request_pipeline::resolve(state.catalog_port.as_ref(), Some(&model_name)).await;
 
+    // An embedding model cannot answer this. gglib launches models tagged
+    // `embedding` with `--embeddings`, which llama-server reads as "restrict to
+    // only the embedding use case" — that server refuses chat completions
+    // outright. Forwarding anyway would evict whatever is currently serving
+    // chat, load the embedding model, and collect a 501, leaving the endpoint
+    // worse off than before the request arrived.
+    //
+    // An unresolvable model has an empty tag set here, so it falls through to
+    // `ensure_model_running` and its ModelNotFound exactly as before.
+    if model_context
+        .tags
+        .iter()
+        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
+    {
+        info!(
+            model = %model_name,
+            "refusing chat completion for an embedding-only model"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::embedding_model_cannot_chat(&model_name)),
+        )
+            .into_response();
+    }
+
     // Ensure the model is running with specified context or default.
     //
     // Startup contention is absorbed here for a bounded window instead of

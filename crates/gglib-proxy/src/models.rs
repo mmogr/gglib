@@ -444,6 +444,24 @@ impl ErrorResponse {
         )
     }
 
+    /// Create an error response for a chat request naming an embedding model.
+    ///
+    /// The mirror of [`Self::not_an_embedding_model`], and refused for the same
+    /// reason: a model tagged `embedding` is launched with `--embeddings`,
+    /// which makes that llama-server refuse chat completions. Swapping to it
+    /// would unload whatever is currently serving chat in order to collect a
+    /// 501.
+    pub fn embedding_model_cannot_chat(model: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Model '{model}' is an embedding model and cannot serve chat completions. Use \
+                 /v1/embeddings for it, or name a different model here."
+            ),
+            "invalid_request_error",
+            "embedding_model_cannot_chat",
+        )
+    }
+
     /// Create an error response for upstream connection failure.
     pub fn upstream_error(reason: &str) -> Self {
         Self::with_code(

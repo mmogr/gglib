@@ -19,7 +19,14 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use fixtures::common::{spawn_mock_embeddings_upstream, spawn_proxy};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
+use gglib_core::ports::ModelRuntimePort;
+
+use fixtures::common::{
+    CountingRuntime, spawn_mock_embeddings_upstream, spawn_proxy, spawn_proxy_with_runtime,
+};
 
 const EMBED_MODEL: &str = "embed-model";
 const CHAT_MODEL: &str = "chat-model";
@@ -100,10 +107,84 @@ async fn array_input_reaches_the_upstream_unchanged() {
 }
 
 /// A model without the `embedding` tag is refused before anything is loaded.
-/// The upstream must see nothing at all — a request that reached it would mean
-/// the proxy had already paid for a swap.
+/// `ensure_model_running` must never be called — a swap here would unload
+/// whatever is serving chat in exchange for a server that can only 501.
 #[tokio::test]
-async fn a_model_without_the_embedding_tag_is_refused_before_the_swap() {
+async fn a_model_without_the_embedding_tag_never_reaches_the_runtime() {
+    let cancel = CancellationToken::new();
+    let (upstream, _) = spawn_mock_embeddings_upstream(cancel.clone(), None).await;
+    let (runtime, ensure_calls) = CountingRuntime::new(upstream, CHAT_MODEL);
+    let (base, proxy_cancel) =
+        spawn_proxy_with_runtime(runtime as Arc<dyn ModelRuntimePort>, CHAT_MODEL, vec![]).await;
+
+    let resp = Client::new()
+        .post(format!("{base}/v1/embeddings"))
+        .json(&json!({ "model": CHAT_MODEL, "input": "hello" }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), 400);
+    assert_eq!(
+        ensure_calls.load(Ordering::SeqCst),
+        0,
+        "the guard must run before the model swap, not after"
+    );
+
+    proxy_cancel.cancel();
+    cancel.cancel();
+}
+
+/// The mirror: a chat completion naming an embedding-only model. Same reason,
+/// same cost avoided, on the other endpoint.
+#[tokio::test]
+async fn a_chat_completion_for_an_embedding_model_never_reaches_the_runtime() {
+    let cancel = CancellationToken::new();
+    let (upstream, _) = spawn_mock_embeddings_upstream(cancel.clone(), None).await;
+    let (runtime, ensure_calls) = CountingRuntime::new(upstream, EMBED_MODEL);
+    let (base, proxy_cancel) = spawn_proxy_with_runtime(
+        runtime as Arc<dyn ModelRuntimePort>,
+        EMBED_MODEL,
+        embedding_tags(),
+    )
+    .await;
+
+    let resp = Client::new()
+        .post(format!("{base}/v1/chat/completions"))
+        .json(&json!({
+            "model": EMBED_MODEL,
+            "messages": [{ "role": "user", "content": "hi" }],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "embedding_model_cannot_chat");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("/v1/embeddings"),
+        "the message must point at the endpoint that does work: {}",
+        body["error"]["message"]
+    );
+
+    assert_eq!(
+        ensure_calls.load(Ordering::SeqCst),
+        0,
+        "a chat request must not unload a running chat model to reach an embedding model"
+    );
+
+    proxy_cancel.cancel();
+    cancel.cancel();
+}
+
+/// The refusal names the remedy, because detection missing a genuine embedding
+/// model is as likely as a client naming the wrong one.
+#[tokio::test]
+async fn refusing_a_non_embedding_model_names_the_remedy() {
     let cancel = CancellationToken::new();
     let (upstream, last_body) = spawn_mock_embeddings_upstream(cancel.clone(), None).await;
     let (base, proxy_cancel) = spawn_proxy(upstream, CHAT_MODEL, vec![]).await;
