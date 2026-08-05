@@ -106,13 +106,13 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       };
       if (inline) {
         return (
-          <code className={cn('py-[0.125rem] px-[0.375rem] text-[0.75rem] font-mono bg-[#0d1117] rounded-[4px]', className)} {...rest}>
+          <code className={cn('py-[0.125rem] px-[0.375rem] text-xs font-mono bg-background rounded-sm', className)} {...rest}>
             {children}
           </code>
         );
       }
       return (
-        <pre className="my-[0.5rem] p-[0.625rem] text-[0.75rem] font-mono bg-[#0d1117] rounded-[6px] overflow-x-auto [&_code]:bg-transparent [&_code]:p-0">
+        <pre className="my-[0.5rem] p-[0.625rem] text-xs font-mono bg-background rounded-base overflow-x-auto [&_code]:bg-transparent [&_code]:p-0">
           <code className={className} {...rest}>
             {children}
           </code>
@@ -122,9 +122,9 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   };
 
   return (
-    <div className={cn('mb-[0.75rem] border border-[#30363d] rounded-[8px] bg-[#161b22] overflow-hidden', isStreaming && 'border-[#388bfd33]')}>
+    <div className={cn('mb-[0.75rem] border border-border rounded-md bg-surface overflow-hidden', isStreaming && 'border-primary-border')}>
       <div
-        className="flex items-center gap-[0.5rem] py-[0.625rem] px-[0.875rem] cursor-pointer select-none transition-colors duration-150 hover:bg-[#21262d] focus-visible:outline-2 focus-visible:outline-[#58a6ff] focus-visible:outline-offset-[-2px]"
+        className="flex items-center gap-[0.5rem] py-[0.625rem] px-[0.875rem] cursor-pointer select-none transition-colors duration-150 hover:bg-background-hover focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]"
         role="button"
         tabIndex={0}
         onClick={handleToggle}
@@ -134,16 +134,16 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         <Icon
           icon={ChevronRight}
           size={12}
-          className={cn('text-[#8b949e] transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
+          className={cn('text-text-muted transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
         />
-        <Icon icon={Brain} size={14} className="text-[#8b949e] shrink-0" />
-        <span className="text-[0.8125rem] font-medium text-[#8b949e]">{getLabel()}</span>
-        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-[#8b949e] border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
+        <Icon icon={Brain} size={14} className="text-text-muted shrink-0" />
+        <span className="text-sm font-medium text-text-muted">{getLabel()}</span>
+        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-text-muted border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>
       
       <div className={cn('max-h-0 overflow-hidden transition-[max-height] duration-[0.25s] ease-out', isExpanded && 'max-h-[500px] overflow-y-auto scrollbar-thin')}>
-        <div className="px-[0.875rem] pb-[0.75rem] border-t border-[#30363d]">
-          <div className="text-[0.8125rem] leading-[1.5] text-[#8b949e] [&_p]:my-[0.5rem] [&_p:first-child]:mt-[0.75rem] [&_p:last-child]:mb-0 [&_ul]:my-[0.5rem] [&_ul]:pl-[1.25rem] [&_ol]:my-[0.5rem] [&_ol]:pl-[1.25rem] [&_li]:my-[0.25rem]">
+        <div className="px-[0.875rem] pb-[0.75rem] border-t border-border">
+          <div className="text-sm leading-[1.5] text-text-muted [&_p]:my-[0.5rem] [&_p:first-child]:mt-[0.75rem] [&_p:last-child]:mb-0 [&_ul]:my-[0.5rem] [&_ul]:pl-[1.25rem] [&_ol]:my-[0.5rem] [&_ol]:pl-[1.25rem] [&_li]:my-[0.25rem]">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}

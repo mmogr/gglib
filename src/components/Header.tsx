@@ -48,17 +48,17 @@ const Header: FC<HeaderProps> = ({
   };
 
   return (
-    <header className="bg-background-elevated text-text py-sm px-xl border-b border-border shrink-0">
+    <header className="bg-background-elevated text-text h-header-height px-lg border-b border-border shrink-0 flex items-center">
       <div className="flex justify-between items-center w-full">
         <div className="flex flex-row items-center gap-sm">
-          <h1 className="flex items-center gap-sm text-xl font-bold m-0">
-            <Library className="w-5 h-5" aria-hidden />
+          <h1 className="flex items-center gap-sm text-lg font-semibold m-0">
+            <Library className="w-[18px] h-[18px] text-primary" aria-hidden />
             <span>GGLib</span>
           </h1>
         </div>
-        <div className="relative flex items-center gap-base" ref={menuRef}>
+        <div className="relative flex items-center gap-sm" ref={menuRef}>
           {/* Desktop navigation */}
-          <div className="hidden md:flex items-center gap-base">
+          <div className="hidden md:flex items-center gap-sm">
             {/* Server status button with popover */}
             <div className="relative">
               <Button
@@ -76,7 +76,7 @@ const Header: FC<HeaderProps> = ({
               >
                 <Icon icon={Monitor} size={18} />
                 {hasRunningServers && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-text-inverse text-[11px] font-semibold flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-text-inverse text-2xs font-semibold flex items-center justify-center">
                     {serverCount}
                   </span>
                 )}
@@ -116,7 +116,7 @@ const Header: FC<HeaderProps> = ({
 
           {/* Mobile dropdown menu */}
           <div className={cn(
-            'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface border border-border rounded-base shadow-lg z-[100]',
+            'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface-elevated border border-border rounded-lg shadow-lg z-dropdown',
             isMobileMenuOpen && 'flex flex-col gap-xs',
           )}>
             <Button

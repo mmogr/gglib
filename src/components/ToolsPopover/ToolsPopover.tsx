@@ -125,26 +125,26 @@ export const ToolsPopover: React.FC = () => {
       >
         <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-[9px] font-semibold leading-[14px] text-center text-white bg-accent rounded-[7px]">{enabledTools.size}</span>
+          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-[9px] font-semibold leading-[14px] text-center text-white bg-accent rounded-full">{enabledTools.size}</span>
         )}
       </Button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
+        <div className="absolute top-full right-0 mt-1 bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
           <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-border bg-surface-elevated">
-            <span className="text-[13px] font-semibold text-text-primary">
+            <span className="text-sm font-semibold text-text-primary">
               <Icon icon={Wrench} size={14} />
               <span className="ml-1.5">Tools</span>
             </span>
-            <span className="text-[11px] text-text-secondary bg-surface px-2 py-[2px] rounded-[10px]">
+            <span className="text-2xs text-text-secondary bg-surface px-2 py-[2px] rounded-full">
               {enabledTools.size}/{tools.length} active
             </span>
           </div>
 
           {tools.length === 0 ? (
             <div className="px-[14px] py-6 text-center">
-              <p className="m-0 text-text-secondary text-[13px]">No tools registered</p>
-              <p className="mt-2 text-[11px] text-text-muted">
+              <p className="m-0 text-text-secondary text-sm">No tools registered</p>
+              <p className="mt-2 text-2xs text-text-muted">
                 Tools can be added via the tool registry API.
               </p>
             </div>
@@ -152,7 +152,7 @@ export const ToolsPopover: React.FC = () => {
             <>
               {/* Toggle all row */}
               <div className="px-[14px] py-2 border-b border-border bg-surface-elevated">
-                <label className="flex items-center gap-2 cursor-pointer text-[12px] text-text-secondary hover:text-text-primary">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-text-secondary hover:text-text-primary">
                   <input
                     type="checkbox"
                     checked={allEnabled}
@@ -190,12 +190,12 @@ export const ToolsPopover: React.FC = () => {
                           onChange={(e) => handleToggleTool(name, e.target.checked)}
                           className="mt-[2px] accent-accent cursor-pointer"
                         />
-                        <span className="text-[18px] -mt-[1px]" aria-hidden>
+                        <span className="text-xl -mt-[1px]" aria-hidden>
                           <Icon icon={icon} size={14} />
                         </span>
                         <div className="flex-1 min-w-0">
-                          <span className="block text-[13px] font-medium text-text-primary mb-[2px]">{displayName}</span>
-                          <span className="text-[11px] text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
+                          <span className="block text-sm font-medium text-text-primary mb-[2px]">{displayName}</span>
+                          <span className="text-2xs text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
                         </div>
                       </label>
                     </div>
@@ -206,7 +206,7 @@ export const ToolsPopover: React.FC = () => {
           )}
 
           <div className="px-[14px] py-2 border-t border-border bg-surface-elevated">
-            <span className="text-[10px] text-text-muted italic">
+            <span className="text-2xs text-text-muted italic">
               Enabled tools are sent to the model for function calling.
             </span>
           </div>

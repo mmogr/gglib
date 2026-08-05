@@ -10,11 +10,11 @@ import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
 
 /** Glass-effect form label */
-const glassLabel = "block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]";
+const glassLabel = "block text-sm font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]";
 /** Glass-effect input override (small) */
-const glassInput = "w-full px-3 py-2 bg-surface-elevated border border-border rounded-[6px] text-text text-[0.85rem] transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus placeholder:text-text-muted";
+const glassInput = "w-full px-3 py-2 bg-surface-elevated border border-border rounded-base text-text text-sm transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus placeholder:text-text-muted";
 /** Glass-effect input override (search box) */
-const glassInputLg = "w-full px-[0.9rem] py-[0.6rem] bg-surface-elevated border border-border rounded-lg text-text text-[0.95rem] transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] placeholder:text-text-muted";
+const glassInputLg = "w-full px-[0.9rem] py-[0.6rem] bg-surface-elevated border border-border rounded-lg text-text text-base transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10 placeholder:text-text-muted";
 
 interface HuggingFaceBrowserProps {
   /** Callback when a model is selected (clicked) for preview */
@@ -82,7 +82,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               placeholder="Search, paste user/repo, or user/repo:quant..."
             />
             {searchError && (
-              <span className="block text-[0.75rem] text-danger mt-[0.35rem]">{searchError}</span>
+              <span className="block text-xs text-danger mt-[0.35rem]">{searchError}</span>
             )}
           </Stack>
           <Button
@@ -124,7 +124,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             <label className={glassLabel}>Sort By</label>
             <Row gap="xs" className="min-w-0">
               <Select
-                className="flex-1 min-w-0 px-3 py-2 bg-surface-elevated border border-border rounded-[6px] text-text text-[0.85rem] cursor-pointer transition-all duration-200 ease-linear appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20width=\'12\'%20height=\'12\'%20viewBox=\'0%200%2024%2024\'%20fill=\'none\'%20stroke=\'%2394a3b8\'%20stroke-width=\'2\'%3E%3Cpath%20d=\'M6%209l6%206%206-6\'/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center] pr-7 focus:outline-none focus:border-border-focus"
+                className="flex-1 min-w-0 px-3 py-2 bg-surface-elevated border border-border rounded-base text-text text-sm cursor-pointer transition-all duration-200 ease-linear appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20width=\'12\'%20height=\'12\'%20viewBox=\'0%200%2024%2024\'%20fill=\'none\'%20stroke=\'%2394a3b8\'%20stroke-width=\'2\'%3E%3Cpath%20d=\'M6%209l6%206%206-6\'/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center] pr-7 focus:outline-none focus:border-border-focus"
                 value={sortBy}
                 onChange={(e) => handleSortChange(e.target.value as HfSortField)}
               >
@@ -135,7 +135,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 ))}
               </Select>
               <button
-                className="shrink-0 px-[0.65rem] py-2 bg-surface-elevated border border-border rounded-[6px] text-text-secondary text-[0.9rem] cursor-pointer transition-all duration-150 ease-linear leading-none hover:bg-surface-hover hover:text-text hover:border-border-hover"
+                className="shrink-0 px-[0.65rem] py-2 bg-surface-elevated border border-border rounded-base text-text-secondary text-base cursor-pointer transition-all duration-150 ease-linear leading-none hover:bg-surface-hover hover:text-text hover:border-border-hover"
                 onClick={() => setSortAscending(!sortAscending)}
                 title={sortAscending ? "Ascending" : "Descending"}
               >
@@ -178,7 +178,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         {!loading && models.length > 0 && (
           <Stack gap="base">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[0.85rem] text-text-secondary">
+              <span className="text-sm text-text-secondary">
                 Showing {models.length} model{models.length !== 1 ? "s" : ""}
               </span>
             </div>

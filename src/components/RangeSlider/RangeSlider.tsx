@@ -75,10 +75,10 @@ const RangeSlider: FC<RangeSliderProps> = ({
       
       <div className="relative h-[20px] flex items-center">
         {/* Background track */}
-        <div className="absolute w-full h-1 bg-border rounded-[2px]" ref={trackRef}>
+        <div className="absolute w-full h-1 bg-border rounded-sm" ref={trackRef}>
           {/* Highlighted range */}
           <div
-            className={cn("absolute h-full rounded-[2px]", disabled ? "bg-border" : "bg-primary")}
+            className={cn("absolute h-full rounded-sm", disabled ? "bg-border" : "bg-primary")}
             style={{
               left: `${minPercent}%`,
               width: `${maxPercent - minPercent}%`,

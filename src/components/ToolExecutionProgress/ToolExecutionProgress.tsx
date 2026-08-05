@@ -114,7 +114,7 @@ function classifyPart(part: ToolCallPart): ToolRowData {
 const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
   <div
     className={cn(
-      'flex items-center gap-2 py-[3px] px-2 rounded-md text-[12px]',
+      'flex items-center gap-2 py-[3px] px-2 rounded-md text-xs',
       row.state === 'running' && 'text-primary-light',
       row.state === 'complete' && 'text-success',
       row.state === 'error' && 'text-danger',
@@ -139,7 +139,7 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
     )}
 
     {row.durationMs !== undefined && (
-      <span className="ml-auto font-mono text-[11px] text-text-muted flex-shrink-0">
+      <span className="ml-auto font-mono text-2xs text-text-muted flex-shrink-0">
         {formatDuration(row.durationMs)}
       </span>
     )}
@@ -213,7 +213,7 @@ const ToolExecutionProgress: React.FC = () => {
       {/* ── Accordion header ────────────────────────────────────────────── */}
       <button
         type="button"
-        className="w-full flex items-center gap-2 px-3 py-2 bg-background-secondary text-[12px] font-medium text-text-secondary hover:bg-background-tertiary transition-colors duration-150 border-none cursor-pointer"
+        className="w-full flex items-center gap-2 px-3 py-2 bg-background-secondary text-xs font-medium text-text-secondary hover:bg-background-tertiary transition-colors duration-150 border-none cursor-pointer"
         onClick={() => setIsCollapsed(prev => !prev)}
         aria-expanded={!isCollapsed}
         aria-controls="tool-execution-rows"

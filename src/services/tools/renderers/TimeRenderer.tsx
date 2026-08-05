@@ -43,7 +43,7 @@ export const timeRenderer: ToolResultRenderer = {
         <div className="text-lg font-semibold text-text mb-2 font-mono">
           {typeof resolved.time === 'number' ? resolved.time.toString() : resolved.time}
         </div>
-        <div className="flex justify-center gap-4 text-[11px] text-text-muted">
+        <div className="flex justify-center gap-4 text-2xs text-text-muted">
           <span>Timezone: {resolved.timezone}</span>
           <span>Format: {resolved.format}</span>
         </div>

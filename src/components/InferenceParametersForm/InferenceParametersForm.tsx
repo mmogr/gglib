@@ -54,7 +54,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <label className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.5rem]">
           <Input
             type="number"
@@ -74,7 +74,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
           {isSet && !disabled && (
             <button
               type="button"
-              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
+              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-sm bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
               onClick={() => updateField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
@@ -84,7 +84,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
           )}
         </div>
         {!isSet && (
-          <span className="text-[0.75rem] text-text-muted italic">
+          <span className="text-xs text-text-muted italic">
             Using default ({defaultHint})
           </span>
         )}
@@ -106,7 +106,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <label className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.75rem]">
           <input
             type="range"
@@ -120,13 +120,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             disabled={disabled}
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
           />
-          <span className="min-w-[100px] text-[0.85rem] text-text tabular-nums">
+          <span className="min-w-[100px] text-sm text-text tabular-nums">
             {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
           </span>
           {isSet && !disabled && (
             <button
               type="button"
-              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
+              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-sm bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
               onClick={() => updateField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
@@ -140,9 +140,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   };
 
   return (
-    <div className="my-[1.5rem] p-[1rem] border border-border rounded-[6px] bg-background-secondary">
-      <h4 className="m-0 mb-[0.5rem] text-[0.95rem] font-semibold text-text">Inference Parameters</h4>
-      <p className="m-0 mb-[1rem] text-[0.85rem] text-text-muted leading-[1.4]">
+    <div className="my-[1.5rem] p-[1rem] border border-border rounded-base bg-background-secondary">
+      <h4 className="m-0 mb-[0.5rem] text-base font-semibold text-text">Inference Parameters</h4>
+      <p className="m-0 mb-[1rem] text-sm text-text-muted leading-[1.4]">
         Configure default sampling parameters. Leave blank to inherit from global defaults.
       </p>
 

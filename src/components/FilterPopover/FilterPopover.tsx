@@ -177,14 +177,14 @@ const FilterPopover: FC<FilterPopoverProps> = ({
   const currentSpeedMax = filters.speedRange?.[1] ?? filterOptions?.speed_range?.max ?? 200;
 
   return (
-    <div className="absolute top-full right-0 mt-xs bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[280px] max-w-[320px] z-[1000] overflow-hidden" ref={popoverRef}>
+    <div className="absolute top-full right-0 mt-xs bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[280px] max-w-[320px] z-popover overflow-hidden" ref={popoverRef}>
       <div className="flex items-center justify-between py-sm px-md border-b border-border bg-surface-elevated">
         <span className="text-sm font-semibold text-text">Sort & Filter</span>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
-            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-white"
+            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-text-inverse"
             onClick={onClearFilters}
             title="Clear all filters (sort preference is kept)"
           >
@@ -204,7 +204,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
                 className={cn(
                   "py-[4px] px-[10px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150",
                   filters.sortBy === value
-                    ? "bg-primary border-primary text-white"
+                    ? "bg-primary border-primary text-text-inverse"
                     : "text-text-secondary bg-surface-elevated border-border hover:border-primary hover:text-text"
                 )}
                 onClick={() => onFiltersChange({ ...filters, sortBy: value })}
@@ -326,7 +326,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
                   key={tag}
                   className={cn(
                     "py-[4px] px-[10px] text-xs font-medium text-text-secondary bg-surface-elevated border border-border rounded-lg cursor-pointer transition-all duration-150 hover:border-primary hover:text-text",
-                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-white"
+                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-text-inverse"
                   )}
                   onClick={() => handleTagToggle(tag)}
                 >

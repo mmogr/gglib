@@ -36,16 +36,16 @@ export const JsonViewer: React.FC<{
   return (
     <div className="mb-2 last:mb-0">
       <button
-        className="flex items-center gap-1.5 bg-transparent border-none py-1 cursor-pointer text-text-secondary text-[13px] text-left w-full hover:text-text"
+        className="flex items-center gap-1.5 bg-transparent border-none py-1 cursor-pointer text-text-secondary text-sm text-left w-full hover:text-text"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
-        <span className="text-[10px] w-3 text-center" aria-hidden>
+        <span className="text-2xs w-3 text-center" aria-hidden>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
         {label && <span className="font-medium text-text-secondary mr-2">{label}</span>}
         {!expanded && (
-          <span className="font-mono text-[11px] text-text-muted overflow-hidden text-ellipsis whitespace-nowrap flex-1">
+          <span className="font-mono text-2xs text-text-muted overflow-hidden text-ellipsis whitespace-nowrap flex-1">
             {formattedJson.length > 50 ? `${formattedJson.substring(0, 50)}...` : formattedJson}
           </span>
         )}

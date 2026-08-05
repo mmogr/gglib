@@ -83,17 +83,17 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       <div className="flex flex-col gap-[0.35rem]">
         <div className="h-2 bg-background-tertiary rounded overflow-hidden">
           <div
-            className={cn('h-full bg-gradient-to-r from-primary to-[#74c7ec] rounded transition-[width] duration-300', isIndeterminate && 'w-[30%] animate-indeterminate')}
+            className={cn('h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300', isIndeterminate && 'w-[30%] animate-indeterminate')}
             style={!isIndeterminate ? { width: `${progress.percentage}%` } : undefined}
           />
         </div>
-        <div className="flex justify-between text-text-secondary text-[0.9rem]">
+        <div className="flex justify-between text-text-secondary text-base">
           <span>{progress.percentage.toFixed(1)}%</span>
           {progress.total > 0 && (
             <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
           )}
         </div>
-        <div className="text-text text-[0.95rem]">{progress.message}</div>
+        <div className="text-text text-base">{progress.message}</div>
       </div>
     );
   };
@@ -140,17 +140,17 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
           <Icon icon={installing ? Loader2 : AlertTriangle} size={28} className={installing ? 'animate-spin' : ''} />
         </div>
         <div>
-          <h2 className="m-0 text-[1.1rem] font-semibold text-text">llama-server Not Installed</h2>
-          <p className="mt-1 mb-0 text-text-secondary text-[0.95rem]">{metadata?.reason}</p>
+          <h2 className="m-0 text-lg font-semibold text-text">llama-server Not Installed</h2>
+          <p className="mt-1 mb-0 text-text-secondary text-base">{metadata?.reason}</p>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
         <p className="m-0 text-text-secondary leading-normal">The llama-server binary was not found at:</p>
-        <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-[0.9rem] text-text break-all">{metadata?.expectedPath}</code>
+        <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-base text-text break-all">{metadata?.expectedPath}</code>
       </div>
 
-      {error ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
+      {error ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-base">{error}</div> : null}
 
       {installing ? renderProgress() : null}
     </>
@@ -167,9 +167,9 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
           />
         </div>
         <div>
-          <h2 className="m-0 text-[1.1rem] font-semibold text-text">{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
+          <h2 className="m-0 text-lg font-semibold text-text">{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
           {!installing && !isCompleted && (
-            <p className="mt-1 mb-0 text-text-secondary text-[0.95rem]">
+            <p className="mt-1 mb-0 text-text-secondary text-base">
               {canDownload
                 ? 'We will download a prebuilt binary for your platform (~15 MB).'
                 : 'Please build llama.cpp via the CLI: gglib config llama install'}
@@ -178,7 +178,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         </div>
       </div>
 
-      {error && !installing ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
+      {error && !installing ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-base">{error}</div> : null}
 
       {renderProgress()}
 

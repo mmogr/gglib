@@ -55,7 +55,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Quantization:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
             value={editedQuantization}
             onChange={(e) => onQuantizationChange(e.target.value)}
             placeholder="e.g., Q4_0"
@@ -100,7 +100,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Path:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] font-mono text-xs"
+            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 font-mono text-xs"
             value={editedFilePath}
             onChange={(e) => onFilePathChange(e.target.value)}
             placeholder="File path"
@@ -112,7 +112,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
             <span className="text-text text-sm text-right break-words flex items-center gap-sm">
               <span className="font-mono text-sm text-text">{model.hfRepoId}</span>
               <button
-                className="bg-transparent border-none cursor-pointer text-[1rem] p-[2px_4px] rounded-sm opacity-70 transition-all duration-200 shrink-0 hover:opacity-100 hover:bg-background-hover hover:scale-110 active:scale-95"
+                className="bg-transparent border-none cursor-pointer text-lg p-[2px_4px] rounded-sm opacity-70 transition-all duration-200 shrink-0 hover:opacity-100 hover:bg-background-hover hover:scale-110 active:scale-95"
                 onClick={() => {
                   const url = getHuggingFaceUrl(model.hfRepoId);
                   if (url) openUrl(url);

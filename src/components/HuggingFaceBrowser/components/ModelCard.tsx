@@ -54,31 +54,31 @@ export const ModelCard: FC<ModelCardProps> = ({
                 <Icon icon={ExternalLink} size={14} />
               </button>
             </h3>
-            <span className="text-[0.8rem] text-text-muted font-mono overflow-hidden text-ellipsis whitespace-nowrap">{model.id}</span>
+            <span className="text-sm text-text-muted font-mono overflow-hidden text-ellipsis whitespace-nowrap">{model.id}</span>
           </div>
           <div className="flex gap-4 items-center shrink-0">
             {/* Neutral: parameter count is a fact, not a warning. */}
             {model.parameters_b && (
-              <span className="px-2 py-[0.2rem] bg-background text-text-secondary border border-border rounded-sm text-[0.75rem] font-semibold">
+              <span className="px-2 py-[0.2rem] bg-background text-text-secondary border border-border rounded-sm text-xs font-semibold">
                 {model.parameters_b.toFixed(1)}B
               </span>
             )}
             {supportsTools && (
               <span 
-                className="px-[0.35rem] py-[0.15rem] bg-primary-subtle text-primary-light rounded-sm text-[0.8rem] cursor-help transition-colors duration-150 ease-linear hover:bg-primary/20"
+                className="px-[0.35rem] py-[0.15rem] bg-primary-subtle text-primary-light rounded-sm text-sm cursor-help transition-colors duration-150 ease-linear hover:bg-primary/20"
                 title="This model likely supports tool/function calling"
               >
                 <Icon icon={Wrench} size={14} />
               </span>
             )}
-            <span className="flex items-center gap-[0.35rem] text-[0.8rem] text-text-secondary">
-              <span className="text-[0.9rem]" aria-hidden>
+            <span className="flex items-center gap-[0.35rem] text-sm text-text-secondary">
+              <span className="text-base" aria-hidden>
                 <Icon icon={Download} size={14} />
               </span>
               {formatNumber(model.downloads)}
             </span>
-            <span className="flex items-center gap-[0.35rem] text-[0.8rem] text-text-secondary">
-              <span className="text-[0.9rem]" aria-hidden>
+            <span className="flex items-center gap-[0.35rem] text-sm text-text-secondary">
+              <span className="text-base" aria-hidden>
                 <Icon icon={Heart} size={14} />
               </span>
               {formatNumber(model.likes)}

@@ -19,9 +19,9 @@ const baseStyles =
 
 const variantStyles: Record<ButtonVariant, string> = {
   // Level 1 — Primary CTA. One per surface maximum.
-  primary: "bg-primary text-white hover:bg-primary-hover",
-  // Level 2 — Default action. Lifts off the page surface with a visible border.
-  secondary: "bg-surface-elevated border-border text-text hover:bg-surface-hover hover:border-border-hover",
+  primary: "bg-primary text-text-inverse hover:bg-primary-hover",
+  // Level 2 — Default action. White-alpha fill lifts off any surface level.
+  secondary: "bg-white/5 border-border text-text hover:bg-white/10 hover:border-border-hover",
   // Level 3 — Emphasis without fill. Stronger rest border than secondary, fills on hover.
   outline: "bg-transparent border-border-hover text-text hover:bg-surface-elevated hover:border-primary",
   // Level 4 — Truly minimal. No border, no fill; only hover reveals the surface.
@@ -35,15 +35,15 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "h-9 px-3 text-sm",
-  md: "h-11 px-4 text-sm",
-  lg: "h-12 px-5 text-base",
+  sm: "h-7 px-2.5 text-xs",
+  md: "h-8 px-3 text-sm",
+  lg: "h-10 px-4 text-sm",
 };
 
 const iconOnlySizeStyles: Record<ButtonSize, string> = {
-  sm: "h-9 w-9 p-0",
-  md: "h-11 w-11 p-0",
-  lg: "h-12 w-12 p-0",
+  sm: "h-7 w-7 p-0",
+  md: "h-8 w-8 p-0",
+  lg: "h-10 w-10 p-0",
 };
 
 const Spinner = () => (

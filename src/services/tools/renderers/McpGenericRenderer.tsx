@@ -70,7 +70,7 @@ export const mcpGenericRenderer: ToolResultRenderer = {
   renderResult(data, toolName) {
     if (typeof data === 'string' && looksLikeMarkdown(data)) {
       return (
-        <div className="prose-sm text-text text-[13px] leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:bg-background [&_code]:rounded [&_code]:px-1 [&_pre]:bg-background [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
+        <div className="prose-sm text-text text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_code]:bg-background [&_code]:rounded [&_code]:px-1 [&_pre]:bg-background [&_pre]:rounded [&_pre]:p-2 [&_pre]:overflow-x-auto">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{data}</ReactMarkdown>
         </div>
       );
