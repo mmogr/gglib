@@ -873,5 +873,8 @@ pub fn virtual_model_info(name: &str, description: &str) -> ModelInfo {
         // Virtual/orchestration entry points, not a single context-bounded
         // model — no meaningful context window to advertise.
         context_window: None,
+        // A council run dispatches chat completions to whatever is loaded; it
+        // has no embeddings path of its own.
+        capabilities: None,
     }
 }

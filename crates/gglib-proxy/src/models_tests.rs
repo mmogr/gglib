@@ -253,6 +253,67 @@ fn models_response_serializes_to_openai_format() {
 }
 
 // =========================================================================
+// ModelInfo capabilities
+// =========================================================================
+
+fn summary_with_tags(name: &str, tags: &[&str]) -> ModelSummary {
+    ModelSummary {
+        id: 1,
+        name: name.into(),
+        tags: tags.iter().map(|t| (*t).to_string()).collect(),
+        capabilities: ModelCapabilities::empty(),
+        param_count: "1B".into(),
+        quantization: None,
+        architecture: None,
+        created_at: 0,
+        file_size: 0,
+        context_length: None,
+        inference_defaults: None,
+        defaults_origin: None,
+        server_defaults: None,
+    }
+}
+
+#[test]
+fn an_embedding_tagged_model_advertises_the_embeddings_capability() {
+    let resp = ModelsResponse::from_summaries(
+        vec![summary_with_tags("bge-small", &["embedding"])],
+        DEFAULT_CONTEXT_SIZE,
+    );
+    assert_eq!(
+        resp.data[0].capabilities.as_deref(),
+        Some(["embeddings".to_string()].as_slice())
+    );
+}
+
+/// A chat model's entry has to stay exactly what it was before this field
+/// existed — a picker built from it must not change shape.
+#[test]
+fn a_chat_model_omits_the_capabilities_field_entirely() {
+    let resp = ModelsResponse::from_summaries(
+        vec![summary_with_tags("qwen3", &["agent", "reasoning"])],
+        DEFAULT_CONTEXT_SIZE,
+    );
+    assert!(resp.data[0].capabilities.is_none());
+
+    let json = serde_json::to_value(&resp.data[0]).unwrap();
+    assert!(
+        json.get("capabilities").is_none(),
+        "an absent capability set must not serialize as [] or null: {json}"
+    );
+}
+
+#[test]
+fn an_embedding_models_capabilities_survive_serialization() {
+    let resp = ModelsResponse::from_summaries(
+        vec![summary_with_tags("bge-small", &["embedding"])],
+        DEFAULT_CONTEXT_SIZE,
+    );
+    let json = serde_json::to_value(&resp.data[0]).unwrap();
+    assert_eq!(json["capabilities"], serde_json::json!(["embeddings"]));
+}
+
+// =========================================================================
 // ModelInfo conversion tests
 // =========================================================================
 

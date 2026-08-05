@@ -285,6 +285,7 @@ impl ModelsResponse {
                     owned_by: "gglib".to_string(),
                     description: Some(summary.description()),
                     context_window: summary.context_length.map(|ctx| ctx.min(effective_cap)),
+                    capabilities: capabilities_of(&summary),
                 }
             })
             .collect();
@@ -293,6 +294,20 @@ impl ModelsResponse {
             data,
         }
     }
+}
+
+/// The extra endpoints a catalogued model can serve, for
+/// [`ModelInfo::capabilities`].
+///
+/// `None` rather than an empty vec for an ordinary chat model, so the field
+/// disappears from the response instead of appearing as `[]` — an empty list
+/// reads as "this model can do nothing", which is the opposite of the truth.
+fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
+    summary
+        .tags
+        .iter()
+        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
+        .then(|| vec!["embeddings".to_string()])
 }
 
 /// Information about a single model (OpenAI format).
@@ -319,6 +334,20 @@ pub struct ModelInfo {
     /// model runs — so the pre-launch value must already be honest.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
+    /// Non-OpenAI endpoints this model can serve, beyond
+    /// `/v1/chat/completions`.
+    ///
+    /// `Some(["embeddings"])` for a model tagged `embedding`; `None` — and so
+    /// absent from the JSON entirely — for everything else. A chat client's
+    /// picker is therefore byte-identical to what it saw before this field
+    /// existed, while a RAG client has something to filter on other than
+    /// guessing from the model's name.
+    ///
+    /// An array rather than a `type` discriminant because capability is not
+    /// exclusive: a future entry may serve both chat and embeddings, and
+    /// vision or tool support could join the same list without a second field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
 }
 
 // =============================================================================
