@@ -10,9 +10,7 @@
 //! - Keep this module format-only: no domain transforms
 //! - Domain transforms belong in core services or CLI-local view-model helpers
 
-pub mod dag;
 pub mod explain_display;
-pub mod input;
 pub mod inspect_display;
 pub mod model_display;
 pub mod style;

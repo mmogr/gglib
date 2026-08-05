@@ -127,11 +127,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |
 | `config profile rm <name>` | Delete a profile |
 | `config profile install-templates` | Install the starter profiles (coding, chat, creative) |
-| `council run "<goal>"` | Plan and execute a DAG task graph |
-| `council list [--status]` | List past orchestrator runs |
-| `council show <id>` | Show run details + event timeline |
-| `council resume <id>` | Continue an interrupted run |
-| `council rewind <id> --wave N` | Roll back to a previous wave and re-execute |
 | `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id\|name>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |
@@ -287,104 +282,6 @@ text reaches stdout. This works regardless of rendering mode.
 ```bash
 gglib config default 1
 ```
-
-### Orchestrator (council)
-
-The `council` command family runs a DAG-structured task graph using a local
-llama-server.  The director LLM decomposes your goal into parallel worker
-nodes; each node is executed with optional human-in-the-loop (HITL) gates.
-
-```bash
-# Basic run — director plans, workers execute, synthesis produces final answer
-gglib council run "Audit the codebase for security issues"
-
-# With a specific model and custom context window
-gglib council run "Write a blog post on Rust async" --model llama3 --ctx-size 8192
-
-# Approve the plan before execution starts
-gglib council run "Refactor the auth module" --hitl plan
-
-# Approve every node before it executes
-gglib council run "Deploy staging" --hitl node
-
-# Auto-reject approval gates after 30 seconds
-gglib council run "Summarise docs" --hitl plan \
-  --approval-timeout 30 --approval-timeout-action reject
-
-# Auto-approve after 60 seconds (unattended CI run with a human fallback window)
-gglib council run "Summarise docs" --hitl plan \
-  --approval-timeout 60 --approval-timeout-action approve
-
-# Machine-readable JSONL output — every CouncilEvent as one JSON line on stdout
-# (requires --hitl none, which is the default)
-gglib council run "Summarise logs" --json | jq 'select(.type == "council_complete")'
-
-# List all runs
-gglib council list
-
-# Filter by status
-gglib council list --status awaiting_approval
-
-# Inspect a run's graph + full event timeline
-gglib council show 01j2kxw3...
-
-# Resume an interrupted or awaiting-approval run
-gglib council resume 01j2kxw3...
-
-# Rewind to wave 2 and re-execute from there
-gglib council rewind 01j2kxw3... --wave 2
-
-# Rewind and inject a steering note at the rewind point
-gglib council rewind 01j2kxw3... --wave 2 --note "Focus on the authentication module"
-```
-
-#### HITL Approval Modes
-
-| Mode | `--hitl` value | What triggers a prompt |
-|------|---------------|------------------------|
-| None (default) | `none` | Never — fully automatic |
-| Plan gate | `plan` | Once, after the director produces the initial task graph |
-| Node gate | `node` | Before each worker node starts |
-| Tool gate | `tools` | Before each tool call inside any node |
-
-At each prompt you can type:
-
-| Input | Action |
-|-------|--------|
-| `y` / Enter | Approve and continue |
-| `n` | Reject (prompts for an optional reason) |
-| `e` | Edit the plan JSON in `$EDITOR` (Plan gates only) |
-| *(timeout)* | Auto-resolve with `--approval-timeout-action` |
-
-#### Live Steering
-
-While a `council run`, `resume`, or `rewind` is executing you can type `/note`
-lines directly into stdin.  The background input router forwards them into the
-executor's `NoteQueue`; at each wave boundary the steering LLM converts each
-queued note into a `GraphDiff` and applies it to the live task graph.
-
-```text
-/note focus only on the authentication module, skip the UI layer
-/note add a node to write a summary report at the end
-```
-
-Any line that does **not** start with `/note ` is interpreted as a response to
-the current HITL approval prompt.
-
-#### JSON Output
-
-Passing `--json` redirects every [`CouncilEvent`] to stdout as a
-newline-delimited JSON object.  No ANSI colour, DAG trees, or progress output
-reaches stdout — only valid JSONL.  All diagnostic text goes to stderr.
-
-```bash
-gglib council run "Summarise" --json 2>/dev/null | while IFS= read -r line; do
-  echo "$line" | jq -r 'select(.type=="council_complete") | .answer'
-done
-```
-
-Each line has a `"type"` field matching the [`CouncilEvent`] variant name in
-`snake_case` (e.g. `node_started`, `node_complete`, `council_complete`).
 
 ## Usage
 
