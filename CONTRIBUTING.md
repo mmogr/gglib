@@ -64,13 +64,20 @@ The workspace is organized into layers. Dependencies flow strictly inward.
 
 **`gglib-runtime`** orchestrates processes (llama.cpp, llama-server). It owns the build and install pipelines.
 
-**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) adapt the shared backend to their output medium. They contain no business logic. Any feature added to one surface must be achievable on all three — see the [GUI Parity Principle](#gui-parity-principle).
+**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) adapt the shared backend to their output medium. They contain no business logic. Any feature added to one surface must be achievable on all three; how quickly the other surfaces must follow depends on the capability's tier — see the [GUI Parity Principle](#gui-parity-principle).
 
 ---
 
 ## GUI Parity Principle
 
-Every capability offered through one interface must be reachable through all three. Downloads, builds, agent loops, and model management all follow the same pattern:
+Parity is tiered. Every capability must remain *achievable* on all three surfaces (the shared backend guarantees that), but when the other surfaces ship depends on what kind of capability it is:
+
+- **Tier 1 — runtime behaviour.** Anything that changes what the proxy or runtime *does*: request handling, model lifecycle, launch flags, admission, security posture. A Tier 1 capability must be reachable through all three surfaces, and all three ship in the same PR.
+- **Tier 2 — management and inspection.** Operator conveniences for looking at or arranging things (e.g. `gglib model explain`, `gglib up`, documentation). These may land CLI-first, provided the PR says so and links a tracked issue for the surface gap — parity debt must be explicit, never silent.
+
+State the tier in the PR description (recent PRs also carry it in the commit message). When in doubt, treat it as Tier 1.
+
+The event-channel pattern below is what makes Tier 1 parity cheap — use it for any long-running operation regardless of tier. Downloads, builds, agent loops, and model management all follow the same pattern:
 
 1. **Core logic in a runtime or domain crate** — emits typed events over a `tokio::sync::mpsc::Sender<T>` channel. It has no knowledge of the terminal, HTTP, or Tauri.
 2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE; the Tauri layer emits them as Tauri events to the WebView.
@@ -88,7 +95,7 @@ When adding a new long-running operation:
 - Define the event enum in the relevant runtime or domain crate.
 - The function signature takes `tx: tokio::sync::mpsc::Sender<YourEvent>` as a parameter.
 - Wire the CLI adapter in its own function. Wire the Axum handler. Wire the Tauri command.
-- All three ship in the same PR.
+- Tier 1: all three ship in the same PR. Tier 2: the CLI ships now and the remaining surfaces are tracked in a linked issue.
 
 **Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
@@ -656,6 +663,6 @@ Before requesting review, confirm each item:
 - [ ] Subprocess I/O is captured with `Stdio::piped()` and read on an OS thread, not a Tokio task.
 - [ ] Environment variable merging uses read-then-append, not a bare `.env()` that overwrites.
 - [ ] Any feature gated behind `#[cfg(feature = "...")]` is declared correctly in all consuming `Cargo.toml` files.
-- [ ] If the change adds a new long-running operation, all three surfaces (CLI, Axum, Tauri) are wired up.
+- [ ] If the change adds a new long-running operation: for Tier 1 (runtime behaviour), all three surfaces (CLI, Axum, Tauri) are wired up in this PR; for Tier 2 (management/inspection), the CLI is wired and the surface gap is tracked in a linked issue.
 - [ ] `Cargo.lock` is up to date and committed.
 - [ ] No new dependency has been introduced from a higher layer to a lower layer.
