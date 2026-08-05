@@ -34,7 +34,7 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// Never returns an error: a failed warm-up leaves a perfectly usable proxy,
 /// and tearing that down over a slow first load would be a worse outcome than
 /// the cold start it was trying to avoid.
-pub(super) async fn run(port: u16, model: String) {
+pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let client = reqwest::Client::new();
 
@@ -47,7 +47,7 @@ pub(super) async fn run(port: u16, model: String) {
     let spinner = make_spinner();
     spinner.set_message(format!("Loading {model}..."));
     let started = Instant::now();
-    let outcome = warm_request(&client, addr, &model).await;
+    let outcome = warm_request(&client, addr, &model, api_key.as_deref()).await;
     spinner.finish_and_clear();
 
     println!();
@@ -72,7 +72,7 @@ pub(super) async fn run(port: u16, model: String) {
         }
     }
 
-    for line in render_client_config(addr, &model, use_color()) {
+    for line in render_client_config(addr, &model, api_key.as_deref(), use_color()) {
         println!("{line}");
     }
 }
@@ -106,10 +106,18 @@ async fn warm_request(
     client: &reqwest::Client,
     addr: SocketAddr,
     model: &str,
+    api_key: Option<&str>,
 ) -> Result<(), String> {
-    let response = client
+    let mut request = client
         .post(format!("http://{addr}/v1/chat/completions"))
-        .timeout(LOAD_TIMEOUT)
+        .timeout(LOAD_TIMEOUT);
+    // `up` never passes `--api-key`, but the stored setting still applies to
+    // the proxy it just started — so this probe has to authenticate like any
+    // other client would.
+    if let Some(key) = api_key {
+        request = request.bearer_auth(key);
+    }
+    let response = request
         .json(&json!({
             "model": model,
             "messages": [{ "role": "user", "content": "hi" }],
@@ -140,7 +148,12 @@ async fn warm_request(
 /// through `/v1/models`, which is precisely what `gglib serve` exists for.
 /// Sending someone there with the unpinned base URL would fail in a way that
 /// looks like gglib being broken.
-fn render_client_config(addr: SocketAddr, model: &str, color: bool) -> Vec<String> {
+fn render_client_config(
+    addr: SocketAddr,
+    model: &str,
+    api_key: Option<&str>,
+    color: bool,
+) -> Vec<String> {
     let (bold, dim, reset) = if color {
         (BOLD, DIM, RESET)
     } else {
@@ -148,13 +161,29 @@ fn render_client_config(addr: SocketAddr, model: &str, color: bool) -> Vec<Strin
     };
     let base = format!("http://{addr}/v1");
 
+    // These are values a user retypes into another program, so the key has to
+    // be the real one when there is one. "not-needed" is the honest answer
+    // only for an unauthenticated endpoint.
+    let (key_line, curl_line) = match api_key {
+        Some(key) => (
+            format!("      API Key    {key}"),
+            format!("      curl -H \"Authorization: Bearer {key}\" {base}/models"),
+        ),
+        None => (
+            format!(
+                "      API Key    not-needed  {dim}(unused, but most clients demand one){reset}"
+            ),
+            format!("      curl {base}/models"),
+        ),
+    };
+
     vec![
         String::new(),
         format!("  {bold}Connect your client{reset}"),
         String::new(),
         format!("    Cline / Roo / Continue   {dim}provider: OpenAI Compatible{reset}"),
         format!("      Base URL   {base}"),
-        format!("      API Key    not-needed  {dim}(unused, but most clients demand one){reset}"),
+        key_line,
         format!("      Model ID   {model}"),
         String::new(),
         format!("    Open WebUI               {dim}Settings -> Connections -> OpenAI API{reset}"),
@@ -164,7 +193,7 @@ fn render_client_config(addr: SocketAddr, model: &str, color: bool) -> Vec<Strin
         format!("      gglib serve {model}"),
         String::new(),
         format!("    Check it from another shell:"),
-        format!("      curl {base}/models"),
+        curl_line,
         String::new(),
         format!("  Dashboard  http://{addr}/v1/proxy/status"),
         String::new(),
@@ -183,7 +212,7 @@ mod tests {
     /// command has failed at its whole purpose.
     #[test]
     fn the_pasteable_values_are_all_present() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", false);
+        let lines = render_client_config(addr(), "qwen3-30b-a3b", None, false);
         let text = lines.join("\n");
         assert!(text.contains("http://127.0.0.1:8080/v1"));
         assert!(text.contains("qwen3-30b-a3b"));
@@ -194,7 +223,7 @@ mod tests {
     /// be spelled out with the model already filled in.
     #[test]
     fn copilot_is_pointed_at_the_pinned_command() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", false);
+        let lines = render_client_config(addr(), "qwen3-30b-a3b", None, false);
         assert!(
             lines
                 .iter()
@@ -204,7 +233,7 @@ mod tests {
 
     #[test]
     fn a_verification_command_is_offered() {
-        let lines = render_client_config(addr(), "m", false);
+        let lines = render_client_config(addr(), "m", None, false);
         assert!(
             lines
                 .iter()
@@ -214,7 +243,7 @@ mod tests {
 
     #[test]
     fn the_dashboard_url_is_included() {
-        let lines = render_client_config(addr(), "m", false);
+        let lines = render_client_config(addr(), "m", None, false);
         assert!(lines.iter().any(|l| l.contains("/v1/proxy/status")));
     }
 
@@ -222,13 +251,13 @@ mod tests {
     /// likely to be copied out of a terminal into a chat or an issue.
     #[test]
     fn no_ansi_escapes_when_color_is_off() {
-        let lines = render_client_config(addr(), "m", false);
+        let lines = render_client_config(addr(), "m", None, false);
         assert!(lines.iter().all(|l| !l.contains('\u{1b}')));
     }
 
     #[test]
     fn ansi_escapes_appear_only_when_color_is_on() {
-        let lines = render_client_config(addr(), "m", true);
+        let lines = render_client_config(addr(), "m", None, true);
         assert!(lines.iter().any(|l| l.contains(DIM)));
         assert!(lines.iter().any(|l| l.contains(BOLD)));
     }
@@ -236,7 +265,7 @@ mod tests {
     /// The address is not hardcoded — `--port` has to reach the printed URLs.
     #[test]
     fn a_non_default_port_reaches_every_url() {
-        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", false);
+        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", None, false);
         let text = lines.join("\n");
         assert!(text.contains("http://127.0.0.1:9999/v1"));
         assert!(!text.contains("8080"));

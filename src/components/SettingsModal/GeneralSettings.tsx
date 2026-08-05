@@ -5,6 +5,7 @@ import {
   PathSettings,
   ModelDefaults,
   PortSettings,
+  SecuritySettings,
   DisplaySettings,
   DesktopSettings,
   AdvancedSettings,
@@ -28,6 +29,8 @@ interface GeneralSettingsProps {
   setServerPortInput: (value: string) => void;
   maxQueueSizeInput: string;
   setMaxQueueSizeInput: (value: string) => void;
+  proxyApiKeyInput: string;
+  setProxyApiKeyInput: (value: string) => void;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
 
@@ -84,6 +87,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setServerPortInput,
   maxQueueSizeInput,
   setMaxQueueSizeInput,
+  proxyApiKeyInput,
+  setProxyApiKeyInput,
   showFitIndicators,
   setShowFitIndicators,
   desktopSettings,
@@ -150,6 +155,12 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         setServerPortInput={setServerPortInput}
         maxQueueSizeInput={maxQueueSizeInput}
         setMaxQueueSizeInput={setMaxQueueSizeInput}
+        saving={saving}
+      />
+
+      <SecuritySettings
+        proxyApiKeyInput={proxyApiKeyInput}
+        setProxyApiKeyInput={setProxyApiKeyInput}
         saving={saving}
       />
 

@@ -43,6 +43,9 @@ const CACHE_FLAGS: &[&str] = &[
     "slot-dir",
 ];
 
+/// The flags `AccessArgs` contributes.
+const ACCESS_FLAGS: &[&str] = &["allowed-host", "api-key"];
+
 /// The flags `SamplingArgs` contributes.
 const SAMPLING_FLAGS: &[&str] = &[
     "max-tokens",
@@ -62,6 +65,26 @@ fn serve_and_proxy_expose_the_same_cache_flags() {
     let proxy = long_flags("proxy");
 
     for flag in CACHE_FLAGS {
+        assert!(
+            serve.contains(&(*flag).to_owned()),
+            "`serve` is missing --{flag}; it has {serve:?}"
+        );
+        assert!(
+            proxy.contains(&(*flag).to_owned()),
+            "`proxy` is missing --{flag}; it has {proxy:?}"
+        );
+    }
+}
+
+/// An access control available on only one of the two commands would be a
+/// hole in whichever lacked it — `serve` is the same proxy stack pinned to one
+/// model, and it is reachable over exactly the same network.
+#[test]
+fn serve_and_proxy_expose_the_same_access_flags() {
+    let serve = long_flags("serve");
+    let proxy = long_flags("proxy");
+
+    for flag in ACCESS_FLAGS {
         assert!(
             serve.contains(&(*flag).to_owned()),
             "`serve` is missing --{flag}; it has {serve:?}"

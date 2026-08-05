@@ -27,6 +27,7 @@ use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
+use gglib_core::{ApiKeySource, CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
 use gglib_proxy::slot_eviction::DiskBudget;
@@ -108,6 +109,15 @@ pub struct ProxyConfig {
     /// (`gglib proxy --temperature …`), applied above the client's own request
     /// parameters. `None` means the client and the stored layers decide.
     pub inference_override: Option<InferenceConfig>,
+    /// Bearer token demanded on `/v1/*` and `/mcp`, as supplied by `--api-key`
+    /// or `GGLIB_API_KEY`. `None` falls through to the stored setting, and then
+    /// to generating one when the bind is not loopback — see
+    /// [`ProxySupervisor::start`].
+    pub api_key: Option<String>,
+    /// Host header values to accept beyond loopback and the bound address
+    /// (`--allowed-host`). Empty is the norm; a wildcard bind is the case that
+    /// needs it.
+    pub allowed_hosts: Vec<String>,
 }
 
 impl Default for ProxyConfig {
@@ -120,8 +130,88 @@ impl Default for ProxyConfig {
             slot_dir: None,
             disk_budget: DiskBudget::Auto,
             inference_override: None,
+            api_key: None,
+            allowed_hosts: Vec::new(),
         }
     }
+}
+
+/// What a successful [`ProxySupervisor::start`] settled on.
+///
+/// The bound address was always the answer; the token joins it because it is
+/// only decided here — the caller supplies at most a preference, and the
+/// supervisor is the layer holding both the bind host and the settings
+/// repository needed to resolve or mint one. The banner needs all three.
+#[derive(Debug, Clone)]
+pub struct ProxyBind {
+    /// Address the listener actually bound, ports resolved.
+    pub addr: SocketAddr,
+    /// The token clients must present, or `None` when the endpoint is open.
+    pub api_key: Option<String>,
+    /// Where [`Self::api_key`] came from, so the banner can say so.
+    pub api_key_source: ApiKeySource,
+}
+
+/// Settle the bearer token for a proxy about to bind `host`.
+///
+/// Precedence is flag/env → stored setting → generated. The generated case is
+/// deliberately conditional on the bind: a loopback endpoint is already
+/// reachable only by processes on this machine, so demanding a token there
+/// would be ceremony that breaks every existing local setup for no gain.
+/// Binding anywhere else puts the endpoint — and the MCP gateway's filesystem
+/// tools — on a network, and that is worth a token the operator did not have
+/// to remember to ask for.
+///
+/// A minted token is persisted rather than kept for the process: a client
+/// configured once should keep working across restarts, and a token that
+/// changed every launch would train people to turn the feature off.
+async fn resolve_api_key(
+    configured: Option<String>,
+    host: &str,
+    settings_repo: &Arc<dyn SettingsRepository>,
+) -> (Option<String>, ApiKeySource) {
+    if let Some(key) = configured {
+        return (Some(key), ApiKeySource::Flag);
+    }
+
+    let stored = settings_repo
+        .load()
+        .await
+        .inspect_err(|e| warn!("could not read settings while resolving the proxy API key: {e}"))
+        .ok();
+
+    if let Some(key) = stored
+        .as_ref()
+        .and_then(|s| s.proxy_api_key.clone())
+        .filter(|key| !key.trim().is_empty())
+    {
+        return (Some(key), ApiKeySource::Settings);
+    }
+
+    if gglib_core::access::is_loopback_host(host) {
+        return (None, ApiKeySource::None);
+    }
+
+    let key = gglib_core::access::generate_api_key();
+
+    // Only write back settings we successfully read. Saving a `Settings`
+    // reconstructed from defaults after a failed load would silently clear
+    // every other stored preference to buy one field.
+    match stored {
+        Some(mut settings) => {
+            settings.proxy_api_key = Some(key.clone());
+            match settings_repo.save(&settings).await {
+                Ok(()) => info!("generated an API key for the non-loopback bind and saved it"),
+                // Still guard this run. Refusing to start would be worse, and an
+                // unsaved key beats an open endpoint on a network — the banner
+                // prints it either way, so the operator can copy it.
+                Err(e) => warn!("generated an API key but could not save it: {e}"),
+            }
+        }
+        None => warn!("generated an API key but settings were unreadable, so it was not saved"),
+    }
+
+    (Some(key), ApiKeySource::Generated)
 }
 
 /// Supervisor for managing the OpenAI-compatible proxy.
@@ -212,7 +302,7 @@ impl ProxySupervisor {
         mcp: Arc<McpService>,
         orchestrator: CouncilDeps,
         settings_repo: Arc<dyn SettingsRepository>,
-    ) -> Result<SocketAddr, SupervisorError> {
+    ) -> Result<ProxyBind, SupervisorError> {
         let mut guard = self.handle.lock().await;
 
         // Check if there's an existing handle
@@ -246,6 +336,18 @@ impl ProxySupervisor {
             .map_err(|e| SupervisorError::Internal(format!("Failed to get local address: {e}")))?;
 
         info!("Proxy bound to {bound_addr}");
+
+        // Settled after the bind so the decision is made against the host that
+        // was actually asked for, and before the spawn so a generated key is
+        // already persisted by the time the endpoint accepts its first request.
+        let (api_key, api_key_source) =
+            resolve_api_key(config.api_key, &config.host, &settings_repo).await;
+        let access = ProxyAccessConfig::new(
+            CorsConfig::LocalOnly,
+            api_key.clone(),
+            &config.host,
+            config.allowed_hosts,
+        );
 
         // Create cancellation token
         let cancel_token = CancellationToken::new();
@@ -282,7 +384,7 @@ impl ProxySupervisor {
                 slot_dir,
                 disk_budget,
                 agent_metrics,
-                &gglib_core::CorsConfig::LocalOnly,
+                &access,
             )
             .await;
 
@@ -304,7 +406,11 @@ impl ProxySupervisor {
             bound_addr,
         });
 
-        Ok(bound_addr)
+        Ok(ProxyBind {
+            addr: bound_addr,
+            api_key,
+            api_key_source,
+        })
     }
 
     /// Stop the proxy server.
@@ -644,11 +750,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_ne!(addr.port(), 0);
+        assert_ne!(addr.addr.port(), 0);
 
         // Should be running
         match supervisor.status().await {
-            ProxyStatus::Running { address } => assert_eq!(address, addr),
+            ProxyStatus::Running { address } => assert_eq!(address, addr.addr),
             other => panic!("Expected Running, got {other:?}"),
         }
 
@@ -727,8 +833,8 @@ mod tests {
 
         // Different port (both were 0 -> random)
         // Note: Could technically get same port, but very unlikely
-        assert_ne!(addr1.port(), 0);
-        assert_ne!(addr2.port(), 0);
+        assert_ne!(addr1.addr.port(), 0);
+        assert_ne!(addr2.addr.port(), 0);
 
         // Cleanup
         supervisor.stop().await.unwrap();

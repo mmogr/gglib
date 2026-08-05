@@ -277,6 +277,7 @@ mod tests {
             title_generation_prompt: None,
             bind_host: None,
             share_lan: None,
+            proxy_api_key: None,
             trust_client_sampling: None,
             proxy_autostart: None,
             close_to_tray: None,

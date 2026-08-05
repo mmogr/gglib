@@ -246,6 +246,30 @@ mod tests {
         }
     }
 
+    /// The proxy API key is shown in full, deliberately.
+    ///
+    /// Masking it would be the reflex, but the proxy *generates* this value
+    /// when it binds a non-loopback host, and `settings show` is then the only
+    /// way to recover it — a masked row would strand someone who lost the
+    /// startup banner. It is a local credential in a local database that the
+    /// reader can already read; hiding it buys nothing and costs recovery.
+    #[test]
+    fn the_proxy_api_key_is_shown_rather_than_masked() {
+        let settings = Settings {
+            proxy_api_key: Some("secret123".to_owned()),
+            ..Default::default()
+        };
+        let rows = settings_display_rows(&settings, None);
+
+        assert_eq!(
+            rows.iter()
+                .find(|(k, _)| k == "proxy-api-key")
+                .map(|(_, v)| v.as_str()),
+            Some("secret123"),
+            "the key must be recoverable from `settings show`: {rows:?}"
+        );
+    }
+
     #[test]
     fn settings_display_rows_model_display_override() {
         let settings = Settings {

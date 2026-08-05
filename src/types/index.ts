@@ -180,6 +180,14 @@ export interface AppSettings {
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null;
   /**
+   * Bearer token the proxy requires on `/v1/*` and `/mcp`; `/health` stays
+   * open. Unset leaves the endpoint unauthenticated, which is the default for
+   * a loopback bind. The proxy sets this itself the first time it binds a
+   * non-loopback host, so the GUI dashboard reads it from here to authenticate
+   * against the proxy it started.
+   */
+  proxyApiKey?: string | null;
+  /**
    * Whether a client's own sampling parameters (temperature, topP, topK,
    * presencePenalty, repeatPenalty, minP) are honoured by the proxy at all.
    * `false`/unset (the default) drops them from the resolution hierarchy —
@@ -224,6 +232,8 @@ export interface UpdateSettingsRequest {
   inferenceProfiles?: InferenceProfile[] | null | undefined;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null | undefined;
+  /** See `AppSettings.proxyApiKey`. */
+  proxyApiKey?: string | null | undefined;
   /** See `AppSettings.trustClientSampling`. */
   trustClientSampling?: boolean | null | undefined;
   /** See `AppSettings.proxyAutostart`. */

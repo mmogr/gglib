@@ -8,8 +8,8 @@ pub mod supervisor;
 
 // Re-export supervisor types
 use params::compose_launch_overrides;
-pub use params::{PinnedModel, ProxyCacheOptions, StandaloneProxyParams};
-pub use supervisor::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
+pub use params::{PinnedModel, ProxyAccessOptions, ProxyCacheOptions, StandaloneProxyParams};
+pub use supervisor::{ProxyBind, ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
@@ -234,6 +234,7 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         default_context,
         inference_override,
         cache,
+        access,
         pinned,
     } = params;
 
@@ -312,6 +313,8 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         // Passed as its own top-priority sampling layer rather than folded into
         // the persisted global defaults, which sit below the per-model layer.
         inference_override: inference_override.clone(),
+        api_key: access.api_key.clone(),
+        allowed_hosts: access.allowed_hosts.clone(),
     };
 
     // Initialize MCP service (validates servers and auto-starts enabled ones)
@@ -352,7 +355,7 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         tool_count,
     );
 
-    let addr = supervisor
+    let bind = supervisor
         .start(
             config,
             runtime_port,
@@ -363,9 +366,14 @@ pub async fn start_proxy_standalone(params: StandaloneProxyParams) -> Result<()>
         )
         .await
         .map_err(|e| anyhow!("{e}"))?;
-    tracing::info!("Proxy started on {addr}");
+    tracing::info!("Proxy started on {}", bind.addr);
 
-    banner::print_ready(addr, pinned.as_ref());
+    banner::print_ready(
+        bind.addr,
+        pinned.as_ref(),
+        bind.api_key.as_deref(),
+        bind.api_key_source,
+    );
 
     // Wait for Ctrl-C
     tokio::signal::ctrl_c().await?;

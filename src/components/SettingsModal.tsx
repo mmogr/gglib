@@ -37,6 +37,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [proxyPortInput, setProxyPortInput] = useState("");
   const [serverPortInput, setServerPortInput] = useState("");
   const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
+  const [proxyApiKeyInput, setProxyApiKeyInput] = useState("");
   const [titlePromptInput, setTitlePromptInput] = useState("");
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
@@ -74,6 +75,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setProxyPortInput(settings.proxyPort?.toString() || "");
       setServerPortInput(settings.llamaBasePort?.toString() || "");
       setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "");
+      setProxyApiKeyInput(settings.proxyApiKey || "");
       setTitlePromptInput(settings.titleGenerationPrompt || "");
       setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
       setShowFitIndicators(settings.showMemoryFitIndicators !== false);
@@ -107,6 +109,10 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           proxyPort: parseNumericInput(proxyPortInput),
           llamaBasePort: parseNumericInput(serverPortInput),
           maxDownloadQueueSize: parseNumericInput(maxQueueSizeInput),
+          // An emptied field means "turn authentication off", which is a
+          // `null` (clear the row) rather than a blank string — the backend
+          // rejects a blank key precisely so it cannot mean both.
+          proxyApiKey: proxyApiKeyInput.trim() || null,
           titleGenerationPrompt: titlePromptInput.trim() || null,
           maxToolIterations: parseNumericInput(maxToolIterationsInput),
           showMemoryFitIndicators: showFitIndicators,
@@ -122,6 +128,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.proxyPort !== undefined ||
           updates.llamaBasePort !== undefined ||
           updates.maxDownloadQueueSize !== undefined ||
+          updates.proxyApiKey !== undefined ||
           updates.titleGenerationPrompt !== undefined ||
           updates.maxToolIterations !== undefined ||
           updates.showMemoryFitIndicators !== undefined ||
@@ -145,6 +152,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       proxyPortInput,
       serverPortInput,
       maxQueueSizeInput,
+      proxyApiKeyInput,
       titlePromptInput,
       maxToolIterationsInput,
       showFitIndicators,
@@ -167,6 +175,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setProxyPortInput(settings.proxyPort?.toString() ?? "");
       setServerPortInput(settings.llamaBasePort?.toString() ?? "");
       setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() ?? "");
+      setProxyApiKeyInput(settings.proxyApiKey ?? "");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
       setTrustClientSampling(false); // Default is disabled
@@ -245,6 +254,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setServerPortInput={setServerPortInput}
             maxQueueSizeInput={maxQueueSizeInput}
             setMaxQueueSizeInput={setMaxQueueSizeInput}
+            proxyApiKeyInput={proxyApiKeyInput}
+            setProxyApiKeyInput={setProxyApiKeyInput}
             showFitIndicators={showFitIndicators}
             setShowFitIndicators={setShowFitIndicators}
             defaultModelInput={defaultModelInput}

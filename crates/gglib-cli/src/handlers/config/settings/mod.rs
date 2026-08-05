@@ -153,6 +153,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             show_memory_fit_indicators,
             bind_host,
             share_lan,
+            proxy_api_key,
             trust_client_sampling,
             proxy_autostart,
             close_to_tray,
@@ -190,6 +191,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if share_lan.is_some() {
                 changed.insert("share-lan");
             }
+            if proxy_api_key.is_some() {
+                changed.insert("proxy-api-key");
+            }
             if trust_client_sampling.is_some() {
                 changed.insert("trust-client-sampling");
             }
@@ -224,6 +228,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 title_generation_prompt: None,
                 bind_host: bind_host.map(Some),
                 share_lan: share_lan.map(Some),
+                proxy_api_key: proxy_api_key.map(Some),
                 trust_client_sampling: trust_client_sampling.map(Some),
                 proxy_autostart: proxy_autostart.map(Some),
                 close_to_tray: close_to_tray.map(Some),
@@ -262,6 +267,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.share_lan {
                 prospective.share_lan = Some(v);
+            }
+            if let Some(Some(v)) = &update.proxy_api_key {
+                prospective.proxy_api_key = Some(v.clone());
             }
             if let Some(Some(v)) = update.trust_client_sampling {
                 prospective.trust_client_sampling = Some(v);

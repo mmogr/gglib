@@ -155,7 +155,11 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   setClearing(true);
                   setClearMessage(null);
                   try {
-                    const result = await clearProxyCache(config.host, activePort);
+                    const result = await clearProxyCache(
+                      config.host,
+                      activePort,
+                      settings?.proxyApiKey
+                    );
                     setClearMessage(result.message || 'Cache cleared');
                   } catch (err: any) {
                     setClearMessage(`Failed: ${err.message}`);
@@ -247,6 +251,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
         onClose={() => setShowDashboard(false)}
         host={config.host}
         port={activePort}
+        apiKey={settings?.proxyApiKey}
       />
     </div>
   );

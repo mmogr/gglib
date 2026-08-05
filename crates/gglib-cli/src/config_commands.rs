@@ -184,6 +184,12 @@ pub enum SettingsCommand {
         /// WARNING: makes GGLib visible to every device on your network.
         #[arg(long)]
         share_lan: Option<bool>,
+        /// Bearer token the proxy requires on /v1/* and /mcp. Clients send it
+        /// as `Authorization: Bearer <key>`; /health stays open. Clear it to
+        /// go back to an unauthenticated endpoint. The proxy sets this itself
+        /// the first time it binds a non-loopback host.
+        #[arg(long)]
+        proxy_api_key: Option<String>,
         /// Honour a client's own sampling parameters (temperature, top_p,
         /// top_k, presence_penalty, repeat_penalty, min_p). Defaults to
         /// false: most clients (e.g. VS Code Copilot) send fixed sampling

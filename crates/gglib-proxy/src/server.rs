@@ -22,13 +22,13 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
-use gglib_core::CorsConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
 use gglib_core::request_pipeline::SamplingLayers;
 use gglib_core::retry::RetryPolicy;
+use gglib_core::{CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
 
 use crate::cache_lifecycle::{StreamConfig, clear_cache, resolve_cache_triple, run_with_cache};
@@ -162,7 +162,6 @@ impl AppState {
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
 /// Build CORS layer from configuration.
-// TODO: Extract to a shared gglib-http crate if tracing/auth middleware is added to the proxy in the future.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
     match config {
         CorsConfig::AllowAll => CorsLayer::new()
@@ -210,7 +209,11 @@ pub async fn serve(
     // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
     // the proxied figure.
     agent_metrics: Arc<CacheMetricsStore>,
-    cors_config: &CorsConfig,
+    // Who may reach this endpoint: the CORS policy, the optional bearer token,
+    // and the Host allowlist. Carries the `CorsConfig` it replaced rather than
+    // sitting beside it — `serve` was already at fifteen parameters, and access
+    // decisions belong together anyway.
+    access: &ProxyAccessConfig,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
@@ -316,17 +319,45 @@ pub async fn serve(
         last_loaded_session,
     };
 
-    let app = Router::new()
-        .route("/health", get(health_check))
+    // Everything a client can reach with credentials. Grouped separately from
+    // `/health` so `route_layer` can require the bearer token here without
+    // closing the one endpoint a supervisor or a load balancer needs to poll
+    // before it has any credentials to poll with.
+    let mut protected = Router::new()
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
-        .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
+        .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp));
+
+    // Installed only when a token is configured, so the unauthenticated
+    // loopback default — still the common case — pays nothing per request.
+    if let Some(expected) = access.expected_authorization() {
+        let expected: Arc<str> = Arc::from(expected);
+        protected = protected.route_layer(axum::middleware::from_fn_with_state(
+            expected,
+            crate::access::bearer_guard,
+        ));
+    }
+
+    let app = Router::new()
+        .route("/health", get(health_check))
+        .merge(protected)
+        // Host allowlist: always on, and outside the router so it covers
+        // `/health` and unmatched paths too. This is the DNS-rebinding guard;
+        // see the `access` module for why CORS alone does not cover it.
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(access.clone()),
+            crate::access::host_guard,
+        ))
         // LocalOnly CORS: mirrors the Axum web server's default security posture.
         // Only localhost, 127.0.0.1, ::1, and tauri://localhost origins are accepted.
-        .layer(build_cors_layer(cors_config))
+        //
+        // Outermost deliberately: it answers OPTIONS preflight itself, and a
+        // preflight that reached the guards above would be refused for carrying
+        // credentials it is not allowed to carry yet.
+        .layer(build_cors_layer(&access.cors))
         .with_state(state);
 
     info!("Proxy listening on {addr}");

@@ -10,6 +10,7 @@ use std::io::IsTerminal;
 use std::net::SocketAddr;
 use std::path::Path;
 
+use gglib_core::ApiKeySource;
 use gglib_core::domain::{InferenceConfig, LaunchNarration};
 
 use super::params::PinnedModel;
@@ -109,7 +110,12 @@ fn print_cache_state(cache_enabled: bool, resolved_slot_dir: Option<&Path>) {
 /// Framing is mode-aware: `gglib serve` exists for clients that *cannot*
 /// switch models via `/v1/models`, so "Configure OpenWebUI" — a client that
 /// can — is the wrong invitation for a pinned endpoint.
-pub(super) fn print_ready(addr: SocketAddr, pinned: Option<&PinnedModel>) {
+pub(super) fn print_ready(
+    addr: SocketAddr,
+    pinned: Option<&PinnedModel>,
+    api_key: Option<&str>,
+    api_key_source: ApiKeySource,
+) {
     println!("  ✓ Proxy started successfully on {addr}");
     println!();
     if pinned.is_some() {
@@ -121,8 +127,44 @@ pub(super) fn print_ready(addr: SocketAddr, pinned: Option<&PinnedModel>) {
     println!("    MCP Tools:  http://{addr}/mcp");
     println!("    Dashboard:  http://{addr}/v1/proxy/status");
     println!();
+    for line in render_auth(addr, api_key, api_key_source) {
+        println!("{line}");
+    }
     println!("  Press Ctrl+C to stop");
     println!();
+}
+
+/// The authentication block, as data.
+///
+/// Split from printing for the same reason as the launch narration: what this
+/// says is worth asserting on, and `println!` output is not observable.
+///
+/// A key the operator supplied is never echoed. They already have it, and
+/// printing it would copy a live credential into terminal scrollback, shell
+/// history captures and any log the output was piped to. A key *this run
+/// generated* is different: nobody has seen it yet, so it is printed once,
+/// alongside the `curl` that proves the endpoint works.
+fn render_auth(addr: SocketAddr, api_key: Option<&str>, source: ApiKeySource) -> Vec<String> {
+    let mut lines = Vec::new();
+    match (api_key, source) {
+        (Some(key), ApiKeySource::Generated) => {
+            lines.push("  Auth: required — generated for this non-loopback bind".to_owned());
+            lines.push(format!("    API key: {key}"));
+            lines.push("    Saved to settings; it will be reused on the next start.".to_owned());
+            lines.push(format!(
+                "    curl -H \"Authorization: Bearer {key}\" http://{addr}/v1/models"
+            ));
+        }
+        (Some(_), _) => {
+            lines.push("  Auth: required (send Authorization: Bearer <key>)".to_owned());
+        }
+        (None, _) => {
+            lines
+                .push("  Auth: disabled — anything that can reach this port can use it".to_owned());
+        }
+    }
+    lines.push(String::new());
+    lines
 }
 
 // =============================================================================
@@ -307,5 +349,42 @@ mod tests {
     #[test]
     fn format_inference_override_empty_config_yields_empty_string() {
         assert_eq!(format_inference_override(&InferenceConfig::default()), "");
+    }
+
+    fn addr() -> SocketAddr {
+        "127.0.0.1:8080".parse().unwrap()
+    }
+
+    /// The one case where printing a secret is correct: nobody has seen it yet.
+    #[test]
+    fn a_generated_key_is_printed_once_with_a_working_curl() {
+        let lines = render_auth(addr(), Some("abc-123"), ApiKeySource::Generated);
+        let block = lines.join("\n");
+        assert!(block.contains("abc-123"), "the generated key must be shown");
+        assert!(block.contains("Saved to settings"));
+        assert!(
+            block.contains("curl -H \"Authorization: Bearer abc-123\""),
+            "the example must be pasteable as-is: {block}"
+        );
+    }
+
+    /// A key the operator already holds must not be copied into scrollback.
+    #[test]
+    fn a_supplied_key_is_never_echoed() {
+        for source in [ApiKeySource::Flag, ApiKeySource::Settings] {
+            let block = render_auth(addr(), Some("hunter2"), source).join("\n");
+            assert!(
+                !block.contains("hunter2"),
+                "{source:?} leaked the key: {block}"
+            );
+            assert!(block.contains("Auth: required"));
+        }
+    }
+
+    /// Silence would read as "secure by default"; it is the opposite.
+    #[test]
+    fn no_key_says_so_plainly() {
+        let block = render_auth(addr(), None, ApiKeySource::None).join("\n");
+        assert!(block.contains("Auth: disabled"), "{block}");
     }
 }

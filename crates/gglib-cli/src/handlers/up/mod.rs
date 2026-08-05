@@ -8,7 +8,7 @@ use std::io::IsTerminal;
 
 use anyhow::Result;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::{StandaloneProxyParams, start_proxy_standalone};
+use gglib_runtime::proxy::{ProxyAccessOptions, StandaloneProxyParams, start_proxy_standalone};
 
 use crate::bootstrap::CliContext;
 use crate::shared_args::CacheArgs;
@@ -69,7 +69,14 @@ pub async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // Spawned before the blocking call, because `start_proxy_standalone` does
     // not return until shutdown. The task waits for the listener itself rather
     // than being handed a readiness signal — there isn't one to hand it.
-    let warmup = tokio::spawn(warm::run(args.port, model.name.clone()));
+    // The stored key, if any, is what the proxy about to start will demand of
+    // this very probe: `up` binds loopback and passes no `--api-key`, so the
+    // supervisor resolves the same settings row we read here.
+    let api_key = settings
+        .proxy_api_key
+        .clone()
+        .filter(|key| !key.trim().is_empty());
+    let warmup = tokio::spawn(warm::run(args.port, model.name.clone(), api_key));
 
     let result = start_proxy_standalone(StandaloneProxyParams {
         host: HOST.to_string(),
@@ -82,6 +89,9 @@ pub async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         default_context,
         inference_override: None,
         cache: CacheArgs::default().into_proxy_cache_options(),
+        // Loopback-only and deliberately unconfigurable, so nothing to override:
+        // the supervisor resolves the stored key and generates nothing.
+        access: ProxyAccessOptions::default(),
         // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
         // discover anything. `up` warms one model; it does not restrict to it.
         pinned: None,

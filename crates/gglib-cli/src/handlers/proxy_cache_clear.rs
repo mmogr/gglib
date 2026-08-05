@@ -7,13 +7,22 @@
 use anyhow::{Context, Result};
 
 /// Clear KV cache via the proxy's `/v1/proxy/cache/clear` endpoint.
-pub async fn execute(host: &str, port: u16, session_id: Option<&str>) -> Result<()> {
+pub async fn execute(
+    host: &str,
+    port: u16,
+    session_id: Option<&str>,
+    api_key: Option<&str>,
+) -> Result<()> {
     let url = format!("http://{}:{}/v1/proxy/cache/clear", host, port);
 
     let mut builder = reqwest::Client::new().post(&url);
 
     if let Some(sid) = session_id {
         builder = builder.header("X-Gglib-Session-Id", sid);
+    }
+
+    if let Some(key) = api_key {
+        builder = builder.bearer_auth(key);
     }
 
     let response = builder.send().await.context(format!(
@@ -42,6 +51,13 @@ pub async fn execute(host: &str, port: u16, session_id: Option<&str>) -> Result<
             eprintln!("Bad request: {}", body.unwrap_or_default());
             std::process::exit(1);
         }
+        401 => {
+            eprintln!(
+                "The proxy at {host}:{port} requires an API key. Pass --api-key, set \
+                 GGLIB_API_KEY, or store one with `gglib config settings set --proxy-api-key <key>`."
+            );
+            std::process::exit(1);
+        }
         _ => {
             eprintln!(
                 "Proxy returned status {}: {}",
@@ -60,7 +76,7 @@ mod tests {
     #[tokio::test]
     async fn execute_unreachable_proxy_returns_error() {
         // Use a port that nothing is listening on — simulates proxy not running
-        let result = execute("127.0.0.1", 59999, None).await;
+        let result = execute("127.0.0.1", 59999, None, None).await;
         assert!(result.is_err(), "Expected error when proxy is unreachable");
         let err_msg = result.unwrap_err().to_string();
         assert!(
