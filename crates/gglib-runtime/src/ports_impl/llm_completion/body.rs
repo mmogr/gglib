@@ -19,7 +19,6 @@ use serde_json::{Value, json};
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, ToolCall, ToolDefinition},
-    ports::ResponseFormat,
 };
 
 // =============================================================================
@@ -112,7 +111,6 @@ pub(super) fn build_chat_body(
     messages: &[AgentMessage],
     tools: &[ToolDefinition],
     sampling: Option<&InferenceConfig>,
-    response_format: Option<&ResponseFormat>,
 ) -> Value {
     let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
     let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
@@ -141,21 +139,6 @@ pub(super) fn build_chat_body(
     {
         for (k, v) in s.to_openai_json_patch() {
             obj.insert(k, v);
-        }
-    }
-
-    // Inject structured-output constraints when requested.
-    if let Some(fmt) = response_format {
-        match fmt {
-            ResponseFormat::JsonSchema { schema, strict } => {
-                body["response_format"] = json!({
-                    "type": "json_schema",
-                    "json_schema": { "schema": schema, "strict": strict }
-                });
-            }
-            ResponseFormat::Grammar { gbnf } => {
-                body["grammar"] = json!(gbnf);
-            }
         }
     }
 
@@ -197,7 +180,7 @@ mod tests {
     #[test]
     fn sampling_emits_all_seven_openai_keys() {
         let config = full_config();
-        let body = build_chat_body("m", &messages(), &[], Some(&config), None);
+        let body = build_chat_body("m", &messages(), &[], Some(&config));
 
         assert_eq!(body["temperature"], json!(0.5));
         assert_eq!(body["top_p"], json!(0.75));
@@ -215,7 +198,7 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let body = build_chat_body("m", &messages(), &[], Some(&config), None);
+        let body = build_chat_body("m", &messages(), &[], Some(&config));
         let obj = body.as_object().expect("body is an object");
 
         assert!(obj.contains_key("temperature"));
@@ -229,7 +212,7 @@ mod tests {
 
     #[test]
     fn sampling_absent_emits_no_sampling_keys() {
-        let body = build_chat_body("m", &messages(), &[], None, None);
+        let body = build_chat_body("m", &messages(), &[], None);
         let obj = body.as_object().expect("body is an object");
 
         for key in [
@@ -249,23 +232,13 @@ mod tests {
     fn sampling_does_not_clobber_transport_fields() {
         let config = full_config();
         let tools = vec![ToolDefinition::new("read_file")];
-        let format = ResponseFormat::Grammar {
-            gbnf: "root ::= \"ok\"".to_string(),
-        };
-        let body = build_chat_body(
-            "my-model",
-            &messages(),
-            &tools,
-            Some(&config),
-            Some(&format),
-        );
+        let body = build_chat_body("my-model", &messages(), &tools, Some(&config));
 
         assert_eq!(body["model"], json!("my-model"));
         assert_eq!(body["stream"], json!(true));
         assert_eq!(body["return_progress"], json!(true));
         assert_eq!(body["tool_choice"], json!("auto"));
         assert_eq!(body["tools"][0]["function"]["name"], json!("read_file"));
-        assert_eq!(body["grammar"], json!("root ::= \"ok\""));
         assert_eq!(body["messages"][0]["content"], json!("hello"));
         // …and the sampling keys still landed alongside them.
         assert_eq!(body["min_p"], json!(0.0625));

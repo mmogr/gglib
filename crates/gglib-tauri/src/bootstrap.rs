@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    AppServices, BenchmarkOps, CouncilApprovalRegistry, DownloadOps, McpOps, ModelOps, ProxyOps,
-    ServerOps, ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
+    AppServices, BenchmarkOps, DownloadOps, McpOps, ModelOps, ProxyOps, ServerOps,
+    ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
@@ -22,7 +22,6 @@ use gglib_core::ports::{
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
-use gglib_db::repositories::SqliteCouncilRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_mcp::McpService;
 use gglib_runtime::proxy::ProxySupervisor;
@@ -82,7 +81,7 @@ pub struct TauriContext {
     /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
     ///
     /// Handed to the embedded Axum context so the desktop app's agent and
-    /// council loops resolve per-model context exactly as the CLI and web UI do.
+    /// agent loops resolve per-model context exactly as the CLI and web UI do.
     pub catalog: Arc<dyn ModelCatalogPort>,
     // 7 domain ops
     pub models: Arc<ModelOps>,
@@ -93,10 +92,6 @@ pub struct TauriContext {
     pub mcp_ops: Arc<McpOps>,
     pub proxy: Arc<ProxyOps>,
     pub setup: Arc<SetupOps>,
-    /// Orchestrator approval registry (for HITL gates via the embedded Axum server).
-    pub approval_registry: Arc<CouncilApprovalRegistry>,
-    /// Orchestrator run repository (for HITL persistence via the embedded Axum server).
-    pub council_repo: Arc<SqliteCouncilRepository>,
     /// Benchmark run repository for compare and perf results.
     pub bench_repo: Arc<SqliteBenchmarkRepository>,
     /// Benchmark operations: run_compare and run_perf.
@@ -211,8 +206,6 @@ async fn bootstrap_inner(
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
-    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool));
 
     let AppServices {
@@ -238,10 +231,6 @@ async fn bootstrap_inner(
         mcp: mcp.clone(),
         emitter: Arc::clone(&emitter),
         server_events,
-        council_repo: Arc::clone(&council_repo)
-            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
-        approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         // No CLI override on the desktop app, so the saved setting decides.
         base_port: None,
@@ -265,8 +254,6 @@ async fn bootstrap_inner(
         mcp_ops,
         proxy,
         setup,
-        approval_registry,
-        council_repo,
         bench_repo,
         benchmark,
         runtime,
@@ -295,8 +282,6 @@ pub async fn bootstrap_with(
         None => Arc::new(gglib_core::events::NoopServerEvents),
     };
 
-    let council_repo = Arc::new(SqliteCouncilRepository::new_in_memory_blocking());
-    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new_in_memory_blocking());
 
     let AppServices {
@@ -322,10 +307,6 @@ pub async fn bootstrap_with(
         mcp: mcp.clone(),
         emitter: Arc::new(NoopEmitter),
         server_events,
-        council_repo: Arc::clone(&council_repo)
-            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
-        approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         base_port: None,
         llama_server_path: PathBuf::from("llama-server"),
@@ -349,8 +330,6 @@ pub async fn bootstrap_with(
         mcp_ops,
         proxy,
         setup,
-        approval_registry,
-        council_repo,
         bench_repo,
         benchmark,
         runtime,

@@ -33,13 +33,12 @@ use gglib_mcp::McpService;
 
 use crate::cache_lifecycle::{StreamConfig, clear_cache, resolve_cache_triple, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
-use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, ForwardRequest};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
-use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
+use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
 use crate::profiles::{ModelRoute, configured_names, resolve_route, variant_entries};
 use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
@@ -70,8 +69,6 @@ pub(crate) struct AppState {
     /// carries fifteen. `Duration::ZERO` restores fail-fast. See the
     /// `contention` module for why waiting is the better default.
     pub(crate) contention_wait: std::time::Duration,
-    /// Orchestrator services for virtual model routing.
-    council: CouncilDeps,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
     /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
@@ -149,13 +146,12 @@ impl AppState {
 /// * `runtime_port` - Port for managing model runtime
 /// * `catalog_port` - Port for listing and resolving models
 /// * `mcp` - MCP service for tool gateway
-/// * `council` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
 /// * `settings_repo` - Settings repository, wrapped in a `SettingsCache` so the
 ///   per-request read is served from a short-lived snapshot rather than a query
 /// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
 ///   Only consulted when `slot_dir` is `Some`.
-/// * `agent_metrics` - Agent-path prompt-cache reuse store (council + GUI chat),
+/// * `agent_metrics` - Agent-path prompt-cache reuse store (GUI + CLI chat),
 ///   surfaced on the dashboard as `agent_usage` alongside the proxied figure.
 ///
 /// # Returns
@@ -195,7 +191,6 @@ pub async fn serve(
     runtime_port: Arc<dyn ModelRuntimePort>,
     catalog_port: Arc<dyn ModelCatalogPort>,
     mcp: Arc<McpService>,
-    council: CouncilDeps,
     cancel: CancellationToken,
     settings_repo: Arc<dyn SettingsRepository>,
     // Operator overrides from this process's command line, applied above the
@@ -303,7 +298,6 @@ pub async fn serve(
         sessions: SessionManager::new(),
         default_ctx,
         contention_wait: crate::contention::wait_from_env(),
-        council,
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
@@ -414,8 +408,6 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 
 /// List all models from the catalog in OpenAI format.
 ///
-/// Appends the three virtual council model entries after the catalog models.
-///
 /// Every model advertises the context it would actually be served with —
 /// clients like the GitHub Copilot LLM Gateway extension read this endpoint
 /// ONCE when building their model picker (typically before any model is
@@ -446,9 +438,9 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             // rather than the finished response also keeps the variants below
             // correct for free — they are built from what survives.
             //
-            // Profile variants of the pinned model and the council virtuals
-            // both stay: neither changes which model actually runs, so
-            // neither can trip the guard.
+            // Profile variants of the pinned model stay: a profile changes
+            // only the request body, never which model actually runs, so it
+            // cannot trip the guard.
             if let Some(pinned) = state.runtime_port.pinned_model() {
                 models.retain(|m| m.name == pinned);
             }
@@ -481,22 +473,6 @@ async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             );
             response.data.extend(variants);
 
-            // Append virtual council models.
-            let virtuals: Vec<ModelInfo> = vec![
-                virtual_model_info(
-                    "gglib-council",
-                    "Auto mode — runs the full Director/Worker pipeline with no approval gates.",
-                ),
-                virtual_model_info(
-                    "gglib-council:interactive",
-                    "Interactive mode — pauses at the plan gate; resume by replying 'yes'.",
-                ),
-                virtual_model_info(
-                    "gglib-council:native",
-                    "Native mode — use POST /api/council/run for the full API.",
-                ),
-            ];
-            response.data.extend(virtuals);
             Json(response).into_response()
         }
         Err(e) => {
@@ -752,24 +728,6 @@ async fn chat_completions(
         num_ctx = ?num_ctx,
         "Processing chat completion request"
     );
-
-    // Intercept virtual council model names before forwarding.
-    //
-    // This must stay ahead of profile routing: `gglib-council:interactive` is
-    // matched whole here, and letting the router see it first would split it
-    // into a base plus an `interactive` suffix.
-    if VIRTUAL_MODELS.contains(&model_name.as_str()) {
-        let agent_metrics: Arc<dyn gglib_core::ports::CacheMetricsSink> =
-            state.dashboard.agent_metrics.clone();
-        return handle_virtual_model(
-            &state.council,
-            &state.dashboard.connections,
-            &model_name,
-            &body,
-            agent_metrics,
-        )
-        .await;
-    }
 
     // One settings view for the whole request: the profile list read here and
     // the global defaults read further down come from the same snapshot, so a

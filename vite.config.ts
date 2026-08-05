@@ -23,7 +23,7 @@ export default defineConfig(async ({ mode }) => {
     emptyOutDir: true,
     rolldownOptions: {
       // Two entries: the main app and the tray popover. The popover is its
-      // own document so it loads none of the model library, chat or council
+      // own document so it loads none of the model library or chat
       // code — opening a 360px panel should not pay for the full app shell.
       input: {
         main: 'index.html',

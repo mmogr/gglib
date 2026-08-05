@@ -16,7 +16,6 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { getTransport } from "./services/transport";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
-import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -228,9 +227,7 @@ function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <CouncilRegistryProvider>
-          <AppContent />
-        </CouncilRegistryProvider>
+        <AppContent />
       </ConfirmProvider>
     </ToastProvider>
   );

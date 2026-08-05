@@ -30,7 +30,7 @@ fn user(text: &str) -> AgentMessage {
 }
 
 fn body_of(adapter: &LlmCompletionAdapter, messages: &[AgentMessage]) -> Value {
-    adapter.shaped_body(messages, &[], None).unwrap()
+    adapter.shaped_body(messages, &[]).unwrap()
 }
 
 // ── Stage 1: reasoning strip ──────────────────────────────────────────────
@@ -269,7 +269,7 @@ fn an_untrimmable_conversation_is_rejected() {
         content: "x".repeat(100_000),
     }];
 
-    let err = adapter.shaped_body(&messages, &[], None).unwrap_err();
+    let err = adapter.shaped_body(&messages, &[]).unwrap_err();
     assert!(
         err.to_string().contains("context budget"),
         "unexpected error: {err}"

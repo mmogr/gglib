@@ -9,8 +9,8 @@
 //! `serde::Serialize` snapshot and no dependency on any particular request
 //! path — so more than one caller can keep its own instance. The proxy keeps
 //! one for the traffic it forwards; a separate instance covers the in-process
-//! agent path (council and GUI chat). The two populations are reported side by
-//! side, never merged: a council run's many small sub-agent calls have a reuse
+//! agent path (GUI and CLI chat). The two populations are reported side by
+//! side, never merged: an agent turn's many small tool-driven calls have a reuse
 //! profile nothing like a user's conversation, so averaging them would make
 //! either figure harder to read.
 //!

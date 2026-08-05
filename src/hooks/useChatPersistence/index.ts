@@ -189,8 +189,8 @@ export function useChatPersistence({
     }
 
     // Collect new messages to save in a batch (avoids isPersistingRef skipping
-    // the second message when multiple are added simultaneously, e.g. council
-    // completion appends a user + assistant message in one setMessages call).
+    // the second message when multiple are added simultaneously, e.g. a turn
+    // appends a user + assistant message in one setMessages call).
     const newToSave: Array<{ m: ThreadMessageLike; text: string; digest: string }> = [];
 
     for (const m of messages) {

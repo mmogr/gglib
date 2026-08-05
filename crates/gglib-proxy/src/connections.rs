@@ -1,8 +1,7 @@
 //! In-memory registry of active `/v1/chat/completions` connections.
 //!
 //! [`ActiveConnectionsRegistry`] tracks every in-flight request — both
-//! direct chat completions and orchestrator/council virtual-model requests
-//! (see [`crate::council_proxy`]) — so the proxy dashboard can show live
+//! chat completions — so the proxy dashboard can show live
 //! connection state: which model is being served, how long it has been
 //! running, and prompt-processing progress during the pre-fill phase.
 //!
@@ -69,14 +68,13 @@ pub enum ConnectionPhase {
 pub struct ActiveConnectionSnapshot {
     /// Unique id assigned at registration.
     pub id: Uuid,
-    /// Name of the model (or virtual council model) serving this connection.
+    /// Name of the model serving this connection.
     pub model_name: String,
     /// Unix timestamp (seconds since epoch) when the connection was registered.
     pub started_at_secs: u64,
     /// `true` for a streaming (SSE) request, `false` for non-streaming.
     pub is_streaming: bool,
-    /// Effective context size in use, when known (`None` for the council
-    /// virtual-model path, which has no single per-request context size).
+    /// Effective context size in use, when known.
     pub num_ctx: Option<u64>,
     /// Current lifecycle phase.
     pub phase: ConnectionPhase,

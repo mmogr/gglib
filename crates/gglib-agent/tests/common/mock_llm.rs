@@ -17,7 +17,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use futures_util::stream;
 use gglib_core::domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition};
-use gglib_core::ports::{LlmCompletionPort, ResponseFormat};
+use gglib_core::ports::LlmCompletionPort;
 use tokio::sync::Mutex;
 
 // =============================================================================
@@ -195,7 +195,6 @@ impl LlmCompletionPort for MockLlmPort {
         &self,
         messages: &[AgentMessage],
         _tools: &[ToolDefinition],
-        _response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Record a snapshot of the messages for test inspection.
         self.messages_received.lock().await.push(messages.to_vec());

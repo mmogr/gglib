@@ -453,7 +453,7 @@ impl McpClient {
         // Kill the process if still running, but do NOT block waiting for it
         // to exit.  `process.wait()` in a synchronous Drop blocks the calling
         // thread, which inside a tokio runtime can stall the whole runtime
-        // (observable as the CLI appearing to hang after a council run
+        // (observable as the CLI appearing to hang after an agent run
         // completes).  `try_wait` is non-blocking: if the process has already
         // exited we reap it; otherwise we send SIGKILL and let the OS clean up
         // the zombie when this process exits.

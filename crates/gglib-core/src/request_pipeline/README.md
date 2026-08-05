@@ -10,7 +10,7 @@ what we do to the request because of it.
 
 `gglib` has two request paths that historically diverged: `gglib proxy`, which
 applied a full shaping pipeline, and the agent path used by `gglib chat`,
-`gglib q`, the web UI and council, which applied almost none of it. Both start
+`gglib q` and the web UI, which applied almost none of it. Both start
 from the same question — *what do we know about this model?* — and both need
 the same answer applied to the outgoing body. This module is the one place that
 does either.

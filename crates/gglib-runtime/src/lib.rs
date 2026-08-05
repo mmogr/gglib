@@ -4,7 +4,6 @@
 pub mod assistant_ui;
 mod command;
 pub mod compose;
-pub mod council_runner;
 mod health;
 pub mod health_monitor;
 pub mod launch_narration;
@@ -42,15 +41,10 @@ pub use process::{
 pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export composition root factory
-pub use compose::{
-    CouncilPorts, compose_agent_loop, compose_agent_loop_with_sampling, compose_council_ports,
-};
+pub use compose::{compose_agent_loop, compose_agent_loop_with_sampling};
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;
-
-// Re-export orchestrator runner adapter for proxy injection
-pub use council_runner::CouncilRunnerAdapter;
 
 // Re-export canonical ServerConfig builder for all launch surfaces
 pub use server_config::{ServerConfigOptions, build_server_config};

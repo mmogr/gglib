@@ -14,7 +14,7 @@
 //! | `pinned` | `None` — auto-swap on request | `Some(PinnedModel)` — refuse others |
 //!
 //! Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP
-//! gateway, council wiring, shutdown — is shared verbatim. That is the point
+//! gateway, shutdown — is shared verbatim. That is the point
 //! of epic #630: `serve` is a *mode* of the proxy, not a second stack.
 
 use std::path::PathBuf;

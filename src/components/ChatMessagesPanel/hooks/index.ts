@@ -14,12 +14,6 @@ export type {
 export { buildThreadMessages } from './buildThreadMessages';
 export type { ThreadHydration } from './buildThreadMessages';
 
-export { useCouncilMode } from './useCouncilMode';
-export type {
-  UseCouncilModeOptions,
-  UseCouncilModeResult,
-} from './useCouncilMode';
-
 export { useTitleGeneration } from './useTitleGeneration';
 export type {
   UseTitleGenerationOptions,

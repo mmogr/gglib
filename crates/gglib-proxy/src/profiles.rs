@@ -344,18 +344,6 @@ mod tests {
         );
     }
 
-    /// The council virtual models are matched whole upstream of this module,
-    /// but their suffixes are also reserved profile names, so confirm routing
-    /// never rewrites one into a base plus profile.
-    #[tokio::test]
-    async fn council_virtual_model_is_left_intact() {
-        let catalog = NamedCatalog::new(&[]);
-        assert_eq!(
-            resolve_route("gglib-council:interactive", &profiles(), &catalog).await,
-            ModelRoute::Bare("gglib-council:interactive")
-        );
-    }
-
     /// Splitting on the last colon lets a colon-bearing model still take a
     /// profile.
     #[tokio::test]

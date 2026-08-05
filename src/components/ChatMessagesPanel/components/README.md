@@ -14,7 +14,7 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 | `ChatPanelHeader.tsx` | Title bar: rename field, AI title generation, status badge, tool-support indicator, conversation actions |
 | `SystemPromptSection.tsx` | System prompt card; owns its own draft/edit state and reports only on save |
 | `ChatStatusBanners.tsx` | Chat error banner and the read-only warning shown while the server is down |
-| `ComposerFooter.tsx` | Composer input, council toggle, stop/send controls, thinking indicator |
+| `ComposerFooter.tsx` | Composer input, stop/send controls, thinking indicator |
 | `ConfirmDeleteModal.tsx` | Warns about cascade deletion when removing a mid-thread message |
 
 ## Message rendering

@@ -16,7 +16,7 @@
 //! ## Live updates without spreading broadcast plumbing everywhere
 //!
 //! An alternative design would thread a broadcast call into every mutation
-//! site across `forward.rs`, `council_proxy.rs`, and `connections.rs`
+//! site across `forward.rs` and `connections.rs`
 //! (firing a `DashboardEvent` on every progress tick, connection start/end,
 //! and slots poll). That would work, but it spreads dashboard-specific
 //! concerns into modules that otherwise have nothing to do with it.
@@ -278,7 +278,7 @@ const BROADCAST_CAPACITY: usize = 8;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DashboardSnapshot {
     /// Every currently in-flight model request — direct `/v1/chat/completions`
-    /// completions, council/virtual-model runs, and `/v1/embeddings`.
+    /// completions and `/v1/embeddings`.
     pub active_connections: Vec<ActiveConnectionSnapshot>,
     /// `true` if the running llama-server's `/slots` endpoint is reachable
     /// and enabled. `false` if it's disabled (`--no-slots`) or currently
@@ -304,10 +304,10 @@ pub struct DashboardSnapshot {
     /// the first request resolves a model, since the RAM budget isn't known
     /// until something is launched.
     pub cache: Option<CacheStatus>,
-    /// Prompt-cache reuse for the in-process **agent path** — council and GUI
+    /// Prompt-cache reuse for the in-process **agent path** — GUI
     /// chat, which talk to llama-server directly rather than through
     /// [`crate::forward`]. Reported as a separate population from [`Self::cache`]'s
-    /// `usage`, never merged into it: a council run's many small sub-agent calls
+    /// `usage`, never merged into it: an agent turn's many small tool-driven calls
     /// have a reuse profile nothing like a user's conversation. Top-level rather
     /// than nested under [`Self::cache`] because it does not depend on the
     /// proxy's cache configuration and must surface even before a proxied
@@ -386,7 +386,7 @@ pub struct DashboardState {
     /// Running prompt-cache reuse totals, recorded by the forward paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
     /// Agent-path prompt-cache reuse totals — a separate population from
-    /// [`Self::cache_metrics`], recorded by council and GUI-chat runs (which
+    /// [`Self::cache_metrics`], recorded by GUI-chat runs (which
     /// bypass [`crate::forward`]) via [`gglib_core::ports::CacheMetricsSink`].
     /// Owned by the supervisor and passed in, so it outlives a single proxy
     /// run and can be shared with the embedded axum server.
@@ -898,7 +898,7 @@ mod tests {
         let proxied = CacheMetricsStore::new();
         let agent = CacheMetricsStore::new();
 
-        // Only the agent store records — e.g. a council run with no proxied
+        // Only the agent store records — e.g. an agent turn with no proxied
         // traffic and no model config resolved yet.
         agent.record(8_000, Some(7_600));
 

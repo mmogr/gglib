@@ -68,17 +68,6 @@ export type GglibMessageCustom = {
   timingFinalized?: boolean;
   /** Thinking duration in seconds (restored from metadata on load). */
   thinkingDurationSeconds?: number | null;
-  /**
-   * When `true`, the submit is intercepted and routed to the embedded
-   * `CouncilThread` instead of the normal chat flow.
-   */
-  isCouncilMode?: boolean;
-  /**
-   * The orchestrator run ID associated with this assistant message.
-   * Set on completion of an orchestrator run; triggers `HistoricalCouncilThread`
-   * rendering when the message is loaded from persistence.
-   */
-  councilRunId?: string;
 };
 
 /**

@@ -1,6 +1,5 @@
 import type { ThreadMessage, ThreadMessageLike } from '@assistant-ui/react';
 import { extractNonTextContentParts, extractReasoningText } from '../../utils/messages';
-import type { GglibMessageCustom } from '../../types/messages';
 import type { ChatMessageMetadata } from '../../services/transport';
 
 /**
@@ -24,10 +23,7 @@ export function buildSaveMetadata(
 
   const hasContent = parts.length > 0 || thinking !== null;
 
-  // Extract orchestrator run id if present on the message
-  const councilRunId = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.councilRunId;
-
-  if (!hasContent && !councilRunId) return null;
+  if (!hasContent) return null;
 
   const meta: ChatMessageMetadata = {};
   if (parts.length > 0) meta.contentParts = parts;
@@ -36,11 +32,6 @@ export function buildSaveMetadata(
     if (thinkingDurationSeconds != null) {
       meta.thinkingDurationSeconds = thinkingDurationSeconds;
     }
-  }
-
-  // Persist orchestrator run id
-  if (councilRunId) {
-    meta.councilRunId = councilRunId;
   }
 
   return meta;

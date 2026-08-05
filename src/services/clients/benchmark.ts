@@ -5,7 +5,7 @@
  * Uses `getAuthenticatedFetchConfig()` for platform-agnostic auth headers
  * (works in both Tauri and web mode).
  *
- * SSE pattern mirrors `services/clients/council.ts`.
+ * Manual SSE parser over a chunked `TextDecoder` buffer.
  *
  * @module services/clients/benchmark
  */

@@ -34,7 +34,7 @@ pub struct BuiltCore {
     /// Raw `SQLite` connection pool.
     ///
     /// Adapters that need to construct additional repositories (e.g., the
-    /// orchestrator repository in the Axum adapter) can use this pool
+    /// benchmark repository in the Axum adapter) can use this pool
     /// directly rather than re-opening the database.
     pub pool: SqlitePool,
 }

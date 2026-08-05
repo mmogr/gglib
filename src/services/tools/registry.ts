@@ -129,11 +129,10 @@ export class ToolRegistry {
    * Resolve the backend wire name for a sanitized registry key.
    *
    * - MCP tools registered via `registerWithNameMapping` become `serverId:originalName`
-   *   (the format the backend council/agent handlers expect).
+   *   (the format the backend agent handlers expect).
    * - Built-in tools (and any tool without a name mapping) keep their sanitized name.
    *
-   * This is the single source of truth used by both the agentic chat tool-filter
-   * and the council per-agent tool-picker.
+   * This is the single source of truth used by the agentic chat tool-filter.
    */
   getBackendName(sanitizedName: string): string {
     const entry = this._nameMap.get(sanitizedName);

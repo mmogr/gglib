@@ -37,9 +37,9 @@ use std::sync::Arc;
 
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
-    AppEventEmitter, BenchmarkRepositoryPort, CouncilApprovalRegistryPort, CouncilRepositoryPort,
-    DownloadManagerPort, GgufParserPort, HfClientPort, ModelCatalogPort, ModelRepository,
-    ModelRuntimePort, Repos, SystemProbePort, ToolSupportDetectorPort,
+    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, Repos, SystemProbePort,
+    ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
@@ -82,10 +82,6 @@ pub struct ServiceGraphParams {
     pub emitter: Arc<dyn AppEventEmitter>,
     /// Adapter-specific server lifecycle event sink.
     pub server_events: Arc<dyn ServerEvents>,
-    /// Council run persistence.
-    pub council_repo: Arc<dyn CouncilRepositoryPort>,
-    /// HITL approval registry.
-    pub approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
     /// Benchmark run persistence.
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
     /// Adapter-supplied base port for llama-server allocation.
@@ -148,8 +144,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         emitter,
         server_events,
         tool_detector,
-        council_repo,
-        approval_registry,
         bench_repo,
         base_port,
         llama_server_path,
@@ -199,8 +193,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         model_repo: model_repo.clone(),
         mcp: Arc::clone(&mcp),
         core: Arc::clone(&core),
-        approval_registry,
-        council_repo,
         runtime: Arc::clone(&runtime),
     }));
 

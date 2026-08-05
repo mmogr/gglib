@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Central chat interface managing the message thread, system prompt, conversation operations (rename, clear, export), AI title generation, and toggling between standard chat and council (multi-agent) modes. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.
+Central chat interface managing the message thread, system prompt, conversation operations (rename, clear, export), and AI title generation. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.
 
 ## Architecture
 
@@ -20,8 +20,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │           │     ├── MarkdownMessageContent
     │           │     ├── ThinkingBlock  (collapsible CoT with live timer)
     │           │     └── ToolUsageBadge / ToolExecutionProgress
-    │           ├── CouncilThread       ← orchestrator runs, inline in the viewport
-    │           └── ComposerFooter      ← input, council toggle, send / stop
+    │           └── ComposerFooter      ← input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
@@ -37,6 +36,6 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
 |-----------|----------|
 | `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
-| `hooks/` | `useChatPersistence`, `useMessageDeletion`, `useCouncilMode`, `useSharedTicker`, `useTitleGeneration`, `buildThreadMessages` |
+| `hooks/` | `useChatPersistence`, `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `buildThreadMessages` |
 
 <!-- module-docs:end -->

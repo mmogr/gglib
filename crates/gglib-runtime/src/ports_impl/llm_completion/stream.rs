@@ -73,8 +73,7 @@ pub(super) fn normalized_event_stream(
 }
 
 /// Telemetry-only tap on the fully-normalized stream: the single point that
-/// covers every agent-path consumer (both `stream_collector` and
-/// `structured_output`) without either knowing about it.
+/// covers every agent-path consumer without any of them knowing about it.
 ///
 /// Records the last `Usage` frame once the stream drains — mirroring the
 /// proxy's "last usage wins, record once" semantics — so a stream that carries

@@ -18,7 +18,6 @@ import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 
-import { mkUserMessage, mkAssistantMessage } from '../types/messages';
 import { useServerState } from '../services/serverEvents';
 import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
 import type { ConversationSummary } from '../services/transport';
@@ -95,11 +94,8 @@ export default function ChatPage({
     return () => { cancelled = true; };
   }, [modelId]);
 
-  // Orchestrator mode: ref filled by ChatMessagesPanel with the submit callback
-  const councilSubmitRef = useRef<((text: string) => void) | null>(null);
-
   // Runtime - now with external message state
-  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
+  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -109,29 +105,7 @@ export default function ChatPage({
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
     maxToolIterations,
     supportsToolCalls,
-    onCouncilSubmit: (text) => councilSubmitRef.current?.(text),
   });
-
-  const handleCouncilRunComplete = useCallback(
-    (runId: string, goal: string, finalAnswer: string | null) => {
-      const userMsg = mkUserMessage(
-        [{ type: 'text' as const, text: goal }],
-        // isCouncilMode prevents re-routing on reload
-        { isCouncilMode: true },
-      );
-      const assistantMsg = mkAssistantMessage({
-        timingFinalized: true,
-        councilRunId: runId,
-      });
-      if (finalAnswer) {
-        (assistantMsg.content as Array<{ type: string; text: string }>).push(
-          { type: 'text', text: finalAnswer },
-        );
-      }
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    },
-    [setMessages],
-  );
 
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
@@ -415,9 +389,6 @@ export default function ChatPage({
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
-              councilSubmitRef={councilSubmitRef}
-              setNextMessageMeta={setNextMessageMeta}
-              onCouncilRunComplete={handleCouncilRunComplete}
             />
           }
         />

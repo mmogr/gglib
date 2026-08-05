@@ -86,7 +86,7 @@ struct DashboardSnapshot {
     /// resolves a model, and on a proxy older than this field.
     #[serde(default)]
     cache: Option<CacheStatus>,
-    /// Agent-path prompt-cache reuse (council + GUI chat) — a separate
+    /// Agent-path prompt-cache reuse (GUI chat) — a separate
     /// population from [`CacheStatus::usage`]. Top-level and always present,
     /// since it does not depend on a resolved model; `default` on a proxy older
     /// than this field.
@@ -266,11 +266,11 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
         Some(cache) => out.push_str(&render_cache_section(cache, term_width)),
     }
 
-    // A separate population from the proxied figure above: council and GUI-chat
+    // A separate population from the proxied figure above: GUI-chat
     // runs talk to llama-server directly, so their reuse profile is nothing
     // like a user's conversation and must not be averaged into it.
     out.push('\n');
-    out.push_str("Agent cache (council · GUI chat)\n");
+    out.push_str("Agent cache (GUI chat)\n");
     out.push_str(&render_usage_rows(&snapshot.agent_usage));
 
     out.push('\n');
@@ -853,7 +853,7 @@ mod tests {
     #[test]
     fn agent_cache_section_renders_its_own_population() {
         let idle = frame_with_agent_usage(CacheUsage::default());
-        assert!(idle.contains("Agent cache (council"), "{idle}");
+        assert!(idle.contains("Agent cache (GUI chat)"), "{idle}");
         assert!(idle.contains("(no cache activity recorded yet)"), "{idle}");
         // The proxied section is independent and still shows its placeholder.
         assert!(idle.contains("(no model resolved yet)"), "{idle}");
@@ -866,7 +866,7 @@ mod tests {
             last_cached_tokens: Some(2_500),
             ..CacheUsage::default()
         });
-        assert!(active.contains("Agent cache (council"), "{active}");
+        assert!(active.contains("Agent cache (GUI chat)"), "{active}");
         assert!(active.contains("9,800 of 12,000 prompt tokens"), "{active}");
         assert!(
             active.contains("2,500 of 3,000 tokens from cache"),

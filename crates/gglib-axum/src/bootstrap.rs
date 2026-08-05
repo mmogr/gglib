@@ -7,22 +7,19 @@
 //! `AppEventEmitter` for the shared bootstrap), the MCP service with SSE
 //! emission, the seven domain ops, and the proxy crash watcher.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    AppServices, BenchmarkOps, CouncilApprovalRegistry, DownloadOps, McpOps, ModelOps, ProxyOps,
-    ServerOps, ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
+    AppServices, BenchmarkOps, DownloadOps, McpOps, ModelOps, ProxyOps, ServerOps,
+    ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{
-    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelCatalogPort, ModelRuntimePort,
-};
+use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelCatalogPort, ModelRuntimePort};
 use gglib_core::services::AppCore;
+use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::cleanup_zombie_benchmark_runs;
-use gglib_db::{SqliteBenchmarkRepository, SqliteCouncilRepository};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
@@ -132,10 +129,6 @@ pub struct AxumContext {
     /// them — preventing resource exhaustion from parallel loops that each
     /// consume LLM inference time and tool I/O.
     pub agent_semaphore: Arc<tokio::sync::Semaphore>,
-    /// Process-local registry for HITL approval gates.
-    pub approval_registry: Arc<CouncilApprovalRegistry>,
-    /// Repository for persisting orchestrator run records and events.
-    pub council_repo: Arc<SqliteCouncilRepository>,
     /// Benchmark run repository for compare and perf results.
     ///
     /// Stored directly in `AxumContext` (alongside `benchmark`) so history
@@ -150,14 +143,10 @@ pub struct AxumContext {
     pub runtime: Arc<dyn ModelRuntimePort>,
     /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
     ///
-    /// Handlers that compose an agent or council loop need the target model's
+    /// Handlers that compose an agent loop need the target model's
     /// capabilities, tags and inference defaults; resolving them through this
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
-    /// Per-run queues for conversational steering notes (keyed by run_id).
-    #[allow(clippy::type_complexity)]
-    pub steering_note_queues:
-        Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Vec<String>>>>>>,
 }
 
 /// Bootstrap the Axum server with all services.
@@ -234,11 +223,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     //
     // Assembly lives in gglib-app-services so this adapter and the Tauri one
     // cannot drift; only genuinely Axum-shaped wiring stays here.
-    let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
-    if let Err(e) = council_repo.mark_interrupted_runs().await {
-        tracing::warn!("council: failed to mark interrupted runs on startup: {e}");
-    }
-    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
 
     let AppServices {
@@ -264,10 +248,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp: mcp.clone(),
         emitter: sse.clone(),
         server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
-        council_repo: Arc::clone(&council_repo)
-            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
-        approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         base_port: Some(config.base_port),
         llama_server_path: config.llama_server_path.clone(),
@@ -315,13 +295,10 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
             config.max_concurrent_agent_loops,
         )),
-        approval_registry,
-        council_repo,
         bench_repo,
         benchmark,
         runtime,
         catalog,
-        steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }
 
