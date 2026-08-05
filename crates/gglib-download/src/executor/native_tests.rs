@@ -15,6 +15,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
 use super::*;
+use reqwest::header::ETAG;
 
 // ============================================================================
 // Test server
@@ -32,6 +33,14 @@ enum Reply {
     Status(u16),
     /// Ignore `Range` and always send the whole body with `200`.
     IgnoresRange { body: Vec<u8> },
+    /// Answer with a 302 to `/cdn`, carrying `X-Linked-Etag` — this is how
+    /// `HuggingFace`'s `resolve/` endpoint behaves, and the digest lives only
+    /// on this hop.
+    RedirectWithLinkedEtag { linked_etag: String },
+    /// Serve `body` with a plain `ETag` that is 64 hex characters but is **not**
+    /// the hash of the body — `HuggingFace`'s CDN does exactly this, echoing the
+    /// Xet block hash from the URL path.
+    CdnFile { body: Vec<u8>, decoy_etag: String },
 }
 
 struct TestServer {
@@ -157,6 +166,33 @@ async fn handle_one(
         }
         Reply::IgnoresRange { body } => {
             write_full(socket, &body, None).await?;
+        }
+        Reply::RedirectWithLinkedEtag { linked_etag } => {
+            let head = format!(
+                "HTTP/1.1 302 Found\r\nLocation: /cdn\r\nContent-Length: 0\r\nX-Linked-Etag: \"{linked_etag}\"\r\nConnection: close\r\n\r\n"
+            );
+            socket.write_all(head.as_bytes()).await?;
+        }
+        Reply::CdnFile { body, decoy_etag } => {
+            if start > 0 {
+                let slice = &body[start..];
+                let head = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nETag: \"{decoy_etag}\"\r\nConnection: close\r\n\r\n",
+                    slice.len(),
+                    start,
+                    body.len() - 1,
+                    body.len()
+                );
+                socket.write_all(head.as_bytes()).await?;
+                socket.write_all(slice).await?;
+            } else {
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nETag: \"{decoy_etag}\"\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                socket.write_all(head.as_bytes()).await?;
+                socket.write_all(&body).await?;
+            }
         }
         Reply::File { body, etag } => {
             if start >= body.len() {
@@ -296,7 +332,7 @@ async fn downloads_a_file_and_publishes_it_atomically() {
 
     let url = server.url();
     download_file(
-        &Client::new(),
+        &build_client(),
         &request(&url, &fx.dest, Some(len_of(&body)), Some(progress)),
     )
     .await
@@ -328,7 +364,7 @@ async fn a_file_with_no_usable_etag_is_still_verified_by_size() {
     let fx = Fixture::new();
 
     let url = server.url();
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, Some(9999), None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, Some(9999), None))
         .await
         .expect_err("a wrong expected size must fail");
 
@@ -365,7 +401,7 @@ async fn resumes_after_an_interrupted_transfer() {
     let size = Some(len_of(&body));
 
     // First attempt: the server hangs up mid-body.
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, size, None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, size, None))
         .await
         .expect_err("a truncated body must not be accepted");
     assert!(
@@ -390,7 +426,7 @@ async fn resumes_after_an_interrupted_transfer() {
     // Second attempt: resumes rather than restarting.
     let (progress, seen) = recording_progress();
     download_file(
-        &Client::new(),
+        &build_client(),
         &request(&url, &fx.dest, size, Some(progress)),
     )
     .await
@@ -437,7 +473,7 @@ async fn restarts_when_the_server_ignores_the_range_request() {
     let url = server.url();
 
     download_file(
-        &Client::new(),
+        &build_client(),
         &request(&url, &fx.dest, Some(len_of(&body)), None),
     )
     .await
@@ -464,7 +500,7 @@ async fn a_complete_partial_file_is_published_without_refetching() {
     let url = server.url();
 
     download_file(
-        &Client::new(),
+        &build_client(),
         &request(&url, &fx.dest, Some(len_of(&body)), None),
     )
     .await
@@ -472,6 +508,101 @@ async fn a_complete_partial_file_is_published_without_refetching() {
 
     assert_eq!(std::fs::read(&fx.dest).unwrap(), body);
     assert!(!fx.part().exists());
+}
+
+// ============================================================================
+// Redirects — the HuggingFace shape
+// ============================================================================
+
+/// The exact production shape: `resolve/` 302s with `X-Linked-Etag` (the real
+/// SHA-256), and the CDN it points at serves the bytes with a plain `ETag` that
+/// is the Xet *block* hash — 64 hex characters, so indistinguishable from a
+/// content digest by shape, but a completely different value.
+///
+/// Letting reqwest follow the redirect and reading the etag off the final
+/// response made every real download fail with a bogus integrity error. Nothing
+/// in the suite caught it, because no test served a redirect.
+#[tokio::test]
+async fn the_digest_comes_from_the_redirect_not_the_cdn() {
+    let body = body_of(4096);
+    let real_sha = sha256_of(&body);
+    // 64 hex chars, but the hash of something else entirely.
+    let xet_block_hash = sha256_of(b"a xet block, not this file");
+    assert_ne!(real_sha, xet_block_hash);
+
+    let server = TestServer::start(vec![
+        Reply::RedirectWithLinkedEtag {
+            linked_etag: real_sha,
+        },
+        Reply::CdnFile {
+            body: body.clone(),
+            decoy_etag: xet_block_hash,
+        },
+    ])
+    .await;
+    let fx = Fixture::new();
+
+    let url = server.url();
+    download_file(
+        &build_client(),
+        &request(&url, &fx.dest, Some(len_of(&body)), None),
+    )
+    .await
+    .expect("the CDN's decoy etag must not be mistaken for a content digest");
+
+    assert_eq!(std::fs::read(&fx.dest).unwrap(), body);
+    assert_eq!(server.request_count(), 2, "one redirect hop, then the CDN");
+}
+
+/// The digest is still *enforced* across a redirect — the test above must not
+/// be passing merely because verification was skipped.
+#[tokio::test]
+async fn a_bad_linked_etag_still_fails_across_a_redirect() {
+    let body = body_of(4096);
+    let wrong = sha256_of(b"not this file either");
+
+    let server = TestServer::start(vec![
+        Reply::RedirectWithLinkedEtag { linked_etag: wrong },
+        Reply::CdnFile {
+            body,
+            decoy_etag: "0".repeat(64),
+        },
+    ])
+    .await;
+    let fx = Fixture::new();
+
+    let url = server.url();
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
+        .await
+        .expect_err("a wrong X-Linked-Etag must still be caught");
+
+    assert!(
+        matches!(err, NativeError::ChecksumMismatch { .. }),
+        "got {err:?}"
+    );
+    assert!(!fx.dest.exists());
+}
+
+/// A bearer token authenticates us to `HuggingFace`; the CDN URL it redirects to
+/// is pre-signed. Forwarding the token across hosts would leak it.
+#[tokio::test]
+async fn a_redirect_chain_terminates_rather_than_looping() {
+    let server = TestServer::start(vec![Reply::RedirectWithLinkedEtag {
+        linked_etag: "a".repeat(64),
+    }])
+    .await;
+    let fx = Fixture::new();
+
+    let url = server.url();
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
+        .await
+        .expect_err("an endless redirect chain must not hang");
+
+    assert!(
+        matches!(err, NativeError::TooManyRedirects(_)),
+        "got {err:?}"
+    );
+    assert!(!fx.dest.exists());
 }
 
 // ============================================================================
@@ -490,7 +621,7 @@ async fn a_checksum_mismatch_fails_and_clears_the_partial_file() {
     let fx = Fixture::new();
 
     let url = server.url();
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, None, None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
         .await
         .expect_err("bytes that do not match the advertised digest must be rejected");
 
@@ -519,7 +650,7 @@ async fn a_404_is_reported_as_not_found() {
     let fx = Fixture::new();
 
     let url = server.url();
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, None, None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
         .await
         .expect_err("404 must fail");
 
@@ -534,7 +665,7 @@ async fn a_server_error_preserves_its_status_code() {
     let fx = Fixture::new();
 
     let url = server.url();
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, None, None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
         .await
         .expect_err("503 must fail");
 
@@ -554,7 +685,7 @@ async fn an_unreachable_host_is_a_network_error() {
 
     let fx = Fixture::new();
     let url = format!("http://{addr}/model.gguf");
-    let err = download_file(&Client::new(), &request(&url, &fx.dest, None, None))
+    let err = download_file(&build_client(), &request(&url, &fx.dest, None, None))
         .await
         .expect_err("a refused connection must fail");
 
@@ -573,7 +704,7 @@ async fn a_cancelled_download_keeps_its_partial_file() {
 
     let url = server.url();
     let err = download_file(
-        &Client::new(),
+        &build_client(),
         &NativeDownload {
             url: &url,
             dest: &fx.dest,
@@ -596,7 +727,7 @@ async fn a_cancelled_download_keeps_its_partial_file() {
 // ============================================================================
 
 #[test]
-fn expected_digest_prefers_the_linked_etag() {
+fn the_linked_etag_wins_over_a_decoy_etag_on_the_same_response() {
     let digest = "a".repeat(64);
     let other = "b".repeat(64);
     let mut headers = HeaderMap::new();
@@ -606,19 +737,37 @@ fn expected_digest_prefers_the_linked_etag() {
     assert_eq!(expected_digest(&headers), Some(digest));
 }
 
+/// A plain `ETag` is never a digest source, however well-formed it looks.
+/// `HuggingFace`'s CDN puts the Xet block hash there — 64 hex characters, and
+/// not the hash of the file. Trusting it failed every real download.
 #[test]
-fn expected_digest_falls_back_to_the_plain_etag() {
+fn a_plain_etag_is_never_trusted_as_a_digest() {
+    let looks_like_a_digest = "c".repeat(64);
+    for value in [
+        format!("\"{looks_like_a_digest}\""),
+        format!("W/\"{looks_like_a_digest}\""),
+    ] {
+        let mut headers = HeaderMap::new();
+        headers.insert(ETAG, value.parse().unwrap());
+        assert_eq!(
+            expected_digest(&headers),
+            None,
+            "ETag {value} must not be used as a content digest"
+        );
+    }
+}
+
+#[test]
+fn a_weak_validator_on_the_linked_etag_is_unwrapped() {
     let digest = "c".repeat(64);
     let mut headers = HeaderMap::new();
-    headers.insert(ETAG, format!("W/\"{digest}\"").parse().unwrap());
+    headers.insert(X_LINKED_ETAG, format!("W/\"{digest}\"").parse().unwrap());
 
     assert_eq!(expected_digest(&headers), Some(digest));
 }
 
 #[test]
-fn a_non_digest_etag_is_not_treated_as_a_checksum() {
-    // Real HuggingFace responses carry opaque etags for non-LFS files. Comparing
-    // a SHA-256 against one of those would fail every download.
+fn a_malformed_linked_etag_is_not_treated_as_a_checksum() {
     for value in [
         "\"686897696a7c876b7e\"",
         "\"not-a-hash\"",
@@ -626,8 +775,8 @@ fn a_non_digest_etag_is_not_treated_as_a_checksum() {
         "W/\"xyz\"",
     ] {
         let mut headers = HeaderMap::new();
-        headers.insert(ETAG, value.parse().unwrap());
-        assert_eq!(expected_digest(&headers), None, "for etag {value}");
+        headers.insert(X_LINKED_ETAG, value.parse().unwrap());
+        assert_eq!(expected_digest(&headers), None, "for x-linked-etag {value}");
     }
 }
 

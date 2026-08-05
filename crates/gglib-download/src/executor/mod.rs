@@ -18,9 +18,12 @@ use native::{NativeError, existing_len};
 
 /// Shared HTTP client. `reqwest::Client` owns a connection pool, so building one
 /// per file would throw away connection reuse across a sharded model.
+///
+/// Configuration lives in [`native::build_client`] — see it for why automatic
+/// redirect following must stay off.
 fn http_client() -> &'static Client {
     static CLIENT: OnceLock<Client> = OnceLock::new();
-    CLIENT.get_or_init(Client::new)
+    CLIENT.get_or_init(native::build_client)
 }
 
 /// A set of files to fetch into one directory.
@@ -180,6 +183,9 @@ fn to_download_error(e: NativeError) -> DownloadError {
             DownloadError::integrity_failed(format!("{expected} bytes"), format!("{actual} bytes"))
         }
         NativeError::Io { operation, message } => DownloadError::io(operation, message),
+        NativeError::TooManyRedirects(url) => {
+            DownloadError::network(format!("too many redirects for {url}"))
+        }
         NativeError::Cancelled => DownloadError::Cancelled,
     }
 }

@@ -9,8 +9,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
-use reqwest::header::{AUTHORIZATION, CONTENT_RANGE, ETAG, HeaderMap, RANGE};
-use reqwest::{Client, StatusCode};
+use reqwest::header::{AUTHORIZATION, CONTENT_RANGE, HeaderMap, LOCATION, RANGE};
+use reqwest::{Client, Response, StatusCode, Url};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
@@ -20,9 +20,18 @@ use crate::cli_exec::ProgressCallback;
 /// Suffix for the in-progress file that sits beside the final destination.
 const PART_SUFFIX: &str = ".part";
 
-/// `HuggingFace` sets this to the LFS object's SHA-256 when the response is a
-/// redirect to the CDN. Plain `ETag` carries it for non-LFS files.
+/// The only header that carries the file's true SHA-256.
+///
+/// `HuggingFace` sets this on the **redirect** its `resolve/` endpoint returns,
+/// alongside the `Location` pointing at the CDN. It is deliberately the only
+/// digest source this module trusts: the CDN's own `ETag` is the Xet block hash
+/// (the same value that appears in the CDN URL path), which is 64 hex characters
+/// and so indistinguishable from a SHA-256 by shape, but is *not* the hash of
+/// the file's bytes. Comparing against it fails every download.
 const X_LINKED_ETAG: &str = "x-linked-etag";
+
+/// Redirect hops to follow before giving up.
+const MAX_REDIRECTS: usize = 10;
 
 /// Errors from the native download path.
 #[derive(Error, Debug)]
@@ -70,6 +79,10 @@ pub enum NativeError {
         /// The underlying error.
         message: String,
     },
+
+    /// The redirect chain never terminated at a real response.
+    #[error("Too many redirects for {0}")]
+    TooManyRedirects(String),
 
     /// The caller cancelled the download.
     #[error("download cancelled by user")]
@@ -145,24 +158,12 @@ async fn stream_to_part(
     part_path: &Path,
     resume_from: u64,
 ) -> Result<TransferOutcome, NativeError> {
-    let mut request = client.get(req.url).header("User-Agent", "gglib");
-    if let Some(token) = req.token {
-        request = request.header(AUTHORIZATION, format!("Bearer {token}"));
-    }
-    if resume_from > 0 {
-        request = request.header(RANGE, format!("bytes={resume_from}-"));
-    }
-
-    let response = request
-        .send()
-        .await
-        .map_err(|e| NativeError::Network(e.to_string()))?;
+    let (response, expected) = send_following_redirects(client, req, resume_from).await?;
 
     let status = response.status();
 
     // The server has all of it already: nothing left to transfer, go verify.
     if status == StatusCode::RANGE_NOT_SATISFIABLE && resume_from > 0 {
-        let expected = expected_digest(response.headers());
         return finish_without_transfer(part_path, expected);
     }
 
@@ -182,7 +183,6 @@ async fn stream_to_part(
     let start_at = if appending { resume_from } else { 0 };
 
     let total = total_size(response.headers(), start_at).or(req.expected_size);
-    let expected = expected_digest(response.headers());
 
     let mut file = open_part(part_path, appending)?;
     let mut hasher = expected.is_some().then(Sha256::new);
@@ -234,6 +234,87 @@ async fn stream_to_part(
             actual: hex(&h.finalize()),
         }),
     })
+}
+
+/// Build the HTTP client this module requires.
+///
+/// Automatic redirect following **must** be off: [`send_following_redirects`]
+/// walks the chain itself so the `X-Linked-Etag` on `HuggingFace`'s 302 survives
+/// to be compared against. A client that follows redirects on its own hands this
+/// module only the CDN's headers, where no trustworthy digest exists — and
+/// verification silently turns into a no-op.
+///
+/// Tests construct their client through here too, so the two cannot drift.
+pub(super) fn build_client() -> Client {
+    Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("default reqwest client builds")
+}
+
+/// Send the request, following redirects by hand, and return the final response
+/// together with any `X-Linked-Etag` seen along the way.
+///
+/// Redirects are followed manually rather than by `reqwest` because the digest
+/// lives on a hop that automatic following would consume and discard:
+/// `HuggingFace`'s `resolve/` endpoint answers with a 302 carrying
+/// `X-Linked-Etag`, and only the `Location` it points at serves the bytes. With
+/// `reqwest` following the chain itself, the only headers left are the CDN's —
+/// whose `ETag` is a Xet block hash, not a content hash.
+async fn send_following_redirects(
+    client: &Client,
+    req: &NativeDownload<'_>,
+    resume_from: u64,
+) -> Result<(Response, Option<String>), NativeError> {
+    let mut url = Url::parse(req.url)
+        .map_err(|e| NativeError::Network(format!("invalid URL {}: {e}", req.url)))?;
+    let origin_host = url.host_str().map(str::to_owned);
+    let mut linked_etag: Option<String> = None;
+
+    for _ in 0..MAX_REDIRECTS {
+        let mut request = client.get(url.clone()).header("User-Agent", "gglib");
+
+        // The token authenticates us to HuggingFace, not to its CDN. The
+        // redirect target is a pre-signed URL that needs no credentials, and
+        // forwarding a bearer token to a different host would leak it.
+        if let Some(token) = req.token {
+            if url.host_str().map(str::to_owned) == origin_host {
+                request = request.header(AUTHORIZATION, format!("Bearer {token}"));
+            }
+        }
+        if resume_from > 0 {
+            request = request.header(RANGE, format!("bytes={resume_from}-"));
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| NativeError::Network(e.to_string()))?;
+
+        // Capture the digest from the first hop that offers one — later hops
+        // (the CDN) do not carry it.
+        if linked_etag.is_none() {
+            linked_etag = expected_digest(response.headers());
+        }
+
+        if !response.status().is_redirection() {
+            return Ok((response, linked_etag));
+        }
+
+        let location = response
+            .headers()
+            .get(LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| {
+                NativeError::Network(format!("redirect from {url} carried no Location"))
+            })?;
+
+        url = url
+            .join(location)
+            .map_err(|e| NativeError::Network(format!("bad redirect target {location}: {e}")))?;
+    }
+
+    Err(NativeError::TooManyRedirects(req.url.to_string()))
 }
 
 /// Nothing to transfer (HTTP 416): hash whatever is on disk so verification can
@@ -341,14 +422,15 @@ fn report(progress: Option<&ProgressCallback>, downloaded: u64, total: Option<u6
 
 /// The SHA-256 the server says the file should hash to, if it gave a usable one.
 ///
-/// `X-Linked-Etag` is `HuggingFace`'s header for the LFS object behind a
-/// redirect; plain `ETag` carries the same value for non-LFS files. Either can
-/// also be a weak validator or an opaque string that is not a digest at all —
-/// only a bare 64-hex value is worth checking against.
+/// Only [`X_LINKED_ETAG`] is trusted. Plain `ETag` is deliberately **not** a
+/// fallback: `HuggingFace`'s CDN sets it to the Xet block hash, which is also 64
+/// hex characters, so no shape check can tell the two apart — and comparing a
+/// file's contents against a block hash fails every single download. A response
+/// with no `X-Linked-Etag` yields `None`, and verification falls back to the
+/// size check.
 fn expected_digest(headers: &HeaderMap) -> Option<String> {
     headers
         .get(X_LINKED_ETAG)
-        .or_else(|| headers.get(ETAG))
         .and_then(|v| v.to_str().ok())
         .map(normalize_etag)
         .filter(|e| is_sha256_hex(e))

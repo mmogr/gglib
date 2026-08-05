@@ -27,10 +27,19 @@ The native path (`native.rs`) is responsible for:
   server ignored the range, so the partial file is discarded and the transfer
   starts over.
 - **Checksum verification.** SHA-256 is computed while streaming and compared
-  against `X-Linked-Etag` (or `ETag`), which is where `HuggingFace` puts the LFS
-  object's digest. A non-digest etag is ignored and the size check carries the
-  verification instead. A mismatch deletes the `.part` file — resuming onto
-  known-bad bytes would fail identically forever.
+  against `X-Linked-Etag`, the *only* header carrying the file's true digest.
+  A mismatch deletes the `.part` file — resuming onto known-bad bytes would fail
+  identically forever. When no `X-Linked-Etag` is offered, the size check carries
+  verification instead.
+- **Redirects followed by hand.** `HuggingFace`'s `resolve/` endpoint answers
+  with a 302 that carries `X-Linked-Etag` and points at a CDN. Letting `reqwest`
+  follow that automatically discards the hop the digest lives on, leaving only
+  the CDN's own `ETag` — which is the Xet *block* hash echoed from the URL path.
+  That value is also 64 hex characters, so no shape check can distinguish it from
+  a content digest, and comparing a file against it fails **every** download.
+  Hence two rules that must stay together: the client is built with
+  `redirect::Policy::none()` (see `native::build_client`, which the tests share
+  so the two cannot drift), and plain `ETag` is never accepted as a digest.
 - **Atomic publication.** The final path is only ever created by renaming a
   fully verified `.part` file, so a partial transfer can never be mistaken for a
   complete model.
