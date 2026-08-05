@@ -5,442 +5,237 @@
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-complexity.json)
 
-This document provides a detailed reference for all available CLI commands.
+What each command is for, and how they fit together. For the exhaustive flag
+list on any command, run `gglib <command> --help` — clap generates that from the
+same source the binary parses, so it cannot drift. This document covers what
+`--help` cannot: why a command exists, how the shared flag groups compose, and
+which resolution layer wins.
 
-For an overview of all interfaces (CLI, Desktop GUI, Web UI), see the main [README](../README.md#interfaces).
+Start at [`gglib up`](#getting-started). Everything beyond it is
+[`gglib proxy`](#serving-an-endpoint).
 
-## Global Options
+## Everything goes through the daemon
 
-- `--help`: Show help information
-- `--version`: Show version information
-- `--models-dir <PATH>`: Override the models directory for the current invocation (CLI flag takes precedence over `.env`/defaults)
-
-## Command Flow
+One process owns llama-server: the **gglib daemon**. It holds an exclusive lock
+on the data directory, and every other surface — this CLI, the desktop GUI, the
+web UI — is a client of it. No CLI command spawns llama-server itself.
 
 ```text
-┌─────────────┐      ┌────────────────┐      ┌───────────────────┐
-│  CLI Input  │ ───► │ Command Parser │ ───► │  Command Handler  │
-│ (clap args) │      │ (main.rs)      │      │ (commands/*.rs)   │
-└─────────────┘      └────────────────┘      └─────────┬─────────┘
-                                                       │
-                                                       ▼
-                                             ┌───────────────────┐
-                                             │  Shared Services  │
-                                             │ (Database, Proxy) │
-                                             └───────────────────┘
+  gglib up ─┐
+  gglib q  ─┤                    ┌──────────────────┐
+  gglib    ─┼──► gglib daemon ──►│   llama-server   │
+  chat      │    (owns the       │  (1–2 resident)  │
+  Desktop  ─┤     runtime,       └──────────────────┘
+  GUI       │     holds the lock)          ▲
+  Web UI   ─┘           │                  │
+                        └── admission queue ┘
 ```
 
-## Sub-modules
+That is why a model started from the GUI is the same model the proxy serves, why
+the endpoint keeps running after you close the desktop window, and why commands
+that used to configure a per-run process (`--llama-port`, the `--cache-*` flags)
+now warn that the daemon does not apply them per run.
 
-- **[Download Module](download/README.md)**: HuggingFace Hub integration and file operations.
-- **[Llama Management](llama/README.md)**: Installation and building of llama.cpp.
+Commands that need the runtime start a daemon automatically if one is not
+already up. A *foreign* process on the daemon port is never fought — it is
+reported as an error.
 
-## Internal Modules
+## Global options
 
-- **llama_invocation**: Shared builder for constructing llama-cli/llama-server commands. Eliminates duplication between `chat` and `serve` commands by centralizing model resolution, context size handling, and flag construction.
+| Option | Effect |
+|---|---|
+| `--models-dir <PATH>` | Override the models directory for this invocation (wins over `.env` and defaults) |
+| `-v`, `--verbose` | Debug-level logging plus file output to `logs/` |
+| `--help`, `--version` | Standard |
 
-## Commands
+## Command map
 
-### Model Management
+| Command | For |
+|---|---|
+| [`up`](#getting-started) | Nothing → working endpoint, in one command |
+| [`proxy`](#serving-an-endpoint) | OpenAI-compatible endpoint, all models, swapped on demand |
+| [`serve <id>`](#serving-an-endpoint) | Same stack pinned to one model |
+| [`daemon`](#serving-an-endpoint) | Inspect or stop the process that owns the runtime |
+| [`model`](#models) | Add, list, download, verify, retag, inspect, explain |
+| [`chat`](#chat-and-ask) | Interactive tool-calling session |
+| [`q`](#chat-and-ask) | One-shot question, pipe-friendly (alias of `question`) |
+| [`benchmark`](#benchmark) | Compare outputs, measure throughput, tune sampling |
+| [`mcp`](#mcp-tool-servers) | Manage MCP tool servers |
+| [`config`](#configuration) | Settings, profiles, llama.cpp, dependencies, paths |
+| [`gui`](#interfaces) / [`web`](#interfaces) | Desktop app / web dashboard |
+| `completions <shell>` | Print a completion script for bash, zsh, fish, elvish, or powershell |
 
-#### `model add <file_path>`
-Add a GGUF model to the database.
+## Getting started
 
-**Example:**
+### `up`
+
+Detects your hardware, installs llama.cpp if missing, recommends and downloads a
+model that fits your VRAM (asking first), starts the proxy, sends a real request
+through it to prove the endpoint answers, and prints the settings to paste into
+your client.
+
+Safe to re-run — anything already present is skipped, so a second run is just
+"start the proxy". Deliberately unconfigurable beyond `--yes`, `--model` and
+`--port`: it binds loopback with gglib's defaults. Reach for `gglib proxy` when
+you want to choose the host, the upstream port, or sampling and cache behaviour.
+
 ```bash
-gglib model add /path/to/model.gguf
+gglib up                      # ask before downloading
+gglib up --yes                # take the recommendation
+gglib up --model qwen3.6 --port 8081
 ```
 
-#### `model list`
-List all models in the database.
+## Serving an endpoint
 
-**Example:**
+### `proxy`
+
+Serves `/v1` chat completions, `/v1/embeddings`, `/v1/models` and `/mcp` (MCP
+Streamable HTTP) from one port. When a request names a model that is not
+resident, the proxy queues it, launches that model, and applies flags derived
+from its capability tags — `mtp` → speculative decoding, `reasoning` →
+`--reasoning-format`, `agent` → `--jinja`. Every surface uses the same config
+builder, so a model behaves identically however it was started.
+
+Sampling flags here act as proxy-wide defaults: per-request and per-model values
+still win. Subcommands: `dashboard` (live terminal view), `cache-clear`, `stop`.
+
+### `serve <id>`
+
+The same proxy stack pinned to one model — requests naming any other are refused
+rather than swapped. That is what clients which cannot switch models via
+`/v1/models` need, VS Code Copilot's BYOK endpoint among them. `--port` is the
+endpoint; `--llama-port` is the upstream behind it.
+
+### `daemon`
+
+`run` (foreground, `--share-lan` to expose on the network), `status`, `stop`.
+Stopping the daemon stops every llama-server it owns.
+
+## Shared flag groups
+
+Several commands flatten the same argument groups. Learning them once covers
+`up`, `proxy`, `serve`, `chat` and `q`.
+
+| Group | Flags cover | Notes |
+|---|---|---|
+| **Context** | `--ctx-size` / `-c` | A number, or `max` to take the model's own metadata. Falls back to the global default. |
+| **Sampling** | temperature, top-p, penalties, … | One layer of a five-level hierarchy — see [Sampling resolution](../../docs/sampling.md). Use [`model explain`](#models) to see which layer won. |
+| **Cache** | `--cache-ram`, `--cache-reuse`, KV cache types | KV quantization and host-RAM prompt cache — see [KV cache tiering](../../docs/cache.md). |
+| **Access** | `--host`, `--api-key`, `--allowed-host` | Loopback needs no key. Binding elsewhere mints one and prints it, and every host a client will reach the endpoint by must be named with `--allowed-host` (DNS-rebinding guard). |
+| **MTP** | `--mtp-draft-n-max`, `--mtp-draft-p-min` | Auto-enabled for `mtp`-tagged models; set `n-max` to `0` to force it off. |
+| **Retry** | retry budget, `--no-retry` | Transient upstream failures on the completion path. |
+
+## Models
+
+`gglib model <subcommand>`:
+
+**Library** — `add`, `list`, `remove`, `update`. `list` sorts by added, name,
+params, or benchmark speed.
+
+**HuggingFace** — `download`, `search`, `browse`, `check-updates`, `upgrade`.
+
+Downloads route through the shared queue the GUI uses. In a TTY the terminal
+becomes a live monitor: **[a]** adds another model while one is in flight;
+**[q]** / `Esc` / `Ctrl-C` drains once, then force-quits on a second press. The
+bar shows the lifecycle phase — `Downloading` → `Finalizing` → `Registering` →
+`Completed` / `Failed` / `Cancelled`. Non-TTY environments fall back to a plain
+monitor automatically. Set `HF_TOKEN` in the environment for private repos.
+
+Transfers run natively over HTTP, resumable and checksum-verified; no Python is
+required. See the [Download Module](download/README.md).
+
+**Integrity** — `verify` (SHA-256), `repair` (re-download failed shards).
+
+**Metadata and capability** — `capabilities`, `inspect`, `retag`, `explain`.
+
+`retag` re-derives auto-tags from persisted GGUF metadata; run it after
+upgrading gglib to backfill newly-introduced tags such as the `format:*` dialect
+family. It is additive by default and never touches user-curated tags; `--full`
+rebuilds the auto namespace only. See [Tags & capability
+detection](../../docs/tags.md).
+
+`explain` prints every resolved sampling parameter alongside the layer that
+supplied it, using the same resolver the live path uses — so it cannot describe
+a hierarchy different from the one that runs.
+
+## Chat and ask
+
+### `chat <identifier>`
+
+Interactive session with tool access (filesystem plus any configured MCP
+servers). `--no-tools` for plain chat. Conversations persist: `--continue <id>`
+resumes one, and `gglib chat history` lists them.
+
+Local models need guardrails to finish a tool-calling task, so the loop carries
+iteration limits (`--max-iterations`), a tool allowlist (`--tools`, evaluated
+once at session start), parallelism and timeout caps, and a dual-threshold loop
+guard — `--observation-tool` / `--max-observation-steps` let read-only tools
+repeat more often than mutating ones before loop detection fires.
+
+### `q` / `question`
+
+One-shot, built for pipes. `{}` in the question is replaced by piped or `--file`
+input. `-Q` / `--quiet` strips tool progress and reasoning tokens for scripting.
+
 ```bash
-gglib model list
+gglib q "What is Rust?"
+cat file.rs | gglib q "Explain this code"
+gglib q --file README.md "Summarize this project"
 ```
 
-#### `model remove <identifier> [--force]`
-Remove a model by name or ID.
-
-**Options:**
-- `--force`: Skip confirmation prompt
-
-**Example:**
-```bash
-gglib model remove 1 --force
-```
-
-#### `model update <id> [OPTIONS]`
-Update model metadata.
-
-**Options:**
-- `--name <NAME>`: Update model name
-- `--param-count <COUNT>`: Update parameter count (in billions)
-- `--architecture <ARCH>`: Update architecture
-- `--quantization <QUANT>`: Update quantization type
-- `--context-length <LENGTH>`: Update context length
-- `--metadata <KEY=VALUE>`: Add or update metadata (can be used multiple times)
-- `--remove-metadata <KEYS>`: Remove metadata keys (comma-separated)
-- `--replace-metadata`: Replace all metadata instead of merging
-- `--dry-run`: Preview changes without applying
-- `--force`: Skip confirmation prompts
-
-**Example:**
-```bash
-gglib model update 1 --name "Llama 2 7B" --metadata "use-case=chat"
-```
-
-### Model Operations
-
-#### `serve <id> [OPTIONS]`
-Serve a model with llama-server.
-
-**Options:**
-- `--ctx-size <SIZE>`, `-c`: Context size override (number or "max" for model metadata). Falls back to the global default from `gglib config settings`.
-- `--mlock`: Enable memory lock
-- `--jinja`: Force-enable Jinja template parsing for llama-server chat templates
-- `--port <PORT>`, `-p`: Port to serve on (default: 8080)
-- `--mtp-draft-n-max <N>`: MTP speculative decoding draft token count.
-  Auto-enabled with `n=2` when the model has the `mtp` tag.
-  Set to `0` to explicitly disable MTP even on a tagged model.
-- `--mtp-draft-p-min <P>`: Minimum acceptance probability for MTP draft tokens (default: `0.75`).
-  Lower values improve throughput at the cost of quality. Recommended range: `0.5`–`0.95`.
-
-**Example:**
-```bash
-gglib serve 1 --ctx-size max --mlock
-
-# Explicitly enable MTP with custom settings (even without tag)
-gglib serve 1 --mtp-draft-n-max 4 --mtp-draft-p-min 0.8
-
-# Disable MTP even though the model has the mtp tag
-gglib serve 1 --mtp-draft-n-max 0
-```
-
-#### `chat <identifier> [OPTIONS]`
-Start an interactive chat session with `llama-cli` using any stored model.
-
-**Options:**
-- `--ctx-size <SIZE>`: Context size override (number or `max` for model metadata). Falls back to the global default from `gglib config settings`.
-- `--mlock`: Enable memory locking
-- `--chat-template <NAME>`: Override the template name baked into llama-cli
-- `--chat-template-file <PATH>`: Provide a custom Jinja template path
-- `--jinja`: Force-enable Jinja parsing for custom templates
-- `--system-prompt <TEXT>` / `-s`: Supply a system prompt passed as `-sys`
-- `--multiline-input`: Allow multi-line prompts without trailing `\`
-- `--simple-io`: Switch to simplified IO for restricted terminals
-
-**Example:**
-```bash
-gglib chat llama-3.1 --ctx-size max --system-prompt "You are a helpful assistant"
-```
-
-#### `proxy [OPTIONS]`
-Start OpenAI-compatible proxy for automatic model swapping.
-
-**Options:**
-- `--host <HOST>`: Host to bind to (default: 127.0.0.1)
-- `--port <PORT>`: Port to bind the proxy to (default: 8080)
-- `--llama-port <PORT>`: Starting port for llama-server instances (default: 5500)
-- `--default-context <SIZE>`: Default context size when not specified by client (default: 4096)
-
-**Example:**
-```bash
-# Local access only
-gglib proxy --port 8080
-
-# LAN access (see LAN Server Mode documentation)
-gglib proxy --host 0.0.0.0 --port 8080 --llama-port 5500
-```
-
-### HuggingFace Hub Integration
-
-#### `model download <repo_id> [OPTIONS]`
-Download a model from HuggingFace Hub with interactive queue support.
-
-**Options:**
-- `--quantization <QUANT>`, `-q`: Specific quantization to download (e.g., "Q4_K_M", "F16")
-- `--list-quants`: List available quantizations for the model
-- `--token <TOKEN>`: HuggingFace token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
-- `--force`, `-f`: Skip confirmation prompt
-
-**Interactive mode (TTY):**
-- After queuing a download, the terminal enters a live progress monitor
-- **[a]** — add another model to the queue while the current one is downloading
-- **[q]** / Ctrl-C — cancel all pending downloads and exit
-- Non-TTY environments (CI, pipes) automatically fall back to a plain monitor
-
-**Authentication:**
-For downloading private models, set the `HF_TOKEN` environment variable. It is read at startup and wired into the download manager, mirroring how the GUI handles authentication.
-
-**Example:**
-```bash
-# List available quantizations
-gglib model download microsoft/DialoGPT-medium --list-quants
-
-# Download specific quantization (auto-registered in database)
-gglib model download microsoft/DialoGPT-medium --quantization Q4_K_M
-
-# Download a private model using HF_TOKEN
-HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
-```
-
-#### `model search <query> [OPTIONS]`
-Search for GGUF models on HuggingFace Hub.
-
-**Options:**
-- `--limit <N>`: Maximum number of results (default: 10)
-- `--sort <FIELD>`: Sort by "downloads", "created", "likes", or "updated" (default: downloads)
-- `--gguf-only`: Only show models with GGUF files
-
-**Example:**
-```bash
-gglib model search "llama 7b gguf" --limit 5 --sort downloads
-```
-
-#### `model browse <category> [OPTIONS]`
-Browse popular GGUF models on HuggingFace Hub.
-
-**Options:**
-- `--limit <N>`: Maximum number of results (default: 20)
-- `--size <SIZE>`: Filter by model size (e.g., "7B", "13B", "70B")
-
-**Categories:**
-- `popular`: Most popular models
-- `recent`: Recently updated models
-- `trending`: Trending models
-
-**Example:**
-```bash
-gglib model browse popular --limit 10
-gglib model browse recent --size 7B
-```
-
-#### `model check-updates [OPTIONS]`
-Check for updates to downloaded models.
-
-**Options:**
-- `--model-id <ID>`: Check specific model by ID
-- `--all`: Check all models
-
-**Example:**
-```bash
-gglib model check-updates --all
-```
-
-#### `model upgrade <model_id> [--force]`
-Update a model to the latest version from HuggingFace Hub.
-
-**Options:**
-- `--force`: Skip confirmation prompt
-
-**Example:**
-```bash
-gglib model upgrade 1
-```
-
-### User Interfaces
-
-#### `gui [OPTIONS]`
-Launch the Tauri desktop GUI.
-
-**Options:**
-- `--dev`: Run in development mode with hot-reload (requires Node.js and npm)
-
-**Example:**
-```bash
-# Launch desktop GUI
-gglib gui
-
-# Development mode (for contributors)
-gglib gui --dev
-```
-
-For more details, see the [Desktop GUI documentation](../src-tauri/README.md).
-
-#### `web [OPTIONS]`
-Start the web-based GUI server.
-
-**Options:**
-- `--port <PORT>`: Port to serve the web GUI on (default: 9887)
-- `--base-port <PORT>`: Base port for llama-server instances (default: 9000)
-- `--api-only`: Serve API endpoints only (do not serve static UI assets)
-
-**Example:**
-```bash
-# Start web server (accessible from LAN by default)
-gglib web --port 9887
-
-# API-only mode (useful when running the React dev server separately)
-gglib web --api-only --port 9887
-
-# Use different base port for model servers
-gglib web --port 9887 --base-port 9000
-```
-
-The web server binds to `127.0.0.1` by default (local only). Use `--host 0.0.0.0` for LAN access. See [Interfaces](../README.md#interfaces) for details.
-
-### llama.cpp Management
-
-#### `llama install`
-Install and build llama.cpp with automatic hardware detection.
-
-**Example:**
-```bash
-gglib config llama install
-```
-
-#### `llama status`
-Show llama.cpp installation status and build information.
-
-**Example:**
-```bash
-gglib config llama status
-```
-
-#### `llama check-updates`
-Check if a newer version of llama.cpp is available.
-
-**Example:**
-```bash
-gglib config llama check-updates
-```
-
-#### `llama update`
-Update llama.cpp to the latest version and rebuild.
-
-**Example:**
-```bash
-gglib config llama update
-```
-
-#### `llama rebuild [OPTIONS]`
-Rebuild llama.cpp with different acceleration options.
-
-**Options:**
-- `--cuda`: Force CUDA acceleration (NVIDIA GPUs)
-- `--metal`: Force Metal acceleration (Apple Silicon)
-- `--cpu-only`: Force CPU-only build
-
-**Example:**
-```bash
-gglib config llama rebuild --cuda
-```
-
-#### `llama uninstall`
-Remove llama.cpp installation.
-
-**Example:**
-```bash
-gglib config llama uninstall
-```
-
-### assistant-ui Management
-
-#### `assistant-ui install`
-Install assistant-ui npm dependencies.
-
-**Example:**
-```bash
-gglib config assistant-ui install
-```
-
-#### `assistant-ui status`
-Show assistant-ui installation status.
-
-**Example:**
-```bash
-gglib config assistant-ui status
-```
-
-#### `assistant-ui update`
-Update assistant-ui dependencies.
-
-**Example:**
-```bash
-gglib config assistant-ui update
-```
-
-### System
-
-#### `paths`
-Show resolved paths for all gglib directories (models, database, config, etc.).
-
-**Example:**
-```bash
-gglib config paths
-```
-
-#### `check-deps`
-Check system dependencies required for gglib.
-
-**Example:**
-```bash
-gglib config check-deps
-```
-
-#### `config models-dir <action>`
-Inspect or update the persistent models directory configuration used by downloads and serving commands.
-
-**Actions:**
-- `show` – print the resolved path along with its source (CLI flag/env/default)
-- `prompt` – interactively ask for a new path, creating it if necessary and saving to `.env`
-- `set <PATH>` – non-interactively persist a new path to `.env`
-
-**Examples:**
-```bash
-# Review the current directory
-gglib config models-dir show
-
-# Walk through the interactive prompt (Enter keeps existing value)
-gglib config models-dir prompt
-
-# Force a specific path
-gglib config models-dir set /fast-ssd/llama_models
-```
-
-#### `config settings <action>`
-Manage application settings including download queue configuration, agent loop parameters, and display preferences.
-
-**Actions:**
-- `show` – display current settings
-- `set` – update settings (see flags below)
-- `reset` – reset all settings to defaults
-
-**`set` flags:**
-- `--default-context-size <N>` – default context size (512-1000000)
-- `--proxy-port <PORT>` – OpenAI-compatible proxy port (≥ 1024)
-- `--llama-base-port <PORT>` – llama-server base port (≥ 1024)
-- `--max-download-queue-size <N>` – max download queue size (1-50)
-- `--default-download-path <PATH>` – default model download directory
-- `--max-tool-iterations <N>` – max agent loop iterations (1-50)
-- `--max-stagnation-steps <N>` – max stagnation steps before abort
-- `--show-memory-fit-indicators <BOOL>` – show memory fit in HF browser
-
-**Examples:**
-```bash
-# View current settings
-gglib config settings show
-
-# Set max agent iterations to 40
-gglib config settings set --max-tool-iterations 40
-
-# Set max download queue size
-gglib config settings set --max-download-queue-size 20
-
-# Reset to defaults
-gglib config settings reset
-```
-
-> Changing settings only affects application behavior; it does **not** affect existing downloads or models.
-
+## Benchmark
+
+`compare` runs one prompt through N models sequentially and shows outputs
+side-by-side. `perf` measures prompt-processing and generation throughput via
+llama-bench. `list`, `show` and `model` read past runs.
+
+`tune` sweeps sampling parameters against an agentic tool-calling suite, scoring
+both tool-call accuracy and resistance to loops and stagnation, and can write the
+winning settings straight back to the model's inference defaults.
+
+## MCP tool servers
+
+`list`, `add`, `remove`, `start`, `stop`, `enable`, `disable`, `tools`, `test`.
+
+Servers are `stdio` (a process) or `sse` (HTTP). The `lifecycle` policy decides
+when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
+`manual` never.
+
+## Configuration
+
+`gglib config <subcommand>`:
+
+- **`settings`** — context size, ports, download queue size, agent loop limits,
+  display preferences. `show` / `set` / `reset`.
+- **`profile`** — named sampling profiles, selectable per request as
+  `<model>:<profile>`. Only the flags you pass are set; the rest fall through to
+  the model's own defaults.
+- **`default`** — view or set the default model.
+- **`models-dir`** — `show` (with its source), `prompt` (interactive), or
+  `set <PATH>`.
+- **`llama`** — install, status, check-updates, update, rebuild, uninstall.
+  gglib manages llama.cpp itself; see [Llama Management](llama/README.md).
+- **`assistant-ui`** — install, status, update.
+- **`check-deps`** — report what is missing and print your platform's exact
+  install commands. `--setup-fast-downloads` additionally provisions the
+  optional `hf_xet` accelerator; downloads work without it.
+- **`paths`** — resolved locations for models, database, config and logs.
+
+Changing settings affects future behaviour only — it does not alter existing
+downloads or models.
+
+## Interfaces
+
+`gui` launches the desktop app (`--dev` for hot-reload, contributors only).
+`web` ensures the daemon is up and prints the dashboard URL; the daemon serves
+UI and API from one loopback port. To expose it on the network, run
+`gglib daemon run --share-lan` in the foreground.
 
 ## See Also
 
-- [Main README](../README.md) — Overview and getting started
-- [Interfaces](../README.md#interfaces) — CLI, Desktop GUI, Web UI, and Proxy
-- [Architecture](../README.md#architecture) — How GGLib is structured
-- [gglib-cli crate](../../crates/gglib-cli/README.md) — Rust source for the CLI
-- [Desktop GUI](../src-tauri/README.md) — Tauri app details
+- [Main README](../../README.md) — what GGLib is and how to point a client at it
+- [Sampling resolution](../../docs/sampling.md) · [Tags](../../docs/tags.md) · [KV cache](../../docs/cache.md)
+- [gglib-cli crate](../../crates/gglib-cli/README.md) — the Rust source behind these commands
+- [Desktop GUI](../../src-tauri/README.md)
 
 <!-- module-docs:end -->
