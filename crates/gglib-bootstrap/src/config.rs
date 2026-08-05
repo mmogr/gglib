@@ -14,8 +14,6 @@ pub struct BootstrapConfig {
     pub db_path: PathBuf,
     /// Absolute path to the llama-server binary.
     pub llama_server_path: PathBuf,
-    /// Maximum number of concurrently running llama-server processes.
-    pub max_concurrent: usize,
     /// Absolute path to the directory where model files are stored.
     pub models_dir: PathBuf,
     /// Optional `HuggingFace` API token for authenticated downloads.

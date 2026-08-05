@@ -8,19 +8,14 @@ use std::io::IsTerminal;
 
 use anyhow::Result;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_runtime::proxy::{ProxyAccessOptions, StandaloneProxyParams, start_proxy_standalone};
 
 use crate::bootstrap::CliContext;
-use crate::shared_args::CacheArgs;
+use crate::daemon_client::{self, StartProxyBody};
 
 /// Loopback only. `up` is the "get me working" path; exposing an
 /// unauthenticated endpoint to a network is a decision, and decisions belong to
 /// `gglib proxy --host`.
 const HOST: &str = "127.0.0.1";
-
-/// Upstream llama-server port, matching `gglib proxy`'s own default (5500+,
-/// clear of macOS AirPlay on 5000).
-const LLAMA_BASE_PORT: u16 = 5500;
 
 /// Number of steps announced in the progress headers.
 const STEPS: usize = 5;
@@ -66,9 +61,6 @@ pub async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         ..Default::default()
     });
 
-    // Spawned before the blocking call, because `start_proxy_standalone` does
-    // not return until shutdown. The task waits for the listener itself rather
-    // than being handed a readiness signal — there isn't one to hand it.
     // The stored key, if any, is what the proxy about to start will demand of
     // this very probe: `up` binds loopback and passes no `--api-key`, so the
     // supervisor resolves the same settings row we read here.
@@ -76,32 +68,29 @@ pub async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         .proxy_api_key
         .clone()
         .filter(|key| !key.trim().is_empty());
-    let warmup = tokio::spawn(warm::run(args.port, model.name.clone(), api_key));
 
-    let result = start_proxy_standalone(StandaloneProxyParams {
-        host: HOST.to_string(),
-        port: args.port,
-        llama_base_port: LLAMA_BASE_PORT,
-        llama_server_path: ctx.llama_server_path.clone(),
-        model_repo: ctx.model_repo.clone(),
-        mcp: ctx.mcp.clone(),
-        settings_repo: ctx.app.settings().repo(),
-        default_context,
-        inference_override: None,
-        cache: CacheArgs::default().into_proxy_cache_options(),
-        // Loopback-only and deliberately unconfigurable, so nothing to override:
-        // the supervisor resolves the stored key and generates nothing.
-        access: ProxyAccessOptions::default(),
-        // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
-        // discover anything. `up` warms one model; it does not restrict to it.
-        pinned: None,
-    })
-    .await;
+    let handle = daemon_client::ensure_daemon().await?;
+    let status = handle
+        .start_proxy(&StartProxyBody {
+            host: Some(HOST.to_string()),
+            port: Some(args.port),
+            default_context: Some(default_context),
+            // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
+            // discover anything. `up` warms one model; it does not restrict
+            // to it. Everything else is deliberately unconfigurable here.
+            ..Default::default()
+        })
+        .await?;
+    let proxy_port = status.port.unwrap_or(args.port);
 
-    // Ctrl-C during the load would otherwise leave the spinner drawing over
-    // the shutdown message.
-    warmup.abort();
-    result
+    // Step 5: prove it. The warm request loads the model through the very
+    // endpoint the user is about to point their client at.
+    warm::run(proxy_port, model.name.clone(), api_key).await;
+
+    // The endpoint now outlives this command — the daemon owns it. Attach the
+    // dashboard so `up` keeps its "foreground until Ctrl-C" feel; detaching
+    // leaves the endpoint serving.
+    crate::handlers::inference::proxy::attach_dashboard(ctx, proxy_port, None).await
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────

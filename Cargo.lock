@@ -2141,7 +2141,6 @@ dependencies = [
  "gglib-download",
  "gglib-gguf",
  "gglib-hf",
- "gglib-runtime",
  "sqlx",
  "tempfile",
  "tokio",
@@ -2190,7 +2189,6 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-test",
- "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]

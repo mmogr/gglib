@@ -6,7 +6,6 @@
 
 use clap::Args;
 use gglib_core::cache_config::KvCacheType;
-use gglib_runtime::proxy::ProxyCacheOptions;
 
 /// Sampling-parameter overrides common to all inference commands.
 ///
@@ -242,25 +241,6 @@ fn kv_cache_type_parser() -> impl clap::builder::TypedValueParser {
                 .expect("clap accepted a value outside KvCacheType::ALL")
         },
     )
-}
-
-impl CacheArgs {
-    /// Convert into the runtime's cache options.
-    ///
-    /// The single construction point for [`ProxyCacheOptions`] on the CLI
-    /// side, so `serve` and `proxy` cannot drift in how a flag is mapped.
-    #[must_use]
-    pub fn into_proxy_cache_options(self) -> ProxyCacheOptions {
-        ProxyCacheOptions {
-            enabled: self.cache,
-            slot_dir: self.slot_dir,
-            ram_mb: self.cache_ram_mb,
-            reuse: self.cache_reuse,
-            disk_gb: self.cache_disk_gb,
-            type_k: self.cache_type_k,
-            type_v: self.cache_type_v,
-        }
-    }
 }
 
 /// Serve-command options that don't belong to another group.

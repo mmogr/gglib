@@ -1,6 +1,6 @@
 //! CLI bootstrap - the composition root for the CLI adapter.
 //!
-//! Shared infrastructure (DB, runner, download manager, model registrar,
+//! Shared infrastructure (DB, download manager, model registrar,
 //! verification service, …) is wired by [`gglib_bootstrap::CoreBootstrap`].
 //! This module is the only place where CLI-specific concerns are added on
 //! top: the indicatif-based download emitter, the MCP service (with a
@@ -13,7 +13,7 @@ use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
-    ModelRepository, NoopEmitter, ProcessRunner, Repos, SettingsRepository,
+    ModelRepository, NoopEmitter, Repos, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
@@ -33,8 +33,6 @@ pub struct CliConfig {
     pub base_port: u16,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
-    /// Maximum concurrent model servers.
-    pub max_concurrent: usize,
 }
 
 impl CliConfig {
@@ -43,7 +41,6 @@ impl CliConfig {
         Ok(Self {
             base_port: DEFAULT_LLAMA_BASE_PORT,
             llama_server_path: llama_server_path()?,
-            max_concurrent: 4,
         })
     }
 }
@@ -55,8 +52,6 @@ impl CliConfig {
 pub struct CliContext {
     /// The core application facade.
     pub app: Arc<AppCore>,
-    /// Process runner for direct server operations.
-    pub runner: Arc<dyn ProcessRunner>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
     /// Download manager for model downloads.
@@ -119,14 +114,12 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     let bootstrap_config = BootstrapConfig {
         db_path: database_path()?,
         llama_server_path: config.llama_server_path.clone(),
-        max_concurrent: config.max_concurrent,
         models_dir: models_resolution.path,
         hf_token: std::env::var("HF_TOKEN").ok(),
     };
 
     let BuiltCore {
         app,
-        runner,
         downloads,
         hf_client: _,
         gguf_parser,
@@ -146,7 +139,6 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
 
     Ok(CliContext {
         app,
-        runner,
         mcp,
         downloads,
         gguf_parser,
@@ -162,13 +154,12 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     })
 }
 
-/// Bootstrap with custom repos and runner (for testing).
+/// Bootstrap with custom repos (for testing).
 ///
 /// Note: callers provide their own download manager (typically a stub that
 /// does nothing). This path bypasses [`CoreBootstrap::build`] entirely.
 pub fn bootstrap_with(
     repos: Repos,
-    runner: Arc<dyn ProcessRunner>,
     downloads: Arc<dyn DownloadManagerPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
     model_registrar: Arc<dyn ModelRegistrarPort>,
@@ -182,7 +173,6 @@ pub fn bootstrap_with(
     ));
     CliContext {
         app,
-        runner,
         mcp,
         downloads,
         gguf_parser,

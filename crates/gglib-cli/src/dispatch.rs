@@ -152,17 +152,20 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Gui { dev } => {
             handlers::gui::execute(dev)?;
         }
-        Commands::Web {
-            port,
-            host,
-            share_lan,
-            base_port,
-            api_only,
-            static_dir,
-        } => {
-            handlers::web::execute(ctx, port, host, share_lan, base_port, api_only, static_dir)
-                .await?;
+        Commands::Web { share_lan } => {
+            handlers::web::execute(share_lan).await?;
         }
+        Commands::Daemon { command } => match command {
+            crate::commands::DaemonCommand::Run { share_lan } => {
+                handlers::daemon::run(share_lan).await?;
+            }
+            crate::commands::DaemonCommand::Status => {
+                handlers::daemon::status().await?;
+            }
+            crate::commands::DaemonCommand::Stop => {
+                handlers::daemon::stop().await?;
+            }
+        },
         Commands::Proxy {
             host,
             port,
@@ -200,6 +203,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                             key.as_deref(),
                         )
                         .await?;
+                    }
+                    crate::commands::ProxyCommand::Stop => {
+                        handlers::inference::proxy::stop().await?;
                     }
                 }
                 return Ok(());

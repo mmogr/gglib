@@ -43,8 +43,6 @@ pub struct ServerConfig {
     pub base_port: u16,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
-    /// Maximum concurrent model servers.
-    pub max_concurrent: usize,
     /// Maximum concurrent agent loop sessions.
     ///
     /// Each `POST /api/agent/chat` request holds one permit for the lifetime
@@ -65,7 +63,6 @@ impl ServerConfig {
             port: 9887,
             base_port: 9000,
             llama_server_path: llama_server_path()?,
-            max_concurrent: 4,
             max_concurrent_agent_loops: 4,
             static_dir: None,
             cors: CorsConfig::default(),
@@ -180,14 +177,12 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let bootstrap_config = BootstrapConfig {
         db_path,
         llama_server_path: config.llama_server_path.clone(),
-        max_concurrent: config.max_concurrent,
         models_dir: models_resolution.path,
         hf_token: None,
     };
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {
         app: core,
-        runner: _,
         downloads,
         hf_client,
         gguf_parser,

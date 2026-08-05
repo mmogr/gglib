@@ -48,21 +48,8 @@ async fn hf_token_config_accepted() {
     );
 }
 
-/// Setting `max_concurrent` to a value greater than 1 must not cause a build failure.
-#[tokio::test]
-async fn max_concurrent_config_accepted() {
-    let dir = TempDir::new().unwrap();
-    let mut cfg = minimal_config(&dir);
-    cfg.max_concurrent = 4;
-    assert!(
-        gglib_bootstrap::CoreBootstrap::build(cfg, noop_emitter())
-            .await
-            .is_ok()
-    );
-}
-
 /// A non-existent llama-server binary is accepted at build time; failure
-/// is deferred to the point where the runner is actually invoked.
+/// is deferred to the point where a llama-server is actually spawned.
 #[tokio::test]
 async fn nonexistent_llama_server_path_is_accepted() {
     let dir = TempDir::new().unwrap();
@@ -75,11 +62,11 @@ async fn nonexistent_llama_server_path_is_accepted() {
     );
 }
 
-/// `build()` result includes a populated `BuiltCore` — spot-check the runner Arc.
+/// `build()` result includes a populated `BuiltCore` — spot-check the downloads Arc.
 #[tokio::test]
-async fn built_core_runner_is_present() {
+async fn built_core_downloads_is_present() {
     let dir = TempDir::new().unwrap();
     let core = build_core(&dir).await;
-    // If runner is behind an Arc<dyn …>, cloning the Arc is a proxy for "it's there".
-    let _runner = core.runner.clone();
+    // Behind an Arc<dyn …>, cloning the Arc is a proxy for "it's there".
+    let _downloads = core.downloads.clone();
 }

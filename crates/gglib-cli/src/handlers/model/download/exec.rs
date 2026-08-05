@@ -1,22 +1,18 @@
 //! Download handler — lean orchestrator.
 //!
-//! Queues the initial model via [`DownloadManagerPort::queue_smart`] (the same
-//! path used by the GUI) and then delegates to [`interactive::run_interactive_monitor`]
-//! for progress rendering and optional interactive queue management.
-//!
-//! Model registration after download is handled internally by the download
-//! manager via the shared [`ModelRegistrarPort`], giving full parity with
-//! the GUI registration path.
-
-use std::sync::Arc;
+//! Queues the download on the gglib daemon (`POST /api/models/downloads/queue`,
+//! the same route the GUI uses) and watches the daemon's queue for progress.
+//! The daemon owns the download and registers the model when it completes, so
+//! detaching this command does not interrupt anything.
 
 use anyhow::Result;
 use gglib_download::cli_exec::list_quantizations;
 
 use crate::bootstrap::CliContext;
+use crate::daemon_client;
 use gglib_core::paths::resolve_models_dir;
 
-use super::interactive;
+use super::remote;
 
 /// Download command arguments passed from CLI.
 pub struct DownloadArgs<'a> {
@@ -34,10 +30,11 @@ pub struct DownloadArgs<'a> {
 
 /// Execute the download command.
 ///
-/// Queues `model_id` via the shared [`DownloadManagerPort`] and enters the
-/// interactive monitor loop. The monitor exits when all queued downloads
-/// complete or the user presses `[q]`.
+/// Queues `model_id` on the daemon and watches the queue until it drains.
+/// Ctrl-C detaches; the daemon keeps downloading and registers the model
+/// itself.
 pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
+    let _ = ctx;
     let models_dir = resolve_models_dir(None)?.path;
 
     // --list-quants: show available quantizations and exit (uses cli_exec directly).
@@ -46,17 +43,7 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
         return Ok(());
     }
 
-    // Queue the initial download via the shared manager (same code path as GUI).
-    let quant = args.quantization.map(String::from);
-    Arc::clone(&ctx.downloads)
-        .queue_smart(args.model_id.to_string(), quant)
-        .await?;
-
-    // Hand off to the interactive monitor — all progress rendering, keypress
-    // handling, TTY/non-TTY detection, and failure reporting live there.
-    interactive::run_interactive_monitor(
-        Arc::clone(&ctx.downloads),
-        Arc::clone(&ctx.download_emitter),
-    )
-    .await
+    let handle = daemon_client::ensure_daemon().await?;
+    remote::queue(&handle, args.model_id, args.quantization.map(String::from)).await?;
+    remote::monitor(&handle).await
 }

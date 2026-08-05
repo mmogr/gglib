@@ -70,6 +70,35 @@ pub enum ProxyCommand {
         #[arg(long, env = "GGLIB_API_KEY")]
         api_key: Option<String>,
     },
+    /// Stop the proxy on the running gglib daemon
+    ///
+    /// The proxy keeps running in the daemon after `gglib proxy`/`gglib serve`
+    /// detach; this is how it is actually stopped.
+    Stop,
+}
+
+/// Subcommands available under `gglib daemon`.
+#[derive(Subcommand)]
+pub enum DaemonCommand {
+    /// Run the daemon in the foreground
+    ///
+    /// The daemon is the one process on this machine that spawns and owns
+    /// llama-server. Other commands start it automatically when they need it;
+    /// run it manually for a foreground session or a service manager unit.
+    Run {
+        /// Expose the daemon on all LAN interfaces (0.0.0.0) and advertise
+        /// it over mDNS
+        ///
+        /// WARNING: the management API has no authentication — every device
+        /// on the network can control this machine's models. Only use on
+        /// networks you trust.
+        #[arg(long)]
+        share_lan: bool,
+    },
+    /// Show whether the daemon is running, and what it is doing
+    Status,
+    /// Stop the running daemon (and every llama-server it owns)
+    Stop,
 }
 
 /// Top-level commands for the GGUF library management tool.
@@ -291,41 +320,24 @@ pub enum Commands {
         dev: bool,
     },
 
-    /// Start the web-based GUI server
+    /// Open the web dashboard (served by the gglib daemon)
+    ///
+    /// Ensures the daemon is running and prints the dashboard URL. The
+    /// daemon serves the UI and the API from one fixed loopback port; to
+    /// expose it on the network, run `gglib daemon run --share-lan` in the
+    /// foreground instead.
     #[command(display_order = 21)]
     Web {
-        /// Port to serve the web GUI on
-        #[arg(short, long, env = "VITE_GGLIB_WEB_PORT", default_value = "9887")]
-        port: u16,
-        /// Host address to bind the server to (overrides the stored `bind-host` setting)
-        ///
-        /// Falls back to the stored setting, then to 127.0.0.1 when neither is set.
-        /// This is a per-run override — it is not written back to settings.
-        #[arg(long)]
-        host: Option<String>,
-        /// Expose the server on all LAN interfaces (0.0.0.0) and enable mDNS broadcasting
-        ///
-        /// WARNING: Makes GGLib visible to every device on your local network and
-        /// relaxes CORS to allow all origins. Off by default.
-        ///
-        /// Combine with --host to share on one interface only. Combining it with a
-        /// loopback address is rejected, since nothing on the LAN could reach it.
-        /// Persist the preference with `gglib config settings set --share-lan true`.
+        /// Shorthand for `gglib daemon run --share-lan` (foreground)
         #[arg(long)]
         share_lan: bool,
-        /// Base port for llama-server instances (Note: Port 5000 conflicts with macOS AirPlay)
-        #[arg(long, default_value = "9000")]
-        base_port: u16,
-        /// Serve API endpoints only (do not serve static UI assets)
-        ///
-        /// By default, `gglib web` will auto-detect a built frontend (e.g. `./web_ui`) and
-        /// serve it with SPA fallback. Use this flag when running the React dev server (Vite)
-        /// separately.
-        #[arg(long)]
-        api_only: bool,
-        /// Path to the directory containing built frontend assets (e.g., ./web_ui/dist)
-        #[arg(long)]
-        static_dir: Option<std::path::PathBuf>,
+    },
+
+    /// Manage the gglib daemon — the process that owns llama-server
+    #[command(display_order = 23)]
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommand,
     },
 
     /// Generate shell completion scripts (bash, zsh, fish, elvish, powershell)

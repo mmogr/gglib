@@ -1,22 +1,22 @@
 //! Maps [`AgentSessionParams`] to an [`AgentLoopPort`] composition root and
-//! manages llama-server lifecycle (auto-start or port reuse).
+//! resolves the llama-server to talk to (daemon-started, or a user-supplied
+//! port).
 //!
 //! The only public surface is [`compose`], which returns the ready-to-use
-//! `Arc<dyn AgentLoopPort>` and an optional [`ProcessHandle`] that the caller
-//! must stop when the session ends (`Some` only when we auto-started the
-//! server).  [`AgentConfig`] is built inline by the caller from the same args.
+//! `Arc<dyn AgentLoopPort>`. The llama-server itself belongs to the daemon —
+//! this process never spawns or stops one, and a model left warm after the
+//! session is a feature, not a leak. [`AgentConfig`] is built inline by the
+//! caller from the same args.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::request_pipeline;
 use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::compose_agent_loop_with_sampling;
-use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -89,10 +89,9 @@ impl From<&ChatArgs> for AgentSessionParams {
 
 /// Compose the agent loop ready to use for a session.
 ///
-/// Returns `(agent, maybe_handle)`:
-/// - `maybe_handle` is `Some(handle)` when we auto-started a llama-server.
-///   The caller **must** call `ctx.runner.stop(&handle)` when the session ends.
-/// - `maybe_handle` is `None` when the caller supplied a port (reuse).
+/// The llama-server behind the returned agent is either the one the caller
+/// pointed at (`--port`) or one the daemon started; either way its lifetime
+/// is not this session's concern.
 ///
 /// When `sandbox_root` is `Some`, filesystem tools are restricted to that
 /// directory.  Pass `None` for an unsandboxed session.
@@ -102,9 +101,9 @@ pub async fn compose(
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
     banner: &BannerInfo,
-) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
-    // 1. Resolve the LLM port — reuse or auto-start.
-    let (port, maybe_handle) = resolve_port(ctx, params, banner).await?;
+) -> Result<Arc<dyn AgentLoopPort>> {
+    // 1. Resolve the LLM port — reuse or ask the daemon to start the model.
+    let port = resolve_port(ctx, params, banner).await?;
 
     // 2. Resolve inference parameters via the 4-level hierarchy.
     //    Look up the model so model-level defaults can be applied.  When the
@@ -156,30 +155,30 @@ pub async fn compose(
         Some(params.retry_policy),
     );
 
-    Ok((agent, maybe_handle))
+    Ok(agent)
 }
 
 // =============================================================================
 // Private helpers
 // =============================================================================
 
-/// Return `(port, maybe_handle)`.
+/// Resolve the llama-server port for this session.
 ///
-/// When a port is supplied the server is treated as externally managed
-/// and no `ProcessHandle` is returned.  Otherwise a llama-server is spawned
-/// via [`CliContext::runner`] and the resulting handle is returned so the
-/// caller can stop it on exit.
+/// A caller-supplied `--port` is used as-is (externally managed server).
+/// Otherwise the daemon — the one process that owns llama-server — is asked
+/// to start (or reuse) the model, and the daemon keeps owning it after this
+/// session ends.
 async fn resolve_port(
     ctx: &CliContext,
     params: &AgentSessionParams,
     banner: &BannerInfo,
-) -> Result<(u16, Option<ProcessHandle>)> {
+) -> Result<u16> {
     if let Some(port) = params.port {
         tracing::debug!("reusing user-supplied llama-server on port {port}");
-        return Ok((port, None));
+        return Ok(port);
     }
 
-    // Auto-start: look up the model, then ask the process runner to start it.
+    // Look up the model so the context flag can resolve against its metadata.
     let model = ctx
         .app
         .models()
@@ -187,46 +186,28 @@ async fn resolve_port(
         .await
         .context("failed to look up model")?;
 
-    // Resolve context size via the shared 4-level fallback chain.
-    // The raw flag is shape-validated up front and resolved against the
-    // model's GGUF context length now that `model` is available (this is
-    // what makes `--ctx-size max` work).
-    let settings = ctx.app.settings().get().await?;
+    // Resolve the per-request context tier here (this is what makes
+    // `--ctx-size max` work); the daemon applies the per-model and global
+    // tiers itself, exactly as it does for every other start request.
     let ctx_arg = parse_ctx_size_flag(params.ctx_size.as_deref())?;
-
-    let server_config = build_server_config(
-        model.id,
-        model.name.clone(),
-        model.file_path.clone(),
-        ctx.base_port,
-        &model.tags,
-        ServerConfigOptions {
-            context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
-            model_server_ctx: model
-                .server_defaults
-                .as_ref()
-                .and_then(|s| s.context_length),
-            global_default_ctx: settings.default_context_size,
-            ..Default::default()
-        },
-    );
+    let context_length = ctx_arg.and_then(|arg| arg.resolve(model.context_length));
 
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
         eprintln!(
-            "  Starting llama-server for '{}' (this may take a moment) \u{2026}",
+            "  Starting llama-server for '{}' via the gglib daemon (this may take a moment) \u{2026}",
             model.name
         );
     }
 
-    let handle = ctx
-        .runner
-        .start(server_config)
+    let handle = crate::daemon_client::ensure_daemon().await?;
+    let started = handle
+        .start_model_server(model.id, context_length)
         .await
-        .context("failed to start llama-server")?;
+        .context("failed to start llama-server via the daemon")?;
 
     if !banner.quiet {
-        eprintln!("  llama-server ready on port {}", handle.port);
+        eprintln!("  llama-server ready on port {}", started.port);
 
         // Sampling overrides
         if let Some(ref s) = banner.sampling {
@@ -243,7 +224,7 @@ async fn resolve_port(
         style::print_banner_close();
     }
 
-    Ok((handle.port, Some(handle)))
+    Ok(started.port)
 }
 
 /// Print non-default sampling parameter lines in the info banner.

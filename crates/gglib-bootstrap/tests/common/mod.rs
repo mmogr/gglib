@@ -23,7 +23,6 @@ pub fn minimal_config(dir: &TempDir) -> BootstrapConfig {
     BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
         llama_server_path: PathBuf::from("/nonexistent/llama-server"),
-        max_concurrent: 1,
         models_dir,
         hf_token: None,
     }

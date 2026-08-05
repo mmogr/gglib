@@ -20,7 +20,6 @@ fn test_config() -> ServerConfig {
         port: 0,
         base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent: 1,
         max_concurrent_agent_loops: 1,
         static_dir: None,
         cors: CorsConfig::LocalOnly,

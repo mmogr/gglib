@@ -39,8 +39,6 @@ use gglib_core::paths::{
 pub struct TauriConfig {
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
-    /// Maximum concurrent model servers.
-    pub max_concurrent: usize,
 }
 
 impl TauriConfig {
@@ -48,7 +46,6 @@ impl TauriConfig {
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
             llama_server_path: llama_server_path()?,
-            max_concurrent: 4,
         })
     }
 }
@@ -183,13 +180,11 @@ async fn bootstrap_inner(
     let bootstrap_config = BootstrapConfig {
         db_path,
         llama_server_path: config.llama_server_path.clone(),
-        max_concurrent: config.max_concurrent,
         models_dir: models_resolution.path,
         hf_token: None,
     };
     let BuiltCore {
         app,
-        runner: _,
         downloads,
         hf_client,
         gguf_parser,

@@ -7,7 +7,7 @@ use anyhow::Result;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort,
-    HfClientPort, ModelRegistrarPort, ModelRepository, ProcessRunner,
+    HfClientPort, ModelRegistrarPort, ModelRepository,
 };
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, ModelFilesRepository, setup_database};
@@ -15,7 +15,6 @@ use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
 use gglib_hf::{DefaultHfClient, HfClientConfig};
-use gglib_runtime::LlamaServerRunner;
 
 use crate::built::BuiltCore;
 use crate::config::BootstrapConfig;
@@ -53,13 +52,7 @@ impl CoreBootstrap {
         let pool = setup_database(&config.db_path).await?;
         let repos = CoreFactory::build_repos(pool.clone());
 
-        // 2. Process runner
-        let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-            config.llama_server_path,
-            config.max_concurrent,
-        ));
-
-        // 3. GGUF parser (shared: model registrar + capability detection)
+        // 2. GGUF parser (shared: model registrar + capability detection)
         let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
 
         // 4. Model-files repository (used by registrar + verification service)
@@ -132,7 +125,6 @@ impl CoreBootstrap {
 
         Ok(BuiltCore {
             app,
-            runner,
             downloads,
             hf_client,
             gguf_parser,

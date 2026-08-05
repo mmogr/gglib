@@ -99,7 +99,7 @@ pub async fn execute(
         Some(inference_config)
     };
 
-    let (agent, maybe_handle) = compose(
+    let agent = compose(
         ctx,
         &params,
         Some(cwd.clone()),
@@ -210,12 +210,11 @@ pub async fn execute(
             run_repl_with_history(agent, history, config, verbose, persistence).await?;
         }
     } else if !completed {
-        // Defer error until after potential server cleanup
-        stop_server(ctx, &maybe_handle).await;
         return Err(anyhow!("agent did not produce a final answer"));
     }
 
-    stop_server(ctx, &maybe_handle).await;
+    // The llama-server belongs to the daemon and stays warm for the next
+    // session; nothing to stop here.
     Ok(())
 }
 
@@ -244,15 +243,6 @@ fn ask_continue() -> Result<bool> {
 
     let answer = input.trim();
     Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
-}
-
-/// Stop the auto-started llama-server, if any.
-async fn stop_server(ctx: &CliContext, maybe_handle: &Option<gglib_core::ProcessHandle>) {
-    if let Some(server_handle) = maybe_handle
-        && let Err(e) = ctx.runner.stop(server_handle).await
-    {
-        tracing::warn!("failed to stop llama-server: {e}");
-    }
 }
 
 /// Build the user message, incorporating piped stdin or `--file` content.

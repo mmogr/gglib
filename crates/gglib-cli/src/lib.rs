@@ -32,6 +32,7 @@ pub mod benchmark_commands;
 pub mod bootstrap;
 pub mod commands;
 pub mod config_commands;
+pub mod daemon_client;
 pub mod dispatch;
 pub mod error;
 pub mod handlers;

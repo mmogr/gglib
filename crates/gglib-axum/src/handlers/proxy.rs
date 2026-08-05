@@ -45,6 +45,21 @@ pub struct StartProxyConfig {
     /// ordinary auto-swapping proxy.
     #[serde(default)]
     pub pinned: Option<gglib_core::ports::PinnedSpec>,
+    /// Byte budget in GiB for the on-disk slot eviction sweep
+    /// (`--cache-disk-gb`). Omitted auto-sizes from free disk space.
+    #[serde(default)]
+    pub cache_disk_gb: Option<u64>,
+    /// Operator sampling overrides applied above the client's own request
+    /// parameters (`gglib proxy --temperature …`).
+    #[serde(default)]
+    pub inference_override: Option<gglib_core::domain::InferenceConfig>,
+    /// Bearer token demanded on `/v1/*` (`--api-key`). Omitted falls through
+    /// to the stored setting.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Host header values to accept beyond loopback (`--allowed-host`).
+    #[serde(default)]
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Convert runtime ProxyStatus to API ProxyStatus.
@@ -119,7 +134,10 @@ fn to_runtime_config(cfg: &StartProxyConfig, settings: &AppSettings) -> RuntimeP
         default_context,
         cache_enabled,
         slot_dir,
-        ..Default::default()
+        disk_budget: gglib_runtime::proxy::resolve_disk_budget(cfg.cache_disk_gb),
+        inference_override: cfg.inference_override.clone(),
+        api_key: cfg.api_key.clone(),
+        allowed_hosts: cfg.allowed_hosts.clone(),
     }
 }
 
@@ -140,13 +158,26 @@ pub async fn start(
     let settings = state.settings.get().await?;
     let runtime_cfg = to_runtime_config(&cfg, &settings);
 
-    // Idempotent: if already running (Conflict), treat as success
+    // Idempotent: if already running (Conflict), treat as success — unless
+    // the caller asked for a pinned mode the running proxy does not match,
+    // where "success" would silently hand them an endpoint without the
+    // refuse-foreign-models guarantee they explicitly requested.
     match state.proxy.start(runtime_cfg, cfg.pinned.clone()).await {
         Ok(_addr) => {}
         Err(e) => {
             let http: HttpError = e.into();
             if !matches!(http, HttpError::Conflict(_)) {
                 return Err(http);
+            }
+            let requested = cfg.pinned.as_ref().map(|p| p.name.clone());
+            if requested.is_some() && state.proxy.pinned_model() != requested {
+                return Err(HttpError::Conflict(format!(
+                    "the proxy is already running {} — stop it first (`gglib proxy stop`)",
+                    match state.proxy.pinned_model() {
+                        Some(name) => format!("pinned to '{name}'"),
+                        None => "unpinned".to_string(),
+                    }
+                )));
             }
         }
     }
