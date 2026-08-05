@@ -26,6 +26,13 @@
 //! | Jinja templates | `opts.jinja = Some(…)` | `"agent"` tag → enabled |
 //! | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
 //! | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → enabled |
+//! | Embedding mode | *(no override — see below)* | `"embedding"` tag → enabled |
+//!
+//! Embedding mode is the one row with no override column. `--embeddings`
+//! restricts llama-server to serving embeddings, so the flag is a statement
+//! about what the model is rather than a preference: forcing it on for a chat
+//! model yields a server that refuses chat completions, and forcing it off for
+//! an embedding model yields one that 501s on `/v1/embeddings`.
 //!
 //! ## One translator
 //!
@@ -48,7 +55,8 @@ use tracing::debug;
 
 use crate::llama::args::{
     JinjaResolution, MtpResolution, ReasoningFormatResolution, ReasoningFormatSource,
-    resolve_jinja_flag, resolve_kv_cache_types, resolve_mtp_args, resolve_reasoning_format,
+    resolve_embeddings_flag, resolve_jinja_flag, resolve_kv_cache_types, resolve_mtp_args,
+    resolve_reasoning_format,
 };
 
 /// The capability resolutions [`build_server_config`] performed, handed back
@@ -66,6 +74,9 @@ pub struct ResolvedCapabilities {
     pub reasoning: ReasoningFormatResolution,
     /// The MTP speculative-decoding decision, and why.
     pub mtp: MtpResolution,
+    /// Whether `--embeddings` was emitted. Tag-derived, so it carries no
+    /// `*Source` of its own — there is only one way for it to be true.
+    pub embeddings: bool,
 }
 
 // =============================================================================
@@ -219,12 +230,23 @@ pub fn build_server_config_narrated(
         config = config.with_mlock();
     }
 
+    // --- Embedding mode (--embeddings) -----------------------------------------
+    // Tag-derived only, with no `opts` field to override it: the flag restricts
+    // llama-server to embeddings, so letting a caller force it either way would
+    // only ever produce a server that refuses the requests it is about to get.
+    let embeddings = resolve_embeddings_flag(tags);
+    if embeddings {
+        debug!("enabling --embeddings for model tagged embedding");
+        config = config.with_embeddings();
+    }
+
     (
         config,
         ResolvedCapabilities {
             jinja,
             reasoning,
             mtp,
+            embeddings,
         },
     )
 }
@@ -342,6 +364,22 @@ mod tests {
             config.spec_draft_n_max.is_some(),
             "mtp tag should auto-enable speculative decoding"
         );
+        assert!(
+            !config.embeddings,
+            "a chat model's tags must never reach --embeddings"
+        );
+    }
+
+    /// The embedding tag is the only route to `--embeddings`; there is no
+    /// `ServerConfigOptions` field that could carry it instead.
+    #[test]
+    fn cascade_preserves_embedding_tag_detection() {
+        let config = build_via_cascade(
+            &["embedding".to_string()],
+            ServerConfigOptions::default(),
+            GlobalDefaults::default(),
+        );
+        assert!(config.embeddings);
     }
 
     /// With caching on, the slot directory reaches the built config the same

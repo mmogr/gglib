@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub mod cache_ram;
+pub mod embedding;
 pub mod jinja;
 pub mod kv_cache_type;
 pub mod mtp;
@@ -8,6 +9,7 @@ pub mod slot_restore;
 
 // Re-export public API
 pub use cache_ram::{CacheRamResolution, CacheRamSource, resolve_cache_ram};
+pub use embedding::resolve_embeddings_flag;
 pub use jinja::{JinjaResolution, JinjaResolutionSource, resolve_jinja_flag};
 pub use kv_cache_type::{KvCacheTypeResolution, KvCacheTypeSource, resolve_kv_cache_types};
 pub use mtp::{

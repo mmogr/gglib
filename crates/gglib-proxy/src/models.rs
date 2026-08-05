@@ -110,6 +110,18 @@ pub(crate) struct ChatRoutingEnvelope {
     pub num_ctx: Option<u64>,
 }
 
+/// The one field the proxy reads out of a `/v1/embeddings` request body.
+///
+/// Same principle as [`ChatRoutingEnvelope`]: `input` is deliberately not
+/// declared. Both OpenAI shapes (a bare string and an array of strings), plus
+/// `encoding_format`, `dimensions` and anything llama-server grows later, ride
+/// through as raw bytes because nothing here ever looks at them.
+#[derive(Debug, Deserialize)]
+pub(crate) struct EmbeddingsRoutingEnvelope {
+    /// Model name or ID used to select the llama-server instance.
+    pub model: String,
+}
+
 /// Full OpenAI-compatible chat completion request.
 ///
 /// This type is kept for response construction, testing, and documentation
@@ -273,6 +285,7 @@ impl ModelsResponse {
                     owned_by: "gglib".to_string(),
                     description: Some(summary.description()),
                     context_window: summary.context_length.map(|ctx| ctx.min(effective_cap)),
+                    capabilities: capabilities_of(&summary),
                 }
             })
             .collect();
@@ -281,6 +294,20 @@ impl ModelsResponse {
             data,
         }
     }
+}
+
+/// The extra endpoints a catalogued model can serve, for
+/// [`ModelInfo::capabilities`].
+///
+/// `None` rather than an empty vec for an ordinary chat model, so the field
+/// disappears from the response instead of appearing as `[]` — an empty list
+/// reads as "this model can do nothing", which is the opposite of the truth.
+fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
+    summary
+        .tags
+        .iter()
+        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
+        .then(|| vec!["embeddings".to_string()])
 }
 
 /// Information about a single model (OpenAI format).
@@ -307,6 +334,20 @@ pub struct ModelInfo {
     /// model runs — so the pre-launch value must already be honest.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
+    /// Non-OpenAI endpoints this model can serve, beyond
+    /// `/v1/chat/completions`.
+    ///
+    /// `Some(["embeddings"])` for a model tagged `embedding`; `None` — and so
+    /// absent from the JSON entirely — for everything else. A chat client's
+    /// picker is therefore byte-identical to what it saw before this field
+    /// existed, while a RAG client has something to filter on other than
+    /// guessing from the model's name.
+    ///
+    /// An array rather than a `type` discriminant because capability is not
+    /// exclusive: a future entry may serve both chat and embeddings, and
+    /// vision or tool support could join the same list without a second field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
 }
 
 // =============================================================================
@@ -405,6 +446,48 @@ impl ErrorResponse {
             ),
             "invalid_request_error",
             "profile_not_found",
+        )
+    }
+
+    /// Create an error response for an embeddings request naming a model that
+    /// is not an embedding model.
+    ///
+    /// Refused before the model is loaded rather than after: llama-server only
+    /// answers `/v1/embeddings` when it was started with `--embeddings`, and
+    /// gglib only passes that flag for a model tagged `embedding`. Forwarding
+    /// anyway would evict whatever is currently serving chat to start a server
+    /// that can only reply 501, so the swap is worth nothing to anyone.
+    ///
+    /// The remedy is named in the message because the failure is equally
+    /// likely to be a client naming the wrong model and detection having
+    /// missed a genuine embedding model.
+    pub fn not_an_embedding_model(model: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Model '{model}' is not an embedding model. Only models tagged 'embedding' can \
+                 serve /v1/embeddings. If this model does produce embeddings, run \
+                 `gglib model retag {model}` to re-derive its tags."
+            ),
+            "invalid_request_error",
+            "not_an_embedding_model",
+        )
+    }
+
+    /// Create an error response for a chat request naming an embedding model.
+    ///
+    /// The mirror of [`Self::not_an_embedding_model`], and refused for the same
+    /// reason: a model tagged `embedding` is launched with `--embeddings`,
+    /// which makes that llama-server refuse chat completions. Swapping to it
+    /// would unload whatever is currently serving chat in order to collect a
+    /// 501.
+    pub fn embedding_model_cannot_chat(model: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Model '{model}' is an embedding model and cannot serve chat completions. Use \
+                 /v1/embeddings for it, or name a different model here."
+            ),
+            "invalid_request_error",
+            "embedding_model_cannot_chat",
         )
     }
 

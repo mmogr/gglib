@@ -277,8 +277,8 @@ const BROADCAST_CAPACITY: usize = 8;
 /// pushed over `GET /v1/proxy/status/stream`.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DashboardSnapshot {
-    /// Every currently in-flight `/v1/chat/completions` request — both
-    /// direct completions and council/virtual-model runs.
+    /// Every currently in-flight model request — direct `/v1/chat/completions`
+    /// completions, council/virtual-model runs, and `/v1/embeddings`.
     pub active_connections: Vec<ActiveConnectionSnapshot>,
     /// `true` if the running llama-server's `/slots` endpoint is reachable
     /// and enabled. `false` if it's disabled (`--no-slots`) or currently

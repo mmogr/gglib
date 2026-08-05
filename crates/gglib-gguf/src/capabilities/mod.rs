@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod embedding;
 mod mtp;
 mod patterns;
 mod reasoning;
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 use gglib_core::GgufCapabilities;
 use gglib_core::domain::gguf::CapabilityFlags;
 
+use embedding::detect_embedding_support;
 use mtp::detect_mtp_support;
 use reasoning::detect_reasoning_support;
 use tool_calling::detect_tool_support;
@@ -37,6 +39,11 @@ pub fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
     let mtp = detect_mtp_support(metadata);
     if mtp.supported {
         flags |= CapabilityFlags::MTP;
+    }
+
+    // Detect an embedding model — decides `--embeddings` at launch
+    if detect_embedding_support(metadata) {
+        flags |= CapabilityFlags::EMBEDDING;
     }
 
     // Surface the detected dialect as a `format:*` extension tag so the
@@ -145,6 +152,31 @@ mod tests {
             !tags.contains(&"format:hermes".to_string()),
             "qwen override should suppress hermes default in {tags:?}"
         );
+    }
+
+    #[test]
+    fn test_detect_all_embedding() {
+        let mut metadata = HashMap::new();
+        metadata.insert("general.architecture".to_string(), "bert".to_string());
+        metadata.insert("bert.pooling_type".to_string(), "1".to_string());
+
+        let caps = detect_all(&metadata);
+        assert!(caps.has_embedding());
+        assert!(caps.to_tags().contains(&"embedding".to_string()));
+    }
+
+    #[test]
+    fn test_detect_all_chat_model_is_not_embedding() {
+        let mut metadata = HashMap::new();
+        metadata.insert("general.architecture".to_string(), "qwen3".to_string());
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>test</tool_call>".to_string(),
+        );
+
+        let caps = detect_all(&metadata);
+        assert!(!caps.has_embedding());
+        assert!(!caps.to_tags().contains(&"embedding".to_string()));
     }
 
     #[test]

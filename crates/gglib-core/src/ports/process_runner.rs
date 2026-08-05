@@ -83,6 +83,15 @@ pub struct ServerConfig {
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
     /// Whether to lock the model in RAM (`--mlock`). Default: `false`.
     pub mlock: bool,
+    /// Whether to serve this model in embedding mode (`--embeddings`).
+    ///
+    /// This is not an additive flag: llama-server reads it as *restrict to
+    /// only the embedding use case*, so a server started with it refuses
+    /// `/v1/chat/completions`, and one started without it answers
+    /// `/v1/embeddings` with a 501. Resolved from the model's `"embedding"`
+    /// tag, which makes the mode a property of which model is loaded rather
+    /// than of any individual request.
+    pub embeddings: bool,
 }
 
 impl ServerConfig {
@@ -114,6 +123,7 @@ impl ServerConfig {
             cache_type_k: None,
             cache_type_v: None,
             mlock: false,
+            embeddings: false,
         }
     }
 
@@ -142,6 +152,15 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_jinja(mut self) -> Self {
         self.jinja = true;
+        self
+    }
+
+    /// Serve this model in embedding mode (`--embeddings`).
+    ///
+    /// See [`Self::embeddings`] — this makes the server embeddings-only.
+    #[must_use]
+    pub const fn with_embeddings(mut self) -> Self {
+        self.embeddings = true;
         self
     }
 

@@ -167,6 +167,10 @@ pub fn variant_entries(models: &[ModelInfo], profiles: &[InferenceProfile]) -> V
                     format!("{} with the '{}' sampling profile", model.id, profile.name)
                 })),
                 context_window: model.context_window,
+                // Inherited like `context_window`: a profile only changes
+                // sampling parameters, so it cannot add or remove an endpoint
+                // the base model can serve.
+                capabilities: model.capabilities.clone(),
             })
         })
         .collect()
@@ -412,6 +416,7 @@ mod tests {
             owned_by: "gglib".to_owned(),
             description: None,
             context_window,
+            capabilities: None,
         }
     }
 

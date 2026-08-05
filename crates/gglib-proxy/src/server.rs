@@ -52,24 +52,24 @@ use gglib_sse::SseOptions;
 #[derive(Clone)]
 pub(crate) struct AppState {
     /// HTTP client for forwarding requests to llama-server.
-    client: Client,
+    pub(crate) client: Client,
     /// Port for managing model runtime.
-    runtime_port: Arc<dyn ModelRuntimePort>,
+    pub(crate) runtime_port: Arc<dyn ModelRuntimePort>,
     /// Port for listing and resolving models.
-    catalog_port: Arc<dyn ModelCatalogPort>,
+    pub(crate) catalog_port: Arc<dyn ModelCatalogPort>,
     /// MCP service for tool gateway.
     pub(crate) mcp: Arc<McpService>,
     /// Session manager for MCP Streamable HTTP sessions.
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
-    default_ctx: u64,
+    pub(crate) default_ctx: u64,
     /// How long to absorb model-startup contention before surfacing a 503.
     ///
     /// Resolved once from `GGLIB_CONTENTION_WAIT_SECS` rather than per request,
     /// and deliberately not a `serve()` parameter — that signature already
     /// carries fifteen. `Duration::ZERO` restores fail-fast. See the
     /// `contention` module for why waiting is the better default.
-    contention_wait: std::time::Duration,
+    pub(crate) contention_wait: std::time::Duration,
     /// Orchestrator services for virtual model routing.
     council: CouncilDeps,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
@@ -100,9 +100,9 @@ pub(crate) struct AppState {
     /// own request parameters when resolving sampling.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
-    cache_enabled: bool,
+    pub(crate) cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
-    slot_dir: Option<PathBuf>,
+    pub(crate) slot_dir: Option<PathBuf>,
     /// Semaphore gating restore→forward→save cycles to prevent interleaving.
     slot_gate: Arc<Semaphore>,
     /// When true, all pending saves are skipped (set on restart or explicit clear).
@@ -326,6 +326,7 @@ pub async fn serve(
     let mut protected = Router::new()
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
@@ -817,6 +818,41 @@ async fn chat_completions(
         let _ = state.runtime_port.stop_current().await;
     }
 
+    // The one catalog round-trip this request pays for. Resolved here rather
+    // than inside `forward_chat_completion` — same single lookup either way,
+    // but doing it before the model is ensured running means a request the
+    // loaded model could never serve can be refused without first paying for a
+    // model swap to discover that. An unresolvable model yields a pass-through
+    // context, leaving `ensure_model_running` below to report it as it always
+    // has.
+    let model_context =
+        gglib_core::request_pipeline::resolve(state.catalog_port.as_ref(), Some(&model_name)).await;
+
+    // An embedding model cannot answer this. gglib launches models tagged
+    // `embedding` with `--embeddings`, which llama-server reads as "restrict to
+    // only the embedding use case" — that server refuses chat completions
+    // outright. Forwarding anyway would evict whatever is currently serving
+    // chat, load the embedding model, and collect a 501, leaving the endpoint
+    // worse off than before the request arrived.
+    //
+    // An unresolvable model has an empty tag set here, so it falls through to
+    // `ensure_model_running` and its ModelNotFound exactly as before.
+    if model_context
+        .tags
+        .iter()
+        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
+    {
+        info!(
+            model = %model_name,
+            "refusing chat completion for an embedding-only model"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::embedding_model_cannot_chat(&model_name)),
+        )
+            .into_response();
+    }
+
     // Ensure the model is running with specified context or default.
     //
     // Startup contention is absorbed here for a bounded window instead of
@@ -939,7 +975,7 @@ async fn chat_completions(
         is_streaming,
         model_name: &model_name,
         effective_ctx: target.effective_ctx,
-        catalog: state.catalog_port.clone(),
+        context: model_context.clone(),
         metrics: state.dashboard.metrics.clone(),
         sampling,
         connection,
@@ -1072,7 +1108,10 @@ async fn chat_completions(
                 is_streaming,
                 model_name: &model_name,
                 effective_ctx: new_target.effective_ctx,
-                catalog: state.catalog_port.clone(),
+                // The same context the first attempt used. A retry follows a
+                // restart of the same model, so re-reading the catalog could
+                // only return what is already in hand.
+                context: model_context.clone(),
                 metrics: state.dashboard.metrics.clone(),
                 sampling: retry_sampling,
                 connection: retry_connection,
@@ -1108,7 +1147,7 @@ async fn chat_completions(
 const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
-fn handle_runtime_error(err: ModelRuntimeError) -> Response {
+pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let contended = matches!(err, ModelRuntimeError::ContentionTimeout(_));
