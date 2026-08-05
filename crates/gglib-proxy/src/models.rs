@@ -110,6 +110,18 @@ pub(crate) struct ChatRoutingEnvelope {
     pub num_ctx: Option<u64>,
 }
 
+/// The one field the proxy reads out of a `/v1/embeddings` request body.
+///
+/// Same principle as [`ChatRoutingEnvelope`]: `input` is deliberately not
+/// declared. Both OpenAI shapes (a bare string and an array of strings), plus
+/// `encoding_format`, `dimensions` and anything llama-server grows later, ride
+/// through as raw bytes because nothing here ever looks at them.
+#[derive(Debug, Deserialize)]
+pub(crate) struct EmbeddingsRoutingEnvelope {
+    /// Model name or ID used to select the llama-server instance.
+    pub model: String,
+}
+
 /// Full OpenAI-compatible chat completion request.
 ///
 /// This type is kept for response construction, testing, and documentation
@@ -405,6 +417,30 @@ impl ErrorResponse {
             ),
             "invalid_request_error",
             "profile_not_found",
+        )
+    }
+
+    /// Create an error response for an embeddings request naming a model that
+    /// is not an embedding model.
+    ///
+    /// Refused before the model is loaded rather than after: llama-server only
+    /// answers `/v1/embeddings` when it was started with `--embeddings`, and
+    /// gglib only passes that flag for a model tagged `embedding`. Forwarding
+    /// anyway would evict whatever is currently serving chat to start a server
+    /// that can only reply 501, so the swap is worth nothing to anyone.
+    ///
+    /// The remedy is named in the message because the failure is equally
+    /// likely to be a client naming the wrong model and detection having
+    /// missed a genuine embedding model.
+    pub fn not_an_embedding_model(model: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Model '{model}' is not an embedding model. Only models tagged 'embedding' can \
+                 serve /v1/embeddings. If this model does produce embeddings, run \
+                 `gglib model retag {model}` to re-derive its tags."
+            ),
+            "invalid_request_error",
+            "not_an_embedding_model",
         )
     }
 

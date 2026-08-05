@@ -530,6 +530,68 @@ pub async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: Cancellatio
     port
 }
 
+/// Spawn a mock upstream serving `POST /v1/embeddings` with a canned
+/// OpenAI-shaped response, optionally failing with `status` instead.
+///
+/// Returns `(port, last_body)`, where `last_body` captures the raw bytes of
+/// the most recent request — the proxy is a pass-through for this endpoint, so
+/// asserting on what actually arrived upstream is the only way to prove the
+/// client's `input` was not reshaped on the way.
+pub async fn spawn_mock_embeddings_upstream(
+    cancel: CancellationToken,
+    failure: Option<(u16, &'static str)>,
+) -> (u16, Arc<Mutex<Option<Bytes>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    let last_body: Arc<Mutex<Option<Bytes>>> = Arc::new(Mutex::new(None));
+
+    let captured = last_body.clone();
+    let app = Router::new().route(
+        "/v1/embeddings",
+        post(move |body: Bytes| {
+            let captured = captured.clone();
+            async move {
+                *captured.lock().await = Some(body);
+                if let Some((status, message)) = failure {
+                    return Response::builder()
+                        .status(status)
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            json!({ "error": { "message": message } }).to_string(),
+                        ))
+                        .unwrap();
+                }
+                Response::builder()
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "object": "list",
+                            "model": "embed-model",
+                            "data": [{
+                                "object": "embedding",
+                                "index": 0,
+                                "embedding": [0.1, 0.2, 0.3],
+                            }],
+                            "usage": { "prompt_tokens": 4, "total_tokens": 4 },
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap()
+            }
+        }),
+    );
+
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(cancel.cancelled_owned())
+            .await
+            .ok();
+    });
+
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    (port, last_body)
+}
+
 /// Spawn a mock upstream server that records action order for the disk-slot
 /// save/restore lifecycle, and serves a plain **non-streaming** JSON response
 /// from `/v1/chat/completions`.

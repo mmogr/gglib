@@ -229,6 +229,24 @@ async fn the_mcp_gateway_requires_the_token() {
     cancel.cancel();
 }
 
+/// Embeddings loads and runs a model exactly like chat completions does, so
+/// it belongs in the protected group and not beside `/health`. A route added
+/// to the wrong group fails silently otherwise.
+#[tokio::test]
+async fn the_embeddings_route_requires_the_token() {
+    let (base, _port, cancel) = spawn_proxy(with_key("secret123")).await;
+
+    let res = Client::new()
+        .post(format!("{base}/v1/embeddings"))
+        .json(&serde_json::json!({ "model": "test-model", "input": "hello" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    cancel.cancel();
+}
+
 /// The dashboard routes are inside the protected group, which is what forces
 /// the GUI and the CLI dashboard to authenticate.
 #[tokio::test]

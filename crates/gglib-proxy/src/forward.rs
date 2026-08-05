@@ -141,7 +141,7 @@ const HOP_BY_HOP_HEADERS: &[&str] = &[
 ];
 
 /// Check if a header should be forwarded.
-fn should_forward_header(name: &str) -> bool {
+pub(crate) fn should_forward_header(name: &str) -> bool {
     let lower = name.to_lowercase();
     !HOP_BY_HOP_HEADERS.contains(&lower.as_str())
 }
@@ -885,7 +885,7 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 }
 
 /// Forward a non-streaming JSON response from llama-server.
-async fn forward_non_streaming_response(
+pub(crate) async fn forward_non_streaming_response(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
 ) -> Response {

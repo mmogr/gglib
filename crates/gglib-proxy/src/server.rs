@@ -52,24 +52,24 @@ use gglib_sse::SseOptions;
 #[derive(Clone)]
 pub(crate) struct AppState {
     /// HTTP client for forwarding requests to llama-server.
-    client: Client,
+    pub(crate) client: Client,
     /// Port for managing model runtime.
-    runtime_port: Arc<dyn ModelRuntimePort>,
+    pub(crate) runtime_port: Arc<dyn ModelRuntimePort>,
     /// Port for listing and resolving models.
-    catalog_port: Arc<dyn ModelCatalogPort>,
+    pub(crate) catalog_port: Arc<dyn ModelCatalogPort>,
     /// MCP service for tool gateway.
     pub(crate) mcp: Arc<McpService>,
     /// Session manager for MCP Streamable HTTP sessions.
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
-    default_ctx: u64,
+    pub(crate) default_ctx: u64,
     /// How long to absorb model-startup contention before surfacing a 503.
     ///
     /// Resolved once from `GGLIB_CONTENTION_WAIT_SECS` rather than per request,
     /// and deliberately not a `serve()` parameter — that signature already
     /// carries fifteen. `Duration::ZERO` restores fail-fast. See the
     /// `contention` module for why waiting is the better default.
-    contention_wait: std::time::Duration,
+    pub(crate) contention_wait: std::time::Duration,
     /// Orchestrator services for virtual model routing.
     council: CouncilDeps,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
@@ -100,9 +100,9 @@ pub(crate) struct AppState {
     /// own request parameters when resolving sampling.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
-    cache_enabled: bool,
+    pub(crate) cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
-    slot_dir: Option<PathBuf>,
+    pub(crate) slot_dir: Option<PathBuf>,
     /// Semaphore gating restore→forward→save cycles to prevent interleaving.
     slot_gate: Arc<Semaphore>,
     /// When true, all pending saves are skipped (set on restart or explicit clear).
@@ -326,6 +326,7 @@ pub async fn serve(
     let mut protected = Router::new()
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
@@ -1108,7 +1109,7 @@ async fn chat_completions(
 const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
-fn handle_runtime_error(err: ModelRuntimeError) -> Response {
+pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let contended = matches!(err, ModelRuntimeError::ContentionTimeout(_));
