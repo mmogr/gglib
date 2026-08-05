@@ -22,14 +22,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   return (
     <div
-      className={cn('flex flex-col items-center justify-center gap-4 p-12 text-center', className)}
+      className={cn('flex flex-col items-center justify-center gap-base p-2xl text-center', className)}
     >
       {icon && (
-        <div className="text-text-muted text-5xl opacity-50">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-elevated border border-border-light text-text-muted">
           {icon}
         </div>
       )}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-sm">
         <h3 className="text-lg font-semibold text-text">
           {title}
         </h3>
@@ -39,7 +39,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           </p>
         )}
       </div>
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-sm">{action}</div>}
     </div>
   );
 };

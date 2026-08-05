@@ -4,9 +4,9 @@ import { cn } from "../../utils/cn";
 const baseStyles = "w-full rounded-md border bg-background-input text-text text-sm transition-colors outline-none focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/10 hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-background cursor-pointer appearance-none bg-no-repeat";
 
 const sizeStyles: Record<SelectSize, string> = {
-  sm: "h-8 px-2 pr-8 text-xs",
-  base: "h-10 px-3 pr-10 text-sm",
-  lg: "h-11 px-4 pr-12 text-base",
+  sm: "h-7 px-2 pr-7 text-xs",
+  base: "h-8 px-3 pr-9 text-sm",
+  lg: "h-9 px-3.5 pr-10 text-base",
 };
 
 const variantStyles: Record<SelectVariant, string> = {
@@ -15,7 +15,7 @@ const variantStyles: Record<SelectVariant, string> = {
 };
 
 // SVG chevron-down icon as data URI
-const chevronIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888888' d='M6 9L1 4h10z'/%3E%3C/svg%3E";
+const chevronIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237e8795' d='M6 9L1 4h10z'/%3E%3C/svg%3E";
 
 export type SelectSize = "sm" | "base" | "lg";
 export type SelectVariant = "default" | "error";
