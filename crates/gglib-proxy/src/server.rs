@@ -818,6 +818,16 @@ async fn chat_completions(
         let _ = state.runtime_port.stop_current().await;
     }
 
+    // The one catalog round-trip this request pays for. Resolved here rather
+    // than inside `forward_chat_completion` — same single lookup either way,
+    // but doing it before the model is ensured running means a request the
+    // loaded model could never serve can be refused without first paying for a
+    // model swap to discover that. An unresolvable model yields a pass-through
+    // context, leaving `ensure_model_running` below to report it as it always
+    // has.
+    let model_context =
+        gglib_core::request_pipeline::resolve(state.catalog_port.as_ref(), Some(&model_name)).await;
+
     // Ensure the model is running with specified context or default.
     //
     // Startup contention is absorbed here for a bounded window instead of
@@ -940,7 +950,7 @@ async fn chat_completions(
         is_streaming,
         model_name: &model_name,
         effective_ctx: target.effective_ctx,
-        catalog: state.catalog_port.clone(),
+        context: model_context.clone(),
         metrics: state.dashboard.metrics.clone(),
         sampling,
         connection,
@@ -1073,7 +1083,10 @@ async fn chat_completions(
                 is_streaming,
                 model_name: &model_name,
                 effective_ctx: new_target.effective_ctx,
-                catalog: state.catalog_port.clone(),
+                // The same context the first attempt used. A retry follows a
+                // restart of the same model, so re-reading the catalog could
+                // only return what is already in hand.
+                context: model_context.clone(),
                 metrics: state.dashboard.metrics.clone(),
                 sampling: retry_sampling,
                 connection: retry_connection,

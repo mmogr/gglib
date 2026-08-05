@@ -26,6 +26,13 @@
 //! lookup is made.  That resolution is shared with every non-proxy surface,
 //! so the proxy and the agent path cannot drift apart on what a model is.
 //!
+//! That lookup happens in `chat_completions`, *before* the model is ensured
+//! running, and the resulting [`ModelContext`] arrives here on
+//! [`ForwardRequest`].  It used to happen here, which was one round-trip
+//! either way — but resolving before the swap is what lets the handler refuse
+//! a request the loaded model could never serve without paying for a model
+//! load first.
+//!
 //! ## Response pipeline
 //!
 //! ```text
@@ -66,7 +73,6 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
 use gglib_core::normalize::{NormalizingStream, get_parser};
-use gglib_core::ports::ModelCatalogPort;
 use gglib_core::request_pipeline::{
     self, ModelContext, SamplingLayers, TruncationError, TruncationReport,
 };
@@ -313,8 +319,13 @@ pub(crate) struct ForwardRequest<'a> {
     /// for the history-truncation hard-abort; floored at the historical
     /// default inside [`truncate_history`].
     pub effective_ctx: u64,
-    /// Catalog port used to resolve capabilities and `format:*` tags.
-    pub catalog: Arc<dyn ModelCatalogPort>,
+    /// This model's stored capabilities and tags, resolved once by
+    /// `chat_completions` before the model was ensured running.
+    ///
+    /// Passed in rather than re-resolved here so the one catalog round-trip a
+    /// request pays for is also the one that decided, ahead of any model swap,
+    /// whether the request should have been forwarded at all.
+    pub context: ModelContext,
     /// Metrics store for recording per-request context snapshots.
     pub metrics: Arc<ContextMetricsStore>,
     /// The profile and global sampling layers to resolve beneath the
@@ -393,7 +404,7 @@ pub(crate) async fn forward_chat_completion(
         is_streaming,
         model_name,
         effective_ctx,
-        catalog,
+        context,
         metrics,
         sampling,
         connection,
@@ -404,11 +415,6 @@ pub(crate) async fn forward_chat_completion(
     } = req;
 
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
-
-    // Single catalog lookup — yields both capabilities (request preprocessing)
-    // and tags (response-stream parser).  Failures return a zero context so
-    // all transforms become no-ops rather than blocking the request.
-    let context = request_pipeline::resolve(catalog.as_ref(), Some(model_name)).await;
 
     // ── Request shaping ────────────────────────────────────────────────────
     //
