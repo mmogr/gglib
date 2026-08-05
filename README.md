@@ -95,9 +95,11 @@ Everything between the OpenAI request and llama-server is the product:
 - **Capability detection** — GGUF metadata drives launch flags (`--jinja`,
   reasoning format, MTP speculative decoding, embeddings) with no per-model
   setup — see [Tags & capability detection](docs/tags.md).
-- **Contention absorption** — model-swap collisions are waited out server-side
-  instead of surfacing as a `503` that clients treat as terminal — see
-  [contention](crates/gglib-proxy/src/contention/README.md).
+- **Admission control** — requests for a model that is not loaded are queued
+  and batched, so alternating chat and embeddings traffic costs one model swap
+  per turn rather than one per request; a small auxiliary model can stay
+  co-resident and never swap at all — see
+  [admission](crates/gglib-runtime/src/process/admission/README.md).
 
 ## Dashboard
 

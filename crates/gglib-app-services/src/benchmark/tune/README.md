@@ -33,7 +33,7 @@ module calls `AgentLoop::build()` directly instead.
 
 # No Model Reload Per Candidate
 
-Only ONE `ModelRuntimePort::ensure_model_running()` call happens per tune
+Only ONE `ModelRuntimePort::admit()` call happens per tune
 run. Every candidate varies only the per-request `InferenceConfig` passed
 to a fresh `LlmCompletionAdapter::with_sampling(..)` — sampling parameters
 are per-request, not part of the loaded llama-server process, so a sweep

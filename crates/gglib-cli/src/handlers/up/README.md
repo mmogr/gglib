@@ -27,7 +27,7 @@ stands in for.
 An unpinned proxy loads nothing until traffic arrives, so without a first
 request the launch narration never prints and `up` ends on a bound socket
 rather than evidence. Going over HTTP — rather than reaching into the runtime —
-exercises the router, the contention gate, model resolution and the forward
+exercises the router, admission control, model resolution and the forward
 pipeline, so the endpoint is demonstrated to work rather than assumed to.
 
 It runs as a spawned task because `start_proxy_standalone` blocks until

@@ -29,9 +29,9 @@ pub use command::NoopLogSink;
 
 // Re-export GUI process management types
 pub use process::{
-    CurrentModelState, GuiProcessCore, ProcessManager, ProcessStrategy, ServerEvent,
-    ServerEventBroadcaster, ServerLogEntry, ServerLogManager, ServerStateInfo, ServerStatus,
-    get_event_broadcaster, get_log_manager,
+    AdmissionQueue, GuiProcessCore, PRIMARY_SLOT, ProcessManager, Resident, ResidentSet,
+    SLOT_COUNT, ServerEvent, ServerEventBroadcaster, ServerLogEntry, ServerLogManager,
+    ServerStateInfo, ServerStatus, get_event_broadcaster, get_log_manager,
 };
 
 // Re-export port implementations for runtime adapters

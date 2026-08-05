@@ -1,25 +1,39 @@
 //! Model runtime port for proxy model management.
 //!
-//! This port defines the interface for ensuring a model is running
-//! and ready to serve requests. It abstracts the process management
-//! details from the proxy layer.
+//! This port defines the interface for admitting a request to a running model.
+//! It abstracts the process management details from the proxy layer.
+//!
+//! ## Admission, not "ensure running"
+//!
+//! The entry point is [`ModelRuntimePort::admit`], and it returns an
+//! [`Admission`] — a routing target *plus a lease*. The lease is what makes
+//! request batching possible: the runtime cannot decide whether it is safe to
+//! swap models unless it knows how many requests are still being served by the
+//! one currently loaded. Holding the lease for the life of the request is
+//! therefore not bookkeeping, it is the mechanism.
+//!
+//! A caller that only wants a model up and does not care when it goes away
+//! (the GUI's "start model" button) drops the lease immediately; the model
+//! stays resident until something else wins admission.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
-use crate::domain::{CacheRamHealth, LaunchNarration};
+use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration};
 use crate::ports::ProcessHandle;
 use crate::server_config::ServerConfigOptions;
 
 /// Per-call launch overrides layered on a runtime's standing configuration.
 ///
 /// A runtime is normally built once with a standing template — the proxy's
-/// cache settings, say — and then shared, so that only one llama-server runs
-/// at a time. This is how an individual caller contributes launch options on
-/// top of that template without needing a manager of its own.
+/// cache settings, say — and then shared, so that one admission queue governs
+/// every llama-server on the machine. This is how an individual caller
+/// contributes launch options on top of that template without needing a manager
+/// of its own.
 ///
 /// `Default` means "no opinion": every field falls through to the template.
 #[derive(Debug, Clone, Default)]
@@ -135,6 +149,113 @@ impl RunningTarget {
     }
 }
 
+/// The runtime side of an [`AdmissionLease`]: what to call when a request that
+/// was holding a VRAM slot is finished with it.
+///
+/// A separate trait rather than a closure so the lease stays `Debug` and has no
+/// generic parameter to thread through every signature that carries one. The
+/// implementation lives in `gglib-runtime`; this crate only needs to be able to
+/// call it from a `Drop`, which is why [`Self::release`] is synchronous and
+/// must not block.
+pub trait AdmissionRelease: Send + Sync + fmt::Debug {
+    /// Release one in-flight reference to `slot`, waking the scheduler if that
+    /// was the last one.
+    ///
+    /// Called from [`AdmissionLease`]'s `Drop`, so it must never block, panic,
+    /// or await.
+    fn release(&self, slot: usize);
+}
+
+/// Proof that a request is being served by a resident model, and that the
+/// runtime must not evict that model until the request is done.
+///
+/// Dropping the lease releases the slot. Every exit path a request has — normal
+/// completion, `?`, client disconnect, panic unwind — runs `Drop`, so there is
+/// no path that leaks a reference and wedges the scheduler. This is the same
+/// guarantee, for the same reason, that the proxy's connection registry gets
+/// from its own guard.
+///
+/// Not `Clone`: two owners would mean two releases for one acquisition.
+#[derive(Debug)]
+pub struct AdmissionLease {
+    owner: Option<Arc<dyn AdmissionRelease>>,
+    slot: usize,
+}
+
+impl AdmissionLease {
+    /// Create a lease that releases `slot` on `owner` when dropped.
+    #[must_use]
+    pub fn new(owner: Arc<dyn AdmissionRelease>, slot: usize) -> Self {
+        Self {
+            owner: Some(owner),
+            slot,
+        }
+    }
+
+    /// A lease that owns nothing and releases nothing.
+    ///
+    /// For runtimes with no resident set to account for — test doubles and the
+    /// [`NoopModelRuntime`] — so they are not forced to implement a scheduler
+    /// to satisfy the signature.
+    #[must_use]
+    pub const fn detached() -> Self {
+        Self {
+            owner: None,
+            slot: 0,
+        }
+    }
+
+    /// Which resident slot this lease is holding.
+    #[must_use]
+    pub const fn slot(&self) -> usize {
+        self.slot
+    }
+}
+
+impl Drop for AdmissionLease {
+    fn drop(&mut self) {
+        if let Some(owner) = self.owner.take() {
+            owner.release(self.slot);
+        }
+    }
+}
+
+/// A granted admission: where to send the request, and the lease that keeps the
+/// model loaded while it is in flight.
+///
+/// The two are returned together rather than the lease being attached to
+/// [`RunningTarget`] because the target must stay `Clone` — the startup guard
+/// broadcasts one target to every caller waiting on the same launch — and a
+/// clonable lease would release once per clone.
+#[derive(Debug)]
+pub struct Admission {
+    /// Where to route the request.
+    pub target: RunningTarget,
+    /// Held for the life of the request. See [`AdmissionLease`].
+    pub lease: AdmissionLease,
+}
+
+impl Admission {
+    /// An admission with no slot accounting, for runtimes that do not have any.
+    #[must_use]
+    pub const fn detached(target: RunningTarget) -> Self {
+        Self {
+            target,
+            lease: AdmissionLease::detached(),
+        }
+    }
+
+    /// Take the target and drop the lease immediately.
+    ///
+    /// For callers that want a model launched but have no request to hold it
+    /// for — `gglib model start` and the GUI's start button. The model stays
+    /// resident; it is simply evictable from this moment on.
+    #[must_use]
+    pub fn into_target(self) -> RunningTarget {
+        self.target
+    }
+}
+
 /// Errors that can occur during model runtime operations.
 #[derive(Clone, Debug, Error)]
 pub enum ModelRuntimeError {
@@ -147,9 +268,16 @@ pub enum ModelRuntimeError {
     #[error("Model is loading, try again")]
     ModelLoading,
 
-    /// Retryable: another caller is loading the same model, we waited too long for contention to clear.
-    #[error("Contention timeout: {0}")]
-    ContentionTimeout(String),
+    /// Retryable: the request sat in the admission queue past its deadline
+    /// without ever reaching the front.
+    ///
+    /// Reaching this means the GPU stayed continuously occupied by other models
+    /// for longer than a request can reasonably wait — not that a collision was
+    /// mishandled. The queue's own fairness bounds make it rare; when it does
+    /// happen the caller gets a 503 with `Retry-After` and control of its own
+    /// backoff.
+    #[error("Admission timeout: {0}")]
+    AdmissionTimeout(String),
 
     /// Failed to spawn the model server process.
     #[error("Failed to start model: {0}")]
@@ -188,14 +316,14 @@ impl ModelRuntimeError {
     /// where retrying may succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
-        matches!(self, Self::ModelLoading | Self::ContentionTimeout(_))
+        matches!(self, Self::ModelLoading | Self::AdmissionTimeout(_))
     }
 
     /// Returns a suggested HTTP status code for this error.
     #[must_use]
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
-            Self::ModelLoading | Self::ContentionTimeout(_) => 503,
+            Self::ModelLoading | Self::AdmissionTimeout(_) => 503,
             // A pinned mismatch is 404, not 403: from the client's point of
             // view the model it asked for does not exist on this endpoint.
             Self::ModelNotFound(_)
@@ -251,7 +379,7 @@ pub struct RuntimeErrorEnvelope {
 impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     fn from(err: &ModelRuntimeError) -> Self {
         let discriminant = match err {
-            ModelRuntimeError::ModelLoading | ModelRuntimeError::ContentionTimeout(_) => {
+            ModelRuntimeError::ModelLoading | ModelRuntimeError::AdmissionTimeout(_) => {
                 error_type::SERVICE_UNAVAILABLE
             }
             ModelRuntimeError::ModelNotFound(_)
@@ -269,67 +397,67 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     }
 }
 
-/// Port for managing model runtime (ensuring models are running).
+/// Port for admitting requests to a running model.
 ///
 /// This is the primary interface the proxy uses to get a running
 /// model server. Implementations handle:
 /// - Model resolution (name → file path)
 /// - Process lifecycle (start, stop, health check)
 /// - Context size management
-/// - Single-swap or concurrent strategies
+/// - Admission control: queueing, batching, and the VRAM resident set
 #[async_trait]
 pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
-    /// Ensure a model is running and ready to serve requests.
+    /// Admit a request to a running model, launching or swapping if needed.
     ///
     /// This method:
     /// 1. Resolves the model name to a database entry
-    /// 2. Checks if the model is already running with the correct context
-    /// 3. Starts or restarts the model if needed
+    /// 2. Admits immediately if the model is already resident
+    /// 3. Otherwise queues until the model can take a VRAM slot — either by
+    ///    co-loading alongside what is already there, or by swapping once the
+    ///    outgoing model has no requests left in flight
     /// 4. Waits for the health check to pass
-    /// 5. Returns the target information for routing
+    /// 5. Returns the routing target and a lease on the slot
+    ///
+    /// **The returned [`Admission::lease`] must be held for as long as the
+    /// request is being served.** Dropping it early tells the runtime the slot
+    /// is free and permits a swap out from under a live generation. Callers
+    /// that only want the model launched — not served — use
+    /// [`Admission::into_target`], which drops the lease deliberately.
     ///
     /// # Arguments
     ///
     /// * `model_name` - Name or alias of the model to run
     /// * `num_ctx` - Optional context size override from request
     /// * `default_ctx` - Default context size if not specified
+    /// * `overrides` - Per-call launch options layered on the runtime's
+    ///   standing template, so one shared runtime can serve callers with
+    ///   different launch needs (a GUI start carrying `--mlock`, a benchmark
+    ///   that must never gain a prompt cache). [`LaunchOverrides::default`]
+    ///   means "no opinion".
     ///
     /// # Errors
     ///
-    /// Returns `ModelRuntimeError` if the model cannot be started.
-    async fn ensure_model_running(
-        &self,
-        model_name: &str,
-        num_ctx: Option<u64>,
-        default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError>;
-
-    /// Same as [`Self::ensure_model_running`], but with per-call overrides
-    /// layered on top of whatever standing configuration the implementation
-    /// was built with.
-    ///
-    /// Lets one shared runtime — and therefore one llama-server at a time —
-    /// serve callers with different launch needs, instead of each caller
-    /// constructing its own manager and losing that guarantee. A GUI start
-    /// request carrying `--mlock` and a benchmark run that must never gain a
-    /// prompt cache can both go through the same instance.
-    ///
-    /// Defaults to ignoring the overrides and delegating, so implementations
-    /// with no per-call configuration to apply need not override it.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ModelRuntimeError` if the model cannot be started.
-    async fn ensure_model_running_with(
+    /// Returns `ModelRuntimeError` if the model cannot be started, or
+    /// [`ModelRuntimeError::AdmissionTimeout`] if the request never reached
+    /// the front of the queue.
+    async fn admit(
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
         default_ctx: u64,
         overrides: LaunchOverrides,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        let _ = overrides;
-        self.ensure_model_running(model_name, num_ctx, default_ctx)
-            .await
+    ) -> Result<Admission, ModelRuntimeError>;
+
+    /// What the admission queue and the VRAM resident set look like right now.
+    ///
+    /// Synchronous for the same reason [`Self::pinned_model`] is: it is a
+    /// single read of plain shared state, not a query against live process
+    /// state. The dashboard publisher calls it on every tick.
+    ///
+    /// Defaults to empty for runtimes with no resident set to report (test
+    /// doubles, remote backends).
+    fn admission_snapshot(&self) -> AdmissionSnapshot {
+        AdmissionSnapshot::default()
     }
 
     /// Get information about the currently running model, if any.
@@ -426,12 +554,13 @@ pub struct NoopModelRuntime;
 
 #[async_trait]
 impl ModelRuntimePort for NoopModelRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
         Err(ModelRuntimeError::Internal(
             "no runtime available in this context".to_string(),
         ))
@@ -457,19 +586,20 @@ mod tests {
 
     #[async_trait]
     impl ModelRuntimePort for MinimalRuntime {
-        async fn ensure_model_running(
+        async fn admit(
             &self,
             model_name: &str,
             num_ctx: Option<u64>,
             default_ctx: u64,
-        ) -> Result<RunningTarget, ModelRuntimeError> {
-            Ok(RunningTarget::local(
+            _overrides: LaunchOverrides,
+        ) -> Result<Admission, ModelRuntimeError> {
+            Ok(Admission::detached(RunningTarget::local(
                 5500,
                 1,
                 model_name.to_string(),
                 num_ctx.unwrap_or(default_ctx),
                 false,
-            ))
+            )))
         }
 
         async fn current_model(&self) -> Option<RunningTarget> {
@@ -481,37 +611,73 @@ mod tests {
         }
     }
 
-    /// The default must delegate rather than fail, which is what lets existing
-    /// implementations adopt the trait change without being edited.
+    /// A runtime with no resident set to account for must still hand back a
+    /// usable lease, or every test double would need a scheduler.
     #[tokio::test]
-    async fn ensure_model_running_with_defaults_to_delegating() {
-        let target = MinimalRuntime
-            .ensure_model_running_with("m", Some(8192), 4096, LaunchOverrides::default())
+    async fn a_minimal_runtime_admits_with_a_detached_lease() {
+        let admission = MinimalRuntime
+            .admit("m", Some(8192), 4096, LaunchOverrides::default())
             .await
-            .expect("default implementation should delegate");
+            .expect("minimal runtime admits");
 
-        assert_eq!(target.model_name, "m");
-        assert_eq!(target.effective_ctx, 8192);
+        assert_eq!(admission.target.model_name, "m");
+        assert_eq!(admission.target.effective_ctx, 8192);
+        assert_eq!(admission.lease.slot(), 0);
+        // Dropping it must be a no-op rather than a panic.
+        drop(admission);
     }
 
-    /// Overrides are dropped by the default, not silently half-applied — an
-    /// implementation that cares must opt in by overriding the method.
-    #[tokio::test]
-    async fn default_ensure_model_running_with_ignores_overrides() {
-        let overrides = LaunchOverrides {
-            options: ServerConfigOptions {
-                context_size: Some(999),
-                ..Default::default()
-            },
-            cache_ram: Some(CacheRamSetting::ExplicitMb(0)),
-        };
+    #[test]
+    fn admission_snapshot_defaults_to_empty() {
+        let snapshot = MinimalRuntime.admission_snapshot();
+        assert!(snapshot.slots.is_empty());
+        assert!(snapshot.queued.is_empty());
+        assert_eq!(snapshot.total_swaps, 0);
+    }
 
-        let target = MinimalRuntime
-            .ensure_model_running_with("m", None, 4096, overrides)
-            .await
-            .unwrap();
+    /// The whole point of the lease: exactly one release per acquisition, on
+    /// every exit path including an unwinding panic.
+    #[test]
+    fn a_lease_releases_its_slot_exactly_once_on_drop() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
-        assert_eq!(target.effective_ctx, 4096);
+        #[derive(Debug, Default)]
+        struct Counter(AtomicUsize);
+
+        impl AdmissionRelease for Counter {
+            fn release(&self, slot: usize) {
+                assert_eq!(slot, 1, "the lease must release the slot it was given");
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let counter = Arc::new(Counter::default());
+        {
+            let lease = AdmissionLease::new(Arc::clone(&counter) as Arc<dyn AdmissionRelease>, 1);
+            assert_eq!(lease.slot(), 1);
+            assert_eq!(counter.0.load(Ordering::SeqCst), 0, "not yet released");
+        }
+        assert_eq!(counter.0.load(Ordering::SeqCst), 1);
+
+        // A panic unwinds through Drop just the same — this workspace sets no
+        // `panic = "abort"` profile, so a panicking handler cannot leak a slot.
+        let counter2 = Arc::new(Counter::default());
+        let held = Arc::clone(&counter2);
+        let result = std::panic::catch_unwind(move || {
+            let _lease = AdmissionLease::new(held as Arc<dyn AdmissionRelease>, 1);
+            panic!("handler blew up mid-request");
+        });
+        assert!(result.is_err());
+        assert_eq!(counter2.0.load(Ordering::SeqCst), 1, "released on unwind");
+    }
+
+    /// A detached lease has nothing to release, so dropping it must not reach
+    /// for an owner that is not there.
+    #[test]
+    fn a_detached_lease_drops_cleanly() {
+        let lease = AdmissionLease::detached();
+        assert_eq!(lease.slot(), 0);
+        drop(lease);
     }
 
     /// Unpinned is the safe default: a runtime that says nothing about
@@ -569,8 +735,8 @@ mod tests {
     /// A retryable error's envelope must carry `retryable: true` and the
     /// `service_unavailable` type, matching the HTTP layer's 503 mapping.
     #[test]
-    fn envelope_for_contention_timeout_is_retryable_service_unavailable() {
-        let err = ModelRuntimeError::ContentionTimeout("waited too long".to_string());
+    fn envelope_for_admission_timeout_is_retryable_service_unavailable() {
+        let err = ModelRuntimeError::AdmissionTimeout("waited too long".to_string());
         let envelope = RuntimeErrorEnvelope::from(&err);
         assert_eq!(envelope.r#type, "service_unavailable");
         assert!(envelope.retryable);
@@ -597,7 +763,7 @@ mod tests {
     fn retryable_predicate_agrees_with_the_error_itself() {
         let all = [
             ModelRuntimeError::ModelLoading,
-            ModelRuntimeError::ContentionTimeout("contended".to_string()),
+            ModelRuntimeError::AdmissionTimeout("contended".to_string()),
             ModelRuntimeError::ModelNotFound("m".to_string()),
             ModelRuntimeError::ModelFileNotFound("f".to_string()),
             pinned_mismatch(),
@@ -622,7 +788,7 @@ mod tests {
     /// body stays consistent with the discriminant path.
     #[test]
     fn retryable_discriminant_lines_up_with_status_503() {
-        let retryable = ModelRuntimeError::ContentionTimeout("c".to_string());
+        let retryable = ModelRuntimeError::AdmissionTimeout("c".to_string());
         assert!(is_retryable_error_type(error_type::SERVICE_UNAVAILABLE));
         assert_eq!(retryable.suggested_status_code(), 503);
         assert!(!is_retryable_error_type(error_type::SERVER_ERROR));

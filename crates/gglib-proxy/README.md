@@ -134,7 +134,6 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`token_calibration.rs`](src/token_calibration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-token_calibration-coverage.json) |
 | [`upstream_health.rs`](src/upstream_health.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-upstream_health-coverage.json) |
 | [`access/`](src/access/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-access-coverage.json) |
-| [`contention/`](src/contention/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-contention-coverage.json) |
 | [`mcp/`](src/mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-coverage.json) |
 <!-- module-table:end -->
 
@@ -282,10 +281,11 @@ model actually runs, so it never reaches the pinned guard.
 
 ### Embeddings
 
-`POST /v1/embeddings` routes through the same
-`ModelRuntimePort::ensure_model_running` path as chat completions, so model
-swap, the bounded contention wait, launch narration and the dashboard all
-apply unchanged.  `input` accepts both OpenAI shapes — a bare string and an
+`POST /v1/embeddings` routes through the same `ModelRuntimePort::admit` path as
+chat completions, so admission control, model swap, launch narration and the
+dashboard all apply unchanged. It is also the endpoint that benefits most from
+the second resident slot: an embedding model small enough to co-reside is
+admitted without displacing the chat model at all.  `input` accepts both OpenAI shapes — a bare string and an
 array of strings — along with `encoding_format` and anything llama-server
 grows later, because the proxy reads only `model` out of the body and forwards
 the rest as raw bytes.
@@ -306,18 +306,20 @@ re-derivable at any point with `gglib model retag`.
 
 Two consequences follow, both deliberate:
 
-- **An embeddings request for a model that is not loaded costs a full swap**,
+- **An embeddings request for a model that is not loaded may cost a swap**,
   and the server it leaves running cannot serve chat until something swaps
-  back.  A workload that interleaves retrieval and generation therefore
-  thrashes.  This is inherent to the single-model-at-a-time strategy; lifting
-  it is M9's job, not this endpoint's.
-- **Neither endpoint will swap to a model it cannot use.**  An embeddings
+  back.  A workload interleaving retrieval and generation used to thrash on
+  this — a swap per request.  Admission control removes the thrash from both
+  ends: requests for the same model are batched so one swap serves a burst,
+  and an embedding model small enough to co-reside takes a second VRAM slot and
+  stops swapping altogether.  See
+  [admission](../gglib-runtime/src/process/admission/README.md).
+- **Neither endpoint will admit a model it cannot use.**  An embeddings
   request naming a model without the tag is refused with 400
   (`not_an_embedding_model`), and a chat completion naming a tagged model is
-  refused with 400 (`embedding_model_cannot_chat`) — both *before*
-  `ensure_model_running` is called.  Forwarding either would unload whatever
-  is currently serving requests in order to start a server that could only
-  reply 501.
+  refused with 400 (`embedding_model_cannot_chat`) — both *before* `admit` is
+  called.  Forwarding either would spend a VRAM slot starting a server that
+  could only reply 501.
 
 If a genuine embedding model is missing the tag, `gglib model retag <id>`
 re-derives it from the persisted GGUF metadata without re-reading the file.

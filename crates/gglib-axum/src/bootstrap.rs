@@ -133,10 +133,11 @@ pub struct AxumContext {
     pub bench_repo: Arc<SqliteBenchmarkRepository>,
     /// Benchmark operations: run_compare and run_perf with SSE streaming.
     pub benchmark: Arc<BenchmarkOps>,
-    /// Shared `ModelRuntimePort` wrapping the `SingleSwap` `ProcessManager`.
+    /// Shared `ModelRuntimePort` wrapping the one `ProcessManager`.
     ///
-    /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that exactly
-    /// one llama-server can run at a time system-wide, preventing VRAM contention.
+    /// Injected into `ProxyOps` and (in Phase 2) `BenchmarkOps` so that a
+    /// single admission queue governs every llama-server on the machine — which
+    /// is what makes the VRAM budget knowable rather than a race.
     pub runtime: Arc<dyn ModelRuntimePort>,
     /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
     ///

@@ -92,6 +92,52 @@ struct DashboardSnapshot {
     /// than this field.
     #[serde(default)]
     agent_usage: CacheUsage,
+    /// VRAM residency and the admission queue. `default` on a proxy older than
+    /// this field, which renders as an empty resident set.
+    #[serde(default)]
+    admission: AdmissionSnapshot,
+}
+
+/// Mirror of `gglib_core::domain::AdmissionSnapshot`.
+#[derive(Debug, Default, Deserialize)]
+struct AdmissionSnapshot {
+    #[serde(default)]
+    slots: Vec<ResidentSlotSnapshot>,
+    #[serde(default)]
+    queued: Vec<QueuedModelSnapshot>,
+    #[serde(default)]
+    total_swaps: u64,
+    #[serde(default)]
+    secondary_slot: SecondarySlotStatus,
+}
+
+/// Mirror of `gglib_core::domain::ResidentSlotSnapshot`.
+#[derive(Debug, Deserialize)]
+struct ResidentSlotSnapshot {
+    model_name: String,
+    #[serde(default)]
+    inflight: u32,
+    #[serde(default)]
+    is_primary: bool,
+    #[serde(default)]
+    resident_for_secs: u64,
+}
+
+/// Mirror of `gglib_core::domain::QueuedModelSnapshot`.
+#[derive(Debug, Deserialize)]
+struct QueuedModelSnapshot {
+    model_name: String,
+    #[serde(default)]
+    waiting: usize,
+    #[serde(default)]
+    oldest_wait_ms: u64,
+}
+
+/// Mirror of `gglib_core::domain::SecondarySlotStatus`.
+#[derive(Debug, Default, Deserialize)]
+struct SecondarySlotStatus {
+    #[serde(default)]
+    detail: String,
 }
 
 /// Mirror of `gglib_proxy::dashboard::CacheStatus`.
@@ -183,6 +229,15 @@ fn progress_bar(filled: u64, total: u64, width: usize) -> String {
     )
 }
 
+/// A span of seconds as `Ns`, or `Nm Ss` past one minute.
+fn format_duration_secs(seconds: u64) -> String {
+    if seconds < 60 {
+        format!("{seconds}s")
+    } else {
+        format!("{}m {}s", seconds / 60, seconds % 60)
+    }
+}
+
 /// Seconds elapsed since a Unix timestamp, formatted as `Ns` (or `Nm Ss` past
 /// one minute). Never panics: a clock skew that makes `started_at_secs` look
 /// like it's in the future just renders as `0s`.
@@ -191,12 +246,7 @@ fn format_elapsed_secs(started_at_secs: u64) -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(started_at_secs);
-    let elapsed = now_secs.saturating_sub(started_at_secs);
-    if elapsed < 60 {
-        format!("{elapsed}s")
-    } else {
-        format!("{}m {}s", elapsed / 60, elapsed % 60)
-    }
+    format_duration_secs(now_secs.saturating_sub(started_at_secs))
 }
 
 /// Build the full multi-line dashboard frame for one snapshot. Pure text
@@ -260,6 +310,9 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
     }
 
     out.push('\n');
+    out.push_str(&render_admission_section(&snapshot.admission, term_width));
+
+    out.push('\n');
     out.push_str("Prompt cache\n");
     match &snapshot.cache {
         None => out.push_str("  (no model resolved yet)\n"),
@@ -277,6 +330,72 @@ fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> Str
     out.push_str(&format!(
         "Total requests served: {}\n",
         snapshot.total_requests
+    ));
+    out
+}
+
+/// Render the VRAM residency and admission-queue section.
+///
+/// Placed directly after the connection list because it answers the question
+/// that list raises: a request sitting at `queued` is waiting either on
+/// llama.cpp or on a model swap, and only this section can say which.
+///
+/// The second-slot line is always printed, even when nothing is co-loaded. An
+/// idle second slot on a machine with free VRAM is the case a user is most
+/// likely to read as a bug, so the server sends the reason and this prints it.
+fn render_admission_section(admission: &AdmissionSnapshot, term_width: u16) -> String {
+    let mut out = String::new();
+    out.push_str("VRAM residency\n");
+
+    if admission.slots.is_empty() {
+        out.push_str("  (no model loaded)\n");
+    }
+    for slot in &admission.slots {
+        let role = if slot.is_primary {
+            "primary"
+        } else {
+            "secondary"
+        };
+        let activity = if slot.inflight > 0 {
+            format!("{} in flight", slot.inflight)
+        } else {
+            "idle".to_string()
+        };
+        out.push_str(&format!(
+            "  {:<24} {:<10} {:<14} {}\n",
+            truncate(&slot.model_name, 24),
+            role,
+            activity,
+            format_duration_secs(slot.resident_for_secs),
+        ));
+    }
+
+    if !admission.secondary_slot.detail.is_empty() {
+        // "  " prefix takes 2 columns; clip so the explanation stays on one
+        // physical row whatever the terminal width, matching how the slots
+        // error line is handled above.
+        let max_chars = usize::from(term_width.saturating_sub(2));
+        out.push_str(&format!(
+            "  {}\n",
+            truncate(&admission.secondary_slot.detail, max_chars)
+        ));
+    }
+
+    for queued in &admission.queued {
+        out.push_str(&format!(
+            "  {:<24} {} waiting, oldest {}\n",
+            truncate(&queued.model_name, 24),
+            queued.waiting,
+            format_duration_secs(queued.oldest_wait_ms / 1000),
+        ));
+    }
+
+    // Printed unconditionally, and next to nothing else: a swap count on its
+    // own reads as a cost, but next to a queue that is draining it reads as
+    // how much the batching saved.
+    out.push_str(&format!(
+        "  {:<24} {}\n",
+        "Model swaps", admission.total_swaps
     ));
     out
 }
@@ -665,6 +784,7 @@ mod tests {
             total_requests: 0,
             cache: None,
             agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot::default(),
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -698,6 +818,7 @@ mod tests {
             total_requests: 3,
             cache: None,
             agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot::default(),
         };
         let frame = render_frame(
             "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -730,6 +851,7 @@ mod tests {
             total_requests: 0,
             cache: None,
             agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot::default(),
         };
         let width = 80u16;
         let frame = render_frame(
@@ -786,6 +908,7 @@ mod tests {
             total_requests: 0,
             cache: None,
             agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot::default(),
         };
         let term_width = 40u16;
         let frame = render_frame(
@@ -824,6 +947,7 @@ mod tests {
             total_requests: 3,
             cache,
             agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot::default(),
         };
         render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
     }
@@ -837,8 +961,122 @@ mod tests {
             total_requests: 0,
             cache: None,
             agent_usage,
+            admission: AdmissionSnapshot::default(),
         };
         render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    }
+
+    fn frame_with_admission(admission: AdmissionSnapshot) -> String {
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 0,
+            cache: None,
+            agent_usage: CacheUsage::default(),
+            admission,
+        };
+        render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    }
+
+    /// A proxy that predates admission control still renders — the section
+    /// reports an empty resident set rather than the frame losing a panel.
+    #[test]
+    fn admission_section_renders_an_empty_resident_set() {
+        let frame = frame_with_admission(AdmissionSnapshot::default());
+        assert!(frame.contains("VRAM residency"), "{frame}");
+        assert!(frame.contains("(no model loaded)"), "{frame}");
+        assert!(frame.contains("Model swaps"), "{frame}");
+    }
+
+    #[test]
+    fn admission_section_names_each_resident_and_its_role() {
+        let frame = frame_with_admission(AdmissionSnapshot {
+            slots: vec![
+                ResidentSlotSnapshot {
+                    model_name: "qwen-coder".to_string(),
+                    inflight: 2,
+                    is_primary: true,
+                    resident_for_secs: 95,
+                },
+                ResidentSlotSnapshot {
+                    model_name: "nomic-embed".to_string(),
+                    inflight: 0,
+                    is_primary: false,
+                    resident_for_secs: 30,
+                },
+            ],
+            ..Default::default()
+        });
+
+        assert!(frame.contains("qwen-coder"), "{frame}");
+        assert!(frame.contains("primary"), "{frame}");
+        assert!(frame.contains("2 in flight"), "{frame}");
+        assert!(frame.contains("1m 35s"), "{frame}");
+        assert!(frame.contains("nomic-embed"), "{frame}");
+        assert!(frame.contains("secondary"), "{frame}");
+        assert!(frame.contains("idle"), "{frame}");
+    }
+
+    /// The whole reason the server sends prose: an idle second slot has to
+    /// explain itself, or a user with free VRAM reads it as a bug.
+    #[test]
+    fn admission_section_prints_the_second_slot_explanation() {
+        let frame = frame_with_admission(AdmissionSnapshot {
+            secondary_slot: SecondarySlotStatus {
+                detail: "Not enough free VRAM to keep a second model loaded.".to_string(),
+            },
+            ..Default::default()
+        });
+
+        assert!(frame.contains("Not enough free VRAM"), "{frame}");
+    }
+
+    #[test]
+    fn admission_section_reports_queue_depth_and_the_oldest_wait() {
+        let frame = frame_with_admission(AdmissionSnapshot {
+            queued: vec![QueuedModelSnapshot {
+                model_name: "nomic-embed".to_string(),
+                waiting: 4,
+                oldest_wait_ms: 95_000,
+            }],
+            total_swaps: 3,
+            ..Default::default()
+        });
+
+        assert!(frame.contains("4 waiting"), "{frame}");
+        assert!(frame.contains("oldest 1m 35s"), "{frame}");
+        assert!(frame.contains("Model swaps"), "{frame}");
+        assert!(frame.contains('3'), "{frame}");
+    }
+
+    /// A server-phrased explanation can be arbitrarily long; it must not wrap
+    /// and break the cursor arithmetic the redraw depends on.
+    #[test]
+    fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
+        let detail = "x".repeat(400);
+        let snapshot = DashboardSnapshot {
+            active_connections: vec![],
+            slots_available: false,
+            slots: vec![],
+            slots_status: None,
+            total_requests: 0,
+            cache: None,
+            agent_usage: CacheUsage::default(),
+            admission: AdmissionSnapshot {
+                secondary_slot: SecondarySlotStatus { detail },
+                ..Default::default()
+            },
+        };
+
+        let frame = render_frame("http://127.0.0.1:8080", &snapshot, 80);
+        for line in frame.lines() {
+            assert!(
+                line.chars().count() <= 80,
+                "line exceeds the terminal width: {line}"
+            );
+        }
     }
 
     #[test]

@@ -41,7 +41,7 @@
 //! [`UnifiedServerConfig`](crate::unified_server_config::UnifiedServerConfig)
 //! flatten its tiers with `resolved_options()` first; the process manager
 //! then calls this function once, at spawn (see
-//! [`SwapState`](crate::process::swap_state::SwapState)).
+//! [`ResidentSet`](crate::process::ResidentSet)).
 //!
 //! Jinja, reasoning format, MTP and KV cache types are resolved here and
 //! nowhere else — duplicating those resolvers is precisely the drift this
@@ -265,7 +265,7 @@ mod tests {
 
     /// Flatten `explicit`/`globals` through the cascade, then translate — the
     /// same two calls every real launch surface makes: `resolved_options()`
-    /// followed by `build_server_config` at spawn (see `SwapState`).
+    /// followed by `build_server_config` at spawn (see `ResidentSet`).
     fn build_via_cascade(
         tags: &[String],
         explicit: ServerConfigOptions,

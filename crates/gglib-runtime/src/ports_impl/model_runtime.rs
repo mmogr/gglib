@@ -5,8 +5,9 @@
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
+use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
+    Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -15,21 +16,17 @@ use crate::process::ProcessManager;
 
 /// Implementation of ModelRuntimePort using ProcessManager.
 ///
-/// Wraps a ProcessManager with SingleSwap strategy to provide
-/// the runtime port interface for the proxy.
-///
 /// # Note
 ///
 /// The ProcessManager is wrapped in Arc because it uses internal
-/// synchronization (RwLock on current state, AtomicBool for loading).
-/// This avoids "copied state" bugs and keeps everything honest.
+/// synchronization (a mutex over the admission queue, an RwLock over the
+/// process table). This avoids "copied state" bugs and keeps everything honest.
 pub struct RuntimePortImpl {
-    /// The underlying process manager (must be SingleSwap strategy).
+    /// The underlying process manager.
     mgr: Arc<ProcessManager>,
-    /// Per-instance override for the host-RAM prompt cache setting, passed
-    /// to every `ensure_model_running` call via
-    /// `ProcessManager::ensure_model_running_with`. `None` defers to
-    /// whatever the shared `mgr` was constructed with.
+    /// Per-instance override for the host-RAM prompt cache setting, passed to
+    /// every `admit` call. `None` defers to whatever the shared `mgr` was
+    /// constructed with.
     cache_ram_override: Option<CacheRamSetting>,
 }
 
@@ -38,7 +35,7 @@ impl RuntimePortImpl {
     ///
     /// # Arguments
     ///
-    /// * `mgr` - ProcessManager configured with SingleSwap strategy
+    /// * `mgr` - the shared process manager
     pub fn new(mgr: Arc<ProcessManager>) -> Self {
         Self {
             mgr,
@@ -50,12 +47,12 @@ impl RuntimePortImpl {
     /// setting on every launch, independent of what `mgr` was constructed
     /// with.
     ///
-    /// Lets one shared `ProcessManager` (single-model-at-a-time, so only one
-    /// llama-server ever runs) serve callers with different cache-RAM needs
-    /// — e.g. a GUI's proxy (`CacheRamSetting::Auto`, parity with the CLI
-    /// proxy) and its benchmark runner (`CacheRamSetting::ExplicitMb(0)`,
-    /// which must never gain a prompt cache) — without splitting the
-    /// manager and losing the single-process guarantee.
+    /// Lets one shared `ProcessManager` — and therefore one admission queue
+    /// governing every llama-server on the machine — serve callers with
+    /// different cache-RAM needs: a GUI's proxy (`CacheRamSetting::Auto`,
+    /// parity with the CLI proxy) and its benchmark runner
+    /// (`CacheRamSetting::ExplicitMb(0)`, which must never gain a prompt cache)
+    /// without splitting the manager and losing that single point of control.
     pub fn with_cache_ram(mgr: Arc<ProcessManager>, setting: CacheRamSetting) -> Self {
         Self {
             mgr,
@@ -72,35 +69,29 @@ impl fmt::Debug for RuntimePortImpl {
 
 #[async_trait]
 impl ModelRuntimePort for RuntimePortImpl {
-    async fn ensure_model_running(
-        &self,
-        model_name: &str,
-        num_ctx: Option<u64>,
-        default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        self.ensure_model_running_with(model_name, num_ctx, default_ctx, LaunchOverrides::default())
-            .await
-    }
-
-    async fn ensure_model_running_with(
+    async fn admit(
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
         default_ctx: u64,
         mut overrides: LaunchOverrides,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
+    ) -> Result<Admission, ModelRuntimeError> {
         // This instance's standing cache-RAM setting applies only when the
         // caller expressed no preference of its own, so a per-call override
         // still wins over `with_cache_ram`.
         overrides.cache_ram = overrides.cache_ram.or(self.cache_ram_override);
 
         self.mgr
-            .ensure_model_running_with(model_name, num_ctx, default_ctx, overrides)
+            .admit(model_name, num_ctx, default_ctx, overrides)
             .await
     }
 
+    fn admission_snapshot(&self) -> AdmissionSnapshot {
+        self.mgr.admission_snapshot()
+    }
+
     async fn current_model(&self) -> Option<RunningTarget> {
-        self.mgr.current_model().await
+        self.mgr.current_model()
     }
 
     async fn list_running(&self) -> Vec<ProcessHandle> {

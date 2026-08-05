@@ -107,7 +107,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 Adapters do not assemble the ops graph by hand — `build_service_graph`
 does it once for both, enforcing the shared-`ProcessManager` ordering that
-keeps only one llama-server running system-wide:
+puts every llama-server on the machine behind one admission queue:
 
 ```rust,ignore
 use gglib_app_services::{AppServices, ServiceGraphParams, build_service_graph};

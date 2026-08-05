@@ -48,7 +48,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     // upstream — the existence precheck in `restore_with_retry` skips the
     // network call entirely when nothing is cached yet, which is correct in
     // production but means this round-trip test needs a real file to
-    // exercise the restore leg. FixedUpstream::ensure_model_running always
+    // exercise the restore leg. FixedUpstream::admit always
     // returns model_id 1.
     //
     // Written *after* the proxy starts, deliberately. `serve()` stamps

@@ -166,7 +166,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
 
     // The one manager. Everything that drives a model shares it, which is what
     // makes "one llama-server at a time" an invariant rather than a hope.
-    let process_manager = Arc::new(ProcessManager::new_single_swap(
+    let process_manager = Arc::new(ProcessManager::new(
         base_port,
         llama_server_path.to_string_lossy().into_owned(),
         Arc::clone(&catalog),

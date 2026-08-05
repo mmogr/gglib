@@ -16,6 +16,8 @@
  * additive server-side changes the same way the CLI's `serde(default)` does.
  */
 
+import type { AdmissionSnapshot } from './admission';
+
 /** Mirrors `gglib_proxy::connections::ConnectionPhase` (`#[serde(rename_all = "snake_case")]`). */
 export type ConnectionPhase = 'queued' | 'processing_prompt' | 'generating';
 
@@ -99,6 +101,14 @@ export function tokensInUse(slot: SlotSnapshot): number | null {
 
   return slot.n_past ?? slot.cache_tokens ?? nDecoded ?? null;
 }
+
+export type {
+  AdmissionSnapshot,
+  QueuedModelSnapshot,
+  ResidentSlotSnapshot,
+  SecondarySlotState,
+  SecondarySlotStatus,
+} from './admission';
 
 /** Mirrors `gglib_proxy::metrics::ContextSnapshot`. */
 export interface ContextSnapshot {
@@ -234,4 +244,10 @@ export interface DashboardSnapshot {
    * resolves a model, and absent on a proxy older than this field.
    */
   launch?: LaunchNarration | null;
+  /**
+   * VRAM residency and the admission queue. Always present on a proxy that has
+   * it; optional here so this mirror still parses a payload from one that
+   * predates M9.
+   */
+  admission?: AdmissionSnapshot | null;
 }

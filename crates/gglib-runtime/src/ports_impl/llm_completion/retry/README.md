@@ -7,14 +7,15 @@
 
 Client-side retry for transient upstream failures on the completions request.
 
-The proxy fails fast on model-startup contention, answering `503` with a
-`Retry-After` header so the caller owns the backoff. This module is that caller.
-It covers every in-process consumer at once — CLI agent chat and the GUI's
+The proxy queues a request whose model is not loaded, and answers `503` with a
+`Retry-After` header only once that wait outlasts its deadline — see
+[admission](crate::process::admission). This module is the caller that honours
+it. It covers every in-process consumer at once — CLI agent chat and the GUI's
 server-side agent loop both reach the upstream through this one adapter.
 
 Backoff shape is not decided here: it comes from
-[`gglib_core::retry`](gglib_core::retry), which the proxy's own contention wait
-also uses, so the two ends agree by construction.
+[`gglib_core::retry`](gglib_core::retry), which the proxy's own `Retry-After`
+hint is derived from, so the two ends agree by construction.
 
 # The idempotency window
 

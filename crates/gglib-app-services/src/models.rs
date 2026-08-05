@@ -448,13 +448,13 @@ mod tests {
 
     #[async_trait::async_trait]
     impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
-        async fn ensure_model_running(
+        async fn admit(
             &self,
             _model_name: &str,
             _num_ctx: Option<u64>,
             _default_ctx: u64,
-        ) -> Result<gglib_core::ports::RunningTarget, gglib_core::ports::ModelRuntimeError>
-        {
+            _overrides: gglib_core::ports::LaunchOverrides,
+        ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
             unimplemented!("not exercised by the remove() tests")
         }
 

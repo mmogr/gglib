@@ -42,19 +42,16 @@ struct RecordingRuntime {
 
 #[async_trait]
 impl ModelRuntimePort for RecordingRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
+        _overrides: gglib_core::ports::LaunchOverrides,
+    ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
         self.launched.lock().unwrap().push(model_name.to_owned());
-        Ok(RunningTarget::local(
-            self.port,
-            1,
-            model_name.to_owned(),
-            4096,
-            false,
+        Ok(gglib_core::ports::Admission::detached(
+            RunningTarget::local(self.port, 1, model_name.to_owned(), 4096, false),
         ))
     }
     async fn current_model(&self) -> Option<RunningTarget> {

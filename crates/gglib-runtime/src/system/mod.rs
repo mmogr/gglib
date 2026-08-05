@@ -53,6 +53,98 @@ pub fn total_system_ram_bytes() -> u64 {
     get_system_memory_info().total_ram_bytes
 }
 
+/// How long a free-VRAM reading is reused before the probe runs again.
+///
+/// Every reading costs a `nvidia-smi` fork (~20–50 ms), and admission can ask
+/// several times a second under load. Two seconds is short enough that the
+/// figure still reflects a model that finished loading moments ago, and long
+/// enough that a burst of requests pays for one probe rather than one each.
+const FREE_VRAM_TTL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Where this machine's free-GPU-memory reading comes from.
+///
+/// Resolved once and cached: the underlying detection shells out to
+/// `nvidia-smi`/`lspci`, which is far too expensive to repeat per admission,
+/// and the answer cannot change without a reboot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FreeVramSource {
+    /// Discrete NVIDIA GPU — `nvidia-smi --query-gpu=memory.free`.
+    NvidiaSmi,
+    /// Apple Silicon unified memory — free host RAM, scaled by the same share
+    /// [`gpu::get_system_memory_info`] treats as GPU-addressable.
+    UnifiedMemory,
+    /// Every other machine. gglib reads VRAM for Metal and NVIDIA only, so an
+    /// AMD, Intel, or CPU-only host reports nothing rather than guessing.
+    Unavailable,
+}
+
+static FREE_VRAM_SOURCE: std::sync::OnceLock<FreeVramSource> = std::sync::OnceLock::new();
+static FREE_VRAM_CACHE: std::sync::Mutex<Option<(std::time::Instant, Option<u64>)>> =
+    std::sync::Mutex::new(None);
+
+/// Share of free host RAM treated as GPU-addressable on unified-memory Macs.
+///
+/// The same 75% [`gpu::get_system_memory_info`] applies to *total* RAM when
+/// reporting Apple Silicon's GPU budget — applied here to the *free* figure so
+/// the two describe the same pool.
+const UNIFIED_MEMORY_GPU_SHARE: f64 = 0.75;
+
+/// Free GPU memory in bytes, right now, or `None` when this machine cannot
+/// report it.
+///
+/// This is the live figure the second-resident-slot decision is made against
+/// (see [`gglib_core::domain::decide_secondary_slot`]) — what is actually free
+/// with the primary model already loaded, not the card's nominal capacity.
+///
+/// `None` is a real answer, not a failure: it means gglib will keep exactly one
+/// model resident, which is the pre-M9 behaviour and always safe.
+///
+/// Cached for [`FREE_VRAM_TTL`], so a burst of admissions costs one probe.
+#[must_use]
+pub fn free_gpu_memory_bytes() -> Option<u64> {
+    let now = std::time::Instant::now();
+
+    {
+        let guard = FREE_VRAM_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((probed_at, value)) = *guard
+            && now.duration_since(probed_at) < FREE_VRAM_TTL
+        {
+            return value;
+        }
+    }
+
+    // Probed outside the lock: the probe forks a process, and holding the
+    // mutex across it would serialise every concurrent admission behind it.
+    // A racing probe is harmless — both compute the same answer and the later
+    // write wins.
+    let source = *FREE_VRAM_SOURCE.get_or_init(detect_free_vram_source);
+    let value = match source {
+        FreeVramSource::NvidiaSmi => gpu::get_nvidia_free_vram_bytes(),
+        FreeVramSource::UnifiedMemory => {
+            #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
+            #[allow(clippy::cast_possible_truncation)]
+            let free = (gpu::get_available_ram_bytes() as f64 * UNIFIED_MEMORY_GPU_SHARE) as u64;
+            Some(free)
+        }
+        FreeVramSource::Unavailable => None,
+    };
+
+    *FREE_VRAM_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((now, value));
+    value
+}
+
+/// Decide once how this machine reports free GPU memory.
+fn detect_free_vram_source() -> FreeVramSource {
+    let info = gpu::detect_gpu_info();
+    if info.has_metal {
+        FreeVramSource::UnifiedMemory
+    } else if info.has_nvidia_gpu && gpu::get_nvidia_free_vram_bytes().is_some() {
+        FreeVramSource::NvidiaSmi
+    } else {
+        FreeVramSource::Unavailable
+    }
+}
+
 /// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
 ///
 /// Used by `GGLIB_DISABLE_<FEATURE>` environment variable checks throughout

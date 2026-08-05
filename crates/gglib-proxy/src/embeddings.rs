@@ -2,10 +2,9 @@
 //!
 //! Deliberately the chat path with everything chat-shaped removed. What it
 //! keeps is what makes the endpoint part of the same gateway rather than a
-//! second, parallel proxy: model resolution, the bounded contention wait,
-//! `ensure_model_running` (so a swap and its narration happen exactly as they
-//! do for chat), and the dashboard registration that makes the traffic
-//! visible.
+//! second, parallel proxy: model resolution, admission control (so queueing, a
+//! swap and its narration happen exactly as they do for chat), and the
+//! dashboard registration that makes the traffic visible.
 //!
 //! What it does not keep, and why:
 //!
@@ -18,14 +17,18 @@
 //! | `{model}:{profile}` routing | Profiles only carry sampling parameters |
 //! | Transparent restart-and-retry | That exists because the VS Code LLM Gateway treats 503 as terminal; an embeddings client has no such constraint, and a retry that re-embeds is the caller's to decide |
 //!
-//! ## The single-model constraint
+//! ## Why this endpoint drove M9
 //!
 //! llama-server reads `--embeddings` as *restrict to only the embedding use
 //! case*. gglib passes it for exactly the models tagged `embedding`, so an
-//! embeddings request against a model that is not loaded costs a full model
-//! swap, and the server it leaves running cannot serve chat completions until
-//! something swaps back. That is inherent to one-model-at-a-time and is not
-//! papered over here — see the crate README.
+//! embeddings server cannot answer chat completions and vice versa. With one
+//! VRAM slot, a client doing both alternately paid for a full model swap on
+//! every single request — the worst case admission control was built to fix.
+//!
+//! It is fixed from two directions, neither of them here: requests for the same
+//! model are batched so one swap serves a burst, and an embedding model small
+//! enough to co-reside takes the second slot and stops swapping altogether. See
+//! [admission](gglib_runtime::process::admission) for both.
 
 use axum::Json;
 use axum::body::Bytes;
@@ -117,18 +120,25 @@ pub(crate) async fn embeddings(
     // arrives mid-swap should wait it out rather than get a fast 503. `None`
     // for `num_ctx` — an embeddings request has no history to size a context
     // around, so it takes whatever the model is configured for.
-    let target = match crate::contention::ensure_with_contention_wait(
-        &state.runtime_port,
-        &model_name,
-        None,
-        state.default_ctx,
-        state.contention_wait,
-    )
-    .await
+    //
+    // This is the endpoint the second resident slot exists for. An embedding
+    // model small enough to co-reside is admitted here without displacing the
+    // chat model at all, so the alternating traffic that used to cost a swap
+    // per request now costs none.
+    let admission = match state
+        .runtime_port
+        .admit(
+            &model_name,
+            None,
+            state.default_ctx,
+            gglib_core::ports::LaunchOverrides::default(),
+        )
+        .await
     {
-        Ok(target) => target,
+        Ok(admission) => admission,
         Err(e) => return handle_runtime_error(e),
     };
+    let target = admission.target.clone();
 
     // Same meeting point as the chat handler: the launch decided this in the
     // runtime, and the dashboard lives here. Skipping these two writes would
@@ -145,12 +155,13 @@ pub(crate) async fn embeddings(
 
     // Registered so embeddings traffic appears in `/v1/proxy/status` rather
     // than looking like an idle proxy that is mysteriously busy. The guard
-    // unregisters on drop, including on every early return below.
-    let _connection =
-        state
-            .dashboard
-            .connections
-            .register(model_name.clone(), false, Some(target.effective_ctx));
+    // unregisters on drop, including on every early return below — and, since
+    // it carries the admission lease, releases the model's VRAM slot with it.
+    let _connection = state
+        .dashboard
+        .connections
+        .register(model_name.clone(), false, Some(target.effective_ctx))
+        .holding(admission.lease);
 
     let upstream_url = format!("{}/v1/embeddings", target.base_url);
     debug!(

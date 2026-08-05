@@ -2,9 +2,9 @@
  * ProxyDashboardModal.
  *
  * Self-contained live view of a running proxy's dashboard: active
- * connections (with per-request prompt-processing progress bars) and
- * inference slots (with per-slot context-usage donuts), backed by
- * `useProxyDashboard()`'s SSE subscription.
+ * connections (with per-request prompt-processing progress bars), VRAM
+ * residency and the admission queue, and inference slots (with per-slot
+ * context-usage donuts), backed by `useProxyDashboard()`'s SSE subscription.
  *
  * Triggered from `ProxyControl.tsx`'s "View Dashboard" button, following the
  * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`/
@@ -21,6 +21,7 @@
 
 import type { FC } from 'react';
 import { Modal } from './ui/Modal';
+import { ProxyAdmissionPanel } from './ProxyAdmissionPanel';
 import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection } from './proxy';
@@ -60,6 +61,19 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
     >
       <div className="flex flex-col gap-lg">
         <ActiveConnectionsSection snapshot={snapshot} />
+
+        {/*
+          Directly under active connections, because it is the answer to the
+          question those connections raise: a request sitting at "queued" is
+          either waiting on llama.cpp or waiting on a model swap, and only this
+          panel can tell the user which.
+        */}
+        <section>
+          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+            VRAM Residency
+          </h3>
+          <ProxyAdmissionPanel admission={snapshot?.admission} />
+        </section>
 
         <section>
           <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">

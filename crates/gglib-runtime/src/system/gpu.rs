@@ -99,8 +99,34 @@ pub fn check_cuda() -> Option<String> {
 
 /// Get NVIDIA GPU VRAM in bytes using nvidia-smi.
 pub fn get_nvidia_vram_bytes() -> Option<u64> {
+    query_nvidia_memory("memory.total")
+}
+
+/// Free NVIDIA VRAM in bytes, right now, using nvidia-smi.
+///
+/// The sibling of [`get_nvidia_vram_bytes`], and the one the residency
+/// decision actually needs: nominal capacity says nothing about whether a
+/// second model fits *alongside the one already loaded*, which is the only
+/// question worth asking at admission time.
+///
+/// This is a machine-wide reading, not a gglib-scoped one — another process
+/// can take memory between this call and the spawn that follows it. Callers
+/// leave a margin for that (see
+/// [`RESIDENCY_UTILISATION`](gglib_core::domain::RESIDENCY_UTILISATION)).
+pub fn get_nvidia_free_vram_bytes() -> Option<u64> {
+    query_nvidia_memory("memory.free")
+}
+
+/// Read one `nvidia-smi --query-gpu` memory field, in bytes.
+///
+/// Multi-GPU hosts report one line per device; the first is taken, matching
+/// what llama-server does by default with no `CUDA_VISIBLE_DEVICES` set.
+fn query_nvidia_memory(field: &str) -> Option<u64> {
     let output = cmd("nvidia-smi")
-        .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .args([
+            &format!("--query-gpu={field}"),
+            "--format=csv,noheader,nounits",
+        ])
         .output()
         .ok()?;
 
@@ -109,10 +135,22 @@ pub fn get_nvidia_vram_bytes() -> Option<u64> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // nvidia-smi returns memory in MiB, convert to bytes
-    // If multiple GPUs, take the first one
+    // nvidia-smi returns memory in MiB, convert to bytes.
     let mib: u64 = stdout.lines().next()?.trim().parse().ok()?;
     Some(mib * 1024 * 1024)
+}
+
+/// Host RAM currently available, in bytes.
+///
+/// Deliberately `System::new()` + `refresh_memory()` rather than
+/// [`System::new_all`]: the latter enumerates every process on the machine,
+/// which is many milliseconds of work to answer a question about memory. This
+/// is on the admission path (via `free_gpu_memory_bytes` on unified-memory
+/// Macs), so the difference matters.
+pub fn get_available_ram_bytes() -> u64 {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.available_memory()
 }
 
 /// Get system memory information for model fit calculations.

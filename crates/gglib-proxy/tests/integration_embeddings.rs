@@ -107,13 +107,13 @@ async fn array_input_reaches_the_upstream_unchanged() {
 }
 
 /// A model without the `embedding` tag is refused before anything is loaded.
-/// `ensure_model_running` must never be called — a swap here would unload
+/// `admit` must never be called — a swap here would unload
 /// whatever is serving chat in exchange for a server that can only 501.
 #[tokio::test]
 async fn a_model_without_the_embedding_tag_never_reaches_the_runtime() {
     let cancel = CancellationToken::new();
     let (upstream, _) = spawn_mock_embeddings_upstream(cancel.clone(), None).await;
-    let (runtime, ensure_calls) = CountingRuntime::new(upstream, CHAT_MODEL);
+    let (runtime, admit_calls) = CountingRuntime::new(upstream, CHAT_MODEL);
     let (base, proxy_cancel) =
         spawn_proxy_with_runtime(runtime as Arc<dyn ModelRuntimePort>, CHAT_MODEL, vec![]).await;
 
@@ -126,7 +126,7 @@ async fn a_model_without_the_embedding_tag_never_reaches_the_runtime() {
 
     assert_eq!(resp.status(), 400);
     assert_eq!(
-        ensure_calls.load(Ordering::SeqCst),
+        admit_calls.load(Ordering::SeqCst),
         0,
         "the guard must run before the model swap, not after"
     );
@@ -141,7 +141,7 @@ async fn a_model_without_the_embedding_tag_never_reaches_the_runtime() {
 async fn a_chat_completion_for_an_embedding_model_never_reaches_the_runtime() {
     let cancel = CancellationToken::new();
     let (upstream, _) = spawn_mock_embeddings_upstream(cancel.clone(), None).await;
-    let (runtime, ensure_calls) = CountingRuntime::new(upstream, EMBED_MODEL);
+    let (runtime, admit_calls) = CountingRuntime::new(upstream, EMBED_MODEL);
     let (base, proxy_cancel) = spawn_proxy_with_runtime(
         runtime as Arc<dyn ModelRuntimePort>,
         EMBED_MODEL,
@@ -172,7 +172,7 @@ async fn a_chat_completion_for_an_embedding_model_never_reaches_the_runtime() {
     );
 
     assert_eq!(
-        ensure_calls.load(Ordering::SeqCst),
+        admit_calls.load(Ordering::SeqCst),
         0,
         "a chat request must not unload a running chat model to reach an embedding model"
     );
