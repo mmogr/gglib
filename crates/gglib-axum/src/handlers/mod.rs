@@ -3,7 +3,6 @@ pub mod agent;
 pub mod benchmark;
 pub mod builtin;
 pub mod config;
-pub mod council;
 pub mod events;
 pub mod mcp;
 pub mod model;
