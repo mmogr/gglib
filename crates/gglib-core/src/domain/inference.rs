@@ -19,6 +19,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::sampling_provenance::{FieldSources, ParamSource};
+
 /// Inference parameters for LLM sampling.
 ///
 /// All fields are optional to support partial configuration and fallback chains.
@@ -309,42 +311,98 @@ impl InferenceConfig {
     /// [`reasoning_profile`]: Self::reasoning_profile
     #[must_use]
     pub fn resolve_layers(layers: &[Option<&Self>], floor: &Self) -> Self {
+        Self::resolve_layers_with_sources(layers, floor).0
+    }
+
+    /// [`resolve_layers`] plus a record of which layer supplied each field.
+    ///
+    /// This is the implementation; [`resolve_layers`] delegates here and
+    /// discards the provenance. Values and provenance therefore come from one
+    /// pass over one ladder and cannot disagree — a second function that
+    /// re-derived the rules would eventually explain a decision the resolution
+    /// did not take, which is exactly what the `describe_provenance` helper
+    /// this replaced had already started doing.
+    ///
+    /// See [`FieldSources`] for how to read the result, and [`resolve_layers`]
+    /// for the coupling rule the sources reflect.
+    ///
+    /// [`resolve_layers`]: Self::resolve_layers
+    #[must_use]
+    pub fn resolve_layers_with_sources(
+        layers: &[Option<&Self>],
+        floor: &Self,
+    ) -> (Self, FieldSources) {
+        // Index into `layers` — not into the flattened iterator — so a caller
+        // can map it back to the name it gave that rung.
+        let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
+            layers.iter().position(|l| l.is_some_and(declares))
+        };
+
         let mut result = Self::default();
 
-        for layer in layers.iter().flatten() {
-            if result.top_p.is_none() {
-                result.top_p = layer.top_p;
-            }
-            if result.top_k.is_none() {
-                result.top_k = layer.top_k;
-            }
-            if result.max_tokens.is_none() {
-                result.max_tokens = layer.max_tokens;
-            }
-        }
+        // Uncoupled: each takes the first layer that names it, independently.
+        let top_p = first(&|c| c.top_p.is_some());
+        let top_k = first(&|c| c.top_k.is_some());
+        let max_tokens = first(&|c| c.max_tokens.is_some());
+        let temperature = first(&|c| c.temperature.is_some());
 
-        result.temperature = layers.iter().flatten().find_map(|l| l.temperature);
+        result.top_p = top_p.and_then(|i| layers[i].and_then(|c| c.top_p));
+        result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
+        result.max_tokens = max_tokens.and_then(|i| layers[i].and_then(|c| c.max_tokens));
+        result.temperature = temperature.and_then(|i| layers[i].and_then(|c| c.temperature));
 
-        if let Some(claim) = layers.iter().flatten().find(|l| l.temperature.is_some()) {
-            result.repeat_penalty = claim.repeat_penalty;
-            result.presence_penalty = claim.presence_penalty;
-            result.min_p = claim.min_p;
+        // Coupled: the layer claiming `temperature` supplies the whole trio,
+        // including the fields it left unset — those drop to the floor rather
+        // than inheriting a value tuned for a temperature nobody chose.
+        let (repeat_penalty, presence_penalty, min_p) = if let Some(claim) = temperature {
+            let c = layers[claim].expect("index came from a Some layer");
+            result.repeat_penalty = c.repeat_penalty;
+            result.presence_penalty = c.presence_penalty;
+            result.min_p = c.min_p;
+            (
+                c.repeat_penalty.and(Some(claim)),
+                c.presence_penalty.and(Some(claim)),
+                c.min_p.and(Some(claim)),
+            )
         } else {
-            for layer in layers.iter().flatten() {
-                if result.repeat_penalty.is_none() {
-                    result.repeat_penalty = layer.repeat_penalty;
-                }
-                if result.presence_penalty.is_none() {
-                    result.presence_penalty = layer.presence_penalty;
-                }
-                if result.min_p.is_none() {
-                    result.min_p = layer.min_p;
-                }
-            }
-        }
+            // Nothing was tuned against anything, so the trio gap-fills like
+            // any uncoupled parameter.
+            let repeat_penalty = first(&|c| c.repeat_penalty.is_some());
+            let presence_penalty = first(&|c| c.presence_penalty.is_some());
+            let min_p = first(&|c| c.min_p.is_some());
+            result.repeat_penalty =
+                repeat_penalty.and_then(|i| layers[i].and_then(|c| c.repeat_penalty));
+            result.presence_penalty =
+                presence_penalty.and_then(|i| layers[i].and_then(|c| c.presence_penalty));
+            result.min_p = min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
+            (repeat_penalty, presence_penalty, min_p)
+        };
 
         result.merge_with(floor);
-        result
+
+        // A field no layer claimed came from the floor — or from nowhere, when
+        // the floor has none either (only `max_tokens`). When a layer claimed
+        // the temperature, the trio's fall-through is the coupling rule at
+        // work rather than a plain absence, and says so.
+        let coupled = temperature.is_some();
+        let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
+            Some(i) => ParamSource::Layer(i),
+            None if !has_floor => ParamSource::Unset,
+            None if is_coupled => ParamSource::FloorCoupled,
+            None => ParamSource::Floor,
+        };
+
+        let sources = FieldSources {
+            temperature: source(temperature, floor.temperature.is_some(), false),
+            top_p: source(top_p, floor.top_p.is_some(), false),
+            top_k: source(top_k, floor.top_k.is_some(), false),
+            presence_penalty: source(presence_penalty, floor.presence_penalty.is_some(), coupled),
+            repeat_penalty: source(repeat_penalty, floor.repeat_penalty.is_some(), coupled),
+            min_p: source(min_p, floor.min_p.is_some(), coupled),
+            max_tokens: source(max_tokens, floor.max_tokens.is_some(), false),
+        };
+
+        (result, sources)
     }
 
     /// Create a new config with all fields set to sensible defaults.
@@ -630,6 +688,32 @@ impl InferenceConfig {
         global: Option<&Self>,
         model_ctx: ModelSamplingContext,
     ) -> Self {
+        self.resolve_with_profile_explained(profile, model, global, model_ctx)
+            .0
+    }
+
+    /// [`resolve_with_profile`] plus a record of which rung supplied each
+    /// field.
+    ///
+    /// This is the implementation; [`resolve_with_profile`] delegates here and
+    /// discards the provenance, so the ladder — including the user/auto rung
+    /// split and the floor selection — is built exactly once.
+    ///
+    /// Map a [`ParamSource::Layer`] index back to a rung with
+    /// [`SamplingLayer::from_index`], which is kept beside this ladder for
+    /// that purpose.
+    ///
+    /// [`resolve_with_profile`]: Self::resolve_with_profile
+    /// [`SamplingLayer::from_index`]: crate::domain::SamplingLayer::from_index
+    /// [`ParamSource::Layer`]: crate::domain::ParamSource::Layer
+    #[must_use]
+    pub fn resolve_with_profile_explained(
+        self,
+        profile: Option<&Self>,
+        model: Option<&Self>,
+        global: Option<&Self>,
+        model_ctx: ModelSamplingContext,
+    ) -> (Self, FieldSources) {
         let floor = if model_ctx.is_reasoning {
             Self::reasoning_floor()
         } else {
@@ -639,7 +723,7 @@ impl InferenceConfig {
             Some(DefaultsOrigin::AutoDetected) => (None, model),
             _ => (model, None),
         };
-        Self::resolve_layers(
+        Self::resolve_layers_with_sources(
             &[Some(&self), profile, user_model, global, auto_model],
             &floor,
         )
@@ -1107,6 +1191,207 @@ mod tests {
                 Some(&global),
                 ModelSamplingContext::default()
             ),
+        );
+    }
+
+    // ── Provenance agrees with the values ─────────────────────────────────
+
+    /// Assert, for every field, that the reported source actually accounts for
+    /// the resolved value.
+    ///
+    /// This is the invariant that makes the two impossible to drift apart, and
+    /// it is the check that would have caught the `describe_provenance`
+    /// divergence this API replaced: a `Layer(i)` claim is only true if that
+    /// layer really carries the resolved value.
+    /// Field name, the value that resolved, and how to read that field off any
+    /// layer — enough to check a reported source against reality.
+    type FieldCheck = (
+        &'static str,
+        Option<f32>,
+        fn(&InferenceConfig) -> Option<f32>,
+    );
+
+    #[track_caller]
+    fn assert_sources_explain_values(layers: &[Option<&InferenceConfig>], floor: &InferenceConfig) {
+        let (resolved, sources) = InferenceConfig::resolve_layers_with_sources(layers, floor);
+
+        let checks: [FieldCheck; 5] = [
+            ("temperature", resolved.temperature, |c| c.temperature),
+            ("top_p", resolved.top_p, |c| c.top_p),
+            ("presence_penalty", resolved.presence_penalty, |c| {
+                c.presence_penalty
+            }),
+            ("repeat_penalty", resolved.repeat_penalty, |c| {
+                c.repeat_penalty
+            }),
+            ("min_p", resolved.min_p, |c| c.min_p),
+        ];
+
+        for (name, value, get) in checks {
+            let source = sources
+                .iter()
+                .find(|(field, _)| *field == name)
+                .expect("field is reported")
+                .1;
+            match source {
+                ParamSource::Layer(i) => {
+                    let layer = layers[i].expect("a named layer is populated");
+                    assert_eq!(get(layer), value, "{name}: layer {i} must carry the value");
+                }
+                ParamSource::Floor | ParamSource::FloorCoupled => {
+                    assert_eq!(get(floor), value, "{name}: must equal the floor");
+                }
+                ParamSource::Unset => assert_eq!(value, None, "{name}: must be absent"),
+            }
+        }
+    }
+
+    /// Across the shapes the tests above exercise individually, plus the
+    /// coupling-rule cases, provenance must account for every resolved value.
+    #[test]
+    fn test_sources_always_account_for_the_resolved_values() {
+        let sparse_profile = InferenceConfig {
+            temperature: Some(0.2),
+            ..Default::default()
+        };
+        let recipe = InferenceConfig::reasoning_profile();
+        let penalty_only = InferenceConfig {
+            presence_penalty: Some(1.2),
+            ..Default::default()
+        };
+        let global = InferenceConfig {
+            top_k: Some(10),
+            min_p: Some(0.05),
+            ..Default::default()
+        };
+
+        let ladders: [[Option<&InferenceConfig>; 4]; 6] = [
+            // Nothing at all — everything falls to the floor.
+            [None, None, None, None],
+            // A sparse profile over a full recipe: the coupling rule fires.
+            [None, Some(&sparse_profile), Some(&recipe), None],
+            // The recipe alone, unclaimed from above.
+            [None, None, Some(&recipe), None],
+            // The drift case: a penalty above a temperature claim below it.
+            [Some(&penalty_only), None, Some(&recipe), None],
+            // No layer names a temperature — the trio gap-fills normally.
+            [Some(&penalty_only), None, None, Some(&global)],
+            // Every rung populated.
+            [
+                Some(&penalty_only),
+                Some(&sparse_profile),
+                Some(&recipe),
+                Some(&global),
+            ],
+        ];
+
+        for floor in [
+            InferenceConfig::with_hardcoded_defaults(),
+            InferenceConfig::reasoning_floor(),
+        ] {
+            for ladder in &ladders {
+                assert_sources_explain_values(ladder, &floor);
+            }
+        }
+    }
+
+    /// `max_tokens` is the one parameter with no floor value, so an untouched
+    /// ladder reports it as genuinely unset rather than as a floor default.
+    #[test]
+    fn test_max_tokens_reports_unset_rather_than_floor() {
+        let (_, sources) = InferenceConfig::resolve_layers_with_sources(
+            &[None],
+            &InferenceConfig::with_hardcoded_defaults(),
+        );
+        assert_eq!(sources.max_tokens, ParamSource::Unset);
+        // Every other field does have a floor to fall back on.
+        assert_eq!(sources.temperature, ParamSource::Floor);
+    }
+
+    /// The two floor variants are distinguishable: a trio suppressed by the
+    /// coupling rule must not look the same as one nobody ever set.
+    #[test]
+    fn test_coupled_suppression_is_distinguishable_from_plain_absence() {
+        let claim = InferenceConfig {
+            temperature: Some(0.2),
+            ..Default::default()
+        };
+        let floor = InferenceConfig::with_hardcoded_defaults();
+
+        let (_, claimed) = InferenceConfig::resolve_layers_with_sources(&[Some(&claim)], &floor);
+        assert_eq!(claimed.presence_penalty, ParamSource::FloorCoupled);
+
+        let (_, untouched) = InferenceConfig::resolve_layers_with_sources(&[None], &floor);
+        assert_eq!(untouched.presence_penalty, ParamSource::Floor);
+    }
+
+    /// `resolve_with_profile` delegates to the explained form, so the two must
+    /// agree on the value, and the ladder indices must match `SamplingLayer`.
+    #[test]
+    fn test_resolve_with_profile_explained_matches_the_plain_form() {
+        let profile = InferenceConfig {
+            temperature: Some(0.2),
+            ..Default::default()
+        };
+        let model = InferenceConfig::reasoning_profile();
+        let ctx = ModelSamplingContext {
+            is_reasoning: true,
+            defaults_origin: Some(DefaultsOrigin::User),
+        };
+
+        let plain = InferenceConfig::default().resolve_with_profile(
+            Some(&profile),
+            Some(&model),
+            None,
+            ctx,
+        );
+        let (explained, sources) = InferenceConfig::default().resolve_with_profile_explained(
+            Some(&profile),
+            Some(&model),
+            None,
+            ctx,
+        );
+
+        assert_eq!(plain, explained);
+        // The profile sits at rung 1, and a user-set model at rung 2.
+        assert_eq!(sources.temperature, ParamSource::Layer(1));
+        assert_eq!(
+            crate::domain::SamplingLayer::from_index(1),
+            Some(crate::domain::SamplingLayer::Profile)
+        );
+        assert_eq!(sources.top_k, ParamSource::Layer(2));
+        assert_eq!(
+            crate::domain::SamplingLayer::from_index(2),
+            Some(crate::domain::SamplingLayer::ModelUserSet)
+        );
+    }
+
+    /// An auto-detected recipe drops to rung 4, below global settings — the
+    /// #685 ranking, now visible in the provenance rather than only in values.
+    #[test]
+    fn test_an_auto_detected_recipe_reports_the_lower_rung() {
+        let model = InferenceConfig::reasoning_profile();
+        let global = InferenceConfig {
+            top_k: Some(10),
+            ..Default::default()
+        };
+        let ctx = ModelSamplingContext {
+            is_reasoning: true,
+            defaults_origin: Some(DefaultsOrigin::AutoDetected),
+        };
+
+        let (_, sources) = InferenceConfig::default().resolve_with_profile_explained(
+            None,
+            Some(&model),
+            Some(&global),
+            ctx,
+        );
+
+        assert_eq!(sources.top_k, ParamSource::Layer(3), "global wins top_k");
+        assert_eq!(
+            sources.temperature,
+            ParamSource::Layer(4),
+            "the auto-detected recipe sits below global"
         );
     }
 

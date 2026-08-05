@@ -108,6 +108,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `add <path>` | Add a GGUF model to the library |
 | `list` | List all models with metadata |
 | `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
+| `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id>` | Remove a model from the library |
 | `serve <id>` | Start llama-server for a model (respects per-model server_defaults from DB, overridable with `--ctx-size`) |
 | `chat <id>` | Start interactive llama-cli chat |

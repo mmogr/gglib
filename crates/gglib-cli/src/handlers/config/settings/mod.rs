@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-mod profiles;
+pub(crate) mod profiles;
 mod settings_display;
 
 use std::collections::BTreeSet;

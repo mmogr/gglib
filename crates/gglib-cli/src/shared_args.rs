@@ -10,8 +10,10 @@ use gglib_runtime::proxy::ProxyCacheOptions;
 
 /// Sampling-parameter overrides common to all inference commands.
 ///
-/// Each field is optional. When `None`, the 3-level merge hierarchy
-/// (CLI → model defaults → global defaults → hardcoded) fills in the value.
+/// Each field is optional. When `None`, the merge hierarchy — CLI → per-model
+/// defaults (user-set) → global defaults → per-model defaults (auto-detected)
+/// → the class floor — fills in the value. `gglib model explain <id>` shows
+/// which of those rungs actually supplied each parameter.
 #[derive(Args, Debug, Clone, Default)]
 pub struct SamplingArgs {
     /// Temperature for sampling (0.0-2.0, overrides model/global defaults)

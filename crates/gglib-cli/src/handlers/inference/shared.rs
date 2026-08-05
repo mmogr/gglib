@@ -10,10 +10,16 @@ use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
 
-/// Resolve inference parameters via the 3-level merge hierarchy.
+/// Resolve inference parameters via the full merge hierarchy.
 ///
-/// Merge order: CLI args (already in `config`) → model defaults → global
-/// defaults → hardcoded defaults. Each layer fills in only `None` fields.
+/// Merge order: CLI args (already in `config`) → per-model defaults, if
+/// user-set → global defaults → per-model defaults, if auto-detected → the
+/// class floor. Each layer fills in only `None` fields, except for the
+/// parameters coupled to `temperature` — see
+/// [`InferenceConfig::resolve_with_profile`] for both rules.
+///
+/// `gglib model explain <id>` prints the outcome of this resolution for any
+/// model, naming the layer each parameter came from.
 pub async fn resolve_inference_config(
     ctx: &CliContext,
     config: InferenceConfig,

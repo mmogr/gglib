@@ -48,54 +48,6 @@ pub struct SamplingLayers {
     pub trust_client_sampling: bool,
 }
 
-/// Which layer supplied each resolved sampling value, as `field=layer` pairs.
-///
-/// Nothing else records this. Without it the effective sampling config is
-/// invisible at every log level, and answering "where did this
-/// `presence_penalty` come from?" means probing llama-server's live `/slots`
-/// mid-generation — which is how the leak behind #621 had to be found.
-///
-/// Takes the exact same ordered layer array [`resolve_sampling`] folds
-/// through [`InferenceConfig::resolve_layers`], so provenance can never
-/// drift from what was actually resolved — there is one ladder, read by both.
-/// Mirrors the coupling rule documented there: once a layer declares a
-/// `temperature`, layers below it can no longer supply the parameters tuned
-/// against it, so those report `floor` even though a lower layer names a
-/// value. A field with no layer naming it at all also reports `floor` — the
-/// two cases are indistinguishable from the wire body alone, which is the
-/// point: either way nothing above the floor spoke for it.
-fn describe_provenance(ordered: &[(&'static str, Option<&InferenceConfig>)]) -> String {
-    // The highest layer naming a temperature; layers below it cannot supply
-    // temperature-tuned parameters. `None` means nothing claimed it, so every
-    // layer stays eligible.
-    let claim = ordered
-        .iter()
-        .position(|(_, c)| c.is_some_and(|c| c.temperature.is_some()))
-        .unwrap_or(ordered.len());
-
-    let source = |declares: &dyn Fn(&InferenceConfig) -> bool, limit: usize| -> &'static str {
-        ordered
-            .iter()
-            .take(limit)
-            .find(|(_, c)| c.is_some_and(&declares))
-            .map_or("floor", |(name, _)| name)
-    };
-
-    let all = ordered.len();
-    // Tuned parameters are eligible only up to and including the claiming layer.
-    let tuned = claim.saturating_add(1).min(all);
-    format!(
-        "temperature={} top_p={} top_k={} max_tokens={} presence_penalty={} repeat_penalty={} min_p={}",
-        source(&|c| c.temperature.is_some(), all),
-        source(&|c| c.top_p.is_some(), all),
-        source(&|c| c.top_k.is_some(), all),
-        source(&|c| c.max_tokens.is_some(), all),
-        source(&|c| c.presence_penalty.is_some(), tuned),
-        source(&|c| c.repeat_penalty.is_some(), tuned),
-        source(&|c| c.min_p.is_some(), tuned),
-    )
-}
-
 /// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
 ///
 /// # Force-insert, not `or_insert`
@@ -170,9 +122,12 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     ];
     let layer_configs: Vec<Option<&InferenceConfig>> =
         ordered.iter().map(|(_, config)| *config).collect();
-    let resolved = InferenceConfig::resolve_layers(&layer_configs, &floor);
+    // Values and provenance come from the same pass over the same ladder, so
+    // the log can never name a layer the resolution did not use.
+    let (resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs, &floor);
 
     if tracing::enabled!(tracing::Level::DEBUG) {
+        let names: Vec<&str> = ordered.iter().map(|(name, _)| *name).collect();
         debug!(
             temperature = ?resolved.temperature,
             top_p = ?resolved.top_p,
@@ -181,7 +136,7 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
             presence_penalty = ?resolved.presence_penalty,
             repeat_penalty = ?resolved.repeat_penalty,
             min_p = ?resolved.min_p,
-            from = %describe_provenance(&ordered),
+            from = %sources.describe(&names),
             "sampling resolved"
         );
     }
@@ -342,9 +297,21 @@ mod tests {
 
     // ── Provenance ────────────────────────────────────────────────────────
 
-    /// The `:coding` shape. The provenance string must say the penalty came
-    /// from the floor, not from the model — otherwise the log would assert
-    /// exactly the leak the merge now prevents.
+    /// The five names the pipeline's own ladder uses, for the provenance
+    /// tests below.
+    const LAYER_NAMES: [&str; 5] = ["cli", "client", "profile", "model", "global"];
+
+    /// Resolve a ladder and render its provenance the way the debug line does.
+    fn provenance_of(layers: &[Option<&InferenceConfig>; 5]) -> String {
+        let floor = InferenceConfig::with_hardcoded_defaults();
+        InferenceConfig::resolve_layers_with_sources(layers, &floor)
+            .1
+            .describe(&LAYER_NAMES)
+    }
+
+    /// The `:coding` shape. The provenance must say the penalty came from the
+    /// floor, not from the model — otherwise the log would assert exactly the
+    /// leak the merge now prevents.
     #[test]
     fn provenance_reports_coupling_suppressed_layers_as_floor() {
         let model = InferenceConfig {
@@ -354,14 +321,7 @@ mod tests {
             ..Default::default()
         };
         let profile = temp(0.2);
-        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
-            ("cli", None),
-            ("client", None),
-            ("profile", Some(&profile)),
-            ("model", Some(&model)),
-            ("global", None),
-        ];
-        let got = describe_provenance(&ordered);
+        let got = provenance_of(&[None, None, Some(&profile), Some(&model), None]);
 
         assert!(got.contains("temperature=profile"), "{got}");
         assert!(got.contains("presence_penalty=floor"), "{got}");
@@ -378,14 +338,7 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
-            ("cli", None),
-            ("client", None),
-            ("profile", None),
-            ("model", Some(&model)),
-            ("global", None),
-        ];
-        let got = describe_provenance(&ordered);
+        let got = provenance_of(&[None, None, None, Some(&model), None]);
 
         assert!(got.contains("temperature=model"), "{got}");
         assert!(got.contains("presence_penalty=model"), "{got}");
@@ -396,16 +349,41 @@ mod tests {
     fn provenance_names_the_cli_layer() {
         let cli = temp(0.3);
         let client = temp(0.9);
-        let ordered: [(&str, Option<&InferenceConfig>); 5] = [
-            ("cli", Some(&cli)),
-            ("client", Some(&client)),
-            ("profile", None),
-            ("model", None),
-            ("global", None),
-        ];
-        let got = describe_provenance(&ordered);
+        let got = provenance_of(&[Some(&cli), Some(&client), None, None, None]);
 
         assert!(got.contains("temperature=cli"), "{got}");
+    }
+
+    /// The drift this unification removes. `cli` names a `presence_penalty`
+    /// but no `temperature`; `model` claims the temperature, so the coupling
+    /// rule resolves the penalty from `model` — and the provenance must say so.
+    ///
+    /// The previous `describe_provenance` scanned every layer down to the
+    /// claiming one and reported `cli`, naming a layer the resolution had
+    /// passed over.
+    #[test]
+    fn provenance_does_not_credit_a_layer_the_coupling_rule_passed_over() {
+        let cli = InferenceConfig {
+            presence_penalty: Some(1.2),
+            ..Default::default()
+        };
+        let model = InferenceConfig {
+            temperature: Some(1.0),
+            presence_penalty: Some(1.5),
+            ..Default::default()
+        };
+        let layers = [Some(&cli), None, None, Some(&model), None];
+
+        let got = provenance_of(&layers);
+        assert!(
+            got.contains("presence_penalty=model"),
+            "the claiming layer supplied it, got: {got}"
+        );
+
+        // And the value agrees with the name.
+        let floor = InferenceConfig::with_hardcoded_defaults();
+        let (resolved, _) = InferenceConfig::resolve_layers_with_sources(&layers, &floor);
+        assert_eq!(resolved.presence_penalty, Some(1.5));
     }
 
     /// Regression for #621: operator flags must beat the per-model layer.
