@@ -586,7 +586,7 @@ gglib config settings set --trust-client-sampling false
 `{model}:{profile}` selection is unaffected either way — that is not a client
 sampling parameter, it is part of the requested model name, and profiles remain the
 sanctioned way for a client to express a sampling preference without needing to be
-trusted (see below). In-process callers (`gglib chat`, `gglib q`, council) are also
+trusted (see below). In-process callers (`gglib chat`, `gglib q`) are also
 unaffected: their sampling parameters are gglib's own typed configuration, not an
 external client's request body, so they are always honoured.
 

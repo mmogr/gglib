@@ -83,7 +83,7 @@ impl McpService {
 
     /// Pre-warm all `Lazy` servers.
     ///
-    /// One-shot CLI commands (`gglib q`, orchestrate, plan, council) call this
+    /// One-shot CLI commands (`gglib q`) call this
     /// right after `initialize` so that tools are ready before generation begins,
     /// avoiding per-tool spawn latency mid-stream.
     pub async fn prewarm_lazy(&self) {

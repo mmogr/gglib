@@ -75,12 +75,12 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
 
         <section>
           <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
-            Agent Cache (Council · GUI Chat)
+            Agent Cache (GUI Chat)
           </h3>
           {/*
-            A separate population from the proxied figure above: council and
-            GUI-chat runs talk to llama-server directly, so their reuse profile
-            is nothing like a user's conversation and must not be averaged in.
+            A separate population from the proxied figure above: GUI-chat runs
+            talk to llama-server directly, so their reuse profile is nothing
+            like a user's conversation and must not be averaged in.
           */}
           <CacheUsageRows usage={snapshot?.agent_usage} />
         </section>

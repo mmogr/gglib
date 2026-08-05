@@ -645,7 +645,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `recent_requests` | array | Last ≤ 20 requests processed by the truncation pipeline, oldest-first |
 | `total_requests` | `u64` | All requests since proxy start, including evicted ones |
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
-| `agent_usage` | `object` | Prompt-cache reuse for the in-process agent path (council + GUI chat), reported separately from `cache.usage` — see below |
+| `agent_usage` | `object` | Prompt-cache reuse for the in-process agent path (GUI chat), reported separately from `cache.usage` — see below |
 
 #### `cache` (`CacheStatus`)
 
@@ -673,14 +673,14 @@ Prompt-cache reuse measured since the proxy started, sourced from
 `n_prompt_tokens_cache`). Both the streaming and non-streaming forward paths
 report, so neither is silently missing from the totals.
 
-**Scope: proxied `/v1/chat/completions` requests only.** Council and GUI-chat
-runs bypass this crate's forward path — they compose an LLM adapter directly
-against the model's `base_url` — so their reuse is reported *separately* in the
-top-level [`agent_usage`](#agent_usage-cacheusage), never merged into this
-figure. That separation is deliberate: a council run issues many small
-sub-agent calls whose reuse characteristics are nothing like a user's
-conversation, and averaging the two would make this figure harder to interpret,
-not more complete. Routing those internal loops back through the user-facing
+**Scope: proxied `/v1/chat/completions` requests only.** GUI-chat runs bypass
+this crate's forward path — they compose an LLM adapter directly against the
+model's `base_url` — so their reuse is reported *separately* in the top-level
+[`agent_usage`](#agent_usage-cacheusage), never merged into this figure. That
+separation is deliberate: an agent turn issues many small tool-driven calls
+whose reuse characteristics are nothing like a user's conversation, and
+averaging the two would make this figure harder to interpret, not more
+complete. Routing those internal loops back through the user-facing
 proxy purely to collect telemetry would also be a U-turn for no benefit.
 
 Raw counts only. Nothing is derived or extrapolated — in particular there is
@@ -701,10 +701,9 @@ numbers that are both real.
 
 The same [`CacheUsage`](#cacheusage-cacheusage) shape as `cache.usage`, but a
 **separate population**: prompt-cache reuse for the in-process agent path —
-council runs (via the virtual-model route) and GUI chat — which reach
-llama-server directly rather than through the forward path above. Recorded by
-tapping the shared LLM adapter's response stream
-(`gglib_core::ports::CacheMetricsSink`), so both agent collectors are covered by
+GUI chat — which reaches llama-server directly rather than through the forward
+path above. Recorded by tapping the shared LLM adapter's response stream
+(`gglib_core::ports::CacheMetricsSink`), so every agent collector is covered by
 one hook. Top-level rather than nested under `cache` because it does not depend
 on the proxy's cache configuration and surfaces even before a proxied request
 has resolved a model.

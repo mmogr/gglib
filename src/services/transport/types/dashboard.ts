@@ -223,7 +223,7 @@ export interface DashboardSnapshot {
    */
   cache?: CacheStatus | null;
   /**
-   * Prompt-cache reuse for the in-process agent path (council + GUI chat),
+   * Prompt-cache reuse for the in-process agent path (GUI chat),
    * reported alongside `cache.usage` and never merged into it. Top-level and
    * always present, since it does not depend on a resolved model; may be absent
    * on a proxy older than this field.

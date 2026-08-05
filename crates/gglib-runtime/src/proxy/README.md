@@ -24,15 +24,15 @@ is the only difference between them:
 | `pinned` | `None` — auto-swap on request | `Some(PinnedModel)` — refuse others |
 | `/v1/models` | the whole catalog | the pinned model only |
 
-Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP gateway,
-council wiring and shutdown — is shared verbatim. `serve` is a *mode* of the
+Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP gateway
+and shutdown — is shared verbatim. `serve` is a *mode* of the
 proxy, not a second stack.
 
 The catalog row follows from the first: a model the proxy would refuse should
 never be advertised, or a client that cannot switch models picks one and gets
 `PinnedModelMismatch` for something it was offered. Profile variants of the
-pinned model and the council virtuals are still listed — neither changes which
-model actually runs, so neither can trip the guard.
+pinned model are still listed — a profile does not change which model actually
+runs, so it cannot trip the guard.
 
 <!-- module-docs:end -->
 
