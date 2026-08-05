@@ -19,6 +19,8 @@ use crate::commands::Commands;
 #[command(
     help_template = "{before-help}{name} {version}\n{about-with-newline}\n\
 {usage-heading} {usage}\n\n\
+Getting started:\n  \
+up              Set up everything and start a working endpoint (start here)\n\n\
 Management (use <command> --help to see subcommands):\n  \
 model           Manage GGUF models (add, list, remove, download, verify, \u{2026})\n  \
 config          Manage configuration, tooling, and system settings\n  \
@@ -70,5 +72,28 @@ mod tests {
         ]);
         assert!(cli.verbose);
         assert_eq!(cli.models_dir, Some("/tmp/models".to_string()));
+    }
+
+    #[test]
+    fn test_up_parses_its_flags() {
+        use clap::Parser;
+        let cli = Cli::parse_from(["gglib", "up", "--yes", "--model", "qwen", "--port", "9999"]);
+        match cli.command {
+            Some(crate::commands::Commands::Up { yes, model, port }) => {
+                assert!(yes);
+                assert_eq!(model.as_deref(), Some("qwen"));
+                assert_eq!(port, 9999);
+            }
+            _ => panic!("expected the Up variant"),
+        }
+    }
+
+    /// The command list in `help_template` is a hand-written string, so adding
+    /// a variant to `Commands` does not add it to `--help`. Without this, the
+    /// headline command can ship invisible.
+    #[test]
+    fn test_up_appears_in_the_top_level_help() {
+        let help = Cli::command().render_help().to_string();
+        assert!(help.contains("up "), "`up` missing from --help:\n{help}");
     }
 }

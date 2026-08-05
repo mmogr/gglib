@@ -12,6 +12,25 @@ Manage your local GGUF models without remembering file paths or llama.cpp comman
 
 GGLib keeps a catalog of your GGUFs, handles downloading from HuggingFace, and starts llama-server for you. Use it from the terminal, a desktop app, a web UI, or as an OpenAI-compatible API — they all share the same database and model directory.
 
+## Start here
+
+```bash
+gglib up
+```
+
+One command from a clean machine to a working OpenAI-compatible endpoint. It
+reads your hardware, installs llama.cpp if it is missing, recommends a model
+that actually fits your VRAM (and says why, and asks before downloading
+anything), starts the proxy, sends a real request through it to prove the
+endpoint answers, and prints the settings to paste into Cline, Continue,
+Open WebUI or Copilot.
+
+Re-running it is safe: whatever is already in place is skipped, so a second run
+just starts the proxy. Add `--yes` to accept the recommendation without being
+asked, `--model <name>` to load a different installed model, `--port` to bind
+somewhere other than 8080. Anything beyond that — a non-loopback host, sampling
+overrides, KV cache tuning — is what `gglib proxy` is for.
+
 ## Quick look
 
 ```bash

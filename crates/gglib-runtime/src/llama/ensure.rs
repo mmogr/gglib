@@ -1,6 +1,5 @@
 use anyhow::Result;
 use gglib_core::paths::{is_prebuilt_binary, llama_cpp_dir, llama_server_path};
-use std::io::{self, Write};
 use tokio::sync::mpsc;
 
 use super::build_events::BuildEvent;
@@ -9,6 +8,22 @@ use super::download::{
     PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
 };
 use super::install::run_llama_source_build;
+use super::prompt::InstallPrompt;
+
+/// Message used for every "shall I install?" confirmation.
+///
+/// One constant rather than three near-identical strings: the three branches
+/// differ in *what* they are about to do, which is explained by the lines
+/// printed before the prompt, not by the prompt itself.
+const CONFIRM_INSTALL: &str = "Would you like to install llama.cpp now?";
+
+/// Refusal is not an error condition to explain twice — one message, wherever
+/// the user declined.
+fn declined() -> anyhow::Error {
+    anyhow::anyhow!(
+        "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
+    )
+}
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -23,7 +38,18 @@ fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
 /// - **Source build** (repo detected): Build from source (existing behavior)
 /// - **Pre-built binary + macOS/Windows**: Download pre-built binaries (fast)
 /// - **Pre-built binary + Linux**: Build from source (CUDA requires compilation)
-pub async fn ensure_llama_initialized() -> Result<()> {
+///
+/// # Prompting
+///
+/// Confirmation goes through [`InstallPrompt`] rather than stdin directly, so
+/// the caller decides the policy: [`CliPrompt`] asks, [`AutoConfirmPrompt`]
+/// proceeds (`gglib up --yes`), and [`NonInteractivePrompt`] refuses rather
+/// than installing behind a user's back.
+///
+/// [`CliPrompt`]: super::prompt::CliPrompt
+/// [`AutoConfirmPrompt`]: super::prompt::AutoConfirmPrompt
+/// [`NonInteractivePrompt`]: super::prompt::NonInteractivePrompt
+pub async fn ensure_llama_initialized(prompt: &dyn InstallPrompt) -> Result<()> {
     let server_path = path_err(llama_server_path())?;
 
     if server_path.exists() {
@@ -38,29 +64,22 @@ pub async fn ensure_llama_initialized() -> Result<()> {
     // Determine installation method based on context
     if is_prebuilt_binary() {
         // Running from a pre-built/installed binary
-        ensure_for_prebuilt_binary().await
+        ensure_for_prebuilt_binary(prompt).await
     } else {
         // Running from source repository (make setup, cargo run, etc.)
-        ensure_for_source_build().await
+        ensure_for_source_build(prompt).await
     }
 }
 
 /// Installation flow for users running from source repository.
 ///
 /// This preserves the existing behavior: prompt user and build from source.
-async fn ensure_for_source_build() -> Result<()> {
+async fn ensure_for_source_build(prompt: &dyn InstallPrompt) -> Result<()> {
     println!("Running from source repository - will build llama.cpp from source.");
-    println!();
-    print!("Would you like to install llama.cpp now? [Y/n] ");
-    io::stdout().flush()?;
+    print_build_duration_warning();
 
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-
-    if input.trim().eq_ignore_ascii_case("n") {
-        anyhow::bail!(
-            "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
-        );
+    if !prompt.confirm(CONFIRM_INSTALL, true)? {
+        return Err(declined());
     }
 
     println!("Building llama.cpp from source (auto-detecting hardware)...");
@@ -76,24 +95,14 @@ async fn ensure_for_source_build() -> Result<()> {
 ///
 /// Attempts to download pre-built llama.cpp binaries for macOS/Windows.
 /// Falls back to building from source for Linux (CUDA requires compilation).
-async fn ensure_for_prebuilt_binary() -> Result<()> {
+async fn ensure_for_prebuilt_binary(prompt: &dyn InstallPrompt) -> Result<()> {
     match check_prebuilt_availability() {
         PrebuiltAvailability::Available { description, .. } => {
-            println!(
-                "Pre-built llama.cpp binaries are available for {}.",
-                description
-            );
+            println!("Pre-built llama.cpp binaries are available for {description}.");
             println!();
-            print!("Would you like to download them now? [Y/n] ");
-            io::stdout().flush()?;
 
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if input.trim().eq_ignore_ascii_case("n") {
-                anyhow::bail!(
-                    "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
-                );
+            if !prompt.confirm("Would you like to download them now?", true)? {
+                return Err(declined());
             }
 
             // Try downloading pre-built binaries
@@ -101,7 +110,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
                 Ok(()) => Ok(()),
                 Err(e) => {
                     println!();
-                    println!("⚠️  Failed to download pre-built binaries: {}", e);
+                    println!("⚠️  Failed to download pre-built binaries: {e}");
                     println!();
                     println!("Falling back to building from source...");
                     println!();
@@ -113,24 +122,16 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
         }
         PrebuiltAvailability::NotAvailable { reason } => {
             // Linux or unsupported platform - must build from source
-            println!("{}", reason);
+            println!("{reason}");
             println!();
             println!("llama.cpp will be built from source to enable GPU acceleration.");
-            println!();
+            print_build_duration_warning();
 
             // Show required build tools
             print_build_requirements();
 
-            print!("Would you like to build llama.cpp now? [Y/n] ");
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if input.trim().eq_ignore_ascii_case("n") {
-                anyhow::bail!(
-                    "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
-                );
+            if !prompt.confirm("Would you like to build llama.cpp now?", true)? {
+                return Err(declined());
             }
 
             println!("Building llama.cpp from source (auto-detecting hardware)...");
@@ -160,22 +161,35 @@ async fn install_from_source() -> Result<()> {
 
     while let Some(event) = rx.recv().await {
         match event {
-            BuildEvent::PhaseStarted { phase } => println!("→ {:?}", phase),
-            BuildEvent::Log { message } => println!("  {}", message),
+            BuildEvent::PhaseStarted { phase } => println!("→ {phase:?}"),
+            BuildEvent::Log { message } => println!("  {message}"),
             BuildEvent::Progress { current, total } => {
-                println!("  [{}/{}] Compiling...", current, total);
+                println!("  [{current}/{total}] Compiling...");
             }
             BuildEvent::PhaseCompleted { .. } => {}
             BuildEvent::Completed { version, .. } => {
-                println!("✓ Build complete ({})", version);
+                println!("✓ Build complete ({version})");
             }
             BuildEvent::Failed { message } => {
-                eprintln!("✗ Build failed: {}", message);
+                eprintln!("✗ Build failed: {message}");
             }
         }
     }
 
     build.await?
+}
+
+/// State the cost before asking for consent.
+///
+/// A source build is tens of minutes of CPU. An auto-confirming caller
+/// (`gglib up --yes`) never sees the prompt, so this has to be printed
+/// unconditionally rather than folded into the question — otherwise the first
+/// thing that command does is silently start a half-hour compile.
+fn print_build_duration_warning() {
+    println!();
+    println!("   This compiles llama.cpp for your hardware and typically takes");
+    println!("   15-30 minutes. It happens once; later runs reuse the binaries.");
+    println!();
 }
 
 /// Print required build tools for building from source.

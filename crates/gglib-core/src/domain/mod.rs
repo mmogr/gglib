@@ -15,6 +15,7 @@ pub mod mcp;
 mod model;
 pub mod model_naming;
 pub mod query;
+pub mod recommendation;
 mod server_config;
 pub mod slot_eviction;
 
@@ -52,6 +53,9 @@ pub use kv_memory::kv_memory_is_partial;
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
+
+// Re-export the first-run model recommendation at the domain level.
+pub use recommendation::{BudgetSource, ModelCandidate, Recommendation, recommend};
 pub use server_config::ServerConfig;
 
 // Re-export cache-RAM budget math at the domain level for convenience

@@ -185,6 +185,33 @@ pub enum ProxyCommand {
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
 pub enum Commands {
+    // ── Getting started ──────────────────────────────────────────────────
+    /// Go from nothing to a working OpenAI-compatible endpoint in one command
+    ///
+    /// Detects your hardware, installs llama.cpp if it is missing, recommends
+    /// and downloads a model that actually fits, starts the proxy, sends a
+    /// real request through it to prove the endpoint works, and prints the
+    /// configuration to paste into your client.
+    ///
+    /// Safe to re-run: anything already present is skipped, so a second run is
+    /// just "start the proxy".
+    ///
+    /// Deliberately unconfigurable beyond the flags below — it binds loopback
+    /// with gglib's defaults. Reach for `gglib proxy` when you want to choose
+    /// the host, the upstream port, sampling or cache behaviour.
+    #[command(display_order = 0)]
+    Up {
+        /// Download the recommended model without asking
+        #[arg(long, short = 'y')]
+        yes: bool,
+        /// Load this model instead of the recommended (or most recent) one
+        #[arg(long)]
+        model: Option<String>,
+        /// Port to bind the endpoint to
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+    },
+
     // ── Management (these have subcommands — use `<command> --help`) ────
     /// Manage GGUF models (add, list, remove, download, verify, …)
     #[command(display_order = 1)]
