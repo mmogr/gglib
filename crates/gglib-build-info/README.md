@@ -5,6 +5,9 @@
 
 Shared build/version metadata for gglib frontends.
 
+Every surface reports the same version and commit, so a bug report names a build
+that can actually be checked out.
+
 ## Overview
 
 This crate provides compile-time constants for version information and git metadata, populated by its `build.rs` script using [vergen-gix](https://crates.io/crates/vergen-gix).

@@ -7,6 +7,10 @@
 
 Shared composition root for gglib adapters.
 
+Wiring happens once, here, so every surface gets the same runtime, the same
+database, and the same shared process manager — the structural reason a model
+launched from one interface is the same model another sees.
+
 This crate consolidates the infrastructure-wiring steps that were previously duplicated
 across the CLI, Axum, and Tauri bootstrap modules into a single
 `CoreBootstrap::build(config, emitter) → BuiltCore` call.

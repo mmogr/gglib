@@ -7,6 +7,10 @@
 
 `SQLite` repository implementations for gglib domain types.
 
+One database behind every surface, which is why a model tagged in the GUI is
+tagged for the proxy too, and why per-model inference defaults survive a
+restart.
+
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it implements the repository ports defined in `gglib-core`.

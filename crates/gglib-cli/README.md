@@ -9,6 +9,10 @@
 
 Command-line interface for gglib — the primary user-facing CLI application.
 
+`gglib up` lives here: one command from a clean machine to a working endpoint.
+Every command is a thin client of the daemon that owns the runtime — this crate
+renders and asks, it never spawns llama-server itself.
+
 ## Architecture
 
 This crate is in the **Adapter Layer** — it wires together all infrastructure crates and exposes them via CLI commands.

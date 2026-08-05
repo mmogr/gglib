@@ -7,6 +7,10 @@
 
 Pure-domain agentic loop implementation for gglib.
 
+Backs `gglib chat` and `gglib q`, and carries the defences a local model needs
+to finish a tool-calling task: loop detection, stagnation detection, and context
+pruning.
+
 ## Architecture
 
 This crate is in the **Application Layer** — it orchestrates the LLM→tool→LLM

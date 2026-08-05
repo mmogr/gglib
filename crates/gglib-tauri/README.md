@@ -7,6 +7,11 @@
 
 Desktop GUI backend for gglib — Tauri application with React frontend.
 
+The desktop app is a client of the daemon, not an owner of the runtime: it
+launches or connects to one, then watches. That is what lets the proxy keep
+serving after the window closes, and why the tray can run it as a background
+service.
+
 > **Note:** Coverage metrics are not tracked for this crate due to GTK system library dependencies required by Tauri.
 
 ## Architecture

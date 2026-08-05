@@ -7,6 +7,10 @@
 
 HTTP API server for gglib — provides REST endpoints for the web UI and external integrations.
 
+It also hosts the daemon: the single process that owns llama-server and holds
+the exclusive lock every other surface connects through. When the CLI, the
+desktop app, or the web UI needs the runtime, this is what they talk to.
+
 ## Architecture
 
 This crate is in the **Adapter Layer** — it exposes gglib functionality via HTTP using the Axum framework.
