@@ -208,8 +208,9 @@ impl ProxyOps {
     ///
     /// # Errors
     ///
-    /// Returns `GuiError::Internal` if settings cannot be loaded, and
-    /// whatever [`Self::map_start_error`] produces if the proxy cannot start.
+    /// Returns `GuiError::Internal` if settings cannot be loaded, and whatever
+    /// `map_start_error` produces if the proxy cannot start — a bind failure or
+    /// an already-running supervisor both surface as `GuiError::Conflict`.
     pub async fn ensure_running(&self) -> Result<SocketAddr, GuiError> {
         if let ProxyStatus::Running { address } = self.supervisor.status().await {
             return Ok(address);

@@ -96,7 +96,7 @@ pub struct ResolvedCapabilities {
 /// * `model_name` — Human-readable model name forwarded to the process manager.
 /// * `model_path` — Absolute path to the GGUF model file.
 /// * `base_port` — Base port for llama-server port allocation.  Pass `0` when
-///   the underlying [`GuiProcessCore`] allocates the port itself.
+///   the underlying [`crate::process::GuiProcessCore`] allocates the port itself.
 /// * `tags` — Model capability tags (e.g. `["mtp", "agent", "reasoning"]`).
 ///   Used for all tag-based auto-detection when the corresponding option field
 ///   is `None`.

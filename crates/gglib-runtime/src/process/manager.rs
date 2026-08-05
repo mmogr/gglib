@@ -58,8 +58,11 @@ impl ProcessManager {
     /// * `cache_ram` — how to size llama-server's own host-RAM prompt cache
     ///   (`--cache-ram`). Not part of `launch_overrides` because it is resolved
     ///   at spawn rather than passed through.
-    ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
-    ///   benchmark launches, where a large prompt cache would perturb results.
+    ///   [`CacheRamSetting::ExplicitMb`]`(0)` disables the cache outright — the
+    ///   right choice for benchmark launches, where a prompt cache would
+    ///   perturb prefill timings. (Omitting the flag entirely, so llama-server's
+    ///   own default applies, is what [`CacheRamSetting::Auto`] does when
+    ///   autosizing is suppressed by env.)
     ///
     /// Use [`Self::set_pin`] afterwards when the manager must refuse every
     /// model but one (`gglib serve`).
