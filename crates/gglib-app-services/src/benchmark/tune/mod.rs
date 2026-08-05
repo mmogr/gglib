@@ -85,12 +85,19 @@ pub async fn run_tune(
         ..Default::default()
     });
 
-    let target = match deps
+    // The lease is held for the whole sweep: a candidate measured across a
+    // model swap would be measuring the swap.
+    let admission = match deps
         .runtime
-        .ensure_model_running(&model.name, Some(resolved_ctx), resolved_ctx)
+        .admit(
+            &model.name,
+            Some(resolved_ctx),
+            resolved_ctx,
+            gglib_core::ports::LaunchOverrides::default(),
+        )
         .await
     {
-        Ok(t) => t,
+        Ok(a) => a,
         Err(e) => {
             let msg = format!("failed to start model '{}': {e}", model.name);
             deps.bench_repo.fail_run(run_id, &msg).await.ok();
@@ -98,6 +105,7 @@ pub async fn run_tune(
             return Ok(());
         }
     };
+    let target = &admission.target;
 
     // ── Pre-screen round: one SingleCall + one Irrelevance task (cheapest,
     // most diagnostic pair) if the suite has them; otherwise the first two
@@ -130,7 +138,7 @@ pub async fn run_tune(
 
         let mut results = Vec::with_capacity(prescreen_tasks.len());
         for task in &prescreen_tasks {
-            let result = run_task(&deps.http_client, &target, &model, candidate_config, task).await;
+            let result = run_task(&deps.http_client, target, &model, candidate_config, task).await;
             let _ = tx
                 .send(BenchmarkEvent::TuneTaskComplete {
                     candidate_index: idx,
@@ -165,7 +173,7 @@ pub async fn run_tune(
         if is_survivor {
             for task in &remaining_tasks {
                 let result =
-                    run_task(&deps.http_client, &target, &model, &candidate_config, task).await;
+                    run_task(&deps.http_client, target, &model, &candidate_config, task).await;
                 let _ = tx
                     .send(BenchmarkEvent::TuneTaskComplete {
                         candidate_index: idx,

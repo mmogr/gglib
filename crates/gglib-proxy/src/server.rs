@@ -62,13 +62,6 @@ pub(crate) struct AppState {
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     pub(crate) default_ctx: u64,
-    /// How long to absorb model-startup contention before surfacing a 503.
-    ///
-    /// Resolved once from `GGLIB_CONTENTION_WAIT_SECS` rather than per request,
-    /// and deliberately not a `serve()` parameter — that signature already
-    /// carries fifteen. `Duration::ZERO` restores fail-fast. See the
-    /// `contention` module for why waiting is the better default.
-    pub(crate) contention_wait: std::time::Duration,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
     /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
@@ -283,6 +276,7 @@ pub async fn serve(
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),
         agent_metrics,
+        Arc::clone(&runtime_port),
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -297,7 +291,6 @@ pub async fn serve(
         mcp,
         sessions: SessionManager::new(),
         default_ctx,
-        contention_wait: crate::contention::wait_from_env(),
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
@@ -416,7 +409,7 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// session:
 ///
 /// * **Non-running models**: `min(static GGUF context_length, default_ctx)`
-///   — `default_ctx` is the same value `ensure_model_running` will launch
+///   — `default_ctx` is the same value `admit` will launch
 ///   the model with on its first request.
 /// * **The currently running model**: its full live `effective_ctx` (the
 ///   real `--ctx-size` llama-server was launched with), which also drives
@@ -781,7 +774,7 @@ async fn chat_completions(
     // but doing it before the model is ensured running means a request the
     // loaded model could never serve can be refused without first paying for a
     // model swap to discover that. An unresolvable model yields a pass-through
-    // context, leaving `ensure_model_running` below to report it as it always
+    // context, leaving `admit` below to report it as it always
     // has.
     let model_context =
         gglib_core::request_pipeline::resolve(state.catalog_port.as_ref(), Some(&model_name)).await;
@@ -794,7 +787,7 @@ async fn chat_completions(
     // worse off than before the request arrived.
     //
     // An unresolvable model has an empty tag set here, so it falls through to
-    // `ensure_model_running` and its ModelNotFound exactly as before.
+    // `admit` and its ModelNotFound exactly as before.
     if model_context
         .tags
         .iter()
@@ -811,27 +804,34 @@ async fn chat_completions(
             .into_response();
     }
 
-    // Ensure the model is running with specified context or default.
+    // Join the admission queue.
     //
-    // Startup contention is absorbed here for a bounded window instead of
-    // being surfaced immediately: an OpenAI-compatible client treats 503 as
-    // terminal (see the UpstreamDead path below, which already avoids 503 for
-    // that reason), so a slow 200 beats a fast 503. Every other error,
-    // ModelLoading included, is passed through untouched.
-    let target = match crate::contention::ensure_with_contention_wait(
-        &state.runtime_port,
-        &model_name,
-        num_ctx,
-        state.default_ctx,
-        state.contention_wait,
-    )
-    .await
+    // This is where a request for a model that is not loaded waits — batched
+    // with every other request for the same model, so one swap serves all of
+    // them rather than each paying for its own. A slow 200 beats a fast 503 for
+    // an OpenAI-compatible client, which treats 503 as terminal (see the
+    // UpstreamDead path below, which already avoids 503 for that reason).
+    //
+    // `admission.lease` is held for the whole of this request — moved into
+    // `ForwardRequest` below — and is what stops the model being swapped out
+    // from under a response that is still streaming.
+    let admission = match state
+        .runtime_port
+        .admit(
+            &model_name,
+            num_ctx,
+            state.default_ctx,
+            gglib_core::ports::LaunchOverrides::default(),
+        )
+        .await
     {
-        Ok(target) => target,
+        Ok(admission) => admission,
         Err(e) => {
             return handle_runtime_error(e);
         }
     };
+    let target = admission.target.clone();
+    let lease = admission.lease;
 
     // If the model was just restarted, invalidate all pending cache slots.
     //
@@ -891,11 +891,15 @@ async fn chat_completions(
     // The returned guard unregisters on drop (see `connections` module docs)
     // — normal completion, early return, client disconnect, or panic all
     // clean up without any explicit unregister call at each exit point.
-    let connection = state.dashboard.connections.register(
-        model_name.clone(),
-        is_streaming,
-        Some(target.effective_ctx),
-    );
+    //
+    // The admission lease rides along on the guard (see `connections` module
+    // docs): it must outlive the response, including across the streaming
+    // path's spawned task, and the guard already goes exactly that far.
+    let connection = state
+        .dashboard
+        .connections
+        .register(model_name.clone(), is_streaming, Some(target.effective_ctx))
+        .holding(lease);
 
     // Global defaults come from the same snapshot the profile list did.
     let sampling = SamplingLayers {
@@ -976,12 +980,12 @@ async fn chat_completions(
     match response {
         Ok(resp) => resp,
         Err(ForwardError::UpstreamDead) => {
-            // llama-server was dead after ensure_model_running() returned a
-            // stale port.  Strategy:
+            // llama-server was dead after admission returned a stale port.
+            // Strategy:
             //   1. Clear stale state via stop_current().
-            //   2. Poll ensure_model_running() until it returns Ok (one
-            //      request drives the restart; concurrent requests wait here
-            //      rather than surfacing a 503 to the client, because the VS
+            //   2. Re-admit — the queue does the waiting now, so one request
+            //      drives the restart and concurrent requests are batched
+            //      behind it rather than surfacing a 503 to the client (the VS
             //      Code LLM Gateway treats 503 as a terminal error).
             //   3. Retry the forward once with the cloned body.
             warn!(
@@ -990,31 +994,25 @@ async fn chat_completions(
             );
             let _ = state.runtime_port.stop_current().await;
 
-            // Bounded polling: give up after 130 s (120 s health-check window
-            // plus 10 s of margin).
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(130);
-
-            let new_target = loop {
-                match state
-                    .runtime_port
-                    .ensure_model_running(&model_name, num_ctx, state.default_ctx)
-                    .await
-                {
-                    Ok(t) => break t,
-                    Err(ModelRuntimeError::ModelLoading) => {
-                        // NOTE: ContentionTimeout is intentionally NOT retried here — it is a
-                        // resource contention signal (not transient loading). It falls through to
-                        // Err(e) below, returning 503 + Retry-After so the client controls backoff.
-                        // (PR #587)
-                        if std::time::Instant::now() >= deadline {
-                            warn!("Timed out waiting for model restart after upstream failure");
-                            return handle_runtime_error(ModelRuntimeError::ModelLoading);
-                        }
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    }
-                    Err(e) => return handle_runtime_error(e),
-                }
+            // AdmissionTimeout is deliberately not retried here: it means the
+            // GPU is oversubscribed rather than that this model is still
+            // loading, so it falls through to a 503 + Retry-After and the
+            // client controls its own backoff. (PR #587)
+            let retry_admission = match state
+                .runtime_port
+                .admit(
+                    &model_name,
+                    num_ctx,
+                    state.default_ctx,
+                    gglib_core::ports::LaunchOverrides::default(),
+                )
+                .await
+            {
+                Ok(admission) => admission,
+                Err(e) => return handle_runtime_error(e),
             };
+            let new_target = retry_admission.target.clone();
+            let retry_lease = retry_admission.lease;
 
             let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
             // Re-read settings for the retry: the model was just relaunched,
@@ -1030,12 +1028,17 @@ async fn chat_completions(
 
             // Fresh connection for the retried attempt — the original guard
             // (moved into the first `forward_chat_completion` call above)
-            // was already dropped when that call returned `UpstreamDead`.
-            let retry_connection = state.dashboard.connections.register(
-                model_name.clone(),
-                is_streaming,
-                Some(new_target.effective_ctx),
-            );
+            // was already dropped when that call returned `UpstreamDead`,
+            // taking the first attempt's admission lease with it.
+            let retry_connection = state
+                .dashboard
+                .connections
+                .register(
+                    model_name.clone(),
+                    is_streaming,
+                    Some(new_target.effective_ctx),
+                )
+                .holding(retry_lease);
 
             // Compute cache-aware permit/config/session_id for the retry.
             // Mirrors the normal-path pattern: acquire permit via
@@ -1099,16 +1102,21 @@ async fn chat_completions(
     }
 }
 
-/// Header naming *why* a 503 was returned, so a client or dashboard can tell
-/// startup contention from ordinary model loading — the two are identical on
-/// the wire otherwise, since both serialise to `service_unavailable`.
+/// Header naming *why* a 503 was returned, so a client or dashboard can tell an
+/// oversubscribed admission queue from ordinary model loading — the two are
+/// identical on the wire otherwise, since both serialise to
+/// `service_unavailable`.
 const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
+
+/// Value of [`RETRY_REASON_HEADER`] when the admission queue timed the request
+/// out.
+const RETRY_REASON_ADMISSION: &str = "admission";
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
 pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    let contended = matches!(err, ModelRuntimeError::ContentionTimeout(_));
+    let queued_out = matches!(err, ModelRuntimeError::AdmissionTimeout(_));
     let error_response = ErrorResponse::from(err);
 
     let mut response = (status, Json(error_response)).into_response();
@@ -1117,12 +1125,12 @@ pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
         // Derived from the shared policy rather than hardcoded, so the hint we
         // advertise cannot drift from the backoff our own clients apply.
         //
-        // `max_backoff` rather than `initial_backoff`: by the time a contention
-        // 503 escapes, the proxy has already waited out its whole window, so the
-        // collision is plainly not clearing quickly. Advertising the policy's
-        // *ceiling* — the longest single delay it would ever produce — tells
-        // honest clients to come back at a sensible remove. Advertising the
-        // opening delay instead would invite everyone who honours the header
+        // `max_backoff` rather than `initial_backoff`: by the time an admission
+        // 503 escapes, the request has already sat in the queue for minutes, so
+        // the oversubscription is plainly not clearing quickly. Advertising the
+        // policy's *ceiling* — the longest single delay it would ever produce —
+        // tells honest clients to come back at a sensible remove. Advertising
+        // the opening delay instead would invite everyone who honours the header
         // back within a second or two, all at once and none of them jittered.
         let hint = RetryPolicy::default().max_backoff.as_secs().max(1);
         if let Ok(value) = hint.to_string().parse() {
@@ -1130,7 +1138,7 @@ pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
                 .headers_mut()
                 .insert(axum::http::header::RETRY_AFTER, value);
         }
-        if contended && let Ok(value) = "contention".parse() {
+        if queued_out && let Ok(value) = RETRY_REASON_ADMISSION.parse() {
             response.headers_mut().insert(RETRY_REASON_HEADER, value);
         }
     }
@@ -1149,8 +1157,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_contention_timeout_returns_503_with_retry_after() {
-        let err = ModelRuntimeError::ContentionTimeout("test contention".to_string());
+    async fn test_admission_timeout_returns_503_with_retry_after() {
+        let err = ModelRuntimeError::AdmissionTimeout("test timeout".to_string());
         let response = handle_runtime_error(err);
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(
@@ -1164,7 +1172,7 @@ mod tests {
     /// it cannot drift from the backoff our own clients actually apply.
     #[tokio::test]
     async fn retry_after_is_a_delay_the_policy_could_produce() {
-        let response = handle_runtime_error(ModelRuntimeError::ContentionTimeout("c".to_string()));
+        let response = handle_runtime_error(ModelRuntimeError::AdmissionTimeout("c".to_string()));
         let policy = RetryPolicy::default();
 
         let advertised = response
@@ -1186,18 +1194,18 @@ mod tests {
         );
     }
 
-    /// Contention and ordinary loading are indistinguishable on the wire —
-    /// both serialise to `service_unavailable` — so the reason header is the
-    /// only way a dashboard can tell them apart.
+    /// An oversubscribed queue and ordinary loading are indistinguishable on
+    /// the wire — both serialise to `service_unavailable` — so the reason
+    /// header is the only way a dashboard can tell them apart.
     #[tokio::test]
-    async fn only_contention_carries_the_retry_reason_header() {
-        let contended = handle_runtime_error(ModelRuntimeError::ContentionTimeout("c".to_string()));
+    async fn only_an_admission_timeout_carries_the_retry_reason_header() {
+        let queued_out = handle_runtime_error(ModelRuntimeError::AdmissionTimeout("c".to_string()));
         assert_eq!(
-            contended
+            queued_out
                 .headers()
                 .get(RETRY_REASON_HEADER)
                 .and_then(|v| v.to_str().ok()),
-            Some("contention")
+            Some(RETRY_REASON_ADMISSION)
         );
 
         let loading = handle_runtime_error(ModelRuntimeError::ModelLoading);
@@ -1210,7 +1218,7 @@ mod tests {
         );
         assert!(
             !loading.headers().contains_key(RETRY_REASON_HEADER),
-            "only contention is labelled"
+            "only an admission timeout is labelled"
         );
     }
 

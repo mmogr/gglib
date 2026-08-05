@@ -257,12 +257,13 @@ mod tests {
 
     #[async_trait]
     impl ModelRuntimePort for NoModelRunning {
-        async fn ensure_model_running(
+        async fn admit(
             &self,
             model: &str,
             _num_ctx: Option<u64>,
             _default_ctx: u64,
-        ) -> Result<RunningTarget, ModelRuntimeError> {
+            _overrides: gglib_core::ports::LaunchOverrides,
+        ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
             Err(ModelRuntimeError::ModelNotFound(model.to_string()))
         }
         async fn current_model(&self) -> Option<RunningTarget> {

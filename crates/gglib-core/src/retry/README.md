@@ -16,8 +16,8 @@ Two consumers share this one policy so that client and server agree on backoff
 shape by construction rather than by convention:
 
 - the in-process LLM completion adapter, retrying a `503` from the proxy, and
-- the proxy itself, waiting out model-startup contention before it ever emits
-  a `503` to an external OpenAI-compatible client.
+- the proxy itself, deriving the `Retry-After` hint it advertises when its
+  admission queue times a request out.
 
 # Delay derivation
 

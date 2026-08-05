@@ -325,7 +325,7 @@ pub struct ModelInfo {
     /// Populated from [`ModelSummary::context_length`] by default. The
     /// `/v1/models` handler (`server::list_models`) then adjusts it to the
     /// context the model would actually be served with: non-running models
-    /// are clamped to the proxy's `default_ctx` (what `ensure_model_running`
+    /// are clamped to the proxy's `default_ctx` (what `admit`
     /// would launch them with), and the currently running model is
     /// overwritten with its live `effective_ctx` from
     /// `ModelRuntimePort::current_model()`. Clients that auto-detect context
@@ -410,12 +410,14 @@ impl ErrorResponse {
         )
     }
 
-    /// Create an error response for startup contention timeout.
+    /// Create an error response for an admission-queue timeout.
     ///
     /// Wire-format identical to `model_loading()` (`service_unavailable` type)
-    /// so clients treat both as retryable with the same backoff behavior.
-    pub fn contention_timeout(msg: &str) -> Self {
-        Self::with_code(msg, "service_unavailable", "contention_timeout")
+    /// so clients treat both as retryable with the same backoff behavior. The
+    /// `code` differs so a client that wants to can tell "this model is still
+    /// starting" from "this endpoint is oversubscribed and never got to me".
+    pub fn admission_timeout(msg: &str) -> Self {
+        Self::with_code(msg, "service_unavailable", "admission_timeout")
     }
 
     /// Create an error response for model not found.
@@ -531,7 +533,7 @@ impl From<ModelRuntimeError> for ErrorResponse {
             ModelRuntimeError::ModelLoading => Self::model_loading(),
             ModelRuntimeError::SpawnFailed(reason) => Self::upstream_error(&reason),
             ModelRuntimeError::HealthCheckFailed(reason) => Self::upstream_error(&reason),
-            ModelRuntimeError::ContentionTimeout(msg) => Self::contention_timeout(&msg),
+            ModelRuntimeError::AdmissionTimeout(msg) => Self::admission_timeout(&msg),
             ModelRuntimeError::ModelFileNotFound(path) => Self::with_code(
                 format!("Model file not found: {path}"),
                 "invalid_request_error",

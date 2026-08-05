@@ -230,12 +230,16 @@ impl ServerOps {
         let overrides = Self::launch_overrides(&model, &request, settings.default_context_size);
         let default_ctx = resolve_context_size(&overrides.options);
 
+        // The lease is dropped as soon as the model is up: this is a "start
+        // this model" request, not a request being served. The model stays
+        // resident until admission control gives its slot to something else.
         let target = self
             .deps
             .proxy
             .runtime()
-            .ensure_model_running_with(&model.name, request.context_length, default_ctx, overrides)
+            .admit(&model.name, request.context_length, default_ctx, overrides)
             .await
+            .map(gglib_core::ports::Admission::into_target)
             .map_err(|e| {
                 let error_summary = ServerSummary {
                     id: format!("server-{}", id),

@@ -70,7 +70,12 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
     // The shared runtime now refuses foreign models outright.
     let err = state
         .runtime
-        .ensure_model_running("some-other-model", None, 4096)
+        .admit(
+            "some-other-model",
+            None,
+            4096,
+            gglib_core::ports::LaunchOverrides::default(),
+        )
         .await
         .expect_err("a foreign model must be refused while pinned");
     assert!(

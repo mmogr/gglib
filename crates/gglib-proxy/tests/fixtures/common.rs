@@ -18,8 +18,8 @@ use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::inference_profile::InferenceProfile;
 use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
-    ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
+    Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
+    ModelRuntimePort, ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
@@ -32,13 +32,20 @@ pub struct NoopRuntime;
 
 #[async_trait]
 impl ModelRuntimePort for NoopRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(0, 1, "mock".into(), 4096, false))
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        Ok(Admission::detached(RunningTarget::local(
+            0,
+            1,
+            "mock".into(),
+            4096,
+            false,
+        )))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -61,13 +68,20 @@ pub struct PinnedRuntime(pub &'static str);
 
 #[async_trait]
 impl ModelRuntimePort for PinnedRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(0, 1, self.0.into(), 4096, false))
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        Ok(Admission::detached(RunningTarget::local(
+            0,
+            1,
+            self.0.into(),
+            4096,
+            false,
+        )))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -89,7 +103,7 @@ impl ModelRuntimePort for PinnedRuntime {
 /// lets a foreign request through so catalog tests can tell "not
 /// advertised" from "refused". This one refuses, so the wire contract a
 /// BYOK client actually hits — 404 plus `pinned_model_mismatch` — can be
-/// asserted end to end over HTTP, not just at the `SwapState`/error-mapping
+/// asserted end to end over HTTP, not just at the resident-set/error-mapping
 /// unit level (`gglib-runtime`'s `manager.rs`, `gglib-proxy`'s
 /// `models_tests.rs`).
 #[derive(Debug)]
@@ -97,19 +111,26 @@ pub struct EnforcingPinnedRuntime(pub &'static str);
 
 #[async_trait]
 impl ModelRuntimePort for EnforcingPinnedRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
         if model_name != self.0 {
             return Err(ModelRuntimeError::PinnedModelMismatch {
                 expected: self.0.to_string(),
                 requested: model_name.to_string(),
             });
         }
-        Ok(RunningTarget::local(0, 1, self.0.into(), 4096, false))
+        Ok(Admission::detached(RunningTarget::local(
+            0,
+            1,
+            self.0.into(),
+            4096,
+            false,
+        )))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -307,7 +328,7 @@ pub fn make_mcp_service() -> Arc<McpService> {
 /// false models a sliding-window/hybrid/recurrent model, where the proxy must
 /// bypass the disk slot layer entirely. `pinned` only affects
 /// [`ModelRuntimePort::pinned_model`] — enforcement lives in `gglib-runtime`'s
-/// `SwapState` and is out of scope here.
+/// the resident set and is out of scope here.
 #[derive(Debug)]
 pub struct FixedUpstream {
     pub port: u16,
@@ -318,16 +339,17 @@ pub struct FixedUpstream {
 
 #[async_trait]
 impl ModelRuntimePort for FixedUpstream {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        Ok(Admission::detached(
             RunningTarget::local(self.port, 1, self.model_name.clone(), 4096, false)
                 .with_slot_restore_supported(self.slot_restore_supported),
-        )
+        ))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -345,45 +367,46 @@ impl ModelRuntimePort for FixedUpstream {
 
 /// Runtime port that counts how many times a launch was requested.
 ///
-/// The pre-swap guards are only worth anything if they run *before*
-/// `ensure_model_running`. A 4xx alone cannot show that — it would look the
-/// same if the proxy had already unloaded a model to discover the request was
-/// hopeless. This makes the distinction assertable.
+/// The pre-admission guards are only worth anything if they run *before*
+/// `admit`. A 4xx alone cannot show that — it would look the same if the proxy
+/// had already unloaded a model to discover the request was hopeless. This
+/// makes the distinction assertable.
 #[derive(Debug)]
 pub struct CountingRuntime {
     pub port: u16,
     pub model_name: String,
-    pub ensure_calls: Arc<AtomicU64>,
+    pub admit_calls: Arc<AtomicU64>,
 }
 
 impl CountingRuntime {
     pub fn new(port: u16, model_name: &str) -> (Arc<Self>, Arc<AtomicU64>) {
-        let ensure_calls = Arc::new(AtomicU64::new(0));
+        let admit_calls = Arc::new(AtomicU64::new(0));
         let runtime = Arc::new(Self {
             port,
             model_name: model_name.into(),
-            ensure_calls: ensure_calls.clone(),
+            admit_calls: admit_calls.clone(),
         });
-        (runtime, ensure_calls)
+        (runtime, admit_calls)
     }
 }
 
 #[async_trait]
 impl ModelRuntimePort for CountingRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        self.ensure_calls.fetch_add(1, Ordering::SeqCst);
-        Ok(RunningTarget::local(
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        self.admit_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Admission::detached(RunningTarget::local(
             self.port,
             1,
             self.model_name.clone(),
             4096,
             false,
-        ))
+        )))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -441,6 +464,183 @@ impl ModelCatalogPort for TaggedCatalog {
         _name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
         Ok(None)
+    }
+}
+
+/// Catalog holding several models, each with its own tags.
+///
+/// [`TaggedCatalog`] can only ever describe one model, which is enough for
+/// tests about a single request but useless for anything involving a swap —
+/// there has to be something to swap *to*.
+#[derive(Debug)]
+pub struct MultiModelCatalog(pub Vec<(String, Vec<String>)>);
+
+impl MultiModelCatalog {
+    fn summary_for(&self, name: &str) -> Option<ModelSummary> {
+        self.0
+            .iter()
+            .position(|(n, _)| n == name)
+            .map(|index| self.summary_at(index))
+    }
+
+    fn summary_at(&self, index: usize) -> ModelSummary {
+        let (name, tags) = &self.0[index];
+        ModelSummary {
+            id: u32::try_from(index).unwrap_or(0) + 1,
+            name: name.clone(),
+            tags: tags.clone(),
+            capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            param_count: "7B".into(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: None,
+            inference_defaults: None,
+            defaults_origin: None,
+            server_defaults: None,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelCatalogPort for MultiModelCatalog {
+    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+        Ok((0..self.0.len()).map(|i| self.summary_at(i)).collect())
+    }
+
+    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+        Ok(self.summary_for(name))
+    }
+
+    async fn resolve_for_launch(
+        &self,
+        _name: &str,
+    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+        Ok(None)
+    }
+}
+
+/// A runtime that simulates one VRAM slot, leases and all.
+///
+/// The real queue lives in `gglib-runtime`, which this crate cannot depend on
+/// (and is tested there). What this double exists to pin is the *proxy's* half
+/// of the contract: that it holds the lease for as long as the response takes —
+/// including across the streaming path's spawned task — and releases it on
+/// every exit. A proxy that dropped the lease early would let a swap cut off a
+/// live stream, and nothing else in the test suite would notice.
+///
+/// The simulation is deliberately strict: a swap while anything is in flight is
+/// a panic, not a silent reordering, so a leaked or early-dropped lease fails
+/// loudly at the point of the bug.
+#[derive(Debug)]
+pub struct ResidentSimRuntime {
+    /// Port each model's upstream listens on.
+    pub ports: HashMap<String, u16>,
+    slot: Arc<ResidentSimSlot>,
+}
+
+/// The simulated slot, shared with every lease it issues.
+///
+/// Separate from the runtime because `AdmissionRelease` is what a lease holds,
+/// and `ModelRuntimePort::admit` takes `&self` rather than `&Arc<Self>` — so
+/// the runtime cannot hand out an `Arc` of itself.
+#[derive(Debug, Default)]
+pub struct ResidentSimSlot(StdMutex<ResidentSimState>);
+
+#[derive(Debug, Default)]
+struct ResidentSimState {
+    loaded: Option<String>,
+    inflight: u32,
+    swaps: u64,
+    /// Highest concurrent in-flight count observed, so a test can prove two
+    /// requests really did overlap rather than happening to serialise.
+    peak_inflight: u32,
+}
+
+impl gglib_core::ports::AdmissionRelease for ResidentSimSlot {
+    fn release(&self, _slot: usize) {
+        let mut state = self.0.lock().unwrap();
+        state.inflight = state.inflight.saturating_sub(1);
+    }
+}
+
+impl ResidentSimRuntime {
+    #[must_use]
+    pub fn new(ports: HashMap<String, u16>) -> Self {
+        Self {
+            ports,
+            slot: Arc::new(ResidentSimSlot::default()),
+        }
+    }
+
+    /// How many model swaps this runtime has performed.
+    pub fn swaps(&self) -> u64 {
+        self.slot.0.lock().unwrap().swaps
+    }
+
+    /// How many requests are currently holding a lease.
+    pub fn inflight(&self) -> u32 {
+        self.slot.0.lock().unwrap().inflight
+    }
+
+    /// The most requests that were ever in flight at once.
+    pub fn peak_inflight(&self) -> u32 {
+        self.slot.0.lock().unwrap().peak_inflight
+    }
+}
+
+#[async_trait]
+impl ModelRuntimePort for ResidentSimRuntime {
+    async fn admit(
+        &self,
+        model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: u64,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        let port = *self
+            .ports
+            .get(model_name)
+            .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.to_string()))?;
+
+        // Wait for the slot to go idle before swapping, exactly as the real
+        // queue does. Polling rather than notifying keeps the double small; the
+        // real scheduling is tested in `gglib-runtime`.
+        loop {
+            {
+                let mut state = self.slot.0.lock().unwrap();
+                if state.loaded.as_deref() == Some(model_name) {
+                    state.inflight += 1;
+                    state.peak_inflight = state.peak_inflight.max(state.inflight);
+                    break;
+                }
+                if state.inflight == 0 {
+                    state.loaded = Some(model_name.to_string());
+                    state.swaps += 1;
+                    state.inflight = 1;
+                    state.peak_inflight = state.peak_inflight.max(1);
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+
+        Ok(Admission {
+            target: RunningTarget::local(port, 1, model_name.to_string(), 4096, false),
+            lease: gglib_core::ports::AdmissionLease::new(
+                Arc::clone(&self.slot) as Arc<dyn gglib_core::ports::AdmissionRelease>,
+                0,
+            ),
+        })
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
     }
 }
 
@@ -767,13 +967,22 @@ pub async fn spawn_proxy_with_runtime(
     model_name: &str,
     tags: Vec<String>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags,
     });
+    spawn_proxy_with_catalog(runtime, catalog).await
+}
+
+/// [`spawn_proxy_with_runtime`] with the catalog supplied too — for tests that
+/// need more than one model to exist, which is the only way to exercise a swap.
+pub async fn spawn_proxy_with_catalog(
+    runtime: Arc<dyn ModelRuntimePort>,
+    catalog: Arc<dyn ModelCatalogPort>,
+) -> (String, CancellationToken) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
     let mcp = make_mcp_service();
 
     let cancel = CancellationToken::new();

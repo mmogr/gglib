@@ -124,8 +124,8 @@ fn with_headers(
     head
 }
 
-/// The proxy's error body for a contention timeout — the real wire shape.
-pub(super) fn contention_body() -> String {
-    r#"{"error":{"message":"startup contention timed out","type":"service_unavailable","code":"contention_timeout"}}"#
+/// The proxy's error body for an admission timeout — the real wire shape.
+pub(super) fn admission_timeout_body() -> String {
+    r#"{"error":{"message":"waited without reaching the front of the queue","type":"service_unavailable","code":"admission_timeout"}}"#
         .to_owned()
 }

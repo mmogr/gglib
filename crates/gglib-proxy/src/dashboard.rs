@@ -37,6 +37,9 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+use gglib_core::domain::AdmissionSnapshot;
+use gglib_core::ports::ModelRuntimePort;
+
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
@@ -318,6 +321,16 @@ pub struct DashboardSnapshot {
     /// [`gglib_core::domain::LaunchNarration`]). `None` until a request has
     /// resolved a model, since nothing has been launched to explain.
     pub launch: Option<LaunchNarration>,
+    /// Which models hold VRAM slots, what is queued behind them, and why the
+    /// second slot is or is not in use.
+    ///
+    /// Read live from the runtime on every snapshot rather than cached the way
+    /// [`Self::cache`] and [`Self::launch`] are. Those two change only when a
+    /// model is launched, so a write-on-resolution cache reports them
+    /// faithfully; queue depth changes continuously and without any request
+    /// resolving a model, so a cached copy would be wrong precisely when it
+    /// mattered — while traffic was backing up.
+    pub admission: AdmissionSnapshot,
 }
 
 impl DashboardSnapshot {
@@ -335,6 +348,7 @@ impl DashboardSnapshot {
         cache_metrics: &CacheMetricsStore,
         agent_metrics: &CacheMetricsStore,
         launch: &LaunchNarrationCache,
+        runtime: Option<&dyn ModelRuntimePort>,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -360,6 +374,11 @@ impl DashboardSnapshot {
                 .map(|status| status.with_usage(cache_metrics.snapshot())),
             agent_usage: agent_metrics.snapshot(),
             launch: launch.get(),
+            // `None` only in tests that build a snapshot without a runtime to
+            // ask; an empty resident set is the honest answer there.
+            admission: runtime
+                .map(ModelRuntimePort::admission_snapshot)
+                .unwrap_or_default(),
         }
     }
 }
@@ -395,6 +414,11 @@ pub struct DashboardState {
     /// resolve. Created here rather than passed in: unlike
     /// [`Self::cache_metrics`], nothing outside the proxy writes to it.
     pub launch: Arc<LaunchNarrationCache>,
+    /// The runtime, asked for its admission state on every snapshot.
+    ///
+    /// Held here rather than reached through `AppState` because the publisher
+    /// task runs on its own schedule with no request in hand to borrow from.
+    pub runtime: Arc<dyn ModelRuntimePort>,
 }
 
 impl DashboardState {
@@ -410,6 +434,7 @@ impl DashboardState {
         cache: Arc<CacheStatusCache>,
         cache_metrics: Arc<CacheMetricsStore>,
         agent_metrics: Arc<CacheMetricsStore>,
+        runtime: Arc<dyn ModelRuntimePort>,
     ) -> Self {
         Self {
             connections,
@@ -421,6 +446,7 @@ impl DashboardState {
             cache_metrics,
             agent_metrics,
             launch: Arc::new(LaunchNarrationCache::new()),
+            runtime,
         }
     }
 
@@ -437,6 +463,7 @@ impl DashboardState {
             &self.cache_metrics,
             &self.agent_metrics,
             &self.launch,
+            Some(self.runtime.as_ref()),
         )
     }
 }
@@ -489,6 +516,7 @@ mod tests {
             Arc::new(CacheStatusCache::new()),
             Arc::new(CacheMetricsStore::new()),
             Arc::new(CacheMetricsStore::new()),
+            Arc::new(gglib_core::ports::NoopModelRuntime),
         ))
     }
 
@@ -508,6 +536,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
+            None,
         );
 
         assert!(snapshot.active_connections.is_empty());
@@ -543,6 +572,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
+            None,
         );
 
         assert_eq!(snapshot.active_connections.len(), 1);
@@ -568,6 +598,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
+            None,
         );
 
         assert!(snapshot.slots_available);
@@ -600,6 +631,7 @@ mod tests {
                 &CacheMetricsStore::new(),
                 &CacheMetricsStore::new(),
                 &LaunchNarrationCache::new(),
+                None,
             );
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
@@ -777,6 +809,7 @@ mod tests {
                 &CacheMetricsStore::new(),
                 &CacheMetricsStore::new(),
                 launch,
+                None,
             )
         };
 
@@ -809,6 +842,7 @@ mod tests {
             &cache_metrics,
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
+            None,
         );
         assert_eq!(before.cache, None);
 
@@ -826,6 +860,7 @@ mod tests {
             &cache_metrics,
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
+            None,
         );
         let status = after.cache.expect("cache status present after set");
         assert!(status.needs_attention);
@@ -861,6 +896,7 @@ mod tests {
                 cm,
                 &CacheMetricsStore::new(),
                 &LaunchNarrationCache::new(),
+                None,
             )
             .cache
             .expect("cache status present")
@@ -911,6 +947,7 @@ mod tests {
             &proxied,
             &agent,
             &LaunchNarrationCache::new(),
+            None,
         );
 
         assert_eq!(snap.agent_usage.reporting_requests, 1);

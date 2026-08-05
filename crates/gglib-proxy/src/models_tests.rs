@@ -151,22 +151,22 @@ fn from_internal_error() {
     assert!(err.error.code.is_none());
 }
 
-/// Wire-format contract: ContentionTimeout and ModelLoading must share the same
+/// Wire-format contract: AdmissionTimeout and ModelLoading must share the same
 /// `service_unavailable` type so clients treat both as retryable with identical
 /// backoff behavior.
 #[test]
-fn contention_timeout_and_model_loading_share_service_unavailable_type() {
+fn admission_timeout_and_model_loading_share_service_unavailable_type() {
     let loading: ErrorResponse = ModelRuntimeError::ModelLoading.into();
-    let contention: ErrorResponse =
-        ModelRuntimeError::ContentionTimeout("Insufficient time remaining".into()).into();
+    let queued_out: ErrorResponse =
+        ModelRuntimeError::AdmissionTimeout("never reached the front".into()).into();
 
     // Both must be service_unavailable (HTTP 503, retryable)
     assert_eq!(loading.error.r#type, "service_unavailable");
-    assert_eq!(contention.error.r#type, "service_unavailable");
+    assert_eq!(queued_out.error.r#type, "service_unavailable");
 
     // But codes should differ so clients can distinguish the cause
     assert_eq!(loading.error.code.as_deref(), Some("model_loading"));
-    assert_eq!(contention.error.code.as_deref(), Some("contention_timeout"));
+    assert_eq!(queued_out.error.code.as_deref(), Some("admission_timeout"));
 }
 
 // =========================================================================

@@ -2,7 +2,7 @@
 //!
 //! The proxy runs on the daemon, so this talks to the endpoint over HTTP like
 //! any other client rather than reaching into a runtime: the point is to
-//! exercise the router, the contention gate, model resolution and the forward
+//! exercise the router, admission control, model resolution and the forward
 //! pipeline, so that "the endpoint works" is demonstrated rather than assumed.
 //!
 //! It is also what makes the launch narration part of `gglib up`'s output —

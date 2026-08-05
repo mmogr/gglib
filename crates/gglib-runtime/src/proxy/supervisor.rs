@@ -560,18 +560,15 @@ mod tests {
 
     #[async_trait]
     impl ModelRuntimePort for MockRuntimePort {
-        async fn ensure_model_running(
+        async fn admit(
             &self,
             _model_name: &str,
             _num_ctx: Option<u64>,
             _default_ctx: u64,
-        ) -> Result<RunningTarget, ModelRuntimeError> {
-            Ok(RunningTarget::local(
-                8080,
-                1,
-                "test-model".to_string(),
-                4096,
-                false,
+            _overrides: gglib_core::ports::LaunchOverrides,
+        ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
+            Ok(gglib_core::ports::Admission::detached(
+                RunningTarget::local(8080, 1, "test-model".to_string(), 4096, false),
             ))
         }
 

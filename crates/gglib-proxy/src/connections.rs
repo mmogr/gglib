@@ -28,6 +28,21 @@
 //! borrowing `AppState`), so it can be moved freely into spawned tasks and
 //! outlive the handler stack frame that created it.
 //!
+//! ## It also carries the admission lease
+//!
+//! [`ConnectionGuard::holding`] attaches the
+//! [`AdmissionLease`](gglib_core::ports::AdmissionLease) the runtime issued
+//! when it admitted this request. The two want identical lifetimes — both must
+//! survive until the response is finished, including across the streaming
+//! path's spawned task — and this guard already travels everywhere that
+//! lifetime goes, so threading the lease separately would be the same journey
+//! made twice.
+//!
+//! The consequence is worth stating plainly: every cleanup guarantee listed
+//! above is also a guarantee that the model's VRAM slot is released. A client
+//! that hangs up mid-stream stops blocking the next model swap immediately,
+//! rather than pinning the GPU until something notices.
+//!
 //! ## Concurrency design
 //!
 //! Uses `std::sync::Mutex` — not `tokio::sync::Mutex` — following the
@@ -40,6 +55,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use gglib_core::ports::AdmissionLease;
 use uuid::Uuid;
 
 // =============================================================================
@@ -181,6 +197,7 @@ impl ActiveConnectionsRegistry {
         ConnectionGuard {
             id,
             registry: Arc::clone(self),
+            lease: None,
         }
     }
 
@@ -274,9 +291,31 @@ impl ActiveConnectionsRegistry {
 pub struct ConnectionGuard {
     id: Uuid,
     registry: Arc<ActiveConnectionsRegistry>,
+    /// The runtime's promise that this request's model stays loaded.
+    ///
+    /// Carried here rather than threaded separately because the two have
+    /// exactly the same lifetime — both must survive until the response is
+    /// finished, including across the streaming path's spawned task — and this
+    /// guard already goes everywhere that lifetime does. Dropping it releases
+    /// the VRAM slot, so a request that ends by any route also stops blocking
+    /// the model swap it was blocking.
+    ///
+    /// `None` only where no admission was involved: tests, and the dashboard's
+    /// own bookkeeping.
+    lease: Option<AdmissionLease>,
 }
 
 impl ConnectionGuard {
+    /// Attach the admission lease this request is holding.
+    ///
+    /// Consuming rather than `&mut` so the lease cannot be attached twice, and
+    /// so the call reads as part of registering the connection.
+    #[must_use]
+    pub fn holding(mut self, lease: AdmissionLease) -> Self {
+        self.lease = Some(lease);
+        self
+    }
+
     /// The connection id assigned at registration.
     #[must_use]
     pub fn id(&self) -> Uuid {

@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub mod admission;
 mod broadcaster;
 mod core;
 mod events;
@@ -6,13 +7,13 @@ mod health;
 mod logs;
 mod manager;
 mod ports;
+pub mod residency;
 pub mod shutdown;
-mod startup_guard;
 mod stream;
-pub mod swap_state;
 mod types;
 
 // Re-export commonly used types
+pub use admission::{AdmissionQueue, PRIMARY_SLOT, Resident, SLOT_COUNT};
 pub use broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
 pub use core::GuiProcessCore;
 pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
@@ -20,8 +21,8 @@ pub use health::{
     check_http_health, check_process_health, update_health_batch, wait_for_http_health,
 };
 pub use logs::{LogManagerSink, ServerLogEntry, ServerLogManager, get_log_manager};
-pub use manager::{ProcessManager, ProcessStrategy};
+pub use manager::ProcessManager;
+pub use residency::ResidentSet;
 pub use shutdown::{kill_pid, shutdown_child};
 pub(crate) use stream::spawn_stream_reader;
-pub use swap_state::{CurrentModelState, SwapState};
 pub use types::{RunningProcess, ServerInfo};

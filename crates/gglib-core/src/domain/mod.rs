@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub mod admission;
 pub mod agent;
 pub mod benchmark;
 pub mod cache_budget;
@@ -15,6 +16,7 @@ mod model;
 pub mod model_naming;
 pub mod query;
 pub mod recommendation;
+pub mod residency;
 pub mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
@@ -59,6 +61,17 @@ pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_m
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::{BudgetSource, ModelCandidate, Recommendation, recommend};
+
+// Re-export admission-control telemetry at the domain level for convenience
+pub use admission::{
+    AdmissionSnapshot, QueuedModelSnapshot, ResidentSlotSnapshot, SecondarySlotStatus,
+};
+
+// Re-export the second-VRAM-slot decision at the domain level for convenience
+pub use residency::{
+    RESIDENCY_UTILISATION, SECONDARY_MAX_BYTES, SecondarySlotDecision, SlotFootprint,
+    decide_secondary_slot,
+};
 pub use server_config::ServerConfig;
 
 // Re-export cache-RAM budget math at the domain level for convenience

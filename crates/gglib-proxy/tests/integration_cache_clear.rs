@@ -28,13 +28,16 @@ struct RecordingRuntime {
 
 #[async_trait]
 impl ModelRuntimePort for RecordingRuntime {
-    async fn ensure_model_running(
+    async fn admit(
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        Ok(RunningTarget::local(0, 1, "mock".into(), 4096, false))
+        _overrides: gglib_core::ports::LaunchOverrides,
+    ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
+        Ok(gglib_core::ports::Admission::detached(
+            RunningTarget::local(0, 1, "mock".into(), 4096, false),
+        ))
     }
     async fn current_model(&self) -> Option<RunningTarget> {
         None

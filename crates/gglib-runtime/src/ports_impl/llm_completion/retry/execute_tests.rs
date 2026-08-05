@@ -19,7 +19,7 @@ use reqwest::{Client, Response};
 
 use super::super::LlmCompletionAdapter;
 use super::send_with_retry;
-use super::test_server::{TestServer, contention_body, json, json_with, sse};
+use super::test_server::{TestServer, admission_timeout_body, json, json_with, sse};
 
 /// Delays small enough that a full sequence costs single-digit milliseconds.
 fn fast_policy(max_attempts: u32) -> RetryPolicy {
@@ -37,7 +37,7 @@ fn ok_stream() -> String {
 }
 
 fn unavailable() -> String {
-    json(503, "Service Unavailable", &contention_body())
+    json(503, "Service Unavailable", &admission_timeout_body())
 }
 
 async fn send_to(
@@ -105,11 +105,21 @@ impl RetryObserver for Recorder {
 // =============================================================================
 
 #[tokio::test]
-async fn recovers_after_transient_contention() {
+async fn recovers_after_a_transient_admission_timeout() {
     let retry_after = [("Retry-After", "5")];
     let server = TestServer::start(vec![
-        json_with(503, "Service Unavailable", &contention_body(), &retry_after),
-        json_with(503, "Service Unavailable", &contention_body(), &retry_after),
+        json_with(
+            503,
+            "Service Unavailable",
+            &admission_timeout_body(),
+            &retry_after,
+        ),
+        json_with(
+            503,
+            "Service Unavailable",
+            &admission_timeout_body(),
+            &retry_after,
+        ),
         ok_stream(),
     ])
     .await;
@@ -203,7 +213,7 @@ async fn an_absurd_retry_after_is_clamped() {
         json_with(
             503,
             "Service Unavailable",
-            &contention_body(),
+            &admission_timeout_body(),
             &[("Retry-After", "86400")],
         ),
         ok_stream(),

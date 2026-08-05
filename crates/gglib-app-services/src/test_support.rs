@@ -287,15 +287,14 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
     let core = Arc::new(AppCore::new(repos.clone()));
 
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(Arc::new(
-        ProcessManager::new_single_swap(
+    let runtime: Arc<dyn ModelRuntimePort> =
+        Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
             9000,
             "llama-server",
             catalog,
             ServerConfigOptions::default(),
             CacheRamSetting::Auto,
-        ),
-    )));
+        ))));
 
     let proxy = Arc::new(crate::ProxyOps::new(crate::ProxyDeps {
         supervisor: Arc::new(ProxySupervisor::new()),

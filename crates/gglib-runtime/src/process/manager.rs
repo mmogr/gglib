@@ -1,72 +1,48 @@
 //! Unified process manager for llama-server instances.
 //!
-//! Every launch surface — the CLI, the proxy, both GUIs — now shares one
-//! `SingleSwap` manager (built once by `build_service_graph`), which is what
-//! makes "only one llama-server runs at a time system-wide" an invariant
-//! rather than a hope. A `Concurrent` strategy existed here for the GUI's
-//! earlier direct-spawn path; epic #630 routed the GUI through the proxy's
-//! manager instead, so it was deleted along with the rest of that path.
+//! Every launch surface — the CLI, the proxy, both GUIs — shares one manager
+//! (built once by `build_service_graph`), which is what makes "gglib owns every
+//! llama-server on this machine" an invariant rather than a hope.
+//!
+//! What that manager guarantees changed with M9. It used to be *one* model at a
+//! time, enforced by killing whatever was loaded before spawning anything else.
+//! It is now a bounded resident set — see
+//! [`admission`](crate::process::admission) for how many, and why — with a
+//! queue deciding who occupies it. The dispatch here is unchanged in shape:
+//! this type routes, and [`ResidentSet`] owns both the state and the launch
+//! sequence that mutates it.
 
 use super::core::GuiProcessCore;
 use super::types::ServerInfo;
 use anyhow::Result;
+use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
+    Admission, LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::process::startup_guard::{
-    STARTUP_WAIT_TIMEOUT, StartupDisposition, drive, should_bail_on_insufficient_budget,
-    wait_for_startup,
-};
-use crate::process::swap_state::SwapState;
-
-/// Strategy for managing llama-server processes.
-///
-/// The only strategy today: auto-swap a single model at a time (proxy, GUI,
-/// and `gglib serve` in pinned mode). Kept as an enum — rather than folding
-/// `SwapState` directly into `ProcessManager` — so a future strategy remains
-/// a variant away rather than a structural change.
-pub enum ProcessStrategy {
-    /// Only allow one model at a time, auto-swap when a different model is
-    /// requested.
-    ///
-    /// Concurrent requests during startup wait via watch channel instead of
-    /// failing immediately. All state and the launch sequence itself live on
-    /// [`SwapState`].
-    ///
-    /// Boxed because `SwapState` carries a full `ServerConfigOptions`
-    /// template, which would otherwise inflate every `ProcessManager` to its
-    /// size even before any model has launched.
-    SingleSwap(Box<SwapState>),
-}
+use crate::process::residency::ResidentSet;
 
 /// Unified process manager for llama-server instances.
 ///
-/// One strategy today — `SingleSwap`, one model at a time, auto-swap — built
-/// via `new_single_swap`, optionally pinned afterwards with
-/// [`ProcessManager::set_pin`]. See [`ProcessStrategy`].
+/// Wraps a [`ResidentSet`] — the VRAM slots and the admission queue that fills
+/// them — with the process-level queries the GUI and CLI need.
 pub struct ProcessManager {
     core: Arc<RwLock<GuiProcessCore>>,
-    strategy: ProcessStrategy,
+    residency: ResidentSet,
 }
 
 impl ProcessManager {
-    /// Create a new `ProcessManager` with SingleSwap strategy (for Proxy).
+    /// Create a new `ProcessManager`.
     ///
-    /// This strategy allows only one model to run at a time. When a request
-    /// arrives for a different model, the currently running server is stopped
-    /// and replaced ("swapped") with the newly requested model.
-    ///
-    /// Concurrent startup requests are coordinated via watch channels: if
-    /// multiple callers simultaneously request the same model while it is
-    /// starting up, only one drives the launch; the others subscribe to a
-    /// shared channel and receive the result when the driver completes. This
-    /// prevents port conflicts and redundant health checks.
+    /// Requests are admitted through a queue rather than racing each other: a
+    /// request for a model that is already resident is served immediately,
+    /// while one for a model that is not waits until it can take a VRAM slot —
+    /// either alongside what is loaded, or by displacing it once nothing is
+    /// being served from it. See [`crate::process::admission`].
     ///
     /// # Arguments
     ///
@@ -77,19 +53,17 @@ impl ProcessManager {
     ///   specifications (file paths, context sizes, etc.).
     /// * `launch_overrides` — Standing launch options every spawn starts from
     ///   (slot-save path, cache reuse, KV cache types, and anything else
-    ///   [`ServerConfigOptions`] carries). Per-call
-    ///   [`LaunchOverrides`] are layered on top; see
-    ///   [`SwapState`](crate::process::swap_state::SwapState) for the
-    ///   composition order.
+    ///   [`ServerConfigOptions`] carries). Per-call [`LaunchOverrides`] are
+    ///   layered on top; see [`ResidentSet`] for the composition order.
     /// * `cache_ram` — how to size llama-server's own host-RAM prompt cache
-    ///   (`--cache-ram`). Not part of `launch_overrides` because it is
-    ///   resolved at spawn rather than passed through.
+    ///   (`--cache-ram`). Not part of `launch_overrides` because it is resolved
+    ///   at spawn rather than passed through.
     ///   [`CacheRamSetting::LlamaDefault`] emits no flag — the right choice for
     ///   benchmark launches, where a large prompt cache would perturb results.
     ///
     /// Use [`Self::set_pin`] afterwards when the manager must refuse every
     /// model but one (`gglib serve`).
-    pub fn new_single_swap(
+    pub fn new(
         base_port: u16,
         llama_server_path: impl Into<String>,
         catalog: Arc<dyn ModelCatalogPort>,
@@ -99,21 +73,17 @@ impl ProcessManager {
         let core = GuiProcessCore::new(base_port, llama_server_path);
         Self {
             core: Arc::new(RwLock::new(core)),
-            strategy: ProcessStrategy::SingleSwap(Box::new(SwapState::new(
-                catalog,
-                launch_overrides,
-                cache_ram,
-            ))),
+            residency: ResidentSet::new(catalog, launch_overrides, cache_ram),
         }
     }
 
     /// Pin this manager to a single model, or clear the pin (`gglib serve`).
     ///
-    /// While pinned, the manager behaves exactly like the auto-swapping one
-    /// for the pinned model — same startup coordination, same cache handling,
-    /// same launch options template, with the pin's own overrides layered on
-    /// top — but rejects every other model with
-    /// [`ModelRuntimeError::PinnedModelMismatch`] instead of swapping to it.
+    /// While pinned, the manager behaves exactly like the unpinned one for the
+    /// pinned model — same admission, same cache handling, same launch options
+    /// template, with the pin's own overrides layered on top — but rejects
+    /// every other model with [`ModelRuntimeError::PinnedModelMismatch`]
+    /// instead of admitting it.
     ///
     /// That refusal is the feature. `gglib serve <model>` exists to give
     /// single-model clients (VS Code Copilot's BYOK endpoint, for one) an
@@ -124,157 +94,80 @@ impl ProcessManager {
     /// long-lived manager: the pin is applied when a pinned proxy run starts
     /// and cleared when it stops.
     pub fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        state.set_pin(pin);
+        self.residency.set_pin(pin);
     }
 
-    /// Ensure a model is running.
+    /// Admit a request to a running model.
     ///
-    /// This method:
-    /// 1. Atomically checks if another startup is in progress (via watch channel)
-    /// 2. If waiting, subscribes to the existing driver's result
-    /// 3. If initiating, spawns a detached driver task and waits for its result
-    /// 4. All callers — including the initiator — wait on the same watch channel,
-    ///    so one client disconnecting does not fail other concurrent requests
+    /// The returned [`Admission::lease`] must be held for as long as the
+    /// request is being served — it is what tells the queue the model is still
+    /// in use and must not be swapped out. See
+    /// [`ModelRuntimePort::admit`](gglib_core::ports::ModelRuntimePort::admit).
     ///
     /// # Errors
     ///
-    /// Returns `ModelRuntimeError` if the model cannot be started.
+    /// Returns `ModelRuntimeError` if the model cannot be started, or
+    /// [`ModelRuntimeError::AdmissionTimeout`] if the request never reached the
+    /// front of the queue.
     ///
     /// # Known limitations
     ///
-    /// If a previous model's shutdown timed out (D-state process), the subsequent spawn
-    /// may fail with a port-in-use or CUDA OOM error. There is no automatic retry — the
-    /// caller receives the error and must retry manually. GPU memory availability is not
-    /// checked before spawn; failures surface as generic CUDA OOM rather than an
-    /// actionable "previous process may still hold resources" message.
-    pub async fn ensure_model_running(
-        &self,
-        model_name: &str,
-        num_ctx: Option<u64>,
-        default_ctx: u64,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        self.ensure_model_running_with(model_name, num_ctx, default_ctx, LaunchOverrides::default())
-            .await
-    }
-
-    /// Same as [`Self::ensure_model_running`], but with per-call launch
-    /// overrides layered on the manager's standing template.
-    ///
-    /// Lets a single shared `ProcessManager` serve callers with different
-    /// launch needs — a GUI start request carrying `--mlock`, and a benchmark
-    /// runner that must never gain a prompt cache — without constructing a
-    /// second manager and losing the one-llama-server-at-a-time guarantee.
-    /// [`LaunchOverrides::default`] means "no opinion": every field falls
-    /// through to what the manager was constructed with (see
-    /// [`Self::new_single_swap`]).
-    ///
-    /// # Errors
-    ///
-    /// Returns `ModelRuntimeError` if the model cannot be started.
-    pub async fn ensure_model_running_with(
+    /// If a displaced model's shutdown timed out (D-state process), the
+    /// subsequent spawn may fail with a port-in-use or CUDA OOM error. There is
+    /// no automatic retry — the caller receives the error and must retry
+    /// manually.
+    pub async fn admit(
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
         default_ctx: u64,
         overrides: LaunchOverrides,
-    ) -> Result<RunningTarget, ModelRuntimeError> {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-
-        // Refuse foreign models before touching the startup guard, so a
-        // rejected request neither queues behind the pinned model nor
-        // displaces it.
-        state.check_pinned(model_name)?;
-
-        // Retry loop with an overall deadline, so a caller cannot wait
-        // unboundedly while other models swap in and out ahead of it.
-        let deadline = tokio::time::Instant::now() + STARTUP_WAIT_TIMEOUT;
-
-        loop {
-            match StartupDisposition::check(&state.loading, model_name.to_string()) {
-                StartupDisposition::Waiter {
-                    rx,
-                    target_model_name,
-                } => {
-                    if target_model_name == model_name {
-                        // Our model is already starting — wait for that result.
-                        // Offset by 5s so the driver always broadcasts first.
-                        return wait_for_startup(rx, STARTUP_WAIT_TIMEOUT + Duration::from_secs(5))
-                            .await;
-                    }
-                    // A different model is starting. Wait for it to finish, then retry.
-                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                    if should_bail_on_insufficient_budget(remaining) {
-                        return Err(ModelRuntimeError::ContentionTimeout(
-                            "Insufficient time remaining for model startup after contention"
-                                .to_string(),
-                        ));
-                    }
-                    let _ = wait_for_startup(rx, remaining).await;
-                }
-                StartupDisposition::Initiator { guard, self_rx } => {
-                    drive(
-                        guard,
-                        STARTUP_WAIT_TIMEOUT,
-                        state.startup_future(
-                            Arc::clone(&self.core),
-                            model_name.to_string(),
-                            num_ctx,
-                            default_ctx,
-                            overrides,
-                        ),
-                    );
-
-                    // Wait on the same channel as every other caller.
-                    return wait_for_startup(
-                        self_rx,
-                        STARTUP_WAIT_TIMEOUT + Duration::from_secs(5),
-                    )
-                    .await;
-                }
-            }
-        }
-    } // end ensure_model_running
-
-    /// Get information about the currently running model.
-    pub async fn current_model(&self) -> Option<RunningTarget> {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        let current = Arc::clone(&state.current);
-        let guard = current.read().await;
-        guard.as_ref().map(|c| {
-            RunningTarget::local(
-                c.port,
-                c.model_id,
-                c.model_name.clone(),
-                c.context_size,
-                false,
-            )
-            .with_slot_restore_supported(c.slot_restore_supported)
-            .with_cache_ram_health(c.cache_ram_health)
-        })
+    ) -> Result<Admission, ModelRuntimeError> {
+        self.residency
+            .admit(&self.core, model_name, num_ctx, default_ctx, overrides)
+            .await
     }
 
-    /// Stop the currently running model.
+    /// What the admission queue and resident set look like right now.
+    #[must_use]
+    pub fn admission_snapshot(&self) -> AdmissionSnapshot {
+        self.residency.queue().snapshot()
+    }
+
+    /// Get information about the model in the primary slot.
+    ///
+    /// The primary is the slot chat traffic follows; a co-resident auxiliary
+    /// model is deliberately not reported here, because every caller of this
+    /// method — the `/slots` poller, the GUI's running-model panel — means "the
+    /// model this endpoint is serving".
+    pub fn current_model(&self) -> Option<RunningTarget> {
+        self.residency.current_model()
+    }
+
+    /// Stop the model in the primary slot.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the process could not be stopped.
     pub async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        let current = Arc::clone(&state.current);
-        let mut guard = current.write().await;
-        if let Some(state) = guard.take() {
-            let mut core = self.core.write().await;
-            core.kill(state.model_id)
-                .await
-                .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
-        }
-        Ok(())
+        self.residency.stop_primary(&self.core).await
     }
 
     /// Stop a running server by model ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the process could not be stopped.
     pub async fn stop_server(&self, model_id: u32) -> Result<()> {
         let mut core = self.core.write().await;
         core.kill(model_id).await
     }
 
     /// Stop all running servers
+    ///
+    /// # Errors
+    ///
+    /// Never returns an error; individual failures are logged.
     pub async fn stop_all(&self) -> Result<()> {
         let mut core = self.core.write().await;
         core.kill_all().await;
@@ -322,41 +215,34 @@ impl ProcessManager {
     }
 
     /// Graceful shutdown
+    ///
+    /// # Errors
+    ///
+    /// Never returns an error; individual failures are logged.
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down process manager");
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        let current = Arc::clone(&state.current);
-        let mut guard = current.write().await;
-        *guard = None;
-        drop(guard);
+        self.residency.forget_all();
         self.stop_all().await
     }
 
     /// The single model this manager is pinned to, if any.
     ///
     /// `Some(name)` is `gglib serve`: every other model is refused rather
-    /// than swapped to. Owned because the pin is runtime-mutable state
-    /// behind a lock (see [`Self::set_pin`]).
+    /// than admitted. Owned because the pin is runtime-mutable state behind a
+    /// lock (see [`Self::set_pin`]).
     #[must_use]
     pub fn pinned_model(&self) -> Option<String> {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        state.pinned_name()
+        self.residency.pinned_name()
     }
 
-    /// Check if a model is currently loading.
+    /// Check if any slot is mid-launch.
     #[must_use]
     pub fn is_loading(&self) -> bool {
-        let ProcessStrategy::SingleSwap(state) = &self.strategy;
-        state
-            .loading
-            .read()
-            .ok()
-            .map(|s| s.is_some())
-            .unwrap_or(false)
+        self.residency.queue().is_loading()
     }
 }
 
-// Note: ProcessManager is not Clone because ProcessStrategy contains
+// Note: ProcessManager is not Clone because ResidentSet contains
 // Arc<dyn ...> and RwLock which don't trivially clone in a meaningful way.
 // If you need shared access, wrap ProcessManager in Arc.
 
@@ -394,14 +280,18 @@ mod tests {
         }
     }
 
-    fn pinned_manager() -> ProcessManager {
-        let manager = ProcessManager::new_single_swap(
+    fn manager() -> ProcessManager {
+        ProcessManager::new(
             9000,
             "llama-server",
             Arc::new(StubCatalog),
             ServerConfigOptions::default(),
             CacheRamSetting::Auto,
-        );
+        )
+    }
+
+    fn pinned_manager() -> ProcessManager {
+        let manager = manager();
         manager.set_pin(Some(gglib_core::ports::PinnedSpec {
             name: "qwen2.5".to_string(),
             launch_overrides: ServerConfigOptions::default(),
@@ -409,12 +299,12 @@ mod tests {
         manager
     }
 
-    /// The guard has to sit on the real entry point, not just on SwapState —
+    /// The guard has to sit on the real entry point, not just on `ResidentSet` —
     /// this is what a proxy request actually calls.
     #[tokio::test]
-    async fn ensure_model_running_rejects_a_foreign_model() {
+    async fn admit_rejects_a_foreign_model() {
         let err = pinned_manager()
-            .ensure_model_running("llama-3-8b", None, 4096)
+            .admit("llama-3-8b", None, 4096, LaunchOverrides::default())
             .await
             .expect_err("a pinned manager must refuse a foreign model");
 
@@ -425,13 +315,13 @@ mod tests {
     }
 
     /// A foreign request must be refused without the catalog ever being
-    /// consulted, proving it short-circuits ahead of the startup machinery
+    /// consulted, proving it short-circuits ahead of the admission machinery
     /// rather than failing somewhere inside it. The stub resolves every model
     /// to `None`, so reaching the catalog would surface as ModelNotFound.
     #[tokio::test]
     async fn foreign_model_is_refused_before_catalog_lookup() {
         let err = pinned_manager()
-            .ensure_model_running("llama-3-8b", None, 4096)
+            .admit("llama-3-8b", None, 4096, LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -444,9 +334,9 @@ mod tests {
     /// The pinned model itself is admitted past the guard — it fails later,
     /// at catalog resolution, which is exactly how far this stub allows.
     #[tokio::test]
-    async fn ensure_model_running_admits_the_pinned_model() {
+    async fn admit_allows_the_pinned_model_through_to_the_catalog() {
         let err = pinned_manager()
-            .ensure_model_running("qwen2.5", None, 4096)
+            .admit("qwen2.5", None, 4096, LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -458,17 +348,9 @@ mod tests {
 
     /// Pinning must not leak into the ordinary proxy manager.
     #[tokio::test]
-    async fn single_swap_manager_admits_any_model() {
-        let manager = ProcessManager::new_single_swap(
-            9000,
-            "llama-server",
-            Arc::new(StubCatalog),
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        );
-
-        let err = manager
-            .ensure_model_running("anything", None, 4096)
+    async fn an_unpinned_manager_admits_any_model() {
+        let err = manager()
+            .admit("anything", None, 4096, LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -476,6 +358,20 @@ mod tests {
             matches!(err, ModelRuntimeError::ModelNotFound(_)),
             "unpinned manager must not reject on identity, got {err:?}"
         );
+    }
+
+    /// An unknown model must fail immediately rather than joining the queue and
+    /// waiting out a swap only to discover nobody has it.
+    #[tokio::test]
+    async fn an_unknown_model_fails_without_queueing() {
+        let manager = manager();
+        let _ = manager
+            .admit("nope", None, 4096, LaunchOverrides::default())
+            .await;
+
+        let snapshot = manager.admission_snapshot();
+        assert_eq!(snapshot.waiting(), 0, "nothing should be left queued");
+        assert_eq!(snapshot.total_swaps, 0);
     }
 
     /// The read side of the guard: callers that want to avoid provoking a
@@ -490,51 +386,30 @@ mod tests {
     /// must not name one, or callers would narrow what they offer for no
     /// reason.
     #[test]
-    fn single_swap_manager_reports_no_pinned_model() {
-        let manager = ProcessManager::new_single_swap(
-            9000,
-            "llama-server",
-            Arc::new(StubCatalog),
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        );
-
-        assert_eq!(manager.pinned_model(), None);
-    }
-
-    fn single_swap_manager() -> ProcessManager {
-        ProcessManager::new_single_swap(
-            9000,
-            "llama-server",
-            Arc::new(StubCatalog),
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        )
+    fn an_unpinned_manager_reports_no_pinned_model() {
+        assert_eq!(manager().pinned_model(), None);
     }
 
     #[tokio::test]
     async fn test_is_serving() {
-        let manager = single_swap_manager();
-        assert!(!manager.is_serving(1).await);
+        assert!(!manager().is_serving(1).await);
     }
 
     #[tokio::test]
     async fn test_list_servers_empty() {
-        let manager = single_swap_manager();
-        assert_eq!(manager.list_servers().await.len(), 0);
+        assert_eq!(manager().list_servers().await.len(), 0);
     }
 
     #[tokio::test]
     async fn list_running_is_empty_with_no_servers() {
-        let manager = single_swap_manager();
-        assert!(manager.list_running().await.is_empty());
+        assert!(manager().list_running().await.is_empty());
     }
 
     /// Both listings project the same underlying process set, so they must
     /// never disagree on how many servers are up.
     #[tokio::test]
     async fn list_running_agrees_with_list_servers() {
-        let manager = single_swap_manager();
+        let manager = manager();
         assert_eq!(
             manager.list_running().await.len(),
             manager.list_servers().await.len()
@@ -543,7 +418,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_is_loading() {
-        let manager = single_swap_manager();
-        assert!(!manager.is_loading());
+        assert!(!manager().is_loading());
+    }
+
+    /// A fresh manager holds nothing and has done nothing.
+    #[test]
+    fn a_fresh_manager_reports_an_empty_resident_set() {
+        let snapshot = manager().admission_snapshot();
+        assert!(snapshot.slots.is_empty());
+        assert!(snapshot.queued.is_empty());
+        assert_eq!(snapshot.total_swaps, 0);
+        assert_eq!(snapshot.secondary_slot.state, "available");
+    }
+
+    #[test]
+    fn a_fresh_manager_has_no_current_model() {
+        assert!(manager().current_model().is_none());
     }
 }

@@ -10,7 +10,7 @@
 //!
 //! Transport failures (refused connection, send timeout) stay terminal, exactly
 //! as before this module existed. Widening retry to cover them would change
-//! behaviour well beyond the contention case this addresses, and would risk
+//! behaviour well beyond the queueing case this addresses, and would risk
 //! masking a genuinely dead upstream.
 
 use std::sync::Arc;

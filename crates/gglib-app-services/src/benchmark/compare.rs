@@ -175,16 +175,25 @@ async fn run_single_compare(
     resolved_ctx: u64,
     global_inf: Option<&InferenceConfig>,
 ) -> Result<ModelCompareResult> {
-    // Start (or keep running) the model server via SingleSwap.
-    // Pre-resolved per-model context size (4-level fallback).
-    // Both args are the same because resolution already happened above with
-    // per-model granularity — the runtime's internal resolution is a no-op
-    // when context_size is Some.
-    let target = deps
+    // Start (or keep running) the model server. Pre-resolved per-model context
+    // size (4-level fallback); both args are the same because resolution
+    // already happened above with per-model granularity — the runtime's
+    // internal resolution is a no-op when context_size is Some.
+    //
+    // The lease is held for the whole measurement, not dropped here: a
+    // benchmark that let the model be swapped out mid-run would be measuring
+    // the swap.
+    let admission = deps
         .runtime
-        .ensure_model_running(&model.name, Some(resolved_ctx), resolved_ctx)
+        .admit(
+            &model.name,
+            Some(resolved_ctx),
+            resolved_ctx,
+            gglib_core::ports::LaunchOverrides::default(),
+        )
         .await
         .with_context(|| format!("failed to start model '{}'", model.name))?;
+    let target = &admission.target;
 
     // Build the request body with fully-resolved inference parameters.
     let req_body = build_compare_request_body(config, model, global_inf);

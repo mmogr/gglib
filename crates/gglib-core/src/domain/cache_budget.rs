@@ -63,6 +63,21 @@ impl CacheRamHealth {
     pub const fn needs_attention(&self) -> bool {
         matches!(self, Self::DisabledInsufficientRam | Self::Low { .. })
     }
+
+    /// The resolved budget in MiB, or `None` when no flag was emitted and
+    /// llama-server's own default applies.
+    ///
+    /// Both disabled states report `Some(0)` rather than `None`: zero is a
+    /// budget that was decided, and callers that treat "no flag" and "zero"
+    /// alike would lose the distinction the enum exists to keep.
+    #[must_use]
+    pub const fn budget_mb(&self) -> Option<u64> {
+        match self {
+            Self::Healthy { mb } | Self::Low { mb } => Some(*mb),
+            Self::DisabledByUser | Self::DisabledInsufficientRam => Some(0),
+            Self::LlamaDefault => None,
+        }
+    }
 }
 
 /// Classify a resolved `--cache-ram` budget.

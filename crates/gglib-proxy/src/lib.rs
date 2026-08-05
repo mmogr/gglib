@@ -5,7 +5,6 @@ mod access;
 pub mod cache_lifecycle;
 pub mod canonicalization;
 pub mod connections;
-pub mod contention;
 pub mod dashboard;
 pub mod embeddings;
 pub mod forward;
