@@ -40,8 +40,6 @@ export interface UseGglibRuntimeOptions {
    * - `null` / `undefined` → unknown; treated as supported (permissive fallback)
    */
   supportsToolCalls?: boolean | null;
-  /** Called instead of the standard chat flow when isCouncilMode is set. */
-  onCouncilSubmit?: (text: string) => void;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -69,7 +67,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     onError,
     onSystemWarning,
     supportsToolCalls,
-    onCouncilSubmit,
   } = options;
 
   // Message state managed externally
@@ -197,16 +194,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       // Drain any one-shot metadata (e.g. isVoice) queued for this message
       const extraMeta = nextMessageMetaRef.current;
       nextMessageMetaRef.current = {};
-
-      // Council mode intercept: route to council suggest instead of chat
-      if (extraMeta.isCouncilMode && onCouncilSubmit) {
-        const text = msg.content
-          .map((p) => ('text' in p && typeof p.text === 'string' ? p.text : ''))
-          .join('')
-          .trim();
-        if (text) onCouncilSubmit(text);
-        return;
-      }
 
       const userMessage = mkUserMessage(msg.content as GglibContent, {
         conversationId,

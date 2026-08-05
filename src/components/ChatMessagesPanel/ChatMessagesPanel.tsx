@@ -23,13 +23,10 @@ import {
   useChatPersistence,
   useTitleGeneration,
   useMessageDeletion,
-  useCouncilMode,
 } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
-import type { GglibMessageCustom } from '../../types/messages';
-import CouncilThread from '../Council/Thread/CouncilThread';
 import type { ConversationSummary } from '../../services/transport';
 
 interface ChatMessagesPanelProps {
@@ -57,15 +54,6 @@ interface ChatMessagesPanelProps {
   supportsToolCalls?: boolean | null;
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
-  /** Ref filled by this component; called when the user submits in orchestrator mode. */
-  councilSubmitRef?: React.MutableRefObject<((text: string) => void) | null>;
-  /** Set one-shot metadata on the next user message. */
-  setNextMessageMeta?: (meta: Partial<GglibMessageCustom>) => void;
-  /**
-   * Called when an orchestrator run reaches a terminal phase.
-   * Receives the draft run ID, the original goal text, and the final answer.
-   */
-  onCouncilRunComplete?: (runId: string, goal: string, finalAnswer: string | null) => void;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -88,19 +76,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   currentStreamingAssistantMessageId,
   supportsToolCalls,
   toolFormat,
-  councilSubmitRef,
-  setNextMessageMeta,
-  onCouncilRunComplete,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
-
-  // Orchestrator mode: toggle state plus the run-start and goal refs
-  const { isCouncilMode, toggleCouncilMode, councilStartRef, pendingGoalRef } = useCouncilMode({
-    councilSubmitRef,
-    setNextMessageMeta,
-  });
 
   // Shared ticker for live timer updates (only runs while streaming)
   // Note: Updating tick triggers provider re-render, but messageComponents is stable
@@ -237,18 +216,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <ThreadPrimitive.Messages
                       components={messageComponents}
                     />
-                    {/* Orchestrator runs embedded in the thread viewport */}
-                    <CouncilThread
-                      serverPort={serverPort}
-                      startRunRef={councilStartRef}
-                      onRunComplete={(runId, finalAnswer) => {
-                        onCouncilRunComplete?.(
-                          runId,
-                          pendingGoalRef.current,
-                          finalAnswer,
-                        );
-                      }}
-                    />
                     <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                       Jump to latest
                     </ThreadPrimitive.ScrollToBottom>
@@ -257,8 +224,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   <ComposerFooter
                     isServerConnected={isServerConnected}
                     isThreadRunning={isThreadRunning}
-                    isCouncilMode={isCouncilMode}
-                    onToggleCouncil={toggleCouncilMode}
                     onStopGeneration={() => threadRuntime?.cancelRun()}
                   />
                 </ThreadPrimitive.Root>
