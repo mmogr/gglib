@@ -43,6 +43,7 @@ use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
 use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
 use gglib_core::cache_metrics::{CacheMetricsStore, CacheUsage};
+use gglib_core::domain::LaunchNarration;
 
 /// Number of recent request snapshots included in each [`DashboardSnapshot`].
 const RECENT_REQUEST_LIMIT: usize = 20;
@@ -214,6 +215,49 @@ impl CacheStatusCache {
     }
 }
 
+/// Latest launch narration, written by the request path as models resolve
+/// and read by the dashboard publisher.
+///
+/// Mirrors [`CacheStatusCache`] exactly, and for the same reason: the launch
+/// decisions and their provenance exist only at spawn, inside the runtime,
+/// while the dashboard that displays them lives here. The resolved target is
+/// where the two meet.
+///
+/// `None` until the first request resolves a model — before that, there is no
+/// launch to narrate.
+#[derive(Debug, Default)]
+pub struct LaunchNarrationCache {
+    latest: std::sync::Mutex<Option<LaunchNarration>>,
+}
+
+impl LaunchNarrationCache {
+    /// Create an empty cache ("nothing launched yet").
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The most recently observed launch narration.
+    #[must_use]
+    pub fn get(&self) -> Option<LaunchNarration> {
+        self.latest
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Record the narration of a freshly resolved target.
+    ///
+    /// Skips the write when nothing changed, so the steady state — every
+    /// request resolving the same model — never contends with the publisher.
+    pub fn set(&self, narration: LaunchNarration) {
+        let mut guard = self.latest.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.as_ref() != Some(&narration) {
+            *guard = Some(narration);
+        }
+    }
+}
+
 /// Cadence at which a fresh snapshot is recomputed and pushed to SSE
 /// subscribers of `GET /v1/proxy/status/stream`.
 const PUBLISH_INTERVAL: Duration = Duration::from_secs(1);
@@ -269,6 +313,11 @@ pub struct DashboardSnapshot {
     /// proxy's cache configuration and must surface even before a proxied
     /// request has resolved a model.
     pub agent_usage: CacheUsage,
+    /// What the running model's launch decided, and why — the same record the
+    /// CLI banner prints at startup (see
+    /// [`gglib_core::domain::LaunchNarration`]). `None` until a request has
+    /// resolved a model, since nothing has been launched to explain.
+    pub launch: Option<LaunchNarration>,
 }
 
 impl DashboardSnapshot {
@@ -285,6 +334,7 @@ impl DashboardSnapshot {
         cache: &CacheStatusCache,
         cache_metrics: &CacheMetricsStore,
         agent_metrics: &CacheMetricsStore,
+        launch: &LaunchNarrationCache,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -309,6 +359,7 @@ impl DashboardSnapshot {
                 .get()
                 .map(|status| status.with_usage(cache_metrics.snapshot())),
             agent_usage: agent_metrics.snapshot(),
+            launch: launch.get(),
         }
     }
 }
@@ -340,6 +391,10 @@ pub struct DashboardState {
     /// Owned by the supervisor and passed in, so it outlives a single proxy
     /// run and can be shared with the embedded axum server.
     pub agent_metrics: Arc<CacheMetricsStore>,
+    /// Latest launch narration, populated by the request path as models
+    /// resolve. Created here rather than passed in: unlike
+    /// [`Self::cache_metrics`], nothing outside the proxy writes to it.
+    pub launch: Arc<LaunchNarrationCache>,
 }
 
 impl DashboardState {
@@ -365,6 +420,7 @@ impl DashboardState {
             cache,
             cache_metrics,
             agent_metrics,
+            launch: Arc::new(LaunchNarrationCache::new()),
         }
     }
 
@@ -380,6 +436,7 @@ impl DashboardState {
             &self.cache,
             &self.cache_metrics,
             &self.agent_metrics,
+            &self.launch,
         )
     }
 }
@@ -450,6 +507,7 @@ mod tests {
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
+            &LaunchNarrationCache::new(),
         );
 
         assert!(snapshot.active_connections.is_empty());
@@ -484,6 +542,7 @@ mod tests {
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
+            &LaunchNarrationCache::new(),
         );
 
         assert_eq!(snapshot.active_connections.len(), 1);
@@ -508,6 +567,7 @@ mod tests {
             &CacheStatusCache::new(),
             &CacheMetricsStore::new(),
             &CacheMetricsStore::new(),
+            &LaunchNarrationCache::new(),
         );
 
         assert!(snapshot.slots_available);
@@ -539,6 +599,7 @@ mod tests {
                 &CacheStatusCache::new(),
                 &CacheMetricsStore::new(),
                 &CacheMetricsStore::new(),
+                &LaunchNarrationCache::new(),
             );
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
@@ -676,6 +737,58 @@ mod tests {
         assert_eq!(cache.get(), Some(low));
     }
 
+    #[test]
+    fn launch_cache_starts_empty_and_records_the_latest_narration() {
+        use gglib_core::domain::{LaunchDecision, LaunchNarration};
+
+        let cache = LaunchNarrationCache::new();
+        assert_eq!(cache.get(), None, "nothing launched yet");
+
+        let mut first = LaunchNarration::new("qwen3", Some("Q4_K_M".to_string()), 1_073_741_824);
+        first.push(LaunchDecision::new("ctx", "32768", "model server_defaults"));
+        cache.set(first.clone());
+        assert_eq!(cache.get(), Some(first));
+
+        // A model swap replaces the narration rather than accumulating.
+        let second = LaunchNarration::new("llama3", None, 0);
+        cache.set(second.clone());
+        assert_eq!(cache.get(), Some(second));
+    }
+
+    /// Tier 1 parity: what the banner prints must also be reachable over
+    /// `GET /v1/proxy/status`, which is this snapshot.
+    #[test]
+    fn snapshot_surfaces_the_recorded_launch_narration() {
+        use gglib_core::domain::{LaunchDecision, LaunchNarration};
+
+        let connections = ActiveConnectionsRegistry::new();
+        let slots = SlotsCache::new();
+        let metrics = ContextMetricsStore::new();
+        let upstream_health = UpstreamHealth::new();
+        let launch = LaunchNarrationCache::new();
+
+        let build = |launch: &LaunchNarrationCache| {
+            DashboardSnapshot::build(
+                &connections,
+                &slots,
+                &metrics,
+                &upstream_health,
+                &CacheStatusCache::new(),
+                &CacheMetricsStore::new(),
+                &CacheMetricsStore::new(),
+                launch,
+            )
+        };
+
+        assert_eq!(build(&launch).launch, None, "nothing launched yet");
+
+        let mut narration = LaunchNarration::new("qwen3", Some("Q4_K_M".to_string()), 0);
+        narration.push(LaunchDecision::new("kv", "q8_0", "default"));
+        launch.set(narration.clone());
+
+        assert_eq!(build(&launch).launch, Some(narration));
+    }
+
     /// The snapshot must expose whatever the cache holds, so the request path
     /// and the publisher agree without further plumbing.
     #[test]
@@ -695,6 +808,7 @@ mod tests {
             &cache,
             &cache_metrics,
             &CacheMetricsStore::new(),
+            &LaunchNarrationCache::new(),
         );
         assert_eq!(before.cache, None);
 
@@ -711,6 +825,7 @@ mod tests {
             &cache,
             &cache_metrics,
             &CacheMetricsStore::new(),
+            &LaunchNarrationCache::new(),
         );
         let status = after.cache.expect("cache status present after set");
         assert!(status.needs_attention);
@@ -745,6 +860,7 @@ mod tests {
                 &cache,
                 cm,
                 &CacheMetricsStore::new(),
+                &LaunchNarrationCache::new(),
             )
             .cache
             .expect("cache status present")
@@ -794,6 +910,7 @@ mod tests {
             &cache,
             &proxied,
             &agent,
+            &LaunchNarrationCache::new(),
         );
 
         assert_eq!(snap.agent_usage.reporting_requests, 1);

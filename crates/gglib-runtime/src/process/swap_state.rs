@@ -24,20 +24,23 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use gglib_core::domain::{CacheRamHealth, classify_cache_ram};
+use gglib_core::domain::{CacheRamHealth, LaunchNarration, classify_cache_ram};
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     CatalogError, LaunchOverrides, ModelCatalogPort, ModelRuntimeError, RunningTarget,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{
+    CacheRamSetting, ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+};
 use std::path::PathBuf;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use super::core::GuiProcessCore;
 use super::health::{check_http_health, wait_for_http_health};
+use crate::launch_narration::NarrationInputs;
 use crate::process::startup_guard::StartupState;
-use crate::server_config::build_server_config;
+use crate::server_config::build_server_config_narrated;
 
 /// Currently running model state for the swap strategy.
 #[derive(Debug, Clone)]
@@ -62,6 +65,11 @@ pub struct CurrentModelState {
     /// same reason: the budget arithmetic only happens at spawn, so a later
     /// `current_model()` call has no way to recompute it.
     pub cache_ram_health: CacheRamHealth,
+    /// What this instance's launch decided (see
+    /// [`gglib_core::domain::LaunchNarration`]). Cached so the
+    /// already-running fast path can report the same explanation as the
+    /// spawn that produced it, rather than nothing.
+    pub narration: Option<LaunchNarration>,
 }
 
 /// Everything the single-model-at-a-time strategy owns.
@@ -110,13 +118,13 @@ fn resolve_launch_opts(
     num_ctx: Option<u64>,
     default_ctx: u64,
     model_server_ctx: Option<usize>,
-) -> (ServerConfigOptions, u64) {
+) -> (ServerConfigOptions, u64, ContextSizeSource) {
     let mut opts = template.overlay(per_call);
     opts.context_size = num_ctx.or(opts.context_size);
     opts.model_server_ctx = model_server_ctx;
     opts.global_default_ctx = Some(default_ctx);
-    let resolved_ctx = resolve_context_size(&opts);
-    (opts, resolved_ctx)
+    let (resolved_ctx, ctx_source) = resolve_context_size_with_source(&opts);
+    (opts, resolved_ctx, ctx_source)
 }
 
 impl SwapState {
@@ -230,7 +238,7 @@ impl SwapState {
             // configured, everything upstream of the actual `-c` flag
             // — the reuse decision, `/v1/models`, and the proxy's
             // prompt-truncation budget — silently reported the wrong number.
-            let (mut opts, resolved_ctx) = resolve_launch_opts(
+            let (mut opts, resolved_ctx, ctx_source) = resolve_launch_opts(
                 &template,
                 &per_call,
                 num_ctx,
@@ -245,11 +253,18 @@ impl SwapState {
             let cached = {
                 let guard = current.read().await;
                 guard.as_ref().and_then(|c| {
-                    (c.model_id == launch_spec.id && c.context_size == resolved_ctx)
-                        .then(|| (c.port, c.model_id, c.model_name.clone(), c.context_size))
+                    (c.model_id == launch_spec.id && c.context_size == resolved_ctx).then(|| {
+                        (
+                            c.port,
+                            c.model_id,
+                            c.model_name.clone(),
+                            c.context_size,
+                            c.narration.clone(),
+                        )
+                    })
                 })
             };
-            if let Some((port, model_id, cached_name, context_size)) = cached {
+            if let Some((port, model_id, cached_name, context_size, cached_narration)) = cached {
                 if check_http_health(port).await {
                     info!(
                         model_id = %model_id,
@@ -258,7 +273,7 @@ impl SwapState {
                         context = %context_size,
                         "Model already running with correct context"
                     );
-                    return Ok(RunningTarget::local(
+                    let mut target = RunningTarget::local(
                         port,
                         model_id,
                         cached_name,
@@ -270,7 +285,15 @@ impl SwapState {
                     .with_slot_restore_supported(
                         crate::llama::args::resolve_slot_restore(launch_spec.kv_memory_is_partial)
                             .enabled,
-                    ));
+                    );
+                    // Reused verbatim rather than re-narrated: this instance
+                    // was launched with whatever the stored narration says,
+                    // and re-resolving now against current settings would
+                    // describe a launch that never happened.
+                    if let Some(narration) = cached_narration {
+                        target = target.with_narration(narration);
+                    }
+                    return Ok(target);
                 }
                 warn!(
                     model_id = %model_id,
@@ -360,7 +383,7 @@ impl SwapState {
 
             let slot_save_path = opts.slot_save_path.clone();
 
-            let config = build_server_config(
+            let (config, capabilities) = build_server_config_narrated(
                 i64::from(launch_spec.id),
                 launch_spec.name.clone(),
                 model_path.to_path_buf(),
@@ -368,6 +391,22 @@ impl SwapState {
                 &launch_spec.tags,
                 opts,
             );
+
+            // Every decision above is now resolved, so this is the last point
+            // at which they all coexist — the narration is assembled here and
+            // then carried, never re-derived. Printed before the spawn rather
+            // than after the health check so a launch that hangs still tells
+            // the user what it was trying to do.
+            let narration = crate::launch_narration::narrate(&NarrationInputs {
+                spec: &launch_spec,
+                context: (resolved_ctx, ctx_source),
+                kv_types,
+                cache_ram: &cache_ram,
+                disk_cache_enabled: slot_save_path.is_some(),
+                slot_restore,
+                capabilities: &capabilities,
+            });
+            crate::proxy::banner::print_launch_narration(&narration);
 
             // Purge stale slot .bin files before spawning a fresh instance:
             // old slot files are incompatible with the new server process.
@@ -402,6 +441,7 @@ impl SwapState {
                     model_path: launch_spec.file_path.clone(),
                     slot_restore_supported: slot_restore.enabled,
                     cache_ram_health,
+                    narration: Some(narration.clone()),
                 });
             }
 
@@ -421,7 +461,8 @@ impl SwapState {
                 true, // fresh spawn — cache slots are stale
             )
             .with_slot_restore_supported(slot_restore.enabled)
-            .with_cache_ram_health(cache_ram_health))
+            .with_cache_ram_health(cache_ram_health)
+            .with_narration(narration))
         }
     }
 }
@@ -564,7 +605,7 @@ mod tests {
     /// launched llama-server with.
     #[test]
     fn resolve_launch_opts_applies_the_per_model_context_when_nothing_more_specific_is_set() {
-        let (opts, resolved_ctx) = resolve_launch_opts(
+        let (opts, resolved_ctx, _) = resolve_launch_opts(
             &ServerConfigOptions::default(),
             &ServerConfigOptions::default(),
             None,          // no per-request override
@@ -584,7 +625,7 @@ mod tests {
     /// refactor, only how many times it runs and who reads the result.
     #[test]
     fn resolve_launch_opts_explicit_num_ctx_beats_the_per_model_tier() {
-        let (_, resolved_ctx) = resolve_launch_opts(
+        let (_, resolved_ctx, _) = resolve_launch_opts(
             &ServerConfigOptions::default(),
             &ServerConfigOptions::default(),
             Some(8_192),
@@ -598,7 +639,7 @@ mod tests {
     /// With nothing else set, the global default is what's left.
     #[test]
     fn resolve_launch_opts_falls_back_to_the_global_default() {
-        let (_, resolved_ctx) = resolve_launch_opts(
+        let (_, resolved_ctx, _) = resolve_launch_opts(
             &ServerConfigOptions::default(),
             &ServerConfigOptions::default(),
             None,
@@ -619,7 +660,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (opts, resolved_ctx) = resolve_launch_opts(
+        let (opts, resolved_ctx, _) = resolve_launch_opts(
             &stale_template,
             &ServerConfigOptions::default(),
             None,

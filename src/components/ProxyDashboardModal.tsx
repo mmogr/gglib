@@ -22,6 +22,7 @@
 import type { FC } from 'react';
 import { Modal } from './ui/Modal';
 import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
+import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection } from './proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
 
@@ -52,6 +53,13 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
     >
       <div className="flex flex-col gap-lg">
         <ActiveConnectionsSection snapshot={snapshot} />
+
+        <section>
+          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+            Launch Decisions
+          </h3>
+          <ProxyLaunchPanel launch={snapshot?.launch} />
+        </section>
 
         <section>
           <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">Prompt Cache</h3>

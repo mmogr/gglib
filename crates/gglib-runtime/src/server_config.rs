@@ -47,8 +47,26 @@ pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use tracing::debug;
 
 use crate::llama::args::{
+    JinjaResolution, MtpResolution, ReasoningFormatResolution, ReasoningFormatSource,
     resolve_jinja_flag, resolve_kv_cache_types, resolve_mtp_args, resolve_reasoning_format,
 };
+
+/// The capability resolutions [`build_server_config`] performed, handed back
+/// so a caller can explain the launch it just configured.
+///
+/// These decisions are taken here and nowhere else (see the module docs), so
+/// this is the only place their `*Source` provenance exists. Returning it
+/// rather than re-resolving at the call site is deliberate: a second
+/// resolution that drifted would narrate a launch that never happened.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedCapabilities {
+    /// Whether `--jinja` was emitted, and why.
+    pub jinja: JinjaResolution,
+    /// The `--reasoning-format` decision, and why.
+    pub reasoning: ReasoningFormatResolution,
+    /// The MTP speculative-decoding decision, and why.
+    pub mtp: MtpResolution,
+}
 
 // =============================================================================
 // Builder
@@ -82,6 +100,22 @@ pub fn build_server_config(
     tags: &[String],
     opts: ServerConfigOptions,
 ) -> ServerConfig {
+    build_server_config_narrated(model_id, model_name, model_path, base_port, tags, opts).0
+}
+
+/// [`build_server_config`], additionally returning the capability
+/// resolutions it performed so the caller can narrate them.
+///
+/// Same translation, same single source of truth — `build_server_config` is a
+/// projection of this function that drops the explanation.
+pub fn build_server_config_narrated(
+    model_id: i64,
+    model_name: String,
+    model_path: PathBuf,
+    base_port: u16,
+    tags: &[String],
+    opts: ServerConfigOptions,
+) -> (ServerConfig, ResolvedCapabilities) {
     let mut config = ServerConfig::new(model_id, model_name, model_path, base_port);
 
     // --- Context size (4-level fallback chain) --------------------------------
@@ -100,20 +134,28 @@ pub fn build_server_config(
     }
 
     // --- Reasoning format ------------------------------------------------------
-    match opts.reasoning_format.as_deref() {
+    let reasoning = match opts.reasoning_format.as_deref() {
         Some("none") => {
             // Caller explicitly suppressed reasoning — don't set the flag.
             debug!("reasoning format explicitly suppressed by caller");
+            ReasoningFormatResolution {
+                format: None,
+                source: ReasoningFormatSource::Explicit,
+            }
         }
         Some(format) => {
             // Caller provided an explicit format string — use it directly.
             debug!(format, "using explicit reasoning format");
             config = config.with_reasoning_format(format.to_owned());
+            ReasoningFormatResolution {
+                format: Some(format.to_owned()),
+                source: ReasoningFormatSource::Explicit,
+            }
         }
         None => {
             // Auto-detect from model tags.
             let reasoning = resolve_reasoning_format(None, tags);
-            if let Some(format) = reasoning.format {
+            if let Some(format) = reasoning.format.clone() {
                 debug!(
                     format = %format,
                     source = ?reasoning.source,
@@ -121,8 +163,9 @@ pub fn build_server_config(
                 );
                 config = config.with_reasoning_format(format);
             }
+            reasoning
         }
-    }
+    };
 
     // --- Inference parameters --------------------------------------------------
     if let Some(params) = opts.inference_params {
@@ -176,7 +219,14 @@ pub fn build_server_config(
         config = config.with_mlock();
     }
 
-    config
+    (
+        config,
+        ResolvedCapabilities {
+            jinja,
+            reasoning,
+            mtp,
+        },
+    )
 }
 
 #[cfg(test)]

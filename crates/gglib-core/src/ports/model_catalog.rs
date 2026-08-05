@@ -90,6 +90,12 @@ pub struct ModelLaunchSpec {
     pub tags: Vec<String>,
     /// Model architecture (for runtime configuration).
     pub architecture: Option<String>,
+    /// Quantization label (`Q4_K_M`), when the catalog recorded one.
+    ///
+    /// Carried purely so the launch can name what it loaded — see
+    /// [`crate::domain::LaunchNarration`]. `None` for models whose GGUF
+    /// metadata did not identify a quantization.
+    pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
     /// Per-model server defaults (e.g., `context_length` for launch).

@@ -7,6 +7,7 @@ pub mod compose;
 pub mod council_runner;
 mod health;
 pub mod health_monitor;
+pub mod launch_narration;
 pub mod llama;
 pub mod pidfile;
 pub mod ports_impl;
