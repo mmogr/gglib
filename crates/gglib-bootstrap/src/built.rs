@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gglib_core::ports::{
-    DownloadManagerPort, GgufParserPort, HfClientPort, ModelRegistrarPort, ProcessRunner, Repos,
+    DownloadManagerPort, GgufParserPort, HfClientPort, ModelRegistrarPort, Repos,
 };
 use gglib_core::services::AppCore;
 use sqlx::SqlitePool;
@@ -15,8 +15,6 @@ use sqlx::SqlitePool;
 pub struct BuiltCore {
     /// Core application facade with verification service attached.
     pub app: Arc<AppCore>,
-    /// Process runner for llama-server lifecycle management.
-    pub runner: Arc<dyn ProcessRunner>,
     /// Download manager trait object.
     pub downloads: Arc<dyn DownloadManagerPort>,
     /// `HuggingFace` HTTP client.

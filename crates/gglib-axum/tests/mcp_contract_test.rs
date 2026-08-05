@@ -23,7 +23,6 @@ fn test_config() -> ServerConfig {
         port: 0,
         base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent: 1,
         max_concurrent_agent_loops: 1,
         static_dir: None,
         cors: CorsConfig::AllowAll,
@@ -37,7 +36,7 @@ async fn test_list_mcp_servers_json_structure() {
         Err(_) => return, // Skip if bootstrap fails
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let response = app
         .oneshot(
@@ -118,7 +117,7 @@ async fn test_add_mcp_server_returns_nested_structure() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::AllowAll);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
 
     let request_body = json!({
         "name": "Test Server",

@@ -18,7 +18,6 @@ gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
 gglib-gguf = { path = "../gglib-gguf" }
 gglib-hf = { path = "../gglib-hf" }
-gglib-runtime = { path = "../gglib-runtime" }
 
 # Async runtime — full features match the adapters that consume this crate
 tokio = { workspace = true }

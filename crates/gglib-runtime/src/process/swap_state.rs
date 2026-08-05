@@ -93,9 +93,15 @@ pub struct SwapState {
     pub(super) cache_ram: CacheRamSetting,
     /// The one model this state will serve, if pinned.
     ///
-    /// `Some(name)` makes every other model a hard error instead of a swap —
-    /// see [`Self::check_pinned`]. `None` is the ordinary auto-swapping proxy.
-    pub(super) pinned: Option<String>,
+    /// `Some(spec)` makes every other model a hard error instead of a swap —
+    /// see [`Self::check_pinned`] — and layers the spec's launch overrides
+    /// onto [`Self::launch_overrides`] at launch. `None` is the ordinary
+    /// auto-swapping proxy.
+    ///
+    /// Mutable at runtime (behind a lock) rather than fixed at construction:
+    /// the daemon owns one long-lived manager, and `gglib serve` pins it over
+    /// HTTP for the lifetime of one proxy run.
+    pub(super) pinned: std::sync::RwLock<Option<gglib_core::ports::PinnedSpec>>,
 }
 
 /// Resolve one launch's [`ServerConfigOptions`] and context size together.
@@ -140,20 +146,7 @@ impl SwapState {
             loading: Arc::new(std::sync::RwLock::new(None)),
             launch_overrides,
             cache_ram,
-            pinned: None,
-        }
-    }
-
-    /// Create swap state pinned to a single model.
-    pub(super) fn pinned_to(
-        model_name: impl Into<String>,
-        catalog: Arc<dyn ModelCatalogPort>,
-        launch_overrides: ServerConfigOptions,
-        cache_ram: CacheRamSetting,
-    ) -> Self {
-        Self {
-            pinned: Some(model_name.into()),
-            ..Self::new(catalog, launch_overrides, cache_ram)
+            pinned: std::sync::RwLock::new(None),
         }
     }
 
@@ -162,8 +155,18 @@ impl SwapState {
     /// The read side of [`Self::check_pinned`]: callers that want to avoid
     /// provoking a mismatch rather than handle one need to know the name up
     /// front.
-    pub(super) fn pinned_name(&self) -> Option<&str> {
-        self.pinned.as_deref()
+    pub(super) fn pinned_name(&self) -> Option<String> {
+        self.pinned
+            .read()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|p| p.name.clone()))
+    }
+
+    /// Pin this state to one model, or clear the pin.
+    pub(super) fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) {
+        if let Ok(mut guard) = self.pinned.write() {
+            *guard = pin;
+        }
     }
 
     /// Reject a request for any model other than the pinned one.
@@ -172,10 +175,10 @@ impl SwapState {
     /// fails immediately rather than queueing behind — or worse, displacing —
     /// the pinned model.
     pub(super) fn check_pinned(&self, model_name: &str) -> Result<(), ModelRuntimeError> {
-        match &self.pinned {
+        match self.pinned_name() {
             Some(expected) if expected != model_name => {
                 Err(ModelRuntimeError::PinnedModelMismatch {
-                    expected: expected.clone(),
+                    expected,
                     requested: model_name.to_owned(),
                 })
             }
@@ -201,7 +204,16 @@ impl SwapState {
     {
         let catalog = Arc::clone(&self.catalog);
         let current = Arc::clone(&self.current);
-        let template = self.launch_overrides.clone();
+        // A pin's launch overrides layer onto the standing template, winning
+        // field-wise: they are the *output* of the caller's full cascade
+        // (`UnifiedServerConfig::resolved_options`), so letting the run-wide
+        // template win would undo a cascade that has already run. Read here,
+        // synchronously, so the launch uses the pin as it stood when this
+        // startup was initiated.
+        let template = match self.pinned.read().ok().and_then(|g| g.clone()) {
+            Some(pin) => self.launch_overrides.overlay(&pin.launch_overrides),
+            None => self.launch_overrides.clone(),
+        };
         let cache_ram_setting = overrides.cache_ram.unwrap_or(self.cache_ram);
         let per_call = overrides.options;
 
@@ -517,12 +529,12 @@ mod tests {
     }
 
     fn pinned_state(model: &str) -> SwapState {
-        SwapState::pinned_to(
-            model,
-            Arc::new(StubCatalog),
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        )
+        let state = swapping_state();
+        state.set_pin(Some(gglib_core::ports::PinnedSpec {
+            name: model.to_string(),
+            launch_overrides: ServerConfigOptions::default(),
+        }));
+        state
     }
 
     fn swapping_state() -> SwapState {
@@ -574,8 +586,8 @@ mod tests {
         assert!(state.check_pinned("something-else").is_ok());
     }
 
-    /// Pinning changes only the admission check; the launch configuration a
-    /// pinned server uses must be identical to the swapping one.
+    /// Pinning changes only the admission check; the standing template a
+    /// pinned server starts from must be identical to the swapping one.
     #[test]
     fn pinning_does_not_alter_launch_configuration() {
         let template = ServerConfigOptions {
@@ -583,16 +595,44 @@ mod tests {
             cache_reuse: Some(256),
             ..Default::default()
         };
-        let state = SwapState::pinned_to(
-            "qwen2.5",
+        let state = SwapState::new(
             Arc::new(StubCatalog),
             template.clone(),
             CacheRamSetting::ExplicitMb(4096),
         );
+        state.set_pin(Some(gglib_core::ports::PinnedSpec {
+            name: "qwen2.5".to_string(),
+            launch_overrides: ServerConfigOptions::default(),
+        }));
 
         assert_eq!(state.launch_overrides.mlock, template.mlock);
         assert_eq!(state.launch_overrides.cache_reuse, template.cache_reuse);
         assert_eq!(state.cache_ram, CacheRamSetting::ExplicitMb(4096));
+    }
+
+    /// Clearing the pin restores ordinary auto-swapping admission.
+    #[test]
+    fn clearing_the_pin_restores_auto_swapping() {
+        let state = pinned_state("qwen2.5");
+        assert!(state.check_pinned("llama-3-8b").is_err());
+
+        state.set_pin(None);
+
+        assert!(state.check_pinned("llama-3-8b").is_ok());
+        assert_eq!(state.pinned_name(), None);
+    }
+
+    /// Re-pinning replaces the previous pin rather than accumulating.
+    #[test]
+    fn repinning_replaces_the_previous_pin() {
+        let state = pinned_state("qwen2.5");
+        state.set_pin(Some(gglib_core::ports::PinnedSpec {
+            name: "llama-3-8b".to_string(),
+            launch_overrides: ServerConfigOptions::default(),
+        }));
+
+        assert!(state.check_pinned("llama-3-8b").is_ok());
+        assert!(state.check_pinned("qwen2.5").is_err());
     }
 
     // ── resolve_launch_opts (#685: the context-bookkeeping desync) ─────────

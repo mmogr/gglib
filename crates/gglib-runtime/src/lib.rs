@@ -11,15 +11,12 @@ pub mod llama;
 pub mod pidfile;
 pub mod ports_impl;
 pub mod process;
-mod process_core;
 pub mod proxy;
-mod runner;
 pub mod server_config;
 pub mod system;
 pub mod unified_server_config;
 
 // Re-export the main ProcessRunner implementation
-pub use runner::LlamaServerRunner;
 
 // Re-export health utilities for direct use if needed
 pub use health::{check_http_health, wait_for_http_health};

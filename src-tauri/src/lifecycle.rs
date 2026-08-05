@@ -1,11 +1,17 @@
 //! Application lifecycle and shutdown orchestration.
+//!
+//! The daemon owns llama-server, downloads and pidfiles, so quitting the
+//! desktop app tears down almost nothing. The one exception is the
+//! in-process daemon fallback: when this app is hosting the daemon itself,
+//! quitting the app is quitting the daemon, so its ordered teardown (proxy
+//! drain, child shutdown, pidfile audit) is triggered over the API and
+//! awaited before exit.
 
 use crate::app::AppState;
-use gglib_runtime::pidfile::cleanup_orphaned_servers;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tracing::{error, info, warn};
+use tracing::info;
 
 /// Whether a shutdown has been started, so it is sequenced exactly once.
 ///
@@ -13,8 +19,7 @@ use tracing::{error, info, warn};
 /// triggering `RunEvent::ExitRequested` and `RunEvent::Exit`". That re-entry is
 /// what this flag exists to survive: the `ExitRequested` handler must know the
 /// exit it is being asked about is the one we asked for, and let it through
-/// rather than preventing it. Without the flag, `prevent_exit` cancels our own
-/// exit and the app lingers with its embedded API server already torn down.
+/// rather than preventing it.
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 /// Whether [`request_shutdown`] has already been entered.
@@ -61,90 +66,26 @@ pub fn request_shutdown(app: &AppHandle) {
     });
 }
 
-/// Perform graceful application shutdown with timeout and watchdog.
+/// Perform graceful application shutdown.
 ///
-/// # Shutdown sequence
-/// 1. Spawn watchdog thread (force exit after 10s)
-/// 2. Stop all running llama-server processes (8s timeout)
-/// 3. Cancel all active downloads
-/// 4. Run PID file audit to catch any stragglers
-/// 5. Cancel watchdog and return
+/// With an external daemon there is nothing backend-shaped to stop — the
+/// daemon and its llama-servers deliberately outlive the app. With the
+/// in-process fallback, this app *is* the daemon: ask it to shut down over
+/// the API (its own ordered teardown runs — proxy drain, graceful child
+/// stop, pidfile audit, all under its watchdog) and wait, bounded, for it
+/// to finish before letting the process exit.
 ///
-/// If cleanup exceeds 10 seconds, the watchdog will force `process::exit(1)`.
-///
-/// Reach this through [`request_shutdown`] rather than calling it directly:
-/// this function does the cleanup but nothing to guarantee it happens only
-/// once, and running it twice would abort background tasks a second time.
+/// Reach this through [`request_shutdown`] rather than calling it directly.
 async fn perform_shutdown(state: &AppState) {
-    info!("Starting hardened graceful shutdown");
-
-    // Spawn watchdog thread that will force exit after 10 seconds
-    let (watchdog_cancel_tx, mut watchdog_cancel_rx) = tokio::sync::oneshot::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(10));
-        // If we reach here, the channel wasn't cancelled = timeout
-        if watchdog_cancel_rx.try_recv().is_err() {
-            eprintln!("SHUTDOWN WATCHDOG: Cleanup exceeded 10 seconds - forcing exit");
-            std::process::exit(1);
-        }
-    });
-
-    // Wrap cleanup in 8-second timeout (leaves 2s buffer before watchdog)
-    let cleanup_result =
-        tokio::time::timeout(Duration::from_secs(8), parallel_cleanup(state)).await;
-
-    match cleanup_result {
-        Ok(Ok(())) => info!("Cleanup completed successfully"),
-        Ok(Err(e)) => warn!("Cleanup completed with errors: {}", e),
-        Err(_) => error!("Cleanup timed out after 8 seconds - proceeding to audit"),
+    if !state.daemon.hosted_in_process {
+        info!("External daemon stays running - nothing to tear down");
+        return;
     }
 
-    // Always run PID file audit as final safety net
-    info!("Running final PID file audit");
-    if let Err(e) = cleanup_orphaned_servers().await {
-        error!("PID file audit failed: {}", e);
-    }
-
-    // Cancel watchdog - we completed in time
-    let _ = watchdog_cancel_tx.send(());
-
-    info!("Hardened graceful shutdown complete");
-}
-
-/// Perform parallel cleanup of servers and downloads.
-async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
-    info!("Stopping all llama-server processes");
-
-    // Abort background tasks first to prevent new events
-    {
-        let mut tasks = state.background_tasks.write().await;
-
-        if let Some(server_task) = tasks.embedded_server.take() {
-            info!("Aborting embedded API server task");
-            server_task.abort();
-        }
-
-        if let Some(log_task) = tasks.log_emitter.take() {
-            info!("Aborting server log emitter task");
-            log_task.abort();
-        }
-    }
-
-    // Run server stop and download cancel in parallel
-    let (servers_result, _) = tokio::join!(state.servers.stop_all(), state.downloads.cancel_all());
-
-    // Map server errors to string
-    servers_result.map_err(|e| format!("Failed to stop servers: {}", e))
-}
-
-/// Perform startup cleanup of orphaned processes.
-///
-/// Should be called early in the setup phase, before any servers are started.
-pub async fn startup_cleanup() {
-    info!("Performing startup orphan cleanup");
-    if let Err(e) = cleanup_orphaned_servers().await {
-        tracing::warn!("Error during startup orphan cleanup: {}", e);
-    }
+    info!("Hosted daemon: requesting its ordered teardown before exit");
+    state.daemon.request_shutdown().await;
+    state.daemon.wait_for_exit(Duration::from_secs(12)).await;
+    info!("Hosted daemon teardown complete");
 }
 
 #[cfg(test)]

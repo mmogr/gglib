@@ -20,7 +20,6 @@ fn test_config() -> ServerConfig {
         port: 0,
         base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent: 1,
         max_concurrent_agent_loops: 1,
         static_dir: None,
         cors: CorsConfig::LocalOnly,
@@ -34,7 +33,7 @@ async fn local_only_rejects_remote_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -64,7 +63,7 @@ async fn local_only_allows_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -95,7 +94,7 @@ async fn local_only_allows_127_0_0_1_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -121,7 +120,7 @@ async fn local_only_allows_ipv6_localhost() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(
@@ -155,7 +154,7 @@ async fn local_only_allows_tauri_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(ctx, &CorsConfig::LocalOnly);
+    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
 
     let response = app
         .oneshot(

@@ -1,12 +1,13 @@
 /**
- * Server logs utilities
- * TRANSPORT_EXCEPTION: Uses Tauri invoke/events for server log streaming.
- * UI components should import from 'services/platform' rather than checking isTauriApp directly.
+ * Server logs utilities.
+ *
+ * Logs live on the gglib daemon in every mode, so both the snapshot and the
+ * live stream go over HTTP/SSE — the desktop WebView uses the same endpoints
+ * a browser tab does.
  */
 
 import { appLogger } from './index';
 import { getApiBaseUrl } from '../../config/api';
-import { isDesktop } from './detect';
 
 export interface ServerLogEntry {
   timestamp: number;
@@ -44,12 +45,6 @@ function normalizeServerLogSnapshot(payload: unknown): ServerLogEntry[] {
  * Get initial server logs for a specific port.
  */
 export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
-  if (isDesktop()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<ServerLogEntry[]>('get_server_logs', { port });
-  }
-  
-  // Web mode: fetch from REST API
   const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/servers/${port}/logs`);
   if (response.ok) {
@@ -67,15 +62,6 @@ export async function listenToServerLogs(
   port: number,
   callback: (entry: ServerLogEntry) => void
 ): Promise<() => void> {
-  if (isDesktop()) {
-    const { listen } = await import('@tauri-apps/api/event');
-    const unlisten = await listen<ServerLogEntry>('server-log', (event) => {
-      callback(event.payload);
-    });
-    return unlisten;
-  }
-  
-  // Web mode: use SSE
   const baseUrl = getApiBaseUrl();
   const eventSource = new EventSource(`${baseUrl}/api/servers/${port}/logs/stream`);
   

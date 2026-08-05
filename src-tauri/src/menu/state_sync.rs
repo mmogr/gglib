@@ -53,9 +53,21 @@ async fn sync_app_menu(
     let selected_id = *state.selected_model_id.read().await;
 
     // A selected model with a running server enables Stop rather than Start.
+    // Read from the daemon — the owner of every llama-server.
     let selected_model_server_active = if let Some(id) = selected_id {
-        let servers = state.servers.list_servers().await;
-        servers.iter().any(|s| s.model_id == id)
+        state
+            .daemon
+            .get_json("/api/servers")
+            .await
+            .ok()
+            .and_then(|v| {
+                v.as_array().map(|servers| {
+                    servers
+                        .iter()
+                        .any(|s| s.get("model_id").and_then(serde_json::Value::as_i64) == Some(id))
+                })
+            })
+            .unwrap_or(false)
     } else {
         false
     };

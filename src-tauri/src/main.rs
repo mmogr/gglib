@@ -4,21 +4,20 @@
 mod app;
 mod autostart;
 mod commands;
+mod daemon;
 mod dock;
 mod lifecycle;
 mod menu;
 mod proxy_actions;
 mod tray;
 
+use std::sync::Arc;
+
 use app::AppState;
 use app::events::{emit_or_log, names};
+use daemon::Daemon;
 use dotenvy::dotenv;
-use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
-use gglib_download::cli_exec::preflight_fast_helper;
-use gglib_runtime::process::get_log_manager;
-use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
 use menu::state_sync::sync_all_state_logged;
-use std::sync::Arc;
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
 use tauri::Wry;
@@ -45,103 +44,25 @@ fn main() {
             Some(vec![autostart::LOGIN_ITEM_FLAG]),
         ))
         .setup(move |app| {
-            // Bootstrap inside setup() where we have AppHandle for real event emission
-            let config = TauriConfig::with_defaults()
-                .expect("Failed to create Tauri config");
-
-            let app_handle = app.handle().clone();
-            let ctx = tauri::async_runtime::block_on(async {
-                bootstrap(config, app_handle).await
-            }).expect("Failed to bootstrap application");
-
-            // Shared with AppState so proxy changes driven from the tray
-            // broadcast the same lifecycle events an HTTP call would.
-            let sse = Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults());
-
-            // Build AxumContext for the embedded server using the 7 domain ops from ctx
-            let axum_ctx = gglib_axum::AxumContext {
-                models: ctx.models.clone(),
-                servers: ctx.servers.clone(),
-                downloads: ctx.downloads.clone(),
-                settings: ctx.settings.clone(),
-                mcp_ops: ctx.mcp_ops.clone(),
-                proxy: ctx.proxy.clone(),
-                setup: ctx.setup.clone(),
-                core: ctx.app.clone(),
-                mcp: ctx.mcp.clone(),
-                hf_client: ctx.hf_client.clone(),
-                sse: sse.clone(),
-                http_client: reqwest::Client::new(),
-                agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
-                bench_repo: ctx.bench_repo.clone(),
-                benchmark: ctx.benchmark.clone(),
-                runtime: ctx.runtime.clone(),
-                catalog: ctx.catalog.clone(),
-            };
-
-            // Start embedded API server with auth and ephemeral port
-            let config = EmbeddedServerConfig {
-                cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
-            };
-
-            let (embedded_api, server_handle) = tauri::async_runtime::block_on(async {
-                start_embedded_server(axum_ctx, config)
-                    .await
-                    .expect("Failed to start embedded API server")
-            });
-
-            // Create and manage app state
-            let app_state = AppState::new(
-                ctx.servers.clone(),
-                ctx.downloads.clone(),
-                ctx.proxy.clone(),
-                ctx.app.clone(),
-                embedded_api,
-                sse,
-            );
-
-            // Store the embedded server handle for cleanup
-            {
-                let tasks = app_state.background_tasks.clone();
-                tauri::async_runtime::block_on(async move {
-                    tasks.write().await.embedded_server = Some(tauri::async_runtime::JoinHandle::Tokio(server_handle));
-                });
-            }
-
+            // The daemon owns the backend: connect to a running one, launch
+            // `gglib daemon run` detached, or — bundle-only fallback — host
+            // the daemon composition in this process behind the same lock.
+            let daemon = tauri::async_runtime::block_on(Daemon::connect_or_launch())
+                .expect("Failed to reach or start the gglib daemon");
+            let hosted = daemon.hosted_in_process;
+            let app_state = AppState::new(Arc::new(daemon));
             app.manage(app_state);
+            info!(hosted_in_process = hosted, "daemon connection established");
 
-            // Download system init: report the optional hf_xet accelerator.
-            //
-            // Downloads themselves need nothing here — they run natively over
-            // HTTP. So the subsystem is always ready, and a missing or broken
-            // Python is an unavailable accelerator, not an error state: it is
-            // logged, not surfaced as a failure the user has to act on.
-            {
-                let app_handle_for_init = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    match preflight_fast_helper().await {
-                        Ok(python_exe) => {
-                            info!(python = %python_exe, "hf_xet accelerator preflight OK");
-                        }
-                        Err(e) => {
-                            info!(
-                                error = %e,
-                                "hf_xet accelerator unavailable; downloads will use the native HTTP path"
-                            );
-                        }
-                    }
-                    emit_or_log(&app_handle_for_init, names::DOWNLOAD_SYSTEM_READY, true);
-                });
-            }
-
-            // Perform startup orphan cleanup
-            tauri::async_runtime::block_on(lifecycle::startup_cleanup());
+            // Downloads run on the daemon and need nothing provisioned in
+            // this process, so the subsystem is ready by construction.
+            emit_or_log(app.handle(), names::DOWNLOAD_SYSTEM_READY, true);
 
             // Continue with rest of setup
             setup_app(app)?;
 
-            // Apply the always-on proxy settings once the window exists, so a
-            // slow or failing start delays nothing the user is waiting on.
+            // Register/unregister the login item to match settings once the
+            // window exists. (Proxy autostart is the daemon's job now.)
             {
                 let handle_for_autostart = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -169,15 +90,11 @@ fn main() {
                 let app_handle = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if close_to_tray_enabled(&app_handle).await {
-                        // Nothing is torn down here on purpose: the embedded
-                        // API server has to outlive the window, or the tray
-                        // panel would be left talking to a dead port.
-                        //
-                        // The window is already hidden, so dropping out of the
-                        // Dock now leaves gglib living entirely in the menu
-                        // bar rather than looking like an app with no windows.
+                        // Nothing is torn down here on purpose: the daemon
+                        // outlives the window, so the tray panel keeps a
+                        // live API to talk to.
                         dock::hide(&app_handle);
-                        info!("Window closed to tray - proxy left running");
+                        info!("Window closed to tray - daemon left running");
                         return;
                     }
 
@@ -186,14 +103,11 @@ fn main() {
                 });
             }
             // Dismiss the panel when it loses focus, the way a menu does.
-            tauri::WindowEvent::Focused(false)
-                if window.label() == tray::window::PANEL_LABEL =>
-            {
+            tauri::WindowEvent::Focused(false) if window.label() == tray::window::PANEL_LABEL => {
                 let _ = window.hide();
             }
             _ => {}
-        })
-        ;
+        });
 
     #[cfg(target_os = "macos")]
     let builder = builder.on_menu_event(menu::handlers::handle_menu_event);
@@ -202,8 +116,6 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // API discovery
             commands::util::get_embedded_api_info,
-            // TRANSPORT_EXCEPTION: Desktop log snapshot (web uses HTTP)
-            commands::util::get_server_logs,
             // OS integration: shell
             commands::util::open_url,
             // OS integration: menu sync
@@ -223,9 +135,8 @@ fn main() {
             match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     // The exit `request_shutdown` itself asks for comes back
-                    // through here. Preventing that one is what used to strand
-                    // the app: alive, but with its embedded API server already
-                    // aborted, so every window's HTTP call failed from then on.
+                    // through here; preventing that one is what used to
+                    // strand the app.
                     if !lifecycle::should_prevent_exit(lifecycle::is_shutting_down()) {
                         info!("Shutdown complete - letting the app exit");
                         return;
@@ -261,10 +172,11 @@ fn main() {
 /// Whether closing the window should hide to the tray instead of quitting.
 ///
 /// Read at close time rather than cached at startup, so toggling the setting
-/// takes effect on the very next close.
+/// takes effect on the very next close. Read through the daemon: settings
+/// belong to the backend, and the backend is the daemon now.
 async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
     let state: tauri::State<AppState> = app.state();
-    match state.core.settings().get().await {
+    match state.daemon.settings().await {
         Ok(settings) => settings.close_to_tray == Some(true),
         Err(e) => {
             // Falling back to quitting keeps the historical behaviour; a
@@ -308,10 +220,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Tray panel placement left to the compositor");
     }
 
-    // The main window is declared hidden, so something has to show it. Done
-    // here rather than in the `autostart::apply` task below because that one
-    // also starts the proxy, and the window should not wait behind that.
-    //
+    // The main window is declared hidden, so something has to show it.
     // After the tray build, never before: whether there is a tray icon decides
     // whether staying hidden is recoverable.
     tauri::async_runtime::block_on(autostart::apply_initial_visibility(&handle, tray_available));
@@ -377,47 +286,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 error!(error = %e, "Failed to build empty app menu");
             }
         }
-    }
-
-    // Spawn server log event emitter
-    let app_handle = app.handle().clone();
-    let state: tauri::State<AppState> = app.state();
-    let tasks = state.background_tasks.clone();
-
-    let log_task = tauri::async_runtime::spawn(async move {
-        let log_manager = get_log_manager();
-        let mut receiver = log_manager.subscribe();
-
-        loop {
-            match receiver.recv().await {
-                Ok(entry) => {
-                    emit_or_log(&app_handle, names::SERVER_LOG, &entry);
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    debug!(skipped = %n, "Server log receiver lagged");
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                    debug!("Server log channel closed");
-                    break;
-                }
-            }
-        }
-    });
-
-    // Store the log task handle for cleanup
-    tasks.blocking_write().log_emitter = Some(log_task);
-
-    // NOTE: Download events are now wired via AppEventBridge in bootstrap()
-    // The TauriEventEmitter broadcasts DownloadEvent to the frontend automatically
-
-    // Emit server:snapshot on app init to seed frontend registry
-    {
-        let state: tauri::State<AppState> = app.state();
-        let servers = state.servers.clone();
-
-        tauri::async_runtime::spawn(async move {
-            servers.emit_initial_snapshot().await;
-        });
     }
 
     Ok(())

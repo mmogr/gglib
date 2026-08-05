@@ -362,16 +362,55 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// the mode `gglib serve` runs in. `None` is the ordinary auto-swapping
     /// runtime.
     ///
-    /// Synchronous because pinning is fixed when the runtime is constructed
-    /// and never changes afterwards, unlike [`Self::current_model`], which
-    /// reports live process state.
+    /// Synchronous because the pin is plain shared state, unlike
+    /// [`Self::current_model`], which reports live process state. Owned
+    /// rather than borrowed because the pin can change at runtime (see
+    /// [`Self::set_pin`]) — a borrow could not outlive the lock guarding it.
     ///
     /// Defaults to unpinned so test doubles and remote backends need not
     /// implement it. Callers use it to avoid offering a model that would only
     /// be refused — `/v1/models` being the motivating case.
-    fn pinned_model(&self) -> Option<&str> {
+    fn pinned_model(&self) -> Option<String> {
         None
     }
+
+    /// Pin this runtime to a single model, or clear the pin.
+    ///
+    /// `Some(spec)` makes every request for another model fail with
+    /// [`ModelRuntimeError::PinnedModelMismatch`] instead of swapping; the
+    /// spec's launch overrides are layered onto the runtime's standing
+    /// template for the pinned model's launches. `None` restores ordinary
+    /// auto-swapping. This is how `gglib serve` reaches the daemon's shared
+    /// runtime: the pin travels over `POST /api/proxy/start` rather than
+    /// being fixed at construction.
+    ///
+    /// # Errors
+    ///
+    /// The default refuses, so a runtime that cannot honour a pin (test
+    /// doubles, remote backends) fails loudly instead of silently serving
+    /// every model against the caller's explicit instruction.
+    fn set_pin(&self, pin: Option<PinnedSpec>) -> Result<(), ModelRuntimeError> {
+        let _ = pin;
+        Err(ModelRuntimeError::Internal(
+            "this runtime does not support pinning".to_string(),
+        ))
+    }
+}
+
+/// A runtime pin: the one model a runtime will serve, plus how to launch it.
+///
+/// Carried by [`ModelRuntimePort::set_pin`] and serialized inside the
+/// daemon's `POST /api/proxy/start` body, which is why it derives serde.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct PinnedSpec {
+    /// Name clients must address the model by. Matched exactly.
+    pub name: String,
+    /// Standing launch options for the pinned model, already resolved
+    /// through the caller's cascade — layered onto the runtime's template at
+    /// launch, winning field-wise (the cascade has already run; the template
+    /// must not undo it).
+    #[serde(default)]
+    pub launch_overrides: ServerConfigOptions,
 }
 
 /// A [`ModelRuntimePort`] that never has anything running.

@@ -53,7 +53,7 @@ impl ModelRuntimePort for NoopRuntime {
 /// Runtime port that reports itself pinned to one model.
 ///
 /// The read side of `gglib serve`: what a caller sees when the manager was
-/// built with `ProcessManager::new_pinned`. It does not enforce the pin —
+/// pinned via `ProcessManager::set_pin`. It does not enforce the pin —
 /// that guard lives in `gglib-runtime` and is tested there — so a test can
 /// tell the difference between "not advertised" and "refused".
 #[derive(Debug)]
@@ -78,8 +78,8 @@ impl ModelRuntimePort for PinnedRuntime {
         Ok(())
     }
 
-    fn pinned_model(&self) -> Option<&str> {
-        Some(self.0)
+    fn pinned_model(&self) -> Option<String> {
+        Some(self.0.to_string())
     }
 }
 
@@ -120,8 +120,8 @@ impl ModelRuntimePort for EnforcingPinnedRuntime {
         Ok(())
     }
 
-    fn pinned_model(&self) -> Option<&str> {
-        Some(self.0)
+    fn pinned_model(&self) -> Option<String> {
+        Some(self.0.to_string())
     }
 }
 
@@ -338,8 +338,8 @@ impl ModelRuntimePort for FixedUpstream {
         Ok(())
     }
 
-    fn pinned_model(&self) -> Option<&str> {
-        self.pinned.then_some(self.model_name.as_str())
+    fn pinned_model(&self) -> Option<String> {
+        self.pinned.then(|| self.model_name.clone())
     }
 }
 

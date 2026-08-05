@@ -1,4 +1,4 @@
-//! mDNS/DNS-SD service advertising for `gglib web --share-lan`.
+//! mDNS/DNS-SD service advertising for `gglib daemon run --share-lan`.
 //!
 //! Registers `_gglib._tcp.local.` so the server is reachable at `gglib.local`
 //! from any device on the LAN without anyone having to look up an IP address.
@@ -10,6 +10,17 @@
 //! continues.
 
 use mdns_sd::{ServiceDaemon, ServiceInfo};
+
+/// Whether `host` is a wildcard bind (`0.0.0.0` or `::`).
+///
+/// Moved here from the old `gglib web` bind resolver when LAN sharing became
+/// a daemon concern.
+fn is_wildcard(host: &str) -> bool {
+    matches!(
+        host.parse::<std::net::IpAddr>(),
+        Ok(addr) if addr.is_unspecified()
+    )
+}
 
 /// DNS-SD service type for GGLib web servers.
 const SERVICE_TYPE: &str = "_gglib._tcp.local.";
@@ -53,7 +64,7 @@ impl MdnsAdvertiser {
 
         // A wildcard address (`0.0.0.0` or `::`) means "every interface" — hand
         // address selection to mdns-sd rather than guessing a primary NIC.
-        let service = if super::bind::is_wildcard(host) {
+        let service = if is_wildcard(host) {
             ServiceInfo::new(SERVICE_TYPE, INSTANCE_NAME, HOSTNAME, "", port, None)
                 .map(ServiceInfo::enable_addr_auto)
         } else {

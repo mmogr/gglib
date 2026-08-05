@@ -1,24 +1,13 @@
 //! CLI handler for `gglib benchmark`.
 //!
-//! Routes to a local `BenchmarkOps` instance when no daemon is reachable, or
-//! proxies HTTP requests to the daemon's `/api/benchmark/…` routes otherwise.
-//!
-//! # Daemon detection
-//!
-//! A lightweight probe is sent to `GET http://127.0.0.1:{proxy_port}/health`
-//! with a 500 ms timeout.  A response whose JSON body contains
-//! `{"service":"gglib-daemon","status":"ok"}` is treated as a live daemon.
-//! Any other response (timeout, non-200, wrong JSON shape) falls back to the
-//! standalone local path.
-
-use std::sync::Arc;
-use std::time::Duration;
+//! Mutating subcommands (compare, perf, tune) run on the gglib daemon — the
+//! one process that owns llama-server — via its `/api/benchmark/…` SSE
+//! routes; this handler streams the events back and renders them exactly as
+//! the old in-process channel consumer did. Read-only subcommands (list,
+//! show, model) stay local: they are DB reads.
 
 use anyhow::{Context as _, Result, anyhow};
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
 
-use gglib_app_services::{BenchmarkDeps, BenchmarkOps};
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
@@ -27,102 +16,16 @@ use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
     PerfConfig,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
-use gglib_runtime::RuntimePortImpl;
-use gglib_runtime::process::ProcessManager;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
+use crate::daemon_client;
 use crate::presentation::style;
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
-/// Route a `BenchmarkCommand` to the appropriate local or daemon handler.
+/// Route a `BenchmarkCommand` to its handler.
 pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
-    // Read-only subcommands never need daemon proxy — serve locally always.
-    match &cmd {
-        BenchmarkCommand::List { limit } => return cmd_list(ctx, *limit).await,
-        BenchmarkCommand::Show { run_id } => return cmd_show(ctx, *run_id).await,
-        BenchmarkCommand::Model { model_id } => return cmd_model(ctx, *model_id).await,
-        _ => {}
-    }
-
-    // For mutating subcommands (compare, perf) check for a live daemon first.
-    if let Some(port) = detect_daemon(ctx).await {
-        tracing::debug!("daemon detected on port {port}; proxying benchmark request");
-        return proxy_to_daemon(ctx, port, &cmd).await;
-    }
-
-    // No daemon — run locally.
-    local_dispatch(ctx, cmd).await
-}
-
-// ─── Daemon detection ─────────────────────────────────────────────────────────
-
-#[derive(serde::Deserialize)]
-struct HealthResponse {
-    service: String,
-    status: String,
-}
-
-/// Probe `GET http://127.0.0.1:{port}/health`.
-///
-/// Returns `Some(port)` only if the JSON response confirms a live
-/// `gglib-daemon` with `status == "ok"`.  Any failure returns `None`.
-async fn detect_daemon(ctx: &CliContext) -> Option<u16> {
-    let settings = ctx.app.settings().get().await.ok()?;
-    let port = settings.effective_proxy_port();
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .ok()?;
-    let resp = client
-        .get(format!("http://127.0.0.1:{port}/health"))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let health: HealthResponse = resp.json().await.ok()?;
-    if health.service == "gglib-daemon" && health.status == "ok" {
-        Some(port)
-    } else {
-        None
-    }
-}
-
-// ─── Daemon proxy ─────────────────────────────────────────────────────────────
-
-/// Proxy a mutating benchmark command to the running daemon (Phase 4 routes).
-///
-/// The daemon's HTTP benchmark endpoints are added in Phase 4.  Until then
-/// this path warns and falls back to the local runner so the CLI is always
-/// usable regardless of Phase 4 status.
-async fn proxy_to_daemon(ctx: &CliContext, port: u16, cmd: &BenchmarkCommand) -> Result<()> {
-    tracing::debug!("proxy_to_daemon port={port}");
-    // Phase 4 will replace this body with proper HTTP streaming.
-    // For now fall through to the local path so the CLI works end-to-end.
-    eprintln!(
-        "{}note:{} daemon detected but HTTP benchmark proxy not yet implemented — \
-         running locally",
-        style::WARNING,
-        style::RESET
-    );
-    let _ = port;
-    local_dispatch(ctx, cmd.clone()).await
-}
-
-// ─── Local execution ──────────────────────────────────────────────────────────
-
-async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
-    // Cleanup any zombie runs from a prior crash.
-    if let Err(e) = ctx.bench_repo.cleanup_zombie_runs().await {
-        tracing::warn!("zombie benchmark run cleanup failed: {e}");
-    }
-
-    let ops = build_ops(ctx)?;
-
     match cmd {
         BenchmarkCommand::Compare {
             prompt,
@@ -134,7 +37,6 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
         } => {
             cmd_compare(
                 ctx,
-                ops,
                 prompt,
                 models,
                 system_prompt,
@@ -150,7 +52,7 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             pp,
             tg,
             reps,
-        } => cmd_perf(ctx, ops, models, pp, tg, reps).await,
+        } => cmd_perf(ctx, models, pp, tg, reps).await,
 
         BenchmarkCommand::Tune {
             model,
@@ -168,7 +70,6 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
         } => {
             cmd_tune(
                 ctx,
-                ops,
                 model,
                 sweep,
                 task_suite,
@@ -185,38 +86,37 @@ async fn local_dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             .await
         }
 
-        // Read-only commands are handled before reaching this path.
+        // Read-only commands: plain DB reads, no daemon involved.
         BenchmarkCommand::List { limit } => cmd_list(ctx, limit).await,
         BenchmarkCommand::Show { run_id } => cmd_show(ctx, run_id).await,
         BenchmarkCommand::Model { model_id } => cmd_model(ctx, model_id).await,
     }
 }
 
-/// Build `BenchmarkOps` for the local path.
-fn build_ops(ctx: &CliContext) -> Result<BenchmarkOps> {
-    let catalog = Arc::clone(&ctx.catalog);
-    let process_mgr = Arc::new(ProcessManager::new_single_swap(
-        ctx.base_port,
-        ctx.llama_server_path.to_string_lossy().into_owned(),
-        catalog,
-        ServerConfigOptions::default(),
-        // Benchmarks must never gain a host-RAM prompt cache: it would perturb
-        // prefill timings and RAM footprint. Explicitly disabled rather than
-        // left unset — an unset flag would leave llama-server's own 8192 MiB
-        // default cache active, which is exactly what this must avoid.
-        CacheRamSetting::ExplicitMb(0),
-    ));
-    let runtime = Arc::new(RuntimePortImpl::new(process_mgr));
-    let http_client =
-        BenchmarkDeps::build_http_client().context("failed to build benchmark HTTP client")?;
-
-    Ok(BenchmarkOps::new(BenchmarkDeps {
-        model_repo: ctx.model_repo.clone(),
-        runtime,
-        bench_repo: ctx.bench_repo.clone(),
-        http_client,
-        settings_repo: ctx.settings_repo.clone(),
-    }))
+/// Run one benchmark on the daemon, rendering its SSE events as they land.
+///
+/// Dropping the stream (Ctrl-C aborts the future) disconnects the request,
+/// which is the daemon's cancellation signal — the run stops at the next
+/// model boundary and VRAM is freed, exactly as the old in-process
+/// `CancellationToken` did.
+async fn run_on_daemon(
+    path: &str,
+    body: &impl serde::Serialize,
+    mut on_event: impl FnMut(&BenchmarkEvent),
+) -> Result<()> {
+    let handle = daemon_client::ensure_daemon().await?;
+    let url = format!("{}{path}", daemon_client::base_url());
+    let stream =
+        daemon_client::sse::stream_json::<BenchmarkEvent, _>(&handle.client, &url, body, |event| {
+            on_event(&event)
+        });
+    tokio::select! {
+        result = stream => result,
+        _ = tokio::signal::ctrl_c() => {
+            eprintln!("\n  cancelled — the daemon stops the run at the next model boundary");
+            Ok(())
+        }
+    }
 }
 
 // ─── Resolve model identifier → i64 ──────────────────────────────────────────
@@ -240,7 +140,6 @@ async fn resolve_model_ids(ctx: &CliContext, identifiers: &[String]) -> Result<V
 #[allow(clippy::too_many_arguments)]
 async fn cmd_compare(
     ctx: &CliContext,
-    ops: BenchmarkOps,
     prompt: String,
     models: Vec<String>,
     system_prompt: Option<String>,
@@ -271,36 +170,13 @@ async fn cmd_compare(
     eprintln!("  Models : {}", models.join(", "));
     style::print_banner_close();
 
-    let cancel = CancellationToken::new();
-    let (tx, mut rx) = mpsc::channel::<BenchmarkEvent>(256);
-
-    // Ctrl-C → cancel
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            cancel_clone.cancel();
-        }
-    });
-
-    let run_task = tokio::spawn(async move { ops.run_compare(config, tx, cancel).await });
-
-    while let Some(event) = rx.recv().await {
-        render_event(&event);
-    }
-
-    run_task
-        .await
-        .map_err(|e| anyhow!("benchmark task panicked: {e}"))?
-        .context("benchmark compare failed")?;
-
-    Ok(())
+    run_on_daemon("/api/benchmark/compare", &config, render_event).await
 }
 
 // ─── benchmark perf ───────────────────────────────────────────────────────────
 
 async fn cmd_perf(
     ctx: &CliContext,
-    ops: BenchmarkOps,
     models: Vec<String>,
     pp: u32,
     tg: u32,
@@ -322,28 +198,7 @@ async fn cmd_perf(
     );
     style::print_banner_close();
 
-    let cancel = CancellationToken::new();
-    let (tx, mut rx) = mpsc::channel::<BenchmarkEvent>(64);
-
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            cancel_clone.cancel();
-        }
-    });
-
-    let run_task = tokio::spawn(async move { ops.run_perf(config, tx, cancel).await });
-
-    while let Some(event) = rx.recv().await {
-        render_event(&event);
-    }
-
-    run_task
-        .await
-        .map_err(|e| anyhow!("benchmark task panicked: {e}"))?
-        .context("benchmark perf failed")?;
-
-    Ok(())
+    run_on_daemon("/api/benchmark/perf", &config, render_event).await
 }
 
 // ─── benchmark tune ───────────────────────────────────────────────────────────
@@ -351,7 +206,6 @@ async fn cmd_perf(
 #[allow(clippy::too_many_arguments)]
 async fn cmd_tune(
     ctx: &CliContext,
-    ops: BenchmarkOps,
     model: String,
     sweep: Vec<String>,
     task_suite: String,
@@ -398,21 +252,9 @@ async fn cmd_tune(
     eprintln!("  Suite : {task_suite}");
     style::print_banner_close();
 
-    let cancel = CancellationToken::new();
-    let (tx, mut rx) = mpsc::channel::<BenchmarkEvent>(256);
-
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            cancel_clone.cancel();
-        }
-    });
-
-    let run_task = tokio::spawn(async move { ops.run_tune(config, tx, cancel).await });
-
     let mut best: Option<TuneCandidateResult> = None;
-    while let Some(event) = rx.recv().await {
-        if let BenchmarkEvent::TuneCandidateComplete { result } = &event
+    run_on_daemon("/api/benchmark/tune", &config, |event| {
+        if let BenchmarkEvent::TuneCandidateComplete { result } = event
             && !result.pruned
             && best
                 .as_ref()
@@ -420,13 +262,9 @@ async fn cmd_tune(
         {
             best = Some(result.clone());
         }
-        render_event(&event);
-    }
-
-    run_task
-        .await
-        .map_err(|e| anyhow!("benchmark task panicked: {e}"))?
-        .context("benchmark tune failed")?;
+        render_event(event);
+    })
+    .await?;
 
     if apply_best {
         match best {

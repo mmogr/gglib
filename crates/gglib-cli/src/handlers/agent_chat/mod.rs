@@ -68,17 +68,11 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         },
     };
     let params = config::AgentSessionParams::from(&args);
-    let (agent, maybe_handle) = config::compose(ctx, &params, None, sampling, &banner).await?;
+    let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
 
-    let result = repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await;
-
-    if let Some(ref handle) = maybe_handle
-        && let Err(e) = ctx.runner.stop(handle).await
-    {
-        tracing::warn!("failed to stop llama-server after agent chat: {e}");
-    }
-
-    result
+    // The llama-server belongs to the daemon and stays warm for the next
+    // session; nothing to stop here.
+    repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await
 }
 
 /// Create a new conversation for a fresh session.

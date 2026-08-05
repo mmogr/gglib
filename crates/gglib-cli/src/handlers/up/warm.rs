@@ -1,8 +1,7 @@
 //! Step 5: prove the endpoint works, then say how to connect to it.
 //!
-//! This runs as a task alongside the proxy, because `start_proxy_standalone`
-//! does not return until shutdown. It talks to the endpoint over HTTP like any
-//! other client rather than reaching into the runtime: the point is to
+//! The proxy runs on the daemon, so this talks to the endpoint over HTTP like
+//! any other client rather than reaching into a runtime: the point is to
 //! exercise the router, the contention gate, model resolution and the forward
 //! pipeline, so that "the endpoint works" is demonstrated rather than assumed.
 //!
@@ -79,9 +78,8 @@ pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
 
 /// Poll `/health` until the listener answers.
 ///
-/// Polling rather than being signalled: the supervisor's bind happens inside
-/// `start_proxy_standalone`, which is busy blocking until shutdown and has no
-/// readiness channel to offer.
+/// Polling rather than being signalled: the bind happens inside the daemon,
+/// which offers no readiness channel to this process.
 async fn wait_for_bind(client: &reqwest::Client, addr: SocketAddr) -> bool {
     let deadline = Instant::now() + BIND_TIMEOUT;
     let url = format!("http://{addr}/health");
