@@ -29,7 +29,7 @@ export const Label: React.FC<LabelProps> = ({
     <label
       className={cn(
         'font-semibold',
-        muted ? 'text-text-secondary uppercase' : 'text-text',
+        muted ? 'text-text-secondary uppercase tracking-wider' : 'text-text',
         sizeClasses[size],
         className,
       )}

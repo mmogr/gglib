@@ -422,7 +422,7 @@ export default function ChatPage({
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-[4px] flex items-center justify-center z-[1000]"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-modal-backdrop"
           onMouseDown={(e) => e.target === e.currentTarget && !creatingConversation && setIsNewConversationModalOpen(false)}
         >
           <div className="bg-surface border border-border rounded-lg p-xl w-[min(450px,90vw)] max-h-[90vh] overflow-y-auto flex flex-col gap-md">

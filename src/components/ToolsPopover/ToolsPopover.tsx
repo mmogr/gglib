@@ -130,7 +130,7 @@ export const ToolsPopover: React.FC = () => {
       </Button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
+        <div className="absolute top-full right-0 mt-1 bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
           <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-border bg-surface-elevated">
             <span className="text-sm font-semibold text-text-primary">
               <Icon icon={Wrench} size={14} />

@@ -164,7 +164,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
       : null;
 
   return (
-    <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 md:h-full md:min-h-0 md:border-b-0 md:border-r">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative tabular-nums flex-1 md:h-full md:min-h-0 md:border-b-0 md:border-r">
       <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
         <div className="mb-md">
@@ -177,7 +177,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
         <div className="flex items-start justify-between gap-md">
           <Stack gap="xs">
-            <span className="text-xs text-text-muted uppercase tracking-[0.05em]">Server running</span>
+            <span className="text-xs text-text-muted uppercase tracking-wider">Server running</span>
             <h2 className="m-0 text-lg font-semibold text-text break-words">{modelName}</h2>
           </Stack>
         </div>
@@ -187,7 +187,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
         <div className="flex flex-col gap-lg">
           {/* Server Info Section */}
           <section className="flex flex-col gap-sm">
-            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Server Info</h3>
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-wider">Server Info</h3>
             <Stack gap="xs">
               <div className="flex justify-between items-center gap-sm py-xs">
                 <span className="text-sm text-text-muted">Port</span>
@@ -219,7 +219,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
           {/* Context Usage Section */}
           <section className="flex flex-col gap-sm">
-            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Context Usage</h3>
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-wider">Context Usage</h3>
             {contextUsagePercent !== null ? (
               <Stack gap="xs">
                 <div className="h-[8px] bg-background rounded-sm overflow-hidden">
@@ -250,7 +250,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           {/* Request Stats Section */}
           {metrics && (
             <section className="flex flex-col gap-sm">
-              <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Statistics</h3>
+              <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-wider">Statistics</h3>
               <Stack gap="xs">
                 <div className="flex justify-between items-center gap-sm py-xs">
                   <span className="text-sm text-text-muted">Prompt Tokens</span>
@@ -270,7 +270,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
           {/* API Endpoints Section */}
           <section className="flex flex-col gap-sm">
-            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">API Endpoints</h3>
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-wider">API Endpoints</h3>
             <Stack gap="xs">
               <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/chat/completions</code>

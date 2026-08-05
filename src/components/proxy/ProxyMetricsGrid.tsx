@@ -11,7 +11,7 @@ interface SectionProps {
 }
 
 const Heading: FC<{ children: ReactNode }> = ({ children }) => (
-  <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">{children}</h3>
+  <h3 className="text-2xs font-semibold uppercase tracking-wider text-text-secondary mb-sm">{children}</h3>
 );
 
 /** In-flight requests, with a count once a snapshot has arrived. */

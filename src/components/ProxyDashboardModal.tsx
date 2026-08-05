@@ -59,7 +59,7 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
       }
       size="lg"
     >
-      <div className="flex flex-col gap-lg">
+      <div className="flex flex-col gap-lg tabular-nums">
         <ActiveConnectionsSection snapshot={snapshot} />
 
         {/*
@@ -69,26 +69,26 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
           panel can tell the user which.
         */}
         <section>
-          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-text-secondary mb-sm">
             VRAM Residency
           </h3>
           <ProxyAdmissionPanel admission={snapshot?.admission} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-text-secondary mb-sm">
             Launch Decisions
           </h3>
           <ProxyLaunchPanel launch={snapshot?.launch} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">Prompt Cache</h3>
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-text-secondary mb-sm">Prompt Cache</h3>
           <ProxyCachePanel cache={snapshot?.cache} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold uppercase text-text-secondary mb-sm">
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-text-secondary mb-sm">
             Agent Cache (GUI Chat)
           </h3>
           {/*

@@ -4,6 +4,7 @@ import { GgufModel, ServerInfo } from '../../types';
 import { formatParamCount } from '../../utils/format';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { EmptyState } from '../primitives/EmptyState';
 import { cn } from '../../utils/cn';
 
 interface ModelsListContentProps {
@@ -34,22 +35,21 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
 
   if (models.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-3xl px-xl text-center min-h-[300px]">
-        <div className="text-4xl mb-base opacity-50 text-text-disabled" aria-hidden>
-          <Icon icon={Box} size={20} />
-        </div>
-        <h3 className="m-0 mb-sm text-xl font-semibold">No models yet</h3>
-        <p className="m-0 mb-lg text-text-secondary">Add your first model to get started!</p>
-        <div className="flex flex-wrap justify-center gap-base">
-          <Button 
-            variant="primary" 
+      <EmptyState
+        className="min-h-[300px]"
+        icon={<Icon icon={Box} size={22} />}
+        title="No models yet"
+        description="Add your first model to get started."
+        action={
+          <Button
+            variant="primary"
             onClick={onSwitchToAddTab}
             leftIcon={<Icon icon={Plus} size={14} />}
           >
             Add Models
           </Button>
-        </div>
-      </div>
+        }
+      />
     );
   }
 
@@ -93,7 +93,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                   <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-text-secondary border border-border">{model.quantization}</span>
                 )}
                 {tps != null && (
-                  <span className="inline-flex items-center gap-xs py-xs px-sm bg-background text-text-secondary rounded-sm text-xs font-medium border border-border">
+                  <span className="inline-flex items-center gap-xs py-xs px-sm bg-background text-text-secondary rounded-sm text-xs font-medium border border-border tabular-nums">
                     <Icon icon={Zap} size={11} />
                     {tps.toFixed(0)} t/s
                   </span>

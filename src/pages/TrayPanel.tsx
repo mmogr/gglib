@@ -120,7 +120,7 @@ export const TrayPanel: FC = () => {
   const handleStop = useCallback(() => run(() => getTransport().stopProxy(), 'stop'), [run]);
 
   return (
-    <div className="flex flex-col h-screen bg-background text-text overflow-hidden">
+    <div className="flex flex-col h-screen bg-background text-text overflow-hidden tabular-nums">
       <header className="flex items-center justify-between px-base py-md border-b border-border shrink-0">
         <span className="text-sm font-semibold">gglib</span>
         <ProxyStatusPill running={proxy.running} />

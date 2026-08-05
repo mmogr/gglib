@@ -152,7 +152,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   return (
     <div
-      className="absolute top-full left-0 mt-xs bg-surface border border-border rounded-md shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden"
+      className="absolute top-full left-0 mt-xs bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden"
       ref={popoverRef}
     >
       <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
