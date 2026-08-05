@@ -72,6 +72,11 @@ async-trait = "0.1"
 sysinfo = { workspace = true }
 
 [dev-dependencies]
+# `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is
+# deliberately not part of tokio's `full`. Declared explicitly rather than
+# inherited: it currently arrives only because `tokio-test` happens to enable
+# it, so removing that dependency would silently break the contention tests.
+tokio = { version = "1.0", features = ["test-util"] }
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

@@ -63,6 +63,20 @@ jobs:
     name: Test (Rust)
     runs-on: ubuntu-latest
     needs: [clippy]
+    # Every test step below pipes into `tee` so the output survives as an
+    # artifact, and a pipeline reports its *last* command's status — `tee`'s,
+    # which is always 0. GitHub's default shell is `bash -e` without pipefail,
+    # so a failing `cargo test` was reported as a passing step: three of the
+    # six CI runs before this change were green with a failing test inside.
+    # `shell: bash` is `bash --noprofile --norc -eo pipefail`, which makes
+    # cargo's status the one that counts.
+    #
+    # Set per job rather than on the workflow: a workflow-level default would
+    # also reach `cli-cross-os`, which runs on windows-2022, and switching that
+    # leg from pwsh to Git Bash has nothing to do with this problem.
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -169,6 +183,11 @@ jobs:
     name: Test (Frontend)
     runs-on: ubuntu-latest
     needs: [clippy]
+    # Same masking as the Rust job: `npm run test:run … | tee` reported `tee`'s
+    # exit status, so a failing suite passed the step. See the note there.
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
