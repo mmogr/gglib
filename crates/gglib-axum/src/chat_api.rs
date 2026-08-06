@@ -580,27 +580,6 @@ pub async fn proxy_chat(
         capabilities,
     );
 
-    // DEBUG: Log the exact payload sent to llama-server
-    let log_path = std::env::var("HOME")
-        .map(|h| format!("{}/llama-request-debug.json", h))
-        .unwrap_or_else(|_| "/tmp/llama-request-debug.json".to_string());
-
-    if let Ok(json_str) = serde_json::to_string_pretty(&forward_body) {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let log_entry = format!(
-            "\n=== REQUEST {} ===\npath: /api/chat (chat_api::proxy_chat)\n{}\n====================================\n",
-            timestamp, json_str
-        );
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .and_then(|mut f| std::io::Write::write_all(&mut f, log_entry.as_bytes()));
-    }
-
     // Forward the request
     let client = Client::new();
     let response = client

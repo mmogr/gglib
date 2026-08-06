@@ -212,5 +212,7 @@ pub(crate) async fn embeddings(
             .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
 
-    forward_non_streaming_response(response, &state.dashboard.cache_metrics).await
+    // No tags: an embeddings body has no `choices`, so normalization is a
+    // no-op — this just satisfies the shared forwarding signature.
+    forward_non_streaming_response(response, &state.dashboard.cache_metrics, &[]).await
 }
