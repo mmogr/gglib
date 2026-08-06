@@ -142,6 +142,9 @@ struct EnvMarker {
     requirements: Vec<String>,
     /// Which tool installed the requirements.
     ///
+    /// Reported by `gglib config fast-downloads status`, and deliberately
+    /// *not* part of [`EnvMarker::matches`] — see there.
+    ///
     /// Defaulted rather than required: markers written before uv support
     /// existed have no such field, and every one of them describes an
     /// environment built by `python -m venv`. Saying so is truthful and keeps
@@ -163,9 +166,17 @@ impl EnvMarker {
         }
     }
 
-    fn matches(&self, builder: &Builder) -> bool {
+    /// Whether the environment on disk is still the one we would build.
+    ///
+    /// The builder is pointedly not consulted. Which tool installed the
+    /// requirements says nothing about whether they are correct, and treating
+    /// a change of builder as staleness actively broke things: uv is on the
+    /// CLI's PATH but frequently not the daemon's, so every download would
+    /// see a "stale" marker and try to reinstall — with pip, into an
+    /// environment uv had built. What matters is the helper version and the
+    /// requirements, which is what this compares.
+    fn matches(&self, _builder: &Builder) -> bool {
         self.helper_version == env!("CARGO_PKG_VERSION")
-            && self.builder == builder.label()
             && self.requirements
                 == PY_REQUIREMENTS
                     .iter()
@@ -375,6 +386,18 @@ impl PythonEnvironment {
                 uv.clone(),
                 vec![
                     "venv".into(),
+                    // `--seed` installs pip into the environment, which uv
+                    // otherwise skips because it does not need it.
+                    //
+                    // Not optional. Whether uv is on PATH is a property of the
+                    // *process*, not of the machine: the CLI can provision
+                    // with uv from an interactive shell and the daemon can
+                    // then find no uv at all and fall back to pip. An
+                    // environment that only uv can maintain is one the daemon
+                    // cannot repair, and the observed failure was exactly
+                    // that — `python -m pip` against a pip-less venv, which
+                    // silently demoted every download to the native path.
+                    "--seed".into(),
                     "--python".into(),
                     bootstrap.into_os_string(),
                     self.env_dir.clone().into_os_string(),
@@ -1112,14 +1135,32 @@ mod tests {
         assert!(!marker.matches(&Builder::Venv));
     }
 
-    /// An environment built by pip and later seen on a machine that has since
-    /// installed uv is stale: reinstalling through uv is cheap and leaves the
-    /// marker describing what is actually on disk.
+    /// Regression: a change of builder must NOT invalidate the environment.
+    ///
+    /// uv is routinely on the CLI's PATH and absent from the daemon's, so
+    /// treating the builder as a freshness input meant every daemon download
+    /// judged a uv-built environment stale and tried to reinstall it with
+    /// pip. In a uv environment built without `--seed` there is no pip, so
+    /// that failed, and every download silently fell back to the native path
+    /// — the accelerator appearing to be on while doing nothing.
     #[test]
-    fn env_marker_builder_mismatch_forces_a_reinstall() {
-        let marker = EnvMarker::current(&Builder::Venv);
+    fn env_marker_ignores_which_builder_made_it() {
+        let built_by_uv = EnvMarker::current(&Builder::Uv(PathBuf::from("/usr/bin/uv")));
+        let built_by_venv = EnvMarker::current(&Builder::Venv);
 
-        assert!(!marker.matches(&Builder::Uv(PathBuf::from("/usr/bin/uv"))));
+        assert!(built_by_uv.matches(&Builder::Venv));
+        assert!(built_by_venv.matches(&Builder::Uv(PathBuf::from("/usr/bin/uv"))));
+    }
+
+    /// The builder is still recorded — `status` reports it — it just does not
+    /// decide anything.
+    #[test]
+    fn env_marker_still_records_the_builder() {
+        assert_eq!(
+            EnvMarker::current(&Builder::Uv(PathBuf::from("/usr/bin/uv"))).builder,
+            "uv"
+        );
+        assert_eq!(EnvMarker::current(&Builder::Venv).builder, "venv");
     }
 
     /// Markers predate the `builder` field. Every one of them describes an
