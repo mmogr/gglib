@@ -16,7 +16,7 @@ use gglib_core::domain::benchmark::tune::result::{
 use gglib_core::domain::benchmark::tune::task::{TaskCategory, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::domain::{InferenceConfig, Model};
-use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort};
+use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort, UsageSink};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
@@ -27,10 +27,12 @@ use tracing::warn;
 pub mod executor;
 pub mod pruning;
 pub mod scoring;
+pub mod usage;
 
 pub use executor::ScoringToolExecutorPort;
 use pruning::select_survivors;
 use scoring::score_outcome;
+use usage::TaskUsageTally;
 
 use super::BenchmarkDeps;
 
@@ -364,28 +366,41 @@ async fn run_task(
     candidate: &InferenceConfig,
     task: &TuneTask,
 ) -> TuneTaskResult {
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(
-            target.base_url.clone(),
-            http_client.clone(),
-            Some(model.name.clone()),
-        )
-        .with_sampling(Some(candidate.clone())),
-    );
-    run_task_with_llm(llm, task).await
+    run_task_with_llm(
+        |usage| {
+            Arc::new(
+                LlmCompletionAdapter::with_client(
+                    target.base_url.clone(),
+                    http_client.clone(),
+                    Some(model.name.clone()),
+                )
+                .with_sampling(Some(candidate.clone()))
+                .with_usage_sink(Some(usage)),
+            )
+        },
+        task,
+    )
+    .await
 }
 
 /// The task-execution core shared by the tune sweep and the raw-vs-gglib
 /// agentic eval: drive one task through the real `AgentLoop` against a
-/// caller-prepared [`LlmCompletionPort`], and score the recorded calls.
+/// caller-built [`LlmCompletionPort`], and score the recorded calls.
 ///
 /// The adapter configuration is the caller's whole degree of freedom — tune
 /// varies sampling per candidate; the eval varies the entire pipeline per
-/// arm — so it arrives prebuilt rather than as parameters.
-pub(crate) async fn run_task_with_llm(
-    llm: Arc<dyn LlmCompletionPort>,
-    task: &TuneTask,
-) -> TuneTaskResult {
+/// arm — so the caller builds it rather than passing parameters.
+///
+/// It arrives as a *builder* rather than a finished port so this function can
+/// own the [`TaskUsageTally`] it has to read afterwards: the sink is handed to
+/// the adapter on the way in, which makes "forgot to wire the tally"
+/// unrepresentable at the call site.
+pub(crate) async fn run_task_with_llm<F>(build_llm: F, task: &TuneTask) -> TuneTaskResult
+where
+    F: FnOnce(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
+{
+    let usage = TaskUsageTally::new();
+    let llm = build_llm(usage.clone());
     let mut messages: Vec<AgentMessage> = task.history.clone().unwrap_or_default();
     if let Some(system_prompt) = &task.system_prompt {
         messages.insert(
@@ -423,10 +438,10 @@ pub(crate) async fn run_task_with_llm(
     let recorded = call_log.lock().await.clone();
     let scoring = score_outcome(&task.expected, &recorded);
 
-    let completion_tokens = match &run_result {
-        Ok(Ok(output)) => output.total_completion_tokens,
-        _ => None,
-    };
+    // Read from the tally, not from `AgentRunOutput`: a guard-aborted run
+    // returns `Err` and its tokens would otherwise vanish — and those are the
+    // runs whose cost matters most.
+    let completion_tokens = usage.total_completion_tokens();
     let (loop_detected, stagnation_detected, error_detail) = match &run_result {
         Ok(Ok(_)) => (false, false, None),
         Ok(Err(gglib_core::ports::AgentError::LoopDetected { .. })) => (true, false, None),
@@ -465,6 +480,10 @@ pub(crate) async fn run_task_with_llm(
 /// includes prompt pre-fill, so this is a consistent within-run comparison
 /// figure rather than a pure decode rate — see
 /// [`TuneCandidateResult::tg_tps`].
+///
+/// Tasks the guards aborted count towards both sides of the ratio: their
+/// tokens survive the abort, so a result set that loops on half its tasks is
+/// no longer measured only on the half that behaved.
 pub(crate) fn throughput_tps(results: &[TuneTaskResult]) -> Option<f64> {
     let tokens: u64 = results.iter().filter_map(|r| r.completion_tokens).sum();
     let millis: u64 = results

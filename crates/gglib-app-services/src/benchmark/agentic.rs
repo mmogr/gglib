@@ -24,7 +24,7 @@ use gglib_core::domain::benchmark::agentic::{
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
-use gglib_core::ports::LlmCompletionPort;
+use gglib_core::ports::{LlmCompletionPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
@@ -125,8 +125,21 @@ pub async fn run_agentic_eval(
                 return Ok(());
             }
 
-            let llm = build_arm_llm(deps, &base_url, &model.name, arm, &model_context, task);
-            let result = run_task_with_llm(llm, task).await;
+            let result = run_task_with_llm(
+                |usage| {
+                    build_arm_llm(
+                        deps,
+                        &base_url,
+                        &model.name,
+                        arm,
+                        &model_context,
+                        task,
+                        usage,
+                    )
+                },
+                task,
+            )
+            .await;
             let _ = tx
                 .send(BenchmarkEvent::AgenticTaskComplete {
                     arm,
@@ -194,6 +207,7 @@ fn build_arm_llm(
     arm: EvalArm,
     model_context: &ModelContext,
     task: &TuneTask,
+    usage: Arc<dyn UsageSink>,
 ) -> Arc<dyn LlmCompletionPort> {
     let tool_choice = demands_tool_call(task).then(|| "required".to_owned());
 
@@ -202,7 +216,8 @@ fn build_arm_llm(
         deps.http_client.clone(),
         Some(model_name.to_owned()),
     )
-    .with_tool_choice(tool_choice);
+    .with_tool_choice(tool_choice)
+    .with_usage_sink(Some(usage));
 
     let adapter = match arm {
         EvalArm::Raw => adapter.with_raw_passthrough(true),

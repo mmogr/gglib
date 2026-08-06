@@ -20,6 +20,8 @@ tune/
   scoring.rs  — AST-style (BFCL-inspired) diffing of recorded calls against
                 a task's expected outcome
   pruning.rs  — successive-halving candidate reduction math
+  usage.rs    — TaskUsageTally: per-task completion-token count that survives
+                a guard-aborted run
 ```
 
 # Why No MCP Dependency
@@ -50,6 +52,7 @@ across dozens of candidates never triggers a costly model reload.
 | [`executor.rs`](executor.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-executor-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-executor-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-executor-coverage.json) |
 | [`pruning.rs`](pruning.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-pruning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-pruning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-pruning-coverage.json) |
 | [`scoring.rs`](scoring.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-scoring-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-scoring-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-scoring-coverage.json) |
+| [`usage.rs`](usage.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-usage-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-usage-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tune-usage-coverage.json) |
 <!-- module-table:end -->
 
 </details>

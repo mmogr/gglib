@@ -77,14 +77,23 @@ pub struct TuneTaskResult {
     pub loop_detected: bool,
     /// `true` if the agent loop's `StagnationDetector` fired during this task.
     pub stagnation_detected: bool,
-    /// Number of agent-loop iterations consumed before completion (or
-    /// before the loop was aborted by a guard).
+    /// Number of *tool-executing* agent-loop iterations that completed.
+    ///
+    /// The loop reports an iteration only after it has executed that turn's
+    /// tool calls, so a turn that answered in text — including the final one —
+    /// is not counted, and a guard-aborted run reports one fewer than the turn
+    /// it aborted on. Read it as "how many tool-call batches this run
+    /// produced", which is what decides whether a repeat was even possible.
     pub iterations: usize,
     /// Wall-clock time spent on this task, in milliseconds.
     pub latency_ms: u64,
-    /// Completion tokens generated across the task's agent run, from the
-    /// upstream's usage reports. `None` when the run errored before any
-    /// response completed or the upstream reported no usage.
+    /// Completion tokens generated across the task's agent run, summed from
+    /// the upstream's per-response usage reports.
+    ///
+    /// Counted independently of how the run ended, so a run a guard aborted
+    /// still reports the tokens it burned — those are the runs whose cost
+    /// matters most. `None` only when the upstream reported no usage at all,
+    /// which stays distinct from a measured zero.
     #[serde(default)]
     pub completion_tokens: Option<u64>,
     /// Optional human-readable detail (e.g. which expected call was missed),
