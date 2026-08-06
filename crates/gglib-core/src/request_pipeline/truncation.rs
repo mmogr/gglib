@@ -169,17 +169,18 @@ pub fn truncate_history(
 
     // ── Oldest-first trim ────────────────────────────────────────────────────
     // Walk from the oldest message toward the newest, eliding eligible
-    // oversized content only until the running payload estimate drops back
-    // under budget. `running` tracks the approximate payload size as each
-    // replacement shrinks it, so we stop at the minimum necessary and leave the
-    // freshest tool outputs intact.
+    // oversized content only until the cumulative estimated savings reach the
+    // target, so the freshest tool outputs are the last to be sacrificed. The
+    // budget gate above guarantees the target is positive, so the loop never
+    // stops before considering the first eligible message.
     let total = messages.len();
     let placeholder_len = TRUNCATION_PLACEHOLDER.len();
+    let target_savings = payload_chars_before - limit_chars;
     let mut messages_truncated = 0usize;
-    let mut running = payload_chars_before;
+    let mut saved = 0usize;
 
     for (i, msg) in messages.iter_mut().enumerate() {
-        if running <= limit_chars {
+        if saved >= target_savings {
             break;
         }
         // Tail-protected messages and non-candidate roles (system, user) are
@@ -202,11 +203,11 @@ pub fn truncate_history(
         msg["content"] = Value::String(TRUNCATION_PLACEHOLDER.to_owned());
         messages_truncated += 1;
         // Each replacement reclaims (content_len - placeholder_len) chars.
-        running = running.saturating_sub(content_len.saturating_sub(placeholder_len));
+        saved = saved.saturating_add(content_len.saturating_sub(placeholder_len));
     }
 
     // ── Budget check ─────────────────────────────────────────────────────────
-    // Re-measure only when something actually changed; `running` is an estimate
+    // Re-measure only when something actually changed; `saved` is an estimate
     // and the hard abort deserves the real number.
     let payload_chars_after = if messages_truncated == 0 {
         payload_chars_before
