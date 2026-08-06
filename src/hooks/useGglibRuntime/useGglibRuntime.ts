@@ -82,7 +82,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const abortControllerRef = useRef<AbortController | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Extra metadata to merge into the next user message (e.g. isVoice)
+  // Extra metadata to merge into the next user message
   const nextMessageMetaRef = useRef<Partial<import('../../types/messages').GglibMessageCustom>>({});
   const setNextMessageMeta = useCallback((meta: Partial<import('../../types/messages').GglibMessageCustom>) => {
     nextMessageMetaRef.current = meta;
@@ -191,7 +191,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
 
     // User sends a new message
     onNew: async (msg: AppendMessage) => {
-      // Drain any one-shot metadata (e.g. isVoice) queued for this message
+      // Drain any one-shot metadata queued for this message
       const extraMeta = nextMessageMetaRef.current;
       nextMessageMetaRef.current = {};
 

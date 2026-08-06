@@ -7,7 +7,5 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>gglib needs microphone access for voice mode — local speech-to-text input via Whisper. Audio is processed entirely on-device and never leaves your machine.</string>
 </dict>
 </plist>
