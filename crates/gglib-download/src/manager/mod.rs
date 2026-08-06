@@ -1368,6 +1368,47 @@ fn aggregate_progress(shard: &ShardInfo, downloaded: u64, shard_total: u64) -> (
     )
 }
 
+/// Build the queue-snapshot DTO for the active download from a live progress
+/// sample.
+///
+/// Bytes go through [`aggregate_progress`] for sharded downloads so the REST
+/// snapshot agrees with the SSE bridge. Before the first chunk lands
+/// (`progress.total == 0`) the shard's known file size stands in for the
+/// per-shard total, so consumers can size a bar immediately.
+fn build_active_dto(
+    id: &DownloadId,
+    progress: &ProgressUpdate,
+    shard_info: Option<&ShardInfo>,
+    group_id: Option<&str>,
+    speed_bps: Option<f64>,
+    eta_seconds: Option<f64>,
+) -> gglib_core::download::QueuedDownload {
+    let (downloaded, total) = shard_info.map_or((progress.downloaded, progress.total), |shard| {
+        let shard_total = if progress.total == 0 {
+            shard.file_size.unwrap_or(0)
+        } else {
+            progress.total
+        };
+        aggregate_progress(shard, progress.downloaded, shard_total)
+    });
+
+    let mut dto = gglib_core::download::QueuedDownload::new(
+        id.to_string(),
+        id.model_id(),
+        id.to_string(),
+        1,
+        0,
+    )
+    .with_status(gglib_core::download::DownloadStatus::Downloading);
+
+    if let (Some(shard), Some(group)) = (shard_info, group_id) {
+        dto = dto.with_shard_info(group.to_string(), shard.clone());
+    }
+
+    dto.update_progress(downloaded, total, speed_bps, eta_seconds);
+    dto
+}
+
 /// Emit a progress event.
 ///
 /// Emits `ShardProgress` if `shard_info` is present, otherwise `DownloadProgress`.
@@ -1535,28 +1576,44 @@ impl DownloadManagerPort for DownloadManagerImpl {
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
-        // Build current item DTO if there's an active download (short lock scope)
-        let current_dto = {
+        // Sample the active job under its lock (short scope), then read the
+        // estimator afterwards — never nested, preserving the queue → active
+        // lock order.
+        let active_sample = {
             let active = self.active.lock().await;
             active.iter().next().map(|(id, job)| {
-                let mut dto = gglib_core::download::QueuedDownload::new(
-                    id.to_string(),
-                    id.model_id(),
-                    id.to_string(),
-                    1,
-                    0,
+                (
+                    id.clone(),
+                    job.progress_tx.borrow().clone(),
+                    job.shard_info.clone(),
+                    job.group_id.clone(),
                 )
-                .with_status(gglib_core::download::DownloadStatus::Downloading);
-
-                // Preserve shard info if this is a sharded download
-                if let Some(shard) = &job.shard_info {
-                    if let Some(group) = &job.group_id {
-                        dto = dto.with_shard_info(group.clone(), shard.clone());
-                    }
-                }
-
-                dto
             })
+        };
+
+        let current_dto = match active_sample {
+            Some((id, progress, shard_info, group_id)) => {
+                let key = group_id.clone().unwrap_or_else(|| id.to_string());
+                let estimator = self.rate_estimators.lock().await.get(&key).map(Arc::clone);
+                // Read-only: `record()` here would let snapshot polling perturb
+                // the decayed average every consumer sees.
+                let (speed_bps, eta_seconds) = match estimator {
+                    Some(estimator) => {
+                        let estimator = estimator.lock().await;
+                        (estimator.rate_bps(), estimator.eta_seconds())
+                    }
+                    None => (None, None),
+                };
+                Some(build_active_dto(
+                    &id,
+                    &progress,
+                    shard_info.as_ref(),
+                    group_id.as_deref(),
+                    speed_bps,
+                    eta_seconds,
+                ))
+            }
+            None => None,
         };
 
         let queue = self.queue.read().await;
@@ -1899,6 +1956,68 @@ mod tests {
     fn falls_back_to_shard_progress_when_no_size_is_known() {
         let shard = ShardInfo::new(1, 3, "shard-1.gguf");
         assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (2_000, 12_000));
+    }
+
+    #[test]
+    fn active_dto_carries_live_progress() {
+        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
+        let progress = ProgressUpdate::new(2_500, 10_000, 7);
+
+        let dto = build_active_dto(&id, &progress, None, None, Some(1_000.0), Some(7.5));
+
+        assert_eq!(dto.downloaded_bytes, 2_500);
+        assert_eq!(dto.total_bytes, 10_000);
+        assert_eq!(dto.speed_bps, Some(1_000.0));
+        assert_eq!(dto.eta_seconds, Some(7.5));
+        assert!((dto.progress_percent - 25.0).abs() < f64::EPSILON);
+        assert_eq!(
+            dto.status,
+            gglib_core::download::DownloadStatus::Downloading
+        );
+    }
+
+    #[test]
+    fn active_dto_aggregates_sharded_progress() {
+        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
+        let (a, b, c) = (4_000, 4_000, 1_500);
+        let shard = shard_with_offsets(1, a, a + b + c, b);
+        let progress = ProgressUpdate::new(2_000, b, 3);
+
+        let dto = build_active_dto(&id, &progress, Some(&shard), Some("group-1"), None, None);
+
+        // Same numbers the SSE bridge derives via aggregate_progress.
+        assert_eq!(dto.downloaded_bytes, 6_000);
+        assert_eq!(dto.total_bytes, 9_500);
+        assert_eq!(dto.group_id.as_deref(), Some("group-1"));
+        assert!(dto.shard_info.is_some());
+    }
+
+    #[test]
+    fn active_dto_uses_shard_file_size_before_first_chunk() {
+        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
+        let shard = shard_with_offsets(0, 0, 9_500, 4_000);
+        let progress = ProgressUpdate::default();
+
+        let dto = build_active_dto(&id, &progress, Some(&shard), Some("group-1"), None, None);
+
+        assert_eq!(dto.downloaded_bytes, 0);
+        assert_eq!(
+            dto.total_bytes, 9_500,
+            "known shard sizes should size the bar immediately"
+        );
+    }
+
+    #[test]
+    fn active_dto_passes_through_unknowns_during_warmup() {
+        let id = DownloadId::new("owner/repo", None::<String>);
+        let progress = ProgressUpdate::default();
+
+        let dto = build_active_dto(&id, &progress, None, None, None, None);
+
+        assert_eq!(dto.total_bytes, 0);
+        assert_eq!(dto.speed_bps, None);
+        assert_eq!(dto.eta_seconds, None);
+        assert!(dto.progress_percent.abs() < f64::EPSILON);
     }
 
     fn test_bridge(cancel: CancellationToken, finished: CancellationToken) -> ProgressBridge {
