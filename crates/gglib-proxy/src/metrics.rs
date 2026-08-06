@@ -50,6 +50,9 @@ pub struct ContextSnapshot {
     /// `true` when the request pipeline originated a decode-time tool-call
     /// grammar for this request (see `request_pipeline::constrain`).
     pub grammar_enforced: bool,
+    /// `true` when the pre-dispatch loop guard rejected this request with an
+    /// HTTP 400 instead of forwarding it (see `loop_guard`).
+    pub loop_guard_tripped: bool,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     pub recorded_at_secs: u64,
 }
@@ -146,6 +149,7 @@ mod tests {
             messages_truncated: 1,
             was_clamped: false,
             grammar_enforced: false,
+            loop_guard_tripped: false,
             recorded_at_secs: 0,
         }
     }

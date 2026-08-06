@@ -12,6 +12,7 @@ pub mod connections;
 pub mod dashboard;
 pub mod embeddings;
 pub mod forward;
+pub mod loop_guard;
 pub mod mcp;
 pub mod metrics;
 pub mod models;

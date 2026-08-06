@@ -463,6 +463,7 @@ pub(crate) async fn forward_chat_completion(
                     messages_truncated: 0,
                     was_clamped: true,
                     grammar_enforced: false,
+                    loop_guard_tripped: false,
                     recorded_at_secs: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -495,6 +496,7 @@ pub(crate) async fn forward_chat_completion(
         messages_truncated: report.messages_truncated,
         was_clamped: false,
         grammar_enforced,
+        loop_guard_tripped: false,
         recorded_at_secs: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

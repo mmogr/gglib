@@ -245,6 +245,22 @@ impl SettingsRepository for MockSettingsRepo {
     }
 }
 
+/// Settings repository returning a caller-supplied [`Settings`] verbatim —
+/// for tests exercising settings-gated proxy behaviour (e.g. the
+/// `proxy_loop_detection` off switch).
+pub struct StaticSettingsRepo(pub Settings);
+
+#[async_trait]
+impl SettingsRepository for StaticSettingsRepo {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        Ok(self.0.clone())
+    }
+
+    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
+        Ok(())
+    }
+}
+
 /// Settings carrying one listed inference profile, so `/v1/models` emits
 /// `{model}:{name}` variant entries.
 pub struct ProfileSettingsRepo(pub &'static str);
@@ -980,6 +996,16 @@ pub async fn spawn_proxy_with_catalog(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
 ) -> (String, CancellationToken) {
+    spawn_proxy_with_settings(runtime, catalog, Arc::new(MockSettingsRepo)).await
+}
+
+/// [`spawn_proxy_with_catalog`] with the settings repository supplied too —
+/// for tests exercising settings-gated behaviour (see [`StaticSettingsRepo`]).
+pub async fn spawn_proxy_with_settings(
+    runtime: Arc<dyn ModelRuntimePort>,
+    catalog: Arc<dyn ModelCatalogPort>,
+    settings_repo: Arc<dyn SettingsRepository>,
+) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -995,7 +1021,7 @@ pub async fn spawn_proxy_with_catalog(
             catalog,
             mcp,
             cancel_clone,
-            Arc::new(MockSettingsRepo),
+            settings_repo,
             None, // inference_override
             false,
             None,

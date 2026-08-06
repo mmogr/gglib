@@ -72,6 +72,30 @@ fn error_response_upstream_error_includes_reason() {
     assert_eq!(err.error.r#type, "server_error");
 }
 
+/// `type` and `code` are both `loop_detected`, mirroring
+/// `context_length_exceeded`'s shape; the message carries the repeated
+/// signature and names the settings escape hatch.
+#[test]
+fn error_response_loop_detected_carries_signature_and_escape_hatch() {
+    let err = ErrorResponse::loop_detected("read_file:00000000deadbeef");
+    assert_eq!(err.error.code.as_deref(), Some("loop_detected"));
+    assert_eq!(err.error.r#type, "loop_detected");
+    assert!(err.error.message.contains("read_file:00000000deadbeef"));
+    assert!(err.error.message.contains("--proxy-loop-detection false"));
+}
+
+/// Same shape for the stagnation variant; the message carries the observed
+/// count and the configured limit.
+#[test]
+fn error_response_stagnation_detected_carries_count_and_limit() {
+    let err = ErrorResponse::stagnation_detected(6, 5);
+    assert_eq!(err.error.code.as_deref(), Some("stagnation_detected"));
+    assert_eq!(err.error.r#type, "stagnation_detected");
+    assert!(err.error.message.contains('6'));
+    assert!(err.error.message.contains("limit 5"));
+    assert!(err.error.message.contains("--proxy-loop-detection false"));
+}
+
 // =========================================================================
 // ErrorResponse serialization tests (OpenAI format compliance)
 // =========================================================================

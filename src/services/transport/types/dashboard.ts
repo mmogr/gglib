@@ -117,6 +117,8 @@ export interface ContextSnapshot {
   payload_chars_after: number;
   messages_truncated: number;
   was_clamped: boolean;
+  /** True when the pre-dispatch loop guard rejected this request with a 400. */
+  loop_guard_tripped: boolean;
   /** True when the proxy originated a decode-time tool-call grammar. */
   grammar_enforced: boolean;
   recorded_at_secs: number;
