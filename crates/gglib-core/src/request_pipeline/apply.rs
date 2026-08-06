@@ -10,6 +10,7 @@
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
 //! | 5 | Pin `cache_prompt` | [`super::sampling`] | top-level keys |
+//! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
 //!
 //! # The order is load-bearing
 //!
@@ -31,6 +32,10 @@
 //!
 //! **4 before 5.** `cache_prompt` is not an [`InferenceConfig`] field, so
 //! pinning it last means the resolved sampling patch can never overwrite it.
+//!
+//! **6 after 3.** The grammar stage 6 *adds* a top-level key, so it runs
+//! after the measurement for the same reason sampling does: the truncation
+//! budget measures the client's conversation, not our own additions to it.
 //!
 //! [`InferenceConfig`]: crate::domain::InferenceConfig
 //!
@@ -56,7 +61,7 @@
 use serde_json::Value;
 
 use super::truncation::{TruncationError, TruncationReport};
-use super::{ModelContext, SamplingLayers, messages, sampling, tools, truncation};
+use super::{ModelContext, SamplingLayers, constrain, messages, sampling, tools, truncation};
 
 /// Apply every request-shaping transform, in order, in place.
 ///
@@ -92,6 +97,7 @@ pub fn apply(
     };
 
     sampling::resolve_sampling(body, ctx, layers);
+    constrain::constrain_tool_calls(body, ctx);
     Ok(report)
 }
 

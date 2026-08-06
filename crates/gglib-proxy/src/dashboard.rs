@@ -559,6 +559,7 @@ mod tests {
             payload_chars_after: 100,
             messages_truncated: 0,
             was_clamped: false,
+            grammar_enforced: false,
             recorded_at_secs: 0,
         });
 
