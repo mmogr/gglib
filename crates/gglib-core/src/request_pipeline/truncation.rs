@@ -16,14 +16,14 @@
 //!    elided while there is room, so the model keeps maximum context on every
 //!    turn that does not actually need trimming.
 //!
-//! 2. **Oldest-first trim** — only when the payload exceeds the budget are
-//!    messages elided, and then only as many as necessary: unprotected
-//!    `role: "tool"` / `role: "assistant"` messages whose `content` string
-//!    exceeds [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with
-//!    [`TRUNCATION_PLACEHOLDER`] **from oldest to newest**, stopping as soon as
-//!    the running payload estimate drops back under budget. The freshest tool
-//!    outputs — the ones the model most likely still needs — are the last to be
-//!    sacrificed.
+//! 2. **Oldest-first trim to a low watermark** — only when the payload exceeds
+//!    the budget are messages elided: unprotected `role: "tool"` /
+//!    `role: "assistant"` messages whose `content` string exceeds
+//!    [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with
+//!    [`TRUNCATION_PLACEHOLDER`] **from oldest to newest**, until the estimated
+//!    savings reach a quantized target aimed at [`LOW_WATERMARK_PCT`] of the
+//!    budget. The freshest tool outputs — the ones the model most likely still
+//!    needs — are the last to be sacrificed.
 //!
 //! 3. **Hard abort** — if the payload still exceeds the budget after every
 //!    eligible message has been trimmed (an enormous protected system prompt,
@@ -34,6 +34,28 @@
 //!    [`PROTECTED_TAIL_COUNT`] messages by index (the immediate conversational
 //!    context, spanning several recent tool-call/result pairs) are never
 //!    modified. Neither is `tool_calls`, at any role.
+//!
+//! ## Why trim past the budget, and why the target is quantized
+//!
+//! This stage is stateless and clients resend the full raw history every turn,
+//! so an elision never persists: each request re-derives the elision set from
+//! scratch. Trimming to just under the budget therefore moves the elision
+//! frontier forward by ~one message on every turn of a long agentic session —
+//! and every move shifts the first byte at which the forwarded prompt differs
+//! from the previous turn's, breaking llama.cpp's common-prefix KV-cache match
+//! and forcing a near-full prompt re-prefill each turn.
+//!
+//! Aiming lower (a classic low watermark) is not enough by itself: a minimal
+//! elision set computed against *any* fixed threshold still grows at the same
+//! per-turn cadence. Instead the savings target is quantized to whole
+//! multiples of the watermark margin (budget − watermark, 25% of budget).
+//! Within one margin's worth of payload growth the target — and therefore the
+//! elision set — is identical across turns, so consecutive requests share
+//! their prompt prefix and llama-server only prefills the new tail. When
+//! growth crosses a margin boundary, several messages are elided at once and
+//! the cycle restarts: the post-trim payload lands at or below the watermark,
+//! sawtoothing within (50%, 75%] of budget, and prefix breaks happen once per
+//! ~25%-of-budget of growth instead of once per turn.
 //!
 //! ## The budget is the model's, and only the model's
 //!
@@ -76,6 +98,15 @@ pub const CHARS_PER_TOKEN_APPROX: usize = 4;
 /// coherently — sized to span several recent tool-call/result pairs so a live
 /// tool exchange is never half-elided.
 pub const PROTECTED_TAIL_COUNT: usize = 8;
+
+/// Low watermark the trim aims for, as a percentage of the request budget.
+///
+/// Once truncation is triggered (payload over `limit_chars`), the stage trims
+/// past the budget down toward this fraction of it, buying several turns of
+/// headroom in which follow-up requests need no new elisions — the property
+/// that keeps the forwarded prompt prefix stable for llama.cpp's KV cache.
+/// See the module docs for why the savings target is also quantized.
+pub const LOW_WATERMARK_PCT: usize = 75;
 
 /// Replacement string inserted in place of truncated message content.
 pub const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
@@ -137,7 +168,9 @@ pub enum TruncationError {
 // The stage
 // =============================================================================
 
-/// Trim stale history in place so the request fits within `limit_chars`.
+/// Trim stale history in place so the request fits within `limit_chars`,
+/// aiming past the budget for the [`LOW_WATERMARK_PCT`] watermark once
+/// triggered.
 ///
 /// `limit_chars` is the total payload character budget for this request. See
 /// the [module documentation](self) for the full algorithm.
@@ -169,17 +202,21 @@ pub fn truncate_history(
 
     // ── Oldest-first trim ────────────────────────────────────────────────────
     // Walk from the oldest message toward the newest, eliding eligible
-    // oversized content only until the running payload estimate drops back
-    // under budget. `running` tracks the approximate payload size as each
-    // replacement shrinks it, so we stop at the minimum necessary and leave the
-    // freshest tool outputs intact.
+    // oversized content until the cumulative estimated savings reach the
+    // quantized watermark target, so the freshest tool outputs are the last to
+    // be sacrificed. The budget gate above guarantees the target is positive,
+    // so the loop never stops before considering the first eligible message.
+    // Exhausting the eligible messages short of the target is fine: the hard
+    // abort below fires only when the payload still exceeds the budget itself,
+    // not the watermark.
     let total = messages.len();
     let placeholder_len = TRUNCATION_PLACEHOLDER.len();
+    let target_savings = target_savings_chars(payload_chars_before, limit_chars);
     let mut messages_truncated = 0usize;
-    let mut running = payload_chars_before;
+    let mut saved = 0usize;
 
     for (i, msg) in messages.iter_mut().enumerate() {
-        if running <= limit_chars {
+        if saved >= target_savings {
             break;
         }
         // Tail-protected messages and non-candidate roles (system, user) are
@@ -202,11 +239,11 @@ pub fn truncate_history(
         msg["content"] = Value::String(TRUNCATION_PLACEHOLDER.to_owned());
         messages_truncated += 1;
         // Each replacement reclaims (content_len - placeholder_len) chars.
-        running = running.saturating_sub(content_len.saturating_sub(placeholder_len));
+        saved = saved.saturating_add(content_len.saturating_sub(placeholder_len));
     }
 
     // ── Budget check ─────────────────────────────────────────────────────────
-    // Re-measure only when something actually changed; `running` is an estimate
+    // Re-measure only when something actually changed; `saved` is an estimate
     // and the hard abort deserves the real number.
     let payload_chars_after = if messages_truncated == 0 {
         payload_chars_before
@@ -231,6 +268,32 @@ pub fn truncate_history(
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// The number of estimated characters truncation must reclaim from a payload
+/// of `payload_chars` under a budget of `limit_chars`.
+///
+/// The naive answer — `payload_chars - limit_chars`, just enough to fit —
+/// re-elides one more message on almost every turn of a growing conversation,
+/// because this stage is stateless and the client resends the full raw history
+/// each time. The target is therefore anchored at the [`LOW_WATERMARK_PCT`]
+/// watermark and rounded **up** to a whole multiple of the margin between
+/// watermark and budget: the result depends on the payload size only through
+/// that coarse bracket, so the elision set it induces stays identical across
+/// every turn within one margin (~25% of budget) of payload growth. See the
+/// module docs for the full KV-cache rationale.
+///
+/// Returns `0` when the payload is already at or below the watermark. The
+/// margin is clamped to at least one character so a degenerate `limit_chars`
+/// of `0` still yields a finite target (the whole payload).
+const fn target_savings_chars(payload_chars: usize, limit_chars: usize) -> usize {
+    let watermark = limit_chars.saturating_mul(LOW_WATERMARK_PCT) / 100;
+    let margin = match limit_chars - watermark {
+        0 => 1,
+        margin => margin,
+    };
+    let needed = payload_chars.saturating_sub(watermark);
+    needed.div_ceil(margin).saturating_mul(margin)
+}
 
 /// Byte length of `body` once serialized, without allocating a copy of it.
 ///

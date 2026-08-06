@@ -79,8 +79,8 @@ fn missing_messages_field_passes_through_unchanged() {
 #[test]
 fn over_budget_trims_oldest_first_and_stops_early() {
     // Four 100k tool messages outside the protected tail. The payload (~400k)
-    // exceeds the 240k budget; trimming the two oldest brings it back under, so
-    // the two newer ones must survive.
+    // exceeds the 240k budget; the quantized watermark target (240,000 saved
+    // chars here) takes the three oldest, so the newest must survive.
     let mut b = body(&with_tail(vec![
         msg("tool", &big(100_000)),
         msg("tool", &big(100_000)),
@@ -91,18 +91,18 @@ fn over_budget_trims_oldest_first_and_stops_early() {
     let report = truncate_history(&mut b, ROOMY).unwrap();
 
     assert_eq!(
-        report.messages_truncated, 2,
-        "only as many oldest messages as needed to get under budget"
+        report.messages_truncated, 3,
+        "as many oldest messages as the watermark target needs"
     );
     assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
     assert_eq!(b["messages"][1]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][2]["content"], TRUNCATION_PLACEHOLDER);
     assert_eq!(
-        b["messages"][2]["content"].as_str().unwrap().len(),
+        b["messages"][3]["content"].as_str().unwrap().len(),
         100_000,
-        "newer big message preserved once under budget"
+        "newest big message preserved once the target is met"
     );
-    assert_eq!(b["messages"][3]["content"].as_str().unwrap().len(), 100_000);
-    assert!(report.payload_chars_after <= ROOMY);
+    assert!(report.payload_chars_after <= ROOMY * LOW_WATERMARK_PCT / 100);
     assert!(report.payload_chars_after < report.payload_chars_before);
 }
 
@@ -141,9 +141,10 @@ fn system_messages_are_never_truncated() {
 /// recent turns, however tight the budget.
 #[test]
 fn the_protected_tail_is_never_trimmed() {
-    // One huge unprotected tool at index 0, then two oversized tools that sit
-    // inside the protected tail. Trimming index 0 alone drops the payload under
-    // budget, and the tail must be untouched regardless.
+    // One huge tool at index 0, then two oversized tools at indices 1-2. With
+    // eleven messages the protected window is indices 3..=10, so all three are
+    // eligible — but index 0 alone covers the savings target, and everything
+    // behind it survives, protected tail included.
     let mut b = body(&with_tail(vec![
         msg("tool", &big(300_000)),
         msg("tool", &big(30_000)),
@@ -292,4 +293,151 @@ fn a_large_budget_admits_a_payload_the_old_floor_would_have_allowed_anyway() {
     ]);
 
     assert!(truncate_history(&mut b, 131_072 * CHARS_PER_TOKEN_APPROX).is_ok());
+}
+
+// ── Low-watermark hysteresis ─────────────────────────────────────────────────
+
+#[test]
+fn a_payload_in_the_dead_zone_is_left_untouched() {
+    // Two 100k tool messages land the payload (~200k) between the 180k
+    // watermark and the 240k budget. Over the watermark is not a trigger —
+    // only over the budget is — so nothing moves and the prompt prefix
+    // survives verbatim.
+    let mut b = body(&with_tail(vec![
+        msg("tool", &big(100_000)),
+        msg("tool", &big(100_000)),
+    ]));
+    let before = b.clone();
+
+    let report = truncate_history(&mut b, ROOMY).unwrap();
+
+    assert_eq!(b, before, "no trimming inside the dead zone");
+    assert_eq!(report.messages_truncated, 0);
+    assert_eq!(report.payload_chars_before, report.payload_chars_after);
+    // The fixture really is inside the zone, not merely under the budget.
+    assert!(report.payload_chars_before > ROOMY * LOW_WATERMARK_PCT / 100);
+    assert!(report.payload_chars_before <= ROOMY);
+}
+
+#[test]
+fn a_triggered_trim_lands_at_the_watermark_not_barely_under_budget() {
+    // Same fixture as `over_budget_trims_oldest_first_and_stops_early`:
+    // minimal-fit trimming would stop after two messages, just under the 240k
+    // budget, and then move the elision frontier again on the very next turn.
+    // The watermark target takes a third, parking the payload under 75% of
+    // budget so following turns need no new elisions.
+    let mut b = body(&with_tail(vec![
+        msg("tool", &big(100_000)),
+        msg("tool", &big(100_000)),
+        msg("tool", &big(100_000)),
+        msg("tool", &big(100_000)),
+    ]));
+
+    let report = truncate_history(&mut b, ROOMY).unwrap();
+
+    assert_eq!(report.messages_truncated, 3, "one more than minimal fit");
+    assert!(report.payload_chars_after <= ROOMY * LOW_WATERMARK_PCT / 100);
+}
+
+#[test]
+fn the_savings_target_is_quantized_to_watermark_margins() {
+    // limit 1,000 → watermark 750, margin 250.
+    assert_eq!(target_savings_chars(1_000, 1_000), 250, "bracket floor");
+    assert_eq!(target_savings_chars(1_001, 1_000), 500, "first crossing");
+    assert_eq!(target_savings_chars(1_250, 1_000), 500, "bracket edge");
+    assert_eq!(
+        target_savings_chars(1_251, 1_000),
+        750,
+        "just past the edge"
+    );
+}
+
+#[test]
+fn a_payload_at_or_below_the_watermark_needs_no_savings() {
+    assert_eq!(target_savings_chars(750, 1_000), 0);
+    assert_eq!(target_savings_chars(0, 1_000), 0);
+}
+
+#[test]
+fn a_degenerate_budget_clamps_the_margin_rather_than_dividing_by_zero() {
+    // limit 0 → watermark 0, margin clamps to 1: the whole payload is owed.
+    assert_eq!(target_savings_chars(42, 0), 42);
+    // limit 1 → watermark 1 * 75 / 100 = 0, margin 1.
+    assert_eq!(target_savings_chars(10, 1), 10);
+}
+
+/// The property this whole feature exists for: as a conversation grows past
+/// the budget turn after turn, the elision set — and therefore the forwarded
+/// prompt prefix llama.cpp matches its KV cache against — stays identical
+/// until growth crosses a whole watermark margin, instead of shifting on
+/// every turn.
+#[test]
+fn the_elision_set_is_stable_while_the_conversation_grows_within_a_bracket() {
+    fn elided_indices(b: &Value) -> Vec<usize> {
+        b["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m["content"] == TRUNCATION_PLACEHOLDER)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    // Budget 200,000 → watermark 150,000, margin 50,000. Turn `t` resends the
+    // full raw history as `t` identical 10k tool messages (the stage is
+    // stateless), so the serialized payload is 35 + 10,029·t and each elision
+    // saves 9,900. Growth per turn (10,029) exceeds savings per message
+    // (9,900): the pre-watermark minimal-fit rule would have moved the elision
+    // frontier on *every* triggered turn of this schedule.
+    const LIMIT: usize = 200_000;
+
+    let mut previous: Option<(Vec<usize>, Vec<Value>)> = None;
+    let mut transitions = 0usize;
+
+    for t in 1..=30 {
+        let mut b = body(&vec![msg("tool", &big(10_000)); t]);
+        let report = truncate_history(&mut b, LIMIT).unwrap();
+
+        // Hand-computed: t ≤ 19 fits (190,586 ≤ 200,000 at t = 19); the
+        // savings target is then 100,000 (turns 20-24, 11 elisions), 150,000
+        // (turns 25-29, 16 elisions), and 200,000 (turn 30, 21 elisions).
+        let expected: Vec<usize> = match t {
+            ..=19 => vec![],
+            20..=24 => (0..=10).collect(),
+            25..=29 => (0..=15).collect(),
+            _ => (0..=20).collect(),
+        };
+        let actual = elided_indices(&b);
+        assert_eq!(actual, expected, "elision set at turn {t}");
+
+        if report.messages_truncated > 0 {
+            assert!(
+                report.payload_chars_after <= LIMIT * LOW_WATERMARK_PCT / 100,
+                "turn {t} must land at or below the watermark"
+            );
+        }
+
+        let messages = b["messages"].as_array().unwrap().clone();
+        if let Some((previous_set, previous_messages)) = previous {
+            if actual == previous_set {
+                // The KV-cache property: while the elision set holds, the
+                // previous turn's entire forwarded message array is a literal
+                // prefix of this turn's.
+                assert_eq!(
+                    &messages[..previous_messages.len()],
+                    &previous_messages[..],
+                    "prefix must be stable into turn {t}"
+                );
+            } else {
+                transitions += 1;
+            }
+        }
+        previous = Some((actual, messages));
+    }
+
+    // One initial truncation event (turn 20) plus two bracket crossings
+    // (turns 25 and 30). Minimal-fit trimming would have made ~11 of the 30
+    // turns move the frontier — one per triggered turn.
+    assert_eq!(transitions, 3, "prefix breaks across the whole session");
 }
