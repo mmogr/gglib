@@ -4,9 +4,8 @@ mod tests;
 
 use std::collections::HashMap;
 
-use gglib_core::ports::AgentError;
-
-use crate::fnv1a::fnv1a_64;
+use super::fnv1a::fnv1a_64;
+use crate::ports::AgentError;
 
 // =============================================================================
 // StagnationDetector
@@ -38,7 +37,7 @@ impl StagnationDetector {
     /// | 5 (default) | 6 (fires on sixth occurrence)          |
     ///
     /// Empty text is silently ignored (tool-call-only iterations).
-    pub(crate) fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
+    pub fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
         if text.is_empty() {
             return Ok(());
         }

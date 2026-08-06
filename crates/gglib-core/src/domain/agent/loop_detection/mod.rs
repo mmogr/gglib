@@ -4,11 +4,11 @@ mod tests;
 
 use std::collections::HashMap;
 
-use gglib_core::ToolCall;
-use gglib_core::ports::AgentError;
 use serde_json::Value;
 
-use crate::fnv1a::fnv1a_64;
+use super::fnv1a::fnv1a_64;
+use super::tool_types::ToolCall;
+use crate::ports::AgentError;
 
 // =============================================================================
 // Signature helpers
@@ -158,7 +158,7 @@ impl LoopDetector {
     /// the third.
     ///
     /// `effective_max = 0` rejects the very first occurrence (zero tolerance).
-    pub(crate) fn check(
+    pub fn check(
         &mut self,
         calls: &[ToolCall],
         max_strikes: usize,

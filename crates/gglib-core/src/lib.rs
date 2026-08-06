@@ -28,15 +28,16 @@ pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
     AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
-    DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent,
+    DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent, LoopDetector,
     MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
     MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpLifecycle, McpServer,
     McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
     MessageContent, MessageRole, Model, ModelCapabilities, ModelFilterOptions, NameSource,
-    NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, SEARCH_RESULTS_CAP, ToolCall,
-    ToolDefinition, ToolIndex, ToolResult, ToolSummary, UNKNOWN_MODEL_NAME, UpdateMcpServer,
-    capabilities_from_architecture, declared_name, infer_from_chat_template, repo_short_name,
-    resolve_model_name, strip_gguf_suffix, transform_messages_for_capabilities,
+    NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, SEARCH_RESULTS_CAP,
+    StagnationDetector, ToolCall, ToolDefinition, ToolIndex, ToolResult, ToolSummary,
+    UNKNOWN_MODEL_NAME, UpdateMcpServer, capabilities_from_architecture, declared_name,
+    infer_from_chat_template, is_observation_batch, repo_short_name, resolve_model_name,
+    strip_gguf_suffix, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
