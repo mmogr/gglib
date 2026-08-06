@@ -17,3 +17,8 @@ pub use exec::python_bridge::{
 // Whether the optional hf_xet accelerator is already provisioned. Read by the
 // executor to choose a backend, and by the GUI to render setup status.
 pub use exec::python_env::fast_helper_provisioned;
+
+// Inspecting and removing that environment, for `gglib config fast-downloads`.
+// Neither is on the download path: the backend choice stays the bare
+// file-existence check above.
+pub use exec::python_env::{FastHelperStatus, fast_helper_status, remove_fast_helper};

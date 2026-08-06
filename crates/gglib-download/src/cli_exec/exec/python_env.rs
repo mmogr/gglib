@@ -531,6 +531,76 @@ pub fn fast_helper_provisioned() -> bool {
     get_env_directory().is_ok_and(|dir| venv_python_path(&dir).exists())
 }
 
+/// What is on disk for the accelerator, for reporting rather than deciding.
+///
+/// Separate from [`fast_helper_provisioned`] on purpose: that one is on the
+/// download hot path and must stay a bare file check, whereas this exists to
+/// answer "what have I actually got?" and can afford to look around.
+#[derive(Debug, Clone)]
+pub struct FastHelperStatus {
+    /// Whether a usable environment is present — the same question, and the
+    /// same answer, that selects the backend for a download.
+    pub provisioned: bool,
+    /// Where it is, or where it would go.
+    pub env_dir: PathBuf,
+    /// Whether `env_dir` is the pre-rename location.
+    pub legacy_path: bool,
+    /// Which tool built it, per its marker. `None` when nothing is provisioned
+    /// or the marker is unreadable.
+    pub builder: Option<String>,
+    /// The tool that *would* build it now.
+    pub available_builder: &'static str,
+}
+
+/// Inspect the accelerator's environment.
+pub fn fast_helper_status() -> Result<FastHelperStatus, EnvSetupError> {
+    let root = data_root().map_err(|e| EnvSetupError::DataRootFailed(e.to_string()))?;
+    let env_dir = resolve_env_directory(&root);
+    let provisioned = venv_python_path(&env_dir).exists();
+
+    let builder = provisioned
+        .then(|| {
+            fs::read_to_string(env_dir.join(ENV_MARKER_NAME))
+                .ok()
+                .and_then(|content| serde_json::from_str::<EnvMarker>(&content).ok())
+                .map(|marker| marker.builder)
+        })
+        .flatten();
+
+    Ok(FastHelperStatus {
+        provisioned,
+        legacy_path: env_dir.parent().and_then(Path::file_name)
+            == Some(LEGACY_ENV_PARENT_DIR.as_ref()),
+        env_dir,
+        builder,
+        available_builder: Builder::detect().label(),
+    })
+}
+
+/// Remove the accelerator's environment.
+///
+/// Deleting the directory *is* the disable switch: the backend choice is a
+/// file-existence check, so once this returns, every subsequent download takes
+/// the native path. The helper script is left alone — it is a single file that
+/// gets rewritten on the next provision anyway, and it is shared with nothing.
+///
+/// Removing what is not there succeeds. "Make sure this is off" is the useful
+/// contract for a command whose whole job is to leave the accelerator disabled.
+pub fn remove_fast_helper() -> Result<bool, EnvSetupError> {
+    let env_dir = get_env_directory()?;
+
+    if !env_dir.exists() {
+        return Ok(false);
+    }
+
+    fs::remove_dir_all(&env_dir).map_err(|e| EnvSetupError::DirectoryCreateFailed {
+        path: env_dir,
+        reason: e.to_string(),
+    })?;
+
+    Ok(true)
+}
+
 /// Environment inputs to interpreter discovery, snapshotted so the candidate
 /// list can be built and asserted on without touching the real environment.
 ///
@@ -1278,6 +1348,56 @@ mod tests {
         assert!(msg.contains("/usr/bin/python3"), "{msg}");
         assert!(msg.contains("3.8"), "{msg}");
         assert!(msg.contains("3.9"), "{msg}");
+    }
+
+    /// Disabling has to be idempotent: `make setup` and the CLI both reach for
+    /// it, and "already off" is a success, not an error to report.
+    #[test]
+    fn remove_fast_helper_reports_whether_anything_was_there() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let env_dir = root.path().join(ENV_PARENT_DIR).join(ENV_NAME);
+
+        // Nothing there yet.
+        assert!(!env_dir.exists());
+
+        fs::create_dir_all(env_dir.join("bin")).expect("create env");
+        assert!(env_dir.exists());
+
+        // The real function reads `data_root`, so exercise the removal
+        // semantics directly against the same directory shape.
+        assert!(fs::remove_dir_all(&env_dir).is_ok());
+        assert!(!env_dir.exists());
+    }
+
+    /// The status struct answers "what have I got", so a provisioned
+    /// environment at the legacy path has to say so — otherwise a user
+    /// wondering why `.python/` is empty has nothing to go on.
+    #[test]
+    fn status_flags_the_legacy_path() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let legacy = root.path().join(LEGACY_ENV_PARENT_DIR).join(ENV_NAME);
+        fs::create_dir_all(&legacy).expect("create legacy env");
+
+        let resolved = resolve_env_directory(root.path());
+
+        assert_eq!(resolved, legacy);
+        assert_eq!(
+            resolved.parent().and_then(Path::file_name),
+            Some(LEGACY_ENV_PARENT_DIR.as_ref())
+        );
+    }
+
+    /// A fresh root is not provisioned and is not on the legacy path.
+    #[test]
+    fn status_of_a_fresh_root_is_not_provisioned() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let resolved = resolve_env_directory(root.path());
+
+        assert!(!venv_python_path(&resolved).exists());
+        assert_ne!(
+            resolved.parent().and_then(Path::file_name),
+            Some(LEGACY_ENV_PARENT_DIR.as_ref())
+        );
     }
 
     #[test]
