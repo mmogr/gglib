@@ -1,5 +1,9 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
+// A std MutexGuard held across an .await starves the whole runtime the moment
+// two tasks contend — the #721 daemon wedge was this bug class. Denied here
+// because neither crate inherits the workspace clippy lints yet.
+#![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
 pub mod assistant_ui;
 mod command;
