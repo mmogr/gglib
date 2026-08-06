@@ -58,6 +58,22 @@ pub enum BenchmarkEvent {
     },
     /// A tune candidate finished evaluating (pre-screen or full suite).
     TuneCandidateComplete { result: TuneCandidateResult },
+
+    /// An agentic-eval arm is about to run its task set.
+    AgenticArmStarted {
+        arm: crate::domain::benchmark::agentic::EvalArm,
+        total_tasks: usize,
+    },
+    /// One task finished under one agentic-eval arm.
+    AgenticTaskComplete {
+        arm: crate::domain::benchmark::agentic::EvalArm,
+        task_id: String,
+        passed: bool,
+    },
+    /// The agentic eval finished; the full A/B report.
+    AgenticEvalComplete {
+        report: crate::domain::benchmark::agentic::AgenticEvalReport,
+    },
 }
 
 /// Wraps either a compare or perf result for `BenchmarkEvent::ModelComplete`.

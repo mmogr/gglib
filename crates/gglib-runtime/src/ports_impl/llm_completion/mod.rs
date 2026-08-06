@@ -88,6 +88,20 @@ pub struct LlmCompletionAdapter {
     /// the case for CLI `gglib chat`/`q`, which render the loop's events
     /// directly.
     retry_observer: Option<Arc<dyn RetryObserver>>,
+    /// Skip the request-shaping pipeline entirely and send the bare body.
+    ///
+    /// The control arm of an A/B evaluation: no sampling resolution (the
+    /// upstream's own defaults apply), no capability shaping, no truncation,
+    /// no grammar. Off everywhere else — this exists so "bare llama-server"
+    /// is measurable against "through the gglib pipeline" on identical
+    /// requests, not as a general escape hatch.
+    raw_passthrough: bool,
+    /// Optional `tool_choice` written into the request body.
+    ///
+    /// The agent path has no client to send one; benchmark harnesses set
+    /// `"required"` on tasks whose expected outcome demands a call, so the
+    /// request carries the same demand an agentic client would express.
+    tool_choice: Option<String>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -140,6 +154,8 @@ impl LlmCompletionAdapter {
             cache_metrics: None,
             retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
+            raw_passthrough: false,
+            tool_choice: None,
         }
     }
 
@@ -214,6 +230,26 @@ impl LlmCompletionAdapter {
         self
     }
 
+    /// Bypass the request-shaping pipeline and send the bare body.
+    ///
+    /// The A/B evaluation's control arm — see the field docs on
+    /// [`Self`]. Leave off (the default) for every production path.
+    #[must_use]
+    pub fn with_raw_passthrough(mut self, raw: bool) -> Self {
+        self.raw_passthrough = raw;
+        self
+    }
+
+    /// Write a `tool_choice` value into each request body.
+    ///
+    /// Set before the pipeline runs, so the shaping stages (including the
+    /// dialect grammar stage) read it exactly as they would a client's.
+    #[must_use]
+    pub fn with_tool_choice(mut self, tool_choice: Option<String>) -> Self {
+        self.tool_choice = tool_choice;
+        self
+    }
+
     /// Build the request body and run the shared request-shaping pipeline over
     /// it — everything that happens before the bytes leave this process.
     ///
@@ -232,6 +268,18 @@ impl LlmCompletionAdapter {
         tools: &[ToolDefinition],
     ) -> Result<serde_json::Value> {
         let mut body = body::build_chat_body(&self.model, messages, tools, self.sampling.as_ref());
+
+        // Written before the pipeline runs so the shaping stages read it
+        // exactly as they would an external client's tool_choice.
+        if let Some(tool_choice) = &self.tool_choice {
+            body["tool_choice"] = serde_json::Value::String(tool_choice.clone());
+        }
+
+        // Control arm of an A/B evaluation: the bare body, upstream defaults,
+        // no shaping. See the `raw_passthrough` field docs.
+        if self.raw_passthrough {
+            return Ok(body);
+        }
 
         // The same pipeline, in the same order, that the proxy runs.
         // `build_chat_body` has already written the caller's sampling

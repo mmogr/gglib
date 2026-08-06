@@ -82,6 +82,11 @@ pub struct TuneTaskResult {
     pub iterations: usize,
     /// Wall-clock time spent on this task, in milliseconds.
     pub latency_ms: u64,
+    /// Completion tokens generated across the task's agent run, from the
+    /// upstream's usage reports. `None` when the run errored before any
+    /// response completed or the upstream reported no usage.
+    #[serde(default)]
+    pub completion_tokens: Option<u64>,
     /// Optional human-readable detail (e.g. which expected call was missed),
     /// surfaced in the leaderboard drill-down.
     #[serde(default)]
@@ -104,8 +109,11 @@ pub struct TuneCandidateResult {
     /// never ran the full suite (`task_results` only covers the pre-screen
     /// tasks in that case).
     pub pruned: bool,
-    /// Token-generation throughput observed for this candidate, if
-    /// measured (used to normalize the `speed` scoring component).
+    /// Completion-token throughput observed for this candidate, in tokens
+    /// per wall-clock second across its evaluated tasks (total completion
+    /// tokens ÷ total task wall time, which includes prompt pre-fill — a
+    /// consistent within-run comparison figure, not a pure decode rate).
+    /// `None` when no task reported usage.
     #[serde(default)]
     pub tg_tps: Option<f64>,
 }

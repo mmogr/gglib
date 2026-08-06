@@ -169,6 +169,7 @@ impl AgentLoop {
         messages: &mut Vec<AgentMessage>,
         content: String,
         iteration: usize,
+        total_completion_tokens: Option<u64>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
         debug!("no tool calls; final answer reached");
@@ -187,6 +188,7 @@ impl AgentLoop {
             answer: content,
             history: std::mem::take(messages),
             total_iterations: iteration + 1,
+            total_completion_tokens,
         })
     }
 
@@ -266,10 +268,18 @@ impl AgentLoopPort for AgentLoop {
 
         messages = prune_for_budget(messages, &config);
 
+        // Summed across iterations; `None` until any upstream reports usage,
+        // so "not measured" stays distinct from "zero tokens".
+        let mut total_completion_tokens: Option<u64> = None;
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
             let response = self.call_and_collect(&messages, &tools, &tx).await?;
+            if let Some(ct) = response.completion_tokens {
+                total_completion_tokens =
+                    Some(total_completion_tokens.unwrap_or(0) + u64::from(ct));
+            }
 
             if response.tool_calls.len() > config.max_parallel_tools {
                 // Soft recovery (was: hard `Err(ParallelToolLimitExceeded)`).
@@ -360,8 +370,14 @@ impl AgentLoopPort for AgentLoop {
                 .await?;
 
             if response.tool_calls.is_empty() {
-                return Self::finalize_answer(&mut messages, response.content, iteration, &tx)
-                    .await;
+                return Self::finalize_answer(
+                    &mut messages,
+                    response.content,
+                    iteration,
+                    total_completion_tokens,
+                    &tx,
+                )
+                .await;
             }
 
             self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)

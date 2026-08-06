@@ -76,6 +76,15 @@ pub struct CollectedResponse {
     pub tool_calls: Vec<ToolCall>,
     /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
     pub finish_reason: String,
+    /// Completion-token count from the stream's trailing
+    /// [`LlmStreamEvent::Usage`] event.
+    ///
+    /// `None` when the upstream never reported usage — absent and zero are
+    /// distinct, exactly as on the event itself. Per the `OpenAI` streaming
+    /// convention the usage chunk arrives *after* `Done`, which is why the
+    /// collector drains the stream to its end instead of returning at the
+    /// `Done` event.
+    pub completion_tokens: Option<u32>,
 }
 
 // =============================================================================
@@ -138,6 +147,10 @@ pub async fn collect_stream(
     // Used to distinguish a hard connectivity failure (zero events) from a
     // mid-response truncation (some events, no Done frame).
     let mut got_any_event = false;
+    // Set at `Done`; the loop keeps draining afterwards because the OpenAI
+    // usage chunk legitimately trails `Done` (before the byte stream closes).
+    let mut finished: Option<(String, Vec<ToolCall>)> = None;
+    let mut completion_tokens: Option<u32> = None;
 
     while let Some(event) = stream.next().await {
         got_any_event = true;
@@ -176,64 +189,28 @@ pub async fn collect_stream(
                 id,
                 name,
                 arguments,
-            } => {
-                // Guard against a pathological index that would cause a huge allocation.
-                if index >= MAX_TOOL_CALL_INDEX {
-                    anyhow::bail!(
-                        "tool-call index {index} exceeds hard limit ({MAX_TOOL_CALL_INDEX})"
-                    );
-                }
-                // Ensure the partials vec has a slot at `index`.
-                if partials.len() <= index {
-                    partials.resize_with(index + 1, PartialToolCall::default);
-                }
-                let p = &mut partials[index];
-                if let Some(id) = id {
-                    if let Some(ref existing) = p.id {
-                        warn!(
-                            tool_index = index,
-                            existing = %existing,
-                            new = %id,
-                            "ToolCallDelta overwrote existing id"
-                        );
-                    }
-                    p.id = Some(id);
-                }
-                if let Some(name) = name {
-                    if let Some(ref existing) = p.name {
-                        warn!(
-                            tool_index = index,
-                            existing = %existing,
-                            new = %name,
-                            "ToolCallDelta overwrote existing name"
-                        );
-                    }
-                    p.name = Some(name);
-                }
-                if let Some(args) = arguments {
-                    p.arguments.push_str(&args);
-                }
-            }
+            } => upsert_tool_call_delta(&mut partials, index, id, name, arguments)?,
 
             LlmStreamEvent::Done { finish_reason } => {
-                let tool_calls = assemble_tool_calls(partials, tx).await?;
-
-                return Ok(CollectedResponse {
-                    content: text_buf,
-                    reasoning_content: reasoning_buf,
-                    tool_calls,
-                    finish_reason,
-                });
+                let tool_calls = assemble_tool_calls(std::mem::take(&mut partials), tx).await?;
+                finished = Some((finish_reason, tool_calls));
+                // Do not return yet: the trailing usage chunk arrives after
+                // Done. The decoder ends the stream right after the [DONE]
+                // sentinel, so this drains at most a few trailer events.
             }
 
             LlmStreamEvent::NormalizationError { kind, raw } => {
                 handle_normalization_error(tx, &kind, &raw).await;
             }
 
-            // Wire-facing telemetry (feeds e.g. a client's context-window
-            // UI widget) with no bearing on the agent loop's own internal
-            // state — nothing to accumulate or forward here.
-            LlmStreamEvent::Usage { .. } => {}
+            // Wire-facing telemetry; the completion count is kept so callers
+            // can compute generation throughput (the tune/eval speed axis).
+            LlmStreamEvent::Usage {
+                completion_tokens: ct,
+                ..
+            } => {
+                completion_tokens = Some(ct);
+            }
 
             LlmStreamEvent::UpstreamError {
                 message,
@@ -241,6 +218,16 @@ pub async fn collect_stream(
                 code,
             } => return Err(upstream_error(&message, &error_type, &code)),
         }
+    }
+
+    if let Some((finish_reason, tool_calls)) = finished {
+        return Ok(CollectedResponse {
+            content: text_buf,
+            reasoning_content: reasoning_buf,
+            tool_calls,
+            finish_reason,
+            completion_tokens,
+        });
     }
 
     // The stream ended without a Done event.  Distinguish two failure modes:
@@ -255,6 +242,54 @@ pub async fn collect_stream(
 // =============================================================================
 // Private helpers
 // =============================================================================
+
+/// Fold one `ToolCallDelta` into the partial-call accumulator at `index`.
+///
+/// Bounds the index against [`MAX_TOOL_CALL_INDEX`] (a malformed stream must
+/// not drive a huge allocation), grows the vec on demand, and logs when a
+/// delta overwrites an already-seen `id`/`name` — a should-never-happen the
+/// old inline code also surfaced.
+fn upsert_tool_call_delta(
+    partials: &mut Vec<PartialToolCall>,
+    index: usize,
+    id: Option<String>,
+    name: Option<String>,
+    arguments: Option<String>,
+) -> Result<()> {
+    if index >= MAX_TOOL_CALL_INDEX {
+        anyhow::bail!("tool-call index {index} exceeds hard limit ({MAX_TOOL_CALL_INDEX})");
+    }
+    if partials.len() <= index {
+        partials.resize_with(index + 1, PartialToolCall::default);
+    }
+    let p = &mut partials[index];
+    if let Some(id) = id {
+        if let Some(ref existing) = p.id {
+            warn!(
+                tool_index = index,
+                existing = %existing,
+                new = %id,
+                "ToolCallDelta overwrote existing id"
+            );
+        }
+        p.id = Some(id);
+    }
+    if let Some(name) = name {
+        if let Some(ref existing) = p.name {
+            warn!(
+                tool_index = index,
+                existing = %existing,
+                new = %name,
+                "ToolCallDelta overwrote existing name"
+            );
+        }
+        p.name = Some(name);
+    }
+    if let Some(args) = arguments {
+        p.arguments.push_str(&args);
+    }
+    Ok(())
+}
 
 /// Surface a non-fatal `NormalizationError` from the dialect parser.
 ///

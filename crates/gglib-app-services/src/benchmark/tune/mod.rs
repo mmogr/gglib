@@ -196,13 +196,14 @@ pub async fn run_tune(
         }
 
         let composite_score = compute_composite_score(&task_results, &config.weights);
+        let tg_tps = throughput_tps(&task_results);
         let result = TuneCandidateResult {
             config: candidate_config,
             source,
             task_results,
             composite_score,
             pruned: !is_survivor,
-            tg_tps: None,
+            tg_tps,
         };
 
         if let Err(e) = deps
@@ -363,6 +364,28 @@ async fn run_task(
     candidate: &InferenceConfig,
     task: &TuneTask,
 ) -> TuneTaskResult {
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
+        LlmCompletionAdapter::with_client(
+            target.base_url.clone(),
+            http_client.clone(),
+            Some(model.name.clone()),
+        )
+        .with_sampling(Some(candidate.clone())),
+    );
+    run_task_with_llm(llm, task).await
+}
+
+/// The task-execution core shared by the tune sweep and the raw-vs-gglib
+/// agentic eval: drive one task through the real `AgentLoop` against a
+/// caller-prepared [`LlmCompletionPort`], and score the recorded calls.
+///
+/// The adapter configuration is the caller's whole degree of freedom — tune
+/// varies sampling per candidate; the eval varies the entire pipeline per
+/// arm — so it arrives prebuilt rather than as parameters.
+pub(crate) async fn run_task_with_llm(
+    llm: Arc<dyn LlmCompletionPort>,
+    task: &TuneTask,
+) -> TuneTaskResult {
     let mut messages: Vec<AgentMessage> = task.history.clone().unwrap_or_default();
     if let Some(system_prompt) = &task.system_prompt {
         messages.insert(
@@ -376,14 +399,6 @@ async fn run_task(
         content: task.user_prompt.clone(),
     });
 
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(
-            target.base_url.clone(),
-            http_client.clone(),
-            Some(model.name.clone()),
-        )
-        .with_sampling(Some(candidate.clone())),
-    );
     let executor = ScoringToolExecutorPort::new(task.tools.clone());
     let call_log = executor.call_log_handle();
     let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(executor);
@@ -408,6 +423,10 @@ async fn run_task(
     let recorded = call_log.lock().await.clone();
     let scoring = score_outcome(&task.expected, &recorded);
 
+    let completion_tokens = match &run_result {
+        Ok(Ok(output)) => output.total_completion_tokens,
+        _ => None,
+    };
     let (loop_detected, stagnation_detected, error_detail) = match &run_result {
         Ok(Ok(_)) => (false, false, None),
         Ok(Err(gglib_core::ports::AgentError::LoopDetected { .. })) => (true, false, None),
@@ -436,22 +455,71 @@ async fn run_task(
         stagnation_detected,
         iterations,
         latency_ms,
+        completion_tokens,
         detail,
     }
 }
 
+/// Completion-token throughput across a result set: total completion tokens
+/// over total wall time. `None` when no task reported usage. Wall time
+/// includes prompt pre-fill, so this is a consistent within-run comparison
+/// figure rather than a pure decode rate — see
+/// [`TuneCandidateResult::tg_tps`].
+pub(crate) fn throughput_tps(results: &[TuneTaskResult]) -> Option<f64> {
+    let tokens: u64 = results.iter().filter_map(|r| r.completion_tokens).sum();
+    let millis: u64 = results
+        .iter()
+        .filter(|r| r.completion_tokens.is_some())
+        .map(|r| r.latency_ms)
+        .sum();
+    if tokens == 0 || millis == 0 {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    Some(tokens as f64 / (millis as f64 / 1000.0))
+}
+
 /// Combine per-task results into one composite score using [`ScoreWeights`].
 ///
-/// The `speed` weight is currently excluded from the denominator (no
-/// per-candidate `tg_tps` measurement exists yet — see
-/// [`TuneCandidateResult::tg_tps`]) so the three measurable components
-/// (tool accuracy, loop avoidance, task completion) are renormalized to
-/// sum to `1.0` of the available weight.
-fn compute_composite_score(results: &[TuneTaskResult], weights: &ScoreWeights) -> f64 {
-    if results.is_empty() {
+/// The `speed` weight is still excluded from the denominator: `tg_tps` is
+/// now *measured* per candidate ([`TuneCandidateResult::tg_tps`]), but its
+/// scoring definition is relative-to-fastest-in-run, which cannot be
+/// computed while candidates stream out one at a time. The three
+/// self-contained components (tool accuracy, loop avoidance, task
+/// completion) are renormalized to sum to `1.0` of the available weight.
+pub(crate) fn compute_composite_score(results: &[TuneTaskResult], weights: &ScoreWeights) -> f64 {
+    let Some(axes) = axis_scores(results) else {
+        return 0.0;
+    };
+
+    let weight_sum = f64::from(weights.tool_accuracy)
+        + f64::from(weights.loop_avoidance)
+        + f64::from(weights.task_completion);
+    if weight_sum <= 0.0 {
         return 0.0;
     }
 
+    (axes.tool_accuracy * f64::from(weights.tool_accuracy)
+        + axes.loop_avoidance * f64::from(weights.loop_avoidance)
+        + axes.task_completion * f64::from(weights.task_completion))
+        / weight_sum
+}
+
+/// The three measured axes of a result set, each `0.0`–`1.0`.
+pub(crate) struct AxisScores {
+    /// Mean AST-style tool-call match score.
+    pub tool_accuracy: f64,
+    /// Fraction of tasks that triggered neither loop nor stagnation guards.
+    pub loop_avoidance: f64,
+    /// Fraction of tasks that passed outright.
+    pub task_completion: f64,
+}
+
+/// Compute the per-axis scores for a result set. `None` when empty.
+pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
+    if results.is_empty() {
+        return None;
+    }
     #[allow(clippy::cast_precision_loss)]
     let n = results.len() as f64;
     let tool_accuracy = results.iter().map(|r| r.tool_match_score).sum::<f64>() / n;
@@ -465,17 +533,11 @@ fn compute_composite_score(results: &[TuneTaskResult], weights: &ScoreWeights) -
     #[allow(clippy::cast_precision_loss)]
     let task_completion = passed as f64 / n;
 
-    let weight_sum = f64::from(weights.tool_accuracy)
-        + f64::from(weights.loop_avoidance)
-        + f64::from(weights.task_completion);
-    if weight_sum <= 0.0 {
-        return 0.0;
-    }
-
-    (tool_accuracy * f64::from(weights.tool_accuracy)
-        + loop_avoidance * f64::from(weights.loop_avoidance)
-        + task_completion * f64::from(weights.task_completion))
-        / weight_sum
+    Some(AxisScores {
+        tool_accuracy,
+        loop_avoidance,
+        task_completion,
+    })
 }
 
 #[cfg(test)]
@@ -492,6 +554,7 @@ mod tests {
             stagnation_detected: false,
             iterations: 1,
             latency_ms: 10,
+            completion_tokens: None,
             detail: None,
         }
     }
@@ -531,6 +594,22 @@ mod tests {
     #[test]
     fn composite_score_of_empty_results_is_zero() {
         assert_eq!(compute_composite_score(&[], &ScoreWeights::default()), 0.0);
+    }
+
+    /// Total tokens over total wall time — and tasks that reported no usage
+    /// contribute neither tokens nor time, so they cannot dilute the figure.
+    #[test]
+    fn throughput_is_tokens_over_wall_time() {
+        let mut measured = task_result(1.0, true, false);
+        measured.completion_tokens = Some(100);
+        measured.latency_ms = 2_000;
+        let mut unmeasured = task_result(1.0, true, false);
+        unmeasured.completion_tokens = None;
+        unmeasured.latency_ms = 5_000;
+
+        let tps = throughput_tps(&[measured, unmeasured]).unwrap();
+        assert!((tps - 50.0).abs() < 1e-9);
+        assert_eq!(throughput_tps(&[task_result(1.0, true, false)]), None);
     }
 
     #[test]

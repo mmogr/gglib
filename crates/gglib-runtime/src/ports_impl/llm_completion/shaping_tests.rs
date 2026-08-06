@@ -287,3 +287,36 @@ fn transport_fields_survive_the_pipeline() {
     assert_eq!(body["stream"], true);
     assert_eq!(body["return_progress"], true);
 }
+
+// ── A/B eval arms ─────────────────────────────────────────────────────────
+
+/// The eval's control arm: no pipeline at all. No sampling keys resolve in
+/// (the upstream's own defaults apply) and `cache_prompt` is never pinned.
+#[test]
+fn raw_passthrough_skips_the_pipeline_entirely() {
+    let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
+        .with_raw_passthrough(true);
+    let body = body_of(&adapter, &[user("hi")]);
+
+    assert!(body.get("temperature").is_none(), "no sampling floor");
+    assert!(body.get("cache_prompt").is_none(), "no pinning");
+    assert_eq!(body["stream"], true, "transport fields still present");
+}
+
+/// A caller-set tool_choice lands in the body where the pipeline (and the
+/// upstream) read it, overriding build_chat_body's `auto` default.
+#[test]
+fn tool_choice_is_written_into_the_body() {
+    let tools = vec![gglib_core::domain::agent::ToolDefinition {
+        name: "f".to_owned(),
+        description: None,
+        input_schema: Some(json!({"type": "object"})),
+        title: None,
+    }];
+    let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
+        .with_raw_passthrough(true)
+        .with_tool_choice(Some("required".to_owned()));
+    let body = adapter.shaped_body(&[user("hi")], &tools).unwrap();
+
+    assert_eq!(body["tool_choice"], "required");
+}
