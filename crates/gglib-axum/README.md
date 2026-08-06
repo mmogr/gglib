@@ -52,11 +52,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │  │             │     │  & wiring   │     │  mounting   │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
-│  ┌───────────┐     ┌───────────┐     ┌───────────┐                            │
-│  │    dto/     │     │  error.rs   │     │ ws_audio.rs │                            │
-│  │  Request &  │     │  HTTP error │     │ WS audio    │                            │
-│  │  Response   │     │  handling   │     │ source/sink │                            │
-│  └───────────┘     └───────────┘     └───────────┘                            │
+│  ┌─────────────┐     ┌─────────────┐                                                │
+│  │    dto/     │     │  error.rs   │                                                │
+│  │  Request &  │     │  HTTP error │                                                │
+│  │  Response   │     │  handling   │                                                │
+│  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -86,12 +86,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`error.rs`** — HTTP error types and JSON error responses
 - **`routes.rs`** — Route definitions and handler mounting
 - **`sse.rs`** — Server-Sent Events utilities for streaming
-- **`ws_audio.rs`** — `WebSocketAudioSource` and `WebSocketAudioSink`: mpsc-backed `AudioSource`/`AudioSink` implementations that bridge browser PCM16 LE audio over a WebSocket binary channel
 - **`dto/`** — Request/response DTOs for API endpoints
 - **`handlers/model/`** — Model CRUD, verification, downloads, HuggingFace discovery handlers
 - **`handlers/config/`** — Settings and system setup handlers
-- **`handlers/voice.rs`** — 19 thin Axum handlers for voice data/config operations and audio control endpoints
-- **`handlers/voice_ws.rs`** — WebSocket upgrade handler (`GET /api/voice/audio`): registers `WebSocketAudioSource`/`WebSocketAudioSink` with `VoiceService`, spawns ingest/egress tasks
 
 ## Endpoints
 
@@ -112,26 +109,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for HuggingFace updates |
 | `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
-| `GET` | `/api/voice/status` | Voice pipeline state and loaded models |
-| `GET` | `/api/voice/models` | Voice model catalog with download status |
-| `GET` | `/api/voice/devices` | OS audio input devices |
-| `POST` | `/api/voice/models/stt/{id}/download` | Download STT model |
-| `POST` | `/api/voice/models/tts/download` | Download TTS bundle |
-| `POST` | `/api/voice/models/vad/download` | Download Silero VAD |
-| `POST` | `/api/voice/stt/load` | Load STT model into pipeline |
-| `POST` | `/api/voice/tts/load` | Load TTS model into pipeline |
-| `PUT` | `/api/voice/mode` | Set PTT / VAD interaction mode |
-| `PUT` | `/api/voice/voice` | Set active TTS voice |
-| `PUT` | `/api/voice/speed` | Set TTS playback speed |
-| `PUT` | `/api/voice/auto-speak` | Enable/disable auto-TTS on LLM responses |
-| `POST` | `/api/voice/unload` | Stop audio I/O and release model memory |
-| `POST` | `/api/voice/start` | Start voice pipeline (PTT or VAD mode) |
-| `POST` | `/api/voice/stop` | Stop voice pipeline |
-| `POST` | `/api/voice/ptt-start` | Begin push-to-talk recording |
-| `POST` | `/api/voice/ptt-stop` | Stop PTT recording and transcribe |
-| `POST` | `/api/voice/speak` | Synthesize and play TTS (202 fire-and-forget) |
-| `POST` | `/api/voice/stop-speaking` | Interrupt TTS playback |
-| `GET` | `/api/voice/audio` | WebSocket upgrade — binary PCM16 LE audio data plane |
 
 ## Usage
 

@@ -74,7 +74,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
-- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` and `VoiceService` initialization)
+- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` initialization)
 - **`error.rs`** — IPC-compatible error types
 - **`event_emitter.rs`** — `TauriEmitter` implementation of `AppEventEmitter`
 - **`events.rs`** — Event type definitions and serialization
@@ -113,7 +113,6 @@ Real-time events are delivered via SSE (`/api/events`) with Bearer auth, not Tau
 | `server:*` | Server lifecycle (start, ready, stop, error) |
 | `download:*` | Download progress and completion |
 | `log:*` | Server console output |
-| `voice:*` | Voice pipeline state, transcripts, audio levels |
 
 ## Usage
 
