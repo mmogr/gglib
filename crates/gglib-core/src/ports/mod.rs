@@ -1,7 +1,6 @@
 #![doc = include_str!("README.md")]
 pub mod agent;
 pub mod benchmark;
-pub mod cache_metrics_sink;
 pub mod chat_history;
 pub mod download;
 pub mod download_event_emitter;
@@ -26,6 +25,7 @@ pub mod settings_repository;
 pub mod system_probe;
 pub mod tool_executor_filter;
 pub mod tool_support;
+pub mod usage_sink;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -39,7 +39,6 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 
 // Re-export repository traits for convenience
 pub use benchmark::BenchmarkRepositoryPort;
-pub use cache_metrics_sink::CacheMetricsSink;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
@@ -72,6 +71,7 @@ pub use tool_support::{
     ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,
     ToolSupportDetectorPort,
 };
+pub use usage_sink::UsageSink;
 
 /// Container for all repository trait objects.
 ///

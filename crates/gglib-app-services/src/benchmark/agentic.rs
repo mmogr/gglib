@@ -10,27 +10,31 @@
 //! One admission lease covers both arms, for the same reason the tune sweep
 //! holds one across candidates: an arm measured across a model swap would
 //! be measuring the swap. Tasks whose expected outcome demands a tool call
-//! send `tool_choice: "required"` in **both** arms — the same request an
-//! agentic client would make — which is what lets the gglib arm's
-//! decode-time grammar stage engage while the raw arm shows what that
-//! demand achieves without it.
+//! send `tool_choice: "required"` on their **opening turn** in both arms —
+//! the same request an agentic client would make — which is what lets the
+//! gglib arm's decode-time grammar stage engage while the raw arm shows what
+//! that demand achieves without it. Later turns drop back to `"auto"`: a
+//! model held at `"required"` for the whole run can never answer, so it
+//! re-emits its last batch until the loop guard stops it, and the eval ends
+//! up measuring its own harness.
 
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_core::domain::benchmark::BenchmarkEvent;
 use gglib_core::domain::benchmark::agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores, EvalArm,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
-use gglib_core::ports::LlmCompletionPort;
+use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
+use gglib_core::ports::{LlmCompletionPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use super::BenchmarkDeps;
 use super::tune::{axis_scores, run_task_with_llm, throughput_tps};
@@ -56,6 +60,19 @@ pub async fn run_agentic_eval(
         .get_by_id(config.model_id)
         .await
         .with_context(|| format!("model {} not found", config.model_id))?;
+
+    let config_json = serde_json::to_string(&config).ok();
+    let run_id = deps
+        .bench_repo
+        .create_run(
+            BenchmarkRunType::Agentic,
+            &[config.model_id],
+            None,
+            None,
+            config_json.as_deref(),
+        )
+        .await
+        .context("failed to create agentic eval run record")?;
 
     // Resolve the serving context exactly as the tune sweep does.
     let settings = deps.settings_repo.load().await.ok();
@@ -88,6 +105,7 @@ pub async fn run_agentic_eval(
         Ok(a) => a,
         Err(e) => {
             let msg = format!("failed to start model '{}': {e}", model.name);
+            deps.bench_repo.fail_run(run_id, &msg).await.ok();
             let _ = tx.send(BenchmarkEvent::RunFailed { error: msg }).await;
             return Ok(());
         }
@@ -116,6 +134,10 @@ pub async fn run_agentic_eval(
         let mut results = Vec::with_capacity(tasks.len());
         for task in &tasks {
             if cancel.is_cancelled() {
+                deps.bench_repo
+                    .fail_run(run_id, "Aborted by user")
+                    .await
+                    .ok();
                 deps.runtime.stop_current().await.ok();
                 let _ = tx
                     .send(BenchmarkEvent::RunFailed {
@@ -125,8 +147,21 @@ pub async fn run_agentic_eval(
                 return Ok(());
             }
 
-            let llm = build_arm_llm(deps, &base_url, &model.name, arm, &model_context, task);
-            let result = run_task_with_llm(llm, task).await;
+            let result = run_task_with_llm(
+                |usage| {
+                    build_arm_llm(
+                        deps,
+                        &base_url,
+                        &model.name,
+                        arm,
+                        &model_context,
+                        task,
+                        usage,
+                    )
+                },
+                task,
+            )
+            .await;
             let _ = tx
                 .send(BenchmarkEvent::AgenticTaskComplete {
                     arm,
@@ -168,6 +203,17 @@ pub async fn run_agentic_eval(
         tasks: tasks_cmp,
     };
 
+    if let Err(e) = deps
+        .bench_repo
+        .save_agentic_result(&report, run_id, config.model_id)
+        .await
+    {
+        warn!("failed to save agentic eval result: {e}");
+    }
+    if let Err(e) = deps.bench_repo.complete_run(run_id).await {
+        warn!("failed to mark agentic eval run complete: {e}");
+    }
+
     let _ = tx
         .send(BenchmarkEvent::AgenticEvalComplete { report })
         .await;
@@ -185,8 +231,10 @@ pub async fn run_agentic_eval(
 /// - **Gglib** carries the catalog-resolved [`ModelContext`], which switches
 ///   on exactly what the proxy would do for this model.
 ///
-/// Both arms send `tool_choice: "required"` when the task's expected outcome
-/// demands a call — identical requests, different machinery.
+/// Both arms send `tool_choice: "required"` on the opening turn when the
+/// task's expected outcome demands a call — identical requests, different
+/// machinery — and both fall back to `"auto"` afterwards so the model can
+/// finish.
 fn build_arm_llm(
     deps: &BenchmarkDeps,
     base_url: &str,
@@ -194,6 +242,7 @@ fn build_arm_llm(
     arm: EvalArm,
     model_context: &ModelContext,
     task: &TuneTask,
+    usage: Arc<dyn UsageSink>,
 ) -> Arc<dyn LlmCompletionPort> {
     let tool_choice = demands_tool_call(task).then(|| "required".to_owned());
 
@@ -202,7 +251,8 @@ fn build_arm_llm(
         deps.http_client.clone(),
         Some(model_name.to_owned()),
     )
-    .with_tool_choice(tool_choice);
+    .with_first_turn_tool_choice(tool_choice)
+    .with_usage_sink(Some(usage));
 
     let adapter = match arm {
         EvalArm::Raw => adapter.with_raw_passthrough(true),
@@ -220,16 +270,44 @@ fn demands_tool_call(task: &TuneTask) -> bool {
 fn arm_scores(results: &[TuneTaskResult], config: &AgenticEvalConfig) -> ArmScores {
     let axes = axis_scores(results);
     let composite = super::tune::compute_composite_score(results, &config.weights);
-    let (tool_accuracy, loop_avoidance, task_completion) = axes.map_or((0.0, 0.0, 0.0), |a| {
-        (a.tool_accuracy, a.loop_avoidance, a.task_completion)
-    });
     ArmScores {
-        tool_accuracy,
-        loop_avoidance,
-        task_completion,
+        tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
+        loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
+        loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),
+        task_completion: axes.as_ref().map_or(0.0, |a| a.task_completion),
         composite,
         tg_tps: throughput_tps(results),
+        total_completion_tokens: total_completion_tokens(results),
+        total_wall_ms: results.iter().map(|r| r.latency_ms).sum(),
+        mean_time_to_first_tool_call_ms: mean_time_to_first_tool_call_ms(results),
     }
+}
+
+/// Suite-wide completion tokens. `None` only when no task reported usage,
+/// which stays distinct from a measured zero.
+fn total_completion_tokens(results: &[TuneTaskResult]) -> Option<u64> {
+    let mut total: Option<u64> = None;
+    for tokens in results.iter().filter_map(|r| r.completion_tokens) {
+        total = Some(total.unwrap_or(0) + tokens);
+    }
+    total
+}
+
+/// Mean time to first tool call across the tasks that made one.
+///
+/// Averaged over callers only: an `Irrelevance` task correctly never calls a
+/// tool, and folding its absence in as a zero would flatter whichever arm
+/// abstained most.
+fn mean_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Option<f64> {
+    let samples: Vec<u64> = results
+        .iter()
+        .filter_map(|r| r.time_to_first_tool_call_ms)
+        .collect();
+    if samples.is_empty() {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    Some(samples.iter().sum::<u64>() as f64 / samples.len() as f64)
 }
 
 #[cfg(test)]

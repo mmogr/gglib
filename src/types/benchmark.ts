@@ -20,7 +20,7 @@ import type { InferenceConfig } from './index';
 
 // ─── Enumerations ────────────────────────────────────────────────────────────
 
-export type BenchmarkRunType = 'compare' | 'perf' | 'tune';
+export type BenchmarkRunType = 'compare' | 'perf' | 'tune' | 'agentic';
 export type BenchmarkRunStatus = 'running' | 'complete' | 'failed';
 
 // ─── Domain Entities ─────────────────────────────────────────────────────────
@@ -226,6 +226,8 @@ export interface TuneTaskResult {
   iterations: number;
   latency_ms: number;
   completion_tokens?: number | null;
+  /** Time to the model's first tool call; `null` when it never called one. */
+  time_to_first_tool_call_ms?: number | null;
   detail?: string | null;
 }
 
@@ -277,18 +279,42 @@ export type EvalArm = 'raw' | 'gglib';
 /** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
 export interface ArmScores {
   tool_accuracy: number;
-  loop_avoidance: number;
+  /**
+   * Fraction of loop-eligible tasks that tripped neither guard. `null` when no
+   * task ever reached a second tool-call batch — the axis was not measured,
+   * which is distinct from a perfect 1.0. Read with `loop_eligible`.
+   */
+  loop_avoidance?: number | null;
+  /** Denominator behind `loop_avoidance`: how many tasks risked a loop. */
+  loop_eligible: number;
   task_completion: number;
   composite: number;
   tg_tps?: number | null;
+  /** Suite-wide generated tokens; `null` when no task reported usage. */
+  total_completion_tokens?: number | null;
+  /** Suite-wide wall clock, unfiltered. */
+  total_wall_ms: number;
+  /** Mean time to first tool call, over the tasks that made one. */
+  mean_time_to_first_tool_call_ms?: number | null;
 }
 
-/** Per-axis `gglib − raw` difference. */
+/**
+ * Per-axis `gglib − raw` difference, plus the efficiency ratios.
+ *
+ * Quality axes are differences (positive means gglib scored higher);
+ * efficiency figures are ratios `raw ÷ gglib` (above 1.0 means gglib did
+ * better), because lower is better on those and the gaps are multiplicative.
+ */
 export interface ArmDelta {
   tool_accuracy: number;
-  loop_avoidance: number;
+  /** `null` unless both arms measured the axis. */
+  loop_avoidance?: number | null;
   task_completion: number;
   composite: number;
+  /** Suite wall-time speedup, `raw ÷ gglib`. */
+  wall_time_speedup?: number | null;
+  /** Completion-token ratio, `raw ÷ gglib`. */
+  completion_token_ratio?: number | null;
 }
 
 /** One task's outcome under both arms. */
@@ -329,4 +355,9 @@ export interface ModelBenchmarkHistoryResponse {
 
 export interface ModelTuneHistoryResponse {
   results: TuneCandidateResult[];
+}
+
+/** Response for `GET /api/models/{id}/agentic-history`, most recent first. */
+export interface ModelAgenticHistoryResponse {
+  reports: AgenticEvalReport[];
 }

@@ -462,6 +462,26 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // One row per raw-vs-gglib A/B run. The whole `AgenticEvalReport` is
+    // stored as a JSON blob for the same reason the tune table stores its
+    // task results that way: the report is a leaderboard interchange format
+    // read back whole, and normalizing per-arm scores into columns would buy
+    // queries nobody makes. The scalar columns are the ones worth filtering
+    // and sorting on.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS benchmark_agentic_results (
+            id                INTEGER PRIMARY KEY,
+            model_id          INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            run_id            INTEGER REFERENCES benchmark_runs(id) ON DELETE SET NULL,
+            raw_composite     REAL    NOT NULL,
+            gglib_composite   REAL    NOT NULL,
+            report_json       TEXT    NOT NULL,
+            created_at        TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     // Indexes for common benchmark queries
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_compare_results_model ON model_compare_results(model_id, created_at DESC)",
@@ -477,6 +497,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_tune_results_model ON benchmark_tune_results(model_id, created_at DESC)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC)",
     )
     .execute(pool)
     .await?;

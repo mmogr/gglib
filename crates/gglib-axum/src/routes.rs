@@ -194,6 +194,10 @@ fn model_routes() -> Router<AppState> {
             "/{id}/tune-history",
             get(handlers::benchmark::history::model_tune_history),
         )
+        .route(
+            "/{id}/agentic-history",
+            get(handlers::benchmark::history::model_agentic_history),
+        )
         // Tags
         .route(
             "/{id}/tags",

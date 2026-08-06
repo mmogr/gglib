@@ -14,6 +14,9 @@ pub enum BenchmarkRunType {
     /// Tuning run: sweep sampling parameters for one model against an
     /// agentic tool-calling task suite to find the best-scoring settings.
     Tune,
+    /// Raw-vs-gglib A/B run: the same agentic task suite twice against one
+    /// model, once with the request pipeline bypassed and once through it.
+    Agentic,
 }
 
 /// Lifecycle state of a benchmark run.

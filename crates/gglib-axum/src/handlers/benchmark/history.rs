@@ -5,6 +5,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
+use gglib_core::domain::benchmark::agentic::AgenticEvalReport;
 use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::{
     BenchmarkRun, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
@@ -73,6 +74,20 @@ pub struct ModelTuneHistoryResponse {
     pub results: Vec<TuneCandidateResult>,
 }
 
+/// Query parameters for `GET /api/models/{id}/agentic-history`.
+#[derive(Debug, serde::Deserialize)]
+pub struct ModelAgenticHistoryQuery {
+    /// Maximum number of A/B reports to return (default: 20).
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+}
+
+/// Response body for `GET /api/models/{id}/agentic-history`.
+#[derive(Debug, serde::Serialize)]
+pub struct ModelAgenticHistoryResponse {
+    pub reports: Vec<AgenticEvalReport>,
+}
+
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// `GET /api/benchmark/runs` — list recent benchmark runs.
@@ -128,4 +143,19 @@ pub async fn model_tune_history(
     let limit = params.limit.clamp(1, 100);
     let results = state.bench_repo.get_model_tune_history(id, limit).await?;
     Ok(Json(ModelTuneHistoryResponse { results }))
+}
+
+/// `GET /api/models/{id}/agentic-history` — past raw-vs-gglib A/B reports for
+/// one model, most recent first.
+pub async fn model_agentic_history(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Query(params): Query<ModelAgenticHistoryQuery>,
+) -> Result<Json<ModelAgenticHistoryResponse>, HttpError> {
+    let limit = params.limit.clamp(1, 100);
+    let reports = state
+        .bench_repo
+        .get_model_agentic_history(id, limit)
+        .await?;
+    Ok(Json(ModelAgenticHistoryResponse { reports }))
 }

@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 
 use super::RepositoryError;
+use crate::domain::benchmark::agentic::AgenticEvalReport;
 use crate::domain::{
     BenchmarkRun, BenchmarkRunType, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
     TuneCandidateResult,
@@ -116,4 +117,25 @@ pub trait BenchmarkRepositoryPort: Send + Sync {
         model_id: i64,
         limit: i64,
     ) -> Result<Vec<TuneCandidateResult>, RepositoryError>;
+
+    /// Persist one raw-vs-gglib A/B report.
+    ///
+    /// Like tune results, this does not upsert `model_benchmark_summaries`:
+    /// the interesting figure is the *difference* between two arms of the same
+    /// run, which is not a cross-run "best" worth denormalising onto the model.
+    ///
+    /// Returns the auto-assigned result ID.
+    async fn save_agentic_result(
+        &self,
+        report: &AgenticEvalReport,
+        run_id: i64,
+        model_id: i64,
+    ) -> Result<i64, RepositoryError>;
+
+    /// Get raw-vs-gglib A/B reports for one model, most recent first.
+    async fn get_model_agentic_history(
+        &self,
+        model_id: i64,
+        limit: i64,
+    ) -> Result<Vec<AgenticEvalReport>, RepositoryError>;
 }

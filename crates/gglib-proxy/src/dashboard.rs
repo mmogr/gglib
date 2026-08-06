@@ -406,7 +406,7 @@ pub struct DashboardState {
     pub cache_metrics: Arc<CacheMetricsStore>,
     /// Agent-path prompt-cache reuse totals — a separate population from
     /// [`Self::cache_metrics`], recorded by GUI-chat runs (which
-    /// bypass [`crate::forward`]) via [`gglib_core::ports::CacheMetricsSink`].
+    /// bypass [`crate::forward`]) via [`gglib_core::ports::UsageSink`].
     /// Owned by the supervisor and passed in, so it outlives a single proxy
     /// run and can be shared with the embedded axum server.
     pub agent_metrics: Arc<CacheMetricsStore>,

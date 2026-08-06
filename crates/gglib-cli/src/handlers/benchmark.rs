@@ -353,12 +353,6 @@ async fn cmd_agentic(
 
 /// Render the A/B table: one row per axis, columns raw / gglib / delta.
 fn render_agentic_report(report: &AgenticEvalReport) {
-    let fmt_tps = |scores: &ArmScores| {
-        scores
-            .tg_tps
-            .map_or("     —".into(), |t| format!("{t:>6.1}"))
-    };
-
     eprintln!();
     eprintln!(
         "  {BOLD}{model} ({params}B{quant}) @ {ctx} ctx{RESET}",
@@ -378,9 +372,9 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     for (name, raw, gglib, delta) in [
         (
             "tool accuracy  ",
-            report.raw.tool_accuracy,
-            report.gglib.tool_accuracy,
-            report.delta.tool_accuracy,
+            Some(report.raw.tool_accuracy),
+            Some(report.gglib.tool_accuracy),
+            Some(report.delta.tool_accuracy),
         ),
         (
             "loop avoidance ",
@@ -390,35 +384,154 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         ),
         (
             "task completion",
-            report.raw.task_completion,
-            report.gglib.task_completion,
-            report.delta.task_completion,
+            Some(report.raw.task_completion),
+            Some(report.gglib.task_completion),
+            Some(report.delta.task_completion),
         ),
         (
             "composite      ",
-            report.raw.composite,
-            report.gglib.composite,
-            report.delta.composite,
+            Some(report.raw.composite),
+            Some(report.gglib.composite),
+            Some(report.delta.composite),
         ),
     ] {
-        let colour = if delta > 0.0 {
-            style::SUCCESS
-        } else if delta < 0.0 {
-            style::DANGER
-        } else {
-            ""
+        let colour = match delta {
+            Some(d) if d > 0.0 => style::SUCCESS,
+            Some(d) if d < 0.0 => style::DANGER,
+            _ => "",
         };
         eprintln!(
-            "  {name} {raw:>6.3} {gglib:>6.3} {colour}{delta:>+7.3}{RESET}",
+            "  {name} {raw} {gglib} {colour}{delta}{RESET}",
+            raw = fmt_axis(raw, 6),
+            gglib = fmt_axis(gglib, 6),
+            delta = fmt_delta(delta),
             RESET = style::RESET
         );
     }
-    eprintln!(
-        "  throughput tok/s {} {}",
-        fmt_tps(&report.raw),
-        fmt_tps(&report.gglib)
-    );
+    // An arm that never reached a second tool batch cannot have looped, so its
+    // loop-avoidance score is unmeasured rather than perfect. Say so, and say
+    // over how many tasks — the denominator is the whole story.
+    if report.raw.loop_avoidance.is_none() || report.gglib.loop_avoidance.is_none() {
+        eprintln!(
+            "  {MUTED}loop avoidance measured on {raw}/{total} raw and {gglib}/{total} gglib \
+             tasks; unmeasured arms are excluded from the composite{RESET}",
+            raw = report.raw.loop_eligible,
+            gglib = report.gglib.loop_eligible,
+            total = report.tasks.len(),
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
+    }
+
+    render_efficiency_block(report);
     eprintln!();
+}
+
+/// The second table: what the quality axes cannot see.
+///
+/// Kept separate from the axis table on purpose. These figures are reported
+/// beside the composite and never folded into it — they are the arm's cost,
+/// not its correctness, and blending them would make the composite
+/// incomparable across machines. Deltas here are ratios (`raw ÷ gglib`,
+/// "gglib is N× better") rather than differences, because lower is better on
+/// every row and the gaps are multiplicative.
+fn render_efficiency_block(report: &AgenticEvalReport) {
+    eprintln!();
+    eprintln!("  efficiency          raw    gglib    factor");
+    eprintln!("  ─────────────── ─────── ──────── ─────────");
+
+    eprintln!(
+        "  suite wall time {raw} {gglib} {colour}{factor}{RESET}",
+        raw = format_args!("{:>7}", fmt_duration(report.raw.total_wall_ms)),
+        gglib = format_args!("{:>8}", fmt_duration(report.gglib.total_wall_ms)),
+        colour = factor_colour(report.delta.wall_time_speedup),
+        factor = fmt_factor(report.delta.wall_time_speedup),
+        RESET = style::RESET,
+    );
+    eprintln!(
+        "  completion tok  {raw:>7} {gglib:>8} {colour}{factor}{RESET}",
+        raw = fmt_count(report.raw.total_completion_tokens),
+        gglib = fmt_count(report.gglib.total_completion_tokens),
+        colour = factor_colour(report.delta.completion_token_ratio),
+        factor = fmt_factor(report.delta.completion_token_ratio),
+        RESET = style::RESET,
+    );
+    eprintln!(
+        "  1st tool call   {raw:>7} {gglib:>8} {blank:>9}",
+        raw = fmt_ms(report.raw.mean_time_to_first_tool_call_ms),
+        gglib = fmt_ms(report.gglib.mean_time_to_first_tool_call_ms),
+        blank = "—",
+    );
+    eprintln!(
+        "  throughput t/s  {raw:>7} {gglib:>8} {blank:>9}",
+        raw = fmt_tps(&report.raw),
+        gglib = fmt_tps(&report.gglib),
+        blank = "—",
+    );
+}
+
+/// Green when gglib came out ahead on a ratio row, red when it came out behind.
+fn factor_colour(factor: Option<f64>) -> &'static str {
+    match factor {
+        Some(f) if f > 1.0 => style::SUCCESS,
+        Some(f) if f < 1.0 => style::DANGER,
+        _ => "",
+    }
+}
+
+/// `230.0×`, or an em-dash when the ratio was not measurable.
+fn fmt_factor(factor: Option<f64>) -> String {
+    factor.map_or_else(
+        || format!("{:>9}", "—"),
+        |f| {
+            let rendered = if f >= 100.0 {
+                format!("{f:.0}×")
+            } else {
+                format!("{f:.1}×")
+            };
+            format!("{rendered:>9}")
+        },
+    )
+}
+
+/// Milliseconds as `4.8s` past a second, `336ms` below it.
+fn fmt_duration(millis: u64) -> String {
+    if millis >= 1_000 {
+        #[allow(clippy::cast_precision_loss)]
+        let secs = millis as f64 / 1_000.0;
+        format!("{secs:.1}s")
+    } else {
+        format!("{millis}ms")
+    }
+}
+
+fn fmt_ms(millis: Option<f64>) -> String {
+    millis.map_or_else(|| "—".to_owned(), |m| fmt_duration(m.round() as u64))
+}
+
+fn fmt_count(count: Option<u64>) -> String {
+    count.map_or_else(|| "—".to_owned(), |c| c.to_string())
+}
+
+fn fmt_tps(scores: &ArmScores) -> String {
+    scores
+        .tg_tps
+        .map_or_else(|| "—".to_owned(), |t| format!("{t:.1}"))
+}
+
+/// Render one axis cell, right-aligned in `width`, with an em-dash for an axis
+/// that was never measured.
+fn fmt_axis(value: Option<f64>, width: usize) -> String {
+    value.map_or_else(
+        || format!("{:>width$}", "—", width = width),
+        |v| format!("{v:>width$.3}", width = width),
+    )
+}
+
+/// Render a delta cell, signed and right-aligned, with an em-dash when either
+/// arm left the axis unmeasured.
+fn fmt_delta(value: Option<f64>) -> String {
+    value.map_or_else(|| format!("{:>7}", "—"), |v| format!("{v:>+7.3}"))
 }
 
 /// Best-effort hardware snapshot for the JSON export, from the daemon's
