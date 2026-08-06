@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -97,12 +98,27 @@ pub struct LlmCompletionAdapter {
     /// is measurable against "through the gglib pipeline" on identical
     /// requests, not as a general escape hatch.
     raw_passthrough: bool,
-    /// Optional `tool_choice` written into the request body.
+    /// Optional `tool_choice` written into the **first** request body of a
+    /// run, and only the first.
     ///
     /// The agent path has no client to send one; benchmark harnesses set
     /// `"required"` on tasks whose expected outcome demands a call, so the
-    /// request carries the same demand an agentic client would express.
-    tool_choice: Option<String>,
+    /// opening request carries the same demand an agentic client would
+    /// express.
+    ///
+    /// It is deliberately not repeated. A model forced to emit a tool call on
+    /// *every* turn can never produce a final answer, so it re-emits its last
+    /// batch until the loop guard aborts the run — which measures the harness,
+    /// not the model. Later turns keep [`body::build_chat_body`]'s `"auto"`
+    /// default, which is what an agentic client sends once it has its first
+    /// tool result.
+    first_turn_tool_choice: Option<String>,
+    /// Consumed by the first [`Self::shaped_body`] call.
+    ///
+    /// One adapter is built per benchmark task, so this is per-run state, not
+    /// global state. `shaped_body` runs once per turn — outside the retry loop
+    /// — so a retried request cannot spend it early.
+    first_turn_pending: AtomicBool,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -156,7 +172,8 @@ impl LlmCompletionAdapter {
             retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
             raw_passthrough: false,
-            tool_choice: None,
+            first_turn_tool_choice: None,
+            first_turn_pending: AtomicBool::new(true),
         }
     }
 
@@ -243,13 +260,16 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Write a `tool_choice` value into each request body.
+    /// Write a `tool_choice` value into this run's **first** request body.
     ///
     /// Set before the pipeline runs, so the shaping stages (including the
     /// dialect grammar stage) read it exactly as they would a client's.
+    /// Subsequent turns fall back to `build_chat_body`'s `"auto"`, letting the
+    /// model finish — see [`Self::first_turn_tool_choice`] for why repeating
+    /// the demand measures the harness rather than the model.
     #[must_use]
-    pub fn with_tool_choice(mut self, tool_choice: Option<String>) -> Self {
-        self.tool_choice = tool_choice;
+    pub fn with_first_turn_tool_choice(mut self, tool_choice: Option<String>) -> Self {
+        self.first_turn_tool_choice = tool_choice;
         self
     }
 
@@ -258,6 +278,11 @@ impl LlmCompletionAdapter {
     ///
     /// Separate from [`chat_stream`](LlmCompletionPort::chat_stream) so the
     /// outgoing body can be asserted on directly, without an HTTP round trip.
+    ///
+    /// Deliberately **not idempotent**: the first call consumes
+    /// [`Self::first_turn_pending`], so a second call on the same adapter
+    /// omits `first_turn_tool_choice`. That is the contract — one adapter
+    /// serves one run, and the demand belongs to its opening turn.
     ///
     /// # Errors
     ///
@@ -273,8 +298,12 @@ impl LlmCompletionAdapter {
         let mut body = body::build_chat_body(&self.model, messages, tools, self.sampling.as_ref());
 
         // Written before the pipeline runs so the shaping stages read it
-        // exactly as they would an external client's tool_choice.
-        if let Some(tool_choice) = &self.tool_choice {
+        // exactly as they would an external client's tool_choice — and only on
+        // the first turn, so the model can still finish. See the
+        // `first_turn_tool_choice` field docs.
+        if let Some(tool_choice) = &self.first_turn_tool_choice
+            && self.first_turn_pending.swap(false, Ordering::Relaxed)
+        {
             body["tool_choice"] = serde_json::Value::String(tool_choice.clone());
         }
 

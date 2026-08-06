@@ -10,10 +10,13 @@
 //! One admission lease covers both arms, for the same reason the tune sweep
 //! holds one across candidates: an arm measured across a model swap would
 //! be measuring the swap. Tasks whose expected outcome demands a tool call
-//! send `tool_choice: "required"` in **both** arms — the same request an
-//! agentic client would make — which is what lets the gglib arm's
-//! decode-time grammar stage engage while the raw arm shows what that
-//! demand achieves without it.
+//! send `tool_choice: "required"` on their **opening turn** in both arms —
+//! the same request an agentic client would make — which is what lets the
+//! gglib arm's decode-time grammar stage engage while the raw arm shows what
+//! that demand achieves without it. Later turns drop back to `"auto"`: a
+//! model held at `"required"` for the whole run can never answer, so it
+//! re-emits its last batch until the loop guard stops it, and the eval ends
+//! up measuring its own harness.
 
 use std::sync::Arc;
 
@@ -198,8 +201,10 @@ pub async fn run_agentic_eval(
 /// - **Gglib** carries the catalog-resolved [`ModelContext`], which switches
 ///   on exactly what the proxy would do for this model.
 ///
-/// Both arms send `tool_choice: "required"` when the task's expected outcome
-/// demands a call — identical requests, different machinery.
+/// Both arms send `tool_choice: "required"` on the opening turn when the
+/// task's expected outcome demands a call — identical requests, different
+/// machinery — and both fall back to `"auto"` afterwards so the model can
+/// finish.
 fn build_arm_llm(
     deps: &BenchmarkDeps,
     base_url: &str,
@@ -216,7 +221,7 @@ fn build_arm_llm(
         deps.http_client.clone(),
         Some(model_name.to_owned()),
     )
-    .with_tool_choice(tool_choice)
+    .with_first_turn_tool_choice(tool_choice)
     .with_usage_sink(Some(usage));
 
     let adapter = match arm {

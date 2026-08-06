@@ -304,9 +304,15 @@ fn raw_passthrough_skips_the_pipeline_entirely() {
 }
 
 /// A caller-set tool_choice lands in the body where the pipeline (and the
-/// upstream) read it, overriding build_chat_body's `auto` default.
+/// upstream) read it, overriding build_chat_body's `auto` default — but only
+/// on the opening turn.
+///
+/// Holding a model at `required` for every turn makes a final answer
+/// unreachable: it must emit a tool call, so it re-emits its last batch until
+/// the loop guard aborts the run. The eval that motivated this tripped its
+/// guard on all seven tool-demanding tasks for exactly that reason.
 #[test]
-fn tool_choice_is_written_into_the_body() {
+fn tool_choice_applies_to_the_first_turn_only() {
     let tools = vec![gglib_core::domain::agent::ToolDefinition {
         name: "f".to_owned(),
         description: None,
@@ -315,8 +321,29 @@ fn tool_choice_is_written_into_the_body() {
     }];
     let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
         .with_raw_passthrough(true)
-        .with_tool_choice(Some("required".to_owned()));
-    let body = adapter.shaped_body(&[user("hi")], &tools).unwrap();
+        .with_first_turn_tool_choice(Some("required".to_owned()));
 
-    assert_eq!(body["tool_choice"], "required");
+    let first = adapter.shaped_body(&[user("hi")], &tools).unwrap();
+    assert_eq!(first["tool_choice"], "required", "opening turn carries it");
+
+    let second = adapter.shaped_body(&[user("hi")], &tools).unwrap();
+    assert_eq!(
+        second["tool_choice"], "auto",
+        "later turns fall back to the default, so the model can finish"
+    );
+}
+
+/// With no tools there is no `auto` default to fall back to, so the key is
+/// absent entirely rather than left pinned from the opening turn.
+#[test]
+fn a_spent_tool_choice_leaves_no_key_behind() {
+    let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
+        .with_raw_passthrough(true)
+        .with_first_turn_tool_choice(Some("required".to_owned()));
+
+    let first = adapter.shaped_body(&[user("hi")], &[]).unwrap();
+    assert_eq!(first["tool_choice"], "required");
+
+    let second = adapter.shaped_body(&[user("hi")], &[]).unwrap();
+    assert!(second.get("tool_choice").is_none());
 }
