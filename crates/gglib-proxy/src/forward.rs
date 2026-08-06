@@ -281,18 +281,22 @@ fn shape_request_body(
     ctx: &ModelContext,
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
-) -> Result<(Bytes, TruncationReport), TruncationError> {
+) -> Result<(Bytes, TruncationReport, bool), TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        return Ok((body, TruncationReport::default()));
+        return Ok((body, TruncationReport::default(), false));
     };
 
+    // The constrain stage never engages over a client-sent grammar, so
+    // before-absent + after-present is exactly "the pipeline originated one".
+    let grammar_before = value.get("grammar").is_some();
     let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars)?;
+    let grammar_enforced = !grammar_before && value.get("grammar").is_some();
 
     match serde_json::to_vec(&value) {
-        Ok(v) => Ok((Bytes::from(v), report)),
+        Ok(v) => Ok((Bytes::from(v), report, grammar_enforced)),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
-            Ok((body, TruncationReport::default()))
+            Ok((body, TruncationReport::default(), false))
         }
     }
 }
@@ -443,28 +447,30 @@ pub(crate) async fn forward_chat_completion(
     );
     let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
 
-    let (body, report) = match shape_request_body(body, &context, &sampling, budget_chars) {
-        Ok(shaped) => shaped,
-        Err(e) => {
-            // Hard abort: the conversation cannot be trimmed to fit. Record a
-            // clamped snapshot — the zeroed char counts are how the dashboard
-            // tells a clamped request from a measured one — then reject with
-            // the wire contract clients already handle.
-            debug!(error = %e, "rejecting request that exceeds the context budget");
-            metrics.record(ContextSnapshot {
-                model_name: model_name.to_owned(),
-                payload_chars_before: 0,
-                payload_chars_after: 0,
-                messages_truncated: 0,
-                was_clamped: true,
-                recorded_at_secs: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            });
-            return Ok(context_length_exceeded_response());
-        }
-    };
+    let (body, report, grammar_enforced) =
+        match shape_request_body(body, &context, &sampling, budget_chars) {
+            Ok(shaped) => shaped,
+            Err(e) => {
+                // Hard abort: the conversation cannot be trimmed to fit. Record a
+                // clamped snapshot — the zeroed char counts are how the dashboard
+                // tells a clamped request from a measured one — then reject with
+                // the wire contract clients already handle.
+                debug!(error = %e, "rejecting request that exceeds the context budget");
+                metrics.record(ContextSnapshot {
+                    model_name: model_name.to_owned(),
+                    payload_chars_before: 0,
+                    payload_chars_after: 0,
+                    messages_truncated: 0,
+                    was_clamped: true,
+                    grammar_enforced: false,
+                    recorded_at_secs: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                });
+                return Ok(context_length_exceeded_response());
+            }
+        };
 
     // Deliberate noise control: history truncation is routine enough that
     // logging every no-op would drown the interesting case.
@@ -476,12 +482,19 @@ pub(crate) async fn forward_chat_completion(
             "history truncated: reduced payload before upstream forwarding"
         );
     }
+    if grammar_enforced {
+        info!(
+            model = model_name,
+            "tool-call grammar enforced for this request (decode-time constraint)"
+        );
+    }
     metrics.record(ContextSnapshot {
         model_name: model_name.to_owned(),
         payload_chars_before: report.payload_chars_before,
         payload_chars_after: report.payload_chars_after,
         messages_truncated: report.messages_truncated,
         was_clamped: false,
+        grammar_enforced,
         recorded_at_secs: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -1089,13 +1102,14 @@ mod tests {
     #[test]
     fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
         let body = Bytes::from(r#"{"model":"m","messages":[],"totally_made_up":{"a":1}}"#);
-        let (out, report) = shape_request_body(
+        let (out, report, grammar_enforced) = shape_request_body(
             body,
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             None,
         )
         .expect("no budget, so nothing to reject");
+        assert!(!grammar_enforced, "passthrough context never constrains");
 
         let parsed: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
         assert_eq!(parsed["cache_prompt"], true, "the pipeline ran");
@@ -1104,10 +1118,36 @@ mod tests {
         assert_eq!(report, TruncationReport::default(), "unmeasured, no budget");
     }
 
+    /// The end-to-end proxy view of the constrain stage: a demanded tool
+    /// call on a qwen-xml model reports `grammar_enforced` so the log line
+    /// and dashboard snapshot can say so.
+    #[test]
+    fn shaping_reports_grammar_enforcement_for_a_demanded_dialect_call() {
+        let ctx = ModelContext {
+            tags: vec![gglib_core::normalize::tags::FORMAT_QWEN_XML.to_owned()],
+            // Tool-capable, or stage 2b strips the tools before stage 6 sees
+            // them — the correct interplay for a model that cannot call tools.
+            capabilities: gglib_core::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS,
+            catalog_resolved: true,
+            ..ModelContext::passthrough()
+        };
+        let body = Bytes::from(
+            r#"{"model":"m","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"required"}"#,
+        );
+        let (out, _, grammar_enforced) =
+            shape_request_body(body, &ctx, &SamplingLayers::default(), None)
+                .expect("nothing to reject");
+
+        assert!(grammar_enforced);
+        let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert!(parsed["grammar"].is_string());
+        assert_eq!(parsed["tool_choice"], "none");
+    }
+
     #[test]
     fn shaping_leaves_non_json_bodies_alone() {
         let body = Bytes::from_static(b"not json at all");
-        let (out, report) = shape_request_body(
+        let (out, report, _) = shape_request_body(
             body.clone(),
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
@@ -1121,7 +1161,7 @@ mod tests {
 
     #[test]
     fn shaping_truncates_when_the_budget_binds() {
-        let (out, report) = shape_request_body(
+        let (out, report, _) = shape_request_body(
             oversized_body(),
             &ModelContext::passthrough(),
             &SamplingLayers::default(),

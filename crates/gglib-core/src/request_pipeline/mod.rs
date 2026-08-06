@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub mod apply;
+pub mod constrain;
 pub mod messages;
 pub mod model_context;
 pub mod resolve;
@@ -8,6 +9,7 @@ pub mod tools;
 pub mod truncation;
 
 pub use apply::apply;
+pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use resolve::resolve;

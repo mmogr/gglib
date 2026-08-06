@@ -47,6 +47,9 @@ pub struct ContextSnapshot {
     /// `true` when the hard-abort budget check triggered and an HTTP 400 was
     /// returned to the client instead of forwarding the request.
     pub was_clamped: bool,
+    /// `true` when the request pipeline originated a decode-time tool-call
+    /// grammar for this request (see `request_pipeline::constrain`).
+    pub grammar_enforced: bool,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     pub recorded_at_secs: u64,
 }
@@ -142,6 +145,7 @@ mod tests {
             payload_chars_after: 800,
             messages_truncated: 1,
             was_clamped: false,
+            grammar_enforced: false,
             recorded_at_secs: 0,
         }
     }

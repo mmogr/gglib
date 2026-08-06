@@ -59,6 +59,22 @@ Models without a dialect tag use the identity `StandardJsonParser`. A
 format hint on a non-tool-calling model would wire a parser with nothing to
 parse.
 
+### Decode-time enforcement for `format:qwen-xml`
+
+Parsing is the rescue path; enforcement is stronger. When a client *demands*
+a tool call from a `format:qwen-xml` model — `tool_choice: "required"` or a
+named function — the proxy also originates a GBNF grammar that llama-server
+applies at decode time, so a malformed `<tool_call>` envelope, truncated
+JSON, or invented tool name cannot be generated at all. `tool_choice:
+"auto"` stays unconstrained (a grammar would forbid plain-text answers), a
+client-supplied `grammar`/`json_schema`/`response_format` is always
+respected, and requests where enforcement engaged are flagged in the proxy
+log and the dashboard's recent-request list. Kill switch:
+
+```bash
+GGLIB_DISABLE_GRAMMAR=1 gglib proxy
+```
+
 ## Capability tags
 
 Alongside `format:*` tags, gglib detects **capability tags** at import time
