@@ -266,6 +266,19 @@ impl PythonEnvironment {
     ///
     /// Returns `Err` if Python is not found or setup fails.
     pub async fn prepare(notice: Option<&NoticeCallback>) -> Result<Self, EnvSetupError> {
+        Self::prepare_with(notice, None).await
+    }
+
+    /// Prepare the environment, building it from a named interpreter.
+    ///
+    /// `python` outranks both the discovery search and `GGLIB_PYTHON`: a user
+    /// who names an interpreter on the command line has answered the question
+    /// the search exists to guess at, so it gets used or reported, never
+    /// silently passed over for something the search liked better.
+    pub async fn prepare_with(
+        notice: Option<&NoticeCallback>,
+        python: Option<&Path>,
+    ) -> Result<Self, EnvSetupError> {
         let env_dir = get_env_directory()?;
         let script_path = get_script_path()?;
 
@@ -279,7 +292,7 @@ impl PythonEnvironment {
         };
 
         env.write_script()?;
-        env.ensure_env_ready(notice).await?;
+        env.ensure_env_ready(notice, python).await?;
 
         // Validate the interpreter we will actually run.
         // This catches environment pollution (e.g., PYTHONHOME/PYTHONPATH) early.
@@ -295,7 +308,7 @@ impl PythonEnvironment {
     ///
     /// Returns the resolved interpreter path string (as reported by Python).
     pub async fn preflight() -> Result<String, EnvSetupError> {
-        let bootstrap = find_bootstrap_python_validated().await?;
+        let bootstrap = find_bootstrap_python_validated(None).await?;
         validate_python_interpreter(&bootstrap).await
     }
 
@@ -313,11 +326,15 @@ impl PythonEnvironment {
     // Internal methods
     // ------------------------------------------------------------------------
 
-    async fn ensure_env_ready(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
+    async fn ensure_env_ready(
+        &self,
+        notice: Option<&NoticeCallback>,
+        python: Option<&Path>,
+    ) -> Result<(), EnvSetupError> {
         let builder = Builder::detect();
 
         if !self.python_path().exists() {
-            self.create_env(&builder, notice).await?;
+            self.create_env(&builder, notice, python).await?;
         }
 
         if !self.marker_is_fresh(&builder)? {
@@ -332,8 +349,9 @@ impl PythonEnvironment {
         &self,
         builder: &Builder,
         notice: Option<&NoticeCallback>,
+        python: Option<&Path>,
     ) -> Result<(), EnvSetupError> {
-        let bootstrap = find_bootstrap_python_validated().await?;
+        let bootstrap = find_bootstrap_python_validated(python).await?;
 
         // With a notice sink (the queued-download path), the note lands on
         // the bar itself and stays terse — no path, it wouldn't fit and
@@ -794,8 +812,14 @@ async fn resolve_launcher_python() -> Option<PathBuf> {
 /// search, and a candidate that fails validation is skipped rather than fatal:
 /// a half-removed conda install should not stop a working pyenv one being
 /// found.
-async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
-    if let Some(override_path) = env::var_os(PYTHON_OVERRIDE_ENV).map(PathBuf::from) {
+async fn find_bootstrap_python_validated(
+    explicit: Option<&Path>,
+) -> Result<PathBuf, EnvSetupError> {
+    let override_path = explicit
+        .map(Path::to_path_buf)
+        .or_else(|| env::var_os(PYTHON_OVERRIDE_ENV).map(PathBuf::from));
+
+    if let Some(override_path) = override_path {
         if !override_path.exists() {
             return Err(EnvSetupError::PythonInvalid {
                 path: override_path,

@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub mod assistant_ui;
 pub mod check_deps;
+pub mod fast_downloads;
 pub mod llama;
 pub mod llama_detect;
 pub mod llama_install;
@@ -29,6 +30,7 @@ pub async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
             let probe = gglib_runtime::DefaultSystemProbe::new();
             check_deps::execute(&probe, setup_fast_downloads).await
         }
+        ConfigCommand::FastDownloads { command } => fast_downloads::dispatch(command).await,
         ConfigCommand::Paths => paths::execute(),
     }
 }

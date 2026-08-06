@@ -100,6 +100,35 @@ pub fn prompt_confirmation(prompt: &str) -> Result<bool> {
     }
 }
 
+/// Prompts the user for a yes/no confirmation, defaulting to yes.
+///
+/// Accepts 'y', 'yes', 'n', 'no' (case insensitive). Empty input is treated
+/// as 'yes'.
+///
+/// The sibling of [`prompt_confirmation`], for the other kind of question.
+/// That one guards an action the user has to actively want; this one offers
+/// something they almost certainly do, where the cost of Enter meaning "no" is
+/// that a good default goes unchosen by everybody who was not reading closely.
+/// Which default applies is a property of the question, so it belongs in the
+/// prompt rather than at each call site.
+///
+/// # Errors
+///
+/// Returns an error if reading from stdin fails.
+pub fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
+    loop {
+        let input = prompt_string(&format!("{prompt} (Y/n)"))?;
+        match input.to_lowercase().as_str() {
+            "y" | "yes" | "" => return Ok(true),
+            "n" | "no" => return Ok(false),
+            _ => {
+                eprintln!("Please enter 'y' for yes or 'n' for no.");
+                continue;
+            }
+        }
+    }
+}
+
 /// Prompts the user for a positive floating-point number.
 ///
 /// Displays a prompt message and waits for the user to enter a number.

@@ -104,7 +104,17 @@ pub struct FastDownloadRequest<'a> {
 
 /// Ensure the fast download helper is ready (env + script prepared).
 pub async fn ensure_fast_helper_ready() -> Result<(), PythonBridgeError> {
-    PythonEnvironment::prepare(None).await?;
+    ensure_fast_helper_ready_with_python(None).await
+}
+
+/// Ensure the fast download helper is ready, built from a named interpreter.
+///
+/// `python` outranks the interpreter search entirely, so a user who knows
+/// which Python they want does not have to arrange for it to win a search.
+pub async fn ensure_fast_helper_ready_with_python(
+    python: Option<&std::path::Path>,
+) -> Result<(), PythonBridgeError> {
+    PythonEnvironment::prepare_with(None, python).await?;
     Ok(())
 }
 

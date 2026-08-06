@@ -11,7 +11,8 @@ pub use types::*;
 // Re-export Python bridge for use by the async manager
 pub use exec::python_bridge::{
     FastDownloadRequest, NoticeCallback, ProgressCallback, PythonBridgeError,
-    ensure_fast_helper_ready, preflight_fast_helper, run_fast_download,
+    ensure_fast_helper_ready, ensure_fast_helper_ready_with_python, preflight_fast_helper,
+    run_fast_download,
 };
 
 // Whether the optional hf_xet accelerator is already provisioned. Read by the
