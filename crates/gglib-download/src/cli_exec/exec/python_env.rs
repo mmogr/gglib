@@ -47,11 +47,43 @@ const LEGACY_ENV_PARENT_DIR: &str = ".conda";
 
 const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
 
+/// Interpreter names looked up on `PATH`, in preference order.
+///
+/// The versioned names matter more than they look: pyenv and asdf install
+/// shims named `python3.12`, and several distros ship no unversioned `python3`
+/// at all. Trying only `python3`/`python` is why a machine with a perfectly
+/// good interpreter could not enable the accelerator.
 #[cfg(target_os = "windows")]
-const PYTHON_CANDIDATES: &[&str] = &["python"];
+const PYTHON_CANDIDATES: &[&str] = &[
+    "python",
+    "python3",
+    "python3.13",
+    "python3.12",
+    "python3.11",
+    "python3.10",
+    "python3.9",
+];
 
 #[cfg(not(target_os = "windows"))]
-const PYTHON_CANDIDATES: &[&str] = &["python3", "python"];
+const PYTHON_CANDIDATES: &[&str] = &[
+    "python3",
+    "python",
+    "python3.13",
+    "python3.12",
+    "python3.11",
+    "python3.10",
+    "python3.9",
+];
+
+/// Oldest interpreter the requirements will install against.
+///
+/// Checked at discovery rather than left to fail during the install: a user
+/// with a stale `python3` on `PATH` and a current one under pyenv should get
+/// the current one, not an error about a wheel that has no build for 3.8.
+const MIN_PYTHON: (u32, u32) = (3, 9);
+
+/// Conda-family install prefixes, relative to the home directory.
+const CONDA_HOME_PREFIXES: &[&str] = &["miniforge3", "mambaforge", "miniconda3", "anaconda3"];
 
 // ============================================================================
 // Error Types
@@ -65,6 +97,13 @@ pub enum EnvSetupError {
 
     #[error("Python interpreter validation failed at {path}: {reason}")]
     PythonInvalid { path: PathBuf, reason: String },
+
+    #[error("Python at {path} is {found}, but {}.{} or newer is required", required.0, required.1)]
+    PythonTooOld {
+        path: PathBuf,
+        found: String,
+        required: (u32, u32),
+    },
 
     #[error("No working Python interpreter found (tried: {tried}). Last error: {last_error}")]
     PythonValidationFailed { tried: String, last_error: String },
@@ -375,9 +414,200 @@ pub fn fast_helper_provisioned() -> bool {
     get_env_directory().is_ok_and(|dir| venv_python_path(&dir).exists())
 }
 
-/// Find a Python interpreter suitable for bootstrapping the venv.
+/// Environment inputs to interpreter discovery, snapshotted so the candidate
+/// list can be built and asserted on without touching the real environment.
+///
+/// `conda_prefix` is read from the *parent* process on purpose, and it is the
+/// one thing here most likely to look like a bug. gglib does not run inside the
+/// user's conda environment — [`apply_python_subprocess_isolation`] strips
+/// `CONDA_PREFIX` from every child it spawns, and that must not change. This
+/// reads the variable only to learn *where a Python lives on disk*; the
+/// interpreter found there is then launched with the same scrubbed environment
+/// as any other. Locating and inheriting are different things.
+#[derive(Debug, Default, Clone)]
+struct DiscoveryEnv {
+    home: Option<PathBuf>,
+    conda_prefix: Option<PathBuf>,
+    pyenv_root: Option<PathBuf>,
+}
+
+impl DiscoveryEnv {
+    fn from_process() -> Self {
+        Self {
+            home: dirs::home_dir(),
+            conda_prefix: env::var_os("CONDA_PREFIX").map(PathBuf::from),
+            pyenv_root: env::var_os("PYENV_ROOT").map(PathBuf::from),
+        }
+    }
+}
+
+/// The interpreter inside an installation prefix.
+fn interpreter_in(prefix: &Path) -> PathBuf {
+    if cfg!(windows) {
+        prefix.join("python.exe")
+    } else {
+        prefix.join("bin").join("python3")
+    }
+}
+
+/// Interpreter paths implied directly by `env`, in preference order.
+///
+/// Pure: every entry is a path that may or may not exist, and the caller
+/// filters. An active conda environment comes first because a user who has one
+/// activated has told us which Python they mean.
+fn direct_candidates(env: &DiscoveryEnv) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+
+    if let Some(prefix) = &env.conda_prefix {
+        out.push(interpreter_in(prefix));
+    }
+
+    if let Some(home) = &env.home {
+        for prefix in CONDA_HOME_PREFIXES {
+            out.push(interpreter_in(&home.join(prefix)));
+        }
+    }
+
+    if cfg!(target_os = "macos") {
+        // Homebrew's prefix differs by architecture and neither is guaranteed
+        // to be on a non-interactive PATH.
+        out.push(PathBuf::from("/opt/homebrew/bin/python3"));
+        out.push(PathBuf::from("/usr/local/bin/python3"));
+    }
+
+    out
+}
+
+/// Directories whose immediate children are each an installed Python prefix,
+/// in preference order.
+///
+/// pyenv's `versions/` and uv's managed-python store both have this shape.
+/// Expanded by [`expand_version_stores`], which is where the I/O lives.
+fn version_store_candidates(env: &DiscoveryEnv) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+
+    if let Some(root) = &env.pyenv_root {
+        out.push(root.join("versions"));
+    }
+
+    if let Some(home) = &env.home {
+        out.push(home.join(".pyenv").join("versions"));
+        out.push(home.join(".local").join("share").join("uv").join("python"));
+    }
+
+    out
+}
+
+/// Ordering key for a version-store entry: its leading numeric components.
+///
+/// Sorting these names as strings is wrong in the one case that matters most
+/// right now — `3.9.18` sorts above `3.12.1` lexicographically, because `9`
+/// beats `1` on the first differing character — and picking 3.9 over 3.12 is
+/// the opposite of "newest". Entries that do not start with a number (pyenv
+/// also stores `pypy3.10-7.3.15`, `miniconda3-4.7.12`) yield an empty key and
+/// sort last, behind every plain version-numbered interpreter.
+fn version_sort_key(name: &str) -> Vec<u64> {
+    name.split(['.', '-'])
+        .map(str::parse::<u64>)
+        .take_while(Result::is_ok)
+        .filter_map(Result::ok)
+        .collect()
+}
+
+/// Expand each version store into the interpreters it holds, newest first.
+///
+/// Sorting is also what makes this deterministic. Directory iteration order is
+/// filesystem-defined, so without it a machine with several pyenv versions
+/// would build its environment against an arbitrary one and could pick a
+/// different one after an unrelated reinstall.
+fn expand_version_stores(stores: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+
+    for store in stores {
+        let Ok(entries) = fs::read_dir(store) else {
+            continue;
+        };
+
+        let mut prefixes: Vec<PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+
+        prefixes.sort_by(|a, b| {
+            let name = |p: &Path| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            };
+            let (a, b) = (name(a), name(b));
+            // Version descending, then name descending so equal keys (and the
+            // unparseable tail) still have one fixed order.
+            version_sort_key(&b)
+                .cmp(&version_sort_key(&a))
+                .then_with(|| b.cmp(&a))
+        });
+
+        out.extend(prefixes.iter().map(|prefix| interpreter_in(prefix)));
+    }
+
+    out
+}
+
+/// Every interpreter path worth validating, in preference order, deduplicated.
+///
+/// `PATH` comes before the manager-specific locations: if the user has arranged
+/// for a `python3` to be the one they get in a shell, that is the answer, and
+/// the rest of this list only exists for machines where they have not.
+fn bootstrap_candidates(env: &DiscoveryEnv) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = PYTHON_CANDIDATES
+        .iter()
+        .filter_map(|name| which::which(name).ok())
+        .collect();
+
+    out.extend(direct_candidates(env));
+    out.extend(expand_version_stores(&version_store_candidates(env)));
+
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|path| seen.insert(path.clone()));
+    out
+}
+
+/// Resolve the Windows `py -3` launcher to a real interpreter path.
+///
+/// The launcher is not itself an interpreter path, so it cannot go in the
+/// candidate list; ask it where Python actually is.
+#[cfg(target_os = "windows")]
+async fn resolve_launcher_python() -> Option<PathBuf> {
+    let mut cmd = async_cmd("py");
+    apply_python_subprocess_isolation(&mut cmd);
+    cmd.arg("-3")
+        .arg("-c")
+        .arg("import sys; print(sys.executable)");
+
+    let output = cmd.output().await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[allow(clippy::unused_async)] // Mirrors the Windows signature; there is no launcher here.
+async fn resolve_launcher_python() -> Option<PathBuf> {
+    None
+}
+
+/// Find a Python interpreter suitable for bootstrapping the environment.
+///
+/// The explicit override is absolute — a user who names an interpreter gets
+/// that one or an error, never a silent substitution. Everything after it is a
+/// search, and a candidate that fails validation is skipped rather than fatal:
+/// a half-removed conda install should not stop a working pyenv one being
+/// found.
 async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
-    // 1) Explicit override
     if let Some(override_path) = env::var_os(PYTHON_OVERRIDE_ENV).map(PathBuf::from) {
         if !override_path.exists() {
             return Err(EnvSetupError::PythonInvalid {
@@ -390,21 +620,25 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
         return Ok(override_path);
     }
 
-    // 2) PATH discovery (prefer python3 on non-Windows)
+    let discovery = DiscoveryEnv::from_process();
+    let mut candidates = bootstrap_candidates(&discovery);
+    if let Some(launcher) = resolve_launcher_python().await {
+        candidates.push(launcher);
+    }
+
     let mut tried: Vec<String> = Vec::new();
     let mut last_error: Option<String> = None;
 
-    for candidate in PYTHON_CANDIDATES {
-        tried.push((*candidate).to_string());
-        let Ok(path) = which::which(candidate) else {
+    for candidate in &candidates {
+        if !candidate.exists() {
             continue;
-        };
+        }
 
-        match validate_python_interpreter(&path).await {
-            Ok(_) => return Ok(path),
-            Err(e) => {
-                last_error = Some(e.to_string());
-            }
+        tried.push(candidate.display().to_string());
+
+        match validate_python_interpreter(candidate).await {
+            Ok(_) => return Ok(candidate.clone()),
+            Err(e) => last_error = Some(e.to_string()),
         }
     }
 
@@ -500,14 +734,32 @@ fn apply_python_subprocess_isolation(cmd: &mut Command) {
     cmd.env("PYTHONNOUSERSITE", "1");
 }
 
-/// Validate that the given Python interpreter can import the standard library.
+/// Split the validation probe's stdout into `sys.executable` and the version.
+///
+/// Pulled out so the parsing is testable without an interpreter: the probe is
+/// two `print` calls, and a candidate that answers with anything else (a shim
+/// that logs a deprecation banner, say) must read as unusable rather than
+/// panic or be silently accepted.
+fn parse_validation_output(stdout: &str) -> Option<(String, (u32, u32))> {
+    let mut lines = stdout.lines().map(str::trim).filter(|l| !l.is_empty());
+    let executable = lines.next()?.to_string();
+    let version = lines.next()?;
+
+    let (major, minor) = version.split_once('.')?;
+    Some((executable, (major.parse().ok()?, minor.parse().ok()?)))
+}
+
+/// Validate that the given Python interpreter can import the standard library
+/// and is new enough for the requirements.
 ///
 /// Returns the resolved `sys.executable` string on success.
 async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupError> {
     let mut cmd = async_cmd(python);
     apply_python_subprocess_isolation(&mut cmd);
-    cmd.arg("-c")
-        .arg("import encodings, sys; print(sys.executable)");
+    cmd.arg("-c").arg(
+        "import encodings, sys; print(sys.executable); \
+         print('%d.%d' % sys.version_info[:2])",
+    );
 
     let output = cmd
         .output()
@@ -537,11 +789,26 @@ async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupEr
         });
     }
 
-    let exe = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(if exe.is_empty() {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let Some((executable, version)) = parse_validation_output(&stdout) else {
+        return Err(EnvSetupError::PythonInvalid {
+            path: python.to_path_buf(),
+            reason: format!("unexpected probe output: {}", stdout.trim()),
+        });
+    };
+
+    if version < MIN_PYTHON {
+        return Err(EnvSetupError::PythonTooOld {
+            path: python.to_path_buf(),
+            found: format!("{}.{}", version.0, version.1),
+            required: MIN_PYTHON,
+        });
+    }
+
+    Ok(if executable.is_empty() {
         python.display().to_string()
     } else {
-        exe
+        executable
     })
 }
 
@@ -661,6 +928,193 @@ mod tests {
             .expect("create legacy env");
 
         assert_eq!(resolve_env_directory(root.path()), current);
+    }
+
+    /// An activated conda environment is the strongest signal available about
+    /// which Python the user means, so it leads.
+    #[test]
+    fn direct_candidates_lead_with_the_active_conda_environment() {
+        let env = DiscoveryEnv {
+            home: Some(PathBuf::from("/home/u")),
+            conda_prefix: Some(PathBuf::from("/opt/conda/envs/ml")),
+            pyenv_root: None,
+        };
+
+        let candidates = direct_candidates(&env);
+
+        assert_eq!(
+            candidates[0],
+            interpreter_in(Path::new("/opt/conda/envs/ml"))
+        );
+    }
+
+    /// Every conda-family layout gets an entry; a user on miniforge should not
+    /// have to care that the code was written against anaconda.
+    #[test]
+    fn direct_candidates_cover_every_conda_family_layout() {
+        let env = DiscoveryEnv {
+            home: Some(PathBuf::from("/home/u")),
+            ..DiscoveryEnv::default()
+        };
+
+        let candidates = direct_candidates(&env);
+
+        for prefix in CONDA_HOME_PREFIXES {
+            let expected = interpreter_in(&PathBuf::from("/home/u").join(prefix));
+            assert!(
+                candidates.contains(&expected),
+                "{prefix} missing from {candidates:?}"
+            );
+        }
+    }
+
+    /// Nothing set: no candidates and, more importantly, no panic and no
+    /// path built from an empty prefix (`/bin/python3` would be a real file on
+    /// some systems and the wrong answer on all of them).
+    #[test]
+    fn direct_candidates_are_empty_without_a_home_or_conda() {
+        let candidates = direct_candidates(&DiscoveryEnv::default());
+
+        #[cfg(target_os = "macos")]
+        assert_eq!(candidates.len(), 2, "only the Homebrew prefixes");
+        #[cfg(not(target_os = "macos"))]
+        assert!(candidates.is_empty(), "got {candidates:?}");
+    }
+
+    #[test]
+    fn version_stores_cover_pyenv_and_uv() {
+        let env = DiscoveryEnv {
+            home: Some(PathBuf::from("/home/u")),
+            conda_prefix: None,
+            pyenv_root: Some(PathBuf::from("/opt/pyenv")),
+        };
+
+        let stores = version_store_candidates(&env);
+
+        assert!(stores.contains(&PathBuf::from("/opt/pyenv/versions")));
+        assert!(stores.contains(&PathBuf::from("/home/u/.pyenv/versions")));
+        assert!(stores.contains(&PathBuf::from("/home/u/.local/share/uv/python")));
+    }
+
+    /// Directory iteration order is filesystem-defined. Without the sort, a
+    /// machine with several pyenv versions would build against an arbitrary
+    /// one and could silently switch after an unrelated reinstall.
+    ///
+    /// `3.9.18` against `3.12.1` is the case that matters: sorted as strings
+    /// it wins, and it is the older interpreter.
+    #[test]
+    fn expand_version_stores_orders_newest_first() {
+        let store = tempfile::tempdir().expect("tempdir");
+        for version in ["3.9.18", "3.12.1", "3.11.7"] {
+            fs::create_dir_all(store.path().join(version).join("bin")).expect("create version");
+        }
+
+        let found = expand_version_stores(&[store.path().to_path_buf()]);
+
+        assert_eq!(
+            store_entry_names(&found),
+            vec!["3.12.1", "3.11.7", "3.9.18"]
+        );
+    }
+
+    /// pyenv keeps more than plain interpreters in `versions/`. Those entries
+    /// are real candidates, but must never outrank a version-numbered one.
+    #[test]
+    fn expand_version_stores_sorts_non_cpython_entries_last() {
+        let store = tempfile::tempdir().expect("tempdir");
+        for entry in ["3.10.13", "pypy3.10-7.3.15", "miniconda3-4.7.12"] {
+            fs::create_dir_all(store.path().join(entry).join("bin")).expect("create entry");
+        }
+
+        let found = expand_version_stores(&[store.path().to_path_buf()]);
+
+        assert_eq!(store_entry_names(&found)[0], "3.10.13");
+    }
+
+    #[test]
+    fn version_sort_key_stops_at_the_first_non_numeric_component() {
+        assert_eq!(version_sort_key("3.12.1"), vec![3, 12, 1]);
+        assert_eq!(version_sort_key("3.9.18"), vec![3, 9, 18]);
+        assert!(version_sort_key("3.12.1") > version_sort_key("3.9.18"));
+        assert_eq!(version_sort_key("pypy3.10-7.3.15"), Vec::<u64>::new());
+        assert_eq!(version_sort_key("miniconda3-4.7.12"), Vec::<u64>::new());
+    }
+
+    /// The store entry name for each discovered interpreter (`<store>/<name>/bin/python3`).
+    fn store_entry_names(interpreters: &[PathBuf]) -> Vec<String> {
+        interpreters
+            .iter()
+            .filter_map(|p| {
+                let prefix = if cfg!(windows) {
+                    p.parent()?
+                } else {
+                    p.parent()?.parent()?
+                };
+                prefix.file_name()
+            })
+            .map(|n| n.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// A store that does not exist is the common case on most machines.
+    #[test]
+    fn expand_version_stores_ignores_missing_directories() {
+        assert!(expand_version_stores(&[PathBuf::from("/nonexistent/pyenv/versions")]).is_empty());
+    }
+
+    /// The same interpreter can be reachable as `python3`, `python3.12`, and a
+    /// pyenv path at once. Validating it three times is wasted subprocesses.
+    #[test]
+    fn bootstrap_candidates_are_deduplicated() {
+        let candidates = bootstrap_candidates(&DiscoveryEnv::from_process());
+
+        let mut seen = std::collections::HashSet::new();
+        for candidate in &candidates {
+            assert!(seen.insert(candidate), "duplicate candidate {candidate:?}");
+        }
+    }
+
+    #[test]
+    fn parse_validation_output_reads_executable_and_version() {
+        let parsed = parse_validation_output("/usr/bin/python3\n3.12\n");
+
+        assert_eq!(parsed, Some(("/usr/bin/python3".to_string(), (3, 12))));
+    }
+
+    /// A shim that prints a banner before the answer is not something to
+    /// guess about.
+    #[test]
+    fn parse_validation_output_rejects_unparseable_output() {
+        assert_eq!(parse_validation_output(""), None);
+        assert_eq!(parse_validation_output("/usr/bin/python3\n"), None);
+        assert_eq!(
+            parse_validation_output("/usr/bin/python3\nthree.twelve\n"),
+            None
+        );
+    }
+
+    /// The floor exists so the failure lands at discovery, with a candidate
+    /// still to try, rather than during `pip install` with nothing left.
+    #[test]
+    fn version_gate_rejects_below_the_floor_and_accepts_above() {
+        assert!((3, 8) < MIN_PYTHON);
+        assert!((3, 9) >= MIN_PYTHON);
+        assert!((3, 12) >= MIN_PYTHON);
+        assert!((4, 0) >= MIN_PYTHON);
+    }
+
+    #[test]
+    fn python_too_old_error_names_both_versions() {
+        let err = EnvSetupError::PythonTooOld {
+            path: PathBuf::from("/usr/bin/python3"),
+            found: "3.8".to_string(),
+            required: (3, 9),
+        };
+
+        let msg = err.to_string();
+        assert!(msg.contains("/usr/bin/python3"), "{msg}");
+        assert!(msg.contains("3.8"), "{msg}");
+        assert!(msg.contains("3.9"), "{msg}");
     }
 
     #[test]
