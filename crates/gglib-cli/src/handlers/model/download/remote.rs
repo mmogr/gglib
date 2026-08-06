@@ -12,13 +12,15 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use gglib_core::download::{DownloadStatus, QueueSnapshot};
+use gglib_core::download::{DownloadStatus, QueueSnapshot, QueuedDownload};
+use gglib_download::{rate_suffix, total_bytes_key};
 
 use crate::daemon_client::DaemonHandle;
 
-/// Poll interval for queue snapshots. Half a second keeps the bars lively
-/// without hammering the loopback API.
-const POLL_INTERVAL: Duration = Duration::from_millis(500);
+/// Poll interval for queue snapshots. Matches the daemon's own progress
+/// sampling tick (250ms), so the bars are at most one tick behind without
+/// hammering the loopback API.
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Queue a download on the daemon.
 pub async fn queue(handle: &DaemonHandle, model_id: &str, quant: Option<String>) -> Result<()> {
@@ -64,11 +66,15 @@ pub async fn monitor(handle: &DaemonHandle) -> Result<()> {
 async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
     let url = format!("{}/api/models/downloads", crate::daemon_client::base_url());
     let multi = MultiProgress::new();
-    let style = ProgressStyle::with_template(
-        "  {msg:32!} [{bar:30}] {bytes}/{total_bytes} ({bytes_per_sec})",
-    )
-    .unwrap_or_else(|_| ProgressStyle::default_bar())
-    .progress_chars("=> ");
+    // No `{bytes_per_sec}`: that's indicatif's own estimate, derived from our
+    // `set_position` calls, and it disagrees with the rate the daemon's
+    // estimator computed for the same transfer (see the BAR_TEMPLATE comment
+    // in gglib_download::cli_emitter). The daemon's rate arrives on the
+    // snapshot and is rendered into the message instead.
+    let style = ProgressStyle::with_template("  {msg:48!} [{bar:30}] {bytes}/{total_bytes}")
+        .unwrap_or_else(|_| ProgressStyle::default_bar())
+        .progress_chars("=> ")
+        .with_key("total_bytes", total_bytes_key);
 
     let mut bars: HashMap<String, ProgressBar> = HashMap::new();
     let mut seen_items = false;
@@ -92,20 +98,19 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
                 observed.push(item.id.clone());
             }
             let bar = bars.entry(item.id.clone()).or_insert_with(|| {
-                let bar = multi.add(ProgressBar::new(item.total_bytes.max(1)));
+                // `no_length()`, never `new(0)`: indicatif renders an explicit
+                // length of 0 as 100% full. Unknown totals draw an empty bar
+                // and `—` (via `total_bytes_key`) until the first snapshot
+                // carries a real total.
+                let bar = multi.add(ProgressBar::no_length());
                 bar.set_style(style.clone());
-                bar.set_message(item.display_name.clone());
                 bar
             });
-            if item.total_bytes > 0 {
+            if item.total_bytes > 0 && bar.length() != Some(item.total_bytes) {
                 bar.set_length(item.total_bytes);
             }
             bar.set_position(item.downloaded_bytes);
-            if matches!(item.status, DownloadStatus::Queued) {
-                bar.set_message(format!("{} (queued)", item.display_name));
-            } else {
-                bar.set_message(item.display_name.clone());
-            }
+            bar.set_message(item_message(item));
         }
 
         // Items that left the queue are finished (or failed — checked below).
@@ -141,5 +146,65 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
         }
 
         tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+/// Label for a queue item: name, shard position, and — while downloading —
+/// the rate and ETA the daemon's estimator computed.
+fn item_message(item: &QueuedDownload) -> String {
+    if matches!(item.status, DownloadStatus::Queued) {
+        return format!("{} (queued)", item.display_name);
+    }
+
+    let shard = item.shard_info.as_ref().map_or_else(String::new, |shard| {
+        format!(" [shard {}/{}]", shard.shard_index + 1, shard.total_shards)
+    });
+
+    format!(
+        "{}{} {}",
+        item.display_name,
+        shard,
+        rate_suffix(item.speed_bps, item.eta_seconds)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gglib_core::download::ShardInfo;
+
+    fn item(status: DownloadStatus) -> QueuedDownload {
+        QueuedDownload::new("owner/repo:Q8_0", "owner/repo", "owner/repo:Q8_0", 1, 0)
+            .with_status(status)
+    }
+
+    #[test]
+    fn queued_items_are_labeled_queued() {
+        let msg = item_message(&item(DownloadStatus::Queued));
+        assert_eq!(msg, "owner/repo:Q8_0 (queued)");
+    }
+
+    #[test]
+    fn downloading_items_render_placeholder_rate_during_warmup() {
+        // speed/eta are None until the daemon's estimator warms up — the
+        // message must show a placeholder, not 0 B/s (reads as stalled).
+        let msg = item_message(&item(DownloadStatus::Downloading));
+        assert!(msg.starts_with("owner/repo:Q8_0 "));
+        assert!(
+            !msg.contains("0 B/s"),
+            "warmup must not render a zero rate: {msg}"
+        );
+    }
+
+    #[test]
+    fn downloading_items_render_manager_rate_and_shard() {
+        let mut item = item(DownloadStatus::Downloading)
+            .with_shard_info("group".into(), ShardInfo::new(0, 3, "shard-0.gguf"));
+        item.update_progress(500, 1_000, Some(1_048_576.0), Some(90.0));
+
+        let msg = item_message(&item);
+        assert!(msg.contains("[shard 1/3]"), "{msg}");
+        assert!(msg.contains("MB/s") || msg.contains("MiB/s"), "{msg}");
+        assert!(msg.contains("ETA"), "{msg}");
     }
 }

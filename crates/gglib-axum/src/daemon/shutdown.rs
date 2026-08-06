@@ -58,13 +58,28 @@ pub async fn shutdown_signal() {
 /// still runs, because each protects a different resource (proxy clients,
 /// llama-server children, download partials, pidfiles).
 pub async fn perform_shutdown(state: &AppState) {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     info!("daemon shutting down");
 
     // If teardown wedges — typically a llama-server stuck in an
     // uninterruptible CUDA ioctl — exit anyway. Children the watchdog
     // abandons are caught by the next daemon start's orphan sweep.
-    let watchdog = tokio::spawn(async {
-        tokio::time::sleep(SHUTDOWN_WATCHDOG).await;
+    //
+    // An OS thread, not a tokio task, and non-negotiably so: the wedge being
+    // guarded against can be the runtime itself (every worker blocked, as in
+    // the #721 admission deadlock), and a watchdog that needs a free worker
+    // to fire is starved by exactly the condition it exists to escape. The
+    // thread cannot be aborted, so completion is signalled through a flag it
+    // checks on waking; a disarmed watchdog simply returns.
+    let completed = Arc::new(AtomicBool::new(false));
+    let disarm = Arc::clone(&completed);
+    std::thread::spawn(move || {
+        std::thread::sleep(SHUTDOWN_WATCHDOG);
+        if disarm.load(Ordering::Acquire) {
+            return;
+        }
         warn!("shutdown watchdog fired — forcing exit");
         std::process::exit(1);
     });
@@ -90,6 +105,6 @@ pub async fn perform_shutdown(state: &AppState) {
         warn!("final orphan audit failed: {e}");
     }
 
-    watchdog.abort();
+    completed.store(true, Ordering::Release);
     info!("daemon shutdown complete");
 }

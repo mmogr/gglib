@@ -2241,6 +2241,7 @@ version = "0.12.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bytes",
  "chrono",
  "futures-util",
  "gglib-core",

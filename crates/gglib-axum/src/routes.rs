@@ -398,9 +398,14 @@ pub fn create_spa_router<P: AsRef<Path>>(
 
 /// Health check endpoint.
 ///
-/// Returns `{"service":"gglib-daemon","status":"ok"}` so the CLI daemon
-/// detection logic (Phase 3b) can confirm it is talking to a live gglib
-/// daemon rather than an unrelated HTTP server on the same port.
+/// Returns `{"service":"gglib-daemon","status":"ok","version":...}` so the
+/// CLI daemon detection logic (Phase 3b) can confirm it is talking to a live
+/// gglib daemon rather than an unrelated HTTP server on the same port. The
+/// version lets clients detect a daemon left running from an older install.
 pub(crate) async fn health_check() -> Json<Value> {
-    Json(json!({ "service": "gglib-daemon", "status": "ok" }))
+    Json(json!({
+        "service": "gglib-daemon",
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
 }

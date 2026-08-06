@@ -226,11 +226,14 @@ impl CliDownloadEventEmitter {
     }
 }
 
-/// Custom `{total_bytes}` renderer: `—` while the length is unknown, the
-/// human-readable size once `set_length` has been called with a real total.
-/// Registered via `ProgressStyle::with_key` — see the module-level comment on
-/// `BAR_TEMPLATE`.
-fn total_bytes_key(state: &ProgressState, w: &mut dyn std::fmt::Write) {
+/// Custom `{total_bytes}` renderer: `—` while the length is unknown.
+///
+/// Renders the human-readable size once `set_length` has been called with a
+/// real total. Registered via `ProgressStyle::with_key` — see the module-level
+/// comment on `BAR_TEMPLATE`. Public so the daemon-polling monitor
+/// (`gglib model download`) renders unknown totals the same way this emitter
+/// does.
+pub fn total_bytes_key(state: &ProgressState, w: &mut dyn std::fmt::Write) {
     match state.len() {
         Some(len) => {
             let _ = write!(w, "{}", HumanBytes(len));
@@ -245,7 +248,10 @@ fn total_bytes_key(state: &ProgressState, w: &mut dyn std::fmt::Write) {
 ///
 /// Both are `None` until the estimator warms up, and render as a placeholder
 /// rather than `0`, which would read as a stalled transfer.
-fn rate_suffix(speed_bps: Option<f64>, eta_seconds: Option<f64>) -> String {
+///
+/// Public so the daemon-polling monitor renders the manager's rate the same
+/// way this emitter does, instead of falling back to indicatif's own estimate.
+pub fn rate_suffix(speed_bps: Option<f64>, eta_seconds: Option<f64>) -> String {
     format!(
         "{} · ETA {}",
         format_rate(speed_bps),
