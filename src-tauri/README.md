@@ -31,7 +31,6 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/proxy` - Proxy management
    - `/api/downloads` - Download queue management
    - `/api/mcp` - MCP server configuration
-   - `/api/voice/*` - Voice pipeline: models, devices, audio control, WebSocket audio data plane
    - `/api/events` - Server-Sent Events for real-time updates
 
 4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the embedded API through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged.
@@ -46,12 +45,6 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `server:*` events - Server lifecycle updates
    - `download:*` events - Download progress
    - `log:*` events - Server console output
-   - `voice:state-changed` - Pipeline state transitions
-   - `voice:transcript` - STT transcription results
-   - `voice:speaking-started` / `voice:speaking-finished` - TTS playback lifecycle
-   - `voice:audio-level` - Microphone input level for UI indicators
-   - `voice:error` - Pipeline error notifications
-   - `voice:model-download-progress` - Voice model download progress
 
 This architecture means:
 - **Security**: All API access requires Bearer token, no unauthorized access to embedded server

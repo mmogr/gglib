@@ -391,7 +391,7 @@ impl SystemProbePort for DefaultSystemProbe {
                 ),
                 system_dep(
                     "libasound2-dev",
-                    "Required for voice/audio support",
+                    "Required for audio support (ALSA)",
                     distro,
                     check_libasound(),
                 ),
