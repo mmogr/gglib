@@ -57,6 +57,7 @@ const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
 const PYTHON_CANDIDATES: &[&str] = &[
     "python",
     "python3",
+    "python3.14",
     "python3.13",
     "python3.12",
     "python3.11",
@@ -68,6 +69,7 @@ const PYTHON_CANDIDATES: &[&str] = &[
 const PYTHON_CANDIDATES: &[&str] = &[
     "python3",
     "python",
+    "python3.14",
     "python3.13",
     "python3.12",
     "python3.11",
@@ -138,24 +140,98 @@ use serde::{Deserialize, Serialize};
 struct EnvMarker {
     helper_version: String,
     requirements: Vec<String>,
+    /// Which tool installed the requirements.
+    ///
+    /// Defaulted rather than required: markers written before uv support
+    /// existed have no such field, and every one of them describes an
+    /// environment built by `python -m venv`. Saying so is truthful and keeps
+    /// an existing install from being treated as corrupt.
+    #[serde(default = "legacy_builder_label")]
+    builder: String,
+}
+
+fn legacy_builder_label() -> String {
+    Builder::VENV_LABEL.to_string()
 }
 
 impl EnvMarker {
-    fn current() -> Self {
+    fn current(builder: &Builder) -> Self {
         Self {
             helper_version: env!("CARGO_PKG_VERSION").to_string(),
             requirements: PY_REQUIREMENTS.iter().copied().map(String::from).collect(),
+            builder: builder.label().to_string(),
         }
     }
 
-    fn matches(&self) -> bool {
+    fn matches(&self, builder: &Builder) -> bool {
         self.helper_version == env!("CARGO_PKG_VERSION")
+            && self.builder == builder.label()
             && self.requirements
                 == PY_REQUIREMENTS
                     .iter()
                     .copied()
                     .map(String::from)
                     .collect::<Vec<_>>()
+    }
+}
+
+// ============================================================================
+// Builder
+// ============================================================================
+
+/// How the managed environment gets built.
+///
+/// This is an implementation detail of provisioning, not a user-facing choice:
+/// both variants produce the same `bin/python` layout, so
+/// [`fast_helper_provisioned`] and everything downstream of it are unaffected
+/// by which one ran.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Builder {
+    /// `uv`, when it is installed. Builds the environment and resolves the
+    /// requirements several times faster than pip — under a second against
+    /// roughly four on a warm cache and a fast link, and the gap widens as
+    /// either gets worse, since pip's cost is dominated by serial downloads.
+    Uv(PathBuf),
+    /// The stdlib `venv` module plus `pip` — always available wherever a
+    /// validated interpreter is, so this is the floor rather than a fallback
+    /// that might not be there.
+    Venv,
+}
+
+impl Builder {
+    const UV_LABEL: &'static str = "uv";
+    const VENV_LABEL: &'static str = "venv";
+
+    /// Prefer uv when it can be found.
+    ///
+    /// `PATH` first, then the two locations its own installers use, which are
+    /// routinely absent from a non-interactive `PATH`.
+    fn detect() -> Self {
+        if let Ok(uv) = which::which("uv") {
+            return Self::Uv(uv);
+        }
+
+        if let Some(home) = dirs::home_dir() {
+            let exe = if cfg!(windows) { "uv.exe" } else { "uv" };
+            for dir in [
+                home.join(".local").join("bin"),
+                home.join(".cargo").join("bin"),
+            ] {
+                let candidate = dir.join(exe);
+                if candidate.exists() {
+                    return Self::Uv(candidate);
+                }
+            }
+        }
+
+        Self::Venv
+    }
+
+    const fn label(&self) -> &'static str {
+        match self {
+            Self::Uv(_) => Self::UV_LABEL,
+            Self::Venv => Self::VENV_LABEL,
+        }
     }
 }
 
@@ -238,19 +314,25 @@ impl PythonEnvironment {
     // ------------------------------------------------------------------------
 
     async fn ensure_env_ready(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
+        let builder = Builder::detect();
+
         if !self.python_path().exists() {
-            self.create_env(notice).await?;
+            self.create_env(&builder, notice).await?;
         }
 
-        if !self.marker_is_fresh()? {
-            self.install_requirements(notice).await?;
-            self.write_marker()?;
+        if !self.marker_is_fresh(&builder)? {
+            self.install_requirements(&builder, notice).await?;
+            self.write_marker(&builder)?;
         }
 
         Ok(())
     }
 
-    async fn create_env(&self, notice: Option<&NoticeCallback>) -> Result<(), EnvSetupError> {
+    async fn create_env(
+        &self,
+        builder: &Builder,
+        notice: Option<&NoticeCallback>,
+    ) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated().await?;
 
         // With a notice sink (the queued-download path), the note lands on
@@ -266,29 +348,52 @@ impl PythonEnvironment {
             ),
         );
 
-        let mut cmd = async_cmd(&bootstrap);
+        // uv seeds the environment from the interpreter discovery already
+        // found. It can fetch a Python of its own, and deliberately is not
+        // asked to: downloading a language runtime is a bigger thing to do on
+        // someone's behalf than building a venv from the Python they have.
+        let (program, args) = match builder {
+            Builder::Uv(uv) => (
+                uv.clone(),
+                vec![
+                    "venv".into(),
+                    "--python".into(),
+                    bootstrap.into_os_string(),
+                    self.env_dir.clone().into_os_string(),
+                ],
+            ),
+            Builder::Venv => (
+                bootstrap,
+                vec![
+                    "-m".into(),
+                    "venv".into(),
+                    self.env_dir.clone().into_os_string(),
+                ],
+            ),
+        };
+
+        let mut cmd = async_cmd(&program);
         apply_python_subprocess_isolation(&mut cmd);
         // `.output()` rather than `.status()`: this pipes the child's stdout
-        // and stderr instead of inheriting the parent's, so `python -m venv`
+        // and stderr instead of inheriting the parent's, so the builder
         // can never write raw bytes straight to the terminal. An inherited
         // handle would bypass indicatif entirely and corrupt any live
         // `MultiProgress` redraw the same way a stray `println!` does.
-        // `run_python_command` below already pipes for the same reason.
-        let output = cmd
-            .arg("-m")
-            .arg("venv")
-            .arg(&self.env_dir)
-            .output()
-            .await
-            .map_err(|e| EnvSetupError::CreateEnvFailed {
-                path: self.env_dir.clone(),
-                reason: e.to_string(),
-            })?;
+        // `run_setup_command` below already pipes for the same reason.
+        // uv is chattier than `python -m venv`, so this matters more now.
+        let output =
+            cmd.args(&args)
+                .output()
+                .await
+                .map_err(|e| EnvSetupError::CreateEnvFailed {
+                    path: self.env_dir.clone(),
+                    reason: e.to_string(),
+                })?;
 
         if !output.status.success() {
             return Err(EnvSetupError::CreateEnvFailed {
                 path: self.env_dir.clone(),
-                reason: venv_failure_reason(output.status, &output.stderr),
+                reason: create_env_failure_reason(builder.label(), output.status, &output.stderr),
             });
         }
 
@@ -297,6 +402,7 @@ impl PythonEnvironment {
 
     async fn install_requirements(
         &self,
+        builder: &Builder,
         notice: Option<&NoticeCallback>,
     ) -> Result<(), EnvSetupError> {
         notify(
@@ -307,13 +413,24 @@ impl PythonEnvironment {
 
         let python = self.python_path();
 
-        // Upgrade pip first
-        run_python_command(&python, &["-m", "pip", "install", "--upgrade", "pip"]).await?;
+        match builder {
+            Builder::Uv(uv) => {
+                // No pip bootstrap step: uv installs into the target
+                // environment from outside it, which is most of the speedup.
+                let mut args = vec!["pip", "install", "--python"];
+                let python = python.to_string_lossy().into_owned();
+                args.push(&python);
+                args.extend(PY_REQUIREMENTS);
+                run_setup_command(uv, &args).await?;
+            }
+            Builder::Venv => {
+                run_setup_command(&python, &["-m", "pip", "install", "--upgrade", "pip"]).await?;
 
-        // Install requirements
-        let mut args = vec!["-m", "pip", "install", "--upgrade"];
-        args.extend(PY_REQUIREMENTS);
-        run_python_command(&python, &args).await?;
+                let mut args = vec!["-m", "pip", "install", "--upgrade"];
+                args.extend(PY_REQUIREMENTS);
+                run_setup_command(&python, &args).await?;
+            }
+        }
 
         Ok(())
     }
@@ -353,7 +470,7 @@ impl PythonEnvironment {
         Ok(())
     }
 
-    fn marker_is_fresh(&self) -> Result<bool, EnvSetupError> {
+    fn marker_is_fresh(&self, builder: &Builder) -> Result<bool, EnvSetupError> {
         let marker_path = self.env_dir.join(ENV_MARKER_NAME);
 
         if !marker_path.exists() {
@@ -368,11 +485,11 @@ impl PythonEnvironment {
             Err(_) => return Ok(false),
         };
 
-        Ok(marker.matches())
+        Ok(marker.matches(builder))
     }
 
-    fn write_marker(&self) -> Result<(), EnvSetupError> {
-        let marker = EnvMarker::current();
+    fn write_marker(&self, builder: &Builder) -> Result<(), EnvSetupError> {
+        let marker = EnvMarker::current(builder);
         let marker_path = self.env_dir.join(ENV_MARKER_NAME);
 
         let content = serde_json::to_string_pretty(&marker)
@@ -662,21 +779,29 @@ fn notify(notice: Option<&NoticeCallback>, bar_message: &str, console_message: &
     }
 }
 
-/// Build the `CreateEnvFailed` reason for a failed `python -m venv`,
+/// Build the `CreateEnvFailed` reason for a failed environment build,
 /// including captured stderr when there is any. Pulled out of `create_env`
 /// so the formatting is testable without spawning a real process.
-fn venv_failure_reason(status: std::process::ExitStatus, stderr: &[u8]) -> String {
+///
+/// `builder` names which tool failed: "uv exited with 2" and "venv exited
+/// with 2" want different things installed, and a reader of the error should
+/// not have to guess which one ran.
+fn create_env_failure_reason(
+    builder: &str,
+    status: std::process::ExitStatus,
+    stderr: &[u8],
+) -> String {
     let stderr = String::from_utf8_lossy(stderr).trim().to_string();
     if stderr.is_empty() {
-        format!("python -m venv exited with {status}")
+        format!("{builder} exited with {status}")
     } else {
-        format!("python -m venv exited with {status}: {stderr}")
+        format!("{builder} exited with {status}: {stderr}")
     }
 }
 
-/// Run a Python command and check for success.
-async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetupError> {
-    let mut cmd = async_cmd(python);
+/// Run a provisioning command and check for success.
+async fn run_setup_command(program: &Path, args: &[&str]) -> Result<(), EnvSetupError> {
+    let mut cmd = async_cmd(program);
     apply_python_subprocess_isolation(&mut cmd);
     cmd.args(args);
 
@@ -690,7 +815,7 @@ async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetup
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let mut details = format!(
             "{} {args:?} exited with {}",
-            python.display(),
+            program.display(),
             output.status
         );
         if !stdout.is_empty() {
@@ -869,8 +994,8 @@ mod tests {
 
     #[test]
     fn test_env_marker_current_matches() {
-        let marker = EnvMarker::current();
-        assert!(marker.matches());
+        let marker = EnvMarker::current(&Builder::Venv);
+        assert!(marker.matches(&Builder::Venv));
     }
 
     #[test]
@@ -878,8 +1003,9 @@ mod tests {
         let marker = EnvMarker {
             helper_version: "0.0.0".to_string(),
             requirements: PY_REQUIREMENTS.iter().copied().map(String::from).collect(),
+            builder: Builder::VENV_LABEL.to_string(),
         };
-        assert!(!marker.matches());
+        assert!(!marker.matches(&Builder::Venv));
     }
 
     #[test]
@@ -887,8 +1013,45 @@ mod tests {
         let marker = EnvMarker {
             helper_version: env!("CARGO_PKG_VERSION").to_string(),
             requirements: vec!["different>=1.0.0".to_string()],
+            builder: Builder::VENV_LABEL.to_string(),
         };
-        assert!(!marker.matches());
+        assert!(!marker.matches(&Builder::Venv));
+    }
+
+    /// An environment built by pip and later seen on a machine that has since
+    /// installed uv is stale: reinstalling through uv is cheap and leaves the
+    /// marker describing what is actually on disk.
+    #[test]
+    fn env_marker_builder_mismatch_forces_a_reinstall() {
+        let marker = EnvMarker::current(&Builder::Venv);
+
+        assert!(!marker.matches(&Builder::Uv(PathBuf::from("/usr/bin/uv"))));
+    }
+
+    /// Markers predate the `builder` field. Every one of them describes an
+    /// environment `python -m venv` built, so that is what they must
+    /// deserialize as — otherwise an existing install reads as corrupt and
+    /// gets needlessly rebuilt on upgrade.
+    #[test]
+    fn env_marker_without_a_builder_field_reads_as_venv() {
+        let legacy = format!(
+            r#"{{"helper_version":"{}","requirements":{}}}"#,
+            env!("CARGO_PKG_VERSION"),
+            serde_json::to_string(PY_REQUIREMENTS).expect("serialize requirements"),
+        );
+
+        let marker: EnvMarker = serde_json::from_str(&legacy).expect("deserialize legacy marker");
+
+        assert_eq!(marker.builder, Builder::VENV_LABEL);
+        assert!(marker.matches(&Builder::Venv));
+    }
+
+    /// Both builders produce the same layout, so the label is the only thing
+    /// that distinguishes them downstream.
+    #[test]
+    fn builder_labels_are_distinct() {
+        assert_eq!(Builder::Venv.label(), "venv");
+        assert_eq!(Builder::Uv(PathBuf::from("/usr/bin/uv")).label(), "uv");
     }
 
     /// A fresh machine has neither directory: the current path is what gets
@@ -1146,10 +1309,24 @@ mod tests {
         use std::os::unix::process::ExitStatusExt;
 
         let status = std::process::ExitStatus::from_raw(1 << 8); // exit code 1
-        let reason = venv_failure_reason(status, b"NotADirectoryError: [Errno 20]\n");
+        let reason = create_env_failure_reason("venv", status, b"NotADirectoryError: [Errno 20]\n");
 
         assert!(reason.contains("exited with"));
         assert!(reason.contains("NotADirectoryError"));
+    }
+
+    /// Which builder failed decides what the user has to go fix, so the
+    /// message names it rather than always saying `venv`.
+    #[cfg(unix)]
+    #[test]
+    fn create_env_failure_reason_names_the_builder() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let status = std::process::ExitStatus::from_raw(2 << 8);
+        let reason = create_env_failure_reason("uv", status, b"no interpreter found\n");
+
+        assert!(reason.starts_with("uv exited with"), "{reason}");
+        assert!(reason.contains("no interpreter found"), "{reason}");
     }
 
     /// Empty stderr (e.g. the process was killed by a signal before writing
@@ -1160,12 +1337,12 @@ mod tests {
         use std::os::unix::process::ExitStatusExt;
 
         let status = std::process::ExitStatus::from_raw(1 << 8);
-        let reason = venv_failure_reason(status, b"");
+        let reason = create_env_failure_reason("venv", status, b"");
 
         // No trailing ": " separator (which would precede an empty stderr
         // section) — just the bare "exited with <status>" whatever ExitStatus's
         // own Display happens to contain.
-        assert_eq!(reason, format!("python -m venv exited with {status}"));
+        assert_eq!(reason, format!("venv exited with {status}"));
     }
 
     /// Test that environment isolation properly removes polluted environment variables
