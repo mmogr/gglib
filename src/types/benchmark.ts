@@ -277,7 +277,14 @@ export type EvalArm = 'raw' | 'gglib';
 /** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
 export interface ArmScores {
   tool_accuracy: number;
-  loop_avoidance: number;
+  /**
+   * Fraction of loop-eligible tasks that tripped neither guard. `null` when no
+   * task ever reached a second tool-call batch — the axis was not measured,
+   * which is distinct from a perfect 1.0. Read with `loop_eligible`.
+   */
+  loop_avoidance?: number | null;
+  /** Denominator behind `loop_avoidance`: how many tasks risked a loop. */
+  loop_eligible: number;
   task_completion: number;
   composite: number;
   tg_tps?: number | null;
@@ -286,7 +293,8 @@ export interface ArmScores {
 /** Per-axis `gglib − raw` difference. */
 export interface ArmDelta {
   tool_accuracy: number;
-  loop_avoidance: number;
+  /** `null` unless both arms measured the axis. */
+  loop_avoidance?: number | null;
   task_completion: number;
   composite: number;
 }

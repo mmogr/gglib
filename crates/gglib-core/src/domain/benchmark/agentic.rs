@@ -63,11 +63,24 @@ impl std::fmt::Display for EvalArm {
 pub struct ArmScores {
     /// Mean AST-style tool-call match score, `0.0`–`1.0`.
     pub tool_accuracy: f64,
-    /// Fraction of tasks that triggered neither loop nor stagnation guards.
-    pub loop_avoidance: f64,
+    /// Fraction of *loop-eligible* tasks that triggered neither the loop nor
+    /// the stagnation guard.
+    ///
+    /// `None` when no task in this arm ever reached a second tool-call batch,
+    /// so the guards had nothing to fire on: the axis was not measured, which
+    /// is distinct from a perfect `1.0`. Read it together with
+    /// [`Self::loop_eligible`], which is its denominator.
+    #[serde(default)]
+    pub loop_avoidance: Option<f64>,
+    /// How many of this arm's tasks were loop-eligible — the sample size
+    /// behind [`Self::loop_avoidance`].
+    #[serde(default)]
+    pub loop_eligible: usize,
     /// Fraction of tasks passed outright.
     pub task_completion: f64,
-    /// Weighted composite of the three axes above.
+    /// Weighted composite of the axes above, over whichever of them were
+    /// measured. An unmeasured loop-avoidance axis claims no weight rather
+    /// than scoring zero.
     pub composite: f64,
     /// Completion-token throughput (tokens per wall-clock second, pre-fill
     /// included). `None` when the upstream reported no usage.
@@ -80,7 +93,12 @@ pub struct ArmDelta {
     /// Tool-accuracy difference.
     pub tool_accuracy: f64,
     /// Loop-avoidance difference.
-    pub loop_avoidance: f64,
+    ///
+    /// `None` unless *both* arms measured the axis — a difference against an
+    /// arm that never risked a loop would be arithmetic on a number that was
+    /// never observed.
+    #[serde(default)]
+    pub loop_avoidance: Option<f64>,
     /// Task-completion difference.
     pub task_completion: f64,
     /// Composite-score difference.
@@ -127,7 +145,10 @@ impl AgenticEvalReport {
     pub fn delta_of(raw: &ArmScores, gglib: &ArmScores) -> ArmDelta {
         ArmDelta {
             tool_accuracy: gglib.tool_accuracy - raw.tool_accuracy,
-            loop_avoidance: gglib.loop_avoidance - raw.loop_avoidance,
+            loop_avoidance: gglib
+                .loop_avoidance
+                .zip(raw.loop_avoidance)
+                .map(|(g, r)| g - r),
             task_completion: gglib.task_completion - raw.task_completion,
             composite: gglib.composite - raw.composite,
         }
@@ -138,27 +159,59 @@ impl AgenticEvalReport {
 mod tests {
     use super::*;
 
+    fn scores(tool_accuracy: f64, loop_avoidance: Option<f64>, composite: f64) -> ArmScores {
+        ArmScores {
+            tool_accuracy,
+            loop_avoidance,
+            loop_eligible: usize::from(loop_avoidance.is_some()),
+            task_completion: 0.25,
+            composite,
+            tg_tps: Some(30.0),
+        }
+    }
+
     #[test]
     fn delta_is_gglib_minus_raw() {
         let raw = ArmScores {
             tool_accuracy: 0.5,
-            loop_avoidance: 0.75,
+            loop_avoidance: Some(0.75),
+            loop_eligible: 4,
             task_completion: 0.25,
             composite: 0.5,
             tg_tps: Some(30.0),
         };
         let gglib = ArmScores {
             tool_accuracy: 0.9,
-            loop_avoidance: 1.0,
+            loop_avoidance: Some(1.0),
+            loop_eligible: 4,
             task_completion: 0.75,
             composite: 0.9,
             tg_tps: Some(28.0),
         };
         let delta = AgenticEvalReport::delta_of(&raw, &gglib);
         assert!((delta.tool_accuracy - 0.4).abs() < 1e-9);
-        assert!((delta.loop_avoidance - 0.25).abs() < 1e-9);
+        assert!((delta.loop_avoidance.unwrap() - 0.25).abs() < 1e-9);
         assert!((delta.task_completion - 0.5).abs() < 1e-9);
         assert!((delta.composite - 0.4).abs() < 1e-9);
+    }
+
+    /// Subtracting against an arm that never risked a loop would be arithmetic
+    /// on a figure nobody observed — exactly the comparison that reported a
+    /// bare llama-server arm as beating the pipeline.
+    #[test]
+    fn an_unmeasured_arm_yields_no_loop_avoidance_delta() {
+        let raw = scores(0.5, None, 0.5);
+        let gglib = scores(0.9, Some(0.0), 0.9);
+        assert!(
+            AgenticEvalReport::delta_of(&raw, &gglib)
+                .loop_avoidance
+                .is_none()
+        );
+        assert!(
+            AgenticEvalReport::delta_of(&gglib, &raw)
+                .loop_avoidance
+                .is_none()
+        );
     }
 
     #[test]

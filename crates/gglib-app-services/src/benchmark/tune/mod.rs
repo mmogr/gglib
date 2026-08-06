@@ -506,32 +506,91 @@ pub(crate) fn throughput_tps(results: &[TuneTaskResult]) -> Option<f64> {
 /// computed while candidates stream out one at a time. The three
 /// self-contained components (tool accuracy, loop avoidance, task
 /// completion) are renormalized to sum to `1.0` of the available weight.
+///
+/// An unmeasured loop-avoidance axis ([`AxisScores::loop_avoidance`] of
+/// `None`) drops out of both the numerator and the denominator rather than
+/// scoring `0.0` or an imputed `1.0`. Two result sets in one sweep can
+/// therefore be scored over different denominators — but the alternative,
+/// imputing a perfect score, systematically rewards candidates that never
+/// engage the guard at all, which is the defect this avoids. Ranking is
+/// unaffected wherever candidates share an eligibility count, which includes
+/// the pre-screen round by construction: it runs one `SingleCall` and one
+/// `Irrelevance` task, neither of which is ever loop-eligible.
 pub(crate) fn compute_composite_score(results: &[TuneTaskResult], weights: &ScoreWeights) -> f64 {
     let Some(axes) = axis_scores(results) else {
         return 0.0;
     };
 
-    let weight_sum = f64::from(weights.tool_accuracy)
-        + f64::from(weights.loop_avoidance)
-        + f64::from(weights.task_completion);
+    // Unmeasured axes contribute no score and claim no weight.
+    let (loop_term, loop_weight) = axes.loop_avoidance.map_or((0.0, 0.0), |avoidance| {
+        (
+            avoidance * f64::from(weights.loop_avoidance),
+            f64::from(weights.loop_avoidance),
+        )
+    });
+
+    let weight_sum =
+        f64::from(weights.tool_accuracy) + loop_weight + f64::from(weights.task_completion);
     if weight_sum <= 0.0 {
         return 0.0;
     }
 
     (axes.tool_accuracy * f64::from(weights.tool_accuracy)
-        + axes.loop_avoidance * f64::from(weights.loop_avoidance)
+        + loop_term
         + axes.task_completion * f64::from(weights.task_completion))
         / weight_sum
 }
 
-/// The three measured axes of a result set, each `0.0`–`1.0`.
+/// Completed tool-executing iterations a task needs before the loop guard
+/// could possibly have fired.
+///
+/// `LoopDetector` compares tool-call batch signatures, so two batches must
+/// exist before a repeat is even representable. With `AgentConfig`'s default
+/// `max_repeated_batch_steps`, this is also the iteration count a guard-aborted
+/// task reports — the aborting turn never completes, so it is never counted.
+///
+/// [`run_task_with_llm`] hardcodes `AgentConfig::default()`, which is what
+/// makes this knowable here. Should the harness ever take a caller-supplied
+/// config, this must be derived from its `max_repeated_batch_steps` instead.
+const MIN_ITERATIONS_FOR_LOOP_RISK: usize = 2;
+
+/// The measured axes of a result set, each `0.0`–`1.0`.
 pub(crate) struct AxisScores {
     /// Mean AST-style tool-call match score.
     pub tool_accuracy: f64,
-    /// Fraction of tasks that triggered neither loop nor stagnation guards.
-    pub loop_avoidance: f64,
+    /// Fraction of *loop-eligible* tasks that triggered neither the loop nor
+    /// the stagnation guard.
+    ///
+    /// `None` when no task was eligible: the axis was not measured, which is
+    /// deliberately distinct from a perfect `1.0`. Scoring an arm that never
+    /// reached a second tool batch as having "avoided" a loop is what let a
+    /// bare llama-server arm — one generating 32,500 tokens per task until it
+    /// hit its cap — outscore the pipeline it was being compared against.
+    pub loop_avoidance: Option<f64>,
+    /// How many tasks were loop-eligible: the denominator behind
+    /// `loop_avoidance`, and the sample size a reader needs to judge it.
+    pub loop_eligible: usize,
     /// Fraction of tasks that passed outright.
     pub task_completion: f64,
+}
+
+/// Whether this task gave the guards a chance to fire.
+///
+/// A task that finished before a second tool batch existed cannot have looped,
+/// so counting it as "avoided a loop" measures nothing. A task the guards did
+/// abort is eligible by definition, whatever its iteration count.
+///
+/// Stagnation is folded in rather than given its own lower threshold. It
+/// compares response *text* and so can fire a turn earlier than the loop
+/// detector, which means a one-batch task is scored ineligible here even
+/// though it could in principle have stagnated. That costs only a
+/// "trivially didn't stagnate" credit and produces no false negatives — a task
+/// that actually stagnated is eligible via `stagnation_detected` — whereas
+/// crediting those tasks re-imports exactly the vacuity this removes.
+fn is_loop_eligible(result: &TuneTaskResult) -> bool {
+    result.loop_detected
+        || result.stagnation_detected
+        || result.iterations >= MIN_ITERATIONS_FOR_LOOP_RISK
 }
 
 /// Compute the per-axis scores for a result set. `None` when empty.
@@ -542,12 +601,13 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
     #[allow(clippy::cast_precision_loss)]
     let n = results.len() as f64;
     let tool_accuracy = results.iter().map(|r| r.tool_match_score).sum::<f64>() / n;
+    let loop_eligible = results.iter().filter(|r| is_loop_eligible(r)).count();
     let loop_free = results
         .iter()
-        .filter(|r| !r.loop_detected && !r.stagnation_detected)
+        .filter(|r| is_loop_eligible(r) && !r.loop_detected && !r.stagnation_detected)
         .count();
     #[allow(clippy::cast_precision_loss)]
-    let loop_avoidance = loop_free as f64 / n;
+    let loop_avoidance = (loop_eligible > 0).then(|| loop_free as f64 / loop_eligible as f64);
     let passed = results.iter().filter(|r| r.passed).count();
     #[allow(clippy::cast_precision_loss)]
     let task_completion = passed as f64 / n;
@@ -555,6 +615,7 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
     Some(AxisScores {
         tool_accuracy,
         loop_avoidance,
+        loop_eligible,
         task_completion,
     })
 }
@@ -563,6 +624,9 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
 mod tests {
     use super::*;
 
+    /// A loop-eligible result by default (`iterations` at the threshold), so
+    /// scoring fixtures exercise the loop axis rather than skipping it.
+    /// Tests that need an ineligible task lower `iterations` explicitly.
     fn task_result(tool_match_score: f64, passed: bool, loop_detected: bool) -> TuneTaskResult {
         TuneTaskResult {
             task_id: "t".to_string(),
@@ -571,11 +635,77 @@ mod tests {
             tool_match_score,
             loop_detected,
             stagnation_detected: false,
-            iterations: 1,
+            iterations: MIN_ITERATIONS_FOR_LOOP_RISK,
             latency_ms: 10,
             completion_tokens: None,
             detail: None,
         }
+    }
+
+    /// The defect this axis was rebuilt around: a task that finished before a
+    /// second tool batch existed cannot have looped, so counting it as
+    /// "avoided a loop" inflates the score with tasks that never took the
+    /// risk. The old code scored this set `2/3 = 0.667`.
+    #[test]
+    fn loop_avoidance_ignores_tasks_that_could_not_loop() {
+        let mut answered_directly = task_result(1.0, true, false);
+        answered_directly.iterations = 0;
+        let mut one_batch_then_answer = task_result(1.0, true, false);
+        one_batch_then_answer.iterations = 1;
+        let looped = task_result(1.0, false, true);
+
+        let axes = axis_scores(&[answered_directly, one_batch_then_answer, looped]).unwrap();
+        assert_eq!(axes.loop_eligible, 1, "only the looping task risked a loop");
+        assert_eq!(axes.loop_avoidance, Some(0.0));
+    }
+
+    /// The regression test for the reported artifact: a bare llama-server arm
+    /// that generated to its token cap on every task, took one batch, and
+    /// never iterated again scored a perfect 1.000 on an axis it had never
+    /// been measured against.
+    #[test]
+    fn a_suite_that_never_risked_a_loop_reports_no_loop_avoidance() {
+        let results: Vec<_> = (0..9)
+            .map(|_| {
+                let mut r = task_result(0.722, true, false);
+                r.iterations = 1;
+                r
+            })
+            .collect();
+
+        let axes = axis_scores(&results).unwrap();
+        assert_eq!(axes.loop_eligible, 0);
+        assert!(
+            axes.loop_avoidance.is_none(),
+            "unmeasured must not read as perfect"
+        );
+    }
+
+    /// Eligibility comes from the guard firing, not from the iteration count:
+    /// stagnation can abort a run before any tool batch completes.
+    #[test]
+    fn a_guard_that_fired_is_always_eligible() {
+        let mut stagnated = task_result(0.0, false, false);
+        stagnated.stagnation_detected = true;
+        stagnated.iterations = 0;
+
+        let axes = axis_scores(&[stagnated]).unwrap();
+        assert_eq!(axes.loop_eligible, 1);
+        assert_eq!(axes.loop_avoidance, Some(0.0));
+    }
+
+    /// An unmeasured axis must claim no weight rather than scoring zero —
+    /// otherwise a suite that never risked a loop is punished for it.
+    #[test]
+    fn composite_renormalizes_when_loop_avoidance_is_unmeasured() {
+        let mut perfect = task_result(1.0, true, false);
+        perfect.iterations = 1;
+
+        let got = compute_composite_score(&[perfect], &ScoreWeights::default());
+        assert!(
+            (got - 1.0).abs() < 1e-9,
+            "expected the loop weight to be redistributed, got {got}"
+        );
     }
 
     #[test]

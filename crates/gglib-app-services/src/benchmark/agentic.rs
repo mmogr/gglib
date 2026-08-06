@@ -240,13 +240,11 @@ fn demands_tool_call(task: &TuneTask) -> bool {
 fn arm_scores(results: &[TuneTaskResult], config: &AgenticEvalConfig) -> ArmScores {
     let axes = axis_scores(results);
     let composite = super::tune::compute_composite_score(results, &config.weights);
-    let (tool_accuracy, loop_avoidance, task_completion) = axes.map_or((0.0, 0.0, 0.0), |a| {
-        (a.tool_accuracy, a.loop_avoidance, a.task_completion)
-    });
     ArmScores {
-        tool_accuracy,
-        loop_avoidance,
-        task_completion,
+        tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
+        loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
+        loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),
+        task_completion: axes.as_ref().map_or(0.0, |a| a.task_completion),
         composite,
         tg_tps: throughput_tps(results),
     }

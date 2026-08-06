@@ -378,9 +378,9 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     for (name, raw, gglib, delta) in [
         (
             "tool accuracy  ",
-            report.raw.tool_accuracy,
-            report.gglib.tool_accuracy,
-            report.delta.tool_accuracy,
+            Some(report.raw.tool_accuracy),
+            Some(report.gglib.tool_accuracy),
+            Some(report.delta.tool_accuracy),
         ),
         (
             "loop avoidance ",
@@ -390,26 +390,27 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         ),
         (
             "task completion",
-            report.raw.task_completion,
-            report.gglib.task_completion,
-            report.delta.task_completion,
+            Some(report.raw.task_completion),
+            Some(report.gglib.task_completion),
+            Some(report.delta.task_completion),
         ),
         (
             "composite      ",
-            report.raw.composite,
-            report.gglib.composite,
-            report.delta.composite,
+            Some(report.raw.composite),
+            Some(report.gglib.composite),
+            Some(report.delta.composite),
         ),
     ] {
-        let colour = if delta > 0.0 {
-            style::SUCCESS
-        } else if delta < 0.0 {
-            style::DANGER
-        } else {
-            ""
+        let colour = match delta {
+            Some(d) if d > 0.0 => style::SUCCESS,
+            Some(d) if d < 0.0 => style::DANGER,
+            _ => "",
         };
         eprintln!(
-            "  {name} {raw:>6.3} {gglib:>6.3} {colour}{delta:>+7.3}{RESET}",
+            "  {name} {raw} {gglib} {colour}{delta}{RESET}",
+            raw = fmt_axis(raw, 6),
+            gglib = fmt_axis(gglib, 6),
+            delta = fmt_delta(delta),
             RESET = style::RESET
         );
     }
@@ -418,7 +419,37 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         fmt_tps(&report.raw),
         fmt_tps(&report.gglib)
     );
+
+    // An arm that never reached a second tool batch cannot have looped, so its
+    // loop-avoidance score is unmeasured rather than perfect. Say so, and say
+    // over how many tasks — the denominator is the whole story.
+    if report.raw.loop_avoidance.is_none() || report.gglib.loop_avoidance.is_none() {
+        eprintln!(
+            "  {MUTED}loop avoidance measured on {raw}/{total} raw and {gglib}/{total} gglib \
+             tasks; unmeasured arms are excluded from the composite{RESET}",
+            raw = report.raw.loop_eligible,
+            gglib = report.gglib.loop_eligible,
+            total = report.tasks.len(),
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
+    }
     eprintln!();
+}
+
+/// Render one axis cell, right-aligned in `width`, with an em-dash for an axis
+/// that was never measured.
+fn fmt_axis(value: Option<f64>, width: usize) -> String {
+    value.map_or_else(
+        || format!("{:>width$}", "—", width = width),
+        |v| format!("{v:>width$.3}", width = width),
+    )
+}
+
+/// Render a delta cell, signed and right-aligned, with an em-dash when either
+/// arm left the axis unmeasured.
+fn fmt_delta(value: Option<f64>) -> String {
+    value.map_or_else(|| format!("{:>7}", "—"), |v| format!("{v:>+7.3}"))
 }
 
 /// Best-effort hardware snapshot for the JSON export, from the daemon's
