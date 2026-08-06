@@ -60,6 +60,8 @@ interface GeneralSettingsProps {
   setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
   trustClientSampling: boolean;
   setTrustClientSampling: (value: boolean) => void;
+  proxyLoopDetection: boolean;
+  setProxyLoopDetection: (value: boolean) => void;
 
   // Actions
   onSubmit: (event: FormEvent) => Promise<void>;
@@ -107,6 +109,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setInferenceDefaultsInput,
   trustClientSampling,
   setTrustClientSampling,
+  proxyLoopDetection,
+  setProxyLoopDetection,
   onSubmit,
   onReset,
   onRefresh,
@@ -193,6 +197,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         setInferenceDefaultsInput={setInferenceDefaultsInput}
         trustClientSampling={trustClientSampling}
         setTrustClientSampling={setTrustClientSampling}
+        proxyLoopDetection={proxyLoopDetection}
+        setProxyLoopDetection={setProxyLoopDetection}
         saving={saving}
       />
 

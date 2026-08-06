@@ -21,6 +21,8 @@ interface AdvancedSettingsProps {
   setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
   trustClientSampling: boolean;
   setTrustClientSampling: (value: boolean) => void;
+  proxyLoopDetection: boolean;
+  setProxyLoopDetection: (value: boolean) => void;
   saving: boolean;
 }
 
@@ -39,6 +41,8 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
   setInferenceDefaultsInput,
   trustClientSampling,
   setTrustClientSampling,
+  proxyLoopDetection,
+  setProxyLoopDetection,
   saving,
 }) => (
   <>
@@ -122,6 +126,20 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           top-k, presence-penalty, repeat-penalty, or min-p. Max tokens is always honoured. Turn
           this on only for a client that exposes real sampling controls to its user (e.g.
           OpenWebUI).
+        </ToggleField>
+
+        <ToggleField
+          id="proxy-loop-detection-input"
+          label="Loop detection on the proxy endpoint"
+          checked={proxyLoopDetection}
+          onChange={setProxyLoopDetection}
+          disabled={saving}
+        >
+          On by default: a conversation whose history repeats the same tool-call batch or
+          assistant response beyond the agent-path thresholds is rejected with a clean 400
+          before any model work, instead of burning a model swap and a full generation per
+          stuck turn. Turn this off only for a client that legitimately replays identical
+          batches.
         </ToggleField>
       </div>
     )}

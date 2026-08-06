@@ -130,6 +130,29 @@ pub struct Settings {
     /// (`OpenWebUI`'s sliders, for instance).
     pub trust_client_sampling: Option<bool>,
 
+    // ── Proxy loop guard ────────────────────────────────────────────
+    /// Whether the proxy's turn-level loop/stagnation guard runs on
+    /// `/v1/chat/completions`.
+    ///
+    /// `None`/`Some(true)` → active (the default): a conversation whose
+    /// replayed history already repeats the same tool-call batch or the same
+    /// assistant response beyond the shared agent-path thresholds is rejected
+    /// with a clean HTTP 400 (`loop_detected` / `stagnation_detected`)
+    /// **before** admission — no model swap, no generation, no ten minutes of
+    /// scrolling garbage. `Some(false)` disables the guard entirely: the
+    /// escape hatch for a client that legitimately replays identical
+    /// tool-call batches or responses.
+    ///
+    /// Note the inverse polarity to [`Self::trust_client_sampling`]: absent
+    /// means **on**, because the guard is protection the endpoint should not
+    /// silently lose, while trusting client sampling is authority a client
+    /// must be explicitly granted.
+    ///
+    /// The stagnation threshold itself comes from
+    /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
+    /// the two paths cannot drift.
+    pub proxy_loop_detection: Option<bool>,
+
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
     /// it launches, rather than waiting for the user to switch it on.
@@ -186,6 +209,7 @@ impl Settings {
             share_lan: None,
             proxy_api_key: None,
             trust_client_sampling: None,
+            proxy_loop_detection: None,
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
@@ -263,6 +287,9 @@ impl Settings {
         if let Some(ref v) = other.trust_client_sampling {
             self.trust_client_sampling = *v;
         }
+        if let Some(ref v) = other.proxy_loop_detection {
+            self.proxy_loop_detection = *v;
+        }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;
         }
@@ -300,6 +327,7 @@ pub struct SettingsUpdate {
     pub share_lan: Option<Option<bool>>,
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
+    pub proxy_loop_detection: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
@@ -704,6 +732,26 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(settings.trust_client_sampling, None);
+    }
+
+    #[test]
+    fn test_proxy_loop_detection_defaults_to_none_and_merges_like_any_bool_setting() {
+        // None means enabled — the guard is on unless explicitly disabled.
+        let defaults = Settings::with_defaults();
+        assert_eq!(defaults.proxy_loop_detection, None);
+
+        let mut settings = Settings::with_defaults();
+        settings.merge(&SettingsUpdate {
+            proxy_loop_detection: Some(Some(false)),
+            ..Default::default()
+        });
+        assert_eq!(settings.proxy_loop_detection, Some(false));
+
+        settings.merge(&SettingsUpdate {
+            proxy_loop_detection: Some(None),
+            ..Default::default()
+        });
+        assert_eq!(settings.proxy_loop_detection, None);
     }
 
     #[test]
