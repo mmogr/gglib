@@ -20,7 +20,7 @@ import type { InferenceConfig } from './index';
 
 // ─── Enumerations ────────────────────────────────────────────────────────────
 
-export type BenchmarkRunType = 'compare' | 'perf' | 'tune';
+export type BenchmarkRunType = 'compare' | 'perf' | 'tune' | 'agentic';
 export type BenchmarkRunStatus = 'running' | 'complete' | 'failed';
 
 // ─── Domain Entities ─────────────────────────────────────────────────────────
@@ -355,4 +355,9 @@ export interface ModelBenchmarkHistoryResponse {
 
 export interface ModelTuneHistoryResponse {
   results: TuneCandidateResult[];
+}
+
+/** Response for `GET /api/models/{id}/agentic-history`, most recent first. */
+export interface ModelAgenticHistoryResponse {
+  reports: AgenticEvalReport[];
 }

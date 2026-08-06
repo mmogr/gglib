@@ -21,12 +21,12 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_core::domain::benchmark::BenchmarkEvent;
 use gglib_core::domain::benchmark::agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores, EvalArm,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
+use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::ports::{LlmCompletionPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
@@ -34,6 +34,7 @@ use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use super::BenchmarkDeps;
 use super::tune::{axis_scores, run_task_with_llm, throughput_tps};
@@ -59,6 +60,19 @@ pub async fn run_agentic_eval(
         .get_by_id(config.model_id)
         .await
         .with_context(|| format!("model {} not found", config.model_id))?;
+
+    let config_json = serde_json::to_string(&config).ok();
+    let run_id = deps
+        .bench_repo
+        .create_run(
+            BenchmarkRunType::Agentic,
+            &[config.model_id],
+            None,
+            None,
+            config_json.as_deref(),
+        )
+        .await
+        .context("failed to create agentic eval run record")?;
 
     // Resolve the serving context exactly as the tune sweep does.
     let settings = deps.settings_repo.load().await.ok();
@@ -91,6 +105,7 @@ pub async fn run_agentic_eval(
         Ok(a) => a,
         Err(e) => {
             let msg = format!("failed to start model '{}': {e}", model.name);
+            deps.bench_repo.fail_run(run_id, &msg).await.ok();
             let _ = tx.send(BenchmarkEvent::RunFailed { error: msg }).await;
             return Ok(());
         }
@@ -119,6 +134,10 @@ pub async fn run_agentic_eval(
         let mut results = Vec::with_capacity(tasks.len());
         for task in &tasks {
             if cancel.is_cancelled() {
+                deps.bench_repo
+                    .fail_run(run_id, "Aborted by user")
+                    .await
+                    .ok();
                 deps.runtime.stop_current().await.ok();
                 let _ = tx
                     .send(BenchmarkEvent::RunFailed {
@@ -183,6 +202,17 @@ pub async fn run_agentic_eval(
         delta,
         tasks: tasks_cmp,
     };
+
+    if let Err(e) = deps
+        .bench_repo
+        .save_agentic_result(&report, run_id, config.model_id)
+        .await
+    {
+        warn!("failed to save agentic eval result: {e}");
+    }
+    if let Err(e) = deps.bench_repo.complete_run(run_id).await {
+        warn!("failed to mark agentic eval run complete: {e}");
+    }
 
     let _ = tx
         .send(BenchmarkEvent::AgenticEvalComplete { report })
