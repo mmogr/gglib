@@ -28,7 +28,7 @@ use std::sync::Arc;
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{
-    AgentLoopPort, CacheMetricsSink, LlmCompletionPort, RetryObserver, ToolExecutorPort,
+    AgentLoopPort, LlmCompletionPort, RetryObserver, ToolExecutorPort, UsageSink,
 };
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::retry::RetryPolicy;
@@ -52,9 +52,9 @@ use crate::LlmCompletionAdapter;
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
-/// * `cache_metrics` — `Some(sink)` reports this loop's prompt-cache reuse
-///   (e.g. the proxy process's agent-path store, for GUI chat); `None` when
-///   there is no dashboard to report to.
+/// * `usage_sink` — `Some(sink)` reports each response's token usage (e.g. the
+///   proxy process's agent-path cache store, for GUI chat); `None` when there
+///   is nothing to report to.
 /// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
 ///   consumer, so a user waiting on a contended model is told why. `None` when
 ///   there is no stream to notify.
@@ -66,7 +66,7 @@ pub fn compose_agent_loop(
     model_context: ModelContext,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
-    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    usage_sink: Option<Arc<dyn UsageSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
@@ -78,7 +78,7 @@ pub fn compose_agent_loop(
         tool_filter,
         None,
         None,
-        cache_metrics,
+        usage_sink,
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,
@@ -99,7 +99,7 @@ pub fn compose_agent_loop_with_sampling(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
-    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    usage_sink: Option<Arc<dyn UsageSink>>,
     retry_policy: Option<RetryPolicy>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
@@ -111,7 +111,7 @@ pub fn compose_agent_loop_with_sampling(
         tool_filter,
         sandbox_root,
         sampling,
-        cache_metrics,
+        usage_sink,
         // The CLI renders the loop's events directly, so there is no separate
         // consumer to notify — retries surface through the loop's own output.
         None,
@@ -129,7 +129,7 @@ fn compose_agent_loop_inner(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
-    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    usage_sink: Option<Arc<dyn UsageSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     retry_policy: Option<RetryPolicy>,
 ) -> Arc<dyn AgentLoopPort> {
@@ -137,7 +137,7 @@ fn compose_agent_loop_inner(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_sampling(sampling)
             .with_model_context(model_context)
-            .with_cache_metrics_sink(cache_metrics)
+            .with_usage_sink(usage_sink)
             .with_retry_observer(retry_observer)
             .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env)),
     );

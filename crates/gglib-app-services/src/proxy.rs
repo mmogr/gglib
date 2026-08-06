@@ -12,7 +12,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use gglib_core::ports::{CacheMetricsSink, ModelCatalogPort, ModelRepository, ModelRuntimePort};
+use gglib_core::ports::{ModelCatalogPort, ModelRepository, ModelRuntimePort, UsageSink};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
@@ -295,7 +295,7 @@ impl ProxyOps {
     /// Always available: the store lives on the supervisor for the process
     /// lifetime, whether or not the proxy is currently running.
     #[must_use]
-    pub fn agent_metrics(&self) -> Arc<dyn CacheMetricsSink> {
+    pub fn agent_metrics(&self) -> Arc<dyn UsageSink> {
         self.supervisor.agent_metrics()
     }
 

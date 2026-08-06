@@ -136,12 +136,16 @@ impl CacheMetricsStore {
     }
 }
 
-/// The in-process store is the default [`CacheMetricsSink`]: the adapter
-/// records straight into the atomics the dashboard snapshots.
+/// The in-process store is the dashboard's [`UsageSink`]: the adapter records
+/// straight into the atomics the dashboard snapshots.
 ///
-/// [`CacheMetricsSink`]: crate::ports::CacheMetricsSink
-impl crate::ports::CacheMetricsSink for CacheMetricsStore {
-    fn record(&self, prompt_tokens: u32, cached_tokens: Option<u32>) {
+/// `completion_tokens` is deliberately ignored — this store exists to answer
+/// "how much of the prompt was served from cache", and the dashboard has no
+/// generation-side figure to render.
+///
+/// [`UsageSink`]: crate::ports::UsageSink
+impl crate::ports::UsageSink for CacheMetricsStore {
+    fn record(&self, prompt_tokens: u32, _completion_tokens: u32, cached_tokens: Option<u32>) {
         Self::record(self, prompt_tokens, cached_tokens);
     }
 }

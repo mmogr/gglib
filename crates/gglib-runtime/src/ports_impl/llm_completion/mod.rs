@@ -10,7 +10,7 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{CacheMetricsSink, LlmCompletionPort, RetryObserver},
+    ports::{LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingLayers},
     retry::RetryPolicy,
 };
@@ -62,14 +62,15 @@ pub struct LlmCompletionAdapter {
     /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
     /// makes every transform a no-op and selects the identity parser.
     model_context: ModelContext,
-    /// Optional destination for this request's prompt-cache reuse figures.
+    /// Optional destination for this request's token-usage figures.
     ///
     /// When set, the completed response's trailing `usage` is recorded into
     /// this sink — the single point that covers every agent-path consumer of
-    /// the stream. `None`
-    /// (the default) means nowhere to report, so recording is skipped: the
-    /// case for CLI `gglib chat`/`q`, which run in a process with no dashboard.
-    cache_metrics: Option<Arc<dyn CacheMetricsSink>>,
+    /// the stream, and the only one that still reports when the agent loop
+    /// aborts mid-run. `None` (the default) means nowhere to report, so
+    /// recording is skipped: the case for CLI `gglib chat`/`q`, which run in a
+    /// process with no dashboard.
+    usage_sink: Option<Arc<dyn UsageSink>>,
     /// Bounds on retrying a transient upstream failure — see
     /// [`retry`](self::retry) for why that is safe to do here.
     ///
@@ -151,7 +152,7 @@ impl LlmCompletionAdapter {
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             model_context: ModelContext::passthrough(),
-            cache_metrics: None,
+            usage_sink: None,
             retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
             raw_passthrough: false,
@@ -194,17 +195,19 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Report this adapter's prompt-cache reuse to `sink`.
+    /// Report each response's token usage to `sink`.
     ///
     /// Pass the process's agent-path [`CacheMetricsStore`] when the caller runs
-    /// in the proxy process (GUI chat) so reuse lands on the dashboard
-    /// alongside the proxied figure. Pass `None` (the default) when there is no
-    /// dashboard to report to — recording then costs nothing.
+    /// in the proxy process (GUI chat) so prompt-cache reuse lands on the
+    /// dashboard alongside the proxied figure; pass a benchmark tally when the
+    /// caller needs the generated-token count to survive a guard-aborted run.
+    /// Pass `None` (the default) when there is nothing to report to — recording
+    /// then costs nothing.
     ///
     /// [`CacheMetricsStore`]: gglib_core::cache_metrics::CacheMetricsStore
     #[must_use]
-    pub fn with_cache_metrics_sink(mut self, sink: Option<Arc<dyn CacheMetricsSink>>) -> Self {
-        self.cache_metrics = sink;
+    pub fn with_usage_sink(mut self, sink: Option<Arc<dyn UsageSink>>) -> Self {
+        self.usage_sink = sink;
         self
     }
 
@@ -368,7 +371,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         Ok(stream::normalized_event_stream(
             response,
             &self.model_context.tags,
-            self.cache_metrics.clone(),
+            self.usage_sink.clone(),
         ))
     }
 }

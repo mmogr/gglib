@@ -1,5 +1,5 @@
 //! Response SSE bytes → normalized `LlmStreamEvent`s, with an optional
-//! prompt-cache usage tap.
+//! token-usage tap.
 //!
 //! Kept separate from the adapter's request-shaping so the streaming concern —
 //! SSE decode, parser normalization, and the telemetry tap — reads as one
@@ -15,7 +15,7 @@ use futures_util::StreamExt as _;
 use gglib_core::{
     domain::agent::LlmStreamEvent,
     normalize::{NormalizingStream, get_parser},
-    ports::CacheMetricsSink,
+    ports::UsageSink,
     sse::SseStreamDecoder,
 };
 
@@ -23,7 +23,7 @@ use gglib_core::{
 pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>;
 
 /// Turn an SSE byte response into the typed, normalized event stream the agent
-/// loop consumes, optionally tapping prompt-cache reuse into `sink`.
+/// loop consumes, optionally tapping the response's token usage into `sink`.
 ///
 /// `model_tags` selects the response parser — empty selects the
 /// identity-passthrough parser, so models that already emit strict OpenAI tool
@@ -31,7 +31,7 @@ pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> 
 pub(super) fn normalized_event_stream(
     response: reqwest::Response,
     model_tags: &[String],
-    sink: Option<Arc<dyn CacheMetricsSink>>,
+    sink: Option<Arc<dyn UsageSink>>,
 ) -> EventStream {
     let byte_stream = response.bytes_stream();
 
@@ -68,7 +68,7 @@ pub(super) fn normalized_event_stream(
 
     match sink {
         None => normalized,
-        Some(sink) => tap_cache_usage(normalized, sink),
+        Some(sink) => tap_usage(normalized, sink),
     }
 }
 
@@ -77,20 +77,28 @@ pub(super) fn normalized_event_stream(
 ///
 /// Records the last `Usage` frame once the stream drains — mirroring the
 /// proxy's "last usage wins, record once" semantics — so a stream that carries
-/// no usage records nothing, and the `Option<u32>` absent-vs-zero distinction
+/// no usage records nothing, and `cached_tokens`' absent-vs-zero distinction
 /// survives to the sink.
-fn tap_cache_usage(stream: EventStream, sink: Arc<dyn CacheMetricsSink>) -> EventStream {
+///
+/// The tap sits after normalization but is independent of it: a raw-passthrough
+/// request selects the identity parser, which forwards `Usage` verbatim, so the
+/// control arm of an A/B evaluation is measured on the same footing as the
+/// shaped one.
+fn tap_usage(stream: EventStream, sink: Arc<dyn UsageSink>) -> EventStream {
     Box::pin(async_stream::stream! {
         let mut stream = std::pin::pin!(stream);
-        let mut last_usage: Option<(u32, Option<u32>)> = None;
+        let mut last_usage: Option<(u32, u32, Option<u32>)> = None;
         while let Some(item) = stream.next().await {
-            if let Ok(LlmStreamEvent::Usage { prompt_tokens, cached_tokens, .. }) = &item {
-                last_usage = Some((*prompt_tokens, *cached_tokens));
+            if let Ok(LlmStreamEvent::Usage {
+                prompt_tokens, completion_tokens, cached_tokens, ..
+            }) = &item
+            {
+                last_usage = Some((*prompt_tokens, *completion_tokens, *cached_tokens));
             }
             yield item;
         }
-        if let Some((prompt_tokens, cached_tokens)) = last_usage {
-            sink.record(prompt_tokens, cached_tokens);
+        if let Some((prompt_tokens, completion_tokens, cached_tokens)) = last_usage {
+            sink.record(prompt_tokens, completion_tokens, cached_tokens);
         }
     })
 }
@@ -101,12 +109,16 @@ mod tests {
 
     use super::*;
 
+    /// Records `(prompt_tokens, completion_tokens, cached_tokens)` per call.
     #[derive(Default)]
-    struct FakeSink(Mutex<Vec<(u32, Option<u32>)>>);
+    struct FakeSink(Mutex<Vec<(u32, u32, Option<u32>)>>);
 
-    impl CacheMetricsSink for FakeSink {
-        fn record(&self, prompt_tokens: u32, cached_tokens: Option<u32>) {
-            self.0.lock().unwrap().push((prompt_tokens, cached_tokens));
+    impl UsageSink for FakeSink {
+        fn record(&self, prompt_tokens: u32, completion_tokens: u32, cached_tokens: Option<u32>) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((prompt_tokens, completion_tokens, cached_tokens));
         }
     }
 
@@ -115,10 +127,14 @@ mod tests {
     }
 
     fn usage(prompt: u32, cached: Option<u32>) -> LlmStreamEvent {
+        usage_with_completion(prompt, 0, cached)
+    }
+
+    fn usage_with_completion(prompt: u32, completion: u32, cached: Option<u32>) -> LlmStreamEvent {
         LlmStreamEvent::Usage {
             prompt_tokens: prompt,
-            completion_tokens: 0,
-            total_tokens: prompt,
+            completion_tokens: completion,
+            total_tokens: prompt + completion,
             cached_tokens: cached,
         }
     }
@@ -134,7 +150,7 @@ mod tests {
     #[tokio::test]
     async fn passes_every_event_through_and_records_reported_usage() {
         let sink = Arc::new(FakeSink::default());
-        let tapped = tap_cache_usage(
+        let tapped = tap_usage(
             events(vec![
                 LlmStreamEvent::TextDelta {
                     content: "hi".to_owned(),
@@ -149,35 +165,27 @@ mod tests {
 
         let passed = drain(tapped).await;
         assert_eq!(passed.len(), 3, "tap must forward every event unchanged");
-        assert_eq!(*sink.0.lock().unwrap(), vec![(1_000, Some(900))]);
+        assert_eq!(*sink.0.lock().unwrap(), vec![(1_000, 0, Some(900))]);
     }
 
     #[tokio::test]
     async fn preserves_unreported_cached_tokens_as_none() {
         let sink = Arc::new(FakeSink::default());
-        drain(tap_cache_usage(
-            events(vec![usage(500, None)]),
-            sink.clone(),
-        ))
-        .await;
-        assert_eq!(*sink.0.lock().unwrap(), vec![(500, None)]);
+        drain(tap_usage(events(vec![usage(500, None)]), sink.clone())).await;
+        assert_eq!(*sink.0.lock().unwrap(), vec![(500, 0, None)]);
     }
 
     #[tokio::test]
     async fn zero_reuse_is_recorded_not_dropped() {
         let sink = Arc::new(FakeSink::default());
-        drain(tap_cache_usage(
-            events(vec![usage(500, Some(0))]),
-            sink.clone(),
-        ))
-        .await;
-        assert_eq!(*sink.0.lock().unwrap(), vec![(500, Some(0))]);
+        drain(tap_usage(events(vec![usage(500, Some(0))]), sink.clone())).await;
+        assert_eq!(*sink.0.lock().unwrap(), vec![(500, 0, Some(0))]);
     }
 
     #[tokio::test]
     async fn a_stream_without_usage_records_nothing() {
         let sink = Arc::new(FakeSink::default());
-        drain(tap_cache_usage(
+        drain(tap_usage(
             events(vec![LlmStreamEvent::Done {
                 finish_reason: "stop".to_owned(),
             }]),
@@ -187,14 +195,28 @@ mod tests {
         assert!(sink.0.lock().unwrap().is_empty());
     }
 
+    /// The generation-side count is what makes a guard-aborted benchmark task
+    /// measurable, so it must reach the sink rather than being dropped with the
+    /// rest of the frame.
+    #[tokio::test]
+    async fn completion_tokens_reach_the_sink() {
+        let sink = Arc::new(FakeSink::default());
+        drain(tap_usage(
+            events(vec![usage_with_completion(120, 32_550, Some(64))]),
+            sink.clone(),
+        ))
+        .await;
+        assert_eq!(*sink.0.lock().unwrap(), vec![(120, 32_550, Some(64))]);
+    }
+
     #[tokio::test]
     async fn only_the_last_usage_frame_is_recorded() {
         let sink = Arc::new(FakeSink::default());
-        drain(tap_cache_usage(
+        drain(tap_usage(
             events(vec![usage(1_000, Some(100)), usage(2_000, Some(1_500))]),
             sink.clone(),
         ))
         .await;
-        assert_eq!(*sink.0.lock().unwrap(), vec![(2_000, Some(1_500))]);
+        assert_eq!(*sink.0.lock().unwrap(), vec![(2_000, 0, Some(1_500))]);
     }
 }

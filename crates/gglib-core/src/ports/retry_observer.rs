@@ -12,7 +12,7 @@ use std::time::Duration;
 /// rather than a frozen cursor; a one-shot CLI path with nothing to notify
 /// passes no observer at all, making the calls no-ops.
 ///
-/// This mirrors [`CacheMetricsSink`](crate::ports::CacheMetricsSink) — the same
+/// This mirrors [`UsageSink`](crate::ports::UsageSink) — the same
 /// optional-upward-reporting seam, so both are wired into the adapter the same
 /// way and neither couples it to a transport.
 ///

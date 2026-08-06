@@ -46,16 +46,16 @@ pub use download::{
 };
 pub use events::{AppEvent, McpServerSummary, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    AgentError, AgentLoopPort, AgentRunOutput, AppEventBridge, AppEventEmitter, CacheMetricsSink,
-    ChatHistoryError, ChatHistoryRepository, CompletedDownload, CoreError,
-    DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
-    DownloadStateRepositoryPort, EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities,
-    GgufMetadata, GgufParseError, GgufParserPort, HfClientPort, HfFileInfo, HfPortError,
-    HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorCategory,
-    McpErrorInfo, McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort,
-    ModelRepository, NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle,
-    ProcessRunner, QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile,
-    ServerConfig, SettingsRepository, TOOL_NOT_AVAILABLE_MSG, ToolExecutorPort,
+    AgentError, AgentLoopPort, AgentRunOutput, AppEventBridge, AppEventEmitter, ChatHistoryError,
+    ChatHistoryRepository, CompletedDownload, CoreError, DownloadEventEmitterPort,
+    DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
+    EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata, GgufParseError,
+    GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
+    HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorCategory, McpErrorInfo,
+    McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository,
+    NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle, ProcessRunner,
+    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
+    SettingsRepository, TOOL_NOT_AVAILABLE_MSG, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
