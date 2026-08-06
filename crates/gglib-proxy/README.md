@@ -53,7 +53,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
+6. **Aborts looping conversations** before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
+7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
 
@@ -484,6 +485,7 @@ curl -X POST http://localhost:8080/mcp \
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
 | 400 | Context window budget exceeded after truncation |
+| 400 | Loop or stagnation detected in the replayed history (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
 
 ## History Truncation
@@ -553,6 +555,46 @@ model's nominal `context_length` instead.
 
 **Zero blast radius:** On JSON parse failure the original body is forwarded
 unchanged; the upstream llama-server produces its own diagnostic.
+
+## Loop & Stagnation Defence
+
+### Problem
+
+The built-in agent loop (`gglib-agent`) aborts a run when the model repeats
+the same tool-call batch or the same response text. External agentic clients
+(Cline, Roo Code, Copilot BYOK) run their loop client-side, where those guards
+never execute — a model looping in such a session burns a model swap plus a
+full generation per stuck turn, and nothing in the system notices except the
+user watching the output.
+
+### Defence
+
+On every `/v1/chat/completions` request, before admission, the proxy walks the
+replayed `messages[]` history through the **same** `LoopDetector` and
+`StagnationDetector` the agent path uses (they live in
+`gglib_core::domain::agent` precisely so the two paths cannot drift — the same
+sharing discipline as the request pipeline). Agentic clients resend the full
+conversation every turn, so the scan is stateless: no session store, no TTL.
+
+| Signal | Threshold | Source |
+|--------|-----------|--------|
+| Identical tool-call batch (FNV-1a signature over canonicalized args) | 3rd occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
+| Identical batch of observation-only tools (`snapshot`, `screenshot`, `read_page`, `navigate`, `click`) | 16th occurrence aborts | `AgentConfig::default().max_observation_steps` |
+| Identical assistant response text (session-wide, catches A→B→A→B oscillation) | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
+
+A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
+cost — `type` and `code` are `loop_detected` or `stagnation_detected`
+(mirroring `context_length_exceeded`'s shape), and the message names the
+off-switch: `gglib config settings set --proxy-loop-detection false`, for a
+client that legitimately replays identical batches. Detection lags the agent
+path's per-iteration check by one turn (the history at turn N shows responses
+1..N-1), capping a runaway session at threshold+1 turns.
+
+**Fail-open:** an unparseable body passes (request routing already validated
+the JSON), and a tool call whose `arguments` string is malformed is hashed as
+the raw string rather than rejected — the guard is protection, not validation.
+Tripped requests are visible on the dashboard as `loop_guard_tripped` in
+`recent_requests`.
 
 ## Proxy Dashboard
 
