@@ -376,6 +376,47 @@ async fn a_file_with_no_usable_etag_is_still_verified_by_size() {
 }
 
 // ============================================================================
+// Progress throttling
+// ============================================================================
+
+#[tokio::test]
+async fn progress_reports_are_throttled_but_land_on_the_final_count() {
+    // 4 MB arrives as hundreds of network chunks; per-chunk reporting would
+    // log hundreds of samples. A loopback transfer completes in well under a
+    // second, so the 100ms throttle admits only a handful.
+    let body = body_of(4 << 20);
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: Some(sha256_of(&body)),
+    }])
+    .await;
+    let fx = Fixture::new();
+    let (progress, seen) = recording_progress();
+
+    let url = server.url();
+    download_file(
+        &build_client(),
+        &request(&url, &fx.dest, Some(len_of(&body)), Some(progress)),
+    )
+    .await
+    .expect("download succeeds");
+
+    let (count, last) = {
+        let seen = seen.lock().unwrap();
+        (seen.len(), *seen.last().expect("at least one report"))
+    };
+    assert!(
+        count < 30,
+        "throttle should shed nearly all per-chunk reports, got {count}"
+    );
+    assert_eq!(
+        last,
+        (len_of(&body), len_of(&body)),
+        "the final report must land on the exact final byte count"
+    );
+}
+
+// ============================================================================
 // Resume after interrupt
 // ============================================================================
 

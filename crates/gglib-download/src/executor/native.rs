@@ -17,6 +17,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::cli_exec::ProgressCallback;
+use crate::progress::ProgressThrottle;
 
 /// Suffix for the in-progress file that sits beside the final destination.
 const PART_SUFFIX: &str = ".part";
@@ -220,7 +221,14 @@ async fn stream_to_part(
     let mut sink = spawn_sink(file, hasher, rx);
 
     let mut downloaded = start_at;
+    // The initial report is unconditional: downstream relies on seq moving off
+    // 0 to know a transfer has started (see emit_synthetic_progress_if_cached).
     report(req.progress.as_ref(), downloaded, total);
+
+    // Per-chunk reporting hammered the watch channel thousands of times a
+    // second; consumers sample every 250ms anyway. 100ms keeps the final
+    // display one tick fresh while shedding ~99% of the sends.
+    let mut throttle = ProgressThrottle::default_interval();
 
     let mut stream = response.bytes_stream();
     loop {
@@ -255,11 +263,17 @@ async fn stream_to_part(
         }
 
         downloaded += len;
-        report(req.progress.as_ref(), downloaded, total);
+        if throttle.should_emit() {
+            report(req.progress.as_ref(), downloaded, total);
+        }
     }
 
     drop(tx);
     let hasher = join_sink(&mut sink).await?;
+
+    // Unconditional final report so the last sample lands on the exact final
+    // byte count instead of wherever the throttle last let one through.
+    report(req.progress.as_ref(), downloaded, total);
 
     Ok(TransferOutcome {
         digest: hasher.map(|h| Digested {
