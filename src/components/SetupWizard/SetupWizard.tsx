@@ -570,9 +570,10 @@ const PythonSetupStep: FC<{
           <div>
             <p className="text-sm font-medium text-warning mb-1">Python not found</p>
             <p className="text-xs text-text-secondary">
-              The accelerator needs Python 3. Skip this step and downloads will run
-              directly, which needs nothing installed. To use it later, install
-              Python 3 and re-run this wizard from Settings.
+              The accelerator needs Python 3.9 or newer. Skip this step and downloads
+              will run directly, which needs nothing installed. To use it later,
+              install Python and either re-run this wizard from Settings or run{' '}
+              <code>gglib config fast-downloads enable</code>.
             </p>
           </div>
         </div>

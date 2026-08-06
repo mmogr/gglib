@@ -217,8 +217,12 @@ when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
   gglib manages llama.cpp itself; see [Llama Management](llama/README.md).
 - **`assistant-ui`** — install, status, update.
 - **`check-deps`** — report what is missing and print your platform's exact
-  install commands. `--setup-fast-downloads` additionally provisions the
-  optional `hf_xet` accelerator; downloads work without it.
+  install commands. Reporting only; it installs nothing.
+- **`fast-downloads`** — `status`, `enable`, `disable`, `prompt` for the
+  optional `hf_xet` accelerator. Downloads work without it, over native HTTP.
+  `enable` builds a Python environment gglib owns under its own data
+  directory, using `uv` when available; `--python <path>` names the
+  interpreter to build it from. `disable` removes it.
 - **`paths`** — resolved locations for models, database, config and logs.
 
 Changing settings affects future behaviour only — it does not alter existing

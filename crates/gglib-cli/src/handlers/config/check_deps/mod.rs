@@ -30,7 +30,9 @@ use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 /// * `probe` - System probe implementation for dependency detection
 /// * `setup_fast_downloads` - Provision the optional `hf_xet` accelerator.
 ///   Reporting is side-effect free; this is the only thing that installs
-///   anything, and it is off unless the user asks for it.
+///   anything, and it is off unless the user asks for it. Superseded by
+///   `gglib config fast-downloads enable`, and kept because the older docs
+///   name it.
 ///
 /// # Returns
 ///
@@ -83,7 +85,7 @@ pub async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: bool) ->
         } else if !fast_helper_provisioned() {
             println!(
                 "{}Downloads run natively over HTTP. To enable the optional hf_xet \
-                 accelerator, run:{} gglib config check-deps --setup-fast-downloads",
+                 accelerator, run:{} gglib config fast-downloads enable",
                 INFO, RESET
             );
         }

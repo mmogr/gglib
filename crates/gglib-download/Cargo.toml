@@ -54,6 +54,8 @@ indicatif = "0.18"
 
 # System utilities (for python env)
 which = "8"
+# Home directory, for locating interpreters installed by conda/pyenv/uv
+dirs = { workspace = true }
 
 # Temp files
 tempfile.workspace = true

@@ -98,8 +98,8 @@ fn suggest_accelerator_once(plan: &DownloadPlan<'_>) {
         return;
     }
 
-    let hint = "using the built-in downloader — `gglib config check-deps \
-                --setup-fast-downloads` enables the parallel accelerator";
+    let hint = "using the built-in downloader — `gglib config fast-downloads \
+                enable` turns on the parallel accelerator";
     tracing::info!("{hint}");
     notify(plan, hint);
 }

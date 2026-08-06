@@ -123,6 +123,7 @@ uninstall:
 		if [ -d src-tauri/gen ]; then rm -rf src-tauri/gen || true; fi; \
 		if [ -d .llama ]; then rm -rf .llama || true; fi; \
 		if [ -d .gglib-runtime ]; then rm -rf .gglib-runtime || true; fi; \
+		if [ -d .python ]; then rm -rf .python || true; fi; \
 		if [ -d .conda ]; then rm -rf .conda || true; fi; \
 		if [ -d pids ]; then rm -rf pids || true; fi; \
 		if [ -f package-lock.json ]; then rm -f package-lock.json || true; fi; \
@@ -324,6 +325,10 @@ build-tauri:
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
+	@# Optional accelerator. The command already refuses to fail — it skips
+	@# without a terminal and reports a failed provision as a skipped step —
+	@# but setup must not break over an optional extra, so belt and braces.
+	@./target/release/gglib config fast-downloads prompt || true
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
 

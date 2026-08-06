@@ -36,7 +36,7 @@ When a GGUF file is downloaded and added to the database, `model_ops.rs` automat
 
 Downloads run natively over HTTP by default: a `reqwest`-based streaming downloader with resumable `.part` transfers, SHA-256 verification against `X-Linked-Etag`, and atomic rename on completion. No Python is required for a download to succeed.
 
-The `hf_xet` accelerator is opt-in. When its environment has already been provisioned (`gglib config check-deps --setup-fast-downloads`), the flow invokes `hf_xet_downloader.py` inside the managed environment (`<data_root>/.conda/gglib-hf-xet`, with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`), which pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing. The environment is never provisioned implicitly, and if the accelerator is present but fails, the download falls back to the native path rather than erroring.
+The `hf_xet` accelerator is opt-in. When its environment has already been provisioned (`gglib config fast-downloads enable`, or by accepting the offer that `make setup` and `gglib up` make), the flow invokes `hf_xet_downloader.py` inside the managed environment (`<data_root>/.python/gglib-hf-xet`, with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`), which pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing. The environment is never provisioned implicitly, and if the accelerator is present but fails, the download falls back to the native path rather than erroring.
 
 ## Deep Dive: Quantization Filter
 

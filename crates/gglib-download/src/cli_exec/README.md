@@ -16,6 +16,9 @@ separated from the queue-based [`DownloadManagerPort`] path.
   [`fast_helper_provisioned`] reports whether it is already here, and
   [`run_fast_download`] drives it. `crate::executor` owns the choice of when to
   use it; the default download path is native Rust and needs none of this.
+  [`fast_helper_status`] describes what is on disk and [`remove_fast_helper`]
+  deletes it, both for `gglib config fast-downloads` — neither is on the
+  download path, which still turns on the bare file check.
 
 # What moved out
 

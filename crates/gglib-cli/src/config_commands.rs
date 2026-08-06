@@ -47,15 +47,41 @@ pub enum ConfigCommand {
     },
     /// Check system dependencies required for gglib
     CheckDeps {
-        /// Also provision the optional hf_xet download accelerator.
+        /// Superseded by `gglib config fast-downloads enable`.
         ///
-        /// Downloads work without this. It builds a Python environment under
-        /// the gglib data directory and needs Python 3 on PATH.
-        #[arg(long)]
+        /// Kept working because it is what the older docs and release notes
+        /// tell people to run.
+        #[arg(long, hide = true)]
         setup_fast_downloads: bool,
+    },
+    /// Enable or inspect the optional hf_xet download accelerator
+    FastDownloads {
+        #[command(subcommand)]
+        command: Option<FastDownloadsCommand>,
     },
     /// Show resolved paths for all gglib directories
     Paths,
+}
+
+/// Fast-download accelerator command variants.
+///
+/// The accelerator is a Python environment gglib builds and owns under its own
+/// data directory. It does not require, and is not affected by, whichever
+/// Python or environment manager the user works with elsewhere.
+#[derive(Subcommand)]
+pub enum FastDownloadsCommand {
+    /// Show whether the accelerator is provisioned, and where (default)
+    Status,
+    /// Build the accelerator's environment
+    Enable {
+        /// Use this Python interpreter instead of searching for one
+        #[arg(long, value_name = "PATH")]
+        python: Option<String>,
+    },
+    /// Remove the accelerator's environment; downloads revert to native HTTP
+    Disable,
+    /// Offer to enable it, interactively. Skips silently without a terminal
+    Prompt,
 }
 
 /// Models directory command variants.
