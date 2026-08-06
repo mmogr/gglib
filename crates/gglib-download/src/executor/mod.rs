@@ -80,9 +80,28 @@ pub async fn download_files(plan: &DownloadPlan<'_>) -> Result<(), DownloadError
                 );
             }
         }
+    } else {
+        suggest_accelerator_once(plan);
     }
 
     run_native(plan).await
+}
+
+/// One-time (per process) hint that the parallel accelerator exists.
+///
+/// Once per process, not per plan: a sharded model runs one plan per shard,
+/// and repeating the hint on every shard would read as nagging.
+fn suggest_accelerator_once(plan: &DownloadPlan<'_>) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static SUGGESTED: AtomicBool = AtomicBool::new(false);
+    if SUGGESTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    let hint = "using the built-in downloader — `gglib config check-deps \
+                --setup-fast-downloads` enables the parallel accelerator";
+    tracing::info!("{hint}");
+    notify(plan, hint);
 }
 
 /// Drive the pre-existing `hf_xet` helper.
