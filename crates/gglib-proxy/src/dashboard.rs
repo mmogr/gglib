@@ -560,6 +560,7 @@ mod tests {
             messages_truncated: 0,
             was_clamped: false,
             grammar_enforced: false,
+            loop_guard_tripped: false,
             recorded_at_secs: 0,
         });
 

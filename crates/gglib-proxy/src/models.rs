@@ -515,6 +515,43 @@ impl ErrorResponse {
         )
     }
 
+    /// Create an error response for a detected agentic tool-call loop.
+    ///
+    /// Returned as HTTP 400 by the pre-dispatch loop guard when the request's
+    /// replayed history repeats the same tool-call batch beyond the shared
+    /// agent-path threshold (see `loop_guard`).  `type` and `code` are both
+    /// `loop_detected`, mirroring [`Self::context_length_exceeded`]'s shape.
+    pub fn loop_detected(signature: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Agentic loop detected: this conversation repeats the same tool-call batch \
+                 (signature: {signature}). Aborting before another identical turn. Start a new \
+                 conversation or change approach; to disable this guard run \
+                 `gglib config settings set --proxy-loop-detection false`."
+            ),
+            "loop_detected",
+            "loop_detected",
+        )
+    }
+
+    /// Create an error response for detected response stagnation.
+    ///
+    /// Returned as HTTP 400 by the pre-dispatch loop guard when the request's
+    /// replayed history contains the same assistant response `count` times
+    /// against a limit of `max_steps`.
+    pub fn stagnation_detected(count: usize, max_steps: usize) -> Self {
+        Self::with_code(
+            format!(
+                "Stagnation detected: the assistant has produced the same response {count} \
+                 times (limit {max_steps}). Aborting before another identical turn. Start a \
+                 new conversation or change approach; to disable this guard run \
+                 `gglib config settings set --proxy-loop-detection false`."
+            ),
+            "stagnation_detected",
+            "stagnation_detected",
+        )
+    }
+
     /// Create an error response for a malformed or invalid request.
     pub fn invalid_request(msg: &str) -> Self {
         Self::with_code(msg, "invalid_request_error", "invalid_request")

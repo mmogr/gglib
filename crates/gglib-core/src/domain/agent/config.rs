@@ -71,6 +71,16 @@ pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 25;
 /// than this many times, preventing infinite stagnant output.
 pub const DEFAULT_MAX_STAGNATION_STEPS: usize = 5;
 
+/// Hard ceiling on [`AgentConfig::max_stagnation_steps`] accepted from
+/// external callers.
+///
+/// Prevents a persisted setting or API caller from setting
+/// `max_stagnation_steps` to an arbitrarily large value, which would
+/// silently neutralise the stagnation guard and let a stuck model repeat
+/// the same response indefinitely.  Mirrors
+/// [`MAX_OBSERVATION_STEPS_CEILING`].
+pub const MAX_STAGNATION_STEPS_CEILING: usize = 100;
+
 /// Hard ceiling on [`AgentConfig::max_observation_steps`] accepted from
 /// external callers.
 ///
@@ -322,11 +332,21 @@ impl AgentConfig {
     ///   entirely.  Pass the complete list you want, including any defaults you
     ///   wish to preserve.  `Some(vec![])` disables observation classification
     ///   (standard threshold applies to all batches).  `None` keeps the
-    ///   built-in defaults (`["snapshot", "screenshot", "read_page"]`).
+    ///   built-in defaults
+    ///   (`["snapshot", "screenshot", "read_page", "navigate", "click"]`).
     ///
     /// - `max_observation_steps: Some(n)` — clamped to
     ///   `[1, MAX_OBSERVATION_STEPS_CEILING]`.  `None` keeps the built-in
-    ///   default of `Some(10)`.
+    ///   default of `Some(15)`.
+    ///
+    /// # Stagnation parameter
+    ///
+    /// `max_stagnation_steps: Some(n)` — clamped to
+    /// `[1, MAX_STAGNATION_STEPS_CEILING]`; `None` keeps the built-in default
+    /// of `Some(DEFAULT_MAX_STAGNATION_STEPS)`.  The floor is 1 because a
+    /// value of 0 would abort on the *first* occurrence of any response.
+    /// Callers pass the persisted `Settings::max_stagnation_steps` here; it
+    /// is deliberately not exposed per-request.
     ///
     /// # Errors
     ///
@@ -338,6 +358,7 @@ impl AgentConfig {
         tool_timeout_ms: Option<u64>,
         observation_tools: Option<Vec<String>>,
         max_observation_steps: Option<usize>,
+        max_stagnation_steps: Option<usize>,
     ) -> Result<Self, AgentConfigError> {
         let mut cfg = Self::default();
         if let Some(n) = max_iterations {
@@ -354,6 +375,9 @@ impl AgentConfig {
         }
         if let Some(n) = max_observation_steps {
             cfg.max_observation_steps = Some(n.clamp(1, MAX_OBSERVATION_STEPS_CEILING));
+        }
+        if let Some(n) = max_stagnation_steps {
+            cfg.max_stagnation_steps = Some(n.clamp(1, MAX_STAGNATION_STEPS_CEILING));
         }
         cfg.validated()
     }
@@ -505,8 +529,8 @@ mod tests {
     #[test]
     fn from_user_params_clamps_and_validates() {
         // All values within range → accepted as-is.
-        let cfg =
-            AgentConfig::from_user_params(Some(10), Some(3), Some(5_000), None, None).unwrap();
+        let cfg = AgentConfig::from_user_params(Some(10), Some(3), Some(5_000), None, None, None)
+            .unwrap();
         assert_eq!(cfg.max_iterations, 10);
         assert_eq!(cfg.max_parallel_tools, 3);
         assert_eq!(cfg.tool_timeout_ms, 5_000);
@@ -515,7 +539,8 @@ mod tests {
     #[test]
     fn from_user_params_clamps_extremes() {
         // Zero iterations → clamped to 1.
-        let cfg = AgentConfig::from_user_params(Some(0), Some(0), Some(0), None, None).unwrap();
+        let cfg =
+            AgentConfig::from_user_params(Some(0), Some(0), Some(0), None, None, None).unwrap();
         assert_eq!(cfg.max_iterations, 1);
         assert_eq!(cfg.max_parallel_tools, 1);
         assert_eq!(cfg.tool_timeout_ms, MIN_TOOL_TIMEOUT_MS);
@@ -529,6 +554,7 @@ mod tests {
             Some(u64::MAX),
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(cfg.max_iterations, MAX_ITERATIONS_CEILING);
@@ -538,7 +564,7 @@ mod tests {
 
     #[test]
     fn from_user_params_none_keeps_defaults() {
-        let cfg = AgentConfig::from_user_params(None, None, None, None, None).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, None, None, None).unwrap();
         let def = AgentConfig::default();
         assert_eq!(cfg.max_iterations, def.max_iterations);
         assert_eq!(cfg.max_parallel_tools, def.max_parallel_tools);
@@ -551,21 +577,23 @@ mod tests {
     fn from_user_params_observation_tools_replaces_defaults() {
         // A non-None observation_tools list replaces the built-in defaults.
         let custom = vec!["get_dom".into(), "fetch_page".into()];
-        let cfg =
-            AgentConfig::from_user_params(None, None, None, Some(custom.clone()), None).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, Some(custom.clone()), None, None)
+            .unwrap();
         assert_eq!(cfg.observation_tools, custom);
     }
 
     #[test]
     fn from_user_params_empty_observation_tools_disables_classification() {
         // Some([]) disables observation classification — no tools ever match.
-        let cfg = AgentConfig::from_user_params(None, None, None, Some(vec![]), None).unwrap();
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, Some(vec![]), None, None).unwrap();
         assert!(cfg.observation_tools.is_empty());
     }
 
     #[test]
     fn from_user_params_observation_steps_clamped_to_ceiling() {
-        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(usize::MAX)).unwrap();
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, None, Some(usize::MAX), None).unwrap();
         assert_eq!(
             cfg.max_observation_steps,
             Some(MAX_OBSERVATION_STEPS_CEILING),
@@ -575,13 +603,33 @@ mod tests {
     #[test]
     fn from_user_params_observation_steps_clamped_to_floor() {
         // Zero would mean fire on the very first occurrence — clamp to 1.
-        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(0)).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(0), None).unwrap();
         assert_eq!(cfg.max_observation_steps, Some(1));
     }
 
     #[test]
     fn from_user_params_observation_steps_within_range_unchanged() {
-        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(15)).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(15), None).unwrap();
         assert_eq!(cfg.max_observation_steps, Some(15));
+    }
+
+    #[test]
+    fn from_user_params_stagnation_steps_clamped_to_ceiling() {
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, None, None, Some(usize::MAX)).unwrap();
+        assert_eq!(cfg.max_stagnation_steps, Some(MAX_STAGNATION_STEPS_CEILING));
+    }
+
+    #[test]
+    fn from_user_params_stagnation_steps_clamped_to_floor() {
+        // Zero would mean abort on the first occurrence of any text — clamp to 1.
+        let cfg = AgentConfig::from_user_params(None, None, None, None, None, Some(0)).unwrap();
+        assert_eq!(cfg.max_stagnation_steps, Some(1));
+    }
+
+    #[test]
+    fn from_user_params_stagnation_steps_none_keeps_default() {
+        let cfg = AgentConfig::from_user_params(None, None, None, None, None, None).unwrap();
+        assert_eq!(cfg.max_stagnation_steps, Some(DEFAULT_MAX_STAGNATION_STEPS),);
     }
 }

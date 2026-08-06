@@ -198,6 +198,14 @@ pub enum SettingsCommand {
         /// always honoured regardless of this setting.
         #[arg(long)]
         trust_client_sampling: Option<bool>,
+        /// Run the proxy's turn-level loop/stagnation guard on
+        /// /v1/chat/completions. Enabled by default: a conversation whose
+        /// replayed history repeats the same tool-call batch or assistant
+        /// response beyond the agent-path thresholds is rejected with a
+        /// clean 400 before any model work. Set false only for a client
+        /// that legitimately replays identical batches.
+        #[arg(long)]
+        proxy_loop_detection: Option<bool>,
         /// Start the OpenAI-compatible proxy as soon as the desktop app
         /// launches, instead of waiting for it to be switched on. Combined
         /// with --start-at-login and --close-to-tray this keeps the endpoint

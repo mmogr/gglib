@@ -121,6 +121,7 @@ pub async fn execute(
         // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
         Some(observation_tools).filter(|v| !v.is_empty()),
         max_observation_steps,
+        settings.max_stagnation_steps.map(|v| v as usize),
     )
     .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 

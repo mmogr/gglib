@@ -86,6 +86,12 @@ Everything between the OpenAI request and llama-server is the product:
   forwarding, and prompts that would still blow the context window are rejected
   with a clean 400 instead of a looping model — see
   [History Truncation](crates/gglib-proxy/README.md#history-truncation).
+- **Loop defense** — a conversation whose history already repeats the same
+  tool-call batch or assistant response is aborted with a clean 400 *before*
+  it costs a model swap or another generation, using the same detectors as
+  the built-in agent loop; sessions fail fast and loud instead of silently
+  burning your GPU — see
+  [Loop & Stagnation Defence](crates/gglib-proxy/README.md#loop--stagnation-defence).
 - **Sampling authority** — a 5-level resolution hierarchy decides every
   parameter; clients that hardcode `temperature: 0` don't silently win — see
   [Sampling resolution](docs/sampling.md).

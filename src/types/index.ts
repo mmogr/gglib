@@ -199,6 +199,15 @@ export interface AppSettings {
    */
   trustClientSampling?: boolean | null;
   /**
+   * Whether the proxy's turn-level loop/stagnation guard runs on
+   * /v1/chat/completions. Unset/`true` (the default) means active: a
+   * conversation whose replayed history repeats the same tool-call batch or
+   * assistant response beyond the threshold is rejected with a clean 400
+   * before any model work. `false` disables the guard — the escape hatch for
+   * a client that legitimately repeats identical requests.
+   */
+  proxyLoopDetection?: boolean | null;
+  /**
    * Whether the desktop app starts the proxy as soon as it launches. Desktop
    * app only — `gglib proxy` and `gglib serve` stay explicit foreground
    * commands.
@@ -236,6 +245,8 @@ export interface UpdateSettingsRequest {
   proxyApiKey?: string | null | undefined;
   /** See `AppSettings.trustClientSampling`. */
   trustClientSampling?: boolean | null | undefined;
+  /** See `AppSettings.proxyLoopDetection`. */
+  proxyLoopDetection?: boolean | null | undefined;
   /** See `AppSettings.proxyAutostart`. */
   proxyAutostart?: boolean | null | undefined;
   /** See `AppSettings.closeToTray`. */

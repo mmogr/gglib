@@ -42,6 +42,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
   const [trustClientSampling, setTrustClientSampling] = useState(false);
+  const [proxyLoopDetection, setProxyLoopDetection] = useState(true);
   const {
     values: desktopValues,
     setValue: setDesktopSetting,
@@ -80,6 +81,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
       setShowFitIndicators(settings.showMemoryFitIndicators !== false);
       setTrustClientSampling(settings.trustClientSampling === true);
+      // Inverse polarity to trustClientSampling: unset means enabled.
+      setProxyLoopDetection(settings.proxyLoopDetection !== false);
       setDefaultModelInput(settings.defaultModelId?.toString() || "");
       setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
     }
@@ -119,6 +122,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           defaultModelId: parseNumericInput(defaultModelInput),
           inferenceDefaults: inferenceDefaultsInput,
           trustClientSampling,
+          proxyLoopDetection,
           ...desktopUpdates,
         };
 
@@ -135,6 +139,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.defaultModelId !== undefined ||
           updates.inferenceDefaults !== undefined ||
           updates.trustClientSampling !== undefined ||
+          updates.proxyLoopDetection !== undefined ||
           updates.proxyAutostart !== undefined;
 
         if (hasUpdates) {
@@ -159,6 +164,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       defaultModelInput,
       inferenceDefaultsInput,
       trustClientSampling,
+      proxyLoopDetection,
       desktopUpdates,
       info,
       saveDir,
@@ -179,6 +185,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
       setTrustClientSampling(false); // Default is disabled
+      setProxyLoopDetection(true); // Default is enabled
       resetDesktop();
     }
   }, [info, settings, resetDesktop]);
@@ -274,6 +281,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setDesktopSetting={setDesktopSetting}
             trustClientSampling={trustClientSampling}
             setTrustClientSampling={setTrustClientSampling}
+            proxyLoopDetection={proxyLoopDetection}
+            setProxyLoopDetection={setProxyLoopDetection}
             onSubmit={handleSubmit}
             onReset={handleReset}
             onRefresh={handleRefresh}

@@ -7,9 +7,11 @@
 
 Pure-domain agentic loop implementation for gglib.
 
-Backs `gglib chat` and `gglib q`, and carries the defences a local model needs
+Backs `gglib chat` and `gglib q`, and enforces the defences a local model needs
 to finish a tool-calling task: loop detection, stagnation detection, and context
-pruning.
+pruning.  The loop and stagnation detectors themselves live in
+`gglib_core::domain::agent` so the proxy can enforce the same guards on
+`/v1/chat/completions` — this crate consumes them per iteration.
 
 ## Architecture
 
@@ -24,9 +26,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 This crate implements:
 - **`AgentLoop`** — concrete implementation of `AgentLoopPort`; drives the
   ReAct-style LLM→tool→LLM cycle until a final answer or termination condition
-- **Loop detection** — FNV-1a batch-signature tracking ported from the TypeScript
-  frontend (`agentLoop.ts`)
-- **Stagnation detection** — catches models that repeat the same response
+- **Guard enforcement** — runs `gglib_core::domain::agent`'s `LoopDetector`
+  (FNV-1a batch-signature tracking) and `StagnationDetector` (repeated-response
+  hashing) after every iteration
 - **Parallel tool execution** — bounded concurrency with per-tool timeout
 - **Stream collection** — consumes `LlmCompletionPort` stream, forwards text
   deltas in real-time, accumulates tool-call deltas until `Done`
@@ -51,9 +53,6 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 |--------|----------------|
 | `agent_loop` | `AgentLoop` struct + `AgentLoopPort` impl (main state machine) |
 | `context_pruning` | Budget-aware message trimming |
-| `fnv1a` | FNV-1a hash primitive used by loop detection |
-| `loop_detection` | Batch-signature tracking, `LoopDetector` guard |
-| `stagnation` | Text-hash stagnation detection, `StagnationDetector` |
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `tool_execution` | Parallel tool dispatch with semaphore + timeout |
 | `util` | Shared internal utilities |
@@ -66,12 +65,9 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`agent_loop.rs`](src/agent_loop.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-coverage.json) |
-| [`fnv1a.rs`](src/fnv1a.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-fnv1a-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-fnv1a-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-fnv1a-coverage.json) |
 | [`stream_collector.rs`](src/stream_collector.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-coverage.json) |
 | [`util.rs`](src/util.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-coverage.json) |
 | [`context_pruning/`](src/context_pruning/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-coverage.json) |
-| [`loop_detection/`](src/loop_detection/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loop_detection-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loop_detection-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loop_detection-coverage.json) |
-| [`stagnation/`](src/stagnation/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stagnation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stagnation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stagnation-coverage.json) |
 | [`tool_execution/`](src/tool_execution/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-coverage.json) |
 <!-- module-table:end -->
 

@@ -10,8 +10,8 @@
 //!   └─ [per iteration]
 //!       ├─ llm.chat_stream()                          LLM call (streaming)
 //!       ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
-//!       ├─ stagnation::StagnationDetector::record()   stagnation guard ──→ AgentEvent::Error (on failure)
-//!       ├─ loop_detection::LoopDetector::check()      loop guard       ──→ AgentEvent::Error (on failure)
+//!       ├─ StagnationDetector::record()               stagnation guard ──→ AgentEvent::Error (on failure)
+//!       ├─ LoopDetector::check()                      loop guard       ──→ AgentEvent::Error (on failure)
 //!       ├─ tool_execution::execute_tools_parallel()   parallel tool dispatch
 //!       │      ├─ AgentEvent::ToolCallStart           per-tool
 //!       │      └─ AgentEvent::ToolCallComplete        per-tool
@@ -41,11 +41,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
-use crate::loop_detection::LoopDetector;
-use crate::stagnation::StagnationDetector;
 use crate::stream_collector::collect_stream;
 use crate::tool_execution::execute_tools_parallel;
 use crate::util::emit_error_event;
+use gglib_core::domain::agent::{LoopDetector, StagnationDetector};
 
 // =============================================================================
 // Private helpers

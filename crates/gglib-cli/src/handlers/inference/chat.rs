@@ -35,6 +35,10 @@ pub struct ChatArgs {
     pub observation_tools: Vec<String>,
     /// Elevated repetition limit for observation-only tool batches.
     pub max_observation_steps: Option<usize>,
+    /// Session-wide identical-response limit before the stagnation guard
+    /// aborts.  Filled from the persisted `max_stagnation_steps` setting —
+    /// there is deliberately no per-run CLI flag.
+    pub max_stagnation_steps: Option<usize>,
 }
 
 /// Execute the chat command — always routes to the agentic REPL.

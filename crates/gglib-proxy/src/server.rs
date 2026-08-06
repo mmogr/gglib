@@ -753,6 +753,51 @@ async fn chat_completions(
         }
     };
 
+    // Turn-level loop/stagnation guard (parity with the built-in agent's
+    // guards): reject a conversation whose replayed history already shows a
+    // stuck loop *before* paying admission — a runaway agentic client
+    // otherwise burns a model swap plus a full generation per repeated turn.
+    // See `loop_guard` for the design (stateless history scan, fail-open).
+    if let Some(guard_cfg) = crate::loop_guard::LoopGuardConfig::from_settings(&settings) {
+        use crate::loop_guard::LoopGuardVerdict;
+        match crate::loop_guard::scan_history(&body, &guard_cfg) {
+            LoopGuardVerdict::Pass => {}
+            tripped => {
+                warn!(
+                    model = %model_name,
+                    verdict = ?tripped,
+                    "loop guard aborting request before dispatch"
+                );
+                state
+                    .dashboard
+                    .metrics
+                    .record(crate::metrics::ContextSnapshot {
+                        model_name: model_name.clone(),
+                        payload_chars_before: body.len(),
+                        payload_chars_after: body.len(),
+                        messages_truncated: 0,
+                        was_clamped: false,
+                        grammar_enforced: false,
+                        loop_guard_tripped: true,
+                        recorded_at_secs: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    });
+                let err = match tripped {
+                    LoopGuardVerdict::LoopDetected { signature } => {
+                        ErrorResponse::loop_detected(&signature)
+                    }
+                    LoopGuardVerdict::StagnationDetected { count, max_steps } => {
+                        ErrorResponse::stagnation_detected(count, max_steps)
+                    }
+                    LoopGuardVerdict::Pass => unreachable!("Pass is handled above"),
+                };
+                return (StatusCode::BAD_REQUEST, Json(err)).into_response();
+            }
+        }
+    }
+
     // Watchdog: if the upstream tripped the consecutive-failure threshold on
     // prior requests (empty responses / first-byte timeouts while still
     // passing /health), recycle it now — before routing this request into a
