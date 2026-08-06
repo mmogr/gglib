@@ -137,6 +137,13 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/benchmark/tune",
             post(handlers::benchmark::tune::tune_sse).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
+        // Benchmark — raw-vs-gglib A/B agentic eval SSE stream. Same body
+        // limit as tune: a custom task_suite can embed long_context tasks.
+        .route(
+            "/benchmark/agentic",
+            post(handlers::benchmark::agentic::agentic_sse)
+                .layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
         // Benchmark — run history
         .route(
             "/benchmark/runs",

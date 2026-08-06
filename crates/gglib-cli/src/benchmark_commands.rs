@@ -138,9 +138,11 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         weight_task_completion: Option<f32>,
 
-        /// Composite-score weight for token-generation throughput
-        /// (currently a no-op — `tg_tps` is not yet measured per
-        /// candidate, see the tune service's module docs)
+        /// Composite-score weight for token-generation throughput.
+        /// `tg_tps` is measured and reported per candidate, but this weight
+        /// does not yet enter the composite (its definition is relative to
+        /// the fastest candidate, which is unknowable mid-stream — see the
+        /// tune service's module docs)
         #[arg(long)]
         weight_speed: Option<f32>,
 
@@ -154,5 +156,37 @@ pub enum BenchmarkCommand {
         /// applied automatically
         #[arg(long)]
         apply_best: bool,
+    },
+
+    /// Measure what the gglib pipeline buys: run the agentic task suite
+    /// twice against one model — once with the pipeline bypassed (bare
+    /// llama-server defaults) and once through it — and report the
+    /// before/after delta in tool-call accuracy, loop avoidance, and task
+    /// completion
+    #[command(display_order = 7)]
+    Agentic {
+        /// Model name or database ID to evaluate (exactly one)
+        #[arg(long = "model", short = 'm')]
+        model: String,
+
+        /// Task suite both arms run: `default` for the built-in BFCL-style
+        /// suite, or a path to a custom JSON task file (same schema as
+        /// `gglib benchmark tune --task-suite`)
+        #[arg(long = "task-suite", default_value = "default")]
+        task_suite: String,
+
+        /// Context size override (number of tokens)
+        #[arg(long)]
+        ctx_size: Option<u64>,
+
+        /// Print the full report as JSON to stdout (the leaderboard
+        /// interchange format: per-arm scores, deltas, per-task drill-down,
+        /// model/quant identity, hardware snapshot)
+        #[arg(long)]
+        json: bool,
+
+        /// Write the same JSON report to this file
+        #[arg(long, value_name = "FILE")]
+        output: Option<std::path::PathBuf>,
     },
 }

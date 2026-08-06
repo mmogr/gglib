@@ -120,6 +120,10 @@ pub(super) fn build_chat_body(
         "messages": openai_messages,
         "stream": true,
         "return_progress": true,
+        // Ask for the trailing usage chunk (the proxy path injects the same
+        // override) so completion-token counts reach the stream collector —
+        // the input to the benchmark speed axis.
+        "stream_options": { "include_usage": true },
     });
     if !openai_tools.is_empty() {
         body["tools"] = json!(openai_tools);

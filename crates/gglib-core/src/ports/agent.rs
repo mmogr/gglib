@@ -127,6 +127,13 @@ pub struct AgentRunOutput {
     /// Number of loop iterations consumed before the agent produced its final
     /// answer.  Always ≥ 1.  Useful for logging and telemetry.
     pub total_iterations: usize,
+    /// Total completion tokens generated across every iteration, summed from
+    /// each response's trailing usage report.
+    ///
+    /// `None` when no upstream response reported usage — distinct from zero,
+    /// which would be a real (if strange) measurement. Feeds the benchmark
+    /// speed axis (completion tokens over wall-clock time).
+    pub total_completion_tokens: Option<u64>,
 }
 
 // =============================================================================

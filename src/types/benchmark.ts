@@ -225,6 +225,7 @@ export interface TuneTaskResult {
   stagnation_detected: boolean;
   iterations: number;
   latency_ms: number;
+  completion_tokens?: number | null;
   detail?: string | null;
 }
 
@@ -263,7 +264,52 @@ export type BenchmarkEvent =
   | { type: 'tune_candidate_started'; candidate_index: number; total: number }
   | { type: 'tune_task_complete'; candidate_index: number; task_id: string; passed: boolean }
   | { type: 'tune_pruned'; candidate_index: number; reason: string }
-  | { type: 'tune_candidate_complete'; result: TuneCandidateResult };
+  | { type: 'tune_candidate_complete'; result: TuneCandidateResult }
+  | { type: 'agentic_arm_started'; arm: EvalArm; total_tasks: number }
+  | { type: 'agentic_task_complete'; arm: EvalArm; task_id: string; passed: boolean }
+  | { type: 'agentic_eval_complete'; report: AgenticEvalReport };
+
+// ─── Agentic A/B Eval (raw vs gglib) ─────────────────────────────────────────
+
+/** Which arm of the A/B eval a task ran under. */
+export type EvalArm = 'raw' | 'gglib';
+
+/** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
+export interface ArmScores {
+  tool_accuracy: number;
+  loop_avoidance: number;
+  task_completion: number;
+  composite: number;
+  tg_tps?: number | null;
+}
+
+/** Per-axis `gglib − raw` difference. */
+export interface ArmDelta {
+  tool_accuracy: number;
+  loop_avoidance: number;
+  task_completion: number;
+  composite: number;
+}
+
+/** One task's outcome under both arms. */
+export interface AgenticTaskComparison {
+  task_id: string;
+  category: TaskCategory;
+  raw: TuneTaskResult;
+  gglib: TuneTaskResult;
+}
+
+/** The complete raw-vs-gglib report. Mirrors `AgenticEvalReport`. */
+export interface AgenticEvalReport {
+  model_name: string;
+  quantization?: string | null;
+  param_count_b: number;
+  ctx_size: number;
+  raw: ArmScores;
+  gglib: ArmScores;
+  delta: ArmDelta;
+  tasks: AgenticTaskComparison[];
+}
 
 // ─── API Response Shapes ─────────────────────────────────────────────────────
 

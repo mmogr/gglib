@@ -6,12 +6,14 @@ use anyhow::Result;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::domain::benchmark::AgenticEvalConfig;
 use gglib_core::domain::benchmark::tune::config::TuneConfig;
 use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
 use gglib_core::ports::{
     BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository,
 };
 
+mod agentic;
 mod compare;
 pub mod guard;
 pub mod mapper;
@@ -132,5 +134,19 @@ impl BenchmarkOps {
         cancel: CancellationToken,
     ) -> Result<()> {
         tune::run_tune(&self.deps, config, tx, cancel).await
+    }
+
+    /// Run the raw-vs-gglib A/B agentic eval: the same task suite twice
+    /// against one loaded model — pipeline bypassed vs the full pipeline —
+    /// finishing with a [`BenchmarkEvent::AgenticEvalComplete`] report.
+    ///
+    /// Like `run_tune`, the model is loaded **once** for both arms.
+    pub async fn run_agentic(
+        &self,
+        config: AgenticEvalConfig,
+        tx: Sender<BenchmarkEvent>,
+        cancel: CancellationToken,
+    ) -> Result<()> {
+        agentic::run_agentic_eval(&self.deps, config, tx, cancel).await
     }
 }

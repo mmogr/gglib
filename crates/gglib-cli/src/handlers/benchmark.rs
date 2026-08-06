@@ -13,8 +13,8 @@ use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneC
 use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
-    BenchmarkEvent, BenchmarkModelResult, CompareConfig, ModelCompareResult, ModelPerfResult,
-    PerfConfig,
+    AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
+    CompareConfig, ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -85,6 +85,14 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             )
             .await
         }
+
+        BenchmarkCommand::Agentic {
+            model,
+            task_suite,
+            ctx_size,
+            json,
+            output,
+        } => cmd_agentic(ctx, model, task_suite, ctx_size, json, output).await,
 
         // Read-only commands: plain DB reads, no daemon involved.
         BenchmarkCommand::List { limit } => cmd_list(ctx, limit).await,
@@ -278,6 +286,153 @@ async fn cmd_tune(
     }
 
     Ok(())
+}
+
+/// Run the raw-vs-gglib A/B agentic eval on the daemon and render the delta.
+async fn cmd_agentic(
+    ctx: &CliContext,
+    model: String,
+    task_suite: String,
+    ctx_size: Option<u64>,
+    json: bool,
+    output: Option<std::path::PathBuf>,
+) -> Result<()> {
+    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+
+    let config = AgenticEvalConfig {
+        model_id,
+        task_suite: load_task_suite(&task_suite)?,
+        weights: ScoreWeights::default(),
+        ctx_size,
+    };
+
+    style::print_info_banner("Agentic A/B Eval", "\u{2696}\u{fe0f}");
+    eprintln!("  Model : {model}");
+    eprintln!("  Suite : {task_suite}");
+    eprintln!("  Arms  : raw (pipeline bypassed) vs gglib (full pipeline)");
+    style::print_banner_close();
+
+    let mut report: Option<AgenticEvalReport> = None;
+    run_on_daemon("/api/benchmark/agentic", &config, |event| {
+        if let BenchmarkEvent::AgenticEvalComplete { report: r } = event {
+            report = Some(r.clone());
+        }
+        render_event(event);
+    })
+    .await?;
+
+    let report = report.ok_or_else(|| {
+        anyhow!("the eval ended without a report (run may have been aborted or failed)")
+    })?;
+
+    render_agentic_report(&report);
+
+    if json || output.is_some() {
+        let export = serde_json::json!({
+            "gglib_version": env!("CARGO_PKG_VERSION"),
+            "hardware": fetch_hardware_snapshot().await,
+            "report": report,
+        });
+        let pretty = serde_json::to_string_pretty(&export)?;
+        if let Some(path) = output {
+            std::fs::write(&path, &pretty)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+            eprintln!("  report written to {}", path.display());
+        }
+        if json {
+            println!("{pretty}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Render the A/B table: one row per axis, columns raw / gglib / delta.
+fn render_agentic_report(report: &AgenticEvalReport) {
+    let fmt_tps =
+        |scores: &ArmScores| scores.tg_tps.map_or("     —".into(), |t| format!("{t:>6.1}"));
+
+    eprintln!();
+    eprintln!(
+        "  {BOLD}{model} ({params}B{quant}) @ {ctx} ctx{RESET}",
+        model = report.model_name,
+        params = report.param_count_b,
+        quant = report
+            .quantization
+            .as_deref()
+            .map_or(String::new(), |q| format!(", {q}")),
+        ctx = report.ctx_size,
+        BOLD = style::BOLD,
+        RESET = style::RESET,
+    );
+    eprintln!();
+    eprintln!("  axis              raw    gglib   delta");
+    eprintln!("  ─────────────── ────── ────── ───────");
+    for (name, raw, gglib, delta) in [
+        (
+            "tool accuracy  ",
+            report.raw.tool_accuracy,
+            report.gglib.tool_accuracy,
+            report.delta.tool_accuracy,
+        ),
+        (
+            "loop avoidance ",
+            report.raw.loop_avoidance,
+            report.gglib.loop_avoidance,
+            report.delta.loop_avoidance,
+        ),
+        (
+            "task completion",
+            report.raw.task_completion,
+            report.gglib.task_completion,
+            report.delta.task_completion,
+        ),
+        (
+            "composite      ",
+            report.raw.composite,
+            report.gglib.composite,
+            report.delta.composite,
+        ),
+    ] {
+        let colour = if delta > 0.0 {
+            style::SUCCESS
+        } else if delta < 0.0 {
+            style::DANGER
+        } else {
+            ""
+        };
+        eprintln!(
+            "  {name} {raw:>6.3} {gglib:>6.3} {colour}{delta:>+7.3}{RESET}",
+            RESET = style::RESET
+        );
+    }
+    eprintln!(
+        "  throughput tok/s {} {}",
+        fmt_tps(&report.raw),
+        fmt_tps(&report.gglib)
+    );
+    eprintln!();
+}
+
+/// Best-effort hardware snapshot for the JSON export, from the daemon's
+/// setup-status endpoint. `null` when unavailable — the report is still
+/// valid, just unpinned to a machine.
+async fn fetch_hardware_snapshot() -> serde_json::Value {
+    let url = format!(
+        "{}/api/config/system/setup-status",
+        daemon_client::base_url()
+    );
+    match reqwest::Client::new().get(&url).send().await {
+        Ok(resp) => resp
+            .json::<serde_json::Value>()
+            .await
+            .unwrap_or(serde_json::Value::Null),
+        Err(_) => serde_json::Value::Null,
+    }
 }
 
 /// Parse `--sweep DIM=V1,V2,...` arguments into a [`SweepSpec`].
@@ -608,6 +763,24 @@ fn render_event(event: &BenchmarkEvent) {
         BenchmarkEvent::TuneCandidateComplete { result } => {
             eprintln!("  composite score: {:.3}", result.composite_score);
         }
+
+        BenchmarkEvent::AgenticArmStarted { arm, total_tasks } => {
+            eprintln!(
+                "\n{BOLD}[{arm} arm]{RESET} {total_tasks} tasks",
+                BOLD = style::BOLD,
+                RESET = style::RESET
+            );
+        }
+
+        BenchmarkEvent::AgenticTaskComplete {
+            task_id, passed, ..
+        } => {
+            let mark = if *passed { "✓" } else { "✗" };
+            eprintln!("  {mark} {task_id}");
+        }
+
+        // Rendered by cmd_agentic as the final A/B table.
+        BenchmarkEvent::AgenticEvalComplete { .. } => {}
     }
 }
 
