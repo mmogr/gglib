@@ -46,7 +46,10 @@ pub async fn run_agentic_eval(
         .task_suite
         .resolve()
         .context("failed to resolve agentic eval task suite")?;
-    anyhow::ensure!(!tasks.is_empty(), "agentic eval task suite must not be empty");
+    anyhow::ensure!(
+        !tasks.is_empty(),
+        "agentic eval task suite must not be empty"
+    );
 
     let model = deps
         .model_repo

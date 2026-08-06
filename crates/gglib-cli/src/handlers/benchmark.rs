@@ -353,8 +353,11 @@ async fn cmd_agentic(
 
 /// Render the A/B table: one row per axis, columns raw / gglib / delta.
 fn render_agentic_report(report: &AgenticEvalReport) {
-    let fmt_tps =
-        |scores: &ArmScores| scores.tg_tps.map_or("     —".into(), |t| format!("{t:>6.1}"));
+    let fmt_tps = |scores: &ArmScores| {
+        scores
+            .tg_tps
+            .map_or("     —".into(), |t| format!("{t:>6.1}"))
+    };
 
     eprintln!();
     eprintln!(
