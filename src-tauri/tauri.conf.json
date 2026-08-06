@@ -1,6 +1,6 @@
 {
   "productName": "GGLib GUI",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "identifier": "com.gglib.gui",
   "build": {
     "beforeBuildCommand": "npm run build:tauri",
@@ -12,7 +12,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GGLib — Local Model Runtime",
+        "title": "GGLib \u2014 Local Model Runtime",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
