@@ -23,6 +23,9 @@
 # PID files (runtime state)
 /pids
 
+# Daemon singleton lock (runtime state)
+daemon.lock
+
 # KV cache slot files (--cache/--slot-dir runtime state)
 /slots
 

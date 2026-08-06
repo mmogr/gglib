@@ -36,12 +36,17 @@ async fn test_list_mcp_servers_json_structure() {
         Err(_) => return, // Skip if bootstrap fails
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        std::sync::Arc::new(gglib_axum::DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .uri("/api/mcp/servers")
+                .header("Host", "127.0.0.1:9887")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -117,7 +122,11 @@ async fn test_add_mcp_server_returns_nested_structure() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        std::sync::Arc::new(gglib_axum::DaemonAccess::loopback()),
+    );
 
     let request_body = json!({
         "name": "Test Server",
@@ -132,6 +141,7 @@ async fn test_add_mcp_server_returns_nested_structure() {
         .oneshot(
             Request::builder()
                 .uri("/api/mcp/servers")
+                .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&request_body).unwrap()))

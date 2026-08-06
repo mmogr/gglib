@@ -13,6 +13,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use common::ports::TEST_BASE_PORT;
+use gglib_axum::DaemonAccess;
 use gglib_axum::bootstrap::{ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
 use gglib_core::CorsConfig;
@@ -44,7 +45,11 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
         Err(_) => return, // Skip if the environment has no DB path
     };
     let state = std::sync::Arc::new(ctx);
-    let app = create_router(std::sync::Arc::clone(&state), &CorsConfig::AllowAll);
+    let app = create_router(
+        std::sync::Arc::clone(&state),
+        &CorsConfig::AllowAll,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     // Start pinned, on an ephemeral port so nothing on the machine is hit.
     let response = app
@@ -53,6 +58,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
             Request::builder()
                 .method("POST")
                 .uri("/api/proxy/start")
+                .header("Host", "127.0.0.1:9887")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"port":0,"pinned":{"name":"pinned-model"}}"#))
                 .unwrap(),
@@ -94,6 +100,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
             Request::builder()
                 .method("POST")
                 .uri("/api/proxy/start")
+                .header("Host", "127.0.0.1:9887")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"port":0,"pinned":{"name":"another"}}"#))
                 .unwrap(),
@@ -109,6 +116,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
             Request::builder()
                 .method("POST")
                 .uri("/api/proxy/stop")
+                .header("Host", "127.0.0.1:9887")
                 .header("content-type", "application/json")
                 .body(Body::from("{}"))
                 .unwrap(),
@@ -134,13 +142,18 @@ async fn shutdown_route_refuses_when_not_a_daemon() {
         Ok(ctx) => ctx,
         Err(_) => return,
     };
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::AllowAll);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/daemon/shutdown")
+                .header("Host", "127.0.0.1:9887")
                 .body(Body::empty())
                 .unwrap(),
         )

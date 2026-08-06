@@ -10,6 +10,7 @@ use axum::http::Request;
 use tower::ServiceExt;
 
 use common::ports::TEST_BASE_PORT;
+use gglib_axum::DaemonAccess;
 use gglib_axum::bootstrap::{ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
 use gglib_core::CorsConfig;
@@ -33,13 +34,18 @@ async fn local_only_rejects_remote_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::LocalOnly,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/api/models")
+                .header("Host", "127.0.0.1:9887")
                 .header("Origin", "http://evil.example.com")
                 .header("Access-Control-Request-Method", "GET")
                 .body(Body::empty())
@@ -63,13 +69,18 @@ async fn local_only_allows_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::LocalOnly,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/api/models")
+                .header("Host", "127.0.0.1:9887")
                 .header("Origin", "http://localhost:9887")
                 .header("Access-Control-Request-Method", "GET")
                 .body(Body::empty())
@@ -94,13 +105,18 @@ async fn local_only_allows_127_0_0_1_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::LocalOnly,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/api/models")
+                .header("Host", "127.0.0.1:9887")
                 .header("Origin", "http://127.0.0.1:3000")
                 .header("Access-Control-Request-Method", "GET")
                 .body(Body::empty())
@@ -120,13 +136,18 @@ async fn local_only_allows_ipv6_localhost() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::LocalOnly,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/api/models")
+                .header("Host", "127.0.0.1:9887")
                 .header("Origin", "http://[::1]:8080")
                 .header("Access-Control-Request-Method", "GET")
                 .body(Body::empty())
@@ -154,13 +175,18 @@ async fn local_only_allows_tauri_localhost_origin() {
         Err(_) => return,
     };
 
-    let app = create_router(std::sync::Arc::new(ctx), &CorsConfig::LocalOnly);
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::LocalOnly,
+        std::sync::Arc::new(DaemonAccess::loopback()),
+    );
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri("/api/models")
+                .header("Host", "127.0.0.1:9887")
                 .header("Origin", "http://tauri.localhost")
                 .header("Access-Control-Request-Method", "GET")
                 .body(Body::empty())

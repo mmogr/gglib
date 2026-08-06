@@ -115,6 +115,45 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
 }
 
 /**
+ * localStorage key holding the API key for web mode.
+ *
+ * Only relevant when the daemon is shared over the LAN (`--share-lan`), where
+ * /api/* requires a bearer token. Same-origin loopback needs no key and never
+ * touches this.
+ */
+const WEB_API_KEY_STORAGE = 'gglib_api_key';
+
+function readStoredWebApiKey(): string | undefined {
+  try {
+    return localStorage.getItem(WEB_API_KEY_STORAGE) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Ask the user for the daemon's API key after a 401 in web mode.
+ * Returns true if a key was provided and stored (so the request can retry).
+ */
+function promptForWebApiKey(): boolean {
+  const entered = window.prompt(
+    'This gglib daemon requires an API key (it was printed when the daemon started).\n' +
+      'Enter it to continue:'
+  );
+  if (!entered || !entered.trim()) {
+    return false;
+  }
+  try {
+    localStorage.setItem(WEB_API_KEY_STORAGE, entered.trim());
+  } catch {
+    // Storage unavailable (private mode) — the retry still works this session
+    // because the client cache rebuild re-reads via the in-memory session.
+  }
+  setApiSession('', entered.trim());
+  return true;
+}
+
+/**
  * Cached client promise for lazy initialization.
  */
 let cachedClientPromise: Promise<HttpClient> | null = null;
@@ -179,11 +218,20 @@ function buildClient(config: HttpClientConfig): HttpClient {
       });
       
       // If 401 and not already retrying, clear cache and retry once
-      if (response.status === 401 && !isRetry && isTauri()) {
-        appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - clearing cache and retrying');
-        resetClientCache();
-        const newClient = await getClient();
-        return newClient.request<T>(path, options, true);
+      if (response.status === 401 && !isRetry) {
+        if (isTauri()) {
+          appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - clearing cache and retrying');
+          resetClientCache();
+          const newClient = await getClient();
+          return newClient.request<T>(path, options, true);
+        }
+        // Web mode: a LAN-shared daemon requires its API key — ask for it.
+        if (promptForWebApiKey()) {
+          appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
+          resetClientCache();
+          const newClient = await getClient();
+          return newClient.request<T>(path, options, true);
+        }
       }
       
       return await readData<T>(response);
@@ -228,9 +276,11 @@ export async function getClient(): Promise<HttpClient> {
         setApiSession(config.baseUrl, config.token);
         return buildClient(config);
       } else {
-        // Web mode: same-origin, no token
-        setApiSession('', undefined);
-        return buildClient({ baseUrl: '' });
+        // Web mode: same-origin. A token is only needed against a LAN-shared
+        // daemon; use one previously stored (or entered this session).
+        const token = readStoredWebApiKey() ?? apiAuthToken;
+        setApiSession('', token);
+        return buildClient({ baseUrl: '', token });
       }
     } catch (error) {
       // Clear cache on discovery failure to allow retry

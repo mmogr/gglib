@@ -314,12 +314,21 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
     let ctx = bootstrap(config.clone()).await?;
     let state: crate::state::AppState = Arc::new(ctx);
 
+    // Host-guarded, tokenless: this entry point has no key resolution of its
+    // own, so a non-loopback bind here relies on the allowlist alone. The
+    // daemon path (`run_daemon`) is the one that resolves and mints keys.
+    let access = Arc::new(crate::access::DaemonAccess::new(
+        None,
+        &config.host,
+        Vec::new(),
+    ));
+
     // Choose router based on whether static serving is configured
     let app = if let Some(ref static_dir) = config.static_dir {
         info!("Serving static assets from: {}", static_dir.display());
-        crate::routes::create_spa_router(state, static_dir, &config.cors)
+        crate::routes::create_spa_router(state, static_dir, &config.cors, access)
     } else {
-        crate::routes::create_router(state, &config.cors)
+        crate::routes::create_router(state, &config.cors, access)
     };
 
     let addr = format!("{}:{}", config.host, config.port);

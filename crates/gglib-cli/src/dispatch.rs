@@ -156,8 +156,11 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             handlers::web::execute(share_lan).await?;
         }
         Commands::Daemon { command } => match command {
-            crate::commands::DaemonCommand::Run { share_lan } => {
-                handlers::daemon::run(share_lan).await?;
+            crate::commands::DaemonCommand::Run {
+                share_lan,
+                allowed_host,
+            } => {
+                handlers::daemon::run(share_lan, allowed_host).await?;
             }
             crate::commands::DaemonCommand::Status => {
                 handlers::daemon::status().await?;

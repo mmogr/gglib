@@ -34,6 +34,11 @@ const INSTANCE_NAME: &str = "gglib";
 /// Hostname the address record is published under → resolves as `gglib.local`.
 const HOSTNAME: &str = "gglib.local.";
 
+/// The name LAN clients actually type — [`HOSTNAME`] without the trailing
+/// dot. Exposed so `daemon run` can add it to the Host allowlist: a name the
+/// daemon advertises is plainly one it answers to.
+pub(crate) const LAN_HOSTNAME: &str = "gglib.local";
+
 /// An active mDNS registration, unregistered on [`shutdown`](Self::shutdown).
 pub struct MdnsAdvertiser {
     daemon: ServiceDaemon,

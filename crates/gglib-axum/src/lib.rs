@@ -28,6 +28,7 @@ use tokio_stream as _;
 use tracing as _;
 use tracing_subscriber as _; // Used by main.rs binary
 
+pub mod access;
 pub mod bootstrap;
 pub mod chat_api;
 pub mod daemon;
@@ -39,6 +40,7 @@ pub mod sse;
 pub mod state;
 
 // Re-export primary types
+pub use access::DaemonAccess;
 pub use bootstrap::{AxumContext, ServerConfig, bootstrap, start_server};
 pub use error::HttpError;
 pub use gglib_core::CorsConfig;
