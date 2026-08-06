@@ -79,8 +79,8 @@ fn missing_messages_field_passes_through_unchanged() {
 #[test]
 fn over_budget_trims_oldest_first_and_stops_early() {
     // Four 100k tool messages outside the protected tail. The payload (~400k)
-    // exceeds the 240k budget; trimming the two oldest brings it back under, so
-    // the two newer ones must survive.
+    // exceeds the 240k budget; the quantized watermark target (240,000 saved
+    // chars here) takes the three oldest, so the newest must survive.
     let mut b = body(&with_tail(vec![
         msg("tool", &big(100_000)),
         msg("tool", &big(100_000)),
@@ -91,18 +91,18 @@ fn over_budget_trims_oldest_first_and_stops_early() {
     let report = truncate_history(&mut b, ROOMY).unwrap();
 
     assert_eq!(
-        report.messages_truncated, 2,
-        "only as many oldest messages as needed to get under budget"
+        report.messages_truncated, 3,
+        "as many oldest messages as the watermark target needs"
     );
     assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
     assert_eq!(b["messages"][1]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][2]["content"], TRUNCATION_PLACEHOLDER);
     assert_eq!(
-        b["messages"][2]["content"].as_str().unwrap().len(),
+        b["messages"][3]["content"].as_str().unwrap().len(),
         100_000,
-        "newer big message preserved once under budget"
+        "newest big message preserved once the target is met"
     );
-    assert_eq!(b["messages"][3]["content"].as_str().unwrap().len(), 100_000);
-    assert!(report.payload_chars_after <= ROOMY);
+    assert!(report.payload_chars_after <= ROOMY * LOW_WATERMARK_PCT / 100);
     assert!(report.payload_chars_after < report.payload_chars_before);
 }
 
