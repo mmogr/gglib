@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Instant;
 
-use gglib_core::domain::CacheRamHealth;
+use gglib_core::domain::{CacheRamHealth, SecondarySlotDecision};
 
 use super::*;
 
@@ -38,20 +38,22 @@ fn resident(model_id: u32, name: &str) -> Resident {
 
 /// The common case for these tests: nothing may co-reside, so every model
 /// change is a swap and the fairness rules are what decide it.
-fn never_fits(_: &str) -> bool {
-    false
-}
+const NEVER_FITS: SecondarySlotDecision = SecondarySlotDecision::RefuseTooLarge {
+    footprint_bytes: 9 * 1024 * 1024 * 1024,
+    ceiling_bytes: 2 * 1024 * 1024 * 1024,
+};
 
 /// The co-residency case: anything fits, so the second slot is always offered.
-fn always_fits(_: &str) -> bool {
-    true
-}
+const ALWAYS_FITS: SecondarySlotDecision = SecondarySlotDecision::Grant {
+    footprint_bytes: 256 * 1024 * 1024,
+    headroom_bytes: 8 * 1024 * 1024 * 1024,
+};
 
 /// Enqueue and immediately poll, the shape every requester's first iteration
 /// takes. Returns the ticket so the caller can keep polling it.
 fn request(q: &Arc<AdmissionQueue>, model: &str) -> (Ticket, AdmissionDecision) {
     let ticket = q.enqueue(model);
-    let decision = q.poll(&ticket, &never_fits);
+    let decision = q.poll(&ticket, NEVER_FITS);
     (ticket, decision)
 }
 
@@ -133,7 +135,7 @@ async fn a_waiter_is_served_by_the_launch_it_waited_for() {
     let _lease = q.install(PRIMARY_SLOT, resident(1, "qwen-coder"));
 
     assert_eq!(
-        q.poll(&second, &never_fits),
+        q.poll(&second, NEVER_FITS),
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
     );
     assert_eq!(q.snapshot().total_swaps, 0, "a cold start is not a swap");
@@ -159,12 +161,12 @@ async fn a_slot_with_a_request_in_flight_is_never_evicted() {
     // Even once every fairness bound has been blown through.
     tokio::time::pause();
     tokio::time::advance(DRAIN_QUANTUM * 4).await;
-    assert_eq!(q.poll(&rival, &never_fits), AdmissionDecision::Wait);
+    assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
 
     // The instant the lease drops, the swap is legal.
     drop(lease);
     assert_eq!(
-        q.poll(&rival, &never_fits),
+        q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT,
             evict: Some(1),
@@ -183,14 +185,14 @@ async fn a_slot_frees_only_when_the_last_lease_drops() {
     let (rival, _) = request(&q, "nomic-embed");
     drop(first);
     assert_eq!(
-        q.poll(&rival, &never_fits),
+        q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Wait,
         "one lease still outstanding"
     );
 
     drop(second);
     assert!(matches!(
-        q.poll(&rival, &never_fits),
+        q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Launch { .. }
     ));
 }
@@ -208,13 +210,13 @@ async fn a_burst_of_queued_requests_costs_a_single_swap() {
     let tickets: Vec<Ticket> = (0..10).map(|_| q.enqueue("nomic-embed")).collect();
 
     // The first one through drives the launch; the rest wait behind it.
-    let first = q.poll(&tickets[0], &never_fits);
+    let first = q.poll(&tickets[0], NEVER_FITS);
     let AdmissionDecision::Launch { slot, evict } = first else {
         panic!("expected a launch, got {first:?}");
     };
     assert_eq!(evict, Some(1));
     for ticket in &tickets[1..] {
-        assert_eq!(q.poll(ticket, &never_fits), AdmissionDecision::Wait);
+        assert_eq!(q.poll(ticket, NEVER_FITS), AdmissionDecision::Wait);
     }
 
     let _lease = q.install(slot, resident(2, "nomic-embed"));
@@ -224,7 +226,7 @@ async fn a_burst_of_queued_requests_costs_a_single_swap() {
         .iter()
         .map(|ticket| {
             assert_eq!(
-                q.poll(ticket, &never_fits),
+                q.poll(ticket, NEVER_FITS),
                 AdmissionDecision::Serve { slot }
             );
             q.claim(slot)
@@ -257,7 +259,7 @@ async fn alternating_traffic_does_not_swap_per_request() {
         guard += 1;
         let mut remaining = Vec::new();
         for ticket in tickets {
-            match q.poll(&ticket, &never_fits) {
+            match q.poll(&ticket, NEVER_FITS) {
                 // `Serve` has already counted this request against the slot, so
                 // the lease must be claimed — exactly as a real requester does.
                 // Leaving it unclaimed would pin the model resident forever.
@@ -304,7 +306,7 @@ async fn the_turn_holder_yields_once_its_quantum_elapses() {
     drop(lease);
 
     assert_eq!(
-        q.poll(&rival, &never_fits),
+        q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Wait,
         "the turn is still young"
     );
@@ -312,10 +314,7 @@ async fn the_turn_holder_yields_once_its_quantum_elapses() {
     tokio::time::advance(DRAIN_QUANTUM + std::time::Duration::from_secs(1)).await;
 
     assert!(
-        matches!(
-            q.poll(&rival, &never_fits),
-            AdmissionDecision::Launch { .. }
-        ),
+        matches!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Launch { .. }),
         "the quantum must end the turn"
     );
 }
@@ -338,7 +337,7 @@ async fn a_deep_queue_does_not_outrank_a_single_older_request() {
 
     assert!(
         matches!(
-            q.poll(&lonely, &never_fits),
+            q.poll(&lonely, NEVER_FITS),
             AdmissionDecision::Launch { .. }
         ),
         "fifty newer requests must not bury one older one"
@@ -358,13 +357,13 @@ async fn a_permanently_busy_slot_expires_the_rival_rather_than_stalling_it() {
     let (rival, _) = request(&q, "nomic-embed");
     tokio::time::advance(DRAIN_QUANTUM * 4).await;
     assert_eq!(
-        q.poll(&rival, &never_fits),
+        q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Wait,
         "still blocked, because preemption is never an option"
     );
 
     tokio::time::advance(ADMISSION_DEADLINE).await;
-    assert_eq!(q.poll(&rival, &never_fits), AdmissionDecision::Expired);
+    assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
 }
 
 /// A turn holder that has run out of work does not get to keep the slot warm
@@ -395,12 +394,12 @@ async fn the_globally_oldest_waiter_decides_which_model_is_next() {
     let newer = q.enqueue("model-b");
 
     assert_eq!(
-        q.poll(&newer, &never_fits),
+        q.poll(&newer, NEVER_FITS),
         AdmissionDecision::Wait,
         "a later arrival must not overtake"
     );
     assert!(matches!(
-        q.poll(&older, &never_fits),
+        q.poll(&older, NEVER_FITS),
         AdmissionDecision::Launch { .. }
     ));
 }
@@ -415,7 +414,7 @@ async fn a_model_that_fits_co_loads_rather_than_swapping() {
     let _lease = make_resident(&q, "qwen-coder", 1);
 
     let ticket = q.enqueue("nomic-embed");
-    let decision = q.poll(&ticket, &always_fits);
+    let decision = q.poll(&ticket, ALWAYS_FITS);
 
     assert_eq!(
         decision,
@@ -435,7 +434,7 @@ async fn co_resident_models_never_contend() {
     let chat = make_resident(&q, "qwen-coder", 1);
 
     let ticket = q.enqueue("nomic-embed");
-    let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, &always_fits) else {
+    let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
     drop(ticket);
@@ -463,7 +462,7 @@ async fn a_model_that_does_not_fit_falls_back_to_swapping() {
     drop(lease);
 
     let ticket = q.enqueue("llama-70b");
-    let decision = q.poll(&ticket, &never_fits);
+    let decision = q.poll(&ticket, NEVER_FITS);
 
     assert_eq!(
         decision,
@@ -483,7 +482,7 @@ async fn a_third_model_evicts_the_secondary_not_the_primary() {
     let q = queue();
     let chat = make_resident(&q, "qwen-coder", 1);
     let embed_ticket = q.enqueue("nomic-embed");
-    let AdmissionDecision::Launch { slot, .. } = q.poll(&embed_ticket, &always_fits) else {
+    let AdmissionDecision::Launch { slot, .. } = q.poll(&embed_ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
     drop(embed_ticket);
@@ -492,7 +491,7 @@ async fn a_third_model_evicts_the_secondary_not_the_primary() {
 
     let third = q.enqueue("reranker");
     assert_eq!(
-        q.poll(&third, &always_fits),
+        q.poll(&third, ALWAYS_FITS),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT + 1,
             evict: Some(2),
@@ -513,7 +512,7 @@ async fn a_request_expires_once_its_deadline_passes() {
     let (rival, _) = request(&q, "nomic-embed");
     tokio::time::advance(ADMISSION_DEADLINE + std::time::Duration::from_secs(1)).await;
 
-    assert_eq!(q.poll(&rival, &never_fits), AdmissionDecision::Expired);
+    assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
 }
 
 /// An expired or abandoned request must stop holding the front of the queue,
@@ -580,7 +579,7 @@ async fn the_snapshot_names_a_co_resident_secondary() {
     let q = queue();
     let _chat = make_resident(&q, "qwen-coder", 1);
     let ticket = q.enqueue("nomic-embed");
-    let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, &always_fits) else {
+    let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
     drop(ticket);
@@ -591,6 +590,61 @@ async fn the_snapshot_names_a_co_resident_secondary() {
     assert!(snapshot.secondary_slot.detail.contains("nomic-embed"));
     assert_eq!(snapshot.slots.len(), 2);
     assert!(!snapshot.slots[1].is_primary);
+}
+
+/// The verdict handed to `poll` lands in the snapshot whenever a secondary
+/// slot could have used it, so an idle second slot can explain itself on the
+/// dashboard. (The verdict is a value computed by the caller before the queue
+/// locks — the regression guarded here is #721, where a callback ran under the
+/// lock and re-entered the queue.)
+#[tokio::test]
+async fn a_consulted_refusal_is_recorded_for_the_dashboard() {
+    let q = queue();
+    let _lease = make_resident(&q, "qwen-coder", 1);
+
+    // Secondary slot is empty, so the refusal is consulted — and recorded.
+    let (_rival, _) = request(&q, "llama-70b");
+
+    assert_eq!(q.snapshot().secondary_slot.state, "too_large");
+}
+
+/// A grant that has not finished loading holds nothing, so it reports the slot
+/// as available rather than resident.
+#[tokio::test]
+async fn a_consulted_grant_reports_the_slot_as_available() {
+    let q = queue();
+    let _lease = make_resident(&q, "qwen-coder", 1);
+
+    let ticket = q.enqueue("nomic-embed");
+    let AdmissionDecision::Launch { .. } = q.poll(&ticket, ALWAYS_FITS) else {
+        panic!("expected a co-load");
+    };
+
+    assert_eq!(q.snapshot().secondary_slot.state, "available");
+}
+
+/// A verdict for a moment when no secondary slot was on offer never mattered,
+/// so it must not overwrite the last one that did.
+#[tokio::test]
+async fn an_unconsulted_verdict_does_not_overwrite_the_recorded_one() {
+    let q = queue();
+    let _chat = make_resident(&q, "qwen-coder", 1);
+
+    // A granted co-load leaves the secondary slot `Loading` — neither empty
+    // nor evictable, so nothing consults a verdict while it stays that way.
+    let embed = q.enqueue("nomic-embed");
+    let AdmissionDecision::Launch { .. } = q.poll(&embed, ALWAYS_FITS) else {
+        panic!("expected a co-load");
+    };
+    drop(embed);
+
+    let (_rival, _) = request(&q, "llama-70b"); // NEVER_FITS, unconsulted
+
+    assert_eq!(
+        q.snapshot().secondary_slot.state,
+        "available",
+        "the refusal was never consulted and must not be recorded"
+    );
 }
 
 /// Every request that passes through is counted, so the ratio against

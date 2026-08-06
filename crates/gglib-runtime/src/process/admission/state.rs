@@ -17,7 +17,7 @@ use tokio::time::Instant;
 
 use gglib_core::domain::{
     AdmissionSnapshot, CacheRamHealth, LaunchNarration, QueuedModelSnapshot, ResidentSlotSnapshot,
-    SecondarySlotStatus,
+    SecondarySlotDecision, SecondarySlotStatus,
 };
 
 /// How many models may be resident in VRAM at once.
@@ -281,7 +281,7 @@ impl QueueState {
         &mut self,
         ticket: &Ticket,
         now: Instant,
-        secondary_fits: &dyn Fn(&str) -> bool,
+        secondary: SecondarySlotDecision,
     ) -> AdmissionDecision {
         // The fast path, and the payoff of a second slot: a co-resident model
         // serves without ever consulting the scheduler's fairness rules,
@@ -311,7 +311,22 @@ impl QueueState {
             return AdmissionDecision::Wait;
         }
 
-        let Some(slot) = self.choose_slot(&ticket.model, now, secondary_fits) else {
+        // The co-residence verdict was computed by the caller *before* the
+        // queue's lock was taken — no caller code runs inside this critical
+        // section (see the locking notes in `lease.rs`; a callback here once
+        // re-entered the queue and deadlocked the daemon). Recorded only when
+        // a secondary slot could actually have used it, so the dashboard shows
+        // the last verdict that mattered rather than one for a moment when no
+        // slot was on offer.
+        let secondary_available = self.secondary_slots().any(|slot| {
+            matches!(self.slots[slot], SlotState::Empty) || self.slots[slot].is_evictable()
+        });
+        if secondary_available {
+            self.secondary_slot = SecondarySlotStatus::from_decision(secondary);
+        }
+        let may_co_reside = secondary_available && secondary.is_grant();
+
+        let Some(slot) = self.choose_slot(&ticket.model, now, may_co_reside) else {
             return AdmissionDecision::Wait;
         };
 
@@ -339,18 +354,7 @@ impl QueueState {
     /// 1. An empty slot — nothing is displaced, so nothing has to be justified.
     /// 2. The secondary slot, when the candidate is small enough to co-reside.
     /// 3. An evictable slot, once the fairness rules permit the swap.
-    fn choose_slot(
-        &self,
-        model: &str,
-        now: Instant,
-        secondary_fits: &dyn Fn(&str) -> bool,
-    ) -> Option<usize> {
-        // Asked once. The answer involves a live free-VRAM reading, and asking
-        // twice inside one decision could give two different answers.
-        let may_co_reside = self.secondary_slots().any(|slot| {
-            matches!(self.slots[slot], SlotState::Empty) || self.slots[slot].is_evictable()
-        }) && secondary_fits(model);
-
+    fn choose_slot(&self, model: &str, now: Instant, may_co_reside: bool) -> Option<usize> {
         // 1. A free slot displaces nothing, so it needs no justification.
         if matches!(self.slots[PRIMARY_SLOT], SlotState::Empty) {
             return Some(PRIMARY_SLOT);

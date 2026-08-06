@@ -2,6 +2,7 @@
 
 mod lock;
 mod shutdown;
+mod watchdog;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -150,6 +151,14 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
             )
         })?;
     info!("gglib daemon listening on http://{addr}");
+
+    // From here the daemon can wedge in the worst way — listening but not
+    // serving — so from here it watches itself. See the module docs for why
+    // this must be a plain thread probing over TCP.
+    match listener.local_addr() {
+        Ok(bound) => watchdog::spawn(bound),
+        Err(e) => warn!("no local addr for the liveness watchdog: {e}"),
+    }
 
     // 5. The proxy belongs to the daemon now: honour autostart here, not in
     //    the desktop app.
