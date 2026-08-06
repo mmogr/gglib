@@ -243,7 +243,10 @@ mod tests {
         assert!(grammar.contains(r#""\"read_file\"" | "\"ls\"""#));
         assert!(grammar.contains(r#""<tool_call>""#));
         assert_eq!(b["tool_choice"], "none");
-        assert!(b.get("tools").is_some(), "tools stay for template rendering");
+        assert!(
+            b.get("tools").is_some(),
+            "tools stay for template rendering"
+        );
     }
 
     /// A named function narrows the grammar to that one tool.
@@ -339,8 +342,7 @@ mod tests {
         use crate::normalize::get_parser;
 
         // A string the grammar admits (call rule, JSON dialect, newlines).
-        let emission =
-            "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.rs\"}}\n</tool_call>";
+        let emission = "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.rs\"}}\n</tool_call>";
 
         let mut parser = get_parser(&[FORMAT_QWEN_XML.to_owned()]);
         let mut out = parser.push_text(emission);
