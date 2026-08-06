@@ -247,7 +247,37 @@ fn arm_scores(results: &[TuneTaskResult], config: &AgenticEvalConfig) -> ArmScor
         task_completion: axes.as_ref().map_or(0.0, |a| a.task_completion),
         composite,
         tg_tps: throughput_tps(results),
+        total_completion_tokens: total_completion_tokens(results),
+        total_wall_ms: results.iter().map(|r| r.latency_ms).sum(),
+        mean_time_to_first_tool_call_ms: mean_time_to_first_tool_call_ms(results),
     }
+}
+
+/// Suite-wide completion tokens. `None` only when no task reported usage,
+/// which stays distinct from a measured zero.
+fn total_completion_tokens(results: &[TuneTaskResult]) -> Option<u64> {
+    let mut total: Option<u64> = None;
+    for tokens in results.iter().filter_map(|r| r.completion_tokens) {
+        total = Some(total.unwrap_or(0) + tokens);
+    }
+    total
+}
+
+/// Mean time to first tool call across the tasks that made one.
+///
+/// Averaged over callers only: an `Irrelevance` task correctly never calls a
+/// tool, and folding its absence in as a zero would flatter whichever arm
+/// abstained most.
+fn mean_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Option<f64> {
+    let samples: Vec<u64> = results
+        .iter()
+        .filter_map(|r| r.time_to_first_tool_call_ms)
+        .collect();
+    if samples.is_empty() {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    Some(samples.iter().sum::<u64>() as f64 / samples.len() as f64)
 }
 
 #[cfg(test)]

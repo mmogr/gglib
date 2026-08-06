@@ -96,6 +96,17 @@ pub struct TuneTaskResult {
     /// which stays distinct from a measured zero.
     #[serde(default)]
     pub completion_tokens: Option<u64>,
+    /// Wall-clock milliseconds from the start of the task to the first tool
+    /// call the model actually issued — how long it took to take its first
+    /// useful action.
+    ///
+    /// This is the figure an agentic client's user feels: a turn that emits a
+    /// valid call in 300 ms and one that emits the same call after 140 s of
+    /// unconstrained generation score identically on every accuracy axis.
+    /// `None` when the task never called a tool, which is the correct outcome
+    /// for an `Irrelevance` task.
+    #[serde(default)]
+    pub time_to_first_tool_call_ms: Option<u64>,
     /// Optional human-readable detail (e.g. which expected call was missed),
     /// surfaced in the leaderboard drill-down.
     #[serde(default)]

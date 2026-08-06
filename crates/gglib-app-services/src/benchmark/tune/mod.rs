@@ -426,10 +426,17 @@ where
     let join_handle =
         tokio::spawn(async move { agent_loop.run(messages, agent_config, event_tx).await });
 
+    // Both figures are recovered from the event stream rather than the run's
+    // return value, so they survive a guard-aborted run.
     let mut iterations = 0usize;
+    let mut time_to_first_tool_call_ms: Option<u64> = None;
     while let Some(event) = event_rx.recv().await {
-        if let AgentEvent::IterationComplete { iteration, .. } = event {
-            iterations = iteration;
+        match event {
+            AgentEvent::IterationComplete { iteration, .. } => iterations = iteration,
+            AgentEvent::ToolCallStart { .. } if time_to_first_tool_call_ms.is_none() => {
+                time_to_first_tool_call_ms = u64::try_from(started_at.elapsed().as_millis()).ok();
+            }
+            _ => {}
         }
     }
     let run_result = join_handle.await;
@@ -471,6 +478,7 @@ where
         iterations,
         latency_ms,
         completion_tokens,
+        time_to_first_tool_call_ms,
         detail,
     }
 }
@@ -638,6 +646,7 @@ mod tests {
             iterations: MIN_ITERATIONS_FOR_LOOP_RISK,
             latency_ms: 10,
             completion_tokens: None,
+            time_to_first_tool_call_ms: None,
             detail: None,
         }
     }
