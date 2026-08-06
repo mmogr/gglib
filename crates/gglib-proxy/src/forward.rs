@@ -54,9 +54,10 @@
 //! `NormalizationError` events surfaced by the parsers are logged via
 //! `tracing::warn` and never forwarded to the wire.
 //!
-//! Non-streaming responses are forwarded verbatim for now — the dialects
-//! we currently rewrite (Qwen XML tool calls, bare `<think>` tags) only
-//! manifest in streaming clients today.
+//! Non-streaming responses run through the same parser in one shot
+//! ([`gglib_core::normalize::normalize_chat_completion_body`]), so a
+//! `stream: false` client gets the same structured `tool_calls` a streaming
+//! client would.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -625,11 +626,9 @@ pub(crate) async fn forward_chat_completion(
         "upstream llama-server accepted request"
     );
 
-    // Non-streaming: read full response. Dialect normalization for
-    // non-streaming responses is intentionally deferred — the wire
-    // formats we currently rewrite (Qwen XML tool calls, bare <think>
-    // tags) only manifest in streaming clients today.
-    Ok(forward_non_streaming_response(response, &cache_metrics).await)
+    // Non-streaming: read the full response and run it through the same
+    // dialect normalization the streaming path applies.
+    Ok(forward_non_streaming_response(response, &cache_metrics, &context.tags).await)
 }
 
 /// Extract the `host:port` authority from an HTTP/HTTPS URL string.
@@ -890,10 +889,12 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
     Some((prompt_tokens, cached_tokens))
 }
 
-/// Forward a non-streaming JSON response from llama-server.
+/// Forward a non-streaming JSON response from llama-server, running the same
+/// dialect normalization the streaming path applies.
 pub(crate) async fn forward_non_streaming_response(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
+    model_tags: &[String],
 ) -> Response {
     // Collect upstream headers we want to preserve
     let content_type = response
@@ -912,6 +913,7 @@ pub(crate) async fn forward_non_streaming_response(
             if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
                 cache_metrics.record(prompt_tokens, cached_tokens);
             }
+            let body_bytes = normalize_non_streaming_body(body_bytes, model_tags);
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", content_type)
@@ -927,6 +929,44 @@ pub(crate) async fn forward_non_streaming_response(
                 .into_response()
         }
     }
+}
+
+/// Run dialect normalization over a buffered non-streaming body.
+///
+/// The same parser the streaming path uses, driven once over the complete
+/// content (`gglib_core::normalize::normalize_chat_completion_body`), so a
+/// `stream: false` client gets structured `tool_calls` instead of raw
+/// dialect markup. Parse failures forward the original bytes verbatim — a
+/// body we cannot read is a body we must not rewrite. Normalization errors
+/// get the same treatment as on the streaming path: logged, and the raw
+/// markup surfaced as visibly-flagged assistant text rather than silently
+/// dropped.
+fn normalize_non_streaming_body(body_bytes: Bytes, model_tags: &[String]) -> Bytes {
+    let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&body_bytes) else {
+        return body_bytes;
+    };
+
+    let errors = gglib_core::normalize::normalize_chat_completion_body(&mut parsed, model_tags);
+
+    for err in &errors {
+        warn!(?err, "normalization error in non-streaming response");
+    }
+    if !errors.is_empty()
+        && let Some(content) = parsed
+            .get_mut("choices")
+            .and_then(|c| c.get_mut(0))
+            .and_then(|c| c.get_mut("message"))
+            .and_then(|m| m.get_mut("content"))
+    {
+        let mut text = content.as_str().unwrap_or_default().to_owned();
+        for err in &errors {
+            text.push_str(NORMALIZATION_NOTICE_PREFIX);
+            text.push_str(&err.raw);
+        }
+        *content = serde_json::Value::String(text);
+    }
+
+    serde_json::to_vec(&parsed).map_or(body_bytes, Bytes::from)
 }
 
 #[cfg(test)]

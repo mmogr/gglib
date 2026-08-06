@@ -6,6 +6,7 @@
 //! |---|---|---|---|
 //! | 1 | Strip prior reasoning | [`super::messages`] | `messages` |
 //! | 2 | Coalesce for capabilities | [`super::messages`] | `messages` |
+//! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
 //! | 5 | Pin `cache_prompt` | [`super::sampling`] | top-level keys |
@@ -19,6 +20,8 @@
 //! **2 before 3.** Both stages 1 and 2 only ever shrink the body, and stage 3
 //! measures it. Truncating first would size its budget against bytes that were
 //! about to be discarded anyway, and trim history that did not need trimming.
+//! The same goes for stage 2b: a stripped tools array must not count against
+//! the truncation budget.
 //!
 //! **3 before 4.** Stage 3 measures the payload; stage 4 inserts up to seven
 //! sampling keys. Resolving sampling first would have truncation size its
@@ -53,7 +56,7 @@
 use serde_json::Value;
 
 use super::truncation::{TruncationError, TruncationReport};
-use super::{ModelContext, SamplingLayers, messages, sampling, truncation};
+use super::{ModelContext, SamplingLayers, messages, sampling, tools, truncation};
 
 /// Apply every request-shaping transform, in order, in place.
 ///
@@ -81,6 +84,7 @@ pub fn apply(
     budget_chars: Option<usize>,
 ) -> Result<TruncationReport, TruncationError> {
     messages::shape_messages(body, ctx);
+    tools::strip_unsupported_tools(body, ctx);
 
     let report = match budget_chars {
         Some(limit) => truncation::truncate_history(body, limit)?,

@@ -38,6 +38,13 @@ pub struct ModelContext {
     /// Maximum context the model supports, in tokens — the history-truncation
     /// budget for every surface that cannot measure a live serving context.
     pub context_length: Option<u64>,
+    /// Whether this context came from an actual catalog row.
+    ///
+    /// `false` for [`passthrough`](Self::passthrough) — the fallback for
+    /// unknown or unresolvable models. Transforms that act on the *absence*
+    /// of a capability (tool stripping) must check this: an empty bitfield on
+    /// a passthrough context means "nobody knows", not "the model can't".
+    pub catalog_resolved: bool,
 }
 
 impl ModelContext {
@@ -82,6 +89,7 @@ impl From<&ModelSummary> for ModelContext {
             inference_defaults: summary.inference_defaults.clone(),
             defaults_origin: summary.defaults_origin,
             context_length: summary.context_length,
+            catalog_resolved: true,
         }
     }
 }
