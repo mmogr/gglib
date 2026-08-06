@@ -160,12 +160,26 @@ Grab a build from the [Releases page](https://github.com/mmogr/gglib/releases)
 
 ```bash
 git clone https://github.com/mmogr/gglib.git && cd gglib
-make setup   # check deps → build frontend → install CLI → offer llama.cpp install
+make setup   # check deps → build frontend → install CLI → offer fast downloads + llama.cpp
 ```
 
 Requires Rust (pinned via `rust-toolchain.toml`), Node.js 20.19+, and a C++
 toolchain with CMake; `gglib config check-deps` prints your platform's exact
 install commands. llama.cpp itself is managed by GGLib — no separate install.
+
+### Faster downloads
+
+Model downloads run over plain HTTP by default, which always works. If you have
+Python, `gglib config fast-downloads enable` adds HuggingFace's `hf_xet`
+transfer, which is noticeably quicker on large GGUFs. `make setup` and
+`gglib up` both offer this, so you generally will not need to run it yourself.
+
+GGLib builds and owns a Python environment for this under its own data
+directory — it uses [uv](https://github.com/astral-sh/uv) when you have it and
+`venv` otherwise, and it finds an interpreter from `PATH`, conda, pyenv or uv.
+You do not have to activate anything, and nothing is installed outside that one
+directory. `gglib config fast-downloads status` says what is there;
+`disable` removes it and reverts to plain HTTP.
 
 ## Documentation
 

@@ -119,8 +119,12 @@ get_version() {
 #
 # Optional, not required: model downloads run natively over HTTP. Python only
 # enables the hf_xet accelerator, and only when the user opts in with
-# `gglib config check-deps --setup-fast-downloads`. A machine with no Python
-# must still pass this script.
+# `gglib config fast-downloads enable` (or by accepting the offer `make setup`
+# makes). A machine with no Python must still pass this script.
+#
+# Deliberately loose about where Python comes from: gglib searches PATH,
+# conda, pyenv and uv, so a hit here is a hint that the accelerator is
+# available, not the interpreter it will end up using.
 check_python() {
     local description="Optional: enables the hf_xet download accelerator"
     local cmd=""
