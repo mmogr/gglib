@@ -10,16 +10,24 @@ use gglib_axum::daemon::{DaemonLock, DaemonOptions, run_daemon};
 use gglib_core::{CorsConfig, DAEMON_PORT};
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.
-pub async fn run(share_lan: bool) -> Result<()> {
+pub async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
     let opts = if share_lan {
         print_share_lan_warning();
+        // The mDNS name is advertised below, so it is plainly a name this
+        // daemon answers to — nobody should have to repeat it as a flag.
+        let mut allowed_hosts = allowed_hosts;
+        allowed_hosts.push(mdns::LAN_HOSTNAME.into());
         DaemonOptions {
             host: "0.0.0.0".into(),
             cors: CorsConfig::AllowAll,
+            allowed_hosts,
             ..DaemonOptions::default()
         }
     } else {
-        DaemonOptions::default()
+        DaemonOptions {
+            allowed_hosts,
+            ..DaemonOptions::default()
+        }
     };
 
     // Registered just before the daemon binds; every mDNS failure is
@@ -127,8 +135,8 @@ fn print_share_lan_warning() {
     eprintln!();
     eprintln!("  \u{26a0}\u{fe0f}  LAN SHARING ENABLED (--share-lan)");
     eprintln!("     The daemon is reachable by every device on your network.");
-    eprintln!("     Its management API has NO authentication: anyone on the network");
-    eprintln!("     can download models and start or stop inference on this machine.");
-    eprintln!("     Only use this on networks you trust.");
+    eprintln!("     Its management API requires the API key printed below \u{2014} anyone");
+    eprintln!("     holding it can download models and start or stop inference on");
+    eprintln!("     this machine. Only use this on networks you trust.");
     eprintln!();
 }

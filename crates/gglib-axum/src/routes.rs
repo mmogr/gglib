@@ -6,12 +6,15 @@
 use axum::Json;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
+use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
+use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::access::{DaemonAccess, bearer_guard, host_guard};
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
@@ -291,16 +294,28 @@ fn config_routes() -> Router<AppState> {
         )
 }
 
-/// Create the main Axum router with all API routes.
+/// The router core shared by [`create_router`] and [`create_spa_router`]:
+/// `/health` plus `/api/*`, with CORS and (when a key is configured) the
+/// bearer guard scoped to `/api/*`.
 ///
-/// This creates the API routes only. For serving static assets,
-/// use [`create_spa_router`] which includes both API routes and
-/// static file serving with SPA fallback.
-///
-/// # Path Parameter Syntax
-/// Axum 0.8 uses brace syntax for path parameters: `{id}`, `{tag}`
-pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
+/// The Host guard is *not* applied here — each public constructor layers it
+/// last, after any fallback service, so it wraps everything the router will
+/// ever serve.
+fn base_router(state: AppState, cors_config: &CorsConfig, access: &Arc<DaemonAccess>) -> Router {
     let cors = build_cors_layer(cors_config);
+
+    let mut api = api_routes().with_state(state);
+    // The bearer layer exists only when a token is configured, so the
+    // unauthenticated loopback default costs nothing per request. /health
+    // stays outside the group: probes must not need credentials. CORS is
+    // layered *after* (outside) the bearer guard so preflight OPTIONS
+    // requests — which never carry Authorization — are answered by the CORS
+    // layer instead of dying on a 401.
+    if let Some(expected) = access.expected_authorization() {
+        let expected: Arc<str> = expected.into();
+        api = api.layer(middleware::from_fn_with_state(expected, bearer_guard));
+    }
+    let api = api.layer(cors);
 
     Router::new()
         // Intentionally placed outside the CORS layer — /health is a
@@ -309,7 +324,23 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         // The proxy server applies CORS globally (including /health) via a
         // router-level .layer(), but this Axum router scopes CORS to /api/* only.
         .route("/health", get(health_check))
-        .nest("/api", api_routes().with_state(state).layer(cors))
+        .nest("/api", api)
+}
+
+/// Create the main Axum router with all API routes.
+///
+/// This creates the API routes only. For serving static assets,
+/// use [`create_spa_router`] which includes both API routes and
+/// static file serving with SPA fallback.
+///
+/// `access` carries the Host allowlist (always enforced, on every route)
+/// and the optional bearer token (enforced on `/api/*` when set).
+///
+/// # Path Parameter Syntax
+/// Axum 0.8 uses brace syntax for path parameters: `{id}`, `{tag}`
+pub fn create_router(state: AppState, cors_config: &CorsConfig, access: Arc<DaemonAccess>) -> Router {
+    base_router(state, cors_config, &access)
+        .layer(middleware::from_fn_with_state(access, host_guard))
 }
 
 /// Create a router with API routes and static asset serving.
@@ -326,15 +357,18 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
 ///
 /// # Example
 /// ```no_run
-/// # use gglib_axum::{CorsConfig, state::AppState};
+/// # use std::sync::Arc;
+/// # use gglib_axum::{CorsConfig, DaemonAccess, state::AppState};
 /// # async fn example(state: AppState) {
-/// let router = gglib_axum::routes::create_spa_router(state, "./dist", &CorsConfig::AllowAll);
+/// let access = Arc::new(DaemonAccess::loopback());
+/// let router = gglib_axum::routes::create_spa_router(state, "./dist", &CorsConfig::AllowAll, access);
 /// # }
 /// ```
 pub fn create_spa_router<P: AsRef<Path>>(
     state: AppState,
     static_dir: P,
     cors_config: &CorsConfig,
+    access: Arc<DaemonAccess>,
 ) -> Router {
     let static_path = static_dir.as_ref();
     let index_path = static_path.join("index.html");
@@ -343,12 +377,12 @@ pub fn create_spa_router<P: AsRef<Path>>(
     // Using .fallback() on ServeDir makes it return index.html for missing files
     let serve_dir = ServeDir::new(static_path).fallback(ServeFile::new(&index_path));
 
-    // API routes (without fallback - they should 404 on unknown API paths)
-    let api = create_router(state, cors_config);
-
-    // Merge API routes with static serving as fallback
-    // API routes take priority, then fallback to static/SPA serving
-    api.fallback_service(serve_dir)
+    // Merge API routes with static serving as fallback, then wrap the whole
+    // thing — SPA assets included — in the Host guard. The layer must come
+    // after the fallback so a rebound page cannot even load the dashboard.
+    base_router(state, cors_config, &access)
+        .fallback_service(serve_dir)
+        .layer(middleware::from_fn_with_state(access, host_guard))
 }
 
 /// Health check endpoint.

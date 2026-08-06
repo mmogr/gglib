@@ -15,7 +15,7 @@ use crate::presentation::style;
 pub async fn execute(share_lan: bool) -> Result<()> {
     if share_lan {
         // Foreground, eyes-open LAN mode — identical to `daemon run --share-lan`.
-        return super::daemon::run(true).await;
+        return super::daemon::run(true, Vec::new()).await;
     }
 
     daemon_client::ensure_daemon().await?;

@@ -89,11 +89,21 @@ pub enum DaemonCommand {
         /// Expose the daemon on all LAN interfaces (0.0.0.0) and advertise
         /// it over mDNS
         ///
-        /// WARNING: the management API has no authentication — every device
-        /// on the network can control this machine's models. Only use on
+        /// The management API then requires a bearer token (the stored
+        /// API key, minted and printed at startup if none exists). It can
+        /// still start and stop inference on this machine — only use on
         /// networks you trust.
         #[arg(long)]
         share_lan: bool,
+
+        /// Accept this Host header value in addition to loopback and IP
+        /// literals (repeatable)
+        ///
+        /// The daemon refuses requests whose Host names a hostname it was
+        /// never told about — the DNS-rebinding guard. Name your DNS alias
+        /// here if you reach a shared daemon through one.
+        #[arg(long = "allowed-host", value_name = "HOST")]
+        allowed_host: Vec<String>,
     },
     /// Show whether the daemon is running, and what it is doing
     Status,
