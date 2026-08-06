@@ -73,7 +73,12 @@ async fn missing_host_is_rejected() {
     };
 
     let response = app
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -92,7 +97,10 @@ async fn loopback_stays_open_by_default() {
         assert_eq!(response.status(), StatusCode::OK, "{host} must be allowed");
     }
 
-    let response = app.oneshot(get("/api/servers", "127.0.0.1:9887")).await.unwrap();
+    let response = app
+        .oneshot(get("/api/servers", "127.0.0.1:9887"))
+        .await
+        .unwrap();
     assert_eq!(
         response.status(),
         StatusCode::OK,
@@ -104,8 +112,12 @@ async fn loopback_stays_open_by_default() {
 /// probes and health checks keep working.
 #[tokio::test]
 async fn configured_token_gates_api_but_not_health() {
-    let Some(app) =
-        build_app(DaemonAccess::new(Some("s3cret".into()), "0.0.0.0", Vec::new())).await
+    let Some(app) = build_app(DaemonAccess::new(
+        Some("s3cret".into()),
+        "0.0.0.0",
+        Vec::new(),
+    ))
+    .await
     else {
         return;
     };
@@ -115,14 +127,22 @@ async fn configured_token_gates_api_but_not_health() {
         .oneshot(get("/api/servers", "127.0.0.1:9887"))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "no token → 401");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "no token → 401"
+    );
 
     let mut wrong = get("/api/servers", "127.0.0.1:9887");
     wrong
         .headers_mut()
         .insert("authorization", "Bearer wrong".parse().unwrap());
     let response = app.clone().oneshot(wrong).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "wrong token → 401");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "wrong token → 401"
+    );
 
     let mut right = get("/api/servers", "127.0.0.1:9887");
     right
@@ -139,8 +159,12 @@ async fn configured_token_gates_api_but_not_health() {
 /// mDNS name, while still refusing foreign hostnames.
 #[tokio::test]
 async fn share_lan_policy_accepts_ip_literals_and_named_hosts() {
-    let Some(app) =
-        build_app(DaemonAccess::new(None, "0.0.0.0", vec!["gglib.local".into()])).await
+    let Some(app) = build_app(DaemonAccess::new(
+        None,
+        "0.0.0.0",
+        vec!["gglib.local".into()],
+    ))
+    .await
     else {
         return;
     };
@@ -150,6 +174,9 @@ async fn share_lan_policy_accepts_ip_literals_and_named_hosts() {
         assert_eq!(response.status(), StatusCode::OK, "{host} must be allowed");
     }
 
-    let response = app.oneshot(get("/health", "evil.example.com")).await.unwrap();
+    let response = app
+        .oneshot(get("/health", "evil.example.com"))
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }

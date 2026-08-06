@@ -317,7 +317,11 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
     // Host-guarded, tokenless: this entry point has no key resolution of its
     // own, so a non-loopback bind here relies on the allowlist alone. The
     // daemon path (`run_daemon`) is the one that resolves and mints keys.
-    let access = Arc::new(crate::access::DaemonAccess::new(None, &config.host, Vec::new()));
+    let access = Arc::new(crate::access::DaemonAccess::new(
+        None,
+        &config.host,
+        Vec::new(),
+    ));
 
     // Choose router based on whether static serving is configured
     let app = if let Some(ref static_dir) = config.static_dir {

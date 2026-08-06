@@ -338,7 +338,11 @@ fn base_router(state: AppState, cors_config: &CorsConfig, access: &Arc<DaemonAcc
 ///
 /// # Path Parameter Syntax
 /// Axum 0.8 uses brace syntax for path parameters: `{id}`, `{tag}`
-pub fn create_router(state: AppState, cors_config: &CorsConfig, access: Arc<DaemonAccess>) -> Router {
+pub fn create_router(
+    state: AppState,
+    cors_config: &CorsConfig,
+    access: Arc<DaemonAccess>,
+) -> Router {
     base_router(state, cors_config, &access)
         .layer(middleware::from_fn_with_state(access, host_guard))
 }
