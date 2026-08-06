@@ -31,11 +31,15 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     //    into args so the agent is composed with the correct parameters.
     let mut args = args.clone();
 
-    // Resolve max_iterations from persisted settings when the CLI flag wasn't provided.
-    if args.max_iterations.is_none()
-        && let Ok(settings) = ctx.app.settings().get().await
-    {
-        args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
+    // Resolve max_iterations and max_stagnation_steps from persisted settings
+    // when not already provided (there is no per-run stagnation flag).
+    if let Ok(settings) = ctx.app.settings().get().await {
+        if args.max_iterations.is_none() {
+            args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
+        }
+        if args.max_stagnation_steps.is_none() {
+            args.max_stagnation_steps = settings.max_stagnation_steps.map(|v| v as usize);
+        }
     }
 
     let (persistence, prior_messages) = if let Some(conv_id) = args.continue_id {

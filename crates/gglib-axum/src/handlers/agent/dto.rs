@@ -46,25 +46,31 @@ pub struct AgentRequestConfig {
     ///
     /// `Some([])` disables observation classification entirely.
     /// `None` (field absent) keeps the built-in defaults
-    /// (`["snapshot", "screenshot", "read_page"]`).
+    /// (`["snapshot", "screenshot", "read_page", "navigate", "click"]`).
     pub observation_tools: Option<Vec<String>>,
 
     /// Maximum repetitions of an observation-only batch before loop detection
     /// fires.
     ///
     /// Clamped to `MAX_OBSERVATION_STEPS_CEILING` (100) server-side.
-    /// `None` (field absent) keeps the built-in default of `10`.
+    /// `None` (field absent) keeps the built-in default of `15`.
     pub max_observation_steps: Option<usize>,
 }
 
-impl From<AgentRequestConfig> for AgentConfig {
-    fn from(req: AgentRequestConfig) -> Self {
+impl AgentRequestConfig {
+    /// Build the validated [`AgentConfig`] for this request.
+    ///
+    /// `max_stagnation_steps` comes from persisted settings, not the request —
+    /// it stays a server-side knob, consistent with this DTO's "safe subset"
+    /// policy of not exposing internal strike limits to untrusted callers.
+    pub(crate) fn into_agent_config(self, max_stagnation_steps: Option<usize>) -> AgentConfig {
         AgentConfig::from_user_params(
-            req.max_iterations,
-            req.max_parallel_tools,
-            req.tool_timeout_ms,
-            req.observation_tools,
-            req.max_observation_steps,
+            self.max_iterations,
+            self.max_parallel_tools,
+            self.tool_timeout_ms,
+            self.observation_tools,
+            self.max_observation_steps,
+            max_stagnation_steps,
         )
         .expect("clamped AgentConfig must pass validation")
     }

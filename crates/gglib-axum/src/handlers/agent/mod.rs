@@ -106,7 +106,19 @@ pub async fn chat(
     );
 
     let messages = req.messages;
-    let config: AgentConfig = req.config.unwrap_or_default().into();
+    // Stagnation threshold is a persisted server-side setting, not a request
+    // field; a settings-read failure falls back to the built-in default.
+    let max_stagnation_steps = state
+        .settings
+        .get()
+        .await
+        .ok()
+        .and_then(|s| s.max_stagnation_steps)
+        .map(|v| v as usize);
+    let config: AgentConfig = req
+        .config
+        .unwrap_or_default()
+        .into_agent_config(max_stagnation_steps);
 
     // Move the semaphore permit into the spawned task so it is held for the
     // full duration of the agent loop.  When the task completes (or is
