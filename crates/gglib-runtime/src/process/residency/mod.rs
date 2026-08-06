@@ -5,7 +5,7 @@ mod vram;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gglib_core::domain::SecondarySlotStatus;
+use gglib_core::domain::SecondarySlotDecision;
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     PinnedSpec, RunningTarget,
@@ -261,7 +261,7 @@ impl ResidentSet {
 
             match self
                 .queue
-                .poll(&queued.ticket, &|name| self.secondary_fits(name, &request))
+                .poll(&queued.ticket, self.secondary_verdict(&request))
             {
                 AdmissionDecision::Serve { slot } => {
                     if let Some(admission) = self.serve(slot, resolved_ctx, core).await {
@@ -292,29 +292,34 @@ impl ResidentSet {
         }
     }
 
-    /// Whether `name` may co-reside, recording the verdict for the dashboard.
+    /// Whether this request's model may co-reside in the second slot.
     ///
-    /// Only ever asked about the model this request is for; the closure takes a
-    /// name purely so the queue does not have to know what a launch request is.
-    fn secondary_fits(&self, name: &str, request: &LaunchRequest) -> bool {
-        if name != request.spec.name {
-            return false;
-        }
+    /// Judged against a free-VRAM reading taken now rather than at enqueue
+    /// time: the primary model may have finished loading since the request
+    /// queued, and a decision made against the earlier figure would be about a
+    /// machine that no longer exists. Re-computed on every poll tick, so the
+    /// verdict the queue acts on is at most one [`POLL_TICK`] old — on top of
+    /// the probe's own short-lived cache.
+    ///
+    /// Computed *before* [`AdmissionQueue::poll`] takes the queue's lock,
+    /// necessarily: the probe can block (it may fork `nvidia-smi`), and no
+    /// caller code may run inside the queue's critical section — a callback
+    /// version of this once re-entered the queue from under its own lock and
+    /// deadlocked the daemon (#721).
+    fn secondary_verdict(&self, request: &LaunchRequest) -> SecondarySlotDecision {
         let kv_types = crate::llama::args::resolve_kv_cache_types(
             request.opts.cache_type_k,
             request.opts.cache_type_v,
         );
         let decision = vram::secondary_slot_decision(&request.spec, kv_types, request.context.0);
-        self.queue
-            .record_secondary_status(SecondarySlotStatus::from_decision(decision));
         if !decision.is_grant() {
             debug!(
-                model = %name,
+                model = %request.spec.name,
                 verdict = decision.label(),
                 "second resident slot refused"
             );
         }
-        decision.is_grant()
+        decision
     }
 
     /// Serve from a model already resident in `slot`.
