@@ -163,8 +163,9 @@ mod tests {
     /// body becomes structured `tool_calls`, not raw text.
     #[test]
     fn qwen_tool_call_markup_becomes_structured_tool_calls() {
-        let mut body =
-            body_with_content(r#"<tool_call>{"name":"read_file","arguments":{"path":"a.rs"}}</tool_call>"#);
+        let mut body = body_with_content(
+            r#"<tool_call>{"name":"read_file","arguments":{"path":"a.rs"}}</tool_call>"#,
+        );
         let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
 
         assert!(errors.is_empty(), "{errors:?}");
@@ -182,9 +183,8 @@ mod tests {
     /// Text around the markup survives as content alongside the calls.
     #[test]
     fn surrounding_text_is_preserved() {
-        let mut body = body_with_content(
-            r#"On it. <tool_call>{"name":"ls","arguments":{}}</tool_call>"#,
-        );
+        let mut body =
+            body_with_content(r#"On it. <tool_call>{"name":"ls","arguments":{}}</tool_call>"#);
         let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
 
         assert!(errors.is_empty());
