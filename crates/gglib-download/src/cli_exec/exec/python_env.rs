@@ -30,6 +30,21 @@ const PY_HELPER_SOURCE: &str = include_str!(concat!(
 
 const ENV_MARKER_NAME: &str = ".gglib-hf-xet.json";
 
+/// Directory name of the managed environment, under its parent.
+const ENV_NAME: &str = "gglib-hf-xet";
+
+/// Parent directory of the managed environment, under the data root.
+const ENV_PARENT_DIR: &str = ".python";
+
+/// Where the environment used to live.
+///
+/// It was never a conda environment — [`PythonEnvironment::create_env`] has
+/// always built a plain venv — but it shipped under `.conda/`, which reads as a
+/// promise the code does not make. Existing installs have several hundred
+/// megabytes sitting at the old path, so [`resolve_env_directory`] keeps using
+/// it when it is there rather than silently rebuilding under the new name.
+const LEGACY_ENV_PARENT_DIR: &str = ".conda";
+
 const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
 
 #[cfg(target_os = "windows")]
@@ -533,7 +548,28 @@ async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupEr
 /// Get the directory for the Python environment.
 fn get_env_directory() -> Result<PathBuf, EnvSetupError> {
     let root = data_root().map_err(|e| EnvSetupError::DataRootFailed(e.to_string()))?;
-    Ok(root.join(".conda").join("gglib-hf-xet"))
+    Ok(resolve_env_directory(&root))
+}
+
+/// Pick the environment directory under `root`, preferring the current path.
+///
+/// Split from [`get_env_directory`] so the precedence is testable against a
+/// temp directory rather than the real data root. The legacy path wins only
+/// when it is the only one present: once an environment exists at the current
+/// path, that is the one every caller must agree on, including the
+/// file-existence check in [`fast_helper_provisioned`].
+fn resolve_env_directory(root: &Path) -> PathBuf {
+    let current = root.join(ENV_PARENT_DIR).join(ENV_NAME);
+    if current.exists() {
+        return current;
+    }
+
+    let legacy = root.join(LEGACY_ENV_PARENT_DIR).join(ENV_NAME);
+    if legacy.exists() {
+        return legacy;
+    }
+
+    current
 }
 
 /// Get the path for the helper script.
@@ -586,6 +622,45 @@ mod tests {
             requirements: vec!["different>=1.0.0".to_string()],
         };
         assert!(!marker.matches());
+    }
+
+    /// A fresh machine has neither directory: the current path is what gets
+    /// built, so it is what gets returned.
+    #[test]
+    fn resolve_env_directory_defaults_to_current_path() {
+        let root = tempfile::tempdir().expect("tempdir");
+
+        assert_eq!(
+            resolve_env_directory(root.path()),
+            root.path().join(ENV_PARENT_DIR).join(ENV_NAME)
+        );
+    }
+
+    /// An install that predates the rename keeps its environment. Rebuilding
+    /// it under the new name would re-download several hundred megabytes of
+    /// wheels to end up in exactly the same place.
+    #[test]
+    fn resolve_env_directory_keeps_a_legacy_environment() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let legacy = root.path().join(LEGACY_ENV_PARENT_DIR).join(ENV_NAME);
+        fs::create_dir_all(&legacy).expect("create legacy env");
+
+        assert_eq!(resolve_env_directory(root.path()), legacy);
+    }
+
+    /// Both present — which happens if a user provisions, downgrades, and
+    /// provisions again — has to resolve the same way for every caller, or
+    /// `fast_helper_provisioned` and the code that runs the interpreter would
+    /// disagree about which environment is live. Current wins.
+    #[test]
+    fn resolve_env_directory_prefers_current_over_legacy() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let current = root.path().join(ENV_PARENT_DIR).join(ENV_NAME);
+        fs::create_dir_all(&current).expect("create current env");
+        fs::create_dir_all(root.path().join(LEGACY_ENV_PARENT_DIR).join(ENV_NAME))
+            .expect("create legacy env");
+
+        assert_eq!(resolve_env_directory(root.path()), current);
     }
 
     #[test]

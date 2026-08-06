@@ -39,6 +39,9 @@ daemon.lock
 # Python
 .venv/
 venv/
+.python/
+# Legacy location of the managed hf_xet environment, still present on installs
+# that predate the rename.
 .conda/
 .gglib-runtime/
 __pycache__/

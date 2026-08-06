@@ -123,6 +123,7 @@ uninstall:
 		if [ -d src-tauri/gen ]; then rm -rf src-tauri/gen || true; fi; \
 		if [ -d .llama ]; then rm -rf .llama || true; fi; \
 		if [ -d .gglib-runtime ]; then rm -rf .gglib-runtime || true; fi; \
+		if [ -d .python ]; then rm -rf .python || true; fi; \
 		if [ -d .conda ]; then rm -rf .conda || true; fi; \
 		if [ -d pids ]; then rm -rf pids || true; fi; \
 		if [ -f package-lock.json ]; then rm -f package-lock.json || true; fi; \
