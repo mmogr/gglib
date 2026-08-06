@@ -331,6 +331,13 @@ async fn join_sink(
 pub(super) fn build_client() -> Client {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        // Bound connection establishment, but no overall request timeout:
+        // multi-GB bodies legitimately stream for hours.
+        .connect_timeout(std::time::Duration::from_secs(30))
+        // Sharded models fetch one file after another from the same hosts;
+        // keeping a few connections warm skips a TLS handshake per shard.
+        .pool_max_idle_per_host(4)
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
         .build()
         .expect("default reqwest client builds")
 }
