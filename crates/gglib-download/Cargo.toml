@@ -43,6 +43,8 @@ hf-hub.workspace = true
 # HTTP client (for API calls and the native download path)
 reqwest = { workspace = true }
 futures-util.workspace = true
+# Body chunk type handed over by reqwest's byte stream (native download sink)
+bytes = "1"
 
 # Checksum verification for downloaded files
 sha2.workspace = true

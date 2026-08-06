@@ -5,7 +5,7 @@
 //! bytes have been verified. This is the default download path — it needs
 //! nothing on the machine beyond the gglib binary itself.
 
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
@@ -13,12 +13,27 @@ use reqwest::header::{AUTHORIZATION, CONTENT_RANGE, HeaderMap, LOCATION, RANGE};
 use reqwest::{Client, Response, StatusCode, Url};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::cli_exec::ProgressCallback;
 
 /// Suffix for the in-progress file that sits beside the final destination.
 const PART_SUFFIX: &str = ".part";
+
+/// Write buffer in front of the `.part` file.
+///
+/// Hyper hands the body over in ~8-16 KB chunks; writing each one straight to
+/// the file costs a syscall per chunk. Batching them into 4 MB writes keeps
+/// the sink thread almost always idle in `blocking_recv`, waiting.
+const SINK_BUF_BYTES: usize = 4 * 1024 * 1024;
+
+/// Chunks buffered between the network loop and the sink thread.
+///
+/// Deep enough to ride out a disk-latency spike without stalling the socket,
+/// shallow enough that cancellation never waits on more than a few MB of
+/// backlog draining.
+const SINK_QUEUE_CHUNKS: usize = 32;
 
 /// The only header that carries the file's true SHA-256.
 ///
@@ -184,7 +199,7 @@ async fn stream_to_part(
 
     let total = total_size(response.headers(), start_at).or(req.expected_size);
 
-    let mut file = open_part(part_path, appending)?;
+    let file = open_part(part_path, appending)?;
     let mut hasher = expected.is_some().then(Sha256::new);
 
     // Resuming: the bytes already on disk are part of the digest, so replay them
@@ -195,6 +210,15 @@ async fn stream_to_part(
         }
     }
 
+    // Writes and hashing happen on a dedicated blocking thread, fed through a
+    // bounded channel, so network reads overlap disk I/O instead of
+    // serializing with it — and no async worker thread ever blocks on a
+    // syscall. Every exit path below drops `tx` and joins the sink, which
+    // flushes whatever arrived; on errors and cancellation that keeps the
+    // `.part` file resumable.
+    let (tx, rx) = mpsc::channel::<bytes::Bytes>(SINK_QUEUE_CHUNKS);
+    let mut sink = spawn_sink(file, hasher, rx);
+
     let mut downloaded = start_at;
     report(req.progress.as_ref(), downloaded, total);
 
@@ -204,7 +228,8 @@ async fn stream_to_part(
             tokio::select! {
                 biased;
                 () = cancel.cancelled() => {
-                    let _ = file.flush();
+                    drop(tx);
+                    let _ = sink.await;
                     return Err(NativeError::Cancelled);
                 }
                 chunk = stream.next() => chunk,
@@ -214,19 +239,27 @@ async fn stream_to_part(
         };
 
         let Some(chunk) = chunk else { break };
-        let chunk = chunk.map_err(|e| NativeError::Network(e.to_string()))?;
+        let chunk = match chunk {
+            Ok(chunk) => chunk,
+            Err(e) => {
+                drop(tx);
+                let _ = sink.await;
+                return Err(NativeError::Network(e.to_string()));
+            }
+        };
 
-        file.write_all(&chunk)
-            .map_err(|e| NativeError::io("write", &e))?;
-        if let Some(h) = hasher.as_mut() {
-            h.update(&chunk);
+        let len = chunk.len() as u64;
+        if tx.send(chunk).await.is_err() {
+            // The sink died; its join result carries the real I/O error.
+            break;
         }
 
-        downloaded += chunk.len() as u64;
+        downloaded += len;
         report(req.progress.as_ref(), downloaded, total);
     }
 
-    file.flush().map_err(|e| NativeError::io("flush", &e))?;
+    drop(tx);
+    let hasher = join_sink(&mut sink).await?;
 
     Ok(TransferOutcome {
         digest: hasher.map(|h| Digested {
@@ -234,6 +267,42 @@ async fn stream_to_part(
             actual: hex(&h.finalize()),
         }),
     })
+}
+
+/// The sink half of the transfer: a blocking thread that owns the `.part`
+/// file and the hasher, draining chunks the network loop sends it.
+///
+/// Returns the hasher once the channel closes and the buffer is flushed.
+fn spawn_sink(
+    file: std::fs::File,
+    mut hasher: Option<Sha256>,
+    mut rx: mpsc::Receiver<bytes::Bytes>,
+) -> tokio::task::JoinHandle<std::io::Result<Option<Sha256>>> {
+    tokio::task::spawn_blocking(move || {
+        let mut writer = BufWriter::with_capacity(SINK_BUF_BYTES, file);
+        while let Some(chunk) = rx.blocking_recv() {
+            writer.write_all(&chunk)?;
+            if let Some(h) = hasher.as_mut() {
+                h.update(&chunk);
+            }
+        }
+        writer.flush()?;
+        Ok(hasher)
+    })
+}
+
+/// Join the sink thread, mapping its two failure layers onto [`NativeError`].
+async fn join_sink(
+    sink: &mut tokio::task::JoinHandle<std::io::Result<Option<Sha256>>>,
+) -> Result<Option<Sha256>, NativeError> {
+    match sink.await {
+        Ok(Ok(hasher)) => Ok(hasher),
+        Ok(Err(e)) => Err(NativeError::io("write", &e)),
+        Err(e) => Err(NativeError::Io {
+            operation: "write".to_string(),
+            message: format!("sink thread panicked: {e}"),
+        }),
+    }
 }
 
 /// Build the HTTP client this module requires.
