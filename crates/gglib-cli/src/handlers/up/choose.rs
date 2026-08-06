@@ -84,6 +84,14 @@ async fn download_recommended(
         bail!("Cancelled. Nothing was downloaded.");
     }
 
+    // The user has just agreed to fetch several gigabytes, which is the moment
+    // the accelerator is worth the interruption and no earlier. Skipped
+    // entirely under `--yes`: that flag authorises the download, not building
+    // a Python environment, and the offer would have nobody to answer it.
+    if !yes {
+        offer_fast_downloads().await;
+    }
+
     let repo = rec.candidate.repo.to_string();
     let quant = rec.candidate.quantization.to_string();
     println!();
@@ -136,6 +144,25 @@ fn confirm() -> Result<bool> {
     require_tty("the download")?;
     println!();
     input::prompt_confirmation("Download this model now?")
+}
+
+/// Offer the download accelerator before the first download runs.
+///
+/// `up` is the path a user who installed a prebuilt binary takes, and they
+/// never see `make setup`. Without this the accelerator would stay invisible
+/// to almost everybody who is not building from a clone.
+///
+/// Infallible by construction: this is an optional extra offered in the middle
+/// of `up`'s five steps, and nothing it can do — declining, no Python, a
+/// failed install — is a reason not to go on and download the model.
+async fn offer_fast_downloads() {
+    if let Err(e) = crate::handlers::config::fast_downloads::dispatch(Some(
+        crate::config_commands::FastDownloadsCommand::Prompt,
+    ))
+    .await
+    {
+        tracing::debug!(error = %e, "skipping the fast-download offer");
+    }
 }
 
 /// Locate the model the download registered.

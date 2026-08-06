@@ -325,6 +325,10 @@ build-tauri:
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
+	@# Optional accelerator. The command already refuses to fail — it skips
+	@# without a terminal and reports a failed provision as a skipped step —
+	@# but setup must not break over an optional extra, so belt and braces.
+	@./target/release/gglib config fast-downloads prompt || true
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
 
