@@ -16,6 +16,7 @@ import type {
   SystemMemoryInfo,
   ModelsDirectoryInfo,
 } from '../../types/models';
+import type { SamplingExplanation } from '../../../../types';
 
 /**
  * List all local models.
@@ -47,6 +48,30 @@ export async function getModel(id: ModelId): Promise<GgufModel | null> {
 export async function getModelDetail(id: ModelId): Promise<ModelDetail | null> {
   try {
     return await get<ModelDetail>(`/api/models/${id}/detail`);
+  } catch (error) {
+    if (TransportError.hasCode(error, 'NOT_FOUND')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get a model's resolved sampling parameters and the layer that supplied each.
+ *
+ * `profile` names a configured inference profile to apply on top of the
+ * model's own defaults; an unknown name is a 400 from the server rather than a
+ * silent fall back to the unprofiled resolution.
+ *
+ * Returns null if the model is not found (instead of throwing).
+ */
+export async function explainModelSampling(
+  id: ModelId,
+  profile?: string,
+): Promise<SamplingExplanation | null> {
+  const query = profile ? `?profile=${encodeURIComponent(profile)}` : '';
+  try {
+    return await get<SamplingExplanation>(`/api/models/${id}/explain${query}`);
   } catch (error) {
     if (TransportError.hasCode(error, 'NOT_FOUND')) {
       return null;

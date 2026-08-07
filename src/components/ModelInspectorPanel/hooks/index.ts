@@ -5,6 +5,9 @@ export type { EditModeState } from './useEditMode';
 export { useModelDetail } from './useModelDetail';
 export type { ModelDetailState } from './useModelDetail';
 
+export { useSamplingExplanation } from './useSamplingExplanation';
+export type { SamplingExplanationState } from './useSamplingExplanation';
+
 export { useServeModal } from './useServeModal';
 export type { ServeModalState } from './useServeModal';
 

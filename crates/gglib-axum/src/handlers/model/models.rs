@@ -5,6 +5,7 @@ use axum::extract::{Path, Query, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_app_services::SamplingExplanationDto;
 use gglib_app_services::types::{
     AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
     UpdateModelRequest,
@@ -199,4 +200,31 @@ pub async fn detail(
     Path(id): Path<i64>,
 ) -> Result<Json<ModelDetailDto>, HttpError> {
     Ok(Json(state.models.get_detail(id).await?))
+}
+
+/// Query parameters for `GET /api/models/{id}/explain`.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct ExplainQueryParams {
+    /// Name of a configured inference profile to apply on top of the model's
+    /// own defaults. An unknown name is a 400 listing the configured ones,
+    /// not a silent fall back to the unprofiled resolution.
+    pub profile: Option<String>,
+}
+
+/// Resolved sampling parameters for a model, and which layer supplied each.
+///
+/// The HTTP equivalent of `gglib model explain`. Both surfaces call
+/// `ModelOps::explain_sampling`, so neither can describe a hierarchy that
+/// differs from the one the proxy actually resolves.
+pub async fn explain(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Query(params): Query<ExplainQueryParams>,
+) -> Result<Json<SamplingExplanationDto>, HttpError> {
+    Ok(Json(
+        state
+            .models
+            .explain_sampling(id, params.profile.as_deref())
+            .await?,
+    ))
 }

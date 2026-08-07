@@ -53,6 +53,78 @@ export interface InferenceProfile {
 }
 
 // ============================================================================
+// Sampling provenance
+// ============================================================================
+
+/**
+ * A rung of the resolution ladder, in priority order.
+ *
+ * Mirrors the backend `SamplingLayerDto`
+ * (`gglib-app-services/src/sampling_explain.rs`), which is the wire form of
+ * `gglib_core::domain::SamplingLayer`.
+ */
+export type SamplingLayerName =
+  | 'request'
+  | 'profile'
+  | 'modelUserSet'
+  | 'global'
+  | 'modelAutoDetected';
+
+/**
+ * What class of source supplied a resolved value.
+ *
+ * Mirrors the backend `ProvenanceKindDto`. `floorCoupled` is distinct from
+ * `floor`: it means a layer claimed `temperature` and this parameter is tuned
+ * against it, so lower layers were deliberately passed over rather than simply
+ * having nothing to say.
+ */
+export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset';
+
+/** The parameters that carry provenance — the keys of {@link InferenceConfig}. */
+export type SamplingParamKey =
+  | 'temperature'
+  | 'topP'
+  | 'topK'
+  | 'presencePenalty'
+  | 'repeatPenalty'
+  | 'minP'
+  | 'maxTokens';
+
+/**
+ * Where one resolved parameter's value came from.
+ *
+ * Mirrors the backend `ParamProvenanceDto`. `layer` is present only when
+ * `kind` is `'layer'`.
+ */
+export interface ParamProvenance {
+  /** The key this entry describes in {@link SamplingExplanation.resolved}. */
+  param: SamplingParamKey;
+  kind: ProvenanceKind;
+  layer?: SamplingLayerName;
+}
+
+/**
+ * A model's resolved sampling parameters and where each value came from —
+ * `GET /api/models/:id/explain`.
+ *
+ * Mirrors the backend `SamplingExplanationDto`. The values live in `resolved`
+ * rather than beside each provenance entry, so `sources[i].param` is a key
+ * into `resolved`.
+ */
+export interface SamplingExplanation {
+  /** The fully resolved configuration, after floors. */
+  resolved: InferenceConfig;
+  /** Per-parameter provenance, already in display order. */
+  sources: ParamProvenance[];
+  /** The profile applied, if one was named. */
+  profile?: string | null;
+  /** Whether the model carries the `reasoning` tag, which selects the floor. */
+  isReasoning: boolean;
+  /** Whether client-supplied sampling is trusted — a rung the table cannot show. */
+  trustClientSampling: boolean;
+}
+
+// ============================================================================
 // Server Configuration
 // ============================================================================
 

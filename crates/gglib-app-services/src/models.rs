@@ -11,6 +11,7 @@ use gglib_core::{
 };
 
 use crate::error::GuiError;
+use crate::sampling_explain::{self, SamplingExplanationDto};
 use crate::types::{
     AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
     UpdateModelRequest,
@@ -108,6 +109,39 @@ impl ModelOps {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (is_serving, port) = self.get_server_status(id).await;
         Ok(ModelDetailDto::from_model(model, is_serving, port))
+    }
+
+    /// Resolve a model's sampling parameters and report which layer supplied
+    /// each one.
+    ///
+    /// The shared data source for the CLI `model explain` command and the
+    /// `GET /api/models/:id/explain` route. `profile` names a configured
+    /// [`InferenceProfile`] to apply on top of the model's own defaults;
+    /// an unknown name is a [`GuiError::ValidationFailed`] rather than a
+    /// silent fall back to the unprofiled resolution.
+    ///
+    /// [`InferenceProfile`]: gglib_core::domain::InferenceProfile
+    pub async fn explain_sampling(
+        &self,
+        id: i64,
+        profile: Option<&str>,
+    ) -> Result<SamplingExplanationDto, GuiError> {
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let settings = self
+            .deps
+            .core
+            .settings()
+            .get()
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+
+        let selected = profile
+            .map(|name| {
+                sampling_explain::find_profile(name, settings.inference_profiles.as_deref())
+            })
+            .transpose()?;
+
+        Ok(sampling_explain::explain(&model, &settings, selected))
     }
 
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
@@ -324,6 +358,7 @@ mod tests {
 
     use super::*;
     use crate::error::GuiError;
+    use crate::sampling_explain::ProvenanceKindDto;
     use crate::test_support::test_core;
     use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
 
@@ -622,5 +657,141 @@ mod tests {
             cleared.server_defaults.is_none(),
             "explicit JSON null must clear server_defaults"
         );
+    }
+
+    // ── explain_sampling ──────────────────────────────────────────────────
+    //
+    // The resolution itself is covered in `sampling_explain`; these cover the
+    // wiring — model lookup, settings load, and profile selection.
+
+    /// Import a placeholder model and return its id.
+    async fn seed_model(ops: &ModelOps, dir: &tempfile::TempDir) -> i64 {
+        let gguf_path = dir.path().join("model.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+        ops.add(AddModelRequest {
+            file_path: gguf_path.to_str().unwrap().to_string(),
+        })
+        .await
+        .expect("add should succeed")
+        .id
+    }
+
+    fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
+        gglib_core::domain::InferenceProfile {
+            name: name.to_owned(),
+            description: None,
+            config: gglib_core::domain::InferenceConfig {
+                temperature: Some(temperature),
+                ..Default::default()
+            },
+            list_in_models: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn explain_sampling_falls_back_to_the_floor_when_nothing_is_stored() {
+        let core = test_core().await;
+        let ops = make_ops(Arc::clone(&core));
+        let dir = tempdir().unwrap();
+        let id = seed_model(&ops, &dir).await;
+
+        let dto = ops.explain_sampling(id, None).await.expect("explain");
+
+        assert_eq!(dto.resolved.temperature, Some(0.7));
+        assert!(dto.profile.is_none());
+        assert!(!dto.is_reasoning);
+        assert!(
+            dto.sources
+                .iter()
+                .all(|entry| entry.layer.is_none() && entry.kind != ProvenanceKindDto::Layer),
+            "no layer should have supplied anything: {:?}",
+            dto.sources
+        );
+    }
+
+    #[tokio::test]
+    async fn explain_sampling_unknown_id_returns_not_found() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+        let result = ops.explain_sampling(999, None).await;
+        assert!(
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "model",
+                    ..
+                })
+            ),
+            "expected NotFound, got {result:?}"
+        );
+    }
+
+    /// A named profile that does not exist is a caller error, not a reason to
+    /// answer a different question.
+    #[tokio::test]
+    async fn explain_sampling_unknown_profile_names_the_configured_ones() {
+        let core = test_core().await;
+        let ops = make_ops(Arc::clone(&core));
+        let dir = tempdir().unwrap();
+        let id = seed_model(&ops, &dir).await;
+
+        core.settings()
+            .update(gglib_core::SettingsUpdate {
+                inference_profiles: Some(Some(vec![profile("coding", 0.2)])),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let result = ops.explain_sampling(id, Some("codign")).await;
+        let Err(GuiError::ValidationFailed(message)) = result else {
+            panic!("expected ValidationFailed, got {result:?}");
+        };
+        assert!(message.contains("codign"), "{message}");
+        assert!(message.contains("coding"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn explain_sampling_applies_a_named_profile_over_global_settings() {
+        let core = test_core().await;
+        let ops = make_ops(Arc::clone(&core));
+        let dir = tempdir().unwrap();
+        let id = seed_model(&ops, &dir).await;
+
+        core.settings()
+            .update(gglib_core::SettingsUpdate {
+                inference_defaults: Some(Some(gglib_core::domain::InferenceConfig {
+                    temperature: Some(0.4),
+                    ..Default::default()
+                })),
+                inference_profiles: Some(Some(vec![profile("coding", 0.2)])),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let unprofiled = ops.explain_sampling(id, None).await.expect("explain");
+        assert_eq!(unprofiled.resolved.temperature, Some(0.4));
+
+        let profiled = ops
+            .explain_sampling(id, Some("coding"))
+            .await
+            .expect("explain");
+        assert_eq!(profiled.profile.as_deref(), Some("coding"));
+        assert_eq!(profiled.resolved.temperature, Some(0.2));
+    }
+
+    #[tokio::test]
+    async fn explain_sampling_reads_the_reasoning_tag_from_the_stored_model() {
+        let core = test_core().await;
+        let ops = make_ops(Arc::clone(&core));
+        let dir = tempdir().unwrap();
+        let id = seed_model(&ops, &dir).await;
+
+        ops.add_tag(id, "reasoning".to_owned()).await.unwrap();
+
+        let dto = ops.explain_sampling(id, None).await.expect("explain");
+        assert!(dto.is_reasoning);
+        assert_eq!(dto.resolved.presence_penalty, Some(1.0));
     }
 }

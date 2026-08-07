@@ -80,6 +80,10 @@ export interface ModelsTransport {
   listModels(): Promise<GgufModel[]>;
   getModel(id: ModelId): Promise<GgufModel | null>;
   getModelDetail(id: ModelId): Promise<ModelDetail | null>;
+  explainModelSampling(
+    id: ModelId,
+    profile?: string,
+  ): Promise<import('../../../types').SamplingExplanation | null>;
   addModel(params: AddModelParams): Promise<GgufModel>;
   removeModel(id: ModelId): Promise<void>;
   updateModel(params: UpdateModelParams): Promise<GgufModel>;
