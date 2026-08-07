@@ -15,12 +15,13 @@ interface SettingFieldProps {
    * The value this field falls back to when left empty, e.g. "4096".
    * Rendered as an explicit "Default: 4096" hint below the control.
    *
-   * Settings inputs start empty and only backfill from the server value
-   * when one has been explicitly set (see SettingsModal.tsx), so an unset
-   * field previously showed nothing but its HTML placeholder — visually
-   * identical to a field the user just hasn't typed in yet. This makes
-   * the fallback an explicit, always-visible fact instead of a value
-   * that vanishes the instant the field gains focus.
+   * This is the half of the story that survives: it stays put when the
+   * field takes focus, and it stays put once a value has been entered, so
+   * the fallback is still legible to someone deciding whether to clear the
+   * field. The control's own placeholder is the other half — it shows the
+   * same value in the box, where it can be typed over. Numeric fields get
+   * both, from one source, via NumberSettingField; a caller supplying its
+   * own control is responsible for its own placeholder.
    */
   defaultHint?: string;
   /** Additional description text, shown alongside the default hint. */
@@ -34,8 +35,8 @@ interface SettingFieldProps {
  *
  * GeneralSettings.tsx used to repeat this structure by hand for every
  * field with slightly different markup each time. Centralising it here
- * is also where the placeholder-as-default defect gets fixed once,
- * instead of once per field.
+ * gives every field the same label placement, control width, and
+ * hint row.
  */
 const controlWidthClasses = {
   xs: 'w-28',

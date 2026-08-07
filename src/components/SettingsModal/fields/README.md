@@ -4,7 +4,7 @@
 
 Single-responsibility field groups for the General Settings form, plus the `SettingField` primitive they're built on.
 
-`SettingField` renders one label / control / hint group and is where the placeholder-as-default problem is fixed once: settings inputs start empty and only backfill from the server when a value has been explicitly set, so an unset field previously showed nothing but its HTML placeholder — indistinguishable from a field the user hasn't typed in yet. `SettingField` accepts an explicit `defaultHint` and renders it as an always-visible "Default: 4096" line instead.
+`SettingField` renders one label / control / hint group. Settings inputs start empty and only backfill from the server when a value has been explicitly set, so a field's default has to be stated rather than inferred, and it is stated twice on purpose: `SettingField`'s `defaultHint` renders an always-visible "Default: 4096" line, and the control carries the same value as its placeholder. The hint survives focus and survives a value being entered; the placeholder sits in the box where it can be typed over. Numeric fields get both from a single `{default, min, max}` spec through `NumberSettingField` — a field that supplies its own control (the models directory, the title prompt) owns its placeholder itself.
 
 ## Key Files
 

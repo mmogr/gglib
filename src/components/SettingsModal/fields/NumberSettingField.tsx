@@ -51,6 +51,7 @@ export const NumberSettingField: FC<NumberSettingFieldProps> = ({
       type="number"
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      placeholder={spec.default}
       min={spec.min}
       max={spec.max}
       disabled={disabled}
