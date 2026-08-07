@@ -185,6 +185,10 @@ fn model_routes() -> Router<AppState> {
         // Returns ModelDetailDto — superset of GuiModel with raw GGUF metadata,
         // MoE topology, HuggingFace provenance, inference defaults, and timestamps.
         .route("/{id}/detail", get(handlers::model::models::detail))
+        // Sampling provenance: GET /api/models/{id}/explain[?profile=NAME]
+        // The resolved sampling parameters plus the layer that supplied each —
+        // the HTTP form of `gglib model explain`.
+        .route("/{id}/explain", get(handlers::model::models::explain))
         // Benchmark history for this model
         .route(
             "/{id}/benchmark",
