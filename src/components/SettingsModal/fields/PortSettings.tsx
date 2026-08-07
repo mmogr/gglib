@@ -1,5 +1,10 @@
 import { FC } from 'react';
 import { Input } from '../../ui/Input';
+import {
+  LLAMA_BASE_PORT,
+  MAX_DOWNLOAD_QUEUE_SIZE,
+  PROXY_PORT,
+} from '../../../constants/settingsDefaults';
 import { SettingField } from './SettingField';
 
 interface PortSettingsProps {
@@ -29,7 +34,7 @@ export const PortSettings: FC<PortSettingsProps> = ({
       id="proxy-port-input"
       label="Proxy Server Port"
       controlWidth="xs"
-      defaultHint="8080"
+      defaultHint={PROXY_PORT.default}
       description="Port for the OpenAI-compatible proxy server"
     >
       <Input
@@ -37,8 +42,8 @@ export const PortSettings: FC<PortSettingsProps> = ({
         type="number"
         value={proxyPortInput}
         onChange={(event) => setProxyPortInput(event.target.value)}
-        min="1024"
-        max="65535"
+        min={PROXY_PORT.min}
+        max={PROXY_PORT.max}
         disabled={saving}
       />
     </SettingField>
@@ -47,7 +52,7 @@ export const PortSettings: FC<PortSettingsProps> = ({
       id="server-port-input"
       label="Base Server Port"
       controlWidth="xs"
-      defaultHint="9000"
+      defaultHint={LLAMA_BASE_PORT.default}
       description="Starting port for llama-server instances"
     >
       <Input
@@ -55,8 +60,8 @@ export const PortSettings: FC<PortSettingsProps> = ({
         type="number"
         value={serverPortInput}
         onChange={(event) => setServerPortInput(event.target.value)}
-        min="1024"
-        max="65535"
+        min={LLAMA_BASE_PORT.min}
+        max={LLAMA_BASE_PORT.max}
         disabled={saving}
       />
     </SettingField>
@@ -65,16 +70,16 @@ export const PortSettings: FC<PortSettingsProps> = ({
       id="max-queue-size-input"
       label="Max Download Queue Size"
       controlWidth="xs"
-      defaultHint="10"
-      description="Maximum number of models that can be queued for download (1-50)"
+      defaultHint={MAX_DOWNLOAD_QUEUE_SIZE.default}
+      description={`Maximum number of models that can be queued for download (${MAX_DOWNLOAD_QUEUE_SIZE.min}-${MAX_DOWNLOAD_QUEUE_SIZE.max})`}
     >
       <Input
         id="max-queue-size-input"
         type="number"
         value={maxQueueSizeInput}
         onChange={(event) => setMaxQueueSizeInput(event.target.value)}
-        min="1"
-        max="50"
+        min={MAX_DOWNLOAD_QUEUE_SIZE.min}
+        max={MAX_DOWNLOAD_QUEUE_SIZE.max}
         disabled={saving}
       />
     </SettingField>

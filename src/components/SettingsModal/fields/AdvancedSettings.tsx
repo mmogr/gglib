@@ -7,6 +7,7 @@ import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { InferenceConfig } from '../../../types';
 import { Label } from '../../primitives';
+import { MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
 import { SettingField } from './SettingField';
 import { ToggleField } from './ToggleField';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
@@ -65,7 +66,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           id="max-tool-iterations-input"
           label="Max Tool Iterations"
           controlWidth="xs"
-          defaultHint="25"
+          defaultHint={MAX_TOOL_ITERATIONS.default}
           description="Maximum iterations for tool calling in agentic loop"
         >
           <Input
@@ -73,8 +74,8 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
             type="number"
             value={maxToolIterationsInput}
             onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-            min="1"
-            max="50"
+            min={MAX_TOOL_ITERATIONS.min}
+            max={MAX_TOOL_ITERATIONS.max}
             disabled={saving}
           />
         </SettingField>
