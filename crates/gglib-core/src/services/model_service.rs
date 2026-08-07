@@ -784,6 +784,7 @@ mod tests {
             crate::ports::GgufCapabilities {
                 flags: crate::domain::gguf::CapabilityFlags::empty(),
                 extensions,
+                dialect: None,
             }
         }
     }

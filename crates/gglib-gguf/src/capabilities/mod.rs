@@ -58,7 +58,11 @@ pub fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
         extensions.insert(format!("format:{fmt}"));
     }
 
-    GgufCapabilities { flags, extensions }
+    GgufCapabilities {
+        flags,
+        extensions,
+        dialect: None,
+    }
 }
 
 #[cfg(test)]

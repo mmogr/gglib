@@ -5,6 +5,7 @@ pub mod benchmark;
 pub mod cache_budget;
 pub mod capabilities;
 pub mod chat;
+pub mod dialect;
 pub mod gguf;
 pub mod inference;
 pub mod inference_profile;
@@ -98,10 +99,10 @@ pub use chat::{
 };
 
 // Re-export GGUF types at the domain level for convenience
-pub use gguf::{
-    CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata, ReasoningDetection,
-    ToolCallingDetection,
-};
+pub use gguf::{CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata};
+
+// Re-export dialect types at the domain level for convenience
+pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};
 
 // Re-export model-naming types at the domain level for convenience
 pub use model_naming::{
