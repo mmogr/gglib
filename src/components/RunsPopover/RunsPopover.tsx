@@ -48,7 +48,7 @@ const RunsPopover: FC<RunsPopoverProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute top-full right-0 mt-xs bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden" ref={popoverRef}>
+    <div className="absolute top-full right-0 mt-xs bg-surface-elevated rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden" ref={popoverRef}>
       <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
         <span className="text-sm font-semibold text-text">Running Servers</span>
         {onRefresh && (

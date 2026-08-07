@@ -129,7 +129,7 @@ export const UserMessageBubble: React.FC = () => {
   };
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-primary/10 border border-primary phone:ml-xl">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary-subtle phone:ml-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={UserIcon} size={18} />
@@ -150,9 +150,9 @@ export const UserMessageBubble: React.FC = () => {
           <Icon icon={Pencil} size={14} />
         </ActionBarPrimitive.Edit>
         <Button
-          variant="ghost"
+          variant="dangerGhost"
           size="sm"
-          className={cn(ACTION_BTN, 'hover:!bg-danger-subtle hover:!text-danger hover:!opacity-100')}
+          className={cn(ACTION_BTN, 'hover:opacity-100')}
           onClick={handleDelete}
           title="Delete message"
           aria-label="Delete message"
@@ -181,7 +181,7 @@ export const EditComposer: React.FC = () => {
   }).format(message.createdAt ?? new Date());
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary/10 border-2 border-primary phone:ml-xl">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary-subtle ring-2 ring-primary phone:ml-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={UserIcon} size={18} />
@@ -197,7 +197,7 @@ export const EditComposer: React.FC = () => {
           <ComposerPrimitive.Cancel className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-transparent border border-border text-text-muted hover:bg-surface-hover hover:text-text">
             Cancel
           </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
+          <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
             Save & Regenerate
           </ComposerPrimitive.Send>
         </div>

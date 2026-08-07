@@ -63,12 +63,9 @@ const Header: FC<HeaderProps> = ({
             <div className="relative">
               <Button
                 ref={runsButtonRef}
-                variant="secondary"
+                variant="ghost"
                 iconOnly
-                className={cn(
-                  'rounded-full relative',
-                  hasRunningServers && 'border-primary text-primary-light',
-                )}
+                className="rounded-full relative"
                 onClick={handleRunsClick}
                 disabled={!hasRunningServers}
                 aria-label={runsLabel}
@@ -76,7 +73,9 @@ const Header: FC<HeaderProps> = ({
               >
                 <Icon icon={Monitor} size={18} />
                 {hasRunningServers && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-success text-text-inverse text-2xs font-semibold flex items-center justify-center">
+                  // Neutral count chip; the green dot alone says "running".
+                  <span className="absolute -top-1 -right-1 h-[18px] px-1.5 rounded-full bg-surface-hover text-text text-2xs font-semibold flex items-center gap-1 shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden />
                     {serverCount}
                   </span>
                 )}
@@ -91,7 +90,7 @@ const Header: FC<HeaderProps> = ({
               />
             </div>
             <Button
-              variant="secondary"
+              variant="ghost"
               iconOnly
               className="rounded-full"
               onClick={onOpenSettings}
@@ -104,7 +103,7 @@ const Header: FC<HeaderProps> = ({
 
           {/* Mobile menu toggle */}
           <Button
-            variant="secondary"
+            variant="ghost"
             iconOnly
             className="flex md:hidden rounded-full"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -116,7 +115,7 @@ const Header: FC<HeaderProps> = ({
 
           {/* Mobile dropdown menu */}
           <div className={cn(
-            'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface-elevated border border-border rounded-lg shadow-lg z-dropdown',
+            'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface-elevated rounded-lg shadow-lg z-dropdown',
             isMobileMenuOpen && 'flex flex-col gap-xs',
           )}>
             <Button
