@@ -13,6 +13,18 @@ interface InferenceParametersFormProps {
 }
 
 /**
+ * DOM id for one parameter's control, so its label can point at it.
+ *
+ * Same `-description` convention as `SettingField`'s `settingDescriptionId`,
+ * spelled out here rather than imported: this form is a top-level component
+ * and has no business depending on the settings modal's internals.
+ */
+const paramId = (field: keyof InferenceConfig) => `inference-param-${field}`;
+
+/** DOM id for the caption below a parameter, referenced by `aria-describedby`. */
+const paramCaptionId = (field: keyof InferenceConfig) => `${paramId(field)}-description`;
+
+/**
  * Tristate inference parameters form.
  * 
  * Each parameter can be:
@@ -52,12 +64,14 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   ) => {
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
+    const inputId = paramId(field);
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.5rem]">
           <Input
+            id={inputId}
             type="number"
             value={isSet ? currentValue : ''}
             onChange={(e) => {
@@ -71,6 +85,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             disabled={disabled}
             size="sm"
             className="flex-1 max-w-[150px]"
+            aria-describedby={isSet ? undefined : paramCaptionId(field)}
           />
           {isSet && !disabled && (
             <IconButton
@@ -86,7 +101,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
           )}
         </div>
         {!isSet && (
-          <span className="text-xs text-text-muted italic">
+          <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
             Using default ({defaultHint})
           </span>
         )}
@@ -105,12 +120,14 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
     const displayValue = isSet ? currentValue : parseFloat(defaultHint);
+    const inputId = paramId(field);
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.75rem]">
           <input
+            id={inputId}
             type="range"
             value={displayValue}
             onChange={(e) => {
@@ -121,8 +138,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             step={step}
             disabled={disabled}
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
+            aria-describedby={paramCaptionId(field)}
           />
-          <span className="min-w-[100px] text-sm text-text tabular-nums">
+          <span id={paramCaptionId(field)} className="min-w-[100px] text-sm text-text tabular-nums">
             {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
           </span>
           {isSet && !disabled && (
