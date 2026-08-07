@@ -7,19 +7,21 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// The diff produced by [`ModelService::retag_model`] when at least one tag
-/// changed.
+/// or the dialect spec changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetagDiff {
     /// Tags that were newly added.
     pub added: Vec<String>,
     /// Tags that were removed (only non-empty on a `full = true` rebuild).
     pub removed: Vec<String>,
+    /// Whether the persisted dialect spec was rewritten.
+    pub spec_changed: bool,
 }
 
 impl RetagDiff {
-    /// Returns `true` if any tag was added or removed.
+    /// Returns `true` if any tag was added or removed, or the spec changed.
     pub const fn is_changed(&self) -> bool {
-        !self.added.is_empty() || !self.removed.is_empty()
+        !self.added.is_empty() || !self.removed.is_empty() || self.spec_changed
     }
 }
 
@@ -397,7 +399,23 @@ impl ModelService {
             metadata: model.metadata.clone(),
             ..Default::default()
         };
-        let new_tags = gguf_parser.detect_capabilities(&gguf_metadata).to_tags();
+        let caps = gguf_parser.detect_capabilities(&gguf_metadata);
+        let new_tags = caps.to_tags();
+
+        // Spec semantics mirror the tag semantics: additive mode only fills
+        // a missing spec, `--full` re-derives unconditionally — including
+        // clearing a spec that is no longer derivable.
+        let new_spec = caps.dialect;
+        let spec_changed = if full {
+            let changed = model.dialect_spec != new_spec;
+            model.dialect_spec = new_spec;
+            changed
+        } else if model.dialect_spec.is_none() && new_spec.is_some() {
+            model.dialect_spec = new_spec;
+            true
+        } else {
+            false
+        };
 
         let before: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
 
@@ -425,7 +443,7 @@ impl ModelService {
         model.tags.sort();
 
         let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
-        if after == before {
+        if after == before && !spec_changed {
             return Ok(None);
         }
 
@@ -433,6 +451,7 @@ impl ModelService {
         Ok(Some(RetagDiff {
             added: after.difference(&before).cloned().collect(),
             removed: before.difference(&after).cloned().collect(),
+            spec_changed,
         }))
     }
 }
@@ -491,6 +510,7 @@ mod tests {
             let mut models = self.models.lock().unwrap();
             let id = models.len() as i64 + 1;
             let created = Model {
+                dialect_spec: model.dialect_spec.clone(),
                 id,
                 name: model.name.clone(),
                 model_key: String::new(),
@@ -763,6 +783,7 @@ mod tests {
     /// Stub parser that emits a fixed capability set for retag tests.
     struct StubCapsParser {
         tags: Vec<String>,
+        spec: Option<crate::domain::DialectSpec>,
     }
 
     impl crate::ports::GgufParserPort for StubCapsParser {
@@ -784,7 +805,7 @@ mod tests {
             crate::ports::GgufCapabilities {
                 flags: crate::domain::gguf::CapabilityFlags::empty(),
                 extensions,
-                dialect: None,
+                dialect: self.spec.clone(),
             }
         }
     }
@@ -801,6 +822,7 @@ mod tests {
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
+            spec: None,
         };
         let diff = service
             .retag_model(created.id, &parser, false)
@@ -825,6 +847,7 @@ mod tests {
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
+            spec: None,
         };
         let diff = service
             .retag_model(created.id, &parser, false)
@@ -849,6 +872,7 @@ mod tests {
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
+            spec: None,
         };
         service
             .retag_model(created.id, &parser, true)
@@ -873,7 +897,10 @@ mod tests {
         let created = service.add(new_model).await.unwrap();
 
         // Detection no longer reports MTP support.
-        let parser = StubCapsParser { tags: Vec::new() };
+        let parser = StubCapsParser {
+            tags: Vec::new(),
+            spec: None,
+        };
         service
             .retag_model(created.id, &parser, true)
             .await
@@ -881,5 +908,89 @@ mod tests {
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(!tags.contains(&"mtp".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_fills_a_missing_spec() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo.clone());
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec!["format:qwen-xml".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+            spec: Some(crate::domain::DialectSpec::qwen_xml()),
+        };
+        let diff = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap()
+            .expect("spec fill must count as a change");
+        assert!(diff.spec_changed);
+        assert!(diff.added.is_empty() && diff.removed.is_empty());
+
+        let model = service.get_by_id(created.id).await.unwrap().unwrap();
+        assert_eq!(
+            model.dialect_spec,
+            Some(crate::domain::DialectSpec::qwen_xml())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_never_overwrites_an_existing_spec() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo.clone());
+
+        let derived = crate::domain::DialectSpec {
+            tool_open: "«TC»".to_string(),
+            tool_close: "«/TC»".to_string(),
+            ..crate::domain::DialectSpec::qwen_xml()
+        };
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.dialect_spec = Some(derived.clone());
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: Vec::new(),
+            spec: Some(crate::domain::DialectSpec::qwen_xml()),
+        };
+        let diff = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap();
+        assert!(diff.is_none(), "additive retag must not rewrite a spec");
+
+        let model = service.get_by_id(created.id).await.unwrap().unwrap();
+        assert_eq!(model.dialect_spec, Some(derived));
+    }
+
+    #[tokio::test]
+    async fn test_retag_full_rederives_and_can_clear_the_spec() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo.clone());
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.dialect_spec = Some(crate::domain::DialectSpec::qwen_xml());
+        let created = service.add(new_model).await.unwrap();
+
+        // Detection no longer derives a spec — full mode must clear it.
+        let parser = StubCapsParser {
+            tags: Vec::new(),
+            spec: None,
+        };
+        let diff = service
+            .retag_model(created.id, &parser, true)
+            .await
+            .unwrap()
+            .expect("clearing the spec is a change");
+        assert!(diff.spec_changed);
+
+        let model = service.get_by_id(created.id).await.unwrap().unwrap();
+        assert_eq!(model.dialect_spec, None);
     }
 }

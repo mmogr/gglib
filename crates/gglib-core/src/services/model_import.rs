@@ -115,9 +115,13 @@ pub fn build_new_model(
         ModelOrigin::HuggingFace(_) => gguf.and_then(|g| g.param_count_b).unwrap_or(0.0),
     };
 
-    let gguf_tags = gguf.map_or_else(Vec::new, |g| parser.detect_capabilities(g).to_tags());
+    let gguf_caps = gguf.map(|g| parser.detect_capabilities(g));
+    let gguf_tags = gguf_caps
+        .as_ref()
+        .map_or_else(Vec::new, crate::domain::GgufCapabilities::to_tags);
 
     let mut model = NewModel::new(name, file_path.to_path_buf(), param_count_b, added_at);
+    model.dialect_spec = gguf_caps.and_then(|c| c.dialect);
     model.architecture = gguf.and_then(|g| g.architecture.clone());
     model.context_length = gguf.and_then(|g| g.context_length);
     model.expert_count = gguf.and_then(|g| g.expert_count);
@@ -198,6 +202,29 @@ mod tests {
         }
     }
 
+    /// Stub parser whose detection reports a dialect spec.
+    struct SpecParser;
+
+    impl crate::ports::GgufParserPort for SpecParser {
+        fn parse(
+            &self,
+            _file_path: &Path,
+        ) -> std::result::Result<crate::ports::GgufMetadata, crate::ports::GgufParseError> {
+            Ok(crate::ports::GgufMetadata::default())
+        }
+
+        fn detect_capabilities(
+            &self,
+            _metadata: &crate::ports::GgufMetadata,
+        ) -> crate::ports::GgufCapabilities {
+            crate::ports::GgufCapabilities {
+                flags: crate::domain::gguf::CapabilityFlags::TOOL_CALLING,
+                extensions: std::collections::BTreeSet::new(),
+                dialect: Some(crate::domain::DialectSpec::qwen_xml()),
+            }
+        }
+    }
+
     fn hf_origin<'a>(repo_id: &'a str, hf_tags: &'a [String]) -> ModelOrigin<'a> {
         ModelOrigin::HuggingFace(HfOrigin {
             repo_id,
@@ -206,6 +233,41 @@ mod tests {
             quantization_fallback: Quantization::Q4KM,
             file_paths: None,
         })
+    }
+
+    #[test]
+    fn detected_dialect_spec_lands_on_the_model() {
+        let gguf = gguf_with(&[]);
+        let origin = ModelOrigin::LocalFile {
+            param_count_override: None,
+        };
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            Some(&gguf),
+            &SpecParser,
+            &origin,
+            Utc::now(),
+        );
+        assert_eq!(
+            model.dialect_spec,
+            Some(crate::domain::DialectSpec::qwen_xml())
+        );
+    }
+
+    /// An HF model whose GGUF could not be parsed has no metadata and can
+    /// never gain a spec — the permanent-fallback case retag cannot fix.
+    #[test]
+    fn missing_gguf_metadata_means_no_spec() {
+        let hf_tags: Vec<String> = vec![];
+        let origin = hf_origin("some/Repo-GGUF", &hf_tags);
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &SpecParser,
+            &origin,
+            Utc::now(),
+        );
+        assert_eq!(model.dialect_spec, None);
     }
 
     #[test]

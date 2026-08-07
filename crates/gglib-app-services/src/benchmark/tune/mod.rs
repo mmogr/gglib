@@ -786,6 +786,7 @@ mod tests {
 
     fn test_model(name: &str) -> Model {
         Model {
+            dialect_spec: None,
             id: 1,
             name: name.to_string(),
             model_key: String::new(),

@@ -227,6 +227,7 @@ mod tests {
     /// so the variants below build on this with struct-update syntax.
     fn model() -> Model {
         Model {
+            dialect_spec: None,
             id: 1,
             name: "test-model".to_owned(),
             model_key: String::new(),
@@ -462,6 +463,7 @@ mod tests {
             ..Settings::with_defaults()
         };
         let auto = Model {
+            dialect_spec: None,
             inference_defaults: Some(InferenceConfig {
                 temperature: Some(1.0),
                 ..Default::default()
@@ -479,6 +481,7 @@ mod tests {
         );
 
         let user = Model {
+            dialect_spec: None,
             defaults_origin: Some(DefaultsOrigin::User),
             ..auto
         };
@@ -496,6 +499,7 @@ mod tests {
     #[test]
     fn the_reasoning_tag_selects_the_reasoning_floor() {
         let reasoning = Model {
+            dialect_spec: None,
             tags: vec!["Reasoning".to_owned()],
             ..model()
         };
@@ -518,6 +522,7 @@ mod tests {
             },
         );
         let tuned = Model {
+            dialect_spec: None,
             inference_defaults: Some(InferenceConfig {
                 presence_penalty: Some(1.5),
                 ..Default::default()

@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -129,6 +129,14 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
         defaults_origin,
         server_defaults: row
             .try_get::<Option<String>, _>("server_defaults")
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
+        // Tolerant parse, like inference_defaults: a NULL column (legacy
+        // row) or unreadable JSON reads as "no spec" and the tag fallback
+        // applies downstream.
+        dialect_spec: row
+            .try_get::<Option<String>, _>("dialect_spec")
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),

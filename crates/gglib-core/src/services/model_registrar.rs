@@ -167,6 +167,7 @@ mod tests {
         async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
             let mut id = self.next_id.lock().unwrap();
             let persisted = Model {
+                dialect_spec: None,
                 id: *id,
                 name: model.name.clone(),
                 model_key: String::new(),

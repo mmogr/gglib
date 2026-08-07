@@ -130,6 +130,12 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        // Serialize dialect_spec if present
+        let dialect_spec_json = model
+            .dialect_spec
+            .as_ref()
+            .and_then(|spec| serde_json::to_string(spec).ok());
+
         // Compute model key for deduplication
         let model_key = compute_model_key(model);
 
@@ -145,8 +151,8 @@ impl ModelRepository for SqliteModelRepository {
                 name, file_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
@@ -159,6 +165,7 @@ impl ModelRepository for SqliteModelRepository {
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags,
                 capabilities = excluded.capabilities,
+                dialect_spec = excluded.dialect_spec,
                 inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
                 defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
             "#,
@@ -186,6 +193,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&inference_defaults_json)
         .bind(&defaults_origin_str)
         .bind(&server_defaults_json)
+        .bind(&dialect_spec_json)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -222,8 +230,13 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|cfg| serde_json::to_string(cfg).ok());
 
+        let dialect_spec_json = model
+            .dialect_spec
+            .as_ref()
+            .and_then(|spec| serde_json::to_string(spec).ok());
+
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ? WHERE id = ?"
         )
             .bind(&model.name)
             .bind(model.file_path.to_string_lossy().as_ref())
@@ -242,6 +255,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&inference_defaults_json)
             .bind(&defaults_origin_str)
             .bind(&server_defaults_json)
+            .bind(&dialect_spec_json)
             .bind(model.id)
             .execute(&self.pool)
             .await
@@ -362,6 +376,72 @@ mod tests {
         let repo = repo().await;
         let err = repo.delete(999).await.unwrap_err();
         assert!(matches!(err, RepositoryError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn dialect_spec_round_trips_through_insert_and_read() {
+        use gglib_core::domain::DialectSpec;
+        let repo = repo().await;
+        let mut model = make_model("Spec");
+        model.dialect_spec = Some(DialectSpec::qwen_xml());
+
+        let inserted = repo.insert(&model).await.unwrap();
+        assert_eq!(inserted.dialect_spec, Some(DialectSpec::qwen_xml()));
+
+        let fetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
+    }
+
+    /// Re-registering the same model overwrites the spec, like tags and
+    /// capabilities — a re-import re-derives, matching `retag --full`.
+    #[tokio::test]
+    async fn upsert_overwrites_the_dialect_spec() {
+        use gglib_core::domain::DialectSpec;
+        let repo = repo().await;
+
+        let mut first = make_model("Zeta");
+        first.dialect_spec = Some(DialectSpec::qwen_xml());
+        let inserted = repo.insert(&first).await.unwrap();
+        assert!(inserted.dialect_spec.is_some());
+
+        let second = make_model("Zeta"); // same model_key, no spec
+        let upserted = repo.insert(&second).await.unwrap();
+        assert_eq!(upserted.id, inserted.id, "same row, not a new one");
+        assert_eq!(upserted.dialect_spec, None, "spec overwritten on upsert");
+    }
+
+    /// Rows written before the column existed (or carrying garbage) read
+    /// as "no spec" — the tag fallback applies downstream.
+    #[tokio::test]
+    async fn unreadable_dialect_spec_reads_as_none() {
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Legacy")).await.unwrap();
+        assert_eq!(inserted.dialect_spec, None);
+
+        sqlx::query("UPDATE models SET dialect_spec = 'not json' WHERE id = ?")
+            .bind(inserted.id)
+            .execute(&repo.pool)
+            .await
+            .unwrap();
+        let fetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(fetched.dialect_spec, None);
+    }
+
+    #[tokio::test]
+    async fn update_persists_the_dialect_spec() {
+        use gglib_core::domain::DialectSpec;
+        let repo = repo().await;
+        let mut model = repo.insert(&make_model("Eta")).await.unwrap();
+
+        model.dialect_spec = Some(DialectSpec::qwen_xml());
+        repo.update(&model).await.unwrap();
+        let fetched = repo.get_by_id(model.id).await.unwrap();
+        assert_eq!(fetched.dialect_spec, Some(DialectSpec::qwen_xml()));
+
+        model.dialect_spec = None;
+        repo.update(&model).await.unwrap();
+        let fetched = repo.get_by_id(model.id).await.unwrap();
+        assert_eq!(fetched.dialect_spec, None, "update can clear the spec");
     }
 
     #[tokio::test]

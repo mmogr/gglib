@@ -258,6 +258,7 @@ mod tests {
 
     fn make_model(id: i64, name: &str, params: f64) -> Model {
         Model {
+            dialect_spec: None,
             id,
             name: name.to_string(),
             model_key: String::new(),
