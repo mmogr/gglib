@@ -7,8 +7,8 @@
  * mapping is directly testable.
  */
 
-import type { InferenceConfig, ParamProvenance, SamplingParamKey } from '../../../types';
-import { UNKNOWN } from '../../../utils/format';
+import type { InferenceConfig, ParamProvenance, SamplingParamKey } from '../types';
+import { UNKNOWN } from './format';
 
 /** Human-readable label per parameter, in the order the server sends them. */
 export const PARAM_LABELS: Record<SamplingParamKey, string> = {
