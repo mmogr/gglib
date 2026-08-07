@@ -22,6 +22,7 @@ mod downloads;
 mod mcp;
 mod models;
 mod proxy;
+mod sampling_explain;
 mod servers;
 mod service_graph;
 mod settings;
@@ -37,6 +38,9 @@ pub use downloads::{DownloadDeps, DownloadOps};
 pub use mcp::{McpDeps, McpOps};
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::{ProxyDeps, ProxyOps};
+pub use sampling_explain::{
+    ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
+};
 pub use servers::{ServerDeps, ServerOps};
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::{SettingsDeps, SettingsOps};
