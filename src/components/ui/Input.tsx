@@ -24,6 +24,30 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   rightIcon?: ReactNode;
 }
 
+const leftIconPadding: Record<InputSize, string> = {
+  sm: "pl-7",
+  base: "pl-9",
+  lg: "pl-10",
+};
+
+const rightIconPadding: Record<InputSize, string> = {
+  sm: "pr-7",
+  base: "pr-9",
+  lg: "pr-10",
+};
+
+const leftIconOffset: Record<InputSize, string> = {
+  sm: "left-2",
+  base: "left-3",
+  lg: "left-4",
+};
+
+const rightIconOffset: Record<InputSize, string> = {
+  sm: "right-2",
+  base: "right-3",
+  lg: "right-4",
+};
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   (
     {
@@ -32,20 +56,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       className = "",
       leftIcon,
       rightIcon,
-      style,
       ...props
     },
     ref
   ) => {
-    const hasLeftIcon = !!leftIcon;
-    const hasRightIcon = !!rightIcon;
-    
-    const paddingStyle = {
-      ...(hasLeftIcon && { paddingLeft: size === "sm" ? "1.75rem" : size === "lg" ? "2.5rem" : "2.25rem" }),
-      ...(hasRightIcon && { paddingRight: size === "sm" ? "1.75rem" : size === "lg" ? "2.5rem" : "2.25rem" }),
-      ...style,
-    };
-
     if (!leftIcon && !rightIcon) {
       return (
         <input
@@ -65,10 +79,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       <div className="relative w-full">
         {leftIcon && (
           <div
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-            style={{
-              left: size === "sm" ? "0.5rem" : size === "lg" ? "1rem" : "0.75rem",
-            }}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 text-text-muted pointer-events-none",
+              leftIconOffset[size],
+            )}
           >
             {leftIcon}
           </div>
@@ -79,17 +93,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             baseStyles,
             sizeStyles[size],
             variantStyles[variant],
+            leftIcon && leftIconPadding[size],
+            rightIcon && rightIconPadding[size],
             className,
           )}
-          style={paddingStyle}
           {...props}
         />
         {rightIcon && (
           <div
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-            style={{
-              right: size === "sm" ? "0.5rem" : size === "lg" ? "1rem" : "0.75rem",
-            }}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 text-text-muted pointer-events-none",
+              rightIconOffset[size],
+            )}
           >
             {rightIcon}
           </div>
