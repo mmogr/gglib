@@ -588,7 +588,7 @@ const PythonSetupStep: FC<{
               <p className="text-sm font-medium text-danger mb-1">Setup failed</p>
               <p className="text-xs text-text-secondary break-all mb-3">{setupError}</p>
               <Button
-                variant="danger"
+                variant="secondary"
                 size="sm"
                 onClick={handleSetup}
                 leftIcon={<Icon icon={RefreshCw} size={14} />}

@@ -564,7 +564,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
 
           {/* Run / Stop button */}
           <Button
-            variant={isRunning ? 'danger' : 'primary'}
+            variant={isRunning ? 'dangerGhost' : 'primary'}
             size="lg"
             fullWidth
             disabled={selectedModelIds.length === 0}

@@ -104,7 +104,7 @@ const ServerList: FC<ServerListProps> = ({
                 </div>
               </div>
               <Button
-                variant="danger"
+                variant="dangerGhost"
                 size="sm"
                 className={cn("shrink-0 !bg-transparent !border !border-border !text-text hover:!bg-danger hover:!border-danger hover:!text-white", compact ? "!p-xs" : "!py-xs !px-sm")}
                 onClick={(e) => handleStop(server.modelId, e)}

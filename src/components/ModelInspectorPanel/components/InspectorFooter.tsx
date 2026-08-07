@@ -44,7 +44,7 @@ export const InspectorFooter: FC<InspectorFooterProps> = ({
     ) : (
       <>
         <Button
-          variant={isRunning ? 'danger' : 'primary'}
+          variant={isRunning ? 'dangerGhost' : 'primary'}
           size="lg"
           onClick={onToggleServer}
           leftIcon={<Icon icon={isRunning ? Square : Rocket} size={16} />}
@@ -66,7 +66,7 @@ export const InspectorFooter: FC<InspectorFooterProps> = ({
             </Button>
           )}
           <Button
-            variant="danger"
+            variant="dangerGhost"
             onClick={onDelete}
             leftIcon={<Icon icon={Trash2} size={14} />}
           >

@@ -1,7 +1,7 @@
 import { forwardRef, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline" | "danger" | "success" | "warning" | "link";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "outline" | "danger" | "dangerGhost" | "link";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,16 +20,16 @@ const baseStyles =
 const variantStyles: Record<ButtonVariant, string> = {
   // Level 1 — Primary CTA. One per surface maximum.
   primary: "bg-primary text-text-inverse hover:bg-primary-hover",
-  // Level 2 — Default action. White-alpha fill lifts off any surface level.
-  secondary: "bg-white/5 border-border text-text hover:bg-white/10 hover:border-border-hover",
-  // Level 3 — Emphasis without fill. Stronger rest border than secondary, fills on hover.
+  // Level 2 — Default action. Borderless white-alpha fill lifts off any surface level.
+  secondary: "bg-white/5 text-text hover:bg-white/10",
+  // Level 3 — Emphasis without fill. The only bordered variant; fills on hover.
   outline: "bg-transparent border-border-hover text-text hover:bg-surface-elevated hover:border-primary",
   // Level 4 — Truly minimal. No border, no fill; only hover reveals the surface.
-  ghost: "bg-transparent text-text-secondary border-transparent hover:text-text hover:bg-surface-elevated",
-  // Semantic tints — soft warning state; reserves solid fills for destructive confirms.
-  danger: "bg-danger-subtle text-danger border-danger-border hover:bg-danger/20",
-  success: "bg-success-subtle text-success border-success-border hover:bg-success/20",
-  warning: "bg-warning-subtle text-warning border-warning-border hover:bg-warning/20",
+  ghost: "bg-transparent text-text-secondary hover:text-text hover:bg-surface-elevated",
+  // Solid destructive fill — confirm dialogs only. Everywhere else use dangerGhost.
+  danger: "bg-danger text-text-inverse hover:bg-danger-hover",
+  // Demoted destructive action — reveals intent on hover without spending red at rest.
+  dangerGhost: "bg-transparent text-text-muted hover:text-danger hover:bg-danger-subtle",
   // Inline text link — no background, no border.
   link: "bg-transparent text-primary h-auto p-0 hover:underline hover:text-primary-hover",
 };

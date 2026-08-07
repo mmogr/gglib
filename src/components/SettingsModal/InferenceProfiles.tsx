@@ -175,7 +175,7 @@ export const InferenceProfiles: FC = () => {
                   Edit
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="dangerGhost"
                   size="sm"
                   disabled={saving}
                   onClick={() => handleDelete(profile.name)}

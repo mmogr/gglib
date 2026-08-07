@@ -90,7 +90,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
               New
             </Button>
             <Button
-              variant="danger"
+              variant="dangerGhost"
               size="sm"
               onClick={onClose}
               title="Stop server and close chat"

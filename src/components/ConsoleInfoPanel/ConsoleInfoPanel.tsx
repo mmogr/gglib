@@ -290,7 +290,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           {/* Stop Server Button */}
           <section className="flex flex-col gap-sm mt-auto pt-md">
             <Button
-              variant="danger"
+              variant="dangerGhost"
               size="lg"
               onClick={handleStopServer}
               isLoading={isStopping}

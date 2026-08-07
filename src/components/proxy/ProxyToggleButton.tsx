@@ -34,7 +34,7 @@ export const ProxyToggleButton: FC<ProxyToggleButtonProps> = ({
 
   return (
     <Button
-      variant={running ? 'danger' : 'primary'}
+      variant={running ? 'dangerGhost' : 'primary'}
       className={className}
       onClick={running ? onStop : onStart}
       disabled={pending}

@@ -281,7 +281,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
                     <Button
                       type="button"
-                      variant="warning"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleAutoFix(info)}
                       disabled={isLoading}
@@ -324,7 +324,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                   )}
                   <Button
                     type="button"
-                    variant="danger"
+                    variant="dangerGhost"
                     size="sm"
                     onClick={() => handleRemove(info)}
                     disabled={isLoading || isRunning}
