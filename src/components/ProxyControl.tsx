@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, LayoutDashboard, Repeat2, Trash2 } from "lucide
 import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { formatError } from "../utils/errors";
 import { useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
 import { Icon } from "./ui/Icon";
@@ -73,7 +74,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
         default_context !== undefined ? { ...rest, default_context } : rest,
       );
     } catch (err) {
-      showToast(`Failed to start proxy: ${err}`, 'error');
+      showToast(`Failed to start proxy: ${formatError(err)}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -84,7 +85,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       setLoading(true);
       await getTransport().stopProxy();
     } catch (err) {
-      showToast(`Failed to stop proxy: ${err}`, 'error');
+      showToast(`Failed to stop proxy: ${formatError(err)}`, 'error');
     } finally {
       setLoading(false);
     }
