@@ -321,16 +321,19 @@ export const ServeModal: FC<ServeModalProps> = ({
 
         {/* Advanced: Inference Parameters */}
         <div className="mb-lg">
-          <button 
+          <Button
             type="button"
-            className="flex items-center gap-xs bg-transparent text-sm font-medium text-text-secondary hover:text-text cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            variant="ghost"
+            size="sm"
+            className="px-0 hover:bg-transparent"
             onClick={() => setShowAdvanced(!showAdvanced)}
             disabled={isServing}
+            aria-expanded={showAdvanced}
+            leftIcon={<Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />}
           >
-            <Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />
-            <span>Inference Parameters</span>
-            {hasInferenceOverrides && <span className="text-primary-light leading-none">•</span>}
-          </button>
+            Inference Parameters
+            {hasInferenceOverrides && <span className="ml-1 text-primary-light leading-none">•</span>}
+          </Button>
           {showAdvanced && (
             <div className="mt-sm">
               <p className="mt-sm mb-md text-sm text-text-secondary">

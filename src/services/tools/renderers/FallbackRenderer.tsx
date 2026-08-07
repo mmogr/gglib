@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '../../../components/ui/Button';
 import type { ToolResultRenderer } from '../types';
 
 const SUMMARY_MAX_LENGTH = 80;
@@ -35,8 +36,10 @@ export const JsonViewer: React.FC<{
 
   return (
     <div className="mb-2 last:mb-0">
-      <button
-        className="flex items-center gap-1.5 bg-transparent border-none py-1 cursor-pointer text-text-secondary text-sm text-left w-full hover:text-text"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-1.5 px-0 hover:bg-transparent"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
@@ -49,7 +52,7 @@ export const JsonViewer: React.FC<{
             {formattedJson.length > 50 ? `${formattedJson.substring(0, 50)}...` : formattedJson}
           </span>
         )}
-      </button>
+      </Button>
       {expanded && (
         <pre className="bg-background rounded-sm px-3 py-2 mt-1.5 overflow-x-auto font-mono text-xs text-text max-h-[200px] overflow-y-auto">
           {formattedJson}

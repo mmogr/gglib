@@ -4,6 +4,7 @@ import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
@@ -121,35 +122,54 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
             {searchQuery ? 'No matching conversations' : 'No conversations yet'}
           </div>
         ) : (
-          <div className="flex flex-col gap-sm">
+          <div role="listbox" aria-label="Conversations" className="flex flex-col">
             {filteredConversations.map((conversation) => (
-              <button
+              // A div, not a button: the delete control is nested inside, and
+              // interactive elements must not contain other interactive elements.
+              // Same no-layout-shift trick as the model list rows: the accent
+              // border is always present, transparent when idle.
+              <div
                 key={conversation.id}
-                type="button"
+                role="option"
+                aria-selected={conversation.id === activeConversationId}
+                tabIndex={0}
                 className={cn(
-                  "group/item flex justify-between items-center py-md px-base border border-border rounded-base bg-transparent text-inherit text-left cursor-pointer transition-all duration-200 hover:border-primary hover:bg-background-hover",
-                  conversation.id === activeConversationId && "border-primary bg-primary/10"
+                  "group/item flex justify-between items-center gap-sm py-sm px-md border-l-[3px] border-l-transparent text-left cursor-pointer transition-colors hover:bg-background-hover",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+                  conversation.id === activeConversationId && "border-l-primary bg-primary-subtle"
                 )}
                 onClick={() => onSelectConversation(conversation.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectConversation(conversation.id);
+                  }
+                }}
               >
                 <Stack gap="xs" className="min-w-0 flex-1">
-                  <span className="font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap">{conversation.title}</span>
-                  <span className="text-sm text-text-muted">
+                  <span
+                    className="font-medium text-sm text-text overflow-hidden text-ellipsis whitespace-nowrap"
+                    title={conversation.title}
+                  >
+                    {conversation.title}
+                  </span>
+                  <span className="text-xs text-text-muted">
                     {formatRelativeTime(conversation.updated_at)}
                   </span>
                 </Stack>
-                <button
-                  type="button"
-                  className="opacity-0 group-hover/item:opacity-100 border-0 bg-transparent text-text-muted cursor-pointer p-xs rounded-sm transition-all duration-200 shrink-0 hover:bg-danger/10 hover:text-danger"
+                <IconButton
+                  label="Delete conversation"
+                  size="sm"
+                  variant="dangerGhost"
+                  className="opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 shrink-0"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteConversation(conversation.id);
                   }}
-                  title="Delete conversation"
                 >
                   <Icon icon={X} size={12} />
-                </button>
-              </button>
+                </IconButton>
+              </div>
             ))}
           </div>
         )}

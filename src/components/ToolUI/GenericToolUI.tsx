@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
 import { ToolResultDisplay } from './ToolResultDisplay';
 import { formatToolDisplayName } from '../../services/tools/nameUtils';
@@ -75,8 +76,10 @@ const JsonViewer: React.FC<{
 
   return (
     <div className="mb-2 last:mb-0">
-      <button
-        className="flex items-center gap-1.5 bg-transparent border-none py-1 cursor-pointer text-text-secondary text-sm text-left w-full hover:text-text"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-1.5 px-0 hover:bg-transparent"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
@@ -91,7 +94,7 @@ const JsonViewer: React.FC<{
               : formattedJson}
           </span>
         )}
-      </button>
+      </Button>
       {expanded && (
         <pre className="bg-background rounded-sm px-3 py-2 mt-1.5 overflow-x-auto font-mono text-xs text-text max-h-[200px] overflow-y-auto">{formattedJson}</pre>
       )}

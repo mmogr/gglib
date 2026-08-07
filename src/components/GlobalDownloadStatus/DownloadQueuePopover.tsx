@@ -4,6 +4,7 @@ import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
 import { getTransport } from '../../services/transport';
 
 /**
@@ -167,24 +168,26 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
           >
             {/* Reorder buttons */}
             <div className="flex flex-col gap-[2px] shrink-0">
-              <button
-                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-sm text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
+              <IconButton
+                label="Move up in queue"
+                title="Move up"
+                size="sm"
+                className="h-5 w-5"
                 onClick={() => handleMoveUp(index)}
                 disabled={isProcessing || index === 0}
-                title="Move up"
-                aria-label="Move up in queue"
               >
-                <Icon icon={ChevronUp} size={16} />
-              </button>
-              <button
-                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-sm text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                <Icon icon={ChevronUp} size={14} />
+              </IconButton>
+              <IconButton
+                label="Move down in queue"
+                title="Move down"
+                size="sm"
+                className="h-5 w-5"
                 onClick={() => handleMoveDown(index)}
                 disabled={isProcessing || index === groupedItems.length - 1}
-                title="Move down"
-                aria-label="Move down in queue"
               >
-                <Icon icon={ChevronDown} size={16} />
-              </button>
+                <Icon icon={ChevronDown} size={14} />
+              </IconButton>
             </div>
             
             {/* Item info */}
@@ -202,14 +205,16 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             </div>
             
             {/* Cancel button */}
-            <button
-              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-xs transition-all duration-150 hover:not-disabled:bg-danger-subtle hover:not-disabled:text-danger hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+            <IconButton
+              label="Remove from queue"
+              size="sm"
+              variant="dangerGhost"
+              className="h-6 w-6 shrink-0"
               onClick={() => handleCancel(item)}
               disabled={isProcessing}
-              title="Remove from queue"
             >
               <Icon icon={X} size={14} />
-            </button>
+            </IconButton>
           </div>
         ))}
       </div>

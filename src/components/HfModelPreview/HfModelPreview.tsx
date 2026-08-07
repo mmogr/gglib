@@ -18,6 +18,8 @@ import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/f
 import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 import { cn } from '../../utils/cn';
 import { getTransport } from '../../services/transport';
 
@@ -194,14 +196,13 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       <div className="flex flex-col gap-sm pb-base border-b border-border">
         <div className="flex items-center justify-between gap-md">
           <h2 className="m-0 text-xl font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap flex-1">{model.name}</h2>
-          <button
-            className="shrink-0 bg-transparent border-none text-xl cursor-pointer px-sm py-xs rounded-base transition-colors duration-150 ease-linear hover:bg-surface-hover"
+          <IconButton
+            label="Open on HuggingFace"
+            className="shrink-0"
             onClick={handleOpenHuggingFace}
-            title="Open on HuggingFace"
-            aria-label="Open on HuggingFace"
           >
             <Icon icon={ExternalLink} size={16} />
-          </button>
+          </IconButton>
         </div>
         <div className="text-sm text-text-secondary">by {model.author || model.id.split('/')[0]}</div>
         
@@ -300,14 +301,14 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
                     </span>
                   )}
                   <span className="text-right">
-                    <button
-                      className="px-md py-xs text-xs font-medium text-text-inverse bg-primary border-none rounded-base cursor-pointer transition-[background-color,opacity] duration-150 ease-linear hover:not-disabled:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                    <Button
+                      size="sm"
                       onClick={() => handleDownload(quant)}
                       disabled={downloadsDisabled}
                       title={downloadsDisabled ? disabledReason : `Download ${quant.name}`}
                     >
                       Download
-                    </button>
+                    </Button>
                   </span>
                 </div>
               ))}

@@ -6,6 +6,7 @@ import type { QueueRunSummary } from '../../services/transport/types/events';
 import { formatBytes, formatDuration, formatRate } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 
@@ -119,9 +120,9 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               {totalAttempts} total attempts
             </div>
           )}
-          <button className="self-end bg-success-subtle text-success border border-success-border rounded-base px-[1.25rem] py-[0.4rem] text-sm font-semibold cursor-pointer transition-all hover:bg-success/20" onClick={onDismissSummary}>
+          <Button variant="secondary" size="sm" className="self-end" onClick={onDismissSummary}>
             OK
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -175,13 +176,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             )}
           </div>
           {currentId && (
-            <button 
-              className="bg-danger-subtle text-danger border border-danger-border rounded-base px-[0.75rem] py-[0.3rem] text-sm font-medium cursor-pointer transition-all hover:bg-danger/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            <Button
+              variant="dangerGhost"
+              size="sm"
               onClick={() => onCancel(currentId)}
               disabled={isCancelling}
             >
               {isCancelling ? 'Cancelling...' : 'Cancel'}
-            </button>
+            </Button>
           )}
         </div>
 

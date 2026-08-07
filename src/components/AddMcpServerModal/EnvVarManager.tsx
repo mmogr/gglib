@@ -2,6 +2,7 @@ import { FC } from "react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Icon } from "../ui/Icon";
+import { IconButton } from "../ui/IconButton";
 import { Plus, X } from "lucide-react";
 import { Stack, Label } from '../primitives';
 
@@ -60,15 +61,16 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
                 placeholder="value"
                 disabled={disabled}
               />
-              <button
-                type="button"
-                className="flex items-center justify-center w-6 h-6 bg-none border-none text-xl text-text-muted cursor-pointer rounded-sm hover:bg-danger-subtle hover:text-danger"
+              <IconButton
+                label="Remove variable"
+                size="sm"
+                variant="dangerGhost"
+                className="h-6 w-6"
                 onClick={() => onRemove(index)}
                 disabled={disabled}
-                aria-label="Remove variable"
               >
                 <Icon icon={X} size={14} />
-              </button>
+              </IconButton>
             </div>
           ))}
         </div>

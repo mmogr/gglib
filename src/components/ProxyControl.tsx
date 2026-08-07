@@ -95,9 +95,10 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
+  // Neutral trigger: running state reads from the green dot, not a filled pill.
   const buttonClasses = cn(
-    buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-surface-elevated border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all relative hover:bg-surface-hover hover:border-border-hover',
-    proxyState.running && (buttonActiveClassName ?? 'bg-success-subtle border-success-border text-success'),
+    buttonClassName ?? 'gap-sm px-md relative',
+    proxyState.running && (buttonActiveClassName ?? 'text-text'),
   );
 
   const dotClasses = cn(
@@ -107,17 +108,18 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   return (
     <div className="relative inline-flex" ref={dropdownRef}>
-      <button
+      <Button
+        variant="ghost"
         className={buttonClasses}
         onClick={() => setIsOpen(!isOpen)}
         type="button"
       >
-        <span className="proxy-icon" aria-hidden>
+        <span aria-hidden>
           <Icon icon={Repeat2} size={16} />
         </span>
-        <span className="proxy-label">Proxy</span>
+        <span>Proxy</span>
         {proxyState.running && <span className={dotClasses}></span>}
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-background-overlay rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">

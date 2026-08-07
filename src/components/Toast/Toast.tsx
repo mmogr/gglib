@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
 import { cn } from '../../utils/cn';
 import { useToastTimer } from '../../hooks/useToastTimer';
 
@@ -73,13 +74,14 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
         <Icon icon={icon} size={16} />
       </span>
       <span className="flex-1 text-text leading-[1.4]">{toast.message}</span>
-      <button
-        className="bg-transparent border-none text-text-muted text-lg cursor-pointer p-0 leading-none opacity-70 transition-opacity duration-200 ease-out shrink-0 hover:opacity-100"
-        aria-label="Dismiss notification"
+      <IconButton
+        label="Dismiss notification"
+        size="sm"
         onClick={handleDismiss}
+        className="shrink-0"
       >
         <Icon icon={X} size={14} />
-      </button>
+      </IconButton>
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { cn } from '../../../utils/cn';
 import { Input } from '../../ui/Input';
+import { Button } from '../../ui/Button';
 import type { ModelsDirectoryInfo } from '../../../types';
 import { SettingField } from './SettingField';
 
@@ -30,13 +31,9 @@ export const PathSettings: FC<PathSettingsProps> = ({
     description={sourceDescription}
     action={
       info?.defaultPath && (
-        <button
-          type="button"
-          className="bg-none border-none text-primary cursor-pointer text-sm underline p-0"
-          onClick={onReset}
-        >
+        <Button type="button" variant="link" size="sm" onClick={onReset}>
           Reset to defaults
-        </button>
+        </Button>
       )
     }
   >

@@ -5,6 +5,7 @@ import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
+import { IconButton } from '../ui/IconButton';
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
@@ -134,13 +135,14 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                   </option>
                 ))}
               </Select>
-              <button
-                className="shrink-0 px-[0.65rem] py-2 bg-surface-elevated border border-border rounded-base text-text-secondary text-base cursor-pointer transition-all duration-150 ease-linear leading-none hover:bg-surface-hover hover:text-text hover:border-border-hover"
+              <IconButton
+                label={sortAscending ? "Ascending" : "Descending"}
+                variant="secondary"
+                className="shrink-0"
                 onClick={() => setSortAscending(!sortAscending)}
-                title={sortAscending ? "Ascending" : "Descending"}
               >
                 <Icon icon={sortAscending ? ArrowUp : ArrowDown} size={14} />
-              </button>
+              </IconButton>
             </Row>
           </Stack>
         </Row>
@@ -197,13 +199,15 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             {/* Load More Button */}
             {hasMore && (
               <div className="p-4 flex justify-center">
-                <button
-                  className="px-6 py-[0.6rem] bg-surface-elevated border border-border rounded-lg text-text font-medium cursor-pointer transition-all duration-200 ease-linear hover:not-disabled:bg-surface-hover hover:not-disabled:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                <Button
+                  variant="secondary"
+                  size="lg"
                   onClick={handleLoadMore}
                   disabled={loadingMore}
+                  isLoading={loadingMore}
                 >
-                  {loadingMore ? "Loading..." : "Load More"}
-                </button>
+                  Load More
+                </Button>
               </div>
             )}
           </Stack>
