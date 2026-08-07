@@ -11,6 +11,7 @@ Single-responsibility field groups for the General Settings form, plus the `Sett
 | File | Role |
 |------|------|
 | `SettingField.tsx` | Label + control + hint/default/action row |
+| `NumberSettingField.tsx` | `SettingField` plus the number input itself, wired to a `{default, min, max}` spec from `src/constants/settingsDefaults.ts`; every numeric setting renders through it |
 | `ToggleField.tsx` | Checkbox + bold label + explanatory paragraph; every boolean setting renders through it |
 | `PathSettings.tsx` | Models directory field and its exists/writable status pills |
 | `ModelDefaults.tsx` | Default context size and default model selector |

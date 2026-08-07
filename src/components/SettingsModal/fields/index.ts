@@ -1,4 +1,5 @@
 export { SettingField } from './SettingField';
+export { NumberSettingField } from './NumberSettingField';
 export { ToggleField } from './ToggleField';
 export { DesktopSettings } from './DesktopSettings';
 export { PathSettings } from './PathSettings';
