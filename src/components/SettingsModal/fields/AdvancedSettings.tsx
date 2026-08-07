@@ -98,6 +98,9 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           value={inferenceDefaultsInput}
           onChange={setInferenceDefaultsInput}
           disabled={saving}
+          // The bottom of the ladder: nothing sits between these and the
+          // hardcoded floor, so the floor is what an empty field falls to.
+          fallback={{ kind: 'floor' }}
         />
         <p className="text-text-secondary text-sm">
           Default inference parameters for all models. Can be overridden per-model in the model

@@ -6,6 +6,7 @@ import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
+import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
 import type { GgufModel, AppSettings, InferenceConfig } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
 
@@ -68,6 +69,11 @@ export const ServeModal: FC<ServeModalProps> = ({
   const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
   const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // What this model's parameters resolve to before this session overrides
+  // anything, so an empty field can name the value and layer it will inherit.
+  // Session overrides live only in this modal, so nothing here invalidates it.
+  const resolution = useSamplingExplanation(model.id, null);
 
   // Check if any inference params are set (for visual indicator)
   const hasInferenceOverrides = inferenceParams && Object.values(inferenceParams).some(v => v != null);
@@ -329,12 +335,13 @@ export const ServeModal: FC<ServeModalProps> = ({
           {showAdvanced && (
             <div className="mt-sm">
               <p className="mt-sm mb-md text-sm text-text-secondary">
-                Override sampling parameters for this session. Leave empty to use model or global defaults.
+                Override sampling parameters for this session.
               </p>
               <InferenceParametersForm
                 value={inferenceParams}
                 onChange={onInferenceParamsChange}
                 disabled={isServing}
+                fallback={{ kind: 'resolved', ownLayer: 'request', resolution }}
               />
             </div>
           )}

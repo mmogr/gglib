@@ -6,12 +6,19 @@ import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
+import { type InferenceFallback, fallbackCaption, fallbackValue } from './fallbackCaption';
 import './InferenceParametersForm.css';
 
 interface InferenceParametersFormProps {
   value: InferenceConfig | undefined | null;
   onChange: (newValue: InferenceConfig) => void;
   disabled?: boolean;
+  /**
+   * What an empty field on this surface falls through to. Required: a surface
+   * that does not say which rung it edits would otherwise inherit a caption
+   * describing somebody else's.
+   */
+  fallback: InferenceFallback;
 }
 
 /**
@@ -34,13 +41,16 @@ const paramCaptionId = (field: SamplingParamKey) => `${paramId(field)}-descripti
  * - null (explicitly cleared)
  * - number (explicitly set)
  * 
- * When a field is undefined/null, it shows placeholder text indicating the default.
- * A reset button appears when a value is explicitly set, allowing users to clear it.
+ * An empty field is captioned with what it will actually fall through to on
+ * this surface — see `fallbackCaption`, which is where the difference between
+ * the three surfaces lives. A reset button appears when a value is explicitly
+ * set, allowing users to clear it.
  */
 export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   value,
   onChange,
   disabled = false,
+  fallback,
 }) => {
   const config = useMemo(() => value || {}, [value]);
 
@@ -57,11 +67,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   }, [config, onChange]);
 
   const renderNumberInput = (field: SamplingParamKey) => {
-    const { default: fallback, min, max, step } = INFERENCE_PARAMS[field];
+    const { min, max, step } = INFERENCE_PARAMS[field];
     const label = PARAM_LABELS[field];
-    // A parameter the floor leaves unset has no number to offer — no
-    // placeholder to type over, and nothing to name in the caption.
-    const defaultHint = fallback === null ? null : formatParamValue(field, fallback);
+    // What the field will actually take if left empty — not necessarily the
+    // floor. Null when nothing applies (Max Tokens) or nothing is known yet.
+    const inherited = fallbackValue(field, fallback);
+    const placeholder = inherited === null ? undefined : formatParamValue(field, inherited);
+    const caption = fallbackCaption(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
     const inputId = paramId(field);
@@ -78,14 +90,14 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
               const val = e.target.value;
               updateField(field, val === '' ? undefined : Number(val));
             }}
-            placeholder={defaultHint ?? undefined}
+            placeholder={placeholder}
             min={min}
             max={max}
             step={step}
             disabled={disabled}
             size="sm"
             className="flex-1 max-w-[150px]"
-            aria-describedby={isSet ? undefined : paramCaptionId(field)}
+            aria-describedby={!isSet && caption ? paramCaptionId(field) : undefined}
           />
           {isSet && !disabled && (
             <IconButton
@@ -100,11 +112,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             </IconButton>
           )}
         </div>
-        {!isSet && (
+        {!isSet && caption && (
           <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
-            {defaultHint === null
-              ? 'No limit — generates until the context is full'
-              : `Using default (${defaultHint})`}
+            {caption}
           </span>
         )}
       </div>
@@ -112,13 +122,15 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   };
 
   const renderSlider = (field: SamplingParamKey) => {
-    const { default: fallback, min, max, step } = INFERENCE_PARAMS[field];
+    const { min, max, step } = INFERENCE_PARAMS[field];
     const label = PARAM_LABELS[field];
+    const caption = fallbackCaption(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
-    // Every slider parameter has a floor; `?? min` only satisfies the type,
-    // which is nullable for Max Tokens' sake — and that one is a number input.
-    const displayValue = isSet ? currentValue : (fallback ?? min);
+    // An unset thumb sits on the value that will actually apply, so it agrees
+    // with the caption beside it. `?? min` covers the one case neither knows:
+    // a value cleared from this very layer, not yet re-resolved.
+    const displayValue = isSet ? currentValue : (fallbackValue(field, fallback) ?? min);
     const inputId = paramId(field);
 
     return (
@@ -137,10 +149,12 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             step={step}
             disabled={disabled}
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
-            aria-describedby={paramCaptionId(field)}
+            aria-describedby={!isSet && caption ? paramCaptionId(field) : undefined}
           />
-          <span id={paramCaptionId(field)} className="min-w-[100px] text-sm text-text tabular-nums">
-            {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
+          <span
+            className={`min-w-[100px] text-sm tabular-nums ${isSet ? 'text-text' : 'text-text-muted'}`}
+          >
+            {displayValue.toFixed(2)}
           </span>
           {isSet && !disabled && (
             <IconButton
@@ -155,6 +169,11 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             </IconButton>
           )}
         </div>
+        {!isSet && caption && (
+          <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
+            {caption}
+          </span>
+        )}
       </div>
     );
   };
