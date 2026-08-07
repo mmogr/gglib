@@ -403,8 +403,15 @@ impl ModelService {
 
         if full {
             // Drop every tag in the auto-generated namespace, then re-add.
-            const AUTO_TAG_NAMES: &[&str] =
-                &["reasoning", "agent", "vision", "code", "moe", "embedding"];
+            const AUTO_TAG_NAMES: &[&str] = &[
+                "reasoning",
+                "agent",
+                "vision",
+                "code",
+                "moe",
+                "mtp",
+                "embedding",
+            ];
             model.tags.retain(|t| {
                 !AUTO_TAG_NAMES.contains(&t.as_str()) && !crate::domain::is_system_tag(t)
             });
@@ -852,5 +859,26 @@ mod tests {
         assert!(tags.contains(&"format:qwen-xml".to_string()));
         assert!(!tags.contains(&"format:hermes".to_string()));
         assert!(!tags.contains(&"reasoning".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_retag_full_drops_stale_mtp_tag() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec!["mtp".to_string()]; // stale auto capability
+        let created = service.add(new_model).await.unwrap();
+
+        // Detection no longer reports MTP support.
+        let parser = StubCapsParser { tags: Vec::new() };
+        service
+            .retag_model(created.id, &parser, true)
+            .await
+            .unwrap();
+
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(!tags.contains(&"mtp".to_string()));
     }
 }
