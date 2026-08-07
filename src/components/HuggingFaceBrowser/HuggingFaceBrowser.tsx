@@ -8,14 +8,7 @@ import { Icon } from "../ui/Icon";
 import { IconButton } from '../ui/IconButton';
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
-import { Stack, Row, EmptyState } from "../primitives";
-
-/** Glass-effect form label */
-const glassLabel = "block text-xs font-medium text-text-muted mb-[0.35rem]";
-/** Glass-effect input override (small) */
-const glassInput = "w-full px-3 py-2 bg-surface-elevated border border-border rounded-base text-text text-sm transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus placeholder:text-text-muted";
-/** Glass-effect input override (search box) */
-const glassInputLg = "w-full px-[0.9rem] py-[0.6rem] bg-surface-elevated border border-border rounded-lg text-text text-base transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10 placeholder:text-text-muted";
+import { Stack, Row, EmptyState, Label } from "../primitives";
 
 interface HuggingFaceBrowserProps {
   /** Callback when a model is selected (clicked) for preview */
@@ -72,10 +65,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       <Stack gap="sm" className="p-4 bg-surface border-b border-border">
         <Row gap="sm" align="end">
           <Stack gap="xs" className="flex-1">
-            <label className={glassLabel}>Search Models</label>
+            <Label size="xs" muted>Search models</Label>
             <Input
               type="text"
-              className={glassInputLg}
+              size="lg"
               variant={searchError ? "error" : "default"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -98,10 +91,9 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
         <Row gap="base" className="mt-3" align="end" wrap>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className={glassLabel}>Min Params (B)</label>
+            <Label size="xs" muted>Min params (B)</Label>
             <Input
               type="number"
-              className={glassInput}
               value={minParams}
               onChange={(e) => setMinParams(e.target.value)}
               placeholder="e.g. 3"
@@ -110,10 +102,9 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             />
           </Stack>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className={glassLabel}>Max Params (B)</label>
+            <Label size="xs" muted>Max params (B)</Label>
             <Input
               type="number"
-              className={glassInput}
               value={maxParams}
               onChange={(e) => setMaxParams(e.target.value)}
               placeholder="e.g. 13"
@@ -122,15 +113,14 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             />
           </Stack>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className={glassLabel}>Sort By</label>
+            <Label size="xs" muted>Sort by</Label>
             <Row gap="xs" className="min-w-0">
               <Select
-                className="flex-1 min-w-0 px-3 py-2 bg-surface-elevated border border-border rounded-base text-text text-sm cursor-pointer transition-all duration-200 ease-linear appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns=\'http://www.w3.org/2000/svg\'%20width=\'12\'%20height=\'12\'%20viewBox=\'0%200%2024%2024\'%20fill=\'none\'%20stroke=\'%2394a3b8\'%20stroke-width=\'2\'%3E%3Cpath%20d=\'M6%209l6%206%206-6\'/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center] pr-7 focus:outline-none focus:border-border-focus"
                 value={sortBy}
                 onChange={(e) => handleSortChange(e.target.value as HfSortField)}
               >
                 {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value} className="bg-surface text-text">
+                  <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}

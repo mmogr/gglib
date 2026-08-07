@@ -36,8 +36,8 @@ export const ModelCard: FC<ModelCardProps> = ({
   return (
     <div 
       className={cn(
-        'bg-surface-elevated border border-border rounded-xl mb-3 overflow-hidden transition-all duration-200 ease-linear hover:bg-surface-hover hover:border-border-hover',
-        isSelected && 'border-primary-border bg-primary-subtle hover:border-primary hover:bg-primary/15'
+        'bg-surface-elevated rounded-md mb-3 overflow-hidden transition-all duration-200 ease-linear hover:bg-surface-hover',
+        isSelected && 'bg-primary-subtle ring-1 ring-primary-border hover:bg-primary/15'
       )}
       onClick={onSelect}
     >
