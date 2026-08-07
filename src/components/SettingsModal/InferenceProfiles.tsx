@@ -14,6 +14,7 @@ import { FC, useCallback, useEffect, useState } from "react";
 import { getSettings, updateSettings } from "../../services/transport/api/settings";
 import type { InferenceConfig, InferenceProfile } from "../../types";
 import { Button } from "../ui/Button";
+import { Banner } from '../ui/Banner';
 import { Stack, EmptyState } from "../primitives";
 import { InferenceProfileEditor } from "./InferenceProfileEditor";
 
@@ -109,9 +110,9 @@ export const InferenceProfiles: FC = () => {
     return (
       <Stack gap="md">
         {error && (
-          <div className="p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm">
+          <Banner variant="danger">
             {error}
-          </div>
+          </Banner>
         )}
         <InferenceProfileEditor
           initial={initial}
@@ -132,9 +133,9 @@ export const InferenceProfiles: FC = () => {
       </p>
 
       {error && (
-        <div className="p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm">
+        <Banner variant="danger">
           {error}
-        </div>
+        </Banner>
       )}
 
       {profiles.length === 0 ? (

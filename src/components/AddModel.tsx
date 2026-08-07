@@ -3,6 +3,7 @@ import { FolderOpen } from "lucide-react";
 import { appLogger } from '../services/platform';
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
+import { Banner } from './ui/Banner';
 import { Icon } from "./ui/Icon";
 import { Input } from "./ui/Input";
 import { getTransport } from '../services/transport';
@@ -79,7 +80,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
           </div>
         </div>
 
-        {error && <div className="bg-danger-subtle border border-danger-border rounded-md p-base text-danger flex items-start gap-sm">{error}</div>}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         <div className="form-actions">
           <Button

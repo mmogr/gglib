@@ -49,11 +49,11 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-sm px-md py-sm rounded-base bg-surface border border-border shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-        toast.type === 'success' && 'border-success-border bg-success-subtle',
-        toast.type === 'error' && 'border-danger-border bg-danger-subtle',
-        toast.type === 'info' && 'border-primary-border bg-primary-subtle',
-        toast.type === 'warning' && 'border-warning-border bg-warning-subtle',
+        'flex items-center gap-sm px-md py-sm rounded-md bg-surface-elevated shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
+        toast.type === 'success' && 'bg-success-subtle',
+        toast.type === 'error' && 'bg-danger-subtle',
+        toast.type === 'info' && 'bg-primary-subtle',
+        toast.type === 'warning' && 'bg-warning-subtle',
         isExiting && 'animate-toast-exit',
       )}
       role={toast.type === 'error' || toast.type === 'warning' ? 'alert' : 'status'}

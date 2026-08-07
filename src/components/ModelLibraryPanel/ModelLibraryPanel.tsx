@@ -2,6 +2,7 @@ import { FC, useState } from 'react';
 import { BookOpenText, PlusCircle, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
 import { Tabs, type TabItem } from '../ui/Tabs';
+import { Banner } from '../ui/Banner';
 
 // Legacy id union kept here after SidebarTabs was replaced by ui/Tabs.
 export type SidebarTabId = 'models' | 'add';
@@ -117,7 +118,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-xl gap-md">
-            <p className="bg-danger-subtle border border-danger-border rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
+            <Banner variant="danger">Error: {error}</Banner>
             <Button variant="ghost" onClick={onRefresh}>
               Retry
             </Button>

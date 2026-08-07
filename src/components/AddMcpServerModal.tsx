@@ -5,6 +5,7 @@
 import { FC, useState, useCallback, useEffect, FormEvent } from "react";
 import type { McpServerType } from "../services/transport/types/mcp";
 import { Modal } from "./ui/Modal";
+import { Banner } from './ui/Banner';
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
@@ -277,9 +278,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             </Stack>
 
             {error && (
-              <div className="p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm" role="alert">
+              <Banner variant="danger">
                 {error}
-              </div>
+              </Banner>
             )}
 
       </form>

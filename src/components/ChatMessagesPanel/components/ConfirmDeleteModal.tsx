@@ -1,6 +1,7 @@
 import { FC } from 'react';
-import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button';
+import { Banner } from '../../ui/Banner';
 import { Icon } from '../../ui/Icon';
 import { Modal } from '../../ui/Modal';
 
@@ -64,13 +65,10 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
         </div>
 
         {messageCount > 1 && (
-          <div className="flex gap-sm items-start p-3 rounded-lg bg-danger-subtle border border-danger-border text-text text-base">
-            <Icon icon={AlertTriangle} size={16} className="text-danger" />
-            <span>
-              This will also delete <strong>{messageCount - 1}</strong> subsequent{' '}
-              {messageCount - 1 === 1 ? 'message' : 'messages'} to maintain conversation flow.
-            </span>
-          </div>
+          <Banner variant="danger">
+            This will also delete <strong>{messageCount - 1}</strong> subsequent{' '}
+            {messageCount - 1 === 1 ? 'message' : 'messages'} to maintain conversation flow.
+          </Banner>
         )}
 
       </div>
