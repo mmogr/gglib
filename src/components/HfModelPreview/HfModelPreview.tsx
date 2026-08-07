@@ -253,7 +253,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
 
       {/* Quantization Table */}
       <div className="flex flex-col gap-md">
-        <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Quantization Options</h3>
+        <h3 className="m-0 text-sm font-semibold text-text">Quantization Options</h3>
         
         {loadingQuants && (
           <div className="p-lg text-center text-text-secondary bg-surface-elevated rounded-lg">
@@ -272,7 +272,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
 
         {!loadingQuants && !quantError && quantizations.length > 0 && (
           <div className="flex flex-col border border-border rounded-lg overflow-hidden bg-surface">
-            <div className="grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md bg-surface-elevated text-xs font-semibold text-text-secondary uppercase tracking-[0.05em]">
+            <div className="grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md bg-surface-elevated text-sm font-semibold text-text">
               <span>Quant</span>
               <span>Size</span>
               <span>Shards</span>
@@ -320,7 +320,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       {/* Model Description */}
       {model.description && (
         <div className="flex flex-col gap-sm">
-          <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Description</h3>
+          <h3 className="m-0 text-sm font-semibold text-text">Description</h3>
           <p className="m-0 text-sm leading-relaxed text-text-secondary">{model.description}</p>
         </div>
       )}
@@ -328,7 +328,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       {/* Tags */}
       {model.tags && model.tags.length > 0 && (
         <div className="flex flex-col gap-sm">
-          <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Tags</h3>
+          <h3 className="m-0 text-sm font-semibold text-text">Tags</h3>
           <div className="flex flex-wrap gap-sm">
             {model.tags.slice(0, 10).map((tag) => (
               <span key={tag} className="px-sm py-xs text-xs text-text-secondary bg-surface-elevated rounded-base">{tag}</span>

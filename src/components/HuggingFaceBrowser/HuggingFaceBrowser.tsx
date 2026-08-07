@@ -11,7 +11,7 @@ import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
 
 /** Glass-effect form label */
-const glassLabel = "block text-sm font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]";
+const glassLabel = "block text-xs font-medium text-text-muted mb-[0.35rem]";
 /** Glass-effect input override (small) */
 const glassInput = "w-full px-3 py-2 bg-surface-elevated border border-border rounded-base text-text text-sm transition-all duration-200 ease-linear focus:outline-none focus:border-border-focus placeholder:text-text-muted";
 /** Glass-effect input override (search box) */

@@ -189,7 +189,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               {showSettings && (
                 <div className="mb-md">
                   <div className="mb-md">
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Host:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Host:</label>
                     <Input
                       type="text"
                       value={config.host}
@@ -197,7 +197,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div className="mb-md">
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Proxy Port:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Proxy Port:</label>
                     <Input
                       type="number"
                       value={config.port}
@@ -205,7 +205,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Default Context:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Default Context:</label>
                     <Input
                       type="number"
                       value={config.default_context ?? ''}

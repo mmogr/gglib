@@ -16,7 +16,7 @@ interface MetadataSectionProps {
  */
 export const MetadataSection: FC<MetadataSectionProps> = ({ title, children, className }) => (
   <div className={cn('mt-xl first:mt-0', className)}>
-    <h3 className="m-0 mb-md text-xs font-semibold text-text-secondary uppercase tracking-[0.05em]">
+    <h3 className="m-0 mb-md text-sm font-semibold text-text">
       {title}
     </h3>
     <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-base gap-y-md m-0">

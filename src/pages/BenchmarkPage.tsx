@@ -442,7 +442,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         <aside className="w-[280px] shrink-0 flex flex-col gap-base p-base border-r border-border overflow-y-auto">
           {/* Model selection */}
           <div className="flex flex-col gap-sm">
-            <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+            <label className="text-xs font-semibold text-text">
               Models ({selectedModelIds.length} selected)
             </label>
             <div className="flex flex-col gap-xs max-h-[240px] overflow-y-auto border border-border rounded-md p-xs">
@@ -472,7 +472,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           {mode === 'compare' && (
             <>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Prompt
                 </label>
                 <Textarea
@@ -484,7 +484,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   System Prompt (optional)
                 </label>
                 <Textarea
@@ -496,7 +496,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Context Size (optional)
                 </label>
                 <Input
@@ -516,7 +516,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           {mode === 'perf' && (
             <>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   PP Tokens
                 </label>
                 <Input
@@ -529,7 +529,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   TG Tokens
                 </label>
                 <Input
@@ -542,7 +542,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Repetitions
                 </label>
                 <Input

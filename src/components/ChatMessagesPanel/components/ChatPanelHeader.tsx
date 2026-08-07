@@ -51,7 +51,7 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
   onClearConversation,
   onExportConversation,
 }) => (
-  <div className="p-base border-b border-border bg-background shrink-0 flex flex-wrap justify-between items-center gap-md phone:flex-nowrap">
+  <div className="p-md border-b border-border-light shrink-0 flex flex-wrap justify-between items-center gap-md phone:flex-nowrap">
     <div className="flex items-center gap-sm min-w-0 basis-full phone:basis-auto phone:flex-1">
       {isRenaming ? (
         <Input

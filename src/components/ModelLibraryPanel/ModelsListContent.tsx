@@ -70,20 +70,20 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
             // The accent border is always present but transparent when idle,
             // so selecting a row recolours it instead of shifting the text 3px.
             className={cn(
-              "py-md px-base text-left border-b border-border border-l-[3px] border-l-transparent cursor-pointer transition duration-200 w-full bg-transparent hover:bg-background-hover focus-visible:outline-none focus-visible:bg-background-hover focus-visible:border-l-primary",
+              "py-sm px-md text-left border-l-[3px] border-l-transparent cursor-pointer transition duration-200 w-full bg-transparent hover:bg-background-hover focus-visible:outline-none focus-visible:bg-background-hover focus-visible:border-l-primary",
               isSelected && "bg-primary-subtle border-l-primary",
               isRunning && !isSelected && "border-l-success",
             )}
             onClick={() => onSelectModel(model.id!)}
           >
-            <div className="flex flex-col gap-sm w-full">
-              <div className="font-medium text-base flex items-center gap-sm w-full break-words">
+            <div className="flex flex-col gap-xs w-full">
+              <div className="font-medium text-sm flex items-center gap-sm w-full break-words">
                 {model.name}
                 {isRunning && (
                   <Chip variant="success" size="sm">Running</Chip>
                 )}
               </div>
-              <div className="flex items-center gap-md text-sm text-text-muted flex-wrap">
+              <div className="flex items-center gap-md text-xs text-text-muted flex-wrap">
                 <span className="inline-flex items-center">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
                 {model.architecture && (
                   <span className="inline-flex items-center">{model.architecture}</span>

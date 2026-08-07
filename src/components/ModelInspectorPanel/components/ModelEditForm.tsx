@@ -40,7 +40,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   return (
     <>
       <section className="mb-xl">
-        <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Model Information</h3>
+        <h3 className="m-0 mb-base text-sm font-semibold text-text">Model Information</h3>
       <div className="flex flex-col gap-md">
         <div className="flex justify-between items-start gap-base">
           <span className="text-text-muted text-sm shrink-0">Size:</span>
@@ -56,7 +56,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Quantization:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            className="min-w-[200px] flex-1"
             value={editedQuantization}
             onChange={(e) => onQuantizationChange(e.target.value)}
             placeholder="e.g., Q4_0"
@@ -100,7 +100,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Path:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 font-mono text-xs"
+            className="min-w-[200px] flex-1 font-mono text-xs"
             value={editedFilePath}
             onChange={(e) => onFilePathChange(e.target.value)}
             placeholder="File path"

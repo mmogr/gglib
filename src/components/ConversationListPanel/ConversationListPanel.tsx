@@ -65,7 +65,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
 
   return (
     <div className="flex flex-col overflow-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-      <div className="p-base border-b border-border bg-background shrink-0">
+      <div className="p-md border-b border-border-light shrink-0">
         {/* View Tabs */}
         <div className="mb-md">
           <Tabs<ChatPageTabId>
@@ -78,7 +78,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
 
         <div className="flex flex-col gap-sm mobile:flex-row mobile:justify-between mobile:items-start mobile:gap-md">
           <Stack gap="xs" className="min-w-0">
-            <span className="text-xs uppercase tracking-[1px] text-text-muted">Chatting with</span>
+            <span className="text-xs font-medium text-text-muted">Chatting with</span>
             <h2 className="text-lg font-semibold m-0 text-text overflow-hidden text-ellipsis whitespace-nowrap">{modelName}</h2>
           </Stack>
           <div className="flex gap-sm items-center w-full justify-between mobile:w-auto mobile:shrink-0">

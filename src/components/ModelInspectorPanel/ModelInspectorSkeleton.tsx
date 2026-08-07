@@ -13,7 +13,7 @@ const panelClass =
 export const ModelInspectorSkeleton: React.FC = () => (
   <div className={panelClass} aria-hidden="true">
     {/* Header — mirrors "p-base border-b" bar with model name + icon buttons */}
-    <div className="p-base border-b border-border bg-background shrink-0">
+    <div className="p-md border-b border-border-light shrink-0">
       <Row gap="base" justify="between" align="center">
         <Skeleton width="45%" height="1.5rem" />
         <Row gap="xs">

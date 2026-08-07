@@ -111,7 +111,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   return (
     <div className="flex flex-col gap-base">
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Model
         </label>
         <select
@@ -130,7 +130,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Sweep — temperature
         </label>
         <Input
@@ -143,25 +143,25 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
       <div className="grid grid-cols-2 gap-sm">
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             top_p
           </label>
           <Input value={topP} onChange={e => setTopP(e.target.value)} disabled={disabled} size="sm" placeholder="0.9,0.95" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             top_k
           </label>
           <Input value={topK} onChange={e => setTopK(e.target.value)} disabled={disabled} size="sm" placeholder="20,40" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             min_p
           </label>
           <Input value={minP} onChange={e => setMinP(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.05" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             repeat_penalty
           </label>
           <Input value={repeatPenalty} onChange={e => setRepeatPenalty(e.target.value)} disabled={disabled} size="sm" placeholder="1.0,1.1" />
@@ -169,7 +169,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Task Suite
         </label>
         <div className="flex gap-sm">
@@ -226,13 +226,13 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
 
       <div className="grid grid-cols-2 gap-sm">
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             Prune fraction
           </label>
           <Input value={pruneFraction} onChange={e => setPruneFraction(e.target.value)} disabled={disabled} size="sm" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             Context size
           </label>
           <Input value={ctxSize} onChange={e => setCtxSize(e.target.value)} disabled={disabled} size="sm" placeholder="Default" />

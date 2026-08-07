@@ -107,7 +107,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   if (error) {
     return (
       <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-        <div className="p-base border-b border-border bg-background shrink-0">
+        <div className="p-md border-b border-border-light shrink-0">
           <Tabs
             tabs={SIDEBAR_TABS}
             activeId={activeTab}
@@ -154,7 +154,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 
   return (
     <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-      <div className="p-base border-b border-border bg-background shrink-0">
+      <div className="p-md border-b border-border-light shrink-0">
         <Tabs
           tabs={SIDEBAR_TABS}
           activeId={activeTab}

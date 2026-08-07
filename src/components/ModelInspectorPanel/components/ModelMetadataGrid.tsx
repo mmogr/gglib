@@ -132,7 +132,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
           chevron so it matches the rest of the app's iconography. */}
       {metadataEntries.length > 0 && (
         <details className="group mt-xl border-t border-border pt-base">
-          <summary className="flex items-center gap-sm cursor-pointer text-xs font-semibold text-text-secondary uppercase tracking-[0.05em] select-none list-none [&::-webkit-details-marker]:hidden">
+          <summary className="flex items-center gap-sm cursor-pointer text-sm font-semibold text-text select-none list-none [&::-webkit-details-marker]:hidden">
             <Icon
               icon={ChevronRight}
               size={14}

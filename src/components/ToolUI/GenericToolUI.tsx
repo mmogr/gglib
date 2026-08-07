@@ -40,7 +40,7 @@ const StatusBadge: React.FC<{
       <span className="text-2xs" aria-hidden>
         <Icon icon={config.icon} size={14} />
       </span>
-      <span className="uppercase tracking-[0.5px]">{config.label}</span>
+      <span className="">{config.label}</span>
     </span>
   );
 };
