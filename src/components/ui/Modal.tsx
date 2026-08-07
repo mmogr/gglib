@@ -2,6 +2,7 @@ import { FC, ReactNode, useId } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Icon } from "./Icon";
+import { IconButton } from "./IconButton";
 import { cn } from "../../utils/cn";
 
 // Styles that visually hide content while keeping it accessible to screen readers.
@@ -25,6 +26,17 @@ interface ModalProps {
   children?: ReactNode;
   /** Content pinned below the scroll area, outside overflow-y-auto. Rendered inside a flex row with border-t. */
   footer?: ReactNode;
+  /**
+   * Content pinned between the header and the scroll area (e.g. a tab bar).
+   * Sits outside overflow-y-auto, so scrolled content clips cleanly beneath
+   * it instead of colliding with header text.
+   */
+  subHeader?: ReactNode;
+  /**
+   * "auto" (default) sizes to content; "fixed" pins the dialog height so
+   * switching inner views (tabs) doesn't resize the modal.
+   */
+  height?: "auto" | "fixed";
   /** Extra classes merged onto the body wrapper (e.g. "p-0" to remove default padding). Uses tailwind-merge so "p-0" correctly overrides "p-lg". */
   bodyClassName?: string;
   /** Extra classes merged onto the footer wrapper (e.g. "justify-center" to override default "justify-end"). */
@@ -48,9 +60,11 @@ export const Modal: FC<ModalProps> = ({
   description,
   children,
   footer,
+  subHeader,
   bodyClassName,
   footerClassName,
   size = "md",
+  height = "auto",
   preventClose = false,
   onOpenAutoFocus,
 }) => {
@@ -70,6 +84,7 @@ export const Modal: FC<ModalProps> = ({
           className={cn(
             "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background-elevated border border-border-light rounded-lg shadow-2xl w-full max-h-[90vh] flex flex-col z-modal animate-modal-slide-in",
             sizeClassMap[size],
+            height === "fixed" && "h-[min(85vh,760px)]",
           )}
           aria-describedby={hasDescription ? descriptionId : undefined}
           onOpenAutoFocus={onOpenAutoFocus}
@@ -80,17 +95,12 @@ export const Modal: FC<ModalProps> = ({
             if (preventClose) event.preventDefault();
           }}
         >
-          <div className="flex items-center justify-between p-lg border-b border-border shrink-0">
-            <DialogPrimitive.Title className="text-xl font-semibold text-text m-0">{title}</DialogPrimitive.Title>
+          <div className="flex items-center justify-between p-lg border-b border-border-light shrink-0">
+            <DialogPrimitive.Title className="text-lg font-semibold text-text m-0">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>
-              <button
-                className="w-[32px] h-[32px] rounded-base flex items-center justify-center bg-transparent text-text-secondary transition-all duration-200 cursor-pointer border-none shrink-0 hover:bg-background-hover hover:text-text"
-                onClick={onClose}
-                aria-label="Close dialog"
-                disabled={preventClose}
-              >
+              <IconButton label="Close dialog" onClick={onClose} disabled={preventClose}>
                 <Icon icon={X} size={14} />
-              </button>
+              </IconButton>
             </DialogPrimitive.Close>
           </div>
           {hasDescription ? (
@@ -102,11 +112,14 @@ export const Modal: FC<ModalProps> = ({
               Dialog content
             </DialogPrimitive.Description>
           )}
+          {subHeader != null && (
+            <div className="px-lg border-b border-border-light shrink-0">{subHeader}</div>
+          )}
           {children != null && (
             <div className={cn("p-lg overflow-y-auto flex-1 min-h-0", bodyClassName)}>{children}</div>
           )}
           {footer != null && (
-            <div className={cn("flex items-center justify-end gap-md p-lg border-t border-border shrink-0", footerClassName)}>
+            <div className={cn("flex items-center justify-end gap-md p-lg border-t border-border-light shrink-0", footerClassName)}>
               {footer}
             </div>
           )}
