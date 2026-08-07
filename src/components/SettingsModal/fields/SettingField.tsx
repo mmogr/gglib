@@ -44,6 +44,16 @@ const controlWidthClasses = {
   full: 'w-full',
 } as const;
 
+/**
+ * Id of the element holding a field's description and default hint.
+ *
+ * A control passes this to `aria-describedby` so the hint is announced with
+ * the field. `SettingField` cannot attach it itself — `children` is an opaque
+ * ReactNode, and reaching into it would mean cloneElement — so the id is
+ * derived from the field id and both sides compute it from here.
+ */
+export const settingDescriptionId = (id: string): string => `${id}-description`;
+
 export const SettingField: FC<SettingFieldProps> = ({
   id,
   label,
@@ -60,7 +70,7 @@ export const SettingField: FC<SettingFieldProps> = ({
     <div className={controlWidthClasses[controlWidth]}>{children}</div>
     {(description || defaultHint || action) && (
       <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-        <span>
+        <span id={id ? settingDescriptionId(id) : undefined}>
           {description}
           {description && defaultHint && ' '}
           {defaultHint && <span className="text-text-muted">Default: {defaultHint}</span>}

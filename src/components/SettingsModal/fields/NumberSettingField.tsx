@@ -1,7 +1,7 @@
 import { FC, ReactNode } from 'react';
 import { Input } from '../../ui/Input';
 import type { NumericSettingSpec } from '../../../constants/settingsDefaults';
-import { SettingField } from './SettingField';
+import { SettingField, settingDescriptionId } from './SettingField';
 
 interface NumberSettingFieldProps {
   /** Field id, wired to the label via htmlFor and forwarded to the input. */
@@ -28,7 +28,9 @@ interface NumberSettingFieldProps {
  * when the field is left empty — and were repeating it call site by call
  * site. Owning the `Input` here (rather than leaving it to each caller, as
  * plain `SettingField` does) is what lets the default reach the control as
- * well as the hint, without `SettingField` having to clone its children.
+ * well as the hint, without `SettingField` having to clone its children —
+ * both as the placeholder and, via `aria-describedby`, as something a
+ * screen reader will actually read out.
  */
 export const NumberSettingField: FC<NumberSettingFieldProps> = ({
   id,
@@ -55,6 +57,7 @@ export const NumberSettingField: FC<NumberSettingFieldProps> = ({
       min={spec.min}
       max={spec.max}
       disabled={disabled}
+      aria-describedby={settingDescriptionId(id)}
     />
   </SettingField>
 );
