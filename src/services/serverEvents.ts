@@ -45,23 +45,23 @@ export async function initServerEvents(): Promise<void> {
       }
     });
 
-    // 2. Hydration fetch — seed registry with servers already running on page load
+    // 2. Hydration fetch — seed registry with servers already running on page load.
+    // Routed through the tolerant normalizer so both camelCase and snake_case
+    // payloads (older backends) map correctly and malformed entries are dropped
+    // instead of becoming "undefined" registry keys.
     const versionBeforeFetch = webEventVersion;
     getTransport()
       .listServers()
       .then((servers) => {
         // Drop stale hydration if a live server event already arrived
         if (webEventVersion !== versionBeforeFetch) return;
-        ingestServerEvent({
-          type: 'snapshot',
-          servers: servers.map((s) => ({
-            modelId: String(s.modelId),
-            status: 'running' as const,
-            port: s.port,
-            updatedAt: Date.now(),
-            modelName: s.modelName,
-          })),
+        const normalized = normalizeServerEventFromAppEvent({
+          type: 'server_snapshot',
+          servers,
         });
+        if (normalized) {
+          ingestServerEvent(normalized);
+        }
       })
       .catch(() => {
         // Non-fatal — live events will populate state as servers start

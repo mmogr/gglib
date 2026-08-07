@@ -131,6 +131,59 @@ describe('serverEvents.normalize', () => {
     });
   });
 
+  it('normalizes a snake_case snapshot (older backend schema)', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_snapshot',
+      servers: [
+        {
+          model_id: 4,
+          model_name: 'SnakeModel',
+          port: MOCK_BASE_PORT,
+          started_at: 1_700_000_000,
+        },
+      ],
+    });
+
+    expect(evt).toEqual({
+      type: 'snapshot',
+      servers: [
+        {
+          modelId: '4',
+          modelName: 'SnakeModel',
+          status: 'running',
+          port: MOCK_BASE_PORT,
+          updatedAt: 1_700_000_000_000,
+        },
+      ],
+    });
+  });
+
+  it('drops snapshot entries whose id is missing or non-numeric', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_snapshot',
+      servers: [
+        { port: MOCK_BASE_PORT }, // no id at all — would stringify to "undefined"
+        { modelId: 'abc', port: MOCK_BASE_PORT + 1 },
+        { modelId: 5, port: MOCK_BASE_PORT + 2 },
+      ],
+    });
+
+    expect(evt).toMatchObject({
+      type: 'snapshot',
+      servers: [{ modelId: '5', port: MOCK_BASE_PORT + 2 }],
+    });
+  });
+
+  it('ignores lifecycle events with non-numeric model ids', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_started',
+      modelId: 'undefined',
+      port: MOCK_BASE_PORT,
+    });
+
+    expect(evt).toBeNull();
+  });
+
   it('named-event path matches app-event path for snapshot', () => {
     const payload = {
       type: 'server_snapshot',
