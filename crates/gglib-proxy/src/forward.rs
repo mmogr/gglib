@@ -1128,6 +1128,7 @@ mod tests {
     fn shaping_reports_grammar_enforcement_for_a_demanded_dialect_call() {
         let ctx = ModelContext {
             tags: vec![gglib_core::normalize::tags::FORMAT_QWEN_XML.to_owned()],
+            dialect: Some(gglib_core::domain::DialectSpec::qwen_xml()),
             // Tool-capable, or stage 2b strips the tools before stage 6 sees
             // them — the correct interplay for a model that cannot call tools.
             capabilities: gglib_core::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS,

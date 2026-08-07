@@ -1,15 +1,17 @@
 //! Stage 6: decode-time enforcement of dialect tool calls.
 //!
-//! For models tagged [`FORMAT_QWEN_XML`], tool calls are free text — the
-//! model *chooses* to emit `<tool_call>{json}</tool_call>` and the proxy
+//! For models with a resolved [`DialectSpec`], tool calls are free text —
+//! the model *chooses* to emit `OPEN{json}CLOSE` markup and the proxy
 //! parses it after the fact. Post-hoc parsing can rescue a well-formed call,
 //! but it cannot stop a small model from producing a malformed one. This
 //! stage can: when the client *demands* a tool call (`tool_choice:
 //! "required"` or a named function), it originates a GBNF `grammar` that
 //! llama-server enforces at decode time, making an invalid envelope,
-//! invalid JSON, or an invented tool name unrepresentable.
+//! invalid JSON, or an invented tool name unrepresentable. The grammar is
+//! generated from the same spec the parser reads, so enforcement and
+//! parsing cannot drift.
 //!
-//! # Why only the qwen-xml dialect
+//! # Why only dialect models
 //!
 //! Models whose chat template does native tool handling are already
 //! constrained: llama.cpp builds its own grammar from the template (eager
@@ -36,14 +38,12 @@
 //! llama.cpp solves this internally with lazily-triggered grammars, but
 //! does not expose lazy triggers as request fields — so `auto` keeps
 //! today's behaviour: unconstrained decode, post-hoc parsing.
-//!
-//! [`FORMAT_QWEN_XML`]: crate::normalize::tags::FORMAT_QWEN_XML
 
 use serde_json::Value;
 use tracing::{debug, info};
 
 use super::ModelContext;
-use crate::normalize::tags::FORMAT_QWEN_XML;
+use crate::domain::dialect::DialectSpec;
 
 /// Environment kill switch. Truthy values (case-insensitive `1`, `true`,
 /// `yes`, `on`) disable grammar origination entirely — the same contract as
@@ -65,8 +65,9 @@ fn grammar_disabled_via_env() -> bool {
 /// Engages only when *all* of the following hold, and is a no-op otherwise:
 ///
 /// - `GGLIB_DISABLE_GRAMMAR` is not set to a truthy value;
-/// - the model resolved from the catalog and carries the qwen-xml format
-///   tag (see module docs for why the native path is excluded);
+/// - the model resolved from the catalog with a dialect spec whose codec
+///   list includes JSON (see module docs for why the native path is
+///   excluded — and a grammar can only originate JSON-shaped bodies);
 /// - the request carries a non-empty `tools` array whose function names are
 ///   expressible in a GBNF literal;
 /// - the client sent none of `grammar` / `json_schema` / `response_format`
@@ -83,9 +84,12 @@ pub fn constrain_tool_calls(body: &mut Value, ctx: &ModelContext) -> bool {
 
 /// [`constrain_tool_calls`] without the environment check, for tests.
 fn constrain_tool_calls_inner(body: &mut Value, ctx: &ModelContext) -> bool {
-    if !ctx.catalog_resolved || !ctx.tags.iter().any(|t| t == FORMAT_QWEN_XML) {
+    if !ctx.catalog_resolved {
         return false;
     }
+    let Some(spec) = ctx.dialect.as_ref().filter(|s| s.supports_json_body()) else {
+        return false;
+    };
     if body.get("grammar").is_some()
         || body.get("json_schema").is_some()
         || body.get("response_format").is_some()
@@ -107,7 +111,10 @@ fn constrain_tool_calls_inner(body: &mut Value, ctx: &ModelContext) -> bool {
         return false;
     }
 
-    let grammar = qwen_tool_call_grammar(&allowed);
+    let Some(grammar) = tool_call_grammar(spec, &allowed) else {
+        debug!("dialect markers not expressible in a GBNF literal; not constraining");
+        return false;
+    };
     body["grammar"] = Value::String(grammar);
     // The one combination llama-server accepts alongside a custom grammar —
     // see the module docs. The demand now lives in the grammar.
@@ -115,7 +122,8 @@ fn constrain_tool_calls_inner(body: &mut Value, ctx: &ModelContext) -> bool {
 
     info!(
         tools = allowed.len(),
-        "originated decode-time grammar for a demanded qwen-xml tool call"
+        dialect = %spec.id,
+        "originated decode-time grammar for a demanded dialect tool call"
     );
     true
 }
@@ -171,27 +179,45 @@ fn gbnf_literal_safe(name: &str) -> bool {
             .all(|c| c.is_ascii_graphic() && c != '"' && c != '\\')
 }
 
-/// Build the GBNF grammar for one or more Qwen-dialect tool calls.
+/// Build the GBNF grammar for one or more dialect tool calls, from the
+/// same [`DialectSpec`] the parser reads.
 ///
 /// The envelope is exactly what the [`DelimitedToolCallParser`] prefers to
-/// parse — the JSON body dialect, `{"name": …, "arguments": {…}}` in that
-/// key order (the order the models were trained on) — wrapped in
-/// `<tool_call>`/`</tool_call>` with the newlines Qwen emits. `name` is an
-/// enum of the demanded tools; `arguments` is constrained to well-formed
-/// JSON. Malformed envelopes, truncated JSON, and invented tool names all
-/// become unrepresentable at decode time.
+/// parse — the JSON body codec, `{"name": …, "arguments": {…}}` in that
+/// key order (the order the models were trained on) — wrapped in the
+/// spec's markers with the spec's emission newlines. `name` is an enum of
+/// the demanded tools; `arguments` is constrained to well-formed JSON.
+/// Malformed envelopes, truncated JSON, and invented tool names all become
+/// unrepresentable at decode time.
+///
+/// Returns `None` when a marker cannot be embedded in a GBNF literal
+/// ([`gbnf_string_literal`]) — the caller falls back to unconstrained
+/// decode rather than risk a grammar llama-server cannot compile.
 ///
 /// [`DelimitedToolCallParser`]: crate::normalize::parsers::delimited::DelimitedToolCallParser
-fn qwen_tool_call_grammar(names: &[String]) -> String {
+fn tool_call_grammar(spec: &DialectSpec, names: &[String]) -> Option<String> {
+    let open = gbnf_string_literal(&spec.tool_open)?;
+    let close = gbnf_string_literal(&spec.tool_close)?;
+    let after_open = if spec.emission.newline_after_open {
+        " nl"
+    } else {
+        ""
+    };
+    let before_close = if spec.emission.newline_before_close {
+        " nl"
+    } else {
+        ""
+    };
+
     let name_alternatives = names
         .iter()
         .map(|n| format!("\"\\\"{n}\\\"\""))
         .collect::<Vec<_>>()
         .join(" | ");
 
-    format!(
+    Some(format!(
         r#"root ::= sp call (sp call)* sp
-call ::= "<tool_call>" nl "{{" sp "\"name\"" sp ":" sp name sp "," sp "\"arguments\"" sp ":" sp object sp "}}" nl "</tool_call>"
+call ::= {open}{after_open} "{{" sp "\"name\"" sp ":" sp name sp "," sp "\"arguments\"" sp ":" sp object sp "}}"{before_close} {close}
 name ::= {name_alternatives}
 object ::= "{{" sp ( member ( sp "," sp member )* )? sp "}}"
 member ::= string sp ":" sp value
@@ -203,17 +229,32 @@ number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [-+]? [0-9]+)?
 sp ::= [ \t\r\n]*
 nl ::= "\n"
 "#
-    )
+    ))
+}
+
+/// Render `s` as a GBNF double-quoted literal, escaping `"` and `\`.
+///
+/// Returns `None` for an empty string or one containing control bytes —
+/// markers a grammar cannot express verbatim make the caller fall back to
+/// unconstrained decode.
+fn gbnf_string_literal(s: &str) -> Option<String> {
+    if s.is_empty() || s.chars().any(char::is_control) {
+        return None;
+    }
+    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    Some(format!("\"{escaped}\""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::normalize::tags::FORMAT_QWEN_XML;
     use serde_json::json;
 
     fn qwen_ctx() -> ModelContext {
         ModelContext {
             tags: vec![FORMAT_QWEN_XML.to_owned()],
+            dialect: Some(DialectSpec::qwen_xml()),
             catalog_resolved: true,
             ..ModelContext::passthrough()
         }
@@ -300,6 +341,7 @@ mod tests {
         };
         let unresolved = ModelContext {
             tags: vec![FORMAT_QWEN_XML.to_owned()],
+            dialect: Some(DialectSpec::qwen_xml()),
             ..ModelContext::passthrough()
         };
         for ctx in [untagged, unresolved] {
@@ -335,25 +377,101 @@ mod tests {
         assert!(!constrain_tool_calls_inner(&mut b, &qwen_ctx()));
     }
 
-    /// The generated grammar parses back through the `DelimitedToolCallParser`: what
-    /// the grammar admits, the proxy's own parser must extract.
+    /// The generated grammar parses back through the `DelimitedToolCallParser`:
+    /// what the grammar admits, the proxy's own parser must extract. The
+    /// emission comes from the *spec itself* (`render_call`), so grammar,
+    /// parser, and test all read one source — no hand-maintained sample to
+    /// silently drift.
     #[test]
     fn grammar_shape_round_trips_through_the_parser() {
         use crate::normalize::get_parser;
-        use crate::normalize::registry::dialect_for_tags;
 
-        // A string the grammar admits (call rule, JSON dialect, newlines).
-        let emission = "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.rs\"}}\n</tool_call>";
+        for spec in [
+            DialectSpec::qwen_xml(),
+            DialectSpec {
+                tool_open: "«TC»".to_owned(),
+                tool_close: "«/TC»".to_owned(),
+                ..DialectSpec::qwen_xml()
+            },
+        ] {
+            // The canonical string the grammar's `call` rule admits.
+            let emission = spec.render_call("read_file", &json!({"path": "a.rs"}));
+            let grammar = tool_call_grammar(&spec, &["read_file".to_owned()]).unwrap();
+            assert!(grammar.contains(&format!("\"{}\"", spec.tool_open)));
 
-        let mut parser = get_parser(dialect_for_tags(&[FORMAT_QWEN_XML.to_owned()]).as_ref());
-        let mut out = parser.push_text(emission);
-        let fin = parser.finish();
-        out.tool_calls.extend(fin.tool_calls);
-        out.errors.extend(fin.errors);
+            let mut parser = get_parser(Some(&spec));
+            let mut out = parser.push_text(&emission);
+            let fin = parser.finish();
+            out.tool_calls.extend(fin.tool_calls);
+            out.errors.extend(fin.errors);
 
-        assert!(out.errors.is_empty(), "{:?}", out.errors);
-        assert_eq!(out.tool_calls.len(), 1);
-        assert_eq!(out.tool_calls[0].name, "read_file");
-        assert_eq!(out.tool_calls[0].arguments["path"], "a.rs");
+            assert!(out.errors.is_empty(), "{:?}", out.errors);
+            assert_eq!(out.tool_calls.len(), 1);
+            assert_eq!(out.tool_calls[0].name, "read_file");
+            assert_eq!(out.tool_calls[0].arguments["path"], "a.rs");
+        }
+    }
+
+    /// A spec without the JSON codec cannot be grammar-enforced — the
+    /// grammar can only originate JSON-shaped bodies.
+    #[test]
+    fn a_function_xml_only_spec_never_installs_a_grammar() {
+        use crate::domain::dialect::BodyCodec;
+        let ctx = ModelContext {
+            dialect: Some(DialectSpec {
+                body_codecs: vec![BodyCodec::FunctionXml],
+                ..DialectSpec::qwen_xml()
+            }),
+            catalog_resolved: true,
+            ..ModelContext::passthrough()
+        };
+        let mut b = body(&json!("required"));
+        assert!(!constrain_tool_calls_inner(&mut b, &ctx));
+        assert!(b.get("grammar").is_none());
+    }
+
+    /// Markers with quotes or backslashes are escaped into the literal;
+    /// control bytes abort the constraint entirely.
+    #[test]
+    fn marker_escaping_and_control_byte_bailout() {
+        let quoted = DialectSpec {
+            tool_open: "<\"q\">".to_owned(),
+            ..DialectSpec::qwen_xml()
+        };
+        let grammar = tool_call_grammar(&quoted, &["f".to_owned()]).unwrap();
+        assert!(grammar.contains(r#""<\"q\">""#));
+
+        let control = DialectSpec {
+            tool_open: "<a\u{1}b>".to_owned(),
+            ..DialectSpec::qwen_xml()
+        };
+        assert_eq!(tool_call_grammar(&control, &["f".to_owned()]), None);
+
+        let ctx = ModelContext {
+            dialect: Some(control),
+            catalog_resolved: true,
+            ..ModelContext::passthrough()
+        };
+        let mut b = body(&json!("required"));
+        assert!(!constrain_tool_calls_inner(&mut b, &ctx));
+        assert!(b.get("grammar").is_none());
+    }
+
+    /// The emission profile drives the grammar's newline tokens.
+    #[test]
+    fn emission_profile_controls_grammar_newlines() {
+        use crate::domain::dialect::EmissionProfile;
+        let no_newlines = DialectSpec {
+            emission: EmissionProfile {
+                newline_after_open: false,
+                newline_before_close: false,
+            },
+            ..DialectSpec::qwen_xml()
+        };
+        let grammar = tool_call_grammar(&no_newlines, &["f".to_owned()]).unwrap();
+        assert!(grammar.contains(r#"call ::= "<tool_call>" "{""#));
+
+        let with_newlines = tool_call_grammar(&DialectSpec::qwen_xml(), &["f".to_owned()]).unwrap();
+        assert!(with_newlines.contains(r#"call ::= "<tool_call>" nl "{""#));
     }
 }
