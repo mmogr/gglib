@@ -435,17 +435,19 @@ impl ModelRuntimePort for CountingRuntime {
     }
 }
 
-/// Catalog port that always resolves the requested model with the given tags.
+/// Catalog port that always resolves the requested model with the given tags
+/// and (optionally) a persisted dialect spec.
 #[derive(Debug)]
 pub struct TaggedCatalog {
     pub name: String,
     pub tags: Vec<String>,
+    pub dialect: Option<gglib_core::domain::DialectSpec>,
 }
 
 impl TaggedCatalog {
     fn summary(&self) -> ModelSummary {
         ModelSummary {
-            dialect: None,
+            dialect: self.dialect.clone(),
             id: 1,
             name: self.name.clone(),
             tags: self.tags.clone(),
@@ -989,6 +991,28 @@ pub async fn spawn_proxy_with_runtime(
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags,
+        dialect: None,
+    });
+    spawn_proxy_with_catalog(runtime, catalog).await
+}
+
+/// [`spawn_proxy`] whose catalog row carries a persisted dialect spec —
+/// the template-derived path, where no `format:*` tag is involved.
+pub async fn spawn_proxy_with_dialect(
+    upstream_port: u16,
+    model_name: &str,
+    dialect: gglib_core::domain::DialectSpec,
+) -> (String, CancellationToken) {
+    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
+        port: upstream_port,
+        model_name: model_name.into(),
+        slot_restore_supported: true,
+        pinned: false,
+    });
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
+        name: model_name.into(),
+        tags: Vec::new(),
+        dialect: Some(dialect),
     });
     spawn_proxy_with_catalog(runtime, catalog).await
 }
@@ -1062,6 +1086,7 @@ pub async fn spawn_proxy_with_cache_for_model(
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: model_name.into(),
         tags: vec![],
+        dialect: None,
     });
     let mcp = make_mcp_service();
     let cancel = CancellationToken::new();

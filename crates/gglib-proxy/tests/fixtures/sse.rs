@@ -58,6 +58,19 @@ data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":17290000
 data: {\"id\":\"u-10\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
 data: [DONE]\n\n";
 
+/// A template-derived dialect: custom multibyte `«TC»`/`«/TC»` markers with
+/// a JSON body, and the CLOSE MARKER SPLIT ACROSS TWO SSE FRAMES — the
+/// end-to-end proof that a spec nobody hardcoded parses chunk-safely
+/// through the whole proxy pipeline.  Byte-string literals cannot hold
+/// non-ASCII, hence `str::as_bytes`.
+pub const DERIVED_MARKER_TOOL_CALL: &[u8] =
+    "data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Sure. \"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"«TC»{\\\"name\\\":\\\"get_weather\\\",\\\"arguments\\\":{\\\"city\\\":\\\"Paris\\\"}}«/T\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"C» done.\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
+data: [DONE]\n\n"
+        .as_bytes();
+
 /// Standard OpenAI tool call (already strict / no dialect rewriting).  The
 /// proxy must round-trip this preserving `id`, `type:"function"`, `name`,
 /// `arguments`, and the `index`.
