@@ -19,6 +19,8 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [generate_module_tables.sh](#generate_module_tablessh) | Update README badge tables | CI |
 | [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Update submodule README templates | Manual |
 | [complexity_hotspots.sh](#complexity_hotspotssh) | Find high-complexity files | Manual |
+| [bench-sweep.sh](#bench-sweepsh) | Run the A/B agentic eval across models | Manual |
+| [bench_table.py](#bench_tablepy) | Merge A/B eval reports into Markdown | `bench-sweep.sh` |
 | [sync_versions.py](#sync_versionspy) | Sync version across package files | Release |
 | [macos-install.command](#macos-installcommand) | macOS app installer | Release bundle |
 
@@ -147,6 +149,36 @@ Generates a ranked list of high-complexity files using `scc`:
 ```
 
 Requires [scc](https://github.com/boyter/scc) (`brew install scc`).
+
+### `bench-sweep.sh`
+
+Runs the raw-vs-gglib A/B agentic eval across several models and writes a
+Markdown summary table:
+
+```bash
+./scripts/bench-sweep.sh -o bench qwen3.6 llama-3.2-3b gpt-oss-20b
+```
+
+Each model runs the 9-task suite twice (pipeline bypassed, then through it),
+so budget roughly the raw arm's wall time per model. A model that fails does
+not abort the sweep — failures are listed at the end and omitted from the
+table. Writes one JSON report per model plus `TABLE.md` into the output
+directory.
+
+Requires `gglib` on PATH and `python3`.
+
+### `bench_table.py`
+
+Merges the JSON reports produced by `gglib benchmark agentic --output` into
+the Markdown tables `bench-sweep.sh` emits. Useful on its own to re-render a
+table from reports gathered earlier:
+
+```bash
+./scripts/bench_table.py bench/*.json > bench/TABLE.md
+```
+
+Unmeasured axes render as `—` rather than an imputed score, matching the
+scorer's own distinction between absent and perfect.
 
 ---
 
