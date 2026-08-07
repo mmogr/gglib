@@ -2,6 +2,7 @@
 export { ModelMetadataGrid } from './ModelMetadataGrid';
 export { InfoRow } from './InfoRow';
 export { MetadataSection } from './MetadataSection';
+export { SamplingProvenanceSection } from './SamplingProvenanceSection';
 export { ModelEditForm } from './ModelEditForm';
 export { TagChips } from './TagChips';
 export { TagAddInput } from './TagAddInput';

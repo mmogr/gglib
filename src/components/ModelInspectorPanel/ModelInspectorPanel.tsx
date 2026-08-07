@@ -213,7 +213,11 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               onServerDefaultsChange={editMode.setEditedServerDefaults}
             />
           ) : (
-            <ModelMetadataGrid model={model} detail={detail.modelDetail ?? undefined} />
+            <ModelMetadataGrid
+              model={model}
+              detail={detail.modelDetail ?? undefined}
+              profiles={settings?.inferenceProfiles ?? []}
+            />
           )}
 
           <InspectorTags

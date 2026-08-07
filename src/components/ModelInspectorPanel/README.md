@@ -12,6 +12,7 @@ Right-hand detail panel for viewing, editing, and serving a selected GGUF model.
 ```
 ModelInspectorPanel
     ├── ModelMetadataGrid      ← read-only metadata display
+    │     └── SamplingProvenanceSection ← resolved sampling + which layer won
     ├── TagChips + TagAddInput ← tag management
     ├── InferenceParametersForm ← per-model inference defaults
     ├── InspectorActions       ← serve / edit / delete / benchmark
@@ -19,11 +20,15 @@ ModelInspectorPanel
     └── DeleteModal            ← confirmation dialog
 ```
 
+Read mode shows what a model's sampling parameters *resolve to* and which
+layer supplied each; edit mode shows the model's own stored defaults, which
+are one rung of that resolution.
+
 ## Sub-directories
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | `ModelMetadataGrid`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `DeleteModal`, `InspectorActions` |
-| `hooks/` | `useEditMode`, `useModelDetail`, `useServeModal`, `useDeleteModal`, `useServerActions` |
+| `components/` | `ModelMetadataGrid`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `DeleteModal`, `InspectorActions` |
+| `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions` |
 
 <!-- module-docs:end -->
