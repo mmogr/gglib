@@ -29,8 +29,8 @@ use fixtures::common::{
 };
 use fixtures::sse::{
     BASIC_TEXT, DERIVED_MARKER_TOOL_CALL, MALFORMED_JSON_RECOVERY, QWEN_FUNCTION_XML_TOOL_CALL,
-    QWEN_XML_TOOL_CALL, REASONING_DEEPSEEK, REASONING_ONLY, STANDARD_OPENAI_TOOL_CALL,
-    basic_text_split_chunks,
+    QWEN_XML_TOOL_CALL, RAW_MARKUP_SPLIT_ACROSS_FRAMES, REASONING_DEEPSEEK, REASONING_ONLY,
+    STANDARD_OPENAI_TOOL_CALL, basic_text_split_chunks,
 };
 
 // ─── End-to-end driver ─────────────────────────────────────────────────────
@@ -78,6 +78,61 @@ async fn round_trip(
     upstream_cancel.cancel();
 
     String::from_utf8(body).expect("utf-8 body")
+}
+
+/// Like [`round_trip`], but also polls `GET /v1/proxy/status` afterwards
+/// until `predicate` accepts the dashboard snapshot (or a timeout expires),
+/// returning the body and the final snapshot. The drift alarm back-patches
+/// its flag from the streaming task after the body finishes, hence the
+/// bounded poll rather than a single read.
+async fn round_trip_with_status(
+    upstream_chunks: Vec<&'static [u8]>,
+    model_name: &str,
+    tags: Vec<String>,
+    predicate: impl Fn(&Value) -> bool,
+) -> (String, Value) {
+    let upstream_cancel = CancellationToken::new();
+    let upstream_port = spawn_mock_upstream(upstream_chunks, upstream_cancel.clone()).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy(upstream_port, model_name, tags).await;
+
+    let client = Client::new();
+    let resp = client
+        .post(format!("{proxy_url}/v1/chat/completions"))
+        .json(&json!({
+            "model": model_name,
+            "stream": true,
+            "messages": [{"role": "user", "content": "hi"}],
+        }))
+        .send()
+        .await
+        .expect("proxy request");
+    assert_eq!(resp.status(), 200);
+
+    let mut body = Vec::new();
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        body.extend_from_slice(&chunk.expect("body chunk"));
+    }
+
+    let mut status = Value::Null;
+    for _ in 0..50 {
+        status = client
+            .get(format!("{proxy_url}/v1/proxy/status"))
+            .send()
+            .await
+            .expect("status request")
+            .json()
+            .await
+            .expect("status json");
+        if predicate(&status) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    proxy_cancel.cancel();
+    upstream_cancel.cancel();
+    (String::from_utf8(body).expect("utf-8 body"), status)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -431,6 +486,75 @@ async fn derived_spec_tool_call_is_normalized_across_frame_splits() {
     }
     let parsed_args: Value = serde_json::from_str(&args).expect("arguments should be JSON");
     assert_eq!(parsed_args, json!({"city": "Paris"}));
+}
+
+/// The drift alarm end to end: an untagged, spec-less model leaks raw
+/// `<tool_call>` markup — split across SSE frames — to the client
+/// verbatim (unchanged behaviour), and the dashboard reports it: the
+/// eviction-safe total increments and the recent-request entry is flagged.
+#[tokio::test]
+async fn dialect_residue_is_flagged_on_the_dashboard() {
+    let (body, status) = round_trip_with_status(
+        vec![RAW_MARKUP_SPLIT_ACROSS_FRAMES],
+        "mystery-model",
+        vec![],
+        |s| s["dialect_residue_total"].as_u64() == Some(1),
+    )
+    .await;
+
+    // Unchanged behaviour: the alarm observes, the client still gets the
+    // raw markup.
+    assert!(
+        body.contains("<tool") && body.contains("_call>"),
+        "passthrough must not alter the stream:\n{body}"
+    );
+
+    assert_eq!(
+        status["dialect_residue_total"].as_u64(),
+        Some(1),
+        "drift alarm total must count the leak, got {status}"
+    );
+    let flagged = status["recent_requests"]
+        .as_array()
+        .expect("recent_requests array")
+        .iter()
+        .any(|r| r["dialect_residue"] == json!(true));
+    assert!(
+        flagged,
+        "the recent-request entry must carry the flag, got {}",
+        status["recent_requests"]
+    );
+}
+
+/// A dialect model whose stream parses cleanly must NOT trip the alarm —
+/// the markup was consumed by the parser, nothing leaked.
+#[tokio::test]
+async fn clean_dialect_stream_does_not_trip_the_alarm() {
+    let (body, status) = round_trip_with_status(
+        vec![QWEN_XML_TOOL_CALL],
+        "qwen3-clean",
+        vec!["format:qwen-xml".to_owned()],
+        // Wait until our request shows up in the recent list; the flag, if
+        // it were ever coming, is set before the body finishes streaming.
+        |s| {
+            s["recent_requests"]
+                .as_array()
+                .is_some_and(|r| !r.is_empty())
+        },
+    )
+    .await;
+
+    assert!(!body.contains("<tool_call>"), "markup must be consumed");
+    assert_eq!(status["dialect_residue_total"].as_u64(), Some(0));
+    assert!(
+        status["recent_requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["dialect_residue"] == json!(false)),
+        "no entry may be flagged: {}",
+        status["recent_requests"]
+    );
 }
 
 /// A standard OpenAI tool-call stream (no dialect) must round-trip through

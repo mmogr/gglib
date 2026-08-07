@@ -8,8 +8,10 @@
 **OpenAI-compatible proxy** — the front door to your local models, with an integrated MCP Streamable HTTP gateway.
 
 Everything between the OpenAI request and llama-server happens here: dialect
-normalization, context defense, sampling authority, and admission. This is the
-crate that makes a local model behave like an API provider.
+normalization (with a drift alarm that logs, counts, and flags any dialect
+markup that survives into client-visible output), context defense, sampling
+authority, and admission. This is the crate that makes a local model behave
+like an API provider.
 
 ## Architecture
 

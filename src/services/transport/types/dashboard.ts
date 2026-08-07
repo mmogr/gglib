@@ -121,6 +121,8 @@ export interface ContextSnapshot {
   loop_guard_tripped: boolean;
   /** True when the proxy originated a decode-time tool-call grammar. */
   grammar_enforced: boolean;
+  /** True when dialect markup survived normalization into this request's client-visible output. */
+  dialect_residue: boolean;
   recorded_at_secs: number;
 }
 
@@ -228,6 +230,8 @@ export interface DashboardSnapshot {
   slots_status?: string | null;
   recent_requests: ContextSnapshot[];
   total_requests: number;
+  /** Requests whose client-visible output carried dialect residue (drift alarm), eviction-safe. */
+  dialect_residue_total: number;
   /**
    * Prompt-cache configuration for the running model. `null` until the first
    * request resolves one, since the RAM budget isn't known until launch.

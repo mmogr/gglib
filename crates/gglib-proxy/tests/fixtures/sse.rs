@@ -71,6 +71,15 @@ data: {\"id\":\"u-11\",\"object\":\"chat.completion.chunk\",\"created\":17290000
 data: [DONE]\n\n"
         .as_bytes();
 
+/// Raw dialect markup on an UNTAGGED, spec-less model, with the marker
+/// split across two SSE frames.  The passthrough parser forwards it
+/// verbatim (unchanged behaviour) — the drift alarm must still flag it.
+pub const RAW_MARKUP_SPLIT_ACROSS_FRAMES: &[u8] = b"\
+data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"leaking <tool\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_call> markup\"},\"finish_reason\":null}]}\n\n\
+data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n";
+
 /// Standard OpenAI tool call (already strict / no dialect rewriting).  The
 /// proxy must round-trip this preserving `id`, `type:"function"`, `name`,
 /// `arguments`, and the `index`.

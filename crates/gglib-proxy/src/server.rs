@@ -772,6 +772,8 @@ async fn chat_completions(
                     .dashboard
                     .metrics
                     .record(crate::metrics::ContextSnapshot {
+                        dialect_residue: false,
+                        seq: 0,
                         model_name: model_name.clone(),
                         payload_chars_before: body.len(),
                         payload_chars_after: body.len(),

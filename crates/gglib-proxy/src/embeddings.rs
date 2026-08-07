@@ -214,5 +214,5 @@ pub(crate) async fn embeddings(
 
     // No tags: an embeddings body has no `choices`, so normalization is a
     // no-op — this just satisfies the shared forwarding signature.
-    forward_non_streaming_response(response, &state.dashboard.cache_metrics, None).await
+    forward_non_streaming_response(response, &state.dashboard.cache_metrics, None, None).await
 }

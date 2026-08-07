@@ -300,6 +300,9 @@ pub struct DashboardSnapshot {
     /// Total requests handled since the proxy started, including any
     /// evicted from `recent_requests`'s ring buffer.
     pub total_requests: u64,
+    /// Total requests whose client-visible output carried dialect residue
+    /// (the drift alarm), eviction-safe like `total_requests`.
+    pub dialect_residue_total: u64,
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.
     pub upstream_health: UpstreamHealthSnapshot,
@@ -367,6 +370,7 @@ impl DashboardSnapshot {
             slots_status,
             recent_requests: metrics.recent(RECENT_REQUEST_LIMIT),
             total_requests: metrics.total_requests(),
+            dialect_residue_total: metrics.dialect_residue_total(),
             upstream_health: upstream_health.snapshot(),
             // Stored config plus live reuse totals — see `CacheStatusCache`.
             cache: cache
@@ -554,6 +558,8 @@ mod tests {
         let slots = SlotsCache::new();
         let metrics = ContextMetricsStore::new();
         metrics.record(crate::metrics::ContextSnapshot {
+            dialect_residue: false,
+            seq: 0,
             model_name: "qwen-3b".to_string(),
             payload_chars_before: 100,
             payload_chars_after: 100,
