@@ -1,0 +1,23 @@
+{#- Modeled on the meta-llama/Llama-3.1-*-Instruct chat template: header
+    tokens per turn, and prior tool calls rendered as BARE JSON with a
+    "parameters" key — no envelope markers. The probe must refuse this
+    (no marker, wrong key) and leave the model to the pattern tables. -#}
+{{- bos_token }}
+{%- for message in messages %}
+    {%- if message.role == 'assistant' and message.tool_calls %}
+        {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
+        {%- for tool_call in message.tool_calls %}
+            {{- '{"name": "' + tool_call.function.name + '", "parameters": ' }}
+            {{- tool_call.function.arguments | tojson }}
+            {{- '}' }}
+        {%- endfor %}
+        {{- '<|eot_id|>' }}
+    {%- else %}
+        {{- '<|start_header_id|>' + message.role + '<|end_header_id|>\n\n' }}
+        {{- message.content }}
+        {{- '<|eot_id|>' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
+{%- endif %}

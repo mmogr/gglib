@@ -3,11 +3,13 @@ mod embedding;
 mod mtp;
 mod patterns;
 mod reasoning;
+mod template_probe;
 pub mod tool_calling;
 
 use std::collections::HashMap;
 
 use gglib_core::GgufCapabilities;
+use gglib_core::domain::dialect::DialectSpec;
 use gglib_core::domain::gguf::CapabilityFlags;
 
 use embedding::detect_embedding_support;
@@ -58,10 +60,28 @@ pub fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
         extensions.insert(format!("format:{fmt}"));
     }
 
+    // Structured dialect spec, in precedence order: the template probe
+    // (render-and-diff over the model's own chat template) first, then the
+    // pattern-table result for the two formats the builtin spec covers.
+    // Gated on tool-calling for the same reason as the format tag.
+    let dialect = if tool_calling.supports_tool_calling {
+        template_probe::derive(metadata).or_else(|| {
+            // Literals match this module's own pattern-table vocabulary
+            // (`patterns.rs` / the qwen override in `tool_calling.rs`).
+            matches!(
+                tool_calling.detected_format.as_deref(),
+                Some("qwen-xml" | "hermes")
+            )
+            .then(DialectSpec::qwen_xml)
+        })
+    } else {
+        None
+    };
+
     GgufCapabilities {
         flags,
         extensions,
-        dialect: None,
+        dialect,
     }
 }
 
@@ -131,6 +151,44 @@ mod tests {
         let caps = detect_all(&metadata);
         assert!(caps.has_tool_calling());
         assert!(caps.to_tags().contains(&"format:hermes".to_string()));
+        // The template mentions the markers but renders no tool calls, so
+        // the probe yields nothing — the pattern-table fallback still
+        // resolves hermes to the builtin spec.
+        assert_eq!(caps.dialect, Some(DialectSpec::qwen_xml()));
+    }
+
+    /// The probe path end to end: an executable template that renders
+    /// tool calls produces a structured spec on the capabilities.
+    #[test]
+    fn test_detect_all_derives_dialect_from_executable_template() {
+        let template = concat!(
+            "{% for m in messages %}",
+            "{% if m.tool_calls %}",
+            "{% for tc in m.tool_calls %}",
+            "[CALL]{\"name\": \"{{ tc.function.name }}\", \"arguments\": {{ tc.function.arguments | tojson }}}[/CALL]",
+            "{% endfor %}",
+            "{% else %}{{ m.content }}{% endif %}",
+            "{% endfor %}",
+        );
+        let mut metadata = HashMap::new();
+        metadata.insert("tokenizer.chat_template".to_string(), template.to_string());
+        // The pattern tables recognise nothing here — tool-calling support
+        // itself comes from the jinja conditional heuristics.
+        metadata.insert("general.name".to_string(), "custom-agent-model".to_string());
+
+        let caps = detect_all(&metadata);
+        assert!(caps.has_tool_calling());
+        let dialect = caps.dialect.expect("probe must derive a spec");
+        assert_eq!(dialect.tool_open, "[CALL]");
+        assert_eq!(dialect.tool_close, "[/CALL]");
+    }
+
+    /// No tool calling, no dialect — a stray spec on a non-tool-calling
+    /// model would wire a parser with nothing to parse.
+    #[test]
+    fn test_detect_all_no_dialect_without_tool_calling() {
+        let caps = detect_all(&HashMap::new());
+        assert_eq!(caps.dialect, None);
     }
 
     #[test]

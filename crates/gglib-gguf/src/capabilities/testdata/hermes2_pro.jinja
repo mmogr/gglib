@@ -1,0 +1,37 @@
+{#- Modeled on the NousResearch/Hermes-2-Pro chat template: ChatML framing
+    with the whole function object tojson'd inside the <tool_call>
+    envelope (arguments-first key order in the rendered JSON). -#}
+{%- if tools %}
+    {{- '<|im_start|>system\nYou are a function calling AI model. You are provided with function signatures within <tools></tools> XML tags: <tools>' }}
+    {%- for tool in tools %}
+        {{- ' ' }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- ' </tools> For each function call return a json object with function name and arguments within <tool_call></tool_call> XML tags.<|im_end|>\n' }}
+{%- endif %}
+{%- for message in messages %}
+    {%- if message.role == "user" or message.role == "system" %}
+        {{- '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>\n' }}
+    {%- elif message.role == "assistant" %}
+        {{- '<|im_start|>assistant\n' }}
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+                {{- '<tool_call>\n' }}
+                {%- if tool_call.function is defined %}
+                    {{- tool_call.function | tojson }}
+                {%- else %}
+                    {{- tool_call | tojson }}
+                {%- endif %}
+                {{- '\n</tool_call>' }}
+            {%- endfor %}
+        {%- else %}
+            {{- message.content }}
+        {%- endif %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message.role == "tool" %}
+        {{- '<|im_start|>tool\n<tool_response>\n' + message.content + '\n</tool_response>\n<|im_end|>\n' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}
