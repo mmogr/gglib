@@ -28,8 +28,11 @@ import type { SamplingParamKey } from '../types';
 
 /** Fallback and bounds for one sampling parameter. */
 export interface InferenceParamSpec {
-  /** Value the floor supplies when no layer sets one. */
-  readonly default: number;
+  /**
+   * Value the floor supplies when no layer sets one, or `null` when the floor
+   * deliberately supplies nothing — see `maxTokens`.
+   */
+  readonly default: number | null;
   readonly min: number;
   readonly max: number;
   readonly step: number;
@@ -45,8 +48,17 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
   /** Rust: `with_hardcoded_defaults().top_k`; validation only requires `> 0`. */
   topK: { default: 40, min: 1, max: 200, step: 1 },
 
-  /** Rust: validation only requires `!= 0`. */
-  maxTokens: { default: 2048, min: 1, max: 8192, step: 1 },
+  /**
+   * Rust: `with_hardcoded_defaults()` sets `max_tokens: None`, deliberately —
+   * resolution force-writes every `Some` field into the outgoing request, so a
+   * fallback here would cap *every* request that did not name its own.
+   * Unset, llama-server applies `n_predict = -1` and generates until a stop
+   * token or the context limit.
+   *
+   * So there is no default to state, and the UI must not invent one.
+   * Validation only requires `!= 0`.
+   */
+  maxTokens: { default: null, min: 1, max: 8192, step: 1 },
 
   /** Rust: `with_hardcoded_defaults().repeat_penalty`; validation requires `> 0.0`. */
   repeatPenalty: { default: 1.0, min: 0, max: 2, step: 0.05 },

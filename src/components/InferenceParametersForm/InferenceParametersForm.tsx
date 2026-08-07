@@ -59,7 +59,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   const renderNumberInput = (field: SamplingParamKey) => {
     const { default: fallback, min, max, step } = INFERENCE_PARAMS[field];
     const label = PARAM_LABELS[field];
-    const defaultHint = formatParamValue(field, fallback);
+    // A parameter the floor leaves unset has no number to offer — no
+    // placeholder to type over, and nothing to name in the caption.
+    const defaultHint = fallback === null ? null : formatParamValue(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
     const inputId = paramId(field);
@@ -76,7 +78,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
               const val = e.target.value;
               updateField(field, val === '' ? undefined : Number(val));
             }}
-            placeholder={defaultHint}
+            placeholder={defaultHint ?? undefined}
             min={min}
             max={max}
             step={step}
@@ -100,7 +102,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         </div>
         {!isSet && (
           <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
-            Using default ({defaultHint})
+            {defaultHint === null
+              ? 'No limit — generates until the context is full'
+              : `Using default (${defaultHint})`}
           </span>
         )}
       </div>
@@ -112,7 +116,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     const label = PARAM_LABELS[field];
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
-    const displayValue = isSet ? currentValue : fallback;
+    // Every slider parameter has a floor; `?? min` only satisfies the type,
+    // which is nullable for Max Tokens' sake — and that one is a number input.
+    const displayValue = isSet ? currentValue : (fallback ?? min);
     const inputId = paramId(field);
 
     return (
