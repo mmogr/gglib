@@ -73,6 +73,7 @@ struct NamedCatalog {
 impl NamedCatalog {
     fn summary(&self, name: &str) -> ModelSummary {
         ModelSummary {
+            dialect: None,
             id: 1,
             name: name.to_owned(),
             tags: Vec::new(),

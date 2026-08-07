@@ -1,19 +1,22 @@
 //! The resolved per-model context every request pipeline is built from.
 
 use super::truncation::CHARS_PER_TOKEN_APPROX;
-use crate::domain::{DefaultsOrigin, InferenceConfig, ModelCapabilities};
+use crate::domain::{DefaultsOrigin, DialectSpec, InferenceConfig, ModelCapabilities};
+use crate::normalize::registry::dialect_for_tags;
 use crate::ports::ModelSummary;
 
 /// Everything a request pipeline needs to know about the target model,
 /// gathered in a single catalog round-trip.
 ///
-/// The five fields feed the resolution and shaping stages, which is why they
+/// The fields feed the resolution and shaping stages, which is why they
 /// travel together rather than being looked up where each is needed:
 ///
 /// * [`capabilities`](Self::capabilities) — request-side transforms
 ///   (strict-turn coalescing and friends).
-/// * [`tags`](Self::tags) — response-stream parser selection, and (via the
-///   `reasoning` tag) the sampling floor.
+/// * [`dialect`](Self::dialect) — response-stream parser selection and
+///   decode-time grammar origination.
+/// * [`tags`](Self::tags) — the sampling floor (via the `reasoning` tag) and
+///   launch narration.
 /// * [`inference_defaults`](Self::inference_defaults) — the per-model layer of
 ///   the sampling hierarchy.
 /// * [`defaults_origin`](Self::defaults_origin) — which rung
@@ -28,8 +31,15 @@ use crate::ports::ModelSummary;
 pub struct ModelContext {
     /// Stored capability bitfield — drives request-side transforms.
     pub capabilities: ModelCapabilities,
-    /// `format:*` tags — drives response-stream parser selection.
+    /// The model's tags — the sampling floor (`reasoning`) and narration.
     pub tags: Vec<String>,
+    /// Resolved tool-call dialect — drives response-stream parser selection
+    /// and decode-time grammar origination.
+    ///
+    /// Populated from the model's persisted spec when one exists, else from
+    /// the `format:*` tag fallback (see [`From<&ModelSummary>`]); `None`
+    /// selects the identity passthrough parser.
+    pub dialect: Option<DialectSpec>,
     /// Per-model inference defaults to merge into each request.
     pub inference_defaults: Option<InferenceConfig>,
     /// Whether [`inference_defaults`](Self::inference_defaults) was set by
@@ -86,6 +96,15 @@ impl From<&ModelSummary> for ModelContext {
         Self {
             capabilities: summary.capabilities,
             tags: summary.tags.clone(),
+            // The single back-compat point for dialect resolution: a
+            // persisted spec wins; rows that predate specs (or whose spec
+            // could not be derived) fall back to their `format:*` tag.
+            // Every surface builds its context here, so all of them
+            // inherit the fallback.
+            dialect: summary
+                .dialect
+                .clone()
+                .or_else(|| dialect_for_tags(&summary.tags)),
             inference_defaults: summary.inference_defaults.clone(),
             defaults_origin: summary.defaults_origin,
             context_length: summary.context_length,
@@ -123,11 +142,44 @@ mod tests {
         assert_eq!(ctx.capabilities, ModelCapabilities::REQUIRES_STRICT_TURNS);
         assert_eq!(ctx.tags, vec!["format:qwen".to_string()]);
         assert_eq!(
+            ctx.dialect, None,
+            "an unrecognized tag maps to no dialect, not a guessed one"
+        );
+        assert_eq!(
             ctx.inference_defaults.and_then(|c| c.temperature),
             Some(0.5)
         );
         assert_eq!(ctx.defaults_origin, Some(DefaultsOrigin::AutoDetected));
         assert_eq!(ctx.context_length, Some(32_768));
+    }
+
+    /// Legacy catalog rows: a `format:qwen-xml` tag with no persisted spec
+    /// resolves to the builtin — the permanent back-compat path.
+    #[test]
+    fn a_format_tag_without_a_spec_falls_back_to_the_builtin() {
+        let mut summary = super::super::tests_support::summary();
+        summary.tags = vec![crate::normalize::tags::FORMAT_QWEN_XML.to_owned()];
+        summary.dialect = None;
+
+        let ctx = ModelContext::from(&summary);
+        assert_eq!(ctx.dialect, Some(DialectSpec::qwen_xml()));
+    }
+
+    /// A persisted spec always beats the tag fallback — the tag may be
+    /// stale, the spec is what detection actually derived.
+    #[test]
+    fn a_persisted_spec_wins_over_the_tag_fallback() {
+        let derived = DialectSpec {
+            tool_open: "«TC»".to_owned(),
+            tool_close: "«/TC»".to_owned(),
+            ..DialectSpec::qwen_xml()
+        };
+        let mut summary = super::super::tests_support::summary();
+        summary.tags = vec![crate::normalize::tags::FORMAT_QWEN_XML.to_owned()];
+        summary.dialect = Some(derived.clone());
+
+        let ctx = ModelContext::from(&summary);
+        assert_eq!(ctx.dialect, Some(derived));
     }
 
     /// The budget scales with the model rather than sitting on a shared floor:

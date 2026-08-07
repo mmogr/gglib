@@ -25,6 +25,7 @@ mod tests_support {
     /// about, so adding a field to `ModelSummary` doesn't touch every test.
     pub fn summary() -> ModelSummary {
         ModelSummary {
+            dialect: None,
             id: 7,
             name: "qwen3".to_string(),
             tags: Vec::new(),

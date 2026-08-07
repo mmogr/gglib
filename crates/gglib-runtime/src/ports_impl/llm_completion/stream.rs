@@ -14,6 +14,7 @@ use futures_util::StreamExt as _;
 
 use gglib_core::{
     domain::agent::LlmStreamEvent,
+    domain::dialect::DialectSpec,
     normalize::{NormalizingStream, get_parser},
     ports::UsageSink,
     sse::SseStreamDecoder,
@@ -25,12 +26,12 @@ pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> 
 /// Turn an SSE byte response into the typed, normalized event stream the agent
 /// loop consumes, optionally tapping the response's token usage into `sink`.
 ///
-/// `model_tags` selects the response parser — empty selects the
+/// `dialect` selects the response parser — `None` selects the
 /// identity-passthrough parser, so models that already emit strict OpenAI tool
 /// calls are unaffected.
 pub(super) fn normalized_event_stream(
     response: reqwest::Response,
-    model_tags: &[String],
+    dialect: Option<&DialectSpec>,
     sink: Option<Arc<dyn UsageSink>>,
 ) -> EventStream {
     let byte_stream = response.bytes_stream();
@@ -63,7 +64,7 @@ pub(super) fn normalized_event_stream(
         }
     };
 
-    let parser = get_parser(model_tags);
+    let parser = get_parser(dialect);
     let normalized: EventStream = Box::pin(NormalizingStream::new(Box::pin(raw), parser));
 
     match sink {

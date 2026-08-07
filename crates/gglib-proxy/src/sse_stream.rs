@@ -16,6 +16,7 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visib
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::domain::DialectSpec;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline
@@ -48,7 +49,7 @@ pub fn spawn_and_return(
     rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>,
     connection: ConnectionGuard,
     model_name_owned: String,
-    tags: Vec<String>,
+    dialect: Option<DialectSpec>,
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
     cache_metrics: Arc<CacheMetricsStore>,
@@ -176,7 +177,7 @@ pub fn spawn_and_return(
                 let outcome = stream_response_to_channel(
                     resp,
                     model_name_owned.clone(),
-                    tags,
+                    dialect,
                     tx,
                     &connection,
                 )

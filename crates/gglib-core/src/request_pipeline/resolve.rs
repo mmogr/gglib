@@ -80,6 +80,7 @@ mod tests {
     async fn found_model_yields_all_three_fields() {
         let catalog = SpyCatalog {
             found: Some(ModelSummary {
+                dialect: None,
                 tags: vec!["format:qwen".to_string()],
                 capabilities: ModelCapabilities::REQUIRES_STRICT_TURNS,
                 ..summary()

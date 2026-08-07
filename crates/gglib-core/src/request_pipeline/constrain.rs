@@ -340,11 +340,12 @@ mod tests {
     #[test]
     fn grammar_shape_round_trips_through_the_parser() {
         use crate::normalize::get_parser;
+        use crate::normalize::registry::dialect_for_tags;
 
         // A string the grammar admits (call rule, JSON dialect, newlines).
         let emission = "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"a.rs\"}}\n</tool_call>";
 
-        let mut parser = get_parser(&[FORMAT_QWEN_XML.to_owned()]);
+        let mut parser = get_parser(dialect_for_tags(&[FORMAT_QWEN_XML.to_owned()]).as_ref());
         let mut out = parser.push_text(emission);
         let fin = parser.finish();
         out.tool_calls.extend(fin.tool_calls);

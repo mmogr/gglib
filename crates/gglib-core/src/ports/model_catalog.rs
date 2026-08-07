@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::domain::DefaultsOrigin;
+use crate::domain::DialectSpec;
 use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
 use crate::domain::ModelCapabilities;
@@ -71,6 +72,12 @@ pub struct ModelSummary {
     pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server defaults (`context_length`, etc.) from the database.
     pub server_defaults: Option<ServerConfig>,
+    /// Persisted tool-call dialect spec, when detection identified one.
+    ///
+    /// `None` for rows imported before specs existed and for models whose
+    /// dialect could not be derived — consumers fall back to mapping
+    /// `format:*` tags via `normalize::registry::dialect_for_tags`.
+    pub dialect: Option<DialectSpec>,
 }
 
 /// Launch specification for running a model.
