@@ -169,13 +169,14 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         <div className="flex gap-sm">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="sm"
             onClick={refresh}
           >
             Refresh
           </Button>
-          {onAddServer && (
+          {/* Hidden while empty — the empty state carries the single CTA. */}
+          {onAddServer && servers.length > 0 && (
             <Button
               type="button"
               variant="primary"

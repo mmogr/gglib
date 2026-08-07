@@ -1,5 +1,4 @@
 import { FC, FormEvent } from "react";
-import { Button } from "../ui/Button";
 import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
 import {
   PathSettings,
@@ -66,8 +65,6 @@ interface GeneralSettingsProps {
   // Actions
   onSubmit: (event: FormEvent) => Promise<void>;
   onReset: () => void;
-  onRefresh: () => void;
-  onClose: () => void;
 
   // Status
   loading: boolean;
@@ -113,8 +110,6 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setProxyLoopDetection,
   onSubmit,
   onReset,
-  onRefresh,
-  onClose,
   loading,
   saving,
   error,
@@ -130,7 +125,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   }
 
   return (
-    <form className="flex flex-col gap-md" onSubmit={onSubmit}>
+    <form id="settings-general-form" className="flex flex-col gap-xl" onSubmit={onSubmit}>
       <PathSettings
         pathInput={pathInput}
         setPathInput={setPathInput}
@@ -139,8 +134,6 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         onReset={onReset}
         saving={saving}
       />
-
-      <div className="border-t border-border my-md" />
 
       <ModelDefaults
         contextSizeInput={contextSizeInput}
@@ -168,23 +161,17 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         saving={saving}
       />
 
-      <div className="border-t border-border my-md" />
-
       <DisplaySettings
         showFitIndicators={showFitIndicators}
         setShowFitIndicators={setShowFitIndicators}
         saving={saving}
       />
 
-      <div className="border-t border-border my-md" />
-
       <DesktopSettings
         values={desktopSettings}
         onChange={setDesktopSetting}
         saving={saving}
       />
-
-      <div className="border-t border-border my-md" />
 
       <AdvancedSettings
         isOpen={isAdvancedOpen}
@@ -205,22 +192,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       {error && <p className="text-danger text-sm" role="alert">{error}</p>}
       {successMessage && <p className="text-success text-sm" role="status" aria-live="polite">{successMessage}</p>}
 
-      <div className="border-t border-border my-md" />
       <SetupWizardRow saving={saving} />
 
-      <div className="flex items-center justify-between gap-md p-lg border-t border-border shrink-0">
-        <Button type="button" variant="secondary" onClick={onRefresh} disabled={loading || saving}>
-          Refresh
-        </Button>
-        <div className="flex gap-sm">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </div>
-      </div>
     </form>
   );
 };

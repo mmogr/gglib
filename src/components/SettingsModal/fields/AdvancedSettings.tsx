@@ -64,6 +64,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
         <SettingField
           id="max-tool-iterations-input"
           label="Max Tool Iterations"
+          controlWidth="xs"
           defaultHint="25"
           description="Maximum iterations for tool calling in agentic loop"
         >
@@ -72,7 +73,6 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
             type="number"
             value={maxToolIterationsInput}
             onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-            placeholder="25"
             min="1"
             max="50"
             disabled={saving}

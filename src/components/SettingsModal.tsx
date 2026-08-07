@@ -11,6 +11,7 @@ import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { Modal } from "./ui/Modal";
+import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
 import type { McpServerInfo } from '../services/transport';
 
@@ -201,6 +202,14 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     refreshSettings();
   }, [refreshDir, refreshSettings]);
 
+  // Settings re-fetch whenever the dialog opens, replacing the old footer
+  // "Refresh" button.
+  useEffect(() => {
+    if (isOpen) {
+      handleRefresh();
+    }
+  }, [isOpen, handleRefresh]);
+
   const sourceDescription = useMemo(() => {
     if (!info) {
       return null;
@@ -214,18 +223,31 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         open={isOpen}
         onClose={onClose}
         title="Settings"
-        description="Configure download paths, ports, and MCP servers."
         size="lg"
+        height="fixed"
         preventClose={saving}
+        subHeader={
+          <Tabs
+            tabs={SETTINGS_TABS}
+            activeId={activeTab}
+            onChange={setActiveTab}
+            aria-label="Settings sections"
+            divider={false}
+          />
+        }
+        footer={
+          activeTab === "general" ? (
+            <>
+              <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="submit" form="settings-general-form" variant="primary" disabled={saving || loading}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </>
+          ) : undefined
+        }
       >
-        {/* Tab Navigation */}
-        <Tabs
-          tabs={SETTINGS_TABS}
-          activeId={activeTab}
-          onChange={setActiveTab}
-          aria-label="Settings sections"
-          className="mb-md"
-        />
 
         {/* General Settings Tab */}
         {activeTab === "general" && (
@@ -266,8 +288,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setProxyLoopDetection={setProxyLoopDetection}
             onSubmit={handleSubmit}
             onReset={handleReset}
-            onRefresh={handleRefresh}
-            onClose={onClose}
             loading={loading}
             saving={saving}
             error={error}

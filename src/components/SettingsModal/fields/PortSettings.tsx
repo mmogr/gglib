@@ -28,6 +28,7 @@ export const PortSettings: FC<PortSettingsProps> = ({
     <SettingField
       id="proxy-port-input"
       label="Proxy Server Port"
+      controlWidth="xs"
       defaultHint="8080"
       description="Port for the OpenAI-compatible proxy server"
     >
@@ -36,7 +37,6 @@ export const PortSettings: FC<PortSettingsProps> = ({
         type="number"
         value={proxyPortInput}
         onChange={(event) => setProxyPortInput(event.target.value)}
-        placeholder="8080"
         min="1024"
         max="65535"
         disabled={saving}
@@ -46,6 +46,7 @@ export const PortSettings: FC<PortSettingsProps> = ({
     <SettingField
       id="server-port-input"
       label="Base Server Port"
+      controlWidth="xs"
       defaultHint="9000"
       description="Starting port for llama-server instances"
     >
@@ -54,7 +55,6 @@ export const PortSettings: FC<PortSettingsProps> = ({
         type="number"
         value={serverPortInput}
         onChange={(event) => setServerPortInput(event.target.value)}
-        placeholder="9000"
         min="1024"
         max="65535"
         disabled={saving}
@@ -64,6 +64,7 @@ export const PortSettings: FC<PortSettingsProps> = ({
     <SettingField
       id="max-queue-size-input"
       label="Max Download Queue Size"
+      controlWidth="xs"
       defaultHint="10"
       description="Maximum number of models that can be queued for download (1-50)"
     >
@@ -72,7 +73,6 @@ export const PortSettings: FC<PortSettingsProps> = ({
         type="number"
         value={maxQueueSizeInput}
         onChange={(event) => setMaxQueueSizeInput(event.target.value)}
-        placeholder="10"
         min="1"
         max="50"
         disabled={saving}

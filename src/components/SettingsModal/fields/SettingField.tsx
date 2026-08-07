@@ -7,6 +7,11 @@ interface SettingFieldProps {
   label: string;
   children: ReactNode;
   /**
+   * Width of the control column. Numeric fields (ports, sizes) use "xs" so
+   * a 4-digit value doesn't get a full-width input.
+   */
+  controlWidth?: 'xs' | 'sm' | 'full';
+  /**
    * The value this field falls back to when left empty, e.g. "4096".
    * Rendered as an explicit "Default: 4096" hint below the control.
    *
@@ -32,10 +37,17 @@ interface SettingFieldProps {
  * is also where the placeholder-as-default defect gets fixed once,
  * instead of once per field.
  */
+const controlWidthClasses = {
+  xs: 'w-28',
+  sm: 'w-48',
+  full: 'w-full',
+} as const;
+
 export const SettingField: FC<SettingFieldProps> = ({
   id,
   label,
   children,
+  controlWidth = 'full',
   defaultHint,
   description,
   action,
@@ -44,7 +56,7 @@ export const SettingField: FC<SettingFieldProps> = ({
     <Label htmlFor={id} size="sm">
       {label}
     </Label>
-    {children}
+    <div className={controlWidthClasses[controlWidth]}>{children}</div>
     {(description || defaultHint || action) && (
       <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>
