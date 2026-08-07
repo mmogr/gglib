@@ -1,7 +1,8 @@
 import { FC } from 'react';
-import { Input } from '../../ui/Input';
 import { Select } from '../../ui/Select';
 import type { GgufModel } from '../../../types';
+import { CONTEXT_SIZE } from '../../../constants/settingsDefaults';
+import { NumberSettingField } from './NumberSettingField';
 import { SettingField } from './SettingField';
 
 interface ModelDefaultsProps {
@@ -27,23 +28,15 @@ export const ModelDefaults: FC<ModelDefaultsProps> = ({
   saving,
 }) => (
   <>
-    <SettingField
+    <NumberSettingField
       id="context-size-input"
       label="Default Context Size"
-      controlWidth="xs"
-      defaultHint="4096"
+      spec={CONTEXT_SIZE}
+      value={contextSizeInput}
+      onChange={setContextSizeInput}
       description="Default context size for models (e.g., 4096, 8192, 16384)"
-    >
-      <Input
-        id="context-size-input"
-        type="number"
-        value={contextSizeInput}
-        onChange={(event) => setContextSizeInput(event.target.value)}
-        min="512"
-        max="1000000"
-        disabled={saving}
-      />
-    </SettingField>
+      disabled={saving}
+    />
 
     <SettingField
       id="default-model-select"

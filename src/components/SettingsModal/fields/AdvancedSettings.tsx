@@ -2,11 +2,12 @@ import { FC } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
-import { Input } from '../../ui/Input';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { InferenceConfig } from '../../../types';
 import { Label } from '../../primitives';
+import { MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
+import { NumberSettingField } from './NumberSettingField';
 import { SettingField } from './SettingField';
 import { ToggleField } from './ToggleField';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
@@ -61,23 +62,15 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
 
     {isOpen && (
       <div className="flex flex-col gap-md pl-md border-l-2 border-l-border mt-sm animate-slide-down">
-        <SettingField
+        <NumberSettingField
           id="max-tool-iterations-input"
           label="Max Tool Iterations"
-          controlWidth="xs"
-          defaultHint="25"
+          spec={MAX_TOOL_ITERATIONS}
+          value={maxToolIterationsInput}
+          onChange={setMaxToolIterationsInput}
           description="Maximum iterations for tool calling in agentic loop"
-        >
-          <Input
-            id="max-tool-iterations-input"
-            type="number"
-            value={maxToolIterationsInput}
-            onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-            min="1"
-            max="50"
-            disabled={saving}
-          />
-        </SettingField>
+          disabled={saving}
+        />
 
         <SettingField
           id="title-prompt-input"
