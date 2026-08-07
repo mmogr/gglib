@@ -5,6 +5,66 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
+// Shared no-restricted-syntax selectors.
+//
+// Flat config REPLACES (never merges) a rule's config when a later block
+// matches the same file, so any block that re-declares no-restricted-syntax
+// must spread these base selectors back in or it would silently drop them.
+const baseRestrictedSyntax = [
+  {
+    // Scoped to className attributes: data-testid values like
+    // "plan-editor-approve-btn" legitimately contain the word "btn".
+    selector: "JSXAttribute[name.name='className'] Literal[value=/\\bbtn\\b/]",
+    message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
+  },
+
+  // ── Iconography ───────────────────────────────────────────────────
+  // Emoji and dingbat glyphs render as full-colour, double-width
+  // system glyphs that clash with lucide's thin monochrome strokes,
+  // and they cannot inherit currentColor. lucide-react is already a
+  // dependency; ui/Icon.tsx wraps it with aria-hidden + stroke width.
+  //
+  // Ranges deliberately EXCLUDE U+2190–U+21FF (← ↑ → ↓ ↵), which are
+  // legitimate prose characters in diff summaries and keyboard hints.
+  // High surrogates (U+D800–U+DBFF) catch astral-plane emoji.
+  {
+    selector:
+      'JSXText[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
+    message:
+      'No emoji or glyph characters in JSX. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
+  },
+  {
+    selector:
+      'Literal[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
+    message:
+      'No emoji or glyph characters in string literals. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
+  },
+];
+
+// Design-system guardrails for feature code (everything outside the
+// primitive layer). Justified exceptions (e.g. role="option" listbox rows,
+// multi-line selectable cards) opt out with an eslint-disable comment
+// explaining why.
+//
+// Color-role allocation (red only for destructive, one primary per screen,
+// green as dot-not-fill) is a documented contract in src/styles/README.md
+// rather than a lint rule: no-restricted-syntax carries a single severity
+// per file, and this repo has a recorded history of className-regex false
+// positives (see the note above baseRestrictedSyntax), so a warn-level
+// color regex cannot coexist with these error-level structural bans.
+const componentRestrictedSyntax = [
+  {
+    selector: "JSXOpeningElement[name.name='button']",
+    message:
+      'Use Button or IconButton from src/components/ui instead of a raw <button>. If this element genuinely cannot be a Button (e.g. a listbox option row), disable this rule for the line with a justification comment.',
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name='input']:has(JSXAttribute[name.name='type'] Literal[value='checkbox'])",
+    message: 'Use Checkbox from src/components/ui instead of a native checkbox input.',
+  },
+];
+
 export default [
   js.configs.recommended,
   {
@@ -67,37 +127,7 @@ export default [
       // pervasively and intentionally — the ban only survived while the
       // lint script itself was broken. Only the genuinely legacy .btn
       // class remains banned.
-      'no-restricted-syntax': [
-        'error',
-        {
-          // Scoped to className attributes: data-testid values like
-          // "plan-editor-approve-btn" legitimately contain the word "btn".
-          selector: "JSXAttribute[name.name='className'] Literal[value=/\\bbtn\\b/]",
-          message: 'Use the Button primitive from src/components/ui/Button.tsx instead of legacy .btn classes',
-        },
-
-        // ── Iconography ───────────────────────────────────────────────────
-        // Emoji and dingbat glyphs render as full-colour, double-width
-        // system glyphs that clash with lucide's thin monochrome strokes,
-        // and they cannot inherit currentColor. lucide-react is already a
-        // dependency; ui/Icon.tsx wraps it with aria-hidden + stroke width.
-        //
-        // Ranges deliberately EXCLUDE U+2190–U+21FF (← ↑ → ↓ ↵), which are
-        // legitimate prose characters in diff summaries and keyboard hints.
-        // High surrogates (U+D800–U+DBFF) catch astral-plane emoji.
-        {
-          selector:
-            'JSXText[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
-          message:
-            'No emoji or glyph characters in JSX. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
-        },
-        {
-          selector:
-            'Literal[value=/[\\u2600-\\u27BF\\u2B00-\\u2BFF\\u25A0-\\u25FF\\uFE0F\\uD800-\\uDBFF]/]',
-          message:
-            'No emoji or glyph characters in string literals. Use lucide-react via <Icon icon={...} /> from src/components/ui/Icon.tsx.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...baseRestrictedSyntax],
 
       // Warn about inline styles (except truly dynamic ones)
       'no-restricted-properties': [
@@ -106,6 +136,38 @@ export default [
           object: '*',
           property: 'style',
           message: 'Avoid inline styles. Use Tailwind classes or CSS modules. If truly dynamic, add a TODO comment explaining why.',
+        },
+      ],
+    },
+  },
+  {
+    // Design-system guardrails: feature code must use the primitive layer.
+    // The primitive layer itself (ui/, primitives/) is the only place raw
+    // buttons and native checkboxes may be rendered.
+    files: ['src/components/**/*.tsx', 'src/pages/**/*.tsx'],
+    ignores: ['src/components/ui/**', 'src/components/primitives/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...componentRestrictedSyntax],
+    },
+  },
+  {
+    // Platform boundary: components and pages must stay platform-agnostic
+    // (styles/README.md §platform-parity). Tauri access goes through
+    // src/services/platform. This is the real rule behind the
+    // `lint:boundaries` npm script, which previously enabled
+    // no-restricted-imports with no options — a permanent no-op.
+    files: ['src/components/**/*.{ts,tsx}', 'src/pages/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@tauri-apps/*'],
+              message:
+                'Components and pages are platform-agnostic; route Tauri access through src/services/platform.',
+            },
+          ],
         },
       ],
     },

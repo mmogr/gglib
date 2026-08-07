@@ -62,6 +62,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
           const isRunning = isModelRunning(model.id);
           const tps = model.benchmarkSummary?.latest_tg_tps ?? model.benchmarkSummary?.best_tg_tps;
           return (
+          // eslint-disable-next-line no-restricted-syntax -- role="option" listbox row, not a Button-shaped control
           <button
             key={model.id || model.name}
             type="button"

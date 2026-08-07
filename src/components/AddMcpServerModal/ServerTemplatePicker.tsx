@@ -57,6 +57,7 @@ export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTe
       {/* Raw buttons by design: multi-line selectable cards, not Button-shaped controls. */}
       <div className="grid grid-cols-2 gap-sm">
         {SERVER_TEMPLATES.map((template) => (
+          // eslint-disable-next-line no-restricted-syntax -- multi-line selectable card, not a Button-shaped control
           <button
             key={template.name}
             type="button"
