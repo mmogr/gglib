@@ -5,6 +5,7 @@ import ToolDetailsModal from './ToolDetailsModal';
 import { Wrench } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Icon } from '../ui/Icon';
+import { Chip } from '../ui/Chip';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
@@ -71,24 +72,21 @@ const ToolUsageBadge: React.FC = () => {
 
   return (
     <>
-      <button
-        className={cn(
-          'inline-flex items-center gap-1 py-[2px] px-2 text-2xs font-medium border-none rounded-full cursor-pointer transition-all duration-150 ml-2 hover:scale-105 active:scale-[0.98]',
-          status === 'running' && 'bg-primary-subtle text-primary border border-primary-border hover:bg-primary/20 animate-pulse',
-          status === 'success' && 'bg-success-subtle text-success border border-success-border hover:bg-success/20',
-          status === 'error' && 'bg-danger-subtle text-danger border border-danger-border hover:bg-danger/20',
-          status === 'mixed' && 'bg-warning-subtle text-warning border border-warning-border hover:bg-warning/20',
-        )}
+      <Chip
+        size="sm"
+        variant={
+          status === 'running' ? 'primary'
+          : status === 'success' ? 'success'
+          : status === 'error' ? 'danger'
+          : 'warning'
+        }
+        className={cn('ml-2 rounded-full max-w-[220px]', status === 'running' && 'animate-pulse')}
+        leftIcon={<Icon icon={Wrench} size={12} />}
         onClick={() => setIsModalOpen(true)}
-        title="Click to view tool execution details"
-        aria-live="polite"
-        aria-label={ariaLabel}
+        title={`Click to view tool execution details. ${ariaLabel}`}
       >
-        <span className="text-xs leading-none" aria-hidden="true">
-          <Icon icon={Wrench} size={14} />
-        </span>
-        <span className="leading-none whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{displayNames}</span>
-      </button>
+        {displayNames}
+      </Chip>
 
       {isModalOpen && (
         <ToolDetailsModal

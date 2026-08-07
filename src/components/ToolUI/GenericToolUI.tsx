@@ -27,10 +27,10 @@ const StatusBadge: React.FC<{
   status: 'running' | 'complete' | 'error' | 'incomplete';
 }> = ({ status }) => {
   const statusConfig = {
-    running: { icon: Loader2, label: 'Running', className: 'bg-primary-subtle text-primary-light border border-primary-border' },
-    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-success-subtle text-success border border-success-border' },
-    error: { icon: XCircle, label: 'Error', className: 'bg-danger-subtle text-danger border border-danger-border' },
-    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-warning-subtle text-warning border border-warning-border' },
+    running: { icon: Loader2, label: 'Running', className: 'bg-primary-subtle text-primary-light' },
+    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-success-subtle text-success' },
+    error: { icon: XCircle, label: 'Error', className: 'bg-danger-subtle text-danger' },
+    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-warning-subtle text-warning' },
   };
 
   const config = statusConfig[status];

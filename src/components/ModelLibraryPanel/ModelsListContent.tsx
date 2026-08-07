@@ -6,6 +6,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../primitives/EmptyState';
 import { cn } from '../../utils/cn';
+import { Chip } from '../ui/Chip';
 
 interface ModelsListContentProps {
   models: GgufModel[];
@@ -79,7 +80,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
               <div className="font-medium text-base flex items-center gap-sm w-full break-words">
                 {model.name}
                 {isRunning && (
-                  <span className="py-xs px-sm rounded-md text-xs font-medium bg-success text-text-inverse">Running</span>
+                  <Chip variant="success" size="sm">Running</Chip>
                 )}
               </div>
               <div className="flex items-center gap-md text-sm text-text-muted flex-wrap">
@@ -90,13 +91,12 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {/* Neutral: quantization and throughput are facts about the
                     model, not states needing attention. */}
                 {model.quantization && (
-                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-text-secondary border border-border">{model.quantization}</span>
+                  <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
                 {tps != null && (
-                  <span className="inline-flex items-center gap-xs py-xs px-sm bg-background text-text-secondary rounded-sm text-xs font-medium border border-border tabular-nums">
-                    <Icon icon={Zap} size={11} />
+                  <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="tabular-nums">
                     {tps.toFixed(0)} t/s
-                  </span>
+                  </Chip>
                 )}
               </div>
             </div>

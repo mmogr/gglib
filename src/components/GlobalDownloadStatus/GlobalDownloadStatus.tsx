@@ -9,6 +9,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import { Chip } from '../ui/Chip';
 
 interface GlobalDownloadStatusProps {
   /** Current download progress from useDownloadManager hook */
@@ -159,13 +160,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             </span>
             {queueCount > 0 && (
               <div className="relative">
-                <button
-                  className="bg-primary-subtle text-primary text-xs font-medium px-[0.5rem] py-[0.15rem] rounded-sm border-none cursor-pointer transition-all hover:bg-primary/20"
+                <Chip
+                  variant="primary"
+                  size="sm"
                   onClick={() => setIsQueuePopoverOpen((prev) => !prev)}
                   title="Click to view and manage queue"
                 >
                   +{queueCount} queued
-                </button>
+                </Chip>
                 <DownloadQueuePopover
                   isOpen={isQueuePopoverOpen}
                   onClose={() => setIsQueuePopoverOpen(false)}

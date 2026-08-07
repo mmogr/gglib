@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { Chip } from '../../ui/Chip';
 
 interface TagChipsProps {
   tags: string[];
@@ -16,16 +17,9 @@ export const TagChips: FC<TagChipsProps> = ({ tags, onRemoveTag }) => {
   return (
     <div className="flex flex-wrap gap-sm">
       {tags.map(tag => (
-        <div key={tag} className="inline-flex items-center gap-sm py-xs px-md border border-border rounded-lg text-sm bg-background text-text">
+        <Chip key={tag} onRemove={() => onRemoveTag(tag)} removeLabel={`Remove tag ${tag}`}>
           {tag}
-          <button
-            className="bg-transparent border-none text-text cursor-pointer text-lg leading-none p-0 m-0 opacity-70 transition duration-200 hover:opacity-100 hover:text-danger"
-            onClick={() => onRemoveTag(tag)}
-            title="Remove tag"
-          >
-            ×
-          </button>
-        </div>
+        </Chip>
       ))}
     </div>
   );
