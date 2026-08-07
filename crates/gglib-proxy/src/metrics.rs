@@ -50,11 +50,21 @@ pub struct ContextSnapshot {
     /// `true` when the request pipeline originated a decode-time tool-call
     /// grammar for this request (see `request_pipeline::constrain`).
     pub grammar_enforced: bool,
+    /// `true` when dialect residue — tool-call markup that survived
+    /// normalization — reached this request's client-visible output (see
+    /// `gglib_core::normalize::residue`). Back-patched after the response
+    /// streams via [`ContextMetricsStore::flag_dialect_residue`].
+    pub dialect_residue: bool,
     /// `true` when the pre-dispatch loop guard rejected this request with an
     /// HTTP 400 instead of forwarding it (see `loop_guard`).
     pub loop_guard_tripped: bool,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     pub recorded_at_secs: u64,
+    /// Per-store sequence number assigned by [`ContextMetricsStore::record`].
+    /// Identifies this snapshot for post-stream back-patching; callers pass
+    /// `0` and the store overwrites it. Not part of the wire contract.
+    #[serde(skip)]
+    pub seq: u64,
 }
 
 // =============================================================================
@@ -75,6 +85,10 @@ pub struct ContextMetricsStore {
     /// Monotonically increasing count of all recorded requests, including
     /// those that were evicted from the ring buffer.
     total_requests: AtomicU64,
+    /// Count of requests whose client-visible output carried dialect
+    /// residue, including flags for snapshots already evicted from the ring
+    /// buffer — eviction must not lose the count.
+    dialect_residue_total: AtomicU64,
 }
 
 impl ContextMetricsStore {
@@ -84,6 +98,7 @@ impl ContextMetricsStore {
         Self {
             snapshots: Mutex::new(VecDeque::with_capacity(MAX_SNAPSHOTS)),
             total_requests: AtomicU64::new(0),
+            dialect_residue_total: AtomicU64::new(0),
         }
     }
 
@@ -98,8 +113,11 @@ impl ContextMetricsStore {
     /// significantly.  The `total_requests` counter is updated with
     /// `Ordering::Relaxed`; exact ordering relative to concurrent readers is
     /// not required for a monotonic counter.
-    pub fn record(&self, snapshot: ContextSnapshot) {
-        self.total_requests.fetch_add(1, Ordering::Relaxed);
+    /// Returns the snapshot's sequence number, used to back-patch
+    /// stream-detected flags via [`Self::flag_dialect_residue`].
+    pub fn record(&self, mut snapshot: ContextSnapshot) -> u64 {
+        let seq = self.total_requests.fetch_add(1, Ordering::Relaxed);
+        snapshot.seq = seq;
 
         let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
         guard.push_back(snapshot);
@@ -107,6 +125,27 @@ impl ContextMetricsStore {
             guard.pop_front();
         }
         // `guard` drops here — lock released.
+        seq
+    }
+
+    /// Mark the snapshot recorded with `seq` as having leaked dialect
+    /// residue into client-visible output.
+    ///
+    /// The total counter bumps unconditionally; the per-snapshot flag is
+    /// best-effort within the ring buffer's window — a snapshot already
+    /// evicted (50+ requests later) still counts, it just cannot be shown
+    /// in the recent-request list.
+    pub fn flag_dialect_residue(&self, seq: u64) {
+        self.dialect_residue_total.fetch_add(1, Ordering::Relaxed);
+        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
+            snapshot.dialect_residue = true;
+        }
+    }
+
+    /// Total requests flagged for dialect residue, eviction-safe.
+    pub fn dialect_residue_total(&self) -> u64 {
+        self.dialect_residue_total.load(Ordering::Relaxed)
     }
 
     /// Return up to `n` of the most recent snapshots in chronological order
@@ -149,8 +188,10 @@ mod tests {
             messages_truncated: 1,
             was_clamped: false,
             grammar_enforced: false,
+            dialect_residue: false,
             loop_guard_tripped: false,
             recorded_at_secs: 0,
+            seq: 0,
         }
     }
 
@@ -241,5 +282,52 @@ mod tests {
         assert_eq!(store.total_requests(), 1);
         store.record(make_snapshot("b"));
         assert_eq!(store.total_requests(), 2);
+    }
+
+    // ── Dialect residue back-patching ─────────────────────────────────────────
+
+    #[test]
+    fn flag_by_seq_sets_the_snapshot_flag_and_counts() {
+        let store = ContextMetricsStore::new();
+        let a = store.record(make_snapshot("a"));
+        let _b = store.record(make_snapshot("b"));
+
+        store.flag_dialect_residue(a);
+
+        let recent = store.recent(10);
+        assert!(
+            recent[0].dialect_residue,
+            "flag lands on the right snapshot"
+        );
+        assert!(!recent[1].dialect_residue);
+        assert_eq!(store.dialect_residue_total(), 1);
+    }
+
+    #[test]
+    fn flag_after_eviction_still_counts_in_the_total() {
+        let store = ContextMetricsStore::new();
+        let first = store.record(make_snapshot("victim"));
+        for i in 0..MAX_SNAPSHOTS {
+            store.record(make_snapshot(&format!("m-{i}")));
+        }
+        // `first` is evicted by now; flagging must not panic and the
+        // eviction-safe total must still increment.
+        store.flag_dialect_residue(first);
+        assert_eq!(store.dialect_residue_total(), 1);
+        assert!(
+            store
+                .recent(MAX_SNAPSHOTS)
+                .iter()
+                .all(|s| !s.dialect_residue)
+        );
+    }
+
+    #[test]
+    fn seq_is_not_serialized() {
+        let store = ContextMetricsStore::new();
+        store.record(make_snapshot("a"));
+        let json = serde_json::to_string(&store.recent(1)[0]).unwrap();
+        assert!(json.contains("dialect_residue"));
+        assert!(!json.contains("\"seq\""));
     }
 }

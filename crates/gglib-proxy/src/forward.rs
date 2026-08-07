@@ -130,6 +130,10 @@ pub(crate) struct StreamOutcome {
     /// see [`gglib_core::LlmStreamEvent::Usage`] on why absent and zero must
     /// stay distinct. Feeds [`gglib_core::cache_metrics::CacheMetricsStore`].
     pub cached_tokens: Option<u32>,
+    /// First dialect marker found in the client-visible text after
+    /// normalization, if any (see `gglib_core::normalize::residue`). The
+    /// spawning task back-patches the request's metrics snapshot with it.
+    pub dialect_residue: Option<String>,
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -464,7 +468,9 @@ pub(crate) async fn forward_chat_completion(
                     messages_truncated: 0,
                     was_clamped: true,
                     grammar_enforced: false,
+                    dialect_residue: false,
                     loop_guard_tripped: false,
+                    seq: 0,
                     recorded_at_secs: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -490,14 +496,16 @@ pub(crate) async fn forward_chat_completion(
             "tool-call grammar enforced for this request (decode-time constraint)"
         );
     }
-    metrics.record(ContextSnapshot {
+    let snapshot_seq = metrics.record(ContextSnapshot {
         model_name: model_name.to_owned(),
         payload_chars_before: report.payload_chars_before,
         payload_chars_after: report.payload_chars_after,
         messages_truncated: report.messages_truncated,
         was_clamped: false,
         grammar_enforced,
+        dialect_residue: false,
         loop_guard_tripped: false,
+        seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -592,6 +600,8 @@ pub(crate) async fn forward_chat_completion(
             upstream_health,
             calibration,
             cache_metrics,
+            Arc::clone(&metrics),
+            snapshot_seq,
             forwarded_chars,
             permit,
             config,
@@ -644,7 +654,13 @@ pub(crate) async fn forward_chat_completion(
 
     // Non-streaming: read the full response and run it through the same
     // dialect normalization the streaming path applies.
-    Ok(forward_non_streaming_response(response, &cache_metrics, context.dialect.as_ref()).await)
+    Ok(forward_non_streaming_response(
+        response,
+        &cache_metrics,
+        context.dialect.as_ref(),
+        Some((metrics.as_ref(), snapshot_seq)),
+    )
+    .await)
 }
 
 /// Extract the `host:port` authority from an HTTP/HTTPS URL string.
@@ -754,6 +770,12 @@ pub(crate) async fn stream_response_to_channel(
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
     let mut normalized = Box::pin(normalized);
 
+    // Drift alarm: watch the post-normalization client-visible text for
+    // dialect markup that survived. Observation only — never alters what
+    // the client receives. Error-recovery text is deliberately excluded
+    // (its ⚠-prefixed notice already flags itself), as is reasoning.
+    let mut residue = gglib_core::normalize::ResidueScanner::new(dialect.as_ref());
+
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
     // Accumulates reasoning text for the promotion path below. Bounded in
@@ -792,9 +814,13 @@ pub(crate) async fn stream_response_to_channel(
                     reasoning_buf.push_str(content);
                     encoder.encode(&ev).map(Bytes::from)
                 }
-                LlmStreamEvent::TextDelta { .. }
-                | LlmStreamEvent::ToolCallDelta { .. }
-                | LlmStreamEvent::UpstreamError { .. } => {
+                LlmStreamEvent::TextDelta { content } => {
+                    connection.mark_generating();
+                    outcome.saw_visible_output = true;
+                    residue.feed(content);
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::ToolCallDelta { .. } | LlmStreamEvent::UpstreamError { .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
                     encoder.encode(&ev).map(Bytes::from)
@@ -880,6 +906,7 @@ pub(crate) async fn stream_response_to_channel(
             .await;
     }
 
+    outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
     outcome
 }
 
@@ -907,10 +934,16 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 
 /// Forward a non-streaming JSON response from llama-server, running the same
 /// dialect normalization the streaming path applies.
+///
+/// `residue_sink` — the metrics store and this request's snapshot sequence
+/// number — receives the dialect drift-alarm flag when post-normalization
+/// content still carries dialect markup. `None` for paths that record no
+/// snapshot (embeddings).
 pub(crate) async fn forward_non_streaming_response(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
     dialect: Option<&DialectSpec>,
+    residue_sink: Option<(&ContextMetricsStore, u64)>,
 ) -> Response {
     // Collect upstream headers we want to preserve
     let content_type = response
@@ -929,7 +962,14 @@ pub(crate) async fn forward_non_streaming_response(
             if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
                 cache_metrics.record(prompt_tokens, cached_tokens);
             }
-            let body_bytes = normalize_non_streaming_body(body_bytes, dialect);
+            let (body_bytes, residue) = normalize_non_streaming_body(body_bytes, dialect);
+            if let (Some(marker), Some((metrics, seq))) = (residue, residue_sink) {
+                warn!(
+                    marker = %marker,
+                    "dialect residue reached client-visible output (non-streaming)"
+                );
+                metrics.flag_dialect_residue(seq);
+            }
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", content_type)
@@ -957,9 +997,16 @@ pub(crate) async fn forward_non_streaming_response(
 /// get the same treatment as on the streaming path: logged, and the raw
 /// markup surfaced as visibly-flagged assistant text rather than silently
 /// dropped.
-fn normalize_non_streaming_body(body_bytes: Bytes, dialect: Option<&DialectSpec>) -> Bytes {
+///
+/// The second return value is the drift alarm's one-shot scan of each
+/// choice's post-normalization content: the first dialect marker that
+/// survived into client-visible text, if any.
+fn normalize_non_streaming_body(
+    body_bytes: Bytes,
+    dialect: Option<&DialectSpec>,
+) -> (Bytes, Option<String>) {
     let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&body_bytes) else {
-        return body_bytes;
+        return (body_bytes, None);
     };
 
     let errors = gglib_core::normalize::normalize_chat_completion_body(&mut parsed, dialect);
@@ -982,7 +1029,30 @@ fn normalize_non_streaming_body(body_bytes: Bytes, dialect: Option<&DialectSpec>
         *content = serde_json::Value::String(text);
     }
 
-    serde_json::to_vec(&parsed).map_or(body_bytes, Bytes::from)
+    // Drift alarm: one-shot scan of each choice's post-normalization
+    // content. Skipped when normalization errors were surfaced — their
+    // recovery notice embeds the raw markup and already flags itself.
+    let residue = if errors.is_empty() {
+        parsed
+            .get("choices")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|choices| {
+                choices.iter().find_map(|choice| {
+                    choice
+                        .get("message")
+                        .and_then(|m| m.get("content"))
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|text| gglib_core::normalize::scan_complete(text, dialect))
+                })
+            })
+    } else {
+        None
+    };
+
+    (
+        serde_json::to_vec(&parsed).map_or(body_bytes, Bytes::from),
+        residue,
+    )
 }
 
 #[cfg(test)]

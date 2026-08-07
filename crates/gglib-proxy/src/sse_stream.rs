@@ -53,6 +53,8 @@ pub fn spawn_and_return(
     upstream_health: Arc<UpstreamHealth>,
     calibration: Arc<TokenCalibration>,
     cache_metrics: Arc<CacheMetricsStore>,
+    context_metrics: Arc<crate::metrics::ContextMetricsStore>,
+    snapshot_seq: u64,
     forwarded_chars: usize,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
@@ -190,6 +192,17 @@ pub fn spawn_and_return(
                 // point of view, and counting it as success reset this streak
                 // on every retry, so the recycle watchdog never fired.
                 upstream_health.record_stream_outcome(outcome.saw_visible_output);
+                // Drift alarm: dialect markup survived normalization into
+                // client-visible output. Log it and back-patch this
+                // request's dashboard snapshot.
+                if let Some(marker) = &outcome.dialect_residue {
+                    warn!(
+                        model = %model_name_owned,
+                        marker = %marker,
+                        "dialect residue reached client-visible output"
+                    );
+                    context_metrics.flag_dialect_residue(snapshot_seq);
+                }
                 // Calibrate this model's chars-per-token ratio from the
                 // real prompt-token count the upstream reported.
                 if let Some(prompt_tokens) = outcome.prompt_tokens {
