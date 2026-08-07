@@ -52,6 +52,11 @@ pub struct GgufCapabilities {
     pub flags: CapabilityFlags,
     /// Unknown/experimental capabilities (forward-compatible).
     pub extensions: BTreeSet<String>,
+    /// Tool-call dialect identified at detection time, if any.
+    ///
+    /// `None` means no structured dialect is known — consumers fall back to
+    /// mapping `format:*` tags to a builtin spec.
+    pub dialect: Option<crate::domain::dialect::DialectSpec>,
 }
 
 impl GgufCapabilities {
@@ -61,6 +66,7 @@ impl GgufCapabilities {
         Self {
             flags: CapabilityFlags::empty(),
             extensions: BTreeSet::new(),
+            dialect: None,
         }
     }
 
@@ -279,36 +285,6 @@ pub struct GgufMetadata {
 pub type RawMetadata = HashMap<String, GgufValue>;
 
 // =============================================================================
-// Detection results (for detailed analysis)
-// =============================================================================
-
-/// Result of reasoning capability detection.
-#[derive(Debug, Clone, Default)]
-pub struct ReasoningDetection {
-    /// Whether the model appears to support reasoning/thinking.
-    pub supports_reasoning: bool,
-    /// Confidence level of the detection (0.0 to 1.0).
-    pub confidence: f32,
-    /// The specific pattern(s) that matched.
-    pub matched_patterns: Vec<String>,
-    /// Suggested reasoning format for llama-server.
-    pub suggested_format: Option<String>,
-}
-
-/// Result of tool calling capability detection.
-#[derive(Debug, Clone, Default)]
-pub struct ToolCallingDetection {
-    /// Whether the model appears to support tool/function calling.
-    pub supports_tool_calling: bool,
-    /// Confidence level of the detection (0.0 to 1.0).
-    pub confidence: f32,
-    /// The specific pattern(s) that matched.
-    pub matched_patterns: Vec<String>,
-    /// Detected tool calling format (e.g., "hermes", "llama3", "mistral").
-    pub detected_format: Option<String>,
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
@@ -329,6 +305,7 @@ mod tests {
         let caps = GgufCapabilities {
             flags: CapabilityFlags::REASONING | CapabilityFlags::TOOL_CALLING,
             extensions: BTreeSet::new(),
+            dialect: None,
         };
         assert!(caps.has_reasoning());
         assert!(caps.has_tool_calling());
@@ -346,6 +323,7 @@ mod tests {
         let caps = GgufCapabilities {
             flags: CapabilityFlags::empty(),
             extensions,
+            dialect: None,
         };
 
         let tags = caps.to_tags();

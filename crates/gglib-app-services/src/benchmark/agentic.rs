@@ -115,6 +115,9 @@ pub async fn run_agentic_eval(
     // The gglib arm's per-model facts, straight from the catalog row.
     let model_context = ModelContext {
         capabilities: model.capabilities,
+        // Same tag fallback the catalog resolution path applies in
+        // `From<&ModelSummary> for ModelContext`.
+        dialect: gglib_core::normalize::registry::dialect_for_tags(&model.tags),
         tags: model.tags.clone(),
         inference_defaults: model.inference_defaults.clone(),
         defaults_origin: model.defaults_origin,

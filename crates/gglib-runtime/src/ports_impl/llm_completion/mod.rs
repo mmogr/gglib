@@ -399,7 +399,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
         Ok(stream::normalized_event_stream(
             response,
-            &self.model_context.tags,
+            self.model_context.dialect.as_ref(),
             self.usage_sink.clone(),
         ))
     }

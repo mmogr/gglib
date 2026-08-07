@@ -96,6 +96,7 @@ mod tests {
     /// The single model these tests resolve: id 7, name "qwen3".
     fn model() -> Model {
         Model {
+            dialect_spec: None,
             id: 7,
             name: "qwen3".to_string(),
             model_key: String::new(),

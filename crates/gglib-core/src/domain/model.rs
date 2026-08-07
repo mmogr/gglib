@@ -132,6 +132,13 @@ pub struct Model {
     /// be overridden at request time. Part of the 4-level fallback chain.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
+    /// Tool-call dialect spec detected at import/retag time.
+    ///
+    /// Stored as JSON in the database. `None` for rows imported before
+    /// specs existed and for models whose dialect could not be derived —
+    /// consumers fall back to the `format:*` tag mapping.
+    #[serde(default)]
+    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
     ///
     /// `None` when no benchmark has been run for this model yet, or when the
@@ -197,6 +204,9 @@ pub struct NewModel {
     /// Per-model server startup defaults.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
+    /// See [`Model::dialect_spec`].
+    #[serde(default)]
+    pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,6 +304,7 @@ impl NewModel {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
+            dialect_spec: None,
         }
     }
 }
@@ -327,6 +338,7 @@ impl Model {
             inference_defaults: self.inference_defaults.clone(),
             defaults_origin: self.defaults_origin,
             server_defaults: self.server_defaults.clone(),
+            dialect_spec: self.dialect_spec.clone(),
         }
     }
 }
@@ -377,6 +389,7 @@ mod tests {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
+            dialect_spec: None,
             benchmark_summary: None,
         };
 

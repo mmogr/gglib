@@ -63,6 +63,9 @@ pub async fn execute(
                 if !diff.removed.is_empty() {
                     println!("  [{id}] {name} — removed: {}", diff.removed.join(", "));
                 }
+                if diff.spec_changed {
+                    println!("  [{id}] {name} — dialect spec re-derived");
+                }
             }
             Err(e) => {
                 eprintln!("  [{id}] {name} — FAILED: {e}");

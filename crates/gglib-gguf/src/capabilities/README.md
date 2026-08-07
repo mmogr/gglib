@@ -11,6 +11,9 @@ such as reasoning/thinking support and tool/function calling.
 
 - `reasoning` - Reasoning/thinking model detection
 - `tool_calling` - Tool/function calling detection
+- `template_probe` - Tool-call dialect derivation by render-and-diff over
+  the model's own chat template — produces the structured `DialectSpec`
+  persisted per model, with the pattern tables as fallback
 - `mtp` - Multi-Token Prediction draft head detection
 - `embedding` - Embedding-model detection, from pooling type or an encoder-only architecture
 - `patterns` - Pattern constants shared across detection modules
@@ -27,6 +30,7 @@ such as reasoning/thinking support and tool/function calling.
 | [`mtp.rs`](mtp.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-mtp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-mtp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-mtp-coverage.json) |
 | [`patterns.rs`](patterns.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-patterns-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-patterns-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-patterns-coverage.json) |
 | [`reasoning.rs`](reasoning.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-reasoning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-reasoning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-reasoning-coverage.json) |
+| [`template_probe.rs`](template_probe.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-template_probe-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-template_probe-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-template_probe-coverage.json) |
 | [`tool_calling.rs`](tool_calling.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-tool_calling-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-tool_calling-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-tool_calling-coverage.json) |
 <!-- module-table:end -->
 

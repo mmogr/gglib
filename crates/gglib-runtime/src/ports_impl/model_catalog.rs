@@ -34,6 +34,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
     let file_size = m.file_path.metadata().map(|md| md.len()).unwrap_or(0);
 
     ModelSummary {
+        dialect: m.dialect_spec.clone(),
         id: m.id as u32,
         name: m.name.clone(),
         tags: m.tags.clone(),
@@ -149,6 +150,7 @@ mod tests {
     impl OneModelRepo {
         fn model() -> Model {
             Model {
+                dialect_spec: None,
                 id: 7,
                 name: "qwen3".to_string(),
                 model_key: String::new(),

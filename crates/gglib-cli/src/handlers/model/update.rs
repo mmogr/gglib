@@ -471,6 +471,7 @@ mod tests {
         metadata.insert("test.key".to_string(), "test.value".to_string());
 
         Model {
+            dialect_spec: None,
             id: 1,
             name: "Original Name".to_string(),
             model_key: String::new(),

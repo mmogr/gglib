@@ -1,0 +1,25 @@
+{#- Modeled on the deepseek-ai/DeepSeek-R1 chat template: fullwidth-bar
+    marker tokens and tool-call bodies rendered as fenced ```json blocks
+    with the function name OUTSIDE the JSON. The probe must refuse this —
+    the body is not a {"name", "arguments"} JSON object. -#}
+{{- bos_token }}
+{%- for message in messages %}
+    {%- if message.role == 'system' %}
+        {{- message.content }}
+    {%- elif message.role == 'user' %}
+        {{- '<｜User｜>' + message.content }}
+    {%- elif message.role == 'assistant' and message.tool_calls %}
+        {{- '<｜Assistant｜><｜tool▁calls▁begin｜>' }}
+        {%- for tool_call in message.tool_calls %}
+            {{- '<｜tool▁call▁begin｜>function<｜tool▁sep｜>' + tool_call.function.name + '\n```json\n' }}
+            {{- tool_call.function.arguments | tojson }}
+            {{- '\n```<｜tool▁call▁end｜>' }}
+        {%- endfor %}
+        {{- '<｜tool▁calls▁end｜><｜end▁of▁sentence｜>' }}
+    {%- elif message.role == 'assistant' %}
+        {{- '<｜Assistant｜>' + message.content + '<｜end▁of▁sentence｜>' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<｜Assistant｜>' }}
+{%- endif %}

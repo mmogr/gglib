@@ -133,7 +133,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             tags TEXT DEFAULT '[]',
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
-            capabilities INTEGER DEFAULT 0
+            capabilities INTEGER DEFAULT 0,
+            dialect_spec TEXT
         )
         "#,
     )
@@ -150,6 +151,16 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // `row_mappers::resolve_defaults_origin`), so a backfill pass would only
     // duplicate work every row already gets for free.
     let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN defaults_origin TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
+    // Migration: add dialect_spec to models — the structured tool-call
+    // dialect detected at import/retag time (JSON-serialized
+    // `gglib_core::domain::DialectSpec`). No backfill: rows without a spec
+    // fall back to their `format:*` tag at context-resolution time, and
+    // `gglib model retag` re-derives the spec from persisted metadata.
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN dialect_spec TEXT"#)
         .execute(pool)
         .await;
     // Ignore error if column already exists

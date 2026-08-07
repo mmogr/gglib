@@ -20,14 +20,15 @@ use serde_json::{Value, json};
 use super::error::NormalizationError;
 use super::parser::ParserOutput;
 use super::registry::get_parser;
+use crate::domain::dialect::DialectSpec;
 
 /// Normalize a complete (non-streaming) `chat.completion` response body in
-/// place, using the dialect parser selected by `model_tags`.
+/// place, using the parser for the model's resolved `dialect`.
 ///
 /// Only `message.content` strings are processed; a null, absent, or
 /// non-string content is left untouched, as is everything else in the body.
-/// For models with no recognised `format:*` tag the parser is the identity
-/// passthrough and the body comes back byte-identical.
+/// For models with no dialect the parser is the identity passthrough and
+/// the body comes back byte-identical.
 ///
 /// When markup is extracted:
 /// - `message.content` becomes the remaining text, or `null` when a tool
@@ -44,7 +45,7 @@ use super::registry::get_parser;
 /// the streaming path does.
 pub fn normalize_chat_completion_body(
     body: &mut Value,
-    model_tags: &[String],
+    dialect: Option<&DialectSpec>,
 ) -> Vec<NormalizationError> {
     let mut all_errors = Vec::new();
 
@@ -65,7 +66,7 @@ pub fn normalize_chat_completion_body(
 
         // Parsers are stream-stateful: one fresh parser per choice, fed the
         // whole content as a single chunk, then flushed.
-        let mut parser = get_parser(model_tags);
+        let mut parser = get_parser(dialect);
         let mut out = parser.push_text(content);
         let fin = parser.finish();
         merge(&mut out, fin);
@@ -140,10 +141,12 @@ fn merge(into: &mut ParserOutput, from: ParserOutput) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::normalize::registry::dialect_for_tags;
     use crate::normalize::tags::FORMAT_QWEN_XML;
 
-    fn qwen_tags() -> Vec<String> {
-        vec![FORMAT_QWEN_XML.to_owned()]
+    fn qwen_dialect() -> Option<DialectSpec> {
+        // Resolved the same way production does for legacy tagged rows.
+        dialect_for_tags(&[FORMAT_QWEN_XML.to_owned()])
     }
 
     fn body_with_content(content: &str) -> Value {
@@ -166,7 +169,7 @@ mod tests {
         let mut body = body_with_content(
             r#"<tool_call>{"name":"read_file","arguments":{"path":"a.rs"}}</tool_call>"#,
         );
-        let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
+        let errors = normalize_chat_completion_body(&mut body, qwen_dialect().as_ref());
 
         assert!(errors.is_empty(), "{errors:?}");
         let message = &body["choices"][0]["message"];
@@ -185,7 +188,7 @@ mod tests {
     fn surrounding_text_is_preserved() {
         let mut body =
             body_with_content(r#"On it. <tool_call>{"name":"ls","arguments":{}}</tool_call>"#);
-        let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
+        let errors = normalize_chat_completion_body(&mut body, qwen_dialect().as_ref());
 
         assert!(errors.is_empty());
         let message = &body["choices"][0]["message"];
@@ -198,7 +201,7 @@ mod tests {
     fn untagged_model_is_passthrough() {
         let original = body_with_content("<tool_call>not for us</tool_call>");
         let mut body = original.clone();
-        let errors = normalize_chat_completion_body(&mut body, &[]);
+        let errors = normalize_chat_completion_body(&mut body, None);
 
         assert!(errors.is_empty());
         assert_eq!(body, original);
@@ -210,7 +213,7 @@ mod tests {
     fn plain_text_reply_is_untouched() {
         let original = body_with_content("Just an answer.");
         let mut body = original.clone();
-        let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
+        let errors = normalize_chat_completion_body(&mut body, qwen_dialect().as_ref());
 
         assert!(errors.is_empty());
         assert_eq!(body, original);
@@ -221,7 +224,7 @@ mod tests {
     #[test]
     fn malformed_markup_surfaces_an_error() {
         let mut body = body_with_content("<tool_call>{not json}</tool_call>");
-        let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
+        let errors = normalize_chat_completion_body(&mut body, qwen_dialect().as_ref());
 
         assert_eq!(errors.len(), 1);
     }
@@ -238,7 +241,7 @@ mod tests {
             }],
         });
         let original = body.clone();
-        let errors = normalize_chat_completion_body(&mut body, &qwen_tags());
+        let errors = normalize_chat_completion_body(&mut body, qwen_dialect().as_ref());
 
         assert!(errors.is_empty());
         assert_eq!(body, original);

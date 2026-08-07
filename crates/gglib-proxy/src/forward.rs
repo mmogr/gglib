@@ -73,6 +73,7 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
+use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
     self, ModelContext, SamplingLayers, TruncationError, TruncationReport,
@@ -578,7 +579,7 @@ pub(crate) async fn forward_chat_completion(
         // relocated to `sse_stream::spawn_and_return` (Step 4).
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let model_name_owned = model_name.to_owned();
-        let tags = context.tags;
+        let dialect = context.dialect;
 
         return Ok(crate::sse_stream::spawn_and_return(
             req_builder,
@@ -587,7 +588,7 @@ pub(crate) async fn forward_chat_completion(
             rx,
             connection,
             model_name_owned,
-            tags,
+            dialect,
             upstream_health,
             calibration,
             cache_metrics,
@@ -643,7 +644,7 @@ pub(crate) async fn forward_chat_completion(
 
     // Non-streaming: read the full response and run it through the same
     // dialect normalization the streaming path applies.
-    Ok(forward_non_streaming_response(response, &cache_metrics, &context.tags).await)
+    Ok(forward_non_streaming_response(response, &cache_metrics, context.dialect.as_ref()).await)
 }
 
 /// Extract the `host:port` authority from an HTTP/HTTPS URL string.
@@ -710,7 +711,7 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
-    tags: Vec<String>,
+    dialect: Option<DialectSpec>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
 ) -> StreamOutcome {
@@ -749,7 +750,7 @@ pub(crate) async fn stream_response_to_channel(
         }
     };
 
-    let parser = get_parser(&tags);
+    let parser = get_parser(dialect.as_ref());
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
     let mut normalized = Box::pin(normalized);
 
@@ -909,7 +910,7 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 pub(crate) async fn forward_non_streaming_response(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
-    model_tags: &[String],
+    dialect: Option<&DialectSpec>,
 ) -> Response {
     // Collect upstream headers we want to preserve
     let content_type = response
@@ -928,7 +929,7 @@ pub(crate) async fn forward_non_streaming_response(
             if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
                 cache_metrics.record(prompt_tokens, cached_tokens);
             }
-            let body_bytes = normalize_non_streaming_body(body_bytes, model_tags);
+            let body_bytes = normalize_non_streaming_body(body_bytes, dialect);
             Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", content_type)
@@ -956,12 +957,12 @@ pub(crate) async fn forward_non_streaming_response(
 /// get the same treatment as on the streaming path: logged, and the raw
 /// markup surfaced as visibly-flagged assistant text rather than silently
 /// dropped.
-fn normalize_non_streaming_body(body_bytes: Bytes, model_tags: &[String]) -> Bytes {
+fn normalize_non_streaming_body(body_bytes: Bytes, dialect: Option<&DialectSpec>) -> Bytes {
     let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&body_bytes) else {
         return body_bytes;
     };
 
-    let errors = gglib_core::normalize::normalize_chat_completion_body(&mut parsed, model_tags);
+    let errors = gglib_core::normalize::normalize_chat_completion_body(&mut parsed, dialect);
 
     for err in &errors {
         warn!(?err, "normalization error in non-streaming response");
@@ -1127,6 +1128,7 @@ mod tests {
     fn shaping_reports_grammar_enforcement_for_a_demanded_dialect_call() {
         let ctx = ModelContext {
             tags: vec![gglib_core::normalize::tags::FORMAT_QWEN_XML.to_owned()],
+            dialect: Some(gglib_core::domain::DialectSpec::qwen_xml()),
             // Tool-capable, or stage 2b strips the tools before stage 6 sees
             // them — the correct interplay for a model that cannot call tools.
             capabilities: gglib_core::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS,

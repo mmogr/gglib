@@ -3,7 +3,7 @@
 //!
 //! Adapters that implement [`crate::ports::LlmCompletionPort`] wrap the
 //! inner SSE-derived stream **once** with `NormalizingStream::new(inner,
-//! get_parser(&model.tags))`.  Every downstream consumer (Axum SSE, CLI,
+//! get_parser(dialect))`.  Every downstream consumer (Axum SSE, CLI,
 //! Tauri, the proxy, the agent loop) then sees a strict OpenAI-shaped
 //! sequence of [`LlmStreamEvent`] values, regardless of which dialect the
 //! underlying model speaks.
@@ -267,7 +267,8 @@ impl Stream for NormalizingStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::normalize::{registry::get_parser, tags};
+    use crate::normalize::registry::{dialect_for_tags, get_parser};
+    use crate::normalize::tags;
     use std::task::Poll;
 
     /// Minimal hand-rolled stream that yields a fixed sequence of events.
@@ -309,9 +310,9 @@ mod tests {
     fn wrap(events: Vec<LlmStreamEvent>, qwen: bool) -> NormalizingStream {
         let inner: InnerStream = Box::pin(VecStream::new(events.into_iter().map(Ok).collect()));
         let parser = if qwen {
-            get_parser(&[tags::FORMAT_QWEN_XML.to_owned()])
+            get_parser(dialect_for_tags(&[tags::FORMAT_QWEN_XML.to_owned()]).as_ref())
         } else {
-            get_parser(&[])
+            get_parser(None)
         };
         NormalizingStream::new(inner, parser)
     }
