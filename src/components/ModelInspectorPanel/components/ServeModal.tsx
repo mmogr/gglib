@@ -323,17 +323,17 @@ export const ServeModal: FC<ServeModalProps> = ({
         <div className="mb-lg">
           <button 
             type="button"
-            className="advanced-toggle"
+            className="flex items-center gap-xs bg-transparent text-sm font-medium text-text-secondary hover:text-text cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={() => setShowAdvanced(!showAdvanced)}
             disabled={isServing}
           >
             <Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />
             <span>Inference Parameters</span>
-            {hasInferenceOverrides && <span className="override-indicator">•</span>}
+            {hasInferenceOverrides && <span className="text-primary-light leading-none">•</span>}
           </button>
           {showAdvanced && (
-            <div className="advanced-section">
-              <p className="mt-sm text-sm text-text-secondary" style={{ marginBottom: '12px' }}>
+            <div className="mt-sm">
+              <p className="mt-sm mb-md text-sm text-text-secondary">
                 Override sampling parameters for this session. Leave empty to use model or global defaults.
               </p>
               <InferenceParametersForm

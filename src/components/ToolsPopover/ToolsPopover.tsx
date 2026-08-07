@@ -167,7 +167,7 @@ export const ToolsPopover: React.FC = () => {
               </div>
 
               {/* Tool list */}
-              <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
+              <div className="max-h-[280px] overflow-y-auto">
                 {tools.map((tool) => {
                   const name = tool.function.name;
                   const enabled = enabledTools.has(name);

@@ -63,7 +63,7 @@ const RunsPopover: FC<RunsPopoverProps> = ({
           </Button>
         )}
       </div>
-      <div className="max-h-[300px] overflow-y-auto scrollbar-thin">
+      <div className="max-h-[300px] overflow-y-auto">
         <ServerList
           servers={servers}
           onStopServer={handleStopServer}

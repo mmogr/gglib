@@ -140,7 +140,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
             />
             Raw GGUF Metadata ({metadataEntries.length} keys)
           </summary>
-          <dl className="mt-base grid grid-cols-[minmax(0,45%)_1fr] gap-x-base gap-y-md m-0 max-h-64 overflow-y-auto pr-xs scrollbar-thin">
+          <dl className="mt-base grid grid-cols-[minmax(0,45%)_1fr] gap-x-base gap-y-md m-0 max-h-64 overflow-y-auto pr-xs">
             {metadataEntries
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([key, value]) => (

@@ -193,7 +193,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
         )}
       </div>
 
-      <div className="max-h-[440px] overflow-y-auto py-sm px-md scrollbar-thin">
+      <div className="max-h-[440px] overflow-y-auto py-sm px-md">
         {/* Sort Section */}
         <div className="py-sm border-b border-border">
           <span className="block text-sm font-medium text-text mb-xs">Sort By</span>

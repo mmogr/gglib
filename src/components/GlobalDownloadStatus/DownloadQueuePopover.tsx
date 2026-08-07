@@ -159,7 +159,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         <span className="text-sm font-semibold text-text-primary">Download Queue</span>
         <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-sm">{groupedItems.length} {groupedItems.length === 1 ? 'item' : 'items'}</span>
       </div>
-      <div className="max-h-[300px] overflow-y-auto scrollbar-thin">
+      <div className="max-h-[300px] overflow-y-auto">
         {groupedItems.map((item, index) => (
           <div
             key={item.group_id || item.id}
