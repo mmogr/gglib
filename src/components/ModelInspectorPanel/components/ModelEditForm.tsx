@@ -7,6 +7,7 @@ import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/IconButton';
 import { Input } from '../../ui/Input';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
+import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
 
 interface ModelEditFormProps {
   model: GgufModel;
@@ -36,6 +37,11 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   onInferenceDefaultsChange,
   onServerDefaultsChange,
 }) => {
+  // What the model's parameters resolve to today, so an empty field can say
+  // what it will inherit instead of guessing at the floor. Keyed on the saved
+  // defaults, so saving an edit re-resolves rather than leaving the captions
+  // describing the previous configuration.
+  const resolution = useSamplingExplanation(model.id, null, model.inferenceDefaults);
 
   return (
     <>
@@ -131,6 +137,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
     <InferenceParametersForm
       value={editedInferenceDefaults}
       onChange={onInferenceDefaultsChange}
+      fallback={{ kind: 'resolved', ownLayer: 'modelUserSet', resolution }}
     />
     </>
   );

@@ -11,7 +11,7 @@ import {
   describeSource,
   formatParamValue,
   resolvedValue,
-} from './samplingProvenance';
+} from '../../../utils/samplingProvenance';
 
 interface SamplingProvenanceSectionProps {
   modelId: number;

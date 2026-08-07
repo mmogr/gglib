@@ -8,7 +8,7 @@ import {
   caveats,
   describeSource,
   formatParamValue,
-} from '../../../src/components/ModelInspectorPanel/components/samplingProvenance';
+} from '../../../src/utils/samplingProvenance';
 import type {
   InferenceProfile,
   ParamProvenance,

@@ -18,6 +18,7 @@ Shared TypeScript helpers used across the React frontend.
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
 | `mcp.ts` | MCP server status predicates (running / error state) |
+| `samplingProvenance.ts` | Render a resolved sampling parameter and the layer that supplied it; wording mirrors `gglib model explain` |
 | `messages/` | Chat message transformation helpers |
 
 For Rust-side utilities (paths, config, process management), see [gglib-core](../../crates/gglib-core/README.md) and [gglib-runtime](../../crates/gglib-runtime/README.md).

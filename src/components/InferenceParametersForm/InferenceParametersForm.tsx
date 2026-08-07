@@ -1,16 +1,37 @@
 import { FC, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
-import type { InferenceConfig } from '../../types';
+import type { InferenceConfig, SamplingParamKey } from '../../types';
+import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
+import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
+import { type InferenceFallback, fallbackCaption, fallbackValue } from './fallbackCaption';
 import './InferenceParametersForm.css';
 
 interface InferenceParametersFormProps {
   value: InferenceConfig | undefined | null;
   onChange: (newValue: InferenceConfig) => void;
   disabled?: boolean;
+  /**
+   * What an empty field on this surface falls through to. Required: a surface
+   * that does not say which rung it edits would otherwise inherit a caption
+   * describing somebody else's.
+   */
+  fallback: InferenceFallback;
 }
+
+/**
+ * DOM id for one parameter's control, so its label can point at it.
+ *
+ * Same `-description` convention as `SettingField`'s `settingDescriptionId`,
+ * spelled out here rather than imported: this form is a top-level component
+ * and has no business depending on the settings modal's internals.
+ */
+const paramId = (field: SamplingParamKey) => `inference-param-${field}`;
+
+/** DOM id for the caption below a parameter, referenced by `aria-describedby`. */
+const paramCaptionId = (field: SamplingParamKey) => `${paramId(field)}-description`;
 
 /**
  * Tristate inference parameters form.
@@ -20,13 +41,16 @@ interface InferenceParametersFormProps {
  * - null (explicitly cleared)
  * - number (explicitly set)
  * 
- * When a field is undefined/null, it shows placeholder text indicating the default.
- * A reset button appears when a value is explicitly set, allowing users to clear it.
+ * An empty field is captioned with what it will actually fall through to on
+ * this surface — see `fallbackCaption`, which is where the difference between
+ * the three surfaces lives. A reset button appears when a value is explicitly
+ * set, allowing users to clear it.
  */
 export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   value,
   onChange,
   disabled = false,
+  fallback,
 }) => {
   const config = useMemo(() => value || {}, [value]);
 
@@ -42,35 +66,38 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     onChange(updated);
   }, [config, onChange]);
 
-  const renderNumberInput = (
-    field: keyof InferenceConfig,
-    label: string,
-    min: number,
-    max: number,
-    step: number,
-    defaultHint: string
-  ) => {
+  const renderNumberInput = (field: SamplingParamKey) => {
+    const { min, max, step } = INFERENCE_PARAMS[field];
+    const label = PARAM_LABELS[field];
+    // What the field will actually take if left empty — not necessarily the
+    // floor. Null when nothing applies (Max Tokens) or nothing is known yet.
+    const inherited = fallbackValue(field, fallback);
+    const placeholder = inherited === null ? undefined : formatParamValue(field, inherited);
+    const caption = fallbackCaption(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
+    const inputId = paramId(field);
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.5rem]">
           <Input
+            id={inputId}
             type="number"
             value={isSet ? currentValue : ''}
             onChange={(e) => {
               const val = e.target.value;
               updateField(field, val === '' ? undefined : Number(val));
             }}
-            placeholder={defaultHint}
+            placeholder={placeholder}
             min={min}
             max={max}
             step={step}
             disabled={disabled}
             size="sm"
             className="flex-1 max-w-[150px]"
+            aria-describedby={!isSet && caption ? paramCaptionId(field) : undefined}
           />
           {isSet && !disabled && (
             <IconButton
@@ -85,32 +112,33 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             </IconButton>
           )}
         </div>
-        {!isSet && (
-          <span className="text-xs text-text-muted italic">
-            Using default ({defaultHint})
+        {!isSet && caption && (
+          <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
+            {caption}
           </span>
         )}
       </div>
     );
   };
 
-  const renderSlider = (
-    field: keyof InferenceConfig,
-    label: string,
-    min: number,
-    max: number,
-    step: number,
-    defaultHint: string
-  ) => {
+  const renderSlider = (field: SamplingParamKey) => {
+    const { min, max, step } = INFERENCE_PARAMS[field];
+    const label = PARAM_LABELS[field];
+    const caption = fallbackCaption(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
-    const displayValue = isSet ? currentValue : parseFloat(defaultHint);
+    // An unset thumb sits on the value that will actually apply, so it agrees
+    // with the caption beside it. `?? min` covers the one case neither knows:
+    // a value cleared from this very layer, not yet re-resolved.
+    const displayValue = isSet ? currentValue : (fallbackValue(field, fallback) ?? min);
+    const inputId = paramId(field);
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-sm font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.75rem]">
           <input
+            id={inputId}
             type="range"
             value={displayValue}
             onChange={(e) => {
@@ -121,9 +149,12 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             step={step}
             disabled={disabled}
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
+            aria-describedby={!isSet && caption ? paramCaptionId(field) : undefined}
           />
-          <span className="min-w-[100px] text-sm text-text tabular-nums">
-            {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
+          <span
+            className={`min-w-[100px] text-sm tabular-nums ${isSet ? 'text-text' : 'text-text-muted'}`}
+          >
+            {displayValue.toFixed(2)}
           </span>
           {isSet && !disabled && (
             <IconButton
@@ -138,6 +169,11 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             </IconButton>
           )}
         </div>
+        {!isSet && caption && (
+          <span id={paramCaptionId(field)} className="text-xs text-text-muted italic">
+            {caption}
+          </span>
+        )}
       </div>
     );
   };
@@ -150,13 +186,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
       </p>
 
       <div className="flex flex-col gap-[1rem]">
-        {renderSlider('temperature', 'Temperature', 0, 2, 0.05, '0.7')}
-        {renderSlider('topP', 'Top P', 0, 1, 0.05, '0.95')}
-        {renderNumberInput('topK', 'Top K', 1, 200, 1, '40')}
-        {renderNumberInput('maxTokens', 'Max Tokens', 1, 8192, 1, '2048')}
-        {renderSlider('repeatPenalty', 'Repeat Penalty', 0, 2, 0.05, '1.0')}
-        {renderSlider('presencePenalty', 'Presence Penalty', 0, 2, 0.05, '0.0')}
-        {renderSlider('minP', 'Min P', 0, 1, 0.01, '0.0')}
+        {renderSlider('temperature')}
+        {renderSlider('topP')}
+        {renderNumberInput('topK')}
+        {renderNumberInput('maxTokens')}
+        {renderSlider('repeatPenalty')}
+        {renderSlider('presencePenalty')}
+        {renderSlider('minP')}
       </div>
     </div>
   );
