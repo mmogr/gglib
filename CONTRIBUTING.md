@@ -174,14 +174,30 @@ Positive evidence wins: if a template contains `[SYSTEM_PROMPT]` **and** a gener
 
 ### Adding a new architecture (response side)
 
-If the architecture needs **response normalization** (e.g., XML-wrapped tool calls):
+**Usually: nothing to add.** Response dialects are described by a
+`DialectSpec` (`crates/gglib-core/src/domain/dialect.rs`) — envelope
+markers plus body codecs — which detection derives automatically by
+executing the model's own chat template
+(`crates/gglib-gguf/src/capabilities/template_probe.rs`) and persists on
+the model row. Any family whose template renders tool calls as
+`MARKERS{json}MARKERS` works with zero code: the spec drives the
+`DelimitedToolCallParser` and the decode-time GBNF grammar alike.
 
-1. Add a `format:myarch-xml` constant to `crates/gglib-core/src/normalize/tags.rs`.
-2. Add a parser module under `crates/gglib-core/src/normalize/parsers/`.
-3. Add an arm to `get_parser()` in `crates/gglib-core/src/normalize/registry.rs`.
-4. Ensure models with this architecture receive the `format:myarch-xml` tag (add to `retag` logic if needed).
+Code is only needed for a genuinely new **body codec** — a dialect whose
+tool-call body is not `{"name", "arguments"}` JSON and not the
+`<function=...>` inner XML:
 
-No other files need to change.  The `normalize` pipeline (shared by the proxy and the in-process agent path) picks up new parsers automatically via `get_parser()`.
+1. Add a variant to `BodyCodec` in `crates/gglib-core/src/domain/dialect.rs`.
+2. Implement its decoder in `crates/gglib-core/src/normalize/parsers/delimited.rs`
+   (`finalize_tool_call` dispatches on the spec's codec list).
+3. Teach the probe's payload validation to recognize the codec's rendering
+   (`template_probe::find_payload`), or — for a builtin-style dialect — add a
+   `format:*` constant to `crates/gglib-core/src/normalize/tags.rs` and map
+   it to a spec in `dialect_for_tags()`
+   (`crates/gglib-core/src/normalize/registry.rs`).
+
+The `normalize` pipeline (shared by the proxy and the in-process agent
+path) picks up specs automatically via `get_parser()`.
 
 ### Capability overrides
 

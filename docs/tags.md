@@ -42,34 +42,72 @@ curl -X PATCH http://localhost:9887/api/models/3/capabilities \
 For details on how to add support for a new architecture, see
 [`CONTRIBUTING.md`](../CONTRIBUTING.md#model-architecture-registry).
 
-## `format:*` dialect tags
+## Dialect specs
 
 The proxy normalizes every stream into strict OpenAI-compatible events
 regardless of the dialect llama-server emits (Qwen XML tool calls, bare
-`<think>` tags, …). Which dialect parser runs is driven entirely by **system
-tags** in the `format:*` namespace, persisted on each model row:
+`<think>` tags, …). Which dialect parser runs is driven by the model's
+**dialect spec** — a structured description of the dialect (envelope
+markers, body codecs, emission layout) persisted on the model row in the
+`dialect_spec` column and resolved once per request into the
+`ModelContext`. One spec is read by all three dialect consumers — the
+stream parser, the decode-time GBNF grammar, and detection — so they
+cannot drift apart.
 
-| Tag | Parser | When auto-applied |
-|-----|--------|-------------------|
-| `format:qwen-xml` | `QwenXmlParser` | Model name contains `qwen` and the chat template emits `<tool_call>` markup |
-| `format:hermes` | `StandardJsonParser` | Hermes/ChatML-style tool-calling templates |
+### How a spec is detected
 
-Models without a dialect tag use the identity `StandardJsonParser`. A
-`format:*` tag is only emitted when tool calling is actually detected — a stray
-format hint on a non-tool-calling model would wire a parser with nothing to
-parse.
+At import (and on `gglib model retag`), detection derives the spec in
+precedence order:
 
-### Decode-time enforcement for `format:qwen-xml`
+1. **Template probe** (`gglib-gguf::capabilities::template_probe`): the
+   model's own `tokenizer.chat_template` is *executed* against two probe
+   conversations differing only in the final assistant turn — plain
+   sentinel text vs. a sentinel tool call — and the two renders are
+   diffed to extract the tool-call envelope markers. Any model family
+   whose template renders tool calls as `MARKERS{json}MARKERS` derives a
+   working spec with **zero per-family code and no model-name matching**.
+   A spec is only emitted when the rendered payload round-trips as
+   `{"name", "arguments"}` JSON — a wrong spec would corrupt client
+   output, so non-JSON body dialects (DeepSeek's fenced blocks, Llama 3's
+   `"parameters"` key) are refused here and fall through.
+2. **Pattern tables**: when the probe cannot derive (template missing —
+   common in quantized community GGUFs — or unexecutable, or a non-JSON
+   body), the legacy substring heuristics still run, and the
+   `qwen-xml`/`hermes` formats they detect map to the built-in Qwen spec.
+3. **Nothing**: no spec is stored; the model streams through the identity
+   passthrough parser.
+
+### `format:*` dialect tags
+
+The `format:*` system-tag namespace remains as the human-visible label
+and the **fallback** for rows persisted before specs existed (no
+re-import needed — resolution maps the tag to the built-in spec at
+request time, and `gglib model retag` persists a real spec from stored
+metadata):
+
+| Tag | Resolves to | When auto-applied |
+|-----|-------------|-------------------|
+| `format:qwen-xml` | built-in Qwen spec → `DelimitedToolCallParser` | Model name contains `qwen` and the chat template emits `<tool_call>` markup |
+| `format:hermes` | built-in Qwen spec → `DelimitedToolCallParser` | Hermes/ChatML-style tool-calling templates |
+
+Models without a spec or dialect tag use the identity
+`StandardJsonParser`. A spec/tag is only emitted when tool calling is
+actually detected — a stray format hint on a non-tool-calling model would
+wire a parser with nothing to parse.
+
+### Decode-time enforcement for dialect models
 
 Parsing is the rescue path; enforcement is stronger. When a client *demands*
-a tool call from a `format:qwen-xml` model — `tool_choice: "required"` or a
-named function — the proxy also originates a GBNF grammar that llama-server
-applies at decode time, so a malformed `<tool_call>` envelope, truncated
-JSON, or invented tool name cannot be generated at all. `tool_choice:
-"auto"` stays unconstrained (a grammar would forbid plain-text answers), a
-client-supplied `grammar`/`json_schema`/`response_format` is always
-respected, and requests where enforcement engaged are flagged in the proxy
-log and the dashboard's recent-request list. Kill switch:
+a tool call from a model with a JSON-codec dialect spec — `tool_choice:
+"required"` or a named function — the proxy also originates a GBNF grammar,
+generated from the same spec the parser reads, that llama-server applies at
+decode time, so a malformed envelope, truncated JSON, or invented tool name
+cannot be generated at all. This covers qwen-tagged, hermes-tagged, and
+template-derived models alike. `tool_choice: "auto"` stays unconstrained (a
+grammar would forbid plain-text answers), a client-supplied
+`grammar`/`json_schema`/`response_format` is always respected, and requests
+where enforcement engaged are flagged in the proxy log and the dashboard's
+recent-request list. Kill switch:
 
 ```bash
 GGLIB_DISABLE_GRAMMAR=1 gglib proxy
@@ -119,19 +157,27 @@ are never touched by detection or retagging.
 
 ## Retagging an existing catalog
 
-Models imported before format-tag detection landed can be retagged in place
-from their persisted GGUF metadata — no re-download required:
+Models imported before format-tag or dialect-spec detection landed can be
+retagged in place from their persisted GGUF metadata — no re-download
+required. Retagging re-runs the full detection stack, template probe
+included, and persists the derived dialect spec alongside the tags:
 
 ```bash
-# Additive: only append missing format:* tags, never remove anything
+# Additive: append missing format:* tags and fill a missing dialect spec,
+# never remove or overwrite anything
 gglib model retag --all
 
-# Full rebuild: drop and re-derive every auto-generated tag, preserving user tags
+# Full rebuild: drop and re-derive every auto-generated tag AND the dialect
+# spec (including clearing one that is no longer derivable), preserving
+# user tags
 gglib model retag --all --full
 
 # Single model
 gglib model retag qwen3-30b
 ```
+
+Re-registering a model (re-import or re-download) also re-derives the spec,
+overwriting the stored one — the same semantics as `--full`.
 
 End-to-end round-trip coverage lives in
 [`crates/gglib-proxy/tests/integration_proxy_pipeline.rs`](../crates/gglib-proxy/tests/integration_proxy_pipeline.rs).
