@@ -1,7 +1,7 @@
 import { FC } from 'react';
 import { Plus, X } from 'lucide-react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
+import { Tabs } from '../ui/Tabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
@@ -68,10 +68,11 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
       <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
         <div className="mb-md">
-          <SidebarTabs<ChatPageTabId>
+          <Tabs<ChatPageTabId>
             tabs={CHAT_PAGE_TABS}
-            activeTab={activeTab}
-            onTabChange={onTabChange}
+            activeId={activeTab}
+            onChange={onTabChange}
+            aria-label="Chat views"
           />
         </div>
 

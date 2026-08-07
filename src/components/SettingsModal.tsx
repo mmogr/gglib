@@ -11,10 +11,16 @@ import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { Modal } from "./ui/Modal";
-import { cn } from '../utils/cn';
+import { Tabs, type TabItem } from "./ui/Tabs";
 import type { McpServerInfo } from '../services/transport';
 
 type SettingsTab = "general" | "profiles" | "mcp";
+
+const SETTINGS_TABS: TabItem<SettingsTab>[] = [
+  { id: "general", label: "General" },
+  { id: "profiles", label: "Inference Profiles" },
+  { id: "mcp", label: "MCP Servers" },
+];
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -213,38 +219,13 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         preventClose={saving}
       >
         {/* Tab Navigation */}
-        <div className="flex gap-xs border-b border-border mb-md">
-          <button
-            type="button"
-            className={cn(
-              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
-              activeTab === "general" && 'text-primary border-b-primary',
-            )}
-            onClick={() => setActiveTab("general")}
-          >
-            General
-          </button>
-          <button
-            type="button"
-            className={cn(
-              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
-              activeTab === "profiles" && 'text-primary border-b-primary',
-            )}
-            onClick={() => setActiveTab("profiles")}
-          >
-            Inference Profiles
-          </button>
-          <button
-            type="button"
-            className={cn(
-              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
-              activeTab === "mcp" && 'text-primary border-b-primary',
-            )}
-            onClick={() => setActiveTab("mcp")}
-          >
-            MCP Servers
-          </button>
-        </div>
+        <Tabs
+          tabs={SETTINGS_TABS}
+          activeId={activeTab}
+          onChange={setActiveTab}
+          aria-label="Settings sections"
+          className="mb-md"
+        />
 
         {/* General Settings Tab */}
         {activeTab === "general" && (

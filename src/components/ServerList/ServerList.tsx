@@ -3,7 +3,7 @@ import { RotateCcw, ServerOff, Square } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { ServerInfo } from '../../types';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
+import { Tabs } from '../ui/Tabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
 import { Row } from '../primitives';
 import { Icon } from '../ui/Icon';
@@ -116,10 +116,11 @@ const ServerList: FC<ServerListProps> = ({
             </div>
             {expandedServerId === server.modelId && onSelectModel && (
               <div className="border-t border-border bg-background-secondary">
-                <SidebarTabs<ChatPageTabId>
+                <Tabs<ChatPageTabId>
                   tabs={CHAT_PAGE_TABS}
-                  activeTab="chat"
-                  onTabChange={(tab) => handleTabSelect(server.modelId, tab)}
+                  activeId="chat"
+                  onChange={(tab) => handleTabSelect(server.modelId, tab)}
+                  aria-label="Open server view"
                 />
               </div>
             )}
