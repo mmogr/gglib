@@ -113,6 +113,19 @@ recent-request list. Kill switch:
 GGLIB_DISABLE_GRAMMAR=1 gglib proxy
 ```
 
+### The dialect drift alarm
+
+Detection is heuristic, and the failure mode of a miss is silent: raw
+tool-call markup flows to the client as ordinary text. The proxy therefore
+watches the *post-normalization* client-visible output for known dialect
+markers (the model's own spec markers plus a curated cross-dialect set) on
+both the streaming and non-streaming paths. A hit never alters the
+response — it is logged (`dialect residue reached client-visible output`),
+counted eviction-safely as `dialect_residue_total` on the dashboard
+snapshot, and flagged on the request's entry in the recent-request list.
+A firing alarm means "this model's dialect handling needs a look" —
+usually a `gglib model retag` away from fixed.
+
 ## Capability tags
 
 Alongside `format:*` tags, gglib detects **capability tags** at import time
