@@ -173,15 +173,15 @@ fn gbnf_literal_safe(name: &str) -> bool {
 
 /// Build the GBNF grammar for one or more Qwen-dialect tool calls.
 ///
-/// The envelope is exactly what [`QwenXmlParser`] prefers to parse — the
-/// JSON body dialect, `{"name": …, "arguments": {…}}` in that key order
-/// (the order the models were trained on) — wrapped in
+/// The envelope is exactly what the [`DelimitedToolCallParser`] prefers to
+/// parse — the JSON body dialect, `{"name": …, "arguments": {…}}` in that
+/// key order (the order the models were trained on) — wrapped in
 /// `<tool_call>`/`</tool_call>` with the newlines Qwen emits. `name` is an
 /// enum of the demanded tools; `arguments` is constrained to well-formed
 /// JSON. Malformed envelopes, truncated JSON, and invented tool names all
 /// become unrepresentable at decode time.
 ///
-/// [`QwenXmlParser`]: crate::normalize::parsers::qwen_xml::QwenXmlParser
+/// [`DelimitedToolCallParser`]: crate::normalize::parsers::delimited::DelimitedToolCallParser
 fn qwen_tool_call_grammar(names: &[String]) -> String {
     let name_alternatives = names
         .iter()
@@ -335,7 +335,7 @@ mod tests {
         assert!(!constrain_tool_calls_inner(&mut b, &qwen_ctx()));
     }
 
-    /// The generated grammar parses back through the `QwenXmlParser`: what
+    /// The generated grammar parses back through the `DelimitedToolCallParser`: what
     /// the grammar admits, the proxy's own parser must extract.
     #[test]
     fn grammar_shape_round_trips_through_the_parser() {

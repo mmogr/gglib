@@ -18,8 +18,9 @@
 ///
 /// Models tagged with this string emit the legacy Qwen 2/2.5/3 tool-call
 /// dialect that pre-dates OpenAI-compatible `tool_calls`.  The
-/// [`super::parsers::qwen_xml::QwenXmlParser`] rewrites these into proper
-/// `LlmStreamEvent::ToolCallDelta` events.
+/// [`super::parsers::delimited::DelimitedToolCallParser`], configured with
+/// the built-in Qwen [`crate::domain::dialect::DialectSpec`], rewrites these
+/// into proper `LlmStreamEvent::ToolCallDelta` events.
 pub const FORMAT_QWEN_XML: &str = "format:qwen-xml";
 
 /// Bare `<think>...</think>` reasoning tags emitted in the text channel.

@@ -318,7 +318,7 @@ pub fn infer_from_chat_template(
 /// For example:
 /// - **Qwen** tool-call XML normalization already flows through
 ///   `detect_tool_support()` → `extensions.insert("format:qwen-xml")` →
-///   `to_tags()` → `get_parser()` → `QwenXmlParser`.  Qwen's chat template
+///   `to_tags()` → `get_parser()` → `DelimitedToolCallParser`.  Qwen's chat template
 ///   always contains `<tool_call>` patterns, so `infer_from_chat_template`
 ///   (Layer 1) sets `SUPPORTS_TOOL_CALLS` reliably.  No architecture entry
 ///   is needed here for Qwen.

@@ -1,29 +1,33 @@
-//! Qwen-style XML tool-call parser.
+//! Spec-driven delimited tool-call parser.
 //!
-//! Rewrites `<tool_call>...</tool_call>` markup — emitted by Qwen 2 / 2.5 / 3
-//! family models in either the text or reasoning channel — into proper
-//! [`ToolCall`] values.  Bytes outside of `<tool_call>` regions are forwarded
-//! verbatim on the channel they arrived on.
+//! Rewrites `OPEN...CLOSE` tool-call markup — emitted inside the text or
+//! reasoning channel — into proper [`ToolCall`] values, where the envelope
+//! markers come from a [`DialectSpec`] rather than being hardcoded.  Bytes
+//! outside envelope regions are forwarded verbatim on the channel they
+//! arrived on.  The built-in [`DialectSpec::qwen_xml`] spec reproduces the
+//! historical Qwen 2 / 2.5 / 3 behaviour (`<tool_call>` markers); template-
+//! derived specs drive the exact same machine with their own markers.
 //!
-//! Two body dialects are accepted inside the wrapper, tried in order — see
-//! `finalize_tool_call` for the detail:
-//! 1. **JSON** — `{"name":"foo","arguments":{...}}` (Qwen 2 / 2.5).
-//! 2. **Inner XML** — `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`,
+//! Body decoding is selected by the spec's ordered [`BodyCodec`] list:
+//! 1. [`BodyCodec::Json`] — `{"name":"foo","arguments":{...}}`
+//!    (Qwen 2 / 2.5, Hermes, and template-derived dialects).
+//! 2. [`BodyCodec::FunctionXml`] —
+//!    `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`,
 //!    one or more back-to-back inside a single wrapper (Qwen 3 + `--jinja`,
-//!    Hermes-style).
+//!    Hermes-style).  The inner markers are codec-internal constants,
+//!    invariant across models that use the codec.
 //!
 //! ## Chunk safety
 //!
-//! Both the open marker (`<tool_call>`, 11 bytes) and the close marker
-//! (`</tool_call>`, 12 bytes) may straddle SSE chunk boundaries.  The parser
-//! holds back at most `CLOSE_MARKER.len() - 1 = 11` bytes per channel as a
-//! lookahead buffer.  The buffered bytes are flushed on the next push or at
+//! Either marker may straddle SSE chunk boundaries.  The parser holds back
+//! at most `marker.len() - 1` bytes per channel as a lookahead buffer.  The
+//! buffered bytes are flushed on the next push or at
 //! [`ToolCallParser::finish`].
 //!
 //! ## Cross-channel handling
 //!
-//! In practice a Qwen tool call appears entirely on one channel — either
-//! text (no reasoning split) or reasoning (when `--reasoning-format` is on).
+//! In practice a tool call appears entirely on one channel — either text
+//! (no reasoning split) or reasoning (when `--reasoning-format` is on).
 //! Each channel therefore maintains its own independent parser state
 //! ([`ChannelState`]) so that markup never crosses channels.  The synthesised
 //! tool-call IDs share a single monotonic counter across both channels.
@@ -33,11 +37,7 @@ use serde_json::Value;
 use super::super::error::NormalizationError;
 use super::super::parser::{ParserOutput, ToolCallParser};
 use crate::domain::agent::ToolCall;
-
-/// Open marker for a Qwen tool call.
-const OPEN: &str = "<tool_call>";
-/// Close marker for a Qwen tool call.
-const CLOSE: &str = "</tool_call>";
+use crate::domain::dialect::{BodyCodec, DialectSpec};
 
 /// Per-channel scanning state.  The text and reasoning channels each own
 /// one of these; they never share buffers.
@@ -58,9 +58,12 @@ enum Channel {
     Reasoning,
 }
 
-/// Parser for the Qwen XML tool-call dialect.  See module docs.
-#[derive(Default, Debug)]
-pub struct QwenXmlParser {
+/// Parser for delimited tool-call dialects, configured by a
+/// [`DialectSpec`].  See module docs.
+#[derive(Debug)]
+pub struct DelimitedToolCallParser {
+    /// The dialect being parsed: markers, body codecs, and ID prefix.
+    spec: DialectSpec,
     text: ChannelState,
     reasoning: ChannelState,
     /// Monotonic counter for synthesised tool-call IDs.  Shared across
@@ -68,18 +71,23 @@ pub struct QwenXmlParser {
     next_id: u32,
 }
 
-impl QwenXmlParser {
-    /// Construct a fresh parser with empty per-channel buffers.
+impl DelimitedToolCallParser {
+    /// Construct a fresh parser for `spec` with empty per-channel buffers.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(spec: DialectSpec) -> Self {
+        Self {
+            spec,
+            text: ChannelState::default(),
+            reasoning: ChannelState::default(),
+            next_id: 0,
+        }
     }
 
     /// Mint a stream-unique synthetic ID for an extracted tool call.
     fn mint_id(&mut self) -> String {
         let n = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
-        format!("call_qwen_{n}")
+        format!("{}{n}", self.spec.id_prefix)
     }
 
     /// Drive the state machine for one channel.
@@ -89,6 +97,13 @@ impl QwenXmlParser {
     /// flushed bytes to the right output field.
     fn scan(&mut self, channel: Channel, chunk: &str) -> ParserOutput {
         let mut out = ParserOutput::default();
+
+        // Clone the spec's marker/codec data into locals so the loop below
+        // can keep borrowing `&mut self` for `mint_id`.  The strings are a
+        // few bytes each; one clone per chunk is noise next to the scan.
+        let open = self.spec.tool_open.clone();
+        let close = self.spec.tool_close.clone();
+        let codecs = self.spec.body_codecs.clone();
 
         // Take ownership of the channel state by moving it out, then put it
         // back at the end.  This sidesteps the borrow conflict between
@@ -102,29 +117,29 @@ impl QwenXmlParser {
 
         loop {
             if state.inside {
-                if let Some(p) = state.pending.find(CLOSE) {
+                if let Some(p) = state.pending.find(&*close) {
                     state.body.push_str(&state.pending[..p]);
-                    finalize_tool_call(&state.body, &mut out, || self.mint_id());
+                    finalize_tool_call(&codecs, &state.body, &mut out, || self.mint_id());
                     state.body.clear();
                     state.inside = false;
-                    state.pending.drain(..p + CLOSE.len());
+                    state.pending.drain(..p + close.len());
                     continue;
                 }
-                let keep = partial_suffix_len(state.pending.as_bytes(), CLOSE.as_bytes());
+                let keep = partial_suffix_len(state.pending.as_bytes(), close.as_bytes());
                 let flush_to = state.pending.len() - keep;
                 state.body.push_str(&state.pending[..flush_to]);
                 state.pending.drain(..flush_to);
                 break;
             }
 
-            // Outside any tool_call.
-            if let Some(p) = state.pending.find(OPEN) {
+            // Outside any tool-call envelope.
+            if let Some(p) = state.pending.find(&*open) {
                 forward(&mut out, channel, &state.pending[..p]);
-                state.pending.drain(..p + OPEN.len());
+                state.pending.drain(..p + open.len());
                 state.inside = true;
                 continue;
             }
-            let keep = partial_suffix_len(state.pending.as_bytes(), OPEN.as_bytes());
+            let keep = partial_suffix_len(state.pending.as_bytes(), open.as_bytes());
             let flush_to = state.pending.len() - keep;
             forward(&mut out, channel, &state.pending[..flush_to]);
             state.pending.drain(..flush_to);
@@ -161,7 +176,7 @@ impl QwenXmlParser {
     }
 }
 
-impl ToolCallParser for QwenXmlParser {
+impl ToolCallParser for DelimitedToolCallParser {
     fn push_text(&mut self, chunk: &str) -> ParserOutput {
         self.scan(Channel::Text, chunk)
     }
@@ -199,35 +214,44 @@ fn forward(out: &mut ParserOutput, channel: Channel, bytes: &str) {
 /// Parse the accumulated tool-call body and push the resulting [`ToolCall`]s
 /// (or a [`NormalizationError`]) onto `out`.
 ///
-/// Two body shapes are accepted, in order:
-/// 1. **JSON** — `{"name":"foo","arguments":{...}}` (Qwen2/2.5 native).
-/// 2. **Inner XML** — one or more back-to-back
-///    `<function=NAME><parameter=KEY>VAL</parameter>...</function>` blocks
-///    (Qwen3 + `--jinja`, Hermes-style).
+/// The spec's `codecs` are tried in order; the first codec that decodes the
+/// body wins.  The built-in Qwen spec lists JSON before inner XML: JSON is
+/// the historical Qwen format and is unambiguous, while the XML form is the
+/// documented fallback for Qwen3 chat templates that emit nested
+/// function/parameter markup inside the envelope.
 ///
-/// JSON is tried first because it is the historical Qwen format and is
-/// unambiguous; the XML form is the documented fallback for Qwen3 chat
-/// templates that emit nested function/parameter markup inside `<tool_call>`.
-///
-/// On failure, the error kind reflects which dialect was attempted: a body
-/// that looks like it opened the XML dialect (`<function=`) but didn't match
-/// its shape reports [`NormalizationErrorKind::MalformedFunctionXml`]
-/// instead of the generic JSON failure, since the two dialects fail for
-/// unrelated reasons and a log reader should not have to guess which one was
-/// in play.
+/// On failure, the error kind reflects which codec was plausibly in play: a
+/// body that looks like it opened the inner-XML codec (`<function=`) — when
+/// that codec is enabled — reports
+/// [`NormalizationErrorKind::MalformedFunctionXml`] instead of the generic
+/// JSON failure, since the two codecs fail for unrelated reasons and a log
+/// reader should not have to guess which one was attempted.
 ///
 /// [`NormalizationErrorKind::MalformedFunctionXml`]: crate::normalize::error::NormalizationErrorKind::MalformedFunctionXml
-fn finalize_tool_call(body: &str, out: &mut ParserOutput, mut mint_id: impl FnMut() -> String) {
+fn finalize_tool_call(
+    codecs: &[BodyCodec],
+    body: &str,
+    out: &mut ParserOutput,
+    mut mint_id: impl FnMut() -> String,
+) {
     let trimmed = body.trim();
-    if let Some(call) = parse_json_body(trimmed, &mut mint_id) {
-        out.tool_calls.push(call);
-        return;
+    for codec in codecs {
+        match codec {
+            BodyCodec::Json => {
+                if let Some(call) = parse_json_body(trimmed, &mut mint_id) {
+                    out.tool_calls.push(call);
+                    return;
+                }
+            }
+            BodyCodec::FunctionXml => {
+                if let Some(calls) = parse_function_xml_body(trimmed, &mut mint_id) {
+                    out.tool_calls.extend(calls);
+                    return;
+                }
+            }
+        }
     }
-    if let Some(calls) = parse_function_xml_body(trimmed, &mut mint_id) {
-        out.tool_calls.extend(calls);
-        return;
-    }
-    let error = if trimmed.starts_with("<function=") {
+    let error = if codecs.contains(&BodyCodec::FunctionXml) && trimmed.starts_with("<function=") {
         NormalizationError::malformed_function_xml(body.to_owned())
     } else {
         NormalizationError::malformed_tool_call(body.to_owned())
@@ -388,7 +412,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn collect(p: &mut QwenXmlParser, chunks: &[&str]) -> ParserOutput {
+    /// A parser wired with the built-in Qwen spec — the configuration every
+    /// pre-spec test in this module was written against.
+    fn qwen() -> DelimitedToolCallParser {
+        DelimitedToolCallParser::new(DialectSpec::qwen_xml())
+    }
+
+    fn collect(p: &mut DelimitedToolCallParser, chunks: &[&str]) -> ParserOutput {
         let mut total = ParserOutput::default();
         for c in chunks {
             let o = p.push_text(c);
@@ -407,7 +437,7 @@ mod tests {
 
     #[test]
     fn passthrough_with_no_markup() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(&mut p, &["hello ", "world"]);
         assert_eq!(out.forward_text, "hello world");
         assert!(out.tool_calls.is_empty());
@@ -416,7 +446,7 @@ mod tests {
 
     #[test]
     fn extracts_simple_tool_call_from_text() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(
             &mut p,
             &[r#"before<tool_call>{"name":"foo","arguments":{"x":1}}</tool_call>after"#],
@@ -431,7 +461,7 @@ mod tests {
 
     #[test]
     fn open_tag_straddles_chunk_boundary() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(
             &mut p,
             &[
@@ -449,7 +479,7 @@ mod tests {
 
     #[test]
     fn close_tag_straddles_chunk_boundary() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(
             &mut p,
             &[
@@ -465,7 +495,7 @@ mod tests {
 
     #[test]
     fn one_byte_at_a_time_still_works() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let s = r#"x<tool_call>{"name":"f","arguments":{"a":2}}</tool_call>y"#;
         let chunks: Vec<String> = s.chars().map(|c| c.to_string()).collect();
         let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
@@ -477,7 +507,7 @@ mod tests {
 
     #[test]
     fn tool_call_in_reasoning_channel_is_extracted() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let chunk = r#"thinking <tool_call>{"name":"foo","arguments":{}}</tool_call> done"#;
         let out = p.push_reasoning(chunk);
         let f = p.finish();
@@ -489,7 +519,7 @@ mod tests {
 
     #[test]
     fn malformed_json_emits_error() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(&mut p, &["<tool_call>not json</tool_call>"]);
         assert!(out.tool_calls.is_empty());
         assert_eq!(out.errors.len(), 1);
@@ -501,7 +531,7 @@ mod tests {
 
     #[test]
     fn missing_name_field_is_malformed() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(&mut p, &[r#"<tool_call>{"arguments":{}}</tool_call>"#]);
         assert!(out.tool_calls.is_empty());
         assert_eq!(out.errors.len(), 1);
@@ -509,7 +539,7 @@ mod tests {
 
     #[test]
     fn missing_arguments_defaults_to_empty_object() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(&mut p, &[r#"<tool_call>{"name":"foo"}</tool_call>"#]);
         assert_eq!(out.tool_calls.len(), 1);
         assert_eq!(out.tool_calls[0].arguments, json!({}));
@@ -518,7 +548,7 @@ mod tests {
 
     #[test]
     fn unclosed_tag_at_end_yields_error() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let _ = p.push_text(r#"hello <tool_call>{"name":"foo""#);
         let f = p.finish();
         assert_eq!(f.errors.len(), 1);
@@ -531,7 +561,7 @@ mod tests {
 
     #[test]
     fn multiple_tool_calls_get_distinct_ids() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(
             &mut p,
             &[
@@ -548,7 +578,7 @@ mod tests {
     fn partial_marker_lookalike_is_eventually_flushed() {
         // "<tool" looks like an open-marker prefix but is actually just
         // text — finish() should flush it.
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let mid = p.push_text("<tool");
         assert_eq!(mid.forward_text, "");
         let f = p.finish();
@@ -574,7 +604,7 @@ mod tests {
 
     #[test]
     fn extracts_function_xml_body_with_string_param() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = "<tool_call>\n<function=grep>\n<parameter=regex>\ngglib\\s+q\n</parameter>\n</function>\n</tool_call>";
         let out = collect(&mut p, &[body]);
         assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
@@ -588,7 +618,7 @@ mod tests {
 
     #[test]
     fn function_xml_body_with_multiple_params() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = concat!(
             "<tool_call><function=read_file>",
             "<parameter=path>src/main.rs</parameter>",
@@ -608,7 +638,7 @@ mod tests {
 
     #[test]
     fn function_xml_body_with_json_object_param() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = r#"<tool_call><function=run><parameter=opts>{"a":1,"b":[2,3]}</parameter></function></tool_call>"#;
         let out = collect(&mut p, &[body]);
         assert!(out.errors.is_empty());
@@ -621,7 +651,7 @@ mod tests {
 
     #[test]
     fn function_xml_body_streamed_byte_by_byte() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let s = "<tool_call><function=grep><parameter=regex>x</parameter></function></tool_call>";
         let chunks: Vec<String> = s.chars().map(|c| c.to_string()).collect();
         let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
@@ -634,7 +664,7 @@ mod tests {
 
     #[test]
     fn function_xml_body_without_parameters_yields_empty_args() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = "<tool_call><function=ping></function></tool_call>";
         let out = collect(&mut p, &[body]);
         assert!(out.errors.is_empty());
@@ -648,7 +678,7 @@ mod tests {
     /// with distinct synthesised IDs.
     #[test]
     fn multiple_function_blocks_in_one_wrapper_are_all_extracted() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = concat!(
             "<tool_call>",
             "<function=get_weather><parameter=city>Paris</parameter></function>",
@@ -676,7 +706,7 @@ mod tests {
     /// failed the whole block.
     #[test]
     fn a_parameter_value_containing_the_literal_close_marker_does_not_truncate() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = concat!(
             "<tool_call><function=write_doc>",
             "<parameter=text>Use </parameter> to close a param</parameter>",
@@ -697,7 +727,7 @@ mod tests {
     /// early when another sibling function follows.
     #[test]
     fn a_parameter_value_containing_the_literal_function_close_does_not_truncate() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = concat!(
             "<tool_call>",
             "<function=write_doc><parameter=text>end with </function> tag</parameter></function>",
@@ -719,7 +749,7 @@ mod tests {
     /// generic JSON one — the two dialects fail for unrelated reasons.
     #[test]
     fn malformed_function_xml_gets_its_own_error_kind() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let out = collect(
             &mut p,
             &["<tool_call><function=oops(no closing angle</tool_call>"],
@@ -740,7 +770,7 @@ mod tests {
     /// but the behaviour must not change silently.
     #[test]
     fn parameter_values_that_look_like_json_literals_are_coerced_not_kept_as_strings() {
-        let mut p = QwenXmlParser::new();
+        let mut p = qwen();
         let body = concat!(
             "<tool_call><function=configure>",
             "<parameter=enabled>true</parameter>",
@@ -755,5 +785,110 @@ mod tests {
             json!({"enabled": true, "count": 123, "label": "plain text"}),
             "bool- and number-shaped strings coerce; only non-JSON-shaped text stays a string"
         );
+    }
+
+    // -------------------------------------------------------------------
+    // Spec-driven behaviour: the same machine must work for any markers
+    // and honor the spec's codec list and ID prefix.
+    // -------------------------------------------------------------------
+
+    /// A synthetic template-derived spec: custom multibyte markers, JSON
+    /// body only, `call_dialect_` prefix.
+    fn derived() -> DialectSpec {
+        DialectSpec {
+            id: crate::domain::dialect::DERIVED_DIALECT_ID.to_owned(),
+            tool_open: "«TC»".to_owned(),
+            tool_close: "«/TC»".to_owned(),
+            body_codecs: vec![BodyCodec::Json],
+            emission: crate::domain::dialect::EmissionProfile::default(),
+            id_prefix: crate::domain::dialect::DERIVED_ID_PREFIX.to_owned(),
+        }
+    }
+
+    #[test]
+    fn custom_marker_spec_extracts_calls_with_its_own_id_prefix() {
+        let mut p = DelimitedToolCallParser::new(derived());
+        let out = collect(
+            &mut p,
+            &[r#"before«TC»{"name":"foo","arguments":{"x":1}}«/TC»after"#],
+        );
+        assert_eq!(out.forward_text, "beforeafter");
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].id, "call_dialect_0");
+        assert_eq!(out.tool_calls[0].name, "foo");
+        assert!(out.errors.is_empty());
+    }
+
+    #[test]
+    fn custom_marker_spec_survives_byte_at_a_time_chunking() {
+        let mut p = DelimitedToolCallParser::new(derived());
+        let s = r#"x«TC»{"name":"f","arguments":{"a":2}}«/TC»y"#;
+        // Char-by-char, not byte-by-byte: push_text takes &str, and the
+        // guillemet markers are multibyte.  Chunks of one char still split
+        // every marker across pushes, which is the property under test.
+        let chunks: Vec<String> = s.chars().map(|c| c.to_string()).collect();
+        let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+        let out = collect(&mut p, &refs);
+        assert_eq!(out.forward_text, "xy");
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].arguments, json!({"a": 2}));
+    }
+
+    #[test]
+    fn fenced_spec_with_identical_open_and_close_markers_works() {
+        let spec = DialectSpec {
+            tool_open: "@@TOOL@@".to_owned(),
+            tool_close: "@@TOOL@@".to_owned(),
+            ..derived()
+        };
+        let mut p = DelimitedToolCallParser::new(spec);
+        let out = collect(
+            &mut p,
+            &[r#"a@@TOOL@@{"name":"f","arguments":{}}@@TOOL@@b"#],
+        );
+        assert_eq!(out.forward_text, "ab");
+        assert_eq!(out.tool_calls.len(), 1);
+        assert!(out.errors.is_empty());
+    }
+
+    /// A JSON-only spec must not decode inner-XML bodies, and its failure
+    /// must report the JSON error kind — the XML kind belongs to specs
+    /// that actually enable the codec.
+    #[test]
+    fn json_only_spec_rejects_function_xml_with_the_json_error_kind() {
+        let spec = DialectSpec {
+            tool_open: "<tool_call>".to_owned(),
+            tool_close: "</tool_call>".to_owned(),
+            ..derived()
+        };
+        let mut p = DelimitedToolCallParser::new(spec);
+        let out = collect(
+            &mut p,
+            &["<tool_call><function=grep><parameter=regex>x</parameter></function></tool_call>"],
+        );
+        assert!(out.tool_calls.is_empty());
+        assert_eq!(out.errors.len(), 1);
+        assert!(matches!(
+            out.errors[0].kind,
+            crate::normalize::error::NormalizationErrorKind::MalformedToolCallJson { .. }
+        ));
+    }
+
+    /// The spec ↔ parser round trip: whatever `render_call` emits, a parser
+    /// built from the same spec must extract — for the builtin and for a
+    /// derived spec alike.  This is the property the grammar test in
+    /// `request_pipeline::constrain` builds on.
+    #[test]
+    fn render_call_output_round_trips_through_a_parser_of_the_same_spec() {
+        for spec in [DialectSpec::qwen_xml(), derived()] {
+            let emission = spec.render_call("read_file", &json!({"path": "a.rs"}));
+            let mut p = DelimitedToolCallParser::new(spec);
+            let out = collect(&mut p, &[emission.as_str()]);
+            assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+            assert_eq!(out.tool_calls.len(), 1);
+            assert_eq!(out.tool_calls[0].name, "read_file");
+            assert_eq!(out.tool_calls[0].arguments, json!({"path": "a.rs"}));
+            assert_eq!(out.forward_text, "");
+        }
     }
 }

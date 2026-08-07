@@ -11,8 +11,9 @@
 //! contained and prevents drift between callers.
 
 use super::parser::ToolCallParser;
-use super::parsers::{qwen_xml::QwenXmlParser, standard::StandardJsonParser};
+use super::parsers::{delimited::DelimitedToolCallParser, standard::StandardJsonParser};
 use super::tags;
+use crate::domain::dialect::DialectSpec;
 
 /// Pick a parser for a model based on its `tags` list.
 ///
@@ -31,7 +32,9 @@ pub fn get_parser(model_tags: &[String]) -> Box<dyn ToolCallParser> {
         // additive — no structural rewrite required.
         #[allow(clippy::single_match)]
         match t.as_str() {
-            tags::FORMAT_QWEN_XML => return Box::new(QwenXmlParser::new()),
+            tags::FORMAT_QWEN_XML => {
+                return Box::new(DelimitedToolCallParser::new(DialectSpec::qwen_xml()));
+            }
             _ => {}
         }
     }
