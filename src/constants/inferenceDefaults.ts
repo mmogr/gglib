@@ -60,8 +60,12 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
    */
   maxTokens: { default: null, min: 1, max: 8192, step: 1 },
 
-  /** Rust: `with_hardcoded_defaults().repeat_penalty`; validation requires `> 0.0`. */
-  repeatPenalty: { default: 1.0, min: 0, max: 2, step: 0.05 },
+  /**
+   * Rust: `with_hardcoded_defaults().repeat_penalty`; validation requires
+   * `> 0.0`, so the minimum is one step above zero rather than zero. Nothing
+   * else here has an exclusive bound.
+   */
+  repeatPenalty: { default: 1.0, min: 0.05, max: 2, step: 0.05 },
 
   /**
    * Rust: `with_hardcoded_defaults().presence_penalty`, range `0.0..=2.0`.
