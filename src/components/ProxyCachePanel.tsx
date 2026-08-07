@@ -17,6 +17,7 @@
  */
 
 import type { FC } from 'react';
+import { Banner } from './ui/Banner';
 import type { CacheStatus, CacheUsage } from '../services/transport/types/dashboard';
 
 export interface ProxyCachePanelProps {
@@ -108,13 +109,15 @@ export const ProxyCachePanel: FC<ProxyCachePanelProps> = ({ cache }) => {
   return (
     <div className="flex flex-col gap-sm">
       {cache.warnings.length > 0 && (
-        <div className="flex flex-col gap-xs p-md rounded-base border border-warning-border bg-warning-subtle">
-          {cache.warnings.map((warning) => (
-            <p key={warning} className="text-xs text-text-secondary">
-              {warning}
-            </p>
-          ))}
-        </div>
+        <Banner variant="warning">
+          <div className="flex flex-col gap-xs">
+            {cache.warnings.map((warning) => (
+              <p key={warning} className="m-0 text-xs">
+                {warning}
+              </p>
+            ))}
+          </div>
+        </Banner>
       )}
 
       <CacheUsageRows usage={cache.usage} />

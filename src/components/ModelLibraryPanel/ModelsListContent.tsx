@@ -6,6 +6,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../primitives/EmptyState';
 import { cn } from '../../utils/cn';
+import { Chip } from '../ui/Chip';
 
 interface ModelsListContentProps {
   models: GgufModel[];
@@ -61,6 +62,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
           const isRunning = isModelRunning(model.id);
           const tps = model.benchmarkSummary?.latest_tg_tps ?? model.benchmarkSummary?.best_tg_tps;
           return (
+          // eslint-disable-next-line no-restricted-syntax -- role="option" listbox row, not a Button-shaped control
           <button
             key={model.id || model.name}
             type="button"
@@ -69,20 +71,20 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
             // The accent border is always present but transparent when idle,
             // so selecting a row recolours it instead of shifting the text 3px.
             className={cn(
-              "py-md px-base text-left border-b border-border border-l-[3px] border-l-transparent cursor-pointer transition duration-200 w-full bg-transparent hover:bg-background-hover focus-visible:outline-none focus-visible:bg-background-hover focus-visible:border-l-primary",
+              "py-sm px-md text-left border-l-[3px] border-l-transparent cursor-pointer transition duration-200 w-full bg-transparent hover:bg-background-hover focus-visible:outline-none focus-visible:bg-background-hover focus-visible:border-l-primary",
               isSelected && "bg-primary-subtle border-l-primary",
               isRunning && !isSelected && "border-l-success",
             )}
             onClick={() => onSelectModel(model.id!)}
           >
-            <div className="flex flex-col gap-sm w-full">
-              <div className="font-medium text-base flex items-center gap-sm w-full break-words">
+            <div className="flex flex-col gap-xs w-full">
+              <div className="font-medium text-sm flex items-center gap-sm w-full break-words">
                 {model.name}
                 {isRunning && (
-                  <span className="py-xs px-sm rounded-md text-xs font-medium bg-success text-text-inverse">Running</span>
+                  <Chip variant="success" size="sm">Running</Chip>
                 )}
               </div>
-              <div className="flex items-center gap-md text-sm text-text-muted flex-wrap">
+              <div className="flex items-center gap-md text-xs text-text-muted flex-wrap">
                 <span className="inline-flex items-center">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
                 {model.architecture && (
                   <span className="inline-flex items-center">{model.architecture}</span>
@@ -90,13 +92,12 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {/* Neutral: quantization and throughput are facts about the
                     model, not states needing attention. */}
                 {model.quantization && (
-                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-text-secondary border border-border">{model.quantization}</span>
+                  <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
                 {tps != null && (
-                  <span className="inline-flex items-center gap-xs py-xs px-sm bg-background text-text-secondary rounded-sm text-xs font-medium border border-border tabular-nums">
-                    <Icon icon={Zap} size={11} />
+                  <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="tabular-nums">
                     {tps.toFixed(0)} t/s
-                  </span>
+                  </Chip>
                 )}
               </div>
             </div>

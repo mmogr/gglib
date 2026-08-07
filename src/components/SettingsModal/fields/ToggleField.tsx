@@ -1,4 +1,5 @@
 import { FC, ReactNode } from 'react';
+import { Checkbox } from '../../ui/Checkbox';
 
 interface ToggleFieldProps {
   id: string;
@@ -26,18 +27,12 @@ export const ToggleField: FC<ToggleFieldProps> = ({
   disabled = false,
   children,
 }) => (
-  <div>
-    <label htmlFor={id} className="flex items-center gap-sm cursor-pointer select-none">
-      <input
-        id={id}
-        type="checkbox"
-        className="w-[18px] h-[18px] accent-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        disabled={disabled}
-      />
-      <span className="font-semibold text-text">{label}</span>
-    </label>
-    {children && <p className="text-text-secondary text-sm mt-xs">{children}</p>}
-  </div>
+  <Checkbox
+    id={id}
+    checked={checked}
+    onChange={(event) => onChange(event.target.checked)}
+    disabled={disabled}
+    label={<span className="font-medium">{label}</span>}
+    description={children}
+  />
 );

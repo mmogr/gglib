@@ -6,8 +6,10 @@ import type { QueueRunSummary } from '../../services/transport/types/events';
 import { formatBytes, formatDuration, formatRate } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import { Chip } from '../ui/Chip';
 
 interface GlobalDownloadStatusProps {
   /** Current download progress from useDownloadManager hook */
@@ -119,9 +121,9 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               {totalAttempts} total attempts
             </div>
           )}
-          <button className="self-end bg-success-subtle text-success border border-success-border rounded-base px-[1.25rem] py-[0.4rem] text-sm font-semibold cursor-pointer transition-all hover:bg-success/20" onClick={onDismissSummary}>
+          <Button variant="secondary" size="sm" className="self-end" onClick={onDismissSummary}>
             OK
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -158,13 +160,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             </span>
             {queueCount > 0 && (
               <div className="relative">
-                <button
-                  className="bg-primary-subtle text-primary text-xs font-medium px-[0.5rem] py-[0.15rem] rounded-sm border-none cursor-pointer transition-all hover:bg-primary/20"
+                <Chip
+                  variant="primary"
+                  size="sm"
                   onClick={() => setIsQueuePopoverOpen((prev) => !prev)}
                   title="Click to view and manage queue"
                 >
                   +{queueCount} queued
-                </button>
+                </Chip>
                 <DownloadQueuePopover
                   isOpen={isQueuePopoverOpen}
                   onClose={() => setIsQueuePopoverOpen(false)}
@@ -175,13 +178,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             )}
           </div>
           {currentId && (
-            <button 
-              className="bg-danger-subtle text-danger border border-danger-border rounded-base px-[0.75rem] py-[0.3rem] text-sm font-medium cursor-pointer transition-all hover:bg-danger/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            <Button
+              variant="dangerGhost"
+              size="sm"
               onClick={() => onCancel(currentId)}
               disabled={isCancelling}
             >
               {isCancelling ? 'Cancelling...' : 'Cancel'}
-            </button>
+            </Button>
           )}
         </div>
 

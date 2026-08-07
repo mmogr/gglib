@@ -3,6 +3,7 @@ import { FolderOpen } from "lucide-react";
 import { appLogger } from '../services/platform';
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
+import { Banner } from './ui/Banner';
 import { Icon } from "./ui/Icon";
 import { Input } from "./ui/Input";
 import { getTransport } from '../services/transport';
@@ -68,18 +69,18 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
               placeholder="/path/to/your/model.gguf"
               className="flex-[1_1_200px] min-w-0"
             />
-            <button
+            <Button
               type="button"
               onClick={handleBrowse}
-              className="inline-flex items-center justify-center gap-sm px-base py-sm bg-primary text-text-inverse border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 w-full md:w-auto"
+              leftIcon={<Icon icon={FolderOpen} size={14} />}
+              className="w-full md:w-auto"
             >
-              <Icon icon={FolderOpen} size={14} />
               Browse
-            </button>
+            </Button>
           </div>
         </div>
 
-        {error && <div className="bg-danger-subtle border border-danger-border rounded-md p-base text-danger flex items-start gap-sm">{error}</div>}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         <div className="form-actions">
           <Button

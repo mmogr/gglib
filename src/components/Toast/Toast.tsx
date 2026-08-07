@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
 import { cn } from '../../utils/cn';
 import { useToastTimer } from '../../hooks/useToastTimer';
 
@@ -48,11 +49,11 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-sm px-md py-sm rounded-base bg-surface border border-border shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-        toast.type === 'success' && 'border-success-border bg-success-subtle',
-        toast.type === 'error' && 'border-danger-border bg-danger-subtle',
-        toast.type === 'info' && 'border-primary-border bg-primary-subtle',
-        toast.type === 'warning' && 'border-warning-border bg-warning-subtle',
+        'flex items-center gap-sm px-md py-sm rounded-md bg-surface-elevated shadow-lg text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
+        toast.type === 'success' && 'bg-success-subtle',
+        toast.type === 'error' && 'bg-danger-subtle',
+        toast.type === 'info' && 'bg-primary-subtle',
+        toast.type === 'warning' && 'bg-warning-subtle',
         isExiting && 'animate-toast-exit',
       )}
       role={toast.type === 'error' || toast.type === 'warning' ? 'alert' : 'status'}
@@ -73,13 +74,14 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
         <Icon icon={icon} size={16} />
       </span>
       <span className="flex-1 text-text leading-[1.4]">{toast.message}</span>
-      <button
-        className="bg-transparent border-none text-text-muted text-lg cursor-pointer p-0 leading-none opacity-70 transition-opacity duration-200 ease-out shrink-0 hover:opacity-100"
-        aria-label="Dismiss notification"
+      <IconButton
+        label="Dismiss notification"
+        size="sm"
         onClick={handleDismiss}
+        className="shrink-0"
       >
         <Icon icon={X} size={14} />
-      </button>
+      </IconButton>
     </div>
   );
 };

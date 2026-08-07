@@ -4,6 +4,7 @@ import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
+import { IconButton } from '../../ui/IconButton';
 import { Input } from '../../ui/Input';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 
@@ -39,7 +40,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   return (
     <>
       <section className="mb-xl">
-        <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Model Information</h3>
+        <h3 className="m-0 mb-base text-sm font-semibold text-text">Model Information</h3>
       <div className="flex flex-col gap-md">
         <div className="flex justify-between items-start gap-base">
           <span className="text-text-muted text-sm shrink-0">Size:</span>
@@ -55,7 +56,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Quantization:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            className="min-w-[200px] flex-1"
             value={editedQuantization}
             onChange={(e) => onQuantizationChange(e.target.value)}
             placeholder="e.g., Q4_0"
@@ -78,8 +79,9 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
               className="w-32"
             />
             {editedServerDefaults !== undefined && (
-              <button
-                type="button"
+              <IconButton
+                label={editedServerDefaults === null ? "Revert 'clear' action" : "Clear override"}
+                size="sm"
                 onClick={() => {
                   // Toggle: null (clear) ↔ object with current model value (revert to model default)
                   if (editedServerDefaults === null) {
@@ -88,11 +90,9 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                     onServerDefaultsChange(null);
                   }
                 }}
-                title={editedServerDefaults === null ? "Revert 'clear' action" : "Clear override"}
-                className="text-text-muted hover:text-text"
               >
                 <Icon icon={editedServerDefaults === null ? Undo2 : X} size={14} />
-              </button>
+              </IconButton>
             )}
           </div>
         </div>
@@ -100,7 +100,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
           <span className="text-text-muted text-sm shrink-0">Path:</span>
           <Input
             type="text"
-            className="py-sm px-md bg-background-input border-2 border-border-focus rounded-base text-text text-sm min-w-[200px] flex-1 transition duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 font-mono text-xs"
+            className="min-w-[200px] flex-1 font-mono text-xs"
             value={editedFilePath}
             onChange={(e) => onFilePathChange(e.target.value)}
             placeholder="File path"
@@ -111,17 +111,17 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
             <span className="text-text-muted text-sm shrink-0">HuggingFace:</span>
             <span className="text-text text-sm text-right break-words flex items-center gap-sm">
               <span className="font-mono text-sm text-text">{model.hfRepoId}</span>
-              <button
-                className="bg-transparent border-none cursor-pointer text-lg p-[2px_4px] rounded-sm opacity-70 transition-all duration-200 shrink-0 hover:opacity-100 hover:bg-background-hover hover:scale-110 active:scale-95"
+              <IconButton
+                label="Open on HuggingFace"
+                size="sm"
+                className="shrink-0"
                 onClick={() => {
                   const url = getHuggingFaceUrl(model.hfRepoId);
                   if (url) openUrl(url);
                 }}
-                title="Open on HuggingFace"
-                aria-label="Open on HuggingFace"
               >
                 <Icon icon={ExternalLink} size={14} />
-              </button>
+              </IconButton>
             </span>
           </div>
         )}

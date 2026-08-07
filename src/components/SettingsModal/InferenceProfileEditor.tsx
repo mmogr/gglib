@@ -8,6 +8,7 @@
  */
 
 import { FC, useState } from "react";
+import { Checkbox } from '../ui/Checkbox';
 import type { InferenceConfig, InferenceProfile } from "../../types";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -160,20 +161,17 @@ export const InferenceProfileEditor: FC<InferenceProfileEditorProps> = ({
           ))}
         </div>
 
-        <label className="flex items-center gap-sm text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={listInModels}
-            onChange={(e) => setListInModels(e.target.checked)}
-          />
-          <span>
-            Show in the model picker
-            <span className="block text-xs text-text-secondary">
+        <Checkbox
+          checked={listInModels}
+          onChange={(e) => setListInModels(e.target.checked)}
+          label="Show in the model picker"
+          description={
+            <>
               Adds <code>&lt;model&gt;:{name || "name"}</code> to /v1/models. Leave off to keep
               the picker short — the profile still works when named directly.
-            </span>
-          </span>
-        </label>
+            </>
+          }
+        />
 
         <div className="flex gap-sm justify-end">
           <Button type="button" variant="secondary" onClick={onCancel}>

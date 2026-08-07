@@ -54,12 +54,14 @@ export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTe
   return (
     <Stack gap="xs">
       <Label size="sm">Quick Start Templates</Label>
+      {/* Raw buttons by design: multi-line selectable cards, not Button-shaped controls. */}
       <div className="grid grid-cols-2 gap-sm">
         {SERVER_TEMPLATES.map((template) => (
+          // eslint-disable-next-line no-restricted-syntax -- multi-line selectable card, not a Button-shaped control
           <button
             key={template.name}
             type="button"
-            className="flex flex-col items-start gap-[2px] px-md py-sm bg-background-secondary border border-border rounded-base cursor-pointer text-left transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary"
+            className="flex flex-col items-start gap-[2px] px-md py-sm bg-surface-elevated rounded-md cursor-pointer text-left transition-colors duration-150 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             onClick={() => onSelectTemplate(template)}
           >
             <span className="text-sm font-semibold text-text">{template.name}</span>

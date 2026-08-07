@@ -68,7 +68,10 @@ export const SamplingProvenanceSection: FC<SamplingProvenanceSectionProps> = ({
     </InfoRow>
   );
 
-  if (hasError) {
+  // A null explanation with loading finished is a definitive "no data"
+  // (e.g. a backend without the explain route resolves to null) — showing
+  // skeletons for it would spin forever.
+  if (hasError || (!explanation && !isLoading)) {
     return (
       <MetadataSection title="Sampling">
         {selector}

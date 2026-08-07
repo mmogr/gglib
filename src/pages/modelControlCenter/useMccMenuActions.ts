@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { syncMenuStateSilent } from '../../services/platform';
 import type { ServerInfo } from '../../types';
-import type { SidebarTabId } from '../../components/ModelLibraryPanel/SidebarTabs';
+import type { SidebarTabId } from '../../components/ModelLibraryPanel/ModelLibraryPanel';
 import type { AddDownloadSubTab } from '../../components/ModelLibraryPanel/AddDownloadContent';
 
 interface UseMccMenuActionsArgs {

@@ -10,6 +10,7 @@
  */
 
 import { FC, useState } from 'react';
+import { Checkbox } from '../../ui/Checkbox';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
 import type { GgufModel } from '../../../types';
@@ -110,7 +111,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   return (
     <div className="flex flex-col gap-base">
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Model
         </label>
         <select
@@ -129,7 +130,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Sweep — temperature
         </label>
         <Input
@@ -142,25 +143,25 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
       <div className="grid grid-cols-2 gap-sm">
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             top_p
           </label>
           <Input value={topP} onChange={e => setTopP(e.target.value)} disabled={disabled} size="sm" placeholder="0.9,0.95" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             top_k
           </label>
           <Input value={topK} onChange={e => setTopK(e.target.value)} disabled={disabled} size="sm" placeholder="20,40" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             min_p
           </label>
           <Input value={minP} onChange={e => setMinP(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.05" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             repeat_penalty
           </label>
           <Input value={repeatPenalty} onChange={e => setRepeatPenalty(e.target.value)} disabled={disabled} size="sm" placeholder="1.0,1.1" />
@@ -168,7 +169,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+        <label className="text-xs font-semibold text-text">
           Task Suite
         </label>
         <div className="flex gap-sm">
@@ -209,53 +210,41 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="flex items-center gap-sm text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={seedFromGguf}
-            disabled={disabled}
-            onChange={e => setSeedFromGguf(e.target.checked)}
-            className="accent-primary"
-          />
-          Seed from GGUF author defaults
-        </label>
-        <label className="flex items-center gap-sm text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={seedFromFamilyPresets}
-            disabled={disabled}
-            onChange={e => setSeedFromFamilyPresets(e.target.checked)}
-            className="accent-primary"
-          />
-          Seed from family presets
-        </label>
+        <Checkbox
+          checked={seedFromGguf}
+          disabled={disabled}
+          onChange={e => setSeedFromGguf(e.target.checked)}
+          label="Seed from GGUF author defaults"
+        />
+        <Checkbox
+          checked={seedFromFamilyPresets}
+          disabled={disabled}
+          onChange={e => setSeedFromFamilyPresets(e.target.checked)}
+          label="Seed from family presets"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-sm">
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             Prune fraction
           </label>
           <Input value={pruneFraction} onChange={e => setPruneFraction(e.target.value)} disabled={disabled} size="sm" />
         </div>
         <div className="flex flex-col gap-xs">
-          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+          <label className="text-xs font-semibold text-text">
             Context size
           </label>
           <Input value={ctxSize} onChange={e => setCtxSize(e.target.value)} disabled={disabled} size="sm" placeholder="Default" />
         </div>
       </div>
 
-      <label className="flex items-center gap-sm text-sm text-text-secondary">
-        <input
-          type="checkbox"
+      <Checkbox
           checked={applyBest}
           disabled={disabled}
           onChange={e => setApplyBest(e.target.checked)}
-          className="accent-primary"
+          label="Apply best config to model when complete"
         />
-        Apply best config to model when complete
-      </label>
 
       <Button
         variant="primary"

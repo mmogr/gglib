@@ -19,6 +19,7 @@ export type TransportErrorCode =
   | 'TIMEOUT'        // Request timeout
   | 'NOT_SUPPORTED'  // Operation not supported on this transport
   | 'INTERNAL'       // Server error (500)
+  | 'DECODE'         // Response body could not be decoded as JSON
   | 'LLAMA_SERVER_NOT_INSTALLED'; // llama-server binary not found
 
 /**
@@ -247,8 +248,28 @@ export async function readData<T>(response: Response): Promise<T> {
     // Return data, defaulting to the entire body if no data field
     return (body.data ?? body) as T;
   } catch (error) {
-    appLogger.error('transport.error', '[readData] JSON parse error', { error });
-    throw error;
+    // Body-level application errors thrown above are not parse failures.
+    if (error instanceof TransportError) {
+      throw error;
+    }
+
+    // A non-JSON body on an /api route means the route doesn't exist on this
+    // backend — an older server falls through to the SPA fallback and returns
+    // 200 text/html. Surface as NOT_FOUND so feature probes degrade the same
+    // way as an explicit 404 instead of throwing a raw SyntaxError.
+    const contentType = response.headers.get('content-type') ?? '';
+    const code: TransportErrorCode =
+      response.status === 404 || contentType.includes('text/html') ? 'NOT_FOUND' : 'DECODE';
+    appLogger.warn('transport.error', '[readData] failed to decode response body', {
+      status: response.status,
+      contentType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new TransportError(code, `Failed to decode response body (HTTP ${response.status})`, {
+      status: response.status,
+      contentType,
+      cause: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

@@ -198,24 +198,6 @@
   z-index: var(--z-notification);
 }
 
-/* ---------- Scrollbar Utilities ---------- */
-
-@utility scrollbar-thin {
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
-  }
-  &::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-hover);
-  }
-}
-
 /* ---------- Custom Keyframes ---------- */
 
 @keyframes modal-slide-in {
@@ -351,19 +333,25 @@
     outline-offset: 2px;
   }
 
-  /* Scrollbar */
+  /* Scrollbar — one thin, unobtrusive style for every scroll region.
+     (Firefox first: the standard properties; then the WebKit pseudos.) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--color-background);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
     background: var(--color-border);
-    border-radius: var(--radius-base);
+    border-radius: var(--radius-full);
   }
 
   ::-webkit-scrollbar-thumb:hover {

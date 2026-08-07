@@ -5,6 +5,7 @@ import { formatNumber, getHuggingFaceModelUrl } from "../../../utils/format";
 import { useToolSupportCache } from "../../../hooks/useToolSupportCache";
 import { openUrl } from "../../../services/platform";
 import { Icon } from "../../ui/Icon";
+import { IconButton } from '../../ui/IconButton';
 import { cn } from '../../../utils/cn';
 
 export interface ModelCardProps {
@@ -35,8 +36,8 @@ export const ModelCard: FC<ModelCardProps> = ({
   return (
     <div 
       className={cn(
-        'bg-surface-elevated border border-border rounded-xl mb-3 overflow-hidden transition-all duration-200 ease-linear hover:bg-surface-hover hover:border-border-hover',
-        isSelected && 'border-primary-border bg-primary-subtle hover:border-primary hover:bg-primary/15'
+        'bg-surface-elevated rounded-md mb-3 overflow-hidden transition-all duration-200 ease-linear hover:bg-surface-hover',
+        isSelected && 'bg-primary-subtle ring-1 ring-primary-border hover:bg-primary/15'
       )}
       onClick={onSelect}
     >
@@ -45,14 +46,14 @@ export const ModelCard: FC<ModelCardProps> = ({
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-text m-0 mb-[0.35rem] overflow-hidden text-ellipsis whitespace-nowrap flex items-center gap-2">
               {model.name}
-              <button
-                className="bg-none border-none cursor-pointer text-base px-[0.3rem] py-[0.15rem] rounded-sm opacity-70 transition-all duration-200 ease-linear shrink-0 hover:opacity-100 hover:bg-surface-hover hover:scale-110 active:scale-95"
+              <IconButton
+                label="Open on HuggingFace"
+                size="sm"
+                className="shrink-0"
                 onClick={handleOpenHuggingFace}
-                title="Open on HuggingFace"
-                aria-label="Open on HuggingFace"
               >
                 <Icon icon={ExternalLink} size={14} />
-              </button>
+              </IconButton>
             </h3>
             <span className="text-sm text-text-muted font-mono overflow-hidden text-ellipsis whitespace-nowrap">{model.id}</span>
           </div>

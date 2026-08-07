@@ -9,6 +9,7 @@ import { FC, useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useMcpServers } from "../hooks/useMcpServers";
 import { Icon } from "./ui/Icon";
+import { Banner } from './ui/Banner';
 import { Button } from "./ui/Button";
 import { Stack } from './primitives';
 import { cn } from "../utils/cn";
@@ -20,7 +21,6 @@ import { isServerRunning, hasServerError, getServerErrorMessage } from '../utils
 
 const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
 
-const errorBox = "p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm";
 
 interface McpServersPanelProps {
   onAddServer?: () => void;
@@ -169,13 +169,14 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         <div className="flex gap-sm">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="sm"
             onClick={refresh}
           >
             Refresh
           </Button>
-          {onAddServer && (
+          {/* Hidden while empty — the empty state carries the single CTA. */}
+          {onAddServer && servers.length > 0 && (
             <Button
               type="button"
               variant="primary"
@@ -189,15 +190,15 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       </div>
 
       {error && (
-        <div className={errorBox} role="alert">
+        <Banner variant="danger">
           {error}
-        </div>
+        </Banner>
       )}
 
       {actionError && (
-        <div className={errorBox} role="alert">
+        <Banner variant="danger">
           {actionError}
-        </div>
+        </Banner>
       )}
 
       {servers.length === 0 ? (
@@ -251,7 +252,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       <code className="font-mono text-xs text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap">{info.server.config.url}</code>
                     )}
                     {!info.server.is_valid && info.server.last_error && (
-                      <div className="text-xs text-danger mt-xs p-xs bg-danger-subtle rounded-sm border-l-2 border-danger-border">
+                      <div className="text-xs text-danger mt-xs p-xs bg-danger-subtle rounded-sm">
                         {info.server.last_error}
                       </div>
                     )}
@@ -281,7 +282,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
                     <Button
                       type="button"
-                      variant="warning"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleAutoFix(info)}
                       disabled={isLoading}
@@ -324,7 +325,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                   )}
                   <Button
                     type="button"
-                    variant="danger"
+                    variant="dangerGhost"
                     size="sm"
                     onClick={() => handleRemove(info)}
                     disabled={isLoading || isRunning}

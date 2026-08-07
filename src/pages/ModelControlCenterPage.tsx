@@ -18,7 +18,7 @@ const ChatPage = lazy(() => import('./ChatPage'));
 // Lazy load BenchmarkPage to keep initial bundle small
 const BenchmarkPage = lazy(() => import('./BenchmarkPage'));
 import { ServerInfo, HfModelSummary } from '../types';
-import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
+import { SidebarTabId } from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import { getTransport } from '../services/transport';
 

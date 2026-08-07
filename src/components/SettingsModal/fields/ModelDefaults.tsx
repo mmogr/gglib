@@ -30,6 +30,7 @@ export const ModelDefaults: FC<ModelDefaultsProps> = ({
     <SettingField
       id="context-size-input"
       label="Default Context Size"
+      controlWidth="xs"
       defaultHint="4096"
       description="Default context size for models (e.g., 4096, 8192, 16384)"
     >
@@ -38,7 +39,6 @@ export const ModelDefaults: FC<ModelDefaultsProps> = ({
         type="number"
         value={contextSizeInput}
         onChange={(event) => setContextSizeInput(event.target.value)}
-        placeholder="4096"
         min="512"
         max="1000000"
         disabled={saving}

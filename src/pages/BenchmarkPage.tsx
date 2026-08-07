@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react';
 import { ArrowLeft, BarChart2, Play, Square, Target, Zap } from 'lucide-react';
+import { Checkbox } from '../components/ui/Checkbox';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
@@ -441,7 +442,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         <aside className="w-[280px] shrink-0 flex flex-col gap-base p-base border-r border-border overflow-y-auto">
           {/* Model selection */}
           <div className="flex flex-col gap-sm">
-            <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+            <label className="text-xs font-semibold text-text">
               Models ({selectedModelIds.length} selected)
             </label>
             <div className="flex flex-col gap-xs max-h-[240px] overflow-y-auto border border-border rounded-md p-xs">
@@ -452,21 +453,16 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 if (m.id == null) return null;
                 const checked = selectedModelIds.includes(m.id);
                 return (
-                  <label
+                  <Checkbox
                     key={m.id}
-                    className={cn(
-                      'flex items-center gap-sm p-xs rounded-sm cursor-pointer text-sm transition-colors',
-                      checked ? 'bg-primary-subtle text-text' : 'text-text-secondary hover:bg-surface-elevated',
+                    checked={checked}
+                    onChange={() => toggleModel(m.id!)}
+                    wrapperClassName={cn(
+                      'w-full p-xs rounded-sm transition-colors',
+                      checked ? 'bg-primary-subtle' : 'hover:bg-surface-elevated',
                     )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleModel(m.id!)}
-                      className="accent-primary"
-                    />
-                    <span className="truncate">{m.name}</span>
-                  </label>
+                    label={<span className={cn('block truncate', checked ? 'text-text' : 'text-text-secondary')}>{m.name}</span>}
+                  />
                 );
               })}
             </div>
@@ -476,7 +472,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           {mode === 'compare' && (
             <>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Prompt
                 </label>
                 <Textarea
@@ -488,7 +484,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   System Prompt (optional)
                 </label>
                 <Textarea
@@ -500,7 +496,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Context Size (optional)
                 </label>
                 <Input
@@ -520,7 +516,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           {mode === 'perf' && (
             <>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   PP Tokens
                 </label>
                 <Input
@@ -533,7 +529,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   TG Tokens
                 </label>
                 <Input
@@ -546,7 +542,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 />
               </div>
               <div className="flex flex-col gap-xs">
-                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
+                <label className="text-xs font-semibold text-text">
                   Repetitions
                 </label>
                 <Input
@@ -564,7 +560,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
 
           {/* Run / Stop button */}
           <Button
-            variant={isRunning ? 'danger' : 'primary'}
+            variant={isRunning ? 'dangerGhost' : 'primary'}
             size="lg"
             fullWidth
             disabled={selectedModelIds.length === 0}

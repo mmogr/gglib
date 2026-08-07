@@ -379,7 +379,8 @@ import styles from './Component.module.css';
 
 ### Automated Enforcement (Phase 5)
 
-- [ ] ESLint rule: No direct `@tauri-apps/api` imports in `src/components`
+- [x] ESLint rule: No direct `@tauri-apps/*` imports in `src/components` or `src/pages` (eslint.config.js platform-boundary block)
+- [x] ESLint rule: No raw `<button>` or native checkbox inputs outside `src/components/ui` and `src/components/primitives` (justified exceptions opt out per line)
 - [ ] ESLint rule: No raw hex colors in TSX files (use CSS variables)
 - [ ] Stylelint rule: No undefined CSS variables
 - [ ] Pre-commit hook: Run `complexity_hotspots.sh` to flag >200 LOC files
@@ -398,6 +399,73 @@ When migrating a component:
 - [ ] Test in both Tauri and Axum WebUI
 - [ ] Delete legacy CSS file once migration complete
 - [ ] Update all call sites to use new primitive
+
+---
+
+## 10. Design Language Contracts (Restyle, 2026-08)
+
+The visual language every screen implements. Two implementers following
+these rules should produce the same UI.
+
+### Borders
+
+Borders exist for: form controls (on `bg-background-input`), focus rings,
+the `outline` Button variant, and hairline `border-border-light` dividers
+that anchor a sticky header/footer over a scroll region. **Everything else
+separates by surface step + spacing.** In-flow cards, panels, chips, and
+banners are borderless — a bordered element reads as interactive.
+
+### Surface ladder
+
+- L0 canvas: `bg-background` (app header `bg-background-elevated`)
+- L1 in-flow panel/card: `bg-surface`
+- L2 static chips, code/meta blocks: `bg-surface-elevated`
+- Floating surfaces (popover/modal/dropdown): `bg-surface-elevated` +
+  `shadow-lg`/`shadow-2xl` — the shadow tokens carry their own hairline ring
+- Hover: `bg-surface-hover` on surfaces, `bg-background-hover` on canvas rows
+
+### Selection — one idiom
+
+Vertical list items use the model-row pattern: an always-present transparent
+`border-l-[3px]`, selected = `border-l-primary` + `bg-primary-subtle`,
+running = `border-l-success`. The accent never shifts layout. Grid cards
+(HF browser) use `bg-primary-subtle` + `ring-1 ring-primary-border`.
+Full `border-primary` selection treatments are retired.
+
+### Tabs
+
+One treatment via `ui/Tabs`: inactive `text-text-muted`, active `text-text`
+(not accent-colored) with a 2px `bg-primary` underline bar. Every tablist
+has an accessible name.
+
+### Color allocation
+
+- Exactly **one solid `primary` Button per visible surface**.
+- Solid red (`Button variant="danger"`) only inside confirm dialogs;
+  destructive actions elsewhere are `dangerGhost` (muted at rest, red on hover).
+- Green means running/online only, expressed as a **dot + neutral text** —
+  never a filled pill.
+- Blue is selection, focus, links, and the single primary CTA.
+
+### Type hierarchy
+
+No all-caps micro-labels. Panel/modal titles `text-lg font-semibold`;
+section headings `text-sm font-semibold text-text`; body and controls
+`text-sm`; meta `text-xs text-text-muted`; ports/paths/quant strings
+`font-mono text-xs tabular-nums`. `text-2xs` is reserved for badge numerals.
+
+### Density & radius
+
+List rows `py-sm px-md`; form sections separate with `gap-xl` + a heading,
+not `border-t` divider walls. Radii: controls `rounded-base`, in-flow cards
+`rounded-md`, floating surfaces `rounded-lg`, dots/badges `rounded-full`.
+
+### Primitives, not markup
+
+Never render a raw `<button>` or `<input type="checkbox">` outside
+`src/components/ui` / `src/components/primitives` — use `Button`,
+`IconButton`, `Tabs`, `Chip`, `Banner`, `Checkbox`. Enforced by ESLint;
+justified exceptions carry an inline disable with a reason.
 
 ---
 

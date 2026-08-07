@@ -4,6 +4,7 @@ import type { GgufModel, ServeConfig, ServerInfo, AppSettings, InferenceConfig }
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
 import { getTransport } from '../../../services/transport';
+import { formatError } from '../../../utils/errors';
 
 export interface ServerActionsConfig {
   model: GgufModel | null;
@@ -181,7 +182,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         await onStopServer(model.id);
       } catch (error) {
         appLogger.error('hook.ui', 'Failed to stop server', { error, modelId: model.id });
-        showToast(`Failed to stop server: ${error}`, 'error');
+        showToast(`Failed to stop server: ${formatError(error)}`, 'error');
       }
     }
   }, [model, isRunning, onStopServer, showToast]);
@@ -194,7 +195,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       closeDeleteModal();
     } catch (error) {
       appLogger.error('hook.ui', 'Failed to remove model', { error, modelId: model.id });
-      showToast(`Failed to remove model: ${error}`, 'error');
+      showToast(`Failed to remove model: ${formatError(error)}`, 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -229,7 +230,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       resetEditState();
     } catch (error) {
       appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
-      showToast(`Failed to update model: ${error}`, 'error');
+      showToast(`Failed to update model: ${formatError(error)}`, 'error');
     }
   }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, editedServerDefaults, onUpdateModel, resetEditState, showToast]);
 

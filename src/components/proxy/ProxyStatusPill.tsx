@@ -16,7 +16,7 @@ interface ProxyStatusPillProps {
 export const ProxyStatusPill: FC<ProxyStatusPillProps> = ({ running, className }) => (
   <span
     className={cn(
-      'px-md py-xs rounded-lg text-xs font-semibold uppercase tracking-wider',
+      'px-md py-xs rounded-lg text-xs font-semibold',
       running ? 'bg-success-subtle text-success' : 'bg-background-hover text-offline',
       className,
     )}

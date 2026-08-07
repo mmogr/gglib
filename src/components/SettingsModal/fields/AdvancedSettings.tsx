@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
+import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
@@ -46,21 +47,24 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
   saving,
 }) => (
   <>
-    <button
+    <Button
       type="button"
-      className="flex items-center gap-sm bg-none border-none text-text text-sm font-semibold cursor-pointer py-xs px-0 transition-colors duration-200 hover:text-primary"
+      variant="ghost"
+      size="sm"
+      className="px-0 font-semibold text-text hover:bg-transparent hover:text-primary"
       onClick={onToggle}
       aria-expanded={isOpen}
+      leftIcon={<Icon icon={isOpen ? ChevronDown : ChevronRight} size={14} />}
     >
-      <Icon icon={isOpen ? ChevronDown : ChevronRight} size={14} />
-      <span>Advanced Settings</span>
-    </button>
+      Advanced Settings
+    </Button>
 
     {isOpen && (
       <div className="flex flex-col gap-md pl-md border-l-2 border-l-border mt-sm animate-slide-down">
         <SettingField
           id="max-tool-iterations-input"
           label="Max Tool Iterations"
+          controlWidth="xs"
           defaultHint="25"
           description="Maximum iterations for tool calling in agentic loop"
         >
@@ -69,7 +73,6 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
             type="number"
             value={maxToolIterationsInput}
             onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-            placeholder="25"
             min="1"
             max="50"
             disabled={saving}
@@ -81,13 +84,9 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           label="Chat Title Generation Prompt"
           description="Prompt used when AI generates chat titles. Leave empty to use the default."
           action={
-            <button
-              type="button"
-              className="bg-none border-none text-primary cursor-pointer text-sm underline p-0"
-              onClick={() => setTitlePromptInput('')}
-            >
+            <Button type="button" variant="link" size="sm" onClick={() => setTitlePromptInput('')}>
               Reset to default
-            </button>
+            </Button>
           }
         >
           <Textarea

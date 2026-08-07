@@ -21,7 +21,7 @@ export const InspectorTags: FC<InspectorTagsProps> = ({
   onRemoveTag,
 }) => (
   <section className="mb-xl">
-    <h3 className="m-0 mb-base text-xs font-semibold text-text-secondary uppercase tracking-[0.05em]">
+    <h3 className="m-0 mb-base text-sm font-semibold text-text">
       Tags
     </h3>
     <div className="flex flex-col gap-base">

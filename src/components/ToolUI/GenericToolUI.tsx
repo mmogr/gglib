@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
 import { ToolResultDisplay } from './ToolResultDisplay';
 import { formatToolDisplayName } from '../../services/tools/nameUtils';
@@ -26,10 +27,10 @@ const StatusBadge: React.FC<{
   status: 'running' | 'complete' | 'error' | 'incomplete';
 }> = ({ status }) => {
   const statusConfig = {
-    running: { icon: Loader2, label: 'Running', className: 'bg-primary-subtle text-primary-light border border-primary-border' },
-    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-success-subtle text-success border border-success-border' },
-    error: { icon: XCircle, label: 'Error', className: 'bg-danger-subtle text-danger border border-danger-border' },
-    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-warning-subtle text-warning border border-warning-border' },
+    running: { icon: Loader2, label: 'Running', className: 'bg-primary-subtle text-primary-light' },
+    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-success-subtle text-success' },
+    error: { icon: XCircle, label: 'Error', className: 'bg-danger-subtle text-danger' },
+    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-warning-subtle text-warning' },
   };
 
   const config = statusConfig[status];
@@ -39,7 +40,7 @@ const StatusBadge: React.FC<{
       <span className="text-2xs" aria-hidden>
         <Icon icon={config.icon} size={14} />
       </span>
-      <span className="uppercase tracking-[0.5px]">{config.label}</span>
+      <span className="">{config.label}</span>
     </span>
   );
 };
@@ -75,8 +76,10 @@ const JsonViewer: React.FC<{
 
   return (
     <div className="mb-2 last:mb-0">
-      <button
-        className="flex items-center gap-1.5 bg-transparent border-none py-1 cursor-pointer text-text-secondary text-sm text-left w-full hover:text-text"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-1.5 px-0 hover:bg-transparent"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
@@ -91,7 +94,7 @@ const JsonViewer: React.FC<{
               : formattedJson}
           </span>
         )}
-      </button>
+      </Button>
       {expanded && (
         <pre className="bg-background rounded-sm px-3 py-2 mt-1.5 overflow-x-auto font-mono text-xs text-text max-h-[200px] overflow-y-auto">{formattedJson}</pre>
       )}

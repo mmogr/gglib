@@ -3,7 +3,7 @@ import { RotateCcw, ServerOff, Square } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { ServerInfo } from '../../types';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
+import { Tabs } from '../ui/Tabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
 import { Row } from '../primitives';
 import { Icon } from '../ui/Icon';
@@ -87,7 +87,7 @@ const ServerList: FC<ServerListProps> = ({
         {servers.map((server) => (
           <div
             key={server.modelId}
-            className={cn("flex flex-col gap-0 bg-background border border-border rounded-md transition duration-200 overflow-hidden", expandedServerId === server.modelId && "border-primary")}
+            className={cn("flex flex-col gap-0 bg-surface rounded-md transition duration-200 overflow-hidden", expandedServerId === server.modelId && "ring-1 ring-primary-border")}
           >
             <div 
               className={cn("flex justify-between items-center gap-sm py-sm px-md", onSelectModel && "cursor-pointer hover:bg-background-hover")}
@@ -100,13 +100,13 @@ const ServerList: FC<ServerListProps> = ({
                 </Row>
                 <div className="flex items-center gap-sm text-xs text-text-muted mt-xs">
                   <span className="font-mono">:{server.port}</span>
-                  <span className="text-success font-medium">{server.status}</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-success" aria-hidden />{server.status}</span>
                 </div>
               </div>
               <Button
-                variant="danger"
+                variant="dangerGhost"
                 size="sm"
-                className={cn("shrink-0 !bg-transparent !border !border-border !text-text hover:!bg-danger hover:!border-danger hover:!text-white", compact ? "!p-xs" : "!py-xs !px-sm")}
+                className="shrink-0"
                 onClick={(e) => handleStop(server.modelId, e)}
                 title="Stop server"
                 leftIcon={<Icon icon={Square} size={14} />}
@@ -115,11 +115,12 @@ const ServerList: FC<ServerListProps> = ({
               </Button>
             </div>
             {expandedServerId === server.modelId && onSelectModel && (
-              <div className="border-t border-border bg-background-secondary">
-                <SidebarTabs<ChatPageTabId>
+              <div className="border-t border-border-light">
+                <Tabs<ChatPageTabId>
                   tabs={CHAT_PAGE_TABS}
-                  activeTab="chat"
-                  onTabChange={(tab) => handleTabSelect(server.modelId, tab)}
+                  activeId="chat"
+                  onChange={(tab) => handleTabSelect(server.modelId, tab)}
+                  aria-label="Open server view"
                 />
               </div>
             )}

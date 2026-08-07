@@ -5,6 +5,7 @@ import { LlamaInstallProgress } from '../hooks/useLlamaStatus';
 import { formatBytes } from '../utils/format';
 import { installLlama } from '../services/platform/llamaInstall';
 import { Button } from './ui/Button';
+import { Banner } from './ui/Banner';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
 import { cn } from '../utils/cn';
@@ -150,7 +151,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-base text-text break-all">{metadata?.expectedPath}</code>
       </div>
 
-      {error ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-base">{error}</div> : null}
+      {error ? <Banner variant="danger">{error}</Banner> : null}
 
       {installing ? renderProgress() : null}
     </>
@@ -178,7 +179,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         </div>
       </div>
 
-      {error && !installing ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-base">{error}</div> : null}
+      {error && !installing ? <Banner variant="danger">{error}</Banner> : null}
 
       {renderProgress()}
 

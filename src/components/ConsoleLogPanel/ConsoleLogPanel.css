@@ -1,4 +1,5 @@
-/* Console Log Panel - ANSI colors + scrollbar (can't be expressed in Tailwind) */
+/* Console Log Panel - ANSI colors (can't be expressed in Tailwind).
+   Scrollbars use the global thin style from styles/tailwind.css. */
 
 .console-log-line {
   padding: 1px 0;
@@ -37,22 +38,3 @@
 .console-log-line .ansi-dim { opacity: 0.7; }
 .console-log-line .ansi-italic { font-style: italic; }
 .console-log-line .ansi-underline { text-decoration: underline; }
-
-/* Scrollbar styling for dark theme */
-.console-log-content::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.console-log-content::-webkit-scrollbar-track {
-  background: #2d2d2d;
-}
-
-.console-log-content::-webkit-scrollbar-thumb {
-  background: #555555;
-  border-radius: 5px;
-}
-
-.console-log-content::-webkit-scrollbar-thumb:hover {
-  background: #666666;
-}

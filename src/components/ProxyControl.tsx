@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, LayoutDashboard, Repeat2, Trash2 } from "lucide
 import { getTransport } from "../services/transport";
 import { clearProxyCache } from "../services/clients/proxyDashboard";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { formatError } from "../utils/errors";
 import { useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
 import { Icon } from "./ui/Icon";
@@ -73,7 +74,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
         default_context !== undefined ? { ...rest, default_context } : rest,
       );
     } catch (err) {
-      showToast(`Failed to start proxy: ${err}`, 'error');
+      showToast(`Failed to start proxy: ${formatError(err)}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -84,7 +85,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       setLoading(true);
       await getTransport().stopProxy();
     } catch (err) {
-      showToast(`Failed to stop proxy: ${err}`, 'error');
+      showToast(`Failed to stop proxy: ${formatError(err)}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -94,9 +95,10 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
+  // Neutral trigger: running state reads from the green dot, not a filled pill.
   const buttonClasses = cn(
-    buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-surface-elevated border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all relative hover:bg-surface-hover hover:border-border-hover',
-    proxyState.running && (buttonActiveClassName ?? 'bg-success-subtle border-success-border text-success'),
+    buttonClassName ?? 'gap-sm px-md relative',
+    proxyState.running && (buttonActiveClassName ?? 'text-text'),
   );
 
   const dotClasses = cn(
@@ -106,17 +108,18 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   return (
     <div className="relative inline-flex" ref={dropdownRef}>
-      <button
+      <Button
+        variant="ghost"
         className={buttonClasses}
         onClick={() => setIsOpen(!isOpen)}
         type="button"
       >
-        <span className="proxy-icon" aria-hidden>
+        <span aria-hidden>
           <Icon icon={Repeat2} size={16} />
         </span>
-        <span className="proxy-label">Proxy</span>
+        <span>Proxy</span>
         {proxyState.running && <span className={dotClasses}></span>}
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-background-overlay rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">
@@ -186,7 +189,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               {showSettings && (
                 <div className="mb-md">
                   <div className="mb-md">
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Host:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Host:</label>
                     <Input
                       type="text"
                       value={config.host}
@@ -194,7 +197,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div className="mb-md">
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Proxy Port:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Proxy Port:</label>
                     <Input
                       type="number"
                       value={config.port}
@@ -202,7 +205,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-2xs font-semibold text-text-secondary mb-xs uppercase tracking-wider">Default Context:</label>
+                    <label className="block text-xs font-semibold text-text mb-xs">Default Context:</label>
                     <Input
                       type="number"
                       value={config.default_context ?? ''}

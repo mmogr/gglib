@@ -93,6 +93,28 @@ describe('useServers', () => {
     expect(vi.mocked(useAllServerStates)).toHaveBeenCalled();
   });
 
+  it('falls back to "Model #id" when modelName is missing', () => {
+    vi.mocked(useAllServerStates).mockReturnValue([
+      { modelId: '7', port: MOCK_BASE_PORT, status: 'running', updatedAt: 1 },
+    ]);
+
+    const { result } = renderHook(() => useServers());
+
+    expect(result.current.servers[0].modelName).toBe('Model #7');
+  });
+
+  it('never renders a stringified missing id — falls back to port, then generic label', () => {
+    vi.mocked(useAllServerStates).mockReturnValue([
+      { modelId: 'undefined', port: MOCK_BASE_PORT, status: 'running', updatedAt: 1 },
+      { modelId: 'NaN', status: 'running', updatedAt: 2 },
+    ]);
+
+    const { result } = renderHook(() => useServers());
+
+    expect(result.current.servers[0].modelName).toBe(`Server :${MOCK_BASE_PORT}`);
+    expect(result.current.servers[1].modelName).toBe('Unknown server');
+  });
+
   it('handles empty server list', () => {
     vi.mocked(useAllServerStates).mockReturnValue([]);
 

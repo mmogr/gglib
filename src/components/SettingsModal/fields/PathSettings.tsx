@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { cn } from '../../../utils/cn';
 import { Input } from '../../ui/Input';
+import { Button } from '../../ui/Button';
 import type { ModelsDirectoryInfo } from '../../../types';
 import { SettingField } from './SettingField';
 
@@ -30,13 +31,9 @@ export const PathSettings: FC<PathSettingsProps> = ({
     description={sourceDescription}
     action={
       info?.defaultPath && (
-        <button
-          type="button"
-          className="bg-none border-none text-primary cursor-pointer text-sm underline p-0"
-          onClick={onReset}
-        >
+        <Button type="button" variant="link" size="sm" onClick={onReset}>
           Reset to defaults
-        </button>
+        </Button>
       )
     }
   >
@@ -51,7 +48,7 @@ export const PathSettings: FC<PathSettingsProps> = ({
       <div className="flex gap-sm flex-wrap" role="status" aria-live="polite">
         <span
           className={cn(
-            'px-2 py-[2px] rounded-base text-sm',
+            'inline-flex items-center h-6 px-2 rounded-base text-xs font-medium',
             info.exists ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning',
           )}
           aria-label={info.exists ? 'Directory exists' : 'Directory will be created (warning)'}
@@ -60,7 +57,7 @@ export const PathSettings: FC<PathSettingsProps> = ({
         </span>
         <span
           className={cn(
-            'px-2 py-[2px] rounded-base text-sm',
+            'inline-flex items-center h-6 px-2 rounded-base text-xs font-medium',
             info.writable ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger',
           )}
           aria-label={info.writable ? 'Writable' : 'Not writable (error)'}

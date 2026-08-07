@@ -86,7 +86,7 @@ export const SystemPromptSection: FC<SystemPromptSectionProps> = ({ conversation
     <section className="border border-border rounded-base p-md bg-background flex flex-col gap-sm shrink-0">
       <div className="flex justify-between gap-md items-start">
         <div>
-          <p className="text-xs uppercase tracking-[1px] text-text-muted m-0 mb-xs">System prompt</p>
+          <p className="text-xs font-medium text-text-muted m-0 mb-xs">System prompt</p>
           {!isEditing && (
             <p className="m-0 text-text text-sm leading-[1.5] line-clamp-2">{preview}</p>
           )}

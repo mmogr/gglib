@@ -35,7 +35,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
       <div className="flex gap-sm shrink-0">
         {isThreadRunning && (
           <Button
-            variant="danger"
+            variant="dangerGhost"
             size="sm"
             onClick={onStopGeneration}
             title="Stop generation"

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import type { InferenceConfig } from '../../types';
 import { Input } from '../ui/Input';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
 import './InferenceParametersForm.css';
 
 interface InferenceParametersFormProps {
@@ -72,15 +73,16 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             className="flex-1 max-w-[150px]"
           />
           {isSet && !disabled && (
-            <button
+            <IconButton
               type="button"
-              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-sm bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
-              onClick={() => updateField(field, undefined)}
+              label={`Reset ${label} to default`}
               title="Reset to default"
-              aria-label={`Reset ${label} to default`}
+              size="sm"
+              className="h-6 w-6"
+              onClick={() => updateField(field, undefined)}
             >
               <Icon icon={X} size={14} />
-            </button>
+            </IconButton>
           )}
         </div>
         {!isSet && (
@@ -124,15 +126,16 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
           </span>
           {isSet && !disabled && (
-            <button
+            <IconButton
               type="button"
-              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-sm bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
-              onClick={() => updateField(field, undefined)}
+              label={`Reset ${label} to default`}
               title="Reset to default"
-              aria-label={`Reset ${label} to default`}
+              size="sm"
+              className="h-6 w-6"
+              onClick={() => updateField(field, undefined)}
             >
               <Icon icon={X} size={14} />
-            </button>
+            </IconButton>
           )}
         </div>
       </div>

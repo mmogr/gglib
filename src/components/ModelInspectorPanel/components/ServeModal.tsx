@@ -1,4 +1,5 @@
 import { FC, useState } from 'react';
+import { Checkbox } from '../../ui/Checkbox';
 import { Loader2, Play, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
@@ -192,20 +193,13 @@ export const ServeModal: FC<ServeModalProps> = ({
                   : (jinjaOverride ? 'Enabled manually' : 'Disabled manually'))}
             </span>
           </div>
-          <div className="flex gap-md items-start">
-            <input
-              id="jinja-toggle"
-              type="checkbox"
-              checked={effectiveJinjaEnabled}
-              onChange={(e) => onJinjaChange(e.target.checked)}
-              disabled={isServing}
-            />
-            <div className="flex-1 text-sm text-text-secondary">
-              <p className="m-0">
-                Enable llama.cpp's Jinja templating for instruction/agent models. Leave off for plain chat models.
-              </p>
-            </div>
-          </div>
+          <Checkbox
+            id="jinja-toggle"
+            checked={effectiveJinjaEnabled}
+            onChange={(e) => onJinjaChange(e.target.checked)}
+            disabled={isServing}
+            description="Enable llama.cpp's Jinja templating for instruction/agent models. Leave off for plain chat models."
+          />
         </div>
 
         {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
@@ -242,28 +236,26 @@ export const ServeModal: FC<ServeModalProps> = ({
                   : (mtpNMaxOverride === 0 ? 'Disabled manually' : `Enabled (n=${mtpNMaxOverride})`))}
             </span>
           </div>
-          <div className="flex gap-md items-start mt-sm">
-            <input
-              id="mtp-toggle"
-              type="checkbox"
-              checked={effectiveMtpEnabled}
-              onChange={(e) => {
-                if (!e.target.checked) {
-                  onMtpNMaxChange(0);
-                } else {
-                  // Restore to auto (tag) or default explicit n=2
-                  onMtpNMaxChange(hasMtpTag ? null : 2);
-                }
-              }}
-              disabled={isServing}
-            />
-            <div className="flex-1 text-sm text-text-secondary">
-              <p className="m-0">
+          <Checkbox
+            id="mtp-toggle"
+            wrapperClassName="mt-sm"
+            checked={effectiveMtpEnabled}
+            onChange={(e) => {
+              if (!e.target.checked) {
+                onMtpNMaxChange(0);
+              } else {
+                // Restore to auto (tag) or default explicit n=2
+                onMtpNMaxChange(hasMtpTag ? null : 2);
+              }
+            }}
+            disabled={isServing}
+            description={
+              <>
                 Enable <code>--spec-type draft-mtp</code> speculative decoding for MTP models.
                 Requires bundled draft heads in the GGUF file.
-              </p>
-            </div>
-          </div>
+              </>
+            }
+          />
           {effectiveMtpEnabled && (
             <div className="flex gap-md mt-md">
               <div className="flex-1">
@@ -321,19 +313,22 @@ export const ServeModal: FC<ServeModalProps> = ({
 
         {/* Advanced: Inference Parameters */}
         <div className="mb-lg">
-          <button 
+          <Button
             type="button"
-            className="advanced-toggle"
+            variant="ghost"
+            size="sm"
+            className="px-0 hover:bg-transparent"
             onClick={() => setShowAdvanced(!showAdvanced)}
             disabled={isServing}
+            aria-expanded={showAdvanced}
+            leftIcon={<Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />}
           >
-            <Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />
-            <span>Inference Parameters</span>
-            {hasInferenceOverrides && <span className="override-indicator">•</span>}
-          </button>
+            Inference Parameters
+            {hasInferenceOverrides && <span className="ml-1 text-primary-light leading-none">•</span>}
+          </Button>
           {showAdvanced && (
-            <div className="advanced-section">
-              <p className="mt-sm text-sm text-text-secondary" style={{ marginBottom: '12px' }}>
+            <div className="mt-sm">
+              <p className="mt-sm mb-md text-sm text-text-secondary">
                 Override sampling parameters for this session. Leave empty to use model or global defaults.
               </p>
               <InferenceParametersForm

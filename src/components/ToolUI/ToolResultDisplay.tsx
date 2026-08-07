@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { Check, ChevronDown, ChevronRight, Clipboard } from 'lucide-react';
 import type { ToolResultRenderer } from '../../services/tools/types';
 import { Icon } from '../ui/Icon';
@@ -69,9 +70,11 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
   return (
     <div className="border border-border rounded-lg bg-background overflow-hidden my-2 text-sm">
       {/* Header — always visible, toggles body */}
-      <button
+      <Button
         type="button"
-        className="flex items-center gap-2 w-full px-3 py-2 text-left cursor-pointer bg-transparent hover:bg-background-secondary transition-colors duration-150"
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-2 px-3 rounded-none h-auto py-2"
         onClick={() => setIsExpanded((prev) => !prev)}
         aria-expanded={isExpanded}
       >
@@ -103,7 +106,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
         >
           <Icon icon={copied ? Check : Clipboard} size={13} />
         </span>
-      </button>
+      </Button>
 
       {/* Body — visible when expanded */}
       {isExpanded && (

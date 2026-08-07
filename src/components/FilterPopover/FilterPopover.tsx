@@ -1,4 +1,5 @@
 import { FC, useRef } from 'react';
+import { Checkbox } from '../ui/Checkbox';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
@@ -7,6 +8,7 @@ import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import { Chip } from '../ui/Chip';
 
 export interface FilterState {
   sortBy: ModelSortBy;
@@ -193,41 +195,32 @@ const FilterPopover: FC<FilterPopoverProps> = ({
         )}
       </div>
 
-      <div className="max-h-[440px] overflow-y-auto py-sm px-md scrollbar-thin">
+      <div className="max-h-[440px] overflow-y-auto py-sm px-md">
         {/* Sort Section */}
         <div className="py-sm border-b border-border">
           <span className="block text-sm font-medium text-text mb-xs">Sort By</span>
           <div className="flex flex-wrap gap-xs mt-xs">
             {SORT_OPTIONS.map(([value, label]) => (
-              <button
+              <Chip
                 key={value}
-                className={cn(
-                  "py-[4px] px-[10px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150",
-                  filters.sortBy === value
-                    ? "bg-primary border-primary text-text-inverse"
-                    : "text-text-secondary bg-surface-elevated border-border hover:border-primary hover:text-text"
-                )}
+                selected={filters.sortBy === value}
                 onClick={() => onFiltersChange({ ...filters, sortBy: value })}
               >
                 {label}
-              </button>
+              </Chip>
             ))}
           </div>
           <div className="flex gap-xs mt-xs">
             {(['desc', 'asc'] as SortOrder[]).map(dir => (
-              <button
+              <Chip
                 key={dir}
-                className={cn(
-                  "flex-1 inline-flex items-center justify-center gap-xs py-[4px] text-xs font-medium rounded-sm border cursor-pointer transition-all duration-150",
-                  filters.sortOrder === dir
-                    ? "bg-surface-elevated border-primary text-text"
-                    : "bg-surface border-border text-text-muted hover:border-primary hover:text-text"
-                )}
+                selected={filters.sortOrder === dir}
                 onClick={() => onFiltersChange({ ...filters, sortOrder: dir })}
+                leftIcon={<Icon icon={dir === 'desc' ? ArrowDown : ArrowUp} size={12} />}
+                className="flex-1 justify-center"
               >
-                <Icon icon={dir === 'desc' ? ArrowDown : ArrowUp} size={12} />
                 {dir === 'desc' ? 'Desc' : 'Asc'}
-              </button>
+              </Chip>
             ))}
           </div>
         </div>
@@ -299,15 +292,13 @@ const FilterPopover: FC<FilterPopoverProps> = ({
             {quantizationsHaveVariety ? (
               <Stack gap="xs" className="mt-xs">
                 {filterOptions!.quantizations.map(quant => (
-                  <label key={quant} className="flex items-center gap-sm cursor-pointer py-[4px] hover:bg-surface-elevated hover:rounded-sm hover:mx-[-4px] hover:px-[4px]">
-                    <input
-                      type="checkbox"
-                      checked={filters.selectedQuantizations.includes(quant)}
-                      onChange={() => handleQuantizationToggle(quant)}
-                      className="w-[16px] h-[16px] accent-primary cursor-pointer"
-                    />
-                    <span className="text-sm text-text">{quant}</span>
-                  </label>
+                  <Checkbox
+                    key={quant}
+                    checked={filters.selectedQuantizations.includes(quant)}
+                    onChange={() => handleQuantizationToggle(quant)}
+                    label={quant}
+                    wrapperClassName="py-[4px]"
+                  />
                 ))}
               </Stack>
             ) : (
@@ -322,16 +313,13 @@ const FilterPopover: FC<FilterPopoverProps> = ({
             <span className="block text-sm font-medium text-text mb-xs">Tags</span>
             <div className="flex flex-wrap gap-xs mt-xs">
               {tags.map(tag => (
-                <button
+                <Chip
                   key={tag}
-                  className={cn(
-                    "py-[4px] px-[10px] text-xs font-medium text-text-secondary bg-surface-elevated border border-border rounded-lg cursor-pointer transition-all duration-150 hover:border-primary hover:text-text",
-                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-text-inverse"
-                  )}
+                  selected={filters.selectedTags.includes(tag)}
                   onClick={() => handleTagToggle(tag)}
                 >
                   {tag}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>

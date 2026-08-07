@@ -104,19 +104,32 @@ function notifyListeners(): void {
 }
 
 /**
+ * Reject registry keys produced by stringifying a missing or non-numeric id
+ * upstream — they would otherwise surface literally in the UI ("Model undefined").
+ */
+function isValidModelId(modelId: string): boolean {
+  return modelId !== '' && Number.isFinite(Number(modelId));
+}
+
+/**
  * Ingest a server event and update state accordingly.
- * 
+ *
  * Ordering guard: Only applies update if evt.updatedAt >= existing.updatedAt.
  * This protects against out-of-order event delivery (e.g., snapshot arriving
  * after individual events).
  */
 export function ingestServerEvent(evt: ServerEvent): void {
+  if (evt.type !== 'snapshot' && !isValidModelId(evt.modelId)) {
+    return;
+  }
+
   switch (evt.type) {
     case 'snapshot': {
       // Snapshot contains only running servers
       // Clear existing state and replace with snapshot
       // Note: We don't clear stopped/crashed servers as snapshot only shows running
       for (const server of evt.servers) {
+        if (!isValidModelId(server.modelId)) continue;
         const existing = state.get(server.modelId);
         if (!existing || server.updatedAt >= existing.updatedAt) {
           state.set(server.modelId, {

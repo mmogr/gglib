@@ -28,7 +28,7 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
   onVerify,
   onCheckUpdates,
 }) => (
-  <div className="p-base border-b border-border bg-background shrink-0">
+  <div className="p-md border-b border-border-light shrink-0">
     <div className="flex items-center justify-between gap-base w-full">
       {isEditMode ? (
         <Input

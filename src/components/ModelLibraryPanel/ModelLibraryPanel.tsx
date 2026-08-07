@@ -1,7 +1,11 @@
 import { FC, useState } from 'react';
 import { BookOpenText, PlusCircle, RefreshCcw, SlidersHorizontal } from 'lucide-react';
 import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
-import SidebarTabs, { SidebarTabId, SidebarTab } from './SidebarTabs';
+import { Tabs, type TabItem } from '../ui/Tabs';
+import { Banner } from '../ui/Banner';
+
+// Legacy id union kept here after SidebarTabs was replaced by ui/Tabs.
+export type SidebarTabId = 'models' | 'add';
 import ModelsListContent from './ModelsListContent';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
@@ -46,7 +50,7 @@ interface ModelLibraryPanelProps {
   onTabChange?: (tab: SidebarTabId) => void;
 }
 
-const SIDEBAR_TABS: SidebarTab[] = [
+const SIDEBAR_TABS: TabItem<SidebarTabId>[] = [
   { id: 'models', label: 'Your Models', icon: <BookOpenText size={18} /> },
   { id: 'add', label: 'Add Models', icon: <PlusCircle size={18} /> },
 ];
@@ -103,16 +107,18 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   if (error) {
     return (
       <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-        <div className="p-base border-b border-border bg-background shrink-0">
-          <SidebarTabs
+        <div className="p-md border-b border-border-light shrink-0">
+          <Tabs
             tabs={SIDEBAR_TABS}
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
+            activeId={activeTab}
+            onChange={handleTabChange}
+            aria-label="Library sections"
+            className="mb-md"
           />
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-xl gap-md">
-            <p className="bg-danger-subtle border border-danger-border rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
+            <Banner variant="danger">Error: {error}</Banner>
             <Button variant="ghost" onClick={onRefresh}>
               Retry
             </Button>
@@ -148,11 +154,13 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 
   return (
     <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-      <div className="p-base border-b border-border bg-background shrink-0">
-        <SidebarTabs
+      <div className="p-md border-b border-border-light shrink-0">
+        <Tabs
           tabs={SIDEBAR_TABS}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
+          activeId={activeTab}
+          onChange={handleTabChange}
+          aria-label="Library sections"
+          className="mb-md"
           rightContent={headerActions}
         />
 

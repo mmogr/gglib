@@ -20,6 +20,18 @@ function toRecord(payload: unknown): Record<string, unknown> | null {
   return payload as Record<string, unknown>;
 }
 
+/**
+ * Coerce a payload model id into a registry key.
+ * Backend ids are numeric; anything that doesn't coerce to a finite number
+ * (missing field, "undefined", "NaN") would otherwise become a garbage
+ * registry key that the UI renders literally.
+ */
+function coerceModelId(value: unknown): string | null {
+  const id = String(value ?? '');
+  if (!id || !Number.isFinite(Number(id))) return null;
+  return id;
+}
+
 function coerceUnixTimeToMs(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
 
@@ -43,7 +55,7 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
         if (typeof s !== 'object' || s === null) return null;
         const entry = s as Record<string, unknown>;
 
-        const modelId = String(entry.modelId ?? entry.model_id ?? '');
+        const modelId = coerceModelId(entry.modelId ?? entry.model_id);
         if (!modelId) return null;
 
         const port = typeof entry.port === 'number' ? entry.port : undefined;
@@ -74,7 +86,7 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
 }
 
 function normalizeHealthChanged(data: Record<string, unknown>): ServerEvent | null {
-  const modelId = String(data.modelId ?? data.model_id ?? '');
+  const modelId = coerceModelId(data.modelId ?? data.model_id);
   if (!modelId) return null;
 
   const status = data.status as Record<string, unknown> | undefined;
@@ -119,7 +131,7 @@ function normalizeLifecycle(
   kind: 'running' | 'stopped' | 'crashed',
   data: Record<string, unknown>
 ): ServerEvent | null {
-  const modelId = String(data.modelId ?? data.model_id ?? '');
+  const modelId = coerceModelId(data.modelId ?? data.model_id);
   if (!modelId) return null;
 
   const port = typeof data.port === 'number' ? data.port : undefined;

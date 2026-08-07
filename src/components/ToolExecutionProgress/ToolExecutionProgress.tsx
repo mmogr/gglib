@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useRef, useMemo } from 'react';
+import { Button } from '../ui/Button';
 import { useMessage } from '@assistant-ui/react';
 import type { ThreadMessage } from '@assistant-ui/react';
 import { CheckCircle2, ChevronDown, ChevronRight, Loader2, XCircle } from 'lucide-react';
@@ -211,9 +212,11 @@ const ToolExecutionProgress: React.FC = () => {
   return (
     <div className="mt-2 border border-border rounded-lg overflow-hidden text-sm">
       {/* ── Accordion header ────────────────────────────────────────────── */}
-      <button
+      <Button
         type="button"
-        className="w-full flex items-center gap-2 px-3 py-2 bg-background-secondary text-xs font-medium text-text-secondary hover:bg-background-tertiary transition-colors duration-150 border-none cursor-pointer"
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-2 px-3 rounded-none h-auto py-2 bg-background-secondary text-xs hover:bg-background-tertiary"
         onClick={() => setIsCollapsed(prev => !prev)}
         aria-expanded={!isCollapsed}
         aria-controls="tool-execution-rows"
@@ -227,7 +230,7 @@ const ToolExecutionProgress: React.FC = () => {
         {runningCount > 0 && (
           <Icon icon={Loader2} size={12} className="animate-spin ml-1 text-primary-light" />
         )}
-      </button>
+      </Button>
 
       {/* ── Per-tool rows ────────────────────────────────────────────────── */}
       {!isCollapsed && (

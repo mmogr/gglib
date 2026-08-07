@@ -34,7 +34,9 @@ export function useSamplingExplanation(
     try {
       setExplanation(await explainModelSampling(modelId, profileName ?? undefined));
     } catch (error) {
-      appLogger.error('hook.ui', 'Failed to load sampling explanation', {
+      // Not error-level: hasError already renders a designed fallback, and a
+      // backend without the explain route resolves to null before this catch.
+      appLogger.warn('hook.ui', 'Failed to load sampling explanation', {
         error,
         modelId,
         profileName,

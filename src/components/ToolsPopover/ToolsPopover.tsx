@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { Checkbox } from '../ui/Checkbox';
 import { Calculator, Clock3, FileText, Search, SunMedium, Wrench } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { getToolRegistry, type ToolDefinition } from '../../services/tools';
@@ -152,22 +153,18 @@ export const ToolsPopover: React.FC = () => {
             <>
               {/* Toggle all row */}
               <div className="px-[14px] py-2 border-b border-border bg-surface-elevated">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-text-secondary hover:text-text-primary">
-                  <input
-                    type="checkbox"
-                    checked={allEnabled}
-                    ref={(el) => {
-                      if (el) el.indeterminate = !allEnabled && !noneEnabled;
-                    }}
-                    onChange={handleToggleAll}
-                    className="mt-[2px] accent-accent cursor-pointer"
-                  />
-                  <span>{allEnabled ? 'Disable all' : 'Enable all'}</span>
-                </label>
+                <Checkbox
+                  checked={allEnabled}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !allEnabled && !noneEnabled;
+                  }}
+                  onChange={handleToggleAll}
+                  label={<span className="text-xs text-text-secondary">{allEnabled ? 'Disable all' : 'Enable all'}</span>}
+                />
               </div>
 
               {/* Tool list */}
-              <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
+              <div className="max-h-[280px] overflow-y-auto">
                 {tools.map((tool) => {
                   const name = tool.function.name;
                   const enabled = enabledTools.has(name);
@@ -183,21 +180,22 @@ export const ToolsPopover: React.FC = () => {
                         !enabled && 'opacity-50',
                       )}
                     >
-                      <label className="flex items-start gap-[10px] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enabled}
-                          onChange={(e) => handleToggleTool(name, e.target.checked)}
-                          className="mt-[2px] accent-accent cursor-pointer"
-                        />
-                        <span className="text-xl -mt-[1px]" aria-hidden>
-                          <Icon icon={icon} size={14} />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium text-text-primary mb-[2px]">{displayName}</span>
-                          <span className="text-2xs text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
-                        </div>
-                      </label>
+                      <Checkbox
+                        checked={enabled}
+                        onChange={(e) => handleToggleTool(name, e.target.checked)}
+                        wrapperClassName="w-full items-start"
+                        label={
+                          <span className="flex items-start gap-[10px]">
+                            <span aria-hidden>
+                              <Icon icon={icon} size={14} />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-sm font-medium text-text-primary mb-[2px]">{displayName}</span>
+                              <span className="block text-2xs text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
+                            </span>
+                          </span>
+                        }
+                      />
                     </div>
                   );
                 })}

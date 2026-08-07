@@ -43,6 +43,23 @@ export function truncatePayload(
     return truncatedArray;
   }
 
+  // Error props (name/message/stack) are non-enumerable, so the generic
+  // object branch below would serialize every Error as {}.
+  if (obj instanceof Error) {
+    const result: Record<string, unknown> = {
+      name: obj.name,
+      message: truncateString(obj.message, maxStringLength),
+    };
+    if (obj.stack) {
+      result.stack = truncateString(obj.stack, maxStringLength);
+    }
+    // Enumerable extras (e.g. TransportError's code/details) survive a spread.
+    for (const [key, value] of Object.entries({ ...obj })) {
+      result[key] = truncatePayload(value, maxStringLength, depth + 1);
+    }
+    return result;
+  }
+
   if (typeof obj === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {

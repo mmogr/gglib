@@ -16,7 +16,7 @@ export const ChatPageSkeleton: React.FC = () => (
       style={{ width: '30%' }}
     >
       {/* Header: tabs + model name + search */}
-      <div className="p-base border-b border-border bg-background shrink-0">
+      <div className="p-md border-b border-border-light shrink-0">
         <Stack gap="sm">
           <Row gap="sm">
             <Skeleton width="50%" height="var(--button-height-sm)" />

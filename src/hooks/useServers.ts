@@ -15,12 +15,22 @@ import { ServerInfo } from '../types';
 export function useServers() {
   const serverStates = useAllServerStates();
 
-  const servers: ServerInfo[] = serverStates.map((s) => ({
-    modelId: Number(s.modelId),
-    modelName: s.modelName ?? `Model ${s.modelId}`,
-    port: s.port ?? 0,
-    status: s.status,
-  }));
+  const servers: ServerInfo[] = serverStates.map((s) => {
+    const modelId = Number(s.modelId);
+    // Never render a stringified missing id ("Model undefined") — fall back
+    // through the most specific identity we actually have.
+    const fallbackName = Number.isFinite(modelId)
+      ? `Model #${modelId}`
+      : s.port
+        ? `Server :${s.port}`
+        : 'Unknown server';
+    return {
+      modelId,
+      modelName: s.modelName ?? fallbackName,
+      port: s.port ?? 0,
+      status: s.status,
+    };
+  });
 
   const stopServer = useCallback(async (modelId: number) => {
     await safeStopServer(modelId);
