@@ -1,6 +1,8 @@
 import { FC, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
-import type { InferenceConfig } from '../../types';
+import type { InferenceConfig, SamplingParamKey } from '../../types';
+import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
+import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
@@ -19,10 +21,10 @@ interface InferenceParametersFormProps {
  * spelled out here rather than imported: this form is a top-level component
  * and has no business depending on the settings modal's internals.
  */
-const paramId = (field: keyof InferenceConfig) => `inference-param-${field}`;
+const paramId = (field: SamplingParamKey) => `inference-param-${field}`;
 
 /** DOM id for the caption below a parameter, referenced by `aria-describedby`. */
-const paramCaptionId = (field: keyof InferenceConfig) => `${paramId(field)}-description`;
+const paramCaptionId = (field: SamplingParamKey) => `${paramId(field)}-description`;
 
 /**
  * Tristate inference parameters form.
@@ -54,14 +56,10 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     onChange(updated);
   }, [config, onChange]);
 
-  const renderNumberInput = (
-    field: keyof InferenceConfig,
-    label: string,
-    min: number,
-    max: number,
-    step: number,
-    defaultHint: string
-  ) => {
+  const renderNumberInput = (field: SamplingParamKey) => {
+    const { default: fallback, min, max, step } = INFERENCE_PARAMS[field];
+    const label = PARAM_LABELS[field];
+    const defaultHint = formatParamValue(field, fallback);
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
     const inputId = paramId(field);
@@ -109,17 +107,12 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     );
   };
 
-  const renderSlider = (
-    field: keyof InferenceConfig,
-    label: string,
-    min: number,
-    max: number,
-    step: number,
-    defaultHint: string
-  ) => {
+  const renderSlider = (field: SamplingParamKey) => {
+    const { default: fallback, min, max, step } = INFERENCE_PARAMS[field];
+    const label = PARAM_LABELS[field];
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
-    const displayValue = isSet ? currentValue : parseFloat(defaultHint);
+    const displayValue = isSet ? currentValue : fallback;
     const inputId = paramId(field);
 
     return (
@@ -168,13 +161,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
       </p>
 
       <div className="flex flex-col gap-[1rem]">
-        {renderSlider('temperature', 'Temperature', 0, 2, 0.05, '0.7')}
-        {renderSlider('topP', 'Top P', 0, 1, 0.05, '0.95')}
-        {renderNumberInput('topK', 'Top K', 1, 200, 1, '40')}
-        {renderNumberInput('maxTokens', 'Max Tokens', 1, 8192, 1, '2048')}
-        {renderSlider('repeatPenalty', 'Repeat Penalty', 0, 2, 0.05, '1.0')}
-        {renderSlider('presencePenalty', 'Presence Penalty', 0, 2, 0.05, '0.0')}
-        {renderSlider('minP', 'Min P', 0, 1, 0.01, '0.0')}
+        {renderSlider('temperature')}
+        {renderSlider('topP')}
+        {renderNumberInput('topK')}
+        {renderNumberInput('maxTokens')}
+        {renderSlider('repeatPenalty')}
+        {renderSlider('presencePenalty')}
+        {renderSlider('minP')}
       </div>
     </div>
   );
