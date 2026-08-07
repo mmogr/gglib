@@ -10,6 +10,7 @@
  */
 
 import { FC, useState } from 'react';
+import { Checkbox } from '../../ui/Checkbox';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
 import type { GgufModel } from '../../../types';
@@ -209,26 +210,18 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <label className="flex items-center gap-sm text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={seedFromGguf}
-            disabled={disabled}
-            onChange={e => setSeedFromGguf(e.target.checked)}
-            className="accent-primary"
-          />
-          Seed from GGUF author defaults
-        </label>
-        <label className="flex items-center gap-sm text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={seedFromFamilyPresets}
-            disabled={disabled}
-            onChange={e => setSeedFromFamilyPresets(e.target.checked)}
-            className="accent-primary"
-          />
-          Seed from family presets
-        </label>
+        <Checkbox
+          checked={seedFromGguf}
+          disabled={disabled}
+          onChange={e => setSeedFromGguf(e.target.checked)}
+          label="Seed from GGUF author defaults"
+        />
+        <Checkbox
+          checked={seedFromFamilyPresets}
+          disabled={disabled}
+          onChange={e => setSeedFromFamilyPresets(e.target.checked)}
+          label="Seed from family presets"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-sm">
@@ -246,16 +239,12 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         </div>
       </div>
 
-      <label className="flex items-center gap-sm text-sm text-text-secondary">
-        <input
-          type="checkbox"
+      <Checkbox
           checked={applyBest}
           disabled={disabled}
           onChange={e => setApplyBest(e.target.checked)}
-          className="accent-primary"
+          label="Apply best config to model when complete"
         />
-        Apply best config to model when complete
-      </label>
 
       <Button
         variant="primary"

@@ -1,4 +1,5 @@
 import { FC, useRef } from 'react';
+import { Checkbox } from '../ui/Checkbox';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
@@ -299,15 +300,13 @@ const FilterPopover: FC<FilterPopoverProps> = ({
             {quantizationsHaveVariety ? (
               <Stack gap="xs" className="mt-xs">
                 {filterOptions!.quantizations.map(quant => (
-                  <label key={quant} className="flex items-center gap-sm cursor-pointer py-[4px] hover:bg-surface-elevated hover:rounded-sm hover:mx-[-4px] hover:px-[4px]">
-                    <input
-                      type="checkbox"
-                      checked={filters.selectedQuantizations.includes(quant)}
-                      onChange={() => handleQuantizationToggle(quant)}
-                      className="w-[16px] h-[16px] accent-primary cursor-pointer"
-                    />
-                    <span className="text-sm text-text">{quant}</span>
-                  </label>
+                  <Checkbox
+                    key={quant}
+                    checked={filters.selectedQuantizations.includes(quant)}
+                    onChange={() => handleQuantizationToggle(quant)}
+                    label={quant}
+                    wrapperClassName="py-[4px]"
+                  />
                 ))}
               </Stack>
             ) : (

@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react';
 import { ArrowLeft, BarChart2, Play, Square, Target, Zap } from 'lucide-react';
+import { Checkbox } from '../components/ui/Checkbox';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
@@ -452,21 +453,16 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                 if (m.id == null) return null;
                 const checked = selectedModelIds.includes(m.id);
                 return (
-                  <label
+                  <Checkbox
                     key={m.id}
-                    className={cn(
-                      'flex items-center gap-sm p-xs rounded-sm cursor-pointer text-sm transition-colors',
-                      checked ? 'bg-primary-subtle text-text' : 'text-text-secondary hover:bg-surface-elevated',
+                    checked={checked}
+                    onChange={() => toggleModel(m.id!)}
+                    wrapperClassName={cn(
+                      'w-full p-xs rounded-sm transition-colors',
+                      checked ? 'bg-primary-subtle' : 'hover:bg-surface-elevated',
                     )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleModel(m.id!)}
-                      className="accent-primary"
-                    />
-                    <span className="truncate">{m.name}</span>
-                  </label>
+                    label={<span className={cn('block truncate', checked ? 'text-text' : 'text-text-secondary')}>{m.name}</span>}
+                  />
                 );
               })}
             </div>
