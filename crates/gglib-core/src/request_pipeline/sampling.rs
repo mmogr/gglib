@@ -7,7 +7,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
-use crate::domain::{DefaultsOrigin, InferenceConfig};
+use crate::domain::{DefaultsOrigin, InferenceConfig, ParamSource};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -46,34 +46,36 @@ pub struct SamplingLayers {
     /// [`Self::global`], which is why it lives here rather than as a
     /// separate parameter threaded through every caller.
     pub trust_client_sampling: bool,
-    /// Whether a request carrying tools resolves against
-    /// [`InferenceConfig::for_tool_call`] instead of the model's class floor.
+    /// Whether a request carrying tools gets the agentic-turn temperature
+    /// ceiling — see [`InferenceConfig::agentic_temperature_ceiling`].
     ///
     /// Set by the caller rather than defaulted on, because the two callers
-    /// decide it differently: the proxy reads `Settings.tool_call_floor`
+    /// decide it differently: the proxy reads `Settings.agentic_sampling`
     /// (opt-out — absent means on), while the in-process agent path has no
     /// settings snapshot and enables it unconditionally. `Default` leaves it
-    /// off so a bare `SamplingLayers::default()` keeps today's behaviour.
-    pub tool_call_floor: bool,
+    /// off so a bare `SamplingLayers::default()` applies no adjustment.
+    pub agentic_adjustments: bool,
 }
 
-/// Environment kill switch for the tool-call floor.
+/// Environment kill switch for the agentic-turn adjustments.
 ///
 /// Truthy values (case-insensitive `1`, `true`, `yes`, `on`) disable it for
 /// every caller, whatever their settings say — the same contract as
 /// [`DISABLE_GRAMMAR_ENV`].
 ///
 /// [`DISABLE_GRAMMAR_ENV`]: super::constrain::DISABLE_GRAMMAR_ENV
-pub const DISABLE_TOOL_FLOOR_ENV: &str = "GGLIB_DISABLE_TOOL_FLOOR";
+pub const DISABLE_AGENTIC_SAMPLING_ENV: &str = "GGLIB_DISABLE_AGENTIC_SAMPLING";
 
-/// Whether [`DISABLE_TOOL_FLOOR_ENV`] is set to a truthy value.
-fn tool_floor_disabled_via_env() -> bool {
-    std::env::var(DISABLE_TOOL_FLOOR_ENV).ok().is_some_and(|v| {
-        matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+/// Whether [`DISABLE_AGENTIC_SAMPLING_ENV`] is set to a truthy value.
+fn agentic_sampling_disabled_via_env() -> bool {
+    std::env::var(DISABLE_AGENTIC_SAMPLING_ENV)
+        .ok()
+        .is_some_and(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 /// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
@@ -129,11 +131,11 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
         InferenceConfig::with_hardcoded_defaults()
     };
 
-    // A request carrying tools is asking for structured output, which wants a
-    // near-deterministic decode and no repetition penalty. The tool overrides
-    // compose *onto* the class floor rather than replacing it, so a
-    // `reasoning`-tagged model calling tools keeps its carve-outs — see
-    // `InferenceConfig::for_tool_call`.
+    let floor = class_floor;
+
+    // Whether an agentic-turn temperature ceiling is eligible to apply. Only
+    // eligibility — whether it actually bites depends on where the resolved
+    // temperature came from, which is not known until after the fold.
     //
     // Keyed on tools being present, not on `tool_choice: "required"`: agentic
     // clients send `"auto"` almost universally, so a `required`-only trigger
@@ -142,16 +144,10 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // Stage 2b has already removed `tools` for a model that cannot call them,
     // so this cannot fire on a model that would never emit a tool call —
     // except on a passthrough context, where nothing is known about the model
-    // and nothing was stripped. Sampling a request that *says* it has tools as
-    // a tool turn is the right reading of the only evidence available.
-    let tool_turn = layers.tool_call_floor
-        && !tool_floor_disabled_via_env()
+    // and nothing was stripped.
+    let agentic_turn = layers.agentic_adjustments
+        && !agentic_sampling_disabled_via_env()
         && super::request_shape::carries_tools(body);
-    let floor = if tool_turn {
-        class_floor.for_tool_call()
-    } else {
-        class_floor
-    };
 
     // `model` occupies one of two rungs depending on how it was set — never
     // both — so an auto-detected guess can't silently outrank global
@@ -176,7 +172,39 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
         ordered.iter().map(|(_, config)| *config).collect();
     // Values and provenance come from the same pass over the same ladder, so
     // the log can never name a layer the resolution did not use.
-    let (resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs, &floor);
+    let (mut resolved, sources) =
+        InferenceConfig::resolve_layers_with_sources(&layer_configs, &floor);
+
+    // Cap the temperature for an agentic turn — but only over a value nobody
+    // deliberately chose.
+    //
+    // The gate is provenance, not rank. A ladder rung would have been the
+    // obvious way to express "outranks the auto-detected recipe", and it is
+    // wrong: a rung that names a `temperature` *claims the coupled set* under
+    // `resolve_layers`, so DRY and the penalties would drop to the floor
+    // behind it. Anyone who had set `--dry-multiplier` without also naming a
+    // temperature would silently lose DRY on every agentic turn — the exact
+    // harm this adjustment is supposed to avoid. Clamping after the fold
+    // leaves the coupled set untouched.
+    //
+    // Eligible sources are the auto-detected rung and the floor. An
+    // auto-detected recipe is an unreviewed guess written at import time, and
+    // already ranks below global settings for that reason; a task-aware
+    // ceiling outranking it is consistent with that. Anything a person
+    // actually set — cli, client, profile, per-model, global — stands.
+    let ceiling = InferenceConfig::agentic_temperature_ceiling(model_is_reasoning);
+    let auto_detected_rung = ordered.len() - 1;
+    let temperature_is_unchosen = matches!(
+        sources.temperature,
+        ParamSource::Floor | ParamSource::FloorCoupled | ParamSource::Unset
+    ) || sources.temperature
+        == ParamSource::Layer(auto_detected_rung);
+    let ceiling_applied = agentic_turn
+        && temperature_is_unchosen
+        && resolved.temperature.is_some_and(|t| t > ceiling);
+    if ceiling_applied {
+        resolved.temperature = Some(ceiling);
+    }
 
     if tracing::enabled!(tracing::Level::DEBUG) {
         let names: Vec<&str> = ordered.iter().map(|(name, _)| *name).collect();
@@ -193,17 +221,16 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
             dry_allowed_length = ?resolved.dry_allowed_length,
             dry_penalty_last_n = ?resolved.dry_penalty_last_n,
             from = %sources.describe(&names),
-            // Which floor was used. `sources` says a value came from "floor"
-            // but not which one, and the explain surfaces cannot show this at
-            // all — they resolve stored configuration with no request in hand.
-            // This log line is the only place the tool floor is observable.
-            floor = if tool_turn {
-                "tool_call"
-            } else if model_is_reasoning {
-                "reasoning"
-            } else {
-                "default"
-            },
+            // Which class floor was used. `sources` says a value came from
+            // "floor" but not which one, and the explain surfaces cannot show
+            // this at all — they resolve stored configuration with no request
+            // in hand.
+            floor = if model_is_reasoning { "reasoning" } else { "default" },
+            // Reported separately from `from`, which still names the rung the
+            // temperature *would* have come from. The ceiling does not replace
+            // that rung, it caps what it supplied.
+            agentic_turn,
+            agentic_ceiling = ceiling_applied.then_some(ceiling),
             "sampling resolved"
         );
     }
@@ -325,7 +352,7 @@ mod tests {
                 // profile" / "cli beats client" rows still exercise the
                 // client layer at all. See `client_sampling_is_ignored_by_default`.
                 trust_client_sampling: true,
-                tool_call_floor: false,
+                agentic_adjustments: false,
             };
             resolve_sampling(&mut body, &model_ctx(model.map(temp)), &layers);
             assert_param(&body, "temperature", expected);
@@ -355,7 +382,7 @@ mod tests {
                 profile: Some(temp(0.2)),
                 global: None,
                 trust_client_sampling: false,
-                tool_call_floor: false,
+                agentic_adjustments: false,
             },
         );
 
@@ -517,7 +544,7 @@ mod tests {
                 profile: Some(temp(0.2)),
                 global: None,
                 trust_client_sampling: false,
-                tool_call_floor: false,
+                agentic_adjustments: false,
             },
         );
 
@@ -704,96 +731,157 @@ mod tests {
         assert_param(&body, "top_p", 0.42);
     }
 
-    // ── The tool-call floor ───────────────────────────────────────────────
+    // ── The agentic-turn temperature ceiling ──────────────────────────────
 
     fn tools_body() -> Value {
         json!({"tools": [{"function": {"name": "read_file"}}]})
     }
 
-    fn tool_layers() -> SamplingLayers {
+    fn agentic_layers() -> SamplingLayers {
         SamplingLayers {
-            tool_call_floor: true,
+            agentic_adjustments: true,
             ..Default::default()
         }
     }
 
-    /// The point of the feature: an untuned model asked for a tool call
-    /// samples near-deterministically instead of at the neutral floor's 0.7.
+    /// A model whose defaults were written automatically at import, which is
+    /// what every `reasoning`-tagged model gets.
+    fn auto_detected_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
+        ModelContext {
+            tags: if reasoning {
+                vec!["reasoning".to_owned()]
+            } else {
+                Vec::new()
+            },
+            inference_defaults: Some(defaults),
+            defaults_origin: Some(DefaultsOrigin::AutoDetected),
+            ..ModelContext::passthrough()
+        }
+    }
+
+    /// The case the ceiling exists for, and the one the floor it replaced
+    /// could never reach: a `reasoning` model's auto-written recipe names
+    /// `temperature: 1.0`, and any layer outranks a floor.
     #[test]
-    fn a_request_carrying_tools_lands_on_the_tool_floor() {
+    fn the_ceiling_caps_an_auto_detected_recipe() {
         let mut body = tools_body();
-        resolve_sampling(&mut body, &ModelContext::passthrough(), &tool_layers());
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
 
-        assert_param(&body, "temperature", 0.15);
-        assert_param(&body, "top_p", 1.0);
-        assert_param(&body, "dry_multiplier", 0.0);
+        assert_param(&body, "temperature", 0.6);
     }
 
-    /// Same layers, no tools: nothing changes for a chat turn.
+    /// Reasoning models are capped far higher than everything else. Below
+    /// ~0.6 they degrade into endless repetition, and the `<think>` block
+    /// shares one sampler configuration with the tool call.
     #[test]
-    fn a_request_without_tools_keeps_the_class_floor() {
-        let mut body = json!({});
-        resolve_sampling(&mut body, &ModelContext::passthrough(), &tool_layers());
+    fn the_reasoning_ceiling_is_higher_than_the_plain_one() {
+        for (reasoning, expected) in [(true, 0.6), (false, 0.3)] {
+            let mut body = tools_body();
+            let ctx = auto_detected_ctx(
+                InferenceConfig {
+                    temperature: Some(1.0),
+                    ..Default::default()
+                },
+                reasoning,
+            );
+            resolve_sampling(&mut body, &ctx, &agentic_layers());
 
-        assert_param(&body, "temperature", 0.7);
-        assert_param(&body, "top_p", 0.95);
+            assert_param(&body, "temperature", expected);
+        }
     }
 
-    /// `strip_unsupported_tools` leaves a dangling `tool_choice` when there
-    /// were no tools to strip, so this shape reaches stage 4 in practice. It
-    /// is not a tool turn.
+    /// Deliberate configuration outranks the ceiling. This is the whole
+    /// reason the gate is provenance rather than rank.
     #[test]
-    fn a_dangling_tool_choice_without_tools_is_not_a_tool_turn() {
-        let mut body = json!({"tool_choice": "required"});
-        resolve_sampling(&mut body, &ModelContext::passthrough(), &tool_layers());
-
-        assert_param(&body, "temperature", 0.7);
-    }
-
-    /// The composition rule: a reasoning model calling tools gets the tool
-    /// floor's temperature but keeps the carve-outs `reasoning_floor` exists
-    /// for — its anti-repetition guard, and its deliberately disabled min-p.
-    #[test]
-    fn the_tool_floor_composes_onto_the_reasoning_floor() {
+    fn a_deliberate_temperature_is_never_capped() {
         let mut body = tools_body();
+        // `User` origin, so the recipe occupies the per-model rung rather than
+        // the auto-detected one.
         let ctx = ModelContext {
-            tags: vec!["reasoning".to_owned()],
+            inference_defaults: Some(temp(0.9)),
+            defaults_origin: Some(DefaultsOrigin::User),
             ..ModelContext::passthrough()
         };
-        resolve_sampling(&mut body, &ctx, &tool_layers());
-
-        assert_param(&body, "temperature", 0.15);
-        assert_param(&body, "presence_penalty", 1.0);
-        assert_param(&body, "min_p", 0.0);
-    }
-
-    /// It is a floor, not an override: anything a real layer names still wins.
-    #[test]
-    fn a_layer_still_outranks_the_tool_floor() {
-        let mut body = tools_body();
-        resolve_sampling(
-            &mut body,
-            &model_ctx(Some(temp(0.9))),
-            &SamplingLayers {
-                tool_call_floor: true,
-                ..Default::default()
-            },
-        );
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
 
         assert_param(&body, "temperature", 0.9);
     }
 
-    /// The settings toggle, expressed as the layer flag the proxy sets from it.
+    /// The regression guard for #743: the adjustment must not disable DRY.
+    /// A ladder rung would have claimed the coupled set and dropped it to the
+    /// floor; clamping after the fold leaves it alone.
     #[test]
-    fn the_floor_does_nothing_when_the_caller_has_not_enabled_it() {
+    fn dry_survives_an_agentic_turn() {
         let mut body = tools_body();
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
         resolve_sampling(
             &mut body,
-            &ModelContext::passthrough(),
-            &SamplingLayers::default(),
+            &ctx,
+            &SamplingLayers {
+                agentic_adjustments: true,
+                global: Some(InferenceConfig {
+                    temperature: Some(0.8),
+                    dry_multiplier: Some(0.8),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
         );
 
-        assert_param(&body, "temperature", 0.7);
+        assert_param(&body, "dry_multiplier", 0.8);
+        // Global is a deliberate setting, so its temperature stands uncapped.
+        assert_param(&body, "temperature", 0.8);
+    }
+
+    /// The ceiling only ever lowers. A model already below it is untouched.
+    #[test]
+    fn the_ceiling_never_raises_a_temperature() {
+        let mut body = tools_body();
+        let ctx = auto_detected_ctx(temp(0.1), false);
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
+
+        assert_param(&body, "temperature", 0.1);
+    }
+
+    /// `top_p` is left alone. The floor this replaced forced it to 1.0, which
+    /// contradicted Qwen's own guidance of 0.95 for thinking mode.
+    #[test]
+    fn the_ceiling_does_not_touch_top_p() {
+        let mut body = tools_body();
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
+
+        assert_param(&body, "top_p", 0.95);
+    }
+
+    #[test]
+    fn a_request_without_tools_is_never_capped() {
+        let mut body = json!({});
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
+
+        assert_param(&body, "temperature", 1.0);
+    }
+
+    /// `strip_unsupported_tools` leaves a dangling `tool_choice` when there
+    /// were no tools to strip, so this shape reaches stage 4 in practice.
+    #[test]
+    fn a_dangling_tool_choice_without_tools_is_not_an_agentic_turn() {
+        let mut body = json!({"tool_choice": "required"});
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &agentic_layers());
+
+        assert_param(&body, "temperature", 1.0);
+    }
+
+    #[test]
+    fn the_ceiling_does_nothing_when_the_caller_has_not_enabled_it() {
+        let mut body = tools_body();
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+
+        assert_param(&body, "temperature", 1.0);
     }
 
     // ── cache_prompt ──────────────────────────────────────────────────────

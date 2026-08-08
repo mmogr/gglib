@@ -15,7 +15,7 @@ pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use request_shape::carries_tools;
 pub use resolve::resolve;
-pub use sampling::{DISABLE_TOOL_FLOOR_ENV, SamplingLayers, resolve_sampling};
+pub use sampling::{DISABLE_AGENTIC_SAMPLING_ENV, SamplingLayers, resolve_sampling};
 pub use tools::strip_unsupported_tools;
 pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};
 

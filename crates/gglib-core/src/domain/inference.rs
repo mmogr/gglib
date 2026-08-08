@@ -124,16 +124,19 @@ pub struct InferenceConfig {
     /// - 0.0: Disabled (llama.cpp's default, and the floor here)
     /// - 0.8: A common starting point for long agentic sessions
     ///
-    /// Disabled by [`for_tool_call`]: structured tool output legitimately
-    /// repeats tokens, so penalising repetition there damages the JSON.
+    /// Left alone on agentic turns, deliberately. An earlier version forced
+    /// this to `0` whenever a request carried tools, reasoning that structured
+    /// output legitimately repeats tokens. Both halves were wrong: llama.cpp's
+    /// sequence breakers already default to `\n`, `:`, `"`, `*` — two of which
+    /// are pervasive in JSON — and agentic clients send `tools` on *every*
+    /// request, so the pin would have disabled DRY for whole sessions, which
+    /// is the workload it exists for.
     ///
-    /// llama.cpp's fifth DRY parameter, `--dry-sequence-breaker` (defaults
-    /// `\n`, `:`, `"`, `*`), is deliberately not modelled: it is a list of
-    /// strings, and every layer of this hierarchy — merge, coupling, the CLI
-    /// flags, the settings mirror — is built for scalars. Its defaults are
-    /// sensible for prose and code alike, so it is left to llama.cpp.
-    ///
-    /// [`for_tool_call`]: Self::for_tool_call
+    /// llama.cpp's fifth DRY parameter, `--dry-sequence-breaker`, is not
+    /// modelled: it is a list of strings, and every layer of this hierarchy —
+    /// merge, coupling, the CLI flags, the settings mirror — is built for
+    /// scalars. It is also the right lever if DRY is ever seen mangling a tool
+    /// call, so modelling it is the follow-up, not switching DRY off.
     pub dry_multiplier: Option<f32>,
 
     /// DRY penalty base, the exponent applied per token of matched sequence
@@ -644,45 +647,39 @@ impl InferenceConfig {
         }
     }
 
-    /// This floor, adjusted for a request that carries tools.
+    /// The highest temperature an agentic turn should decode at.
     ///
-    /// A tool-emission turn wants a near-deterministic decode: the output is
-    /// structured, there is a right answer, and creativity in a JSON envelope
-    /// is only ever a defect. This lowers the temperature and opens `top_p`
-    /// so the truncation is done by temperature alone.
+    /// A turn that carries tools may emit structured output, where creativity
+    /// is only ever a defect. This is the ceiling that caps it — applied by
+    /// [`crate::request_pipeline::sampling`] *after* resolution, and only over
+    /// a value nobody deliberately chose. It never raises a temperature.
     ///
-    /// # DRY is switched off, not left alone
+    /// # Why reasoning models get a much higher ceiling
     ///
-    /// Structured output legitimately repeats tokens — braces, quoted keys,
-    /// the same argument names across a batch of calls. A repetition penalty
-    /// there attacks the very structure that makes the call parseable, and a
-    /// malformed tool call is the failure this pipeline is least able to
-    /// recover from. So `dry_multiplier` is pinned to `0.0` regardless of what
-    /// the base floor says.
+    /// A `reasoning` model does not decode its tool call in isolation: the
+    /// `<think>` block and the call are one completion under one sampler
+    /// configuration, so any ceiling imposed for the sake of structured output
+    /// lands on the reasoning phase too. Both vendors warn about exactly this
+    /// — Qwen3 specifies ~0.6 for thinking mode and says not to use greedy
+    /// decoding, and DeepSeek-R1 specifies 0.5–0.7 for the same reason. Below
+    /// that range these models degrade into endless repetition, which the
+    /// proxy's own loop guard would then reject as a 400. Capping a thinking
+    /// model near-greedy manufactures the failure that guard exists to catch.
     ///
-    /// # What it deliberately does not touch
+    /// `0.3` for everything else is low enough to steady structured output
+    /// without being greedy.
     ///
-    /// `presence_penalty`, `repeat_penalty`, `min_p`, `top_k` and `max_tokens`
-    /// are carried through unchanged. That keeps [`reasoning_floor`]'s two carve-outs
-    /// intact for a `reasoning`-tagged model that is also calling tools: its
-    /// anti-repetition guard survives, and its deliberately disabled min-p is
-    /// not quietly re-enabled by a floor that has no opinion about Qwen3.6.
+    /// # Why a ceiling and not a floor
     ///
-    /// This is a *floor*, so every one of these values is still outranked by
-    /// any layer that names one.
-    ///
-    /// [`reasoning_floor`]: Self::reasoning_floor
+    /// The floor this replaced could never fire on the models that most needed
+    /// it. A `reasoning`-tagged model carries an auto-detected recipe naming
+    /// `temperature: 1.0`, and any layer outranks a floor — so the adjustment
+    /// was inert on precisely the models used for agentic coding. A ceiling
+    /// gated on provenance fires there and stays out of the way everywhere a
+    /// person actually made a choice.
     #[must_use]
-    pub const fn for_tool_call(self) -> Self {
-        Self {
-            temperature: Some(0.15),
-            top_p: Some(1.0),
-            dry_multiplier: Some(0.0),
-            dry_base: None,
-            dry_allowed_length: None,
-            dry_penalty_last_n: None,
-            ..self
-        }
+    pub const fn agentic_temperature_ceiling(is_reasoning: bool) -> f32 {
+        if is_reasoning { 0.6 } else { 0.3 }
     }
 
     /// Convert inference config to llama CLI arguments.
