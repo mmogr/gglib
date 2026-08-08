@@ -360,6 +360,16 @@ request params  →  profile  →  model defaults  →  global settings  →  ha
    A `reasoning`-tagged model floors at `presence_penalty=1.0` and `min_p=0.0`
    instead — the two parameters whose floor is model-dependent.
 
+A request carrying a non-empty `tools` array resolves against a tighter floor
+still — `temperature=0.15`, `top_p=1.0`, and DRY forced off — composed onto
+whichever class floor applies, so a `reasoning`-tagged model calling tools keeps
+its carve-outs. Structured output legitimately repeats tokens, so a repetition
+penalty during tool emission attacks the structure that makes the call
+parseable. It keys on tools being present rather than `tool_choice: "required"`,
+because agentic clients send `"auto"` almost universally. Disable with
+`gglib config settings set --tool-call-floor false` or `GGLIB_DISABLE_TOOL_FLOOR=1`;
+see [Sampling resolution](../../docs/sampling.md#the-tool-call-floor).
+
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
 written into the forwarded request body (via `body_obj.insert`) so llama-server
