@@ -58,15 +58,23 @@ pub async fn run_tune(
 
     // Built and bounded before the run row exists, so an oversized grid is
     // refused outright rather than recorded as a run that failed.
+    //
+    // Reported as `RunFailed` rather than returned as `Err`: the Axum handler
+    // spawns this future and only logs a returned error to tracing, so an
+    // `Err` here would abort the run with the caller seeing nothing at all.
+    // Every other early failure in this function reports the same way.
     let candidates = build_candidates(&config.sweep, &model, &config);
-    anyhow::ensure!(
-        candidates.len() <= MAX_CANDIDATES,
-        "this sweep would run {} candidates, over the {MAX_CANDIDATES} limit. \
-         Every candidate costs at least one agent loop per pre-screen task, and \
-         pruning only starts after the whole grid has run, so the cost is the \
-         full count. Reduce the values per dimension, or sweep fewer dimensions.",
-        candidates.len()
-    );
+    if candidates.len() > MAX_CANDIDATES {
+        let msg = format!(
+            "this sweep would run {} candidates, over the {MAX_CANDIDATES} limit. \
+             Every candidate costs at least one agent loop per pre-screen task, and \
+             pruning only starts after the whole grid has run, so the cost is the \
+             full count. Reduce the values per dimension, or sweep fewer dimensions.",
+            candidates.len()
+        );
+        let _ = tx.send(BenchmarkEvent::RunFailed { error: msg }).await;
+        return Ok(());
+    }
 
     let config_json = serde_json::to_string(&config).ok();
     let run_id = deps
