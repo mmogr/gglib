@@ -34,24 +34,29 @@ The full set of configurable parameters:
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
 | `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0, or 1.0 on a `reasoning`-tagged model | See below |
 | `min_p` | `--min-p` | 0.0 – 1.0 | 0.05, or 0.0 on a `reasoning`-tagged model | Matches llama.cpp's own default — see below |
+| `dry_multiplier` | `--dry-multiplier` | 0.0 – 5.0 | 0.0 (disabled) | DRY repetition penalty; see below |
+| `dry_base` | `--dry-base` | > 1.0 | *(none)* | llama.cpp default 1.75 |
+| `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
+| `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
 
 ## Temperature coupling
 
-**`temperature`, `presence_penalty`, `repeat_penalty` and `min_p` are coupled.**
-The last three are only meaningful relative to how sharp `temperature` makes the
+**`temperature`, `presence_penalty`, `repeat_penalty`, `min_p` and the four
+DRY parameters are coupled.**
+The rest are only meaningful relative to how sharp `temperature` makes the
 sampling distribution, so they always come from whichever layer supplied the
 `temperature` — never a lower layer, which would apply a penalty tuned for a
-distribution nothing above it asked for. If that layer left one of the three
+distribution nothing above it asked for. If that layer left one of them
 unset (or if no layer names a temperature at all, in which case the pair-up
 doesn't apply), it falls to the floor rather than to a lower layer's value.
 
-The floor itself is class-aware for exactly one field: a plain `0.0`
-`presence_penalty` is fine for most models, but a `reasoning`-tagged model
-(Qwen3.6, DeepSeek-R1, QwQ, …) degrades into repetitive reasoning loops under
-greedy or near-greedy decoding, so its floor is `1.0` — a real guard, without
-asserting the model's full tuned recipe onto a temperature it wasn't chosen
-for. `top_p`, `top_k` and `max_tokens` are uncoupled and fill from any layer
-independently regardless of temperature.
+The floor itself is class-aware for two fields, `presence_penalty` and
+`min_p`: a plain `0.0` presence penalty is fine for most models, but a
+`reasoning`-tagged model (Qwen3.6, DeepSeek-R1, QwQ, …) degrades into
+repetitive reasoning loops under greedy or near-greedy decoding, so its floor
+is `1.0` — a real guard, without asserting the model's full tuned recipe onto
+a temperature it wasn't chosen for. `top_p`, `top_k` and `max_tokens` are
+uncoupled and fill from any layer independently regardless of temperature.
 
 **`max_tokens` has no fallback, by design.** Resolution force-writes every set
 parameter into the outgoing request, so a fallback here would cap *every* request
@@ -269,3 +274,55 @@ Per-model server defaults can be set via the GUI or API (`PATCH /api/models/:id`
 left unchanged by omitting the field. The CLI `serve`, `chat`, and `q` commands
 automatically consume these defaults, so models with large context windows don't need
 manual `--ctx-size` flags on every invocation.
+
+## DRY
+
+`repeat_penalty` is a flat per-token penalty: it cannot see that a model is
+cycling through the same three-line block, only that individual tokens recur.
+DRY penalises a token in proportion to the length of the repeated *sequence* it
+would extend, which is the shape degenerate loops actually take in long agentic
+sessions.
+
+The floor leaves it off (`dry_multiplier: 0.0`, llama.cpp's own default).
+Turning it on for every untuned model is a tuning decision, not a default —
+enable it per model or per profile:
+
+```bash
+gglib model update qwen3.6 --dry-multiplier 0.8
+gglib config profile set coding --dry-multiplier 0.8 --dry-allowed-length 3
+```
+
+`dry_base`, `dry_allowed_length` and `dry_penalty_last_n` have no floor value.
+Left unset they are omitted from the request entirely and llama.cpp applies its
+own defaults (1.75, 2, and -1), which are reasonable starting points.
+
+## The tool-call floor
+
+A request carrying a non-empty `tools` array is asking for structured output,
+and resolves against a tighter floor than a chat turn: `temperature 0.15`,
+`top_p 1.0`, and **DRY forced off**.
+
+DRY is disabled there deliberately. Structured output legitimately repeats
+tokens — braces, quoted keys, the same argument names across a batch of calls —
+so a repetition penalty attacks the very structure that makes the call
+parseable, and a malformed tool call is the failure the pipeline is least able
+to recover from.
+
+It engages on tools being *present*, not on `tool_choice: "required"`. Real
+agentic clients send `"auto"` almost universally, so a `required`-only trigger
+would describe nearly no traffic.
+
+It composes onto whichever class floor applies rather than replacing it, so a
+`reasoning`-tagged model calling tools keeps both of that floor's carve-outs:
+its anti-repetition guard, and its deliberately disabled min-p.
+
+Being a floor, every value is still outranked by any layer that names one — the
+way to override it for one model is that model's own defaults, not the global
+switch. Disable it entirely with
+`gglib config settings set --tool-call-floor false`, or per-process with
+`GGLIB_DISABLE_TOOL_FLOOR=1`.
+
+Two surfaces do not apply it, both by construction: `gglib model explain` and
+the GUI's sampling provenance explain *stored configuration* with no request in
+hand, so they always report the reasoning or neutral floor. The proxy's
+`sampling resolved` debug line names the floor that actually ran.

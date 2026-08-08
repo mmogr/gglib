@@ -193,6 +193,10 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         {renderSlider('repeatPenalty')}
         {renderSlider('presencePenalty')}
         {renderSlider('minP')}
+        {renderSlider('dryMultiplier')}
+        {renderSlider('dryBase')}
+        {renderNumberInput('dryAllowedLength')}
+        {renderNumberInput('dryPenaltyLastN')}
       </div>
     </div>
   );

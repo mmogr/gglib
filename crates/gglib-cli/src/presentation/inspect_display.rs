@@ -116,7 +116,11 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
             || inf.max_tokens.is_some()
             || inf.repeat_penalty.is_some()
             || inf.presence_penalty.is_some()
-            || inf.min_p.is_some();
+            || inf.min_p.is_some()
+            || inf.dry_multiplier.is_some()
+            || inf.dry_base.is_some()
+            || inf.dry_allowed_length.is_some()
+            || inf.dry_penalty_last_n.is_some();
 
         if has_any {
             let origin_suffix = match dto.defaults_origin {
@@ -136,6 +140,10 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
             print_opt_f32("  repeat_penalty   ", inf.repeat_penalty);
             print_opt_f32("  presence_penalty ", inf.presence_penalty);
             print_opt_f32("  min_p            ", inf.min_p);
+            print_opt_f32("  dry_multiplier   ", inf.dry_multiplier);
+            print_opt_f32("  dry_base         ", inf.dry_base);
+            print_opt_i32("  dry_allowed_len  ", inf.dry_allowed_length);
+            print_opt_i32("  dry_penalty_last ", inf.dry_penalty_last_n);
         }
     }
 

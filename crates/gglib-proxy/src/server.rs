@@ -954,6 +954,8 @@ async fn chat_completions(
         profile: request_profile.clone(),
         global: settings.inference_defaults.clone(),
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
+        // Opt-out: absent means on. See `Settings::tool_call_floor`.
+        tool_call_floor: settings.tool_call_floor != Some(false),
     };
 
     // Clone body before forwarding — Bytes is reference-counted so this is
@@ -1071,6 +1073,7 @@ async fn chat_completions(
                 profile: request_profile.clone(),
                 global: retry_settings.inference_defaults.clone(),
                 trust_client_sampling: retry_settings.trust_client_sampling.unwrap_or(false),
+                tool_call_floor: retry_settings.tool_call_floor != Some(false),
             };
 
             // Fresh connection for the retried attempt — the original guard

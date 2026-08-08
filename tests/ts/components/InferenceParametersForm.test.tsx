@@ -21,7 +21,11 @@ const PARAMS: { label: string; floor: string | null; min: number; max: number }[
   { label: 'Max Tokens', floor: null, min: 1, max: 8192 },
   { label: 'Repeat Penalty', floor: '1.0', min: 0.05, max: 2 },
   { label: 'Presence Penalty', floor: '0.0', min: 0, max: 2 },
-  { label: 'Min P', floor: '0.0', min: 0, max: 1 },
+  { label: 'Min P', floor: '0.05', min: 0, max: 1 },
+  { label: 'DRY Multiplier', floor: '0.0', min: 0, max: 2 },
+  { label: 'DRY Base', floor: null, min: 1.05, max: 4 },
+  { label: 'DRY Allowed Length', floor: null, min: 0, max: 20 },
+  { label: 'DRY Penalty Last N', floor: null, min: -1, max: 8192 },
 ];
 
 const FLOOR: InferenceFallback = { kind: 'floor' };
@@ -103,14 +107,30 @@ describe('InferenceParametersForm', () => {
       );
     });
 
-    it('notes that the presence penalty floor differs for reasoning models', () => {
+    // reasoning_floor() overrides exactly these two, and this surface has no
+    // model to check the tag against, so both captions name the alternative.
+    it.each([
+      ['Presence Penalty', /1\.0 for reasoning models/],
+      ['Min P', /0\.0 for reasoning models/],
+    ])('%s names the floor reasoning models use instead', (label, pattern) => {
       renderForm(FLOOR);
 
-      // reasoning_floor() overrides presence_penalty and nothing else, and
-      // this surface has no model to check the tag against.
-      expect(screen.getByLabelText('Presence Penalty')).toHaveAccessibleDescription(
-        /1\.0 for reasoning models/,
-      );
+      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(pattern);
+    });
+
+    // Max Tokens' "No limit" wording describes unbounded generation. The DRY
+    // parameters are also floorless, but unset means llama.cpp's own default
+    // applies — a number worth naming, and nothing to do with a limit.
+    it.each([
+      ['DRY Base', /llama\.cpp default: 1\.75/],
+      ['DRY Allowed Length', /llama\.cpp default: 2/],
+      ['DRY Penalty Last N', /llama\.cpp default: 64/],
+    ])('%s cites llama.cpp rather than borrowing Max Tokens wording', (label, pattern) => {
+      renderForm(FLOOR);
+
+      const field = screen.getByLabelText(label);
+      expect(field).toHaveAccessibleDescription(pattern);
+      expect(field).not.toHaveAccessibleDescription(/No limit/);
     });
 
     it('claims no default for Max Tokens, because the backend has none', () => {

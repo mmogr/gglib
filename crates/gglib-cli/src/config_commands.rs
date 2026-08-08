@@ -146,6 +146,18 @@ pub enum ProfileCommand {
         /// Min-p sampling threshold (0.0–1.0)
         #[arg(long)]
         min_p: Option<f32>,
+        /// DRY repetition penalty strength (0.0 disables)
+        #[arg(long)]
+        dry_multiplier: Option<f32>,
+        /// DRY penalty base (llama.cpp default 1.75)
+        #[arg(long)]
+        dry_base: Option<f32>,
+        /// Tokens of repeat DRY tolerates before penalising (default 2)
+        #[arg(long)]
+        dry_allowed_length: Option<i32>,
+        /// DRY lookback window in tokens; 0 disables (llama.cpp default 64)
+        #[arg(long)]
+        dry_penalty_last_n: Option<i32>,
         /// Clear a parameter so it falls back to the model's own default.
         /// Repeatable, e.g. `--unset top-k --unset min-p`.
         #[arg(long, value_name = "PARAM")]
@@ -232,6 +244,13 @@ pub enum SettingsCommand {
         /// that legitimately replays identical batches.
         #[arg(long)]
         proxy_loop_detection: Option<bool>,
+        /// Sample tool-emission turns against a tighter floor. Enabled by
+        /// default: a request carrying tools decodes near-deterministically
+        /// with DRY off, because its output is structured and a malformed
+        /// tool call is the hardest failure to recover from. Only ever
+        /// supplies a floor, so any layer that names a parameter still wins.
+        #[arg(long)]
+        tool_call_floor: Option<bool>,
         /// Start the OpenAI-compatible proxy as soon as the desktop app
         /// launches, instead of waiting for it to be switched on. Combined
         /// with --start-at-login and --close-to-tray this keeps the endpoint

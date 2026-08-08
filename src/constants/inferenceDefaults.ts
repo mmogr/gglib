@@ -84,4 +84,34 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
    * guidance to disable min-p.
    */
   minP: { default: 0.05, min: 0, max: 1, step: 0.01 },
+
+  /**
+   * Rust: `with_hardcoded_defaults().dry_multiplier`, validated `0.0..=5.0`.
+   *
+   * The floor states `0.0` — DRY expressible but off — because turning it on
+   * for every untuned model is a tuning decision, not a default. `max` here is
+   * a UI guard rail well below the validated ceiling; useful values sit under
+   * 1.0.
+   */
+  dryMultiplier: { default: 0.0, min: 0, max: 2, step: 0.05 },
+
+  /**
+   * Rust: `with_hardcoded_defaults()` leaves `dry_base` unset, so llama.cpp's
+   * own default (1.75) applies. Validation requires `> 1.0`, so the minimum is
+   * one step above it.
+   */
+  dryBase: { default: null, min: 1.05, max: 4, step: 0.05 },
+
+  /**
+   * Rust: unset at the floor; llama.cpp defaults to 2. Validation only
+   * requires non-negative.
+   */
+  dryAllowedLength: { default: null, min: 0, max: 20, step: 1 },
+
+  /**
+   * Rust: unset at the floor; llama.cpp defaults to -1, meaning scan the whole
+   * context. Validation accepts -1 or non-negative, which is why `min` is -1
+   * rather than 0.
+   */
+  dryPenaltyLastN: { default: null, min: -1, max: 8192, step: 1 },
 };

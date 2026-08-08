@@ -18,6 +18,10 @@ export const PARAM_LABELS: Record<SamplingParamKey, string> = {
   presencePenalty: 'Presence Penalty',
   repeatPenalty: 'Repeat Penalty',
   minP: 'Min P',
+  dryMultiplier: 'DRY Multiplier',
+  dryBase: 'DRY Base',
+  dryAllowedLength: 'DRY Allowed Length',
+  dryPenaltyLastN: 'DRY Penalty Last N',
   maxTokens: 'Max Tokens',
 };
 
@@ -25,7 +29,7 @@ export const PARAM_LABELS: Record<SamplingParamKey, string> = {
 export interface SourceContext {
   /** The profile applied, if one was selected. */
   profile?: string | null;
-  /** Selects which floor the coupled trio falls back to. */
+  /** Selects which floor the coupled set falls back to. */
   isReasoning: boolean;
 }
 
@@ -77,7 +81,12 @@ export function formatParamValue(
   value: number | null | undefined,
 ): string {
   if (value == null) return UNKNOWN;
-  if (param === 'topK') return String(value);
+  // Integer-valued parameters render bare. `dryPenaltyLastN` is the only one
+  // that can legitimately be negative (-1 = whole context), which `toFixed(1)`
+  // would render as a misleading "-1.0".
+  if (param === 'topK' || param === 'dryAllowedLength' || param === 'dryPenaltyLastN') {
+    return String(value);
+  }
   if (param === 'maxTokens') return value.toLocaleString();
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }

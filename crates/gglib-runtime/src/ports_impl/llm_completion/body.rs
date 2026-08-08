@@ -165,6 +165,10 @@ mod tests {
             repeat_penalty: Some(1.25),
             presence_penalty: Some(1.5),
             min_p: Some(0.0625),
+            dry_multiplier: Some(0.75),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(-1),
         }
     }
 
@@ -182,7 +186,7 @@ mod tests {
     /// now applied via [`InferenceConfig::to_openai_json_patch`] — the proxy's
     /// own helper — so the two cannot diverge again.
     #[test]
-    fn sampling_emits_all_seven_openai_keys() {
+    fn sampling_emits_every_openai_key() {
         let config = full_config();
         let body = build_chat_body("m", &messages(), &[], Some(&config));
 
@@ -193,6 +197,13 @@ mod tests {
         assert_eq!(body["repeat_penalty"], json!(1.25));
         assert_eq!(body["presence_penalty"], json!(1.5));
         assert_eq!(body["min_p"], json!(0.0625));
+        // The DRY set. `dry_penalty_last_n` is the one parameter here whose
+        // meaningful value is negative (-1 = scan the whole context), so it
+        // also guards against a future unsigned narrowing.
+        assert_eq!(body["dry_multiplier"], json!(0.75));
+        assert_eq!(body["dry_base"], json!(1.75));
+        assert_eq!(body["dry_allowed_length"], json!(2));
+        assert_eq!(body["dry_penalty_last_n"], json!(-1));
     }
 
     #[test]
@@ -207,7 +218,17 @@ mod tests {
 
         assert!(obj.contains_key("temperature"));
         assert!(obj.contains_key("presence_penalty"));
-        for key in ["top_p", "top_k", "max_tokens", "repeat_penalty", "min_p"] {
+        for key in [
+            "top_p",
+            "top_k",
+            "max_tokens",
+            "repeat_penalty",
+            "min_p",
+            "dry_multiplier",
+            "dry_base",
+            "dry_allowed_length",
+            "dry_penalty_last_n",
+        ] {
             assert!(!obj.contains_key(key), "{key} should be absent, not null");
         }
         // Unset fields must be omitted entirely rather than sent as `null`.

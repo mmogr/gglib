@@ -48,8 +48,7 @@ use crate::domain::sampling_provenance::{FieldSources, ParamSource};
 ///     top_k: Some(40),
 ///     max_tokens: Some(2048),
 ///     repeat_penalty: Some(1.1),
-///     presence_penalty: None,
-///     min_p: None,
+///     ..Default::default()
 /// };
 ///
 /// // Creative writing settings
@@ -116,6 +115,40 @@ pub struct InferenceConfig {
     /// [`reasoning_floor`]: Self::reasoning_floor
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     pub min_p: Option<f32>,
+
+    /// DRY (Don't Repeat Yourself) penalty strength.
+    ///
+    /// Penalises tokens that would extend a sequence already present in the
+    /// context, which catches the multi-token degenerate loops that
+    /// `repeat_penalty` — a flat per-token penalty — cannot see.
+    /// - 0.0: Disabled (llama.cpp's default, and the floor here)
+    /// - 0.8: A common starting point for long agentic sessions
+    ///
+    /// Disabled by [`for_tool_call`]: structured tool output legitimately
+    /// repeats tokens, so penalising repetition there damages the JSON.
+    ///
+    /// llama.cpp's fifth DRY parameter, `--dry-sequence-breaker` (defaults
+    /// `\n`, `:`, `"`, `*`), is deliberately not modelled: it is a list of
+    /// strings, and every layer of this hierarchy — merge, coupling, the CLI
+    /// flags, the settings mirror — is built for scalars. Its defaults are
+    /// sensible for prose and code alike, so it is left to llama.cpp.
+    ///
+    /// [`for_tool_call`]: Self::for_tool_call
+    pub dry_multiplier: Option<f32>,
+
+    /// DRY penalty base, the exponent applied per token of matched sequence
+    /// length. Higher grows the penalty faster on longer repeats.
+    /// Unset defers to llama.cpp's own default (1.75).
+    pub dry_base: Option<f32>,
+
+    /// Sequence length, in tokens, that DRY tolerates before penalising.
+    /// Unset defers to llama.cpp's own default (2).
+    pub dry_allowed_length: Option<i32>,
+
+    /// How far back DRY scans for repeats, in tokens. `0` disables the
+    /// penalty; llama.cpp resolves negative values against the context size.
+    /// Unset defers to llama.cpp's own default (64).
+    pub dry_penalty_last_n: Option<i32>,
 }
 
 /// Whether a model's stored `inference_defaults` were set by the user or
@@ -228,6 +261,23 @@ fn snake_to_camel(s: &str) -> String {
     out
 }
 
+/// Which ladder rung supplied each member of the temperature-coupled set.
+///
+/// Purely an intermediate inside [`InferenceConfig::resolve_layers_with_sources`]:
+/// the two arms of the coupling rule each produce one of these, and the
+/// provenance record is built from it. A struct rather than a tuple because
+/// the set is seven wide — positional destructuring stopped being readable.
+#[derive(Debug, Clone, Copy)]
+struct CoupledLayers {
+    repeat_penalty: Option<usize>,
+    presence_penalty: Option<usize>,
+    min_p: Option<usize>,
+    dry_multiplier: Option<usize>,
+    dry_base: Option<usize>,
+    dry_allowed_length: Option<usize>,
+    dry_penalty_last_n: Option<usize>,
+}
+
 impl InferenceConfig {
     /// Merge another config into this one, preferring values from `other`.
     ///
@@ -276,6 +326,18 @@ impl InferenceConfig {
         if self.min_p.is_none() {
             self.min_p = other.min_p;
         }
+        if self.dry_multiplier.is_none() {
+            self.dry_multiplier = other.dry_multiplier;
+        }
+        if self.dry_base.is_none() {
+            self.dry_base = other.dry_base;
+        }
+        if self.dry_allowed_length.is_none() {
+            self.dry_allowed_length = other.dry_allowed_length;
+        }
+        if self.dry_penalty_last_n.is_none() {
+            self.dry_penalty_last_n = other.dry_penalty_last_n;
+        }
     }
 
     /// Resolve an ordered list of sampling layers (highest priority first)
@@ -296,20 +358,23 @@ impl InferenceConfig {
     ///
     /// # Coupled parameters
     ///
-    /// `presence_penalty`, `repeat_penalty` and `min_p` are only meaningful
-    /// relative to how sharp the sampling distribution is, so they travel with
-    /// the `temperature` they were chosen for. [`reasoning_profile`] pairs
-    /// `temperature 1.0` with `presence_penalty 1.5` deliberately; a sparse
-    /// profile that sets `temperature 0.2` and leaves the penalty unset must
-    /// not inherit that `1.5` — that would run a recipe no layer ever
-    /// intended, a penalty tuned for a broad distribution applied to a
-    /// near-greedy one.
+    /// `presence_penalty`, `repeat_penalty`, `min_p` and the four DRY
+    /// parameters are only meaningful relative to how sharp the sampling
+    /// distribution is, so they travel with the `temperature` they were chosen
+    /// for. [`reasoning_profile`] pairs `temperature 1.0` with
+    /// `presence_penalty 1.5` deliberately; a sparse profile that sets
+    /// `temperature 0.2` and leaves the penalty unset must not inherit that
+    /// `1.5` — that would run a recipe no layer ever intended, a penalty tuned
+    /// for a broad distribution applied to a near-greedy one. The DRY
+    /// parameters join the set for the same reason: they are a repetition
+    /// penalty, and a DRY strength chosen for one temperature is not a
+    /// statement about another.
     ///
     /// So: `temperature` resolves to the first layer that sets one. If some
-    /// layer does, the coupled trio comes *only* from that same layer — never
+    /// layer does, the coupled set comes *only* from that same layer — never
     /// a layer beneath it — falling to `floor` for anything that layer itself
     /// left unset. If **no** layer sets a temperature at all, nothing has been
-    /// tuned against anything, so the coupled trio gap-fills normally, exactly
+    /// tuned against anything, so the coupled set gap-fills normally, exactly
     /// like the uncoupled parameters.
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
@@ -317,6 +382,81 @@ impl InferenceConfig {
     #[must_use]
     pub fn resolve_layers(layers: &[Option<&Self>], floor: &Self) -> Self {
         Self::resolve_layers_with_sources(layers, floor).0
+    }
+
+    /// Write the temperature-coupled set into `result` and report which rung
+    /// supplied each member.
+    ///
+    /// Split out of [`resolve_layers_with_sources`] only for length; the rule
+    /// it implements is documented on [`resolve_layers`]. `temperature` is the
+    /// rung that claimed the temperature, if any — the whole coupling rule
+    /// hangs off whether that is `Some`.
+    ///
+    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
+    /// [`resolve_layers`]: Self::resolve_layers
+    fn resolve_coupled(
+        layers: &[Option<&Self>],
+        temperature: Option<usize>,
+        result: &mut Self,
+    ) -> CoupledLayers {
+        let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
+            layers.iter().position(|l| l.is_some_and(declares))
+        };
+
+        // The layer claiming `temperature` supplies the whole set, including
+        // the fields it left unset — those drop to the floor rather than
+        // inheriting a value tuned for a temperature nobody chose.
+        if let Some(claim) = temperature {
+            let c = layers[claim].expect("index came from a Some layer");
+            result.repeat_penalty = c.repeat_penalty;
+            result.presence_penalty = c.presence_penalty;
+            result.min_p = c.min_p;
+            result.dry_multiplier = c.dry_multiplier;
+            result.dry_base = c.dry_base;
+            result.dry_allowed_length = c.dry_allowed_length;
+            result.dry_penalty_last_n = c.dry_penalty_last_n;
+            return CoupledLayers {
+                repeat_penalty: c.repeat_penalty.and(Some(claim)),
+                presence_penalty: c.presence_penalty.and(Some(claim)),
+                min_p: c.min_p.and(Some(claim)),
+                dry_multiplier: c.dry_multiplier.and(Some(claim)),
+                dry_base: c.dry_base.and(Some(claim)),
+                dry_allowed_length: c.dry_allowed_length.and(Some(claim)),
+                dry_penalty_last_n: c.dry_penalty_last_n.and(Some(claim)),
+            };
+        }
+
+        // Nothing was tuned against anything, so the set gap-fills like any
+        // uncoupled parameter.
+        let found = CoupledLayers {
+            repeat_penalty: first(&|c| c.repeat_penalty.is_some()),
+            presence_penalty: first(&|c| c.presence_penalty.is_some()),
+            min_p: first(&|c| c.min_p.is_some()),
+            dry_multiplier: first(&|c| c.dry_multiplier.is_some()),
+            dry_base: first(&|c| c.dry_base.is_some()),
+            dry_allowed_length: first(&|c| c.dry_allowed_length.is_some()),
+            dry_penalty_last_n: first(&|c| c.dry_penalty_last_n.is_some()),
+        };
+        result.repeat_penalty = found
+            .repeat_penalty
+            .and_then(|i| layers[i].and_then(|c| c.repeat_penalty));
+        result.presence_penalty = found
+            .presence_penalty
+            .and_then(|i| layers[i].and_then(|c| c.presence_penalty));
+        result.min_p = found.min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
+        result.dry_multiplier = found
+            .dry_multiplier
+            .and_then(|i| layers[i].and_then(|c| c.dry_multiplier));
+        result.dry_base = found
+            .dry_base
+            .and_then(|i| layers[i].and_then(|c| c.dry_base));
+        result.dry_allowed_length = found
+            .dry_allowed_length
+            .and_then(|i| layers[i].and_then(|c| c.dry_allowed_length));
+        result.dry_penalty_last_n = found
+            .dry_penalty_last_n
+            .and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
+        found
     }
 
     /// [`resolve_layers`] plus a record of which layer supplied each field.
@@ -356,32 +496,7 @@ impl InferenceConfig {
         result.max_tokens = max_tokens.and_then(|i| layers[i].and_then(|c| c.max_tokens));
         result.temperature = temperature.and_then(|i| layers[i].and_then(|c| c.temperature));
 
-        // Coupled: the layer claiming `temperature` supplies the whole trio,
-        // including the fields it left unset — those drop to the floor rather
-        // than inheriting a value tuned for a temperature nobody chose.
-        let (repeat_penalty, presence_penalty, min_p) = if let Some(claim) = temperature {
-            let c = layers[claim].expect("index came from a Some layer");
-            result.repeat_penalty = c.repeat_penalty;
-            result.presence_penalty = c.presence_penalty;
-            result.min_p = c.min_p;
-            (
-                c.repeat_penalty.and(Some(claim)),
-                c.presence_penalty.and(Some(claim)),
-                c.min_p.and(Some(claim)),
-            )
-        } else {
-            // Nothing was tuned against anything, so the trio gap-fills like
-            // any uncoupled parameter.
-            let repeat_penalty = first(&|c| c.repeat_penalty.is_some());
-            let presence_penalty = first(&|c| c.presence_penalty.is_some());
-            let min_p = first(&|c| c.min_p.is_some());
-            result.repeat_penalty =
-                repeat_penalty.and_then(|i| layers[i].and_then(|c| c.repeat_penalty));
-            result.presence_penalty =
-                presence_penalty.and_then(|i| layers[i].and_then(|c| c.presence_penalty));
-            result.min_p = min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
-            (repeat_penalty, presence_penalty, min_p)
-        };
+        let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
         result.merge_with(floor);
 
@@ -401,9 +516,33 @@ impl InferenceConfig {
             temperature: source(temperature, floor.temperature.is_some(), false),
             top_p: source(top_p, floor.top_p.is_some(), false),
             top_k: source(top_k, floor.top_k.is_some(), false),
-            presence_penalty: source(presence_penalty, floor.presence_penalty.is_some(), coupled),
-            repeat_penalty: source(repeat_penalty, floor.repeat_penalty.is_some(), coupled),
-            min_p: source(min_p, floor.min_p.is_some(), coupled),
+            presence_penalty: source(
+                coupled_layers.presence_penalty,
+                floor.presence_penalty.is_some(),
+                coupled,
+            ),
+            repeat_penalty: source(
+                coupled_layers.repeat_penalty,
+                floor.repeat_penalty.is_some(),
+                coupled,
+            ),
+            min_p: source(coupled_layers.min_p, floor.min_p.is_some(), coupled),
+            dry_multiplier: source(
+                coupled_layers.dry_multiplier,
+                floor.dry_multiplier.is_some(),
+                coupled,
+            ),
+            dry_base: source(coupled_layers.dry_base, floor.dry_base.is_some(), coupled),
+            dry_allowed_length: source(
+                coupled_layers.dry_allowed_length,
+                floor.dry_allowed_length.is_some(),
+                coupled,
+            ),
+            dry_penalty_last_n: source(
+                coupled_layers.dry_penalty_last_n,
+                floor.dry_penalty_last_n.is_some(),
+                coupled,
+            ),
             max_tokens: source(max_tokens, floor.max_tokens.is_some(), false),
         };
 
@@ -458,13 +597,26 @@ impl InferenceConfig {
             repeat_penalty: Some(1.0),
             presence_penalty: Some(0.0),
             min_p: Some(0.05),
+            // DRY expressible but inert. Enabling it fleet-wide is a tuning
+            // decision that belongs to a per-model or per-profile layer with
+            // sweep data behind it, not to the floor every untuned model
+            // silently lands on. `0.0` is also llama.cpp's own default, so
+            // stating it changes nothing about what the model sees.
+            dry_multiplier: Some(0.0),
+            // Left unset rather than restated: with the multiplier at zero
+            // they have no effect, and asserting values here would claim a
+            // recipe nobody has measured. llama.cpp's own defaults apply if a
+            // layer above turns DRY on without naming them.
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
         }
     }
 
     /// The coupled-trio floor for models tagged `reasoning`.
     ///
     /// [`resolve_layers`] falls back to a floor once it has decided which
-    /// layer (if any) claims the coupled trio and that layer left a field
+    /// layer (if any) claims the coupled set and that layer left a field
     /// unset. [`with_hardcoded_defaults`]'s neutral `presence_penalty: 0.0` is
     /// the right floor for most models, but wrong for a `reasoning`-tagged
     /// one: those degrade under greedy or near-greedy decoding into
@@ -492,6 +644,47 @@ impl InferenceConfig {
         }
     }
 
+    /// This floor, adjusted for a request that carries tools.
+    ///
+    /// A tool-emission turn wants a near-deterministic decode: the output is
+    /// structured, there is a right answer, and creativity in a JSON envelope
+    /// is only ever a defect. This lowers the temperature and opens `top_p`
+    /// so the truncation is done by temperature alone.
+    ///
+    /// # DRY is switched off, not left alone
+    ///
+    /// Structured output legitimately repeats tokens — braces, quoted keys,
+    /// the same argument names across a batch of calls. A repetition penalty
+    /// there attacks the very structure that makes the call parseable, and a
+    /// malformed tool call is the failure this pipeline is least able to
+    /// recover from. So `dry_multiplier` is pinned to `0.0` regardless of what
+    /// the base floor says.
+    ///
+    /// # What it deliberately does not touch
+    ///
+    /// `presence_penalty`, `repeat_penalty`, `min_p`, `top_k` and `max_tokens`
+    /// are carried through unchanged. That keeps [`reasoning_floor`]'s two carve-outs
+    /// intact for a `reasoning`-tagged model that is also calling tools: its
+    /// anti-repetition guard survives, and its deliberately disabled min-p is
+    /// not quietly re-enabled by a floor that has no opinion about Qwen3.6.
+    ///
+    /// This is a *floor*, so every one of these values is still outranked by
+    /// any layer that names one.
+    ///
+    /// [`reasoning_floor`]: Self::reasoning_floor
+    #[must_use]
+    pub const fn for_tool_call(self) -> Self {
+        Self {
+            temperature: Some(0.15),
+            top_p: Some(1.0),
+            dry_multiplier: Some(0.0),
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
+            ..self
+        }
+    }
+
     /// Convert inference config to llama CLI arguments.
     ///
     /// Returns a vector of argument strings suitable for passing to llama-server.
@@ -509,15 +702,16 @@ impl InferenceConfig {
     /// let config = InferenceConfig {
     ///     temperature: Some(0.8),
     ///     top_p: Some(0.9),
-    ///     top_k: None,
     ///     max_tokens: Some(1024),
-    ///     repeat_penalty: None,
-    ///     presence_penalty: None,
-    ///     min_p: None,
+    ///     dry_multiplier: Some(0.8),
+    ///     ..Default::default()
     /// };
     ///
     /// let args = config.to_cli_args();
-    /// assert_eq!(args, vec!["--temp", "0.8", "--top-p", "0.9", "-n", "1024"]);
+    /// assert_eq!(
+    ///     args,
+    ///     vec!["--temp", "0.8", "--top-p", "0.9", "-n", "1024", "--dry-multiplier", "0.8"]
+    /// );
     /// ```
     #[must_use]
     pub fn to_cli_args(&self) -> Vec<String> {
@@ -550,6 +744,22 @@ impl InferenceConfig {
         if let Some(min_p) = self.min_p {
             args.push("--min-p".to_string());
             args.push(min_p.to_string());
+        }
+        if let Some(dry_multiplier) = self.dry_multiplier {
+            args.push("--dry-multiplier".to_string());
+            args.push(dry_multiplier.to_string());
+        }
+        if let Some(dry_base) = self.dry_base {
+            args.push("--dry-base".to_string());
+            args.push(dry_base.to_string());
+        }
+        if let Some(dry_allowed_length) = self.dry_allowed_length {
+            args.push("--dry-allowed-length".to_string());
+            args.push(dry_allowed_length.to_string());
+        }
+        if let Some(dry_penalty_last_n) = self.dry_penalty_last_n {
+            args.push("--dry-penalty-last-n".to_string());
+            args.push(dry_penalty_last_n.to_string());
         }
 
         args
@@ -584,6 +794,17 @@ impl InferenceConfig {
             repeat_penalty: Some(1.0),
             presence_penalty: Some(1.5),
             min_p: Some(0.0),
+            // Deliberately unset, and this must stay that way: legacy rows are
+            // classified as auto-detected by comparing their stored defaults
+            // against this recipe verbatim (`resolve_defaults_origin`). Rows
+            // written before DRY existed deserialize these as `None`, so any
+            // value here would make every one of them compare unequal and
+            // silently reclassify as user-set, moving them up a resolution
+            // rung.
+            dry_multiplier: None,
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
         }
     }
 
@@ -880,7 +1101,7 @@ mod tests {
     }
 
     /// If nothing in the stack ever declares a temperature, nothing has been
-    /// "tuned" against anything — the coupled trio must gap-fill exactly like
+    /// "tuned" against anything — the coupled set must gap-fill exactly like
     /// any other parameter, from whichever layer sets it first, rather than
     /// jump straight to the floor.
     #[test]
@@ -980,6 +1201,12 @@ mod tests {
             repeat_penalty: None,
             presence_penalty: None,
             min_p: None,
+            // A set and an unset DRY field, so the round-trip covers both the
+            // camelCase rename and the `Option` shape for the new parameters.
+            dry_multiplier: Some(0.8),
+            dry_base: None,
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(-1),
         };
 
         let json = serde_json::to_string(&config).unwrap();

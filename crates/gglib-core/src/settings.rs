@@ -153,6 +153,24 @@ pub struct Settings {
     /// the two paths cannot drift.
     pub proxy_loop_detection: Option<bool>,
 
+    // ── Task-aware sampling ─────────────────────────────────────────
+    /// Whether a request carrying tools resolves against
+    /// [`InferenceConfig::for_tool_call`](crate::domain::InferenceConfig::for_tool_call)
+    /// instead of the model's class floor.
+    ///
+    /// `None`/`Some(true)` → active (the default): a tool-emission turn is
+    /// sampled near-deterministically with DRY off, because its output is
+    /// structured and a malformed tool call is the failure the pipeline is
+    /// least able to recover from. `Some(false)` disables it, and every
+    /// request resolves against the reasoning or neutral floor as before.
+    ///
+    /// Same polarity as [`Self::proxy_loop_detection`], and for the same
+    /// reason: this is a correction the endpoint should not silently lose.
+    /// It only ever supplies a *floor*, so any layer that names a parameter
+    /// still outranks it — the escape hatch for one model is to set that
+    /// model's own defaults, not to turn this off globally.
+    pub tool_call_floor: Option<bool>,
+
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
     /// it launches, rather than waiting for the user to switch it on.
@@ -200,6 +218,7 @@ impl Settings {
             max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
             #[allow(clippy::cast_possible_truncation)]
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
+            tool_call_floor: None,
             default_model_id: None,
             inference_defaults: None,
             inference_profiles: None,
@@ -290,6 +309,9 @@ impl Settings {
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;
         }
+        if let Some(ref v) = other.tool_call_floor {
+            self.tool_call_floor = *v;
+        }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;
         }
@@ -328,6 +350,8 @@ pub struct SettingsUpdate {
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     pub proxy_loop_detection: Option<Option<bool>>,
+    /// See [`Settings::tool_call_floor`].
+    pub tool_call_floor: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
@@ -520,6 +544,42 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
     }
 
+    // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
+    if let Some(dm) = config.dry_multiplier
+        && !(0.0..=5.0).contains(&dm)
+    {
+        return Err(format!(
+            "DRY multiplier must be between 0.0 and 5.0, got {dm}"
+        ));
+    }
+
+    // Validate dry_base (> 1.0; the exponent base grows the penalty with
+    // matched sequence length, so a base at or below 1.0 cannot penalise)
+    if let Some(db) = config.dry_base
+        && db <= 1.0
+    {
+        return Err(format!("DRY base must be greater than 1.0, got {db}"));
+    }
+
+    // Validate dry_allowed_length (non-negative token count)
+    if let Some(dal) = config.dry_allowed_length
+        && dal < 0
+    {
+        return Err(format!(
+            "DRY allowed length must be non-negative, got {dal}"
+        ));
+    }
+
+    // Validate dry_penalty_last_n (0 disables; negatives are resolved by
+    // llama.cpp against the context size)
+    if let Some(dpn) = config.dry_penalty_last_n
+        && dpn < -1
+    {
+        return Err(format!(
+            "DRY penalty last N must be -1 or greater (0 disables), got {dpn}"
+        ));
+    }
+
     Ok(())
 }
 
@@ -602,6 +662,10 @@ mod tests {
             repeat_penalty: Some(1.1),
             presence_penalty: Some(0.0),
             min_p: Some(0.0),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(-1),
         };
         assert!(validate_inference_config(&config).is_ok());
     }

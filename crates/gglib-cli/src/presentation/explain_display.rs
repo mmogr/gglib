@@ -88,6 +88,10 @@ pub fn explanation_lines(
         ("presence_penalty", fmt_f32(resolved.presence_penalty)),
         ("repeat_penalty", fmt_f32(resolved.repeat_penalty)),
         ("min_p", fmt_f32(resolved.min_p)),
+        ("dry_multiplier", fmt_f32(resolved.dry_multiplier)),
+        ("dry_base", fmt_f32(resolved.dry_base)),
+        ("dry_allowed_length", fmt_i32(resolved.dry_allowed_length)),
+        ("dry_penalty_last_n", fmt_i32(resolved.dry_penalty_last_n)),
         ("max_tokens", fmt_u32(resolved.max_tokens)),
     ];
 
@@ -208,6 +212,10 @@ mod tests {
             presence_penalty: ParamSource::Layer(4),
             repeat_penalty: ParamSource::FloorCoupled,
             min_p: ParamSource::FloorCoupled,
+            dry_multiplier: ParamSource::FloorCoupled,
+            dry_base: ParamSource::Unset,
+            dry_allowed_length: ParamSource::Unset,
+            dry_penalty_last_n: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
         }
     }
@@ -219,7 +227,7 @@ mod tests {
             &auto_detected_sources(),
             ctx(),
         );
-        assert_eq!(lines.len(), 7, "{lines:#?}");
+        assert_eq!(lines.len(), 11, "{lines:#?}");
         for field in [
             "temperature",
             "top_p",
@@ -227,6 +235,10 @@ mod tests {
             "presence_penalty",
             "repeat_penalty",
             "min_p",
+            "dry_multiplier",
+            "dry_base",
+            "dry_allowed_length",
+            "dry_penalty_last_n",
             "max_tokens",
         ] {
             assert_eq!(

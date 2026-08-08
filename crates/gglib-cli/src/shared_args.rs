@@ -37,6 +37,22 @@ pub struct SamplingArgs {
     /// Min-P sampling threshold — 0.0 = disabled (overrides model/global defaults)
     #[arg(long = "min-p")]
     pub min_p: Option<f32>,
+    /// DRY repetition penalty strength — 0.0 = disabled, 0.8 = a common
+    /// starting point (overrides model/global defaults)
+    #[arg(long = "dry-multiplier")]
+    pub dry_multiplier: Option<f32>,
+    /// DRY penalty base; higher grows the penalty faster on longer repeats
+    /// (llama.cpp default 1.75)
+    #[arg(long = "dry-base")]
+    pub dry_base: Option<f32>,
+    /// Sequence length in tokens DRY tolerates before penalising
+    /// (llama.cpp default 2)
+    #[arg(long = "dry-allowed-length")]
+    pub dry_allowed_length: Option<i32>,
+    /// How far back DRY scans for repeats, in tokens; 0 disables
+    /// (llama.cpp default 64)
+    #[arg(long = "dry-penalty-last-n")]
+    pub dry_penalty_last_n: Option<i32>,
 }
 
 /// Context-size and memory-lock flags common to all inference commands.
@@ -91,6 +107,10 @@ impl SamplingArgs {
             repeat_penalty: self.repeat_penalty,
             presence_penalty: self.presence_penalty,
             min_p: self.min_p,
+            dry_multiplier: self.dry_multiplier,
+            dry_base: self.dry_base,
+            dry_allowed_length: self.dry_allowed_length,
+            dry_penalty_last_n: self.dry_penalty_last_n,
         }
     }
 

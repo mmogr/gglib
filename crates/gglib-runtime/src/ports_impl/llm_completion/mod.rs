@@ -341,6 +341,11 @@ impl LlmCompletionAdapter {
             &self.model_context,
             &SamplingLayers {
                 trust_client_sampling: true,
+                // Unconditionally on: there is no settings snapshot in
+                // process, and this path is the agent loop, whose turns with
+                // tools are exactly what the floor exists for. The
+                // `GGLIB_DISABLE_TOOL_FLOOR` env switch still reaches it.
+                tool_call_floor: true,
                 ..Default::default()
             },
             self.model_context.context_budget_chars(),
