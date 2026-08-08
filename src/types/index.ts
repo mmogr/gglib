@@ -40,8 +40,8 @@ export interface InferenceConfig {
   /** Tokens of repeat DRY tolerates before penalising. Unset defers to
    *  llama.cpp's default (2). */
   dryAllowedLength?: number;
-  /** How far back DRY scans, in tokens; -1 = whole context. Unset defers to
-   *  llama.cpp's default (-1). */
+  /** How far back DRY scans, in tokens; 0 disables. Unset defers to
+   *  llama.cpp's default (64). */
   dryPenaltyLastN?: number;
 }
 

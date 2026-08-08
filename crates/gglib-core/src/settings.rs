@@ -570,12 +570,13 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         ));
     }
 
-    // Validate dry_penalty_last_n (-1 means the whole context)
+    // Validate dry_penalty_last_n (0 disables; negatives are resolved by
+    // llama.cpp against the context size)
     if let Some(dpn) = config.dry_penalty_last_n
         && dpn < -1
     {
         return Err(format!(
-            "DRY penalty last N must be -1 (whole context) or non-negative, got {dpn}"
+            "DRY penalty last N must be -1 or greater (0 disables), got {dpn}"
         ));
     }
 

@@ -37,7 +37,7 @@ The full set of configurable parameters:
 | `dry_multiplier` | `--dry-multiplier` | 0.0 – 5.0 | 0.0 (disabled) | DRY repetition penalty; see below |
 | `dry_base` | `--dry-base` | > 1.0 | *(none)* | llama.cpp default 1.75 |
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
-| `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default -1 (whole context) |
+| `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
 
 ## Temperature coupling
 

@@ -124,7 +124,7 @@ describe('InferenceParametersForm', () => {
     it.each([
       ['DRY Base', /llama\.cpp default: 1\.75/],
       ['DRY Allowed Length', /llama\.cpp default: 2/],
-      ['DRY Penalty Last N', /llama\.cpp default: -1/],
+      ['DRY Penalty Last N', /llama\.cpp default: 64/],
     ])('%s cites llama.cpp rather than borrowing Max Tokens wording', (label, pattern) => {
       renderForm(FLOOR);
 

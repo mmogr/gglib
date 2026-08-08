@@ -49,8 +49,8 @@ pub struct SamplingArgs {
     /// (llama.cpp default 2)
     #[arg(long = "dry-allowed-length")]
     pub dry_allowed_length: Option<i32>,
-    /// How far back DRY scans for repeats, in tokens; -1 = whole context
-    /// (llama.cpp default -1)
+    /// How far back DRY scans for repeats, in tokens; 0 disables
+    /// (llama.cpp default 64)
     #[arg(long = "dry-penalty-last-n")]
     pub dry_penalty_last_n: Option<i32>,
 }

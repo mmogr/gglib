@@ -155,7 +155,7 @@ pub enum ProfileCommand {
         /// Tokens of repeat DRY tolerates before penalising (default 2)
         #[arg(long)]
         dry_allowed_length: Option<i32>,
-        /// DRY lookback window in tokens; -1 = whole context
+        /// DRY lookback window in tokens; 0 disables (llama.cpp default 64)
         #[arg(long)]
         dry_penalty_last_n: Option<i32>,
         /// Clear a parameter so it falls back to the model's own default.

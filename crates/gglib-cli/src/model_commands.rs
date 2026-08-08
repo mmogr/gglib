@@ -186,7 +186,7 @@ pub enum ModelCommand {
         /// Set tokens of repeat DRY tolerates before penalising (default 2)
         #[arg(long = "dry-allowed-length")]
         dry_allowed_length: Option<i32>,
-        /// Set the DRY lookback window in tokens; -1 = whole context
+        /// Set the DRY lookback window in tokens; 0 disables (default 64)
         #[arg(long = "dry-penalty-last-n")]
         dry_penalty_last_n: Option<i32>,
         /// Clear all inference parameter defaults (revert to inherit mode)

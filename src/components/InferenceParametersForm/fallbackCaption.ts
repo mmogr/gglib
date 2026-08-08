@@ -50,7 +50,7 @@ const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
   maxTokens: 'No limit — generates until the context is full',
   dryBase: 'llama.cpp default: 1.75',
   dryAllowedLength: 'llama.cpp default: 2',
-  dryPenaltyLastN: 'llama.cpp default: -1 (whole context)',
+  dryPenaltyLastN: 'llama.cpp default: 64',
 };
 
 /**

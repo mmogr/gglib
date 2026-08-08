@@ -124,10 +124,16 @@ pub struct InferenceConfig {
     /// - 0.0: Disabled (llama.cpp's default, and the floor here)
     /// - 0.8: A common starting point for long agentic sessions
     ///
-    /// Disabled by [`tool_call_floor`]: structured tool output legitimately
+    /// Disabled by [`for_tool_call`]: structured tool output legitimately
     /// repeats tokens, so penalising repetition there damages the JSON.
     ///
-    /// [`tool_call_floor`]: Self::tool_call_floor
+    /// llama.cpp's fifth DRY parameter, `--dry-sequence-breaker` (defaults
+    /// `\n`, `:`, `"`, `*`), is deliberately not modelled: it is a list of
+    /// strings, and every layer of this hierarchy — merge, coupling, the CLI
+    /// flags, the settings mirror — is built for scalars. Its defaults are
+    /// sensible for prose and code alike, so it is left to llama.cpp.
+    ///
+    /// [`for_tool_call`]: Self::for_tool_call
     pub dry_multiplier: Option<f32>,
 
     /// DRY penalty base, the exponent applied per token of matched sequence
@@ -139,8 +145,9 @@ pub struct InferenceConfig {
     /// Unset defers to llama.cpp's own default (2).
     pub dry_allowed_length: Option<i32>,
 
-    /// How far back DRY scans for repeats, in tokens. `-1` means the whole
-    /// context. Unset defers to llama.cpp's own default (-1).
+    /// How far back DRY scans for repeats, in tokens. `0` disables the
+    /// penalty; llama.cpp resolves negative values against the context size.
+    /// Unset defers to llama.cpp's own default (64).
     pub dry_penalty_last_n: Option<i32>,
 }
 
