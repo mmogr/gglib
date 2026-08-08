@@ -94,6 +94,24 @@ bitflags! {
     }
 }
 
+/// Smallest build number treated as a real llama.cpp release.
+///
+/// llama.cpp's `CMake` derives `LLAMA_BUILD_NUMBER` from `git describe`. A clone
+/// without release tags fetched — the ordinary state of a source build, and of
+/// gglib's own `.llama/llama.cpp` checkout — cannot derive one and falls back
+/// to `1`. The banner then reads `version: 1 (69bf643)`: a sentinel meaning
+/// *unnumbered*, not a build that predates every threshold in this module.
+///
+/// Taking it literally is worse than not parsing it at all. A source build of
+/// current llama.cpp would be classified as ancient, silently losing every
+/// native capability it actually has, and no amount of upstream progress would
+/// ever change the answer.
+///
+/// Real release numbers have been in the thousands since 2023, so anything
+/// under this floor is an unnumbered build. Its identity is the commit sha,
+/// which [`RuntimeCapabilities::commit`] records instead.
+pub const MIN_PLAUSIBLE_BUILD: u32 = 1_000;
+
 /// What the llama-server binary underneath gglib is, and what it can do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeCapabilities {
@@ -102,8 +120,19 @@ pub struct RuntimeCapabilities {
     ///
     /// `None` for a binary whose version output this module does not
     /// recognise — a source build with a modified banner, a wrapper script, a
-    /// future format. Recorded rather than guessed.
+    /// future format — and for an unnumbered source build, whose sentinel `1`
+    /// is rejected by [`MIN_PLAUSIBLE_BUILD`]. Recorded rather than guessed.
     pub build: Option<u32>,
+
+    /// The commit sha the banner reported, when it carried one.
+    ///
+    /// For a numbered release this is redundant with [`Self::build`]. For an
+    /// unnumbered source build it is the *only* identity available, which is
+    /// why it is captured separately rather than left inside
+    /// [`Self::version_line`]: a stored request record naming a sha can be
+    /// resolved against upstream history later, and one naming `version: 1`
+    /// cannot.
+    pub commit: Option<String>,
 
     /// The raw version line as the binary reported it.
     ///
@@ -120,9 +149,12 @@ impl RuntimeCapabilities {
     /// An unidentified runtime: no build, no flags, every compensation on.
     #[must_use]
     pub fn unknown(version_line: impl Into<String>) -> Self {
+        let version_line = version_line.into();
+        let commit = parse_commit(&version_line);
         Self {
             build: None,
-            version_line: version_line.into(),
+            commit,
+            version_line,
             flags: RuntimeFlags::empty(),
         }
     }
@@ -131,17 +163,28 @@ impl RuntimeCapabilities {
     ///
     /// The single place a build number becomes a capability set, so a
     /// threshold is stated once and every caller agrees about it.
+    ///
+    /// A build under [`MIN_PLAUSIBLE_BUILD`] is an unnumbered source build and
+    /// yields [`Self::unknown`] — the conservative answer, and the only honest
+    /// one, since such a binary could be any commit at all.
     #[must_use]
     pub fn from_build(build: u32, version_line: impl Into<String>) -> Self {
+        if build < MIN_PLAUSIBLE_BUILD {
+            return Self::unknown(version_line);
+        }
+
         let mut flags = RuntimeFlags::empty();
 
         if build >= MIN_BUILD_PEG_NATIVE_TOOL_CALLS {
             flags |= RuntimeFlags::PEG_NATIVE_TOOL_CALLS;
         }
 
+        let version_line = version_line.into();
+        let commit = parse_commit(&version_line);
         Self {
             build: Some(build),
-            version_line: version_line.into(),
+            commit,
+            version_line,
             flags,
         }
     }
@@ -205,6 +248,20 @@ pub fn parse_build_number(output: &str) -> Option<u32> {
         })
 }
 
+/// Extract the commit sha from a `--version` banner.
+///
+/// llama-server renders it parenthesised after the build number —
+/// `version: 1 (69bf643)`. Read as the first parenthesised run of hex digits
+/// so a banner carrying other parenthesised text does not yield a false sha.
+#[must_use]
+pub fn parse_commit(output: &str) -> Option<String> {
+    let (_, after) = output.split_once('(')?;
+    let (inner, _) = after.split_once(')')?;
+    let sha = inner.trim();
+
+    (sha.len() >= 7 && sha.chars().all(|c| c.is_ascii_hexdigit())).then(|| sha.to_owned())
+}
+
 /// The leading run of ASCII digits in `s`, parsed.
 fn leading_number(s: &str) -> Option<u32> {
     let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
@@ -264,6 +321,49 @@ mod tests {
     #[test]
     fn a_non_numeric_b_token_is_not_a_build() {
         assert_eq!(parse_build_number("built with backend=vulkan"), None);
+    }
+
+    /// The case that motivated [`MIN_PLAUSIBLE_BUILD`], observed on a real
+    /// machine: gglib's own `.llama/llama.cpp` checkout, built from source at
+    /// a current commit, reports `version: 1` because no release tags were
+    /// fetched. Taken literally it would read as a pre-historic build.
+    #[test]
+    fn an_unnumbered_source_build_is_unidentified_not_ancient() {
+        let caps = RuntimeCapabilities::from_version_output("version: 1 (69bf643)");
+
+        assert!(
+            !caps.is_identified(),
+            "a source-build sentinel must not read as build 1"
+        );
+        assert_eq!(
+            caps.commit.as_deref(),
+            Some("69bf643"),
+            "the sha is the only identity such a build has"
+        );
+    }
+
+    /// The floor must not reject a real release.
+    #[test]
+    fn a_real_release_build_is_still_identified() {
+        let caps = RuntimeCapabilities::from_version_output("version: 10327 (69bf643)");
+
+        assert_eq!(caps.build, Some(10327));
+        assert!(caps.has(RuntimeFlags::PEG_NATIVE_TOOL_CALLS));
+        assert_eq!(caps.commit.as_deref(), Some("69bf643"));
+    }
+
+    #[test]
+    fn a_banner_without_a_sha_records_no_commit() {
+        assert_eq!(
+            RuntimeCapabilities::from_version_output("version: 10327").commit,
+            None
+        );
+    }
+
+    /// Parenthesised prose is not a sha.
+    #[test]
+    fn non_hex_parenthesised_text_is_not_a_commit() {
+        assert_eq!(parse_commit("version: 10327 (debug build)"), None);
     }
 
     /// The load-bearing default: a runtime we cannot identify claims nothing,

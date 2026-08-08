@@ -52,7 +52,8 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{
-    MIN_BUILD_PEG_NATIVE_TOOL_CALLS, RuntimeCapabilities, RuntimeFlags, parse_build_number,
+    MIN_BUILD_PEG_NATIVE_TOOL_CALLS, MIN_PLAUSIBLE_BUILD, RuntimeCapabilities, RuntimeFlags,
+    parse_build_number, parse_commit,
 };
 
 // Re-export KV estimation helpers at the domain level for convenience

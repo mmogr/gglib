@@ -72,8 +72,12 @@ Rules:
   into deletion.
 
 Current members: `normalize::parsers::delimited`, `normalize::oneshot`,
-`normalize` reasoning-tag handling (`format:think-tag`),
-`request_pipeline::constrain`.
+`request_pipeline::constrain`. Each carries its tier and deletion criterion in
+its own module docs; this list is the index, not the source of truth.
+
+`format:think-tag` is reserved in `normalize::tags` but has no parser yet. When
+one lands it is Tier A, and the tag is noted here so that classification is
+decided before the code exists rather than after.
 
 ### Tier B — Policy
 
