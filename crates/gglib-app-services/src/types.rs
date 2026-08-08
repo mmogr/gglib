@@ -596,9 +596,13 @@ pub struct UpdateSettingsRequest {
     // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
-    // Task-aware sampling; explicit `null` re-enables (see `gglib_core::Settings`)
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub tool_call_floor: Option<Option<bool>>,
+    // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[serde(
+        default,
+        alias = "toolCallFloor",
+        with = "serde_with::rust::double_option"
+    )]
+    pub agentic_sampling: Option<Option<bool>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_autostart: Option<Option<bool>>,
@@ -629,7 +633,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
             proxy_loop_detection: request.proxy_loop_detection,
-            tool_call_floor: request.tool_call_floor,
+            agentic_sampling: request.agentic_sampling,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,
