@@ -508,7 +508,7 @@ mod tests {
     }
 
     /// The tag changes both the flag the client renders and the floor the
-    /// coupled trio falls back to.
+    /// coupled set falls back to.
     #[test]
     fn the_reasoning_tag_selects_the_reasoning_floor() {
         let reasoning = Model {

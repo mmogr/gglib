@@ -4,10 +4,11 @@
 //!
 //! [`InferenceConfig::resolve_layers`](crate::domain::InferenceConfig::resolve_layers)
 //! folds an ordered ladder of sampling layers into one config under two rules
-//! that are individually defensible and jointly opaque: the coupled trio
-//! (`presence_penalty`, `repeat_penalty`, `min_p`) travels with the
-//! `temperature` it was tuned against, and a model's stored defaults rank
-//! above or below global settings depending on whether a person set them.
+//! that are individually defensible and jointly opaque: the coupled set
+//! (`presence_penalty`, `repeat_penalty`, `min_p` and the four DRY
+//! parameters) travels with the `temperature` it was tuned against, and a
+//! model's stored defaults rank above or below global settings depending on
+//! whether a person set them.
 //!
 //! The resolved numbers alone cannot distinguish a value someone chose from
 //! one that fell out of a floor. `0.0` is a number; "`0.0`, from the floor,

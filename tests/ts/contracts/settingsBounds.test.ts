@@ -128,12 +128,21 @@ function acceptedRange(fnSource: string, field: string): Range {
   const inclusive = guard.match(/!\(([0-9_.]+)\.\.=([0-9_.]+)\)\.contains/);
   if (inclusive) return { min: num(inclusive[1]), max: num(inclusive[2]) };
 
-  const lessThan = guard.match(/&&\s*\w+\s*<\s*([0-9_.]+)/);
+  // `x < N` rejects everything below N. N may be negative: `dry_penalty_last_n`
+  // accepts -1 as "scan the whole context".
+  const lessThan = guard.match(/&&\s*\w+\s*<\s*(-?[0-9_.]+)/);
   if (lessThan) return { min: num(lessThan[1]), max: Infinity };
 
-  // `x <= 0.0` rejects zero and below, so anything offered must be strictly
-  // greater than zero — a slider starting at 0 is out of bounds.
-  if (/&&\s*\w+\s*<=\s*0(\.0)?\b/.test(guard)) return { min: Number.MIN_VALUE, max: Infinity };
+  // `x <= N` rejects N itself, so anything offered must be strictly greater —
+  // a slider starting exactly at N is out of bounds. The smallest representable
+  // step above N stands in for that exclusive bound, so a UI minimum equal to N
+  // fails rather than passing by rounding.
+  const lessOrEqual = guard.match(/&&\s*\w+\s*<=\s*(-?[0-9_.]+)/);
+  if (lessOrEqual) {
+    const bound = num(lessOrEqual[1]);
+    const step = Number.EPSILON * Math.max(1, Math.abs(bound));
+    return { min: bound === 0 ? Number.MIN_VALUE : bound + step, max: Infinity };
+  }
 
   // `x == 0` on an unsigned field means "any positive integer".
   if (/&&\s*\w+\s*==\s*0\b/.test(guard)) return { min: 1, max: Infinity };
@@ -218,6 +227,10 @@ const RUST_PARAM: Record<SamplingParamKey, string> = {
   repeatPenalty: 'repeat_penalty',
   presencePenalty: 'presence_penalty',
   minP: 'min_p',
+  dryMultiplier: 'dry_multiplier',
+  dryBase: 'dry_base',
+  dryAllowedLength: 'dry_allowed_length',
+  dryPenaltyLastN: 'dry_penalty_last_n',
 };
 
 const PARAMS = Object.keys(RUST_PARAM) as SamplingParamKey[];

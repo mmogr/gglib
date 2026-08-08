@@ -609,7 +609,7 @@ impl InferenceConfig {
     /// The coupled-trio floor for models tagged `reasoning`.
     ///
     /// [`resolve_layers`] falls back to a floor once it has decided which
-    /// layer (if any) claims the coupled trio and that layer left a field
+    /// layer (if any) claims the coupled set and that layer left a field
     /// unset. [`with_hardcoded_defaults`]'s neutral `presence_penalty: 0.0` is
     /// the right floor for most models, but wrong for a `reasoning`-tagged
     /// one: those degrade under greedy or near-greedy decoding into
@@ -1053,7 +1053,7 @@ mod tests {
     }
 
     /// If nothing in the stack ever declares a temperature, nothing has been
-    /// "tuned" against anything — the coupled trio must gap-fill exactly like
+    /// "tuned" against anything — the coupled set must gap-fill exactly like
     /// any other parameter, from whichever layer sets it first, rather than
     /// jump straight to the floor.
     #[test]

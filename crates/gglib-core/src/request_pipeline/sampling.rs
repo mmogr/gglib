@@ -512,7 +512,7 @@ mod tests {
     /// The default. This is the actual fix for the incident that motivated
     /// this whole refactor: without a client-trust escape hatch, a client
     /// hardcoding `temperature: 0` with no way for its user to change it (VS
-    /// Code Copilot's LLM Gateway) claims the coupled trio on every request
+    /// Code Copilot's LLM Gateway) claims the coupled set on every request
     /// and supplies none of it — so the model's own tuned recipe never has a
     /// chance to apply, no matter what `resolve_layers`'s coupling rule does.
     /// With the client out of the ladder entirely, the model's full recipe —

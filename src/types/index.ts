@@ -31,6 +31,18 @@ export interface InferenceConfig {
   /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
    *  0.0 = disabled (recommended by Qwen3.6). */
   minP?: number;
+  /** DRY repetition penalty strength. 0.0 = disabled; catches multi-token
+   *  loops that the flat `repeatPenalty` cannot see. */
+  dryMultiplier?: number;
+  /** DRY penalty base — the exponent applied per token of matched sequence.
+   *  Unset defers to llama.cpp's default (1.75). */
+  dryBase?: number;
+  /** Tokens of repeat DRY tolerates before penalising. Unset defers to
+   *  llama.cpp's default (2). */
+  dryAllowedLength?: number;
+  /** How far back DRY scans, in tokens; -1 = whole context. Unset defers to
+   *  llama.cpp's default (-1). */
+  dryPenaltyLastN?: number;
 }
 
 /**
@@ -88,6 +100,10 @@ export type SamplingParamKey =
   | 'presencePenalty'
   | 'repeatPenalty'
   | 'minP'
+  | 'dryMultiplier'
+  | 'dryBase'
+  | 'dryAllowedLength'
+  | 'dryPenaltyLastN'
   | 'maxTokens';
 
 /**

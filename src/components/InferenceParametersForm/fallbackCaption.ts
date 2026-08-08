@@ -36,8 +36,31 @@ export interface ResolutionState {
   hasError: boolean;
 }
 
-/** Said of a parameter the floor deliberately leaves unset — only Max Tokens. */
-const NO_LIMIT = 'No limit — generates until the context is full';
+/**
+ * What to say for a parameter the floor deliberately leaves unset.
+ *
+ * "Unset" does not mean the same thing for all of them, so none of these can
+ * be shared. Max Tokens unset means genuinely unbounded generation; an unset
+ * DRY parameter means llama.cpp's own default applies, which is a number worth
+ * naming rather than an absence. A field reaching this map without an entry
+ * gets no caption at all, which is the safe answer — better silence than Max
+ * Tokens' wording under a threshold it does not describe.
+ */
+const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
+  maxTokens: 'No limit — generates until the context is full',
+  dryBase: 'llama.cpp default: 1.75',
+  dryAllowedLength: 'llama.cpp default: 2',
+  dryPenaltyLastN: 'llama.cpp default: -1 (whole context)',
+};
+
+/**
+ * Parameters whose floor depends on the model, and what `reasoning_floor()`
+ * uses instead. This surface has no model to check against, so it names both.
+ */
+const REASONING_FLOOR_OVERRIDES: Partial<Record<SamplingParamKey, string>> = {
+  presencePenalty: '1.0',
+  minP: '0.0',
+};
 
 /** The provenance entry for one parameter, once it is safe to believe. */
 function usableEntry(field: SamplingParamKey, fallback: InferenceFallback) {
@@ -88,13 +111,11 @@ export function fallbackCaption(
 ): string | null {
   if (fallback.kind === 'floor') {
     const { default: floor } = INFERENCE_PARAMS[field];
-    if (floor === null) return NO_LIMIT;
+    if (floor === null) return UNSET_FLOOR_CAPTIONS[field] ?? null;
 
     const caption = `Default: ${formatParamValue(field, floor)}`;
-    // The one parameter whose floor depends on the model: reasoning_floor()
-    // overrides presence_penalty and nothing else, and this surface has no
-    // model to check against.
-    return field === 'presencePenalty' ? `${caption} (1.0 for reasoning models)` : caption;
+    const reasoning = REASONING_FLOOR_OVERRIDES[field];
+    return reasoning ? `${caption} (${reasoning} for reasoning models)` : caption;
   }
 
   const { isLoading, hasError, explanation } = fallback.resolution;
