@@ -302,6 +302,14 @@ gglib model update qwen3.6 --dry-multiplier 0.8
 gglib config profile set coding --dry-multiplier 0.8 --dry-allowed-length 3
 ```
 
+To pick a value from measurement rather than guesswork, sweep it. `0.0` is a
+real candidate meaning "off", so one run compares disabled against two
+strengths on your own model and task suite:
+
+```bash
+gglib benchmark tune <model> --sweep dry_multiplier=0,0.4,0.8
+```
+
 `dry_base`, `dry_allowed_length` and `dry_penalty_last_n` have no floor value.
 Left unset they are omitted from the request entirely and llama.cpp applies its
 own defaults (1.75, 2, and -1), which are reasonable starting points.

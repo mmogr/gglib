@@ -63,6 +63,7 @@ export const TuneLeaderboard: FC<TuneLeaderboardProps> = ({
           <th className="px-base py-xs font-medium">#</th>
           <th className="px-base py-xs font-medium">Source</th>
           <th className="px-base py-xs font-medium">Temp</th>
+          <th className="px-base py-xs font-medium">DRY</th>
           <th className="px-base py-xs font-medium">top_p</th>
           <th className="px-base py-xs font-medium">Score</th>
           <th className="px-base py-xs font-medium">Tool Acc.</th>
@@ -81,6 +82,9 @@ export const TuneLeaderboard: FC<TuneLeaderboardProps> = ({
             <td className="px-base py-xs text-text-secondary">{sourceLabel(result.source)}</td>
             <td className="px-base py-xs text-text-secondary">
               {result.config.temperature?.toFixed(2) ?? '—'}
+            </td>
+            <td className="px-base py-xs text-text-secondary">
+              {result.config.dryMultiplier?.toFixed(2) ?? '—'}
             </td>
             <td className="px-base py-xs text-text-secondary">
               {result.config.topP?.toFixed(2) ?? '—'}
