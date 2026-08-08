@@ -10,7 +10,7 @@ pub mod tools;
 pub mod truncation;
 pub mod validate;
 
-pub use apply::apply;
+pub use apply::{PipelinePass, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use messages::shape_messages;
 pub use model_context::ModelContext;

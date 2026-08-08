@@ -60,6 +60,33 @@
 
 use serde_json::Value;
 
+/// Which trip through the pipeline this is.
+///
+/// The pipeline is otherwise stateless, so a repair re-issue would be
+/// indistinguishable from a first attempt — and stage 6 behaves differently
+/// on the two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PipelinePass {
+    /// A request's first trip through. Every stage runs.
+    #[default]
+    Initial,
+    /// A tool-call repair re-issue, carrying `tool_choice: "required"` so
+    /// llama.cpp installs its own schema-derived grammar.
+    ///
+    /// [`constrain`] must **not** run on this pass. It fires on
+    /// `tool_choice: "required"` for dialect models, installs gglib's own
+    /// grammar, and rewrites `tool_choice` to `"none"` — because llama-server
+    /// rejects a custom grammar combined with `tools`. On a repair that would
+    /// convert the request into one asking for no tool call at all: the repair
+    /// costs a full generation and changes nothing, silently.
+    ///
+    /// Suppressing it is not a workaround but the point. gglib's grammar
+    /// constrains the envelope, the name, and JSON well-formedness; upstream's
+    /// constrains arguments to the tool's schema. On the repair path the
+    /// stronger of the two is the one we want.
+    Repair,
+}
+
 use super::truncation::{TruncationError, TruncationReport};
 use super::{ModelContext, SamplingLayers, constrain, messages, sampling, tools, truncation};
 
@@ -87,6 +114,7 @@ pub fn apply(
     ctx: &ModelContext,
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
+    pass: PipelinePass,
 ) -> Result<TruncationReport, TruncationError> {
     messages::shape_messages(body, ctx);
     tools::strip_unsupported_tools(body, ctx);
@@ -97,7 +125,13 @@ pub fn apply(
     };
 
     sampling::resolve_sampling(body, ctx, layers);
-    constrain::constrain_tool_calls(body, ctx);
+
+    // Stage 6 stands down on a repair pass. See [`PipelinePass::Repair`] —
+    // running it there would rewrite `tool_choice` to `"none"` and silently
+    // turn the repair into a request for no tool call at all.
+    if pass == PipelinePass::Initial {
+        constrain::constrain_tool_calls(body, ctx);
+    }
     Ok(report)
 }
 
@@ -141,6 +175,7 @@ mod tests {
             &strict_turn_ctx(),
             &SamplingLayers::default(),
             None,
+            PipelinePass::Initial,
         )
         .unwrap();
 
@@ -157,6 +192,7 @@ mod tests {
             &strict_turn_ctx(),
             &SamplingLayers::default(),
             Some(100_000),
+            PipelinePass::Initial,
         )
         .unwrap();
 
@@ -188,6 +224,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             None,
+            PipelinePass::Initial,
         )
         .unwrap();
 
@@ -218,6 +255,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(20_000),
+            PipelinePass::Initial,
         )
         .unwrap();
 
@@ -235,6 +273,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             None,
+            PipelinePass::Initial,
         )
         .unwrap();
 
@@ -257,6 +296,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(200),
+            PipelinePass::Initial,
         )
         .unwrap_err();
 

@@ -979,6 +979,7 @@ async fn chat_completions(
     // Everything forward_chat_completion needs that doesn't vary across the
     // cache-branching below — see `ForwardRequest` docs.
     let req = ForwardRequest {
+        pass: gglib_core::request_pipeline::PipelinePass::Initial,
         client: &state.client,
         upstream_url: &upstream_url,
         headers: &headers,
@@ -1112,6 +1113,7 @@ async fn chat_completions(
             };
 
             let retry_req = ForwardRequest {
+                pass: gglib_core::request_pipeline::PipelinePass::Initial,
                 client: &state.client,
                 upstream_url: &retry_url,
                 headers: &headers,
