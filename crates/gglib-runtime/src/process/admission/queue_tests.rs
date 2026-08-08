@@ -241,6 +241,91 @@ async fn a_slot_frees_only_when_the_last_lease_drops() {
     ));
 }
 
+// ── capacity: what llama-server can actually start ────────────────────────
+
+/// llama-server is launched with `--parallel 1`, so admitting a second
+/// concurrent request would not serve it any sooner — it would only move the
+/// wait inside llama-server, out of the queue's sight.
+#[tokio::test]
+async fn a_resident_slot_admits_only_what_llama_server_can_serve() {
+    let q = queue();
+    let serving = make_resident(&q, "qwen-coder", 1);
+
+    let (ticket, decision) = request(&q, "qwen-coder");
+    assert_eq!(
+        decision,
+        AdmissionDecision::Wait,
+        "the instance is already serving all it can"
+    );
+
+    drop(serving);
+    assert_eq!(
+        q.poll(&ticket, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "and is admitted the moment that finishes"
+    );
+}
+
+/// The regression this whole exercise is about.
+///
+/// An agentic client issues its next request the instant the previous one
+/// returns, so the model never goes idle for longer than it takes to hand over.
+/// That used to pin the slot outright: every one of those requests was admitted
+/// on arrival, `inflight` never reached zero, and the rival waited out
+/// [`ADMISSION_DEADLINE`] for a 503 while the GPU sat there serving one request
+/// at a time.
+///
+/// The incumbent must now stand aside once the rival is entitled to the slot,
+/// rather than renewing its lease ahead of it.
+#[tokio::test]
+async fn a_pipelined_client_cannot_pin_a_model_forever() {
+    tokio::time::pause();
+    let q = queue();
+    let in_flight = make_resident(&q, "qwen-coder", 1);
+
+    // The rival arrives and waits out the incumbent's turn.
+    let (rival, _) = request(&q, "nomic-embed");
+    tokio::time::advance(DRAIN_QUANTUM + std::time::Duration::from_secs(1)).await;
+
+    // The pipelined client has its next request queued before the current one
+    // returns, which is exactly how it kept the slot pinned.
+    let (pipelined, _) = request(&q, "qwen-coder");
+    drop(in_flight);
+
+    assert_eq!(
+        q.poll(&pipelined, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "the incumbent must not renew its lease over a rival's turn"
+    );
+    assert!(
+        matches!(
+            q.poll(&rival, NEVER_FITS),
+            AdmissionDecision::Launch {
+                slot: PRIMARY_SLOT,
+                evict: Some(1)
+            }
+        ),
+        "the rival must get the slot the quantum promised it"
+    );
+}
+
+/// A request held back by the cap is waiting like any other, so the deadline
+/// has to reach it. The capacity test sits above the deadline check in `poll`,
+/// and an early return there would leave it waiting forever with nothing to
+/// surface a 503.
+#[tokio::test]
+async fn a_capped_request_still_expires() {
+    tokio::time::pause();
+    let q = queue();
+    let _never_released = make_resident(&q, "qwen-coder", 1);
+
+    let (capped, decision) = request(&q, "qwen-coder");
+    assert_eq!(decision, AdmissionDecision::Wait);
+
+    tokio::time::advance(ADMISSION_DEADLINE).await;
+    assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Expired);
+}
+
 // ── batching: the point of the exercise ───────────────────────────────────
 
 /// The headline behaviour. Ten queued requests for a model that is not loaded
