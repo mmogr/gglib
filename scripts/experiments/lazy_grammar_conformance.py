@@ -31,11 +31,16 @@ from *luck* needs three things, all of which this harness does:
 ## Second question: is gglib's parser still needed?
 
 Independent of the grammar result. Upstream could constrain arguments
-perfectly and still drop calls on the two bugs gglib fixed in #690, so the
-regression arm replays them:
+perfectly and still drop calls on the two bugs gglib fixed in #690, so a
+second arm steers the model into generating each shape:
 
   R1 (#24807) a parameter value containing a literal `</parameter>`
   R2 (#20260) a reasoning model emitting prose before `<tool_call>`
+
+These must be *generated*, not replayed as assistant history. An earlier
+version of this arm did the latter and reported that the server "accepted"
+the markup — which proved only that llama-server will carry arbitrary text in
+a prior message, and never touched the parser. It passed for the wrong reason.
 
 Exit status is 0 whatever the findings — this reports, it does not judge.
 """
@@ -183,13 +188,20 @@ def post(url: str, payload: dict, timeout: int) -> dict:
         return json.loads(resp.read())
 
 
-def extract_calls(message: dict) -> tuple[list[tuple[str, dict]], str | None]:
-    """Structured tool calls from a response message, plus a parse note.
+def extract_calls(
+    message: dict,
+) -> tuple[list[tuple[str, dict]], str | None, dict | None]:
+    """Structured tool calls from a response message, a note, and evidence.
 
-    Returns `([], note)` when the model produced no structured call. The note
-    distinguishes "emitted raw markup as text" — the failure gglib's parser
-    exists for — from "declined to call a tool at all", which is a legitimate
-    model choice and not a defect.
+    Returns `([], note, evidence)` when the model produced no usable call. The
+    note distinguishes "emitted raw markup as text" — the failure gglib's
+    parser exists for — from "declined to call a tool at all", which is a
+    legitimate model choice and not a defect.
+
+    `evidence` carries the **full** offending string when parsing fails. An
+    earlier version of this harness truncated it into the note, which
+    aggregated distinct failures under one bucket and left the actual cause
+    unrecoverable — the reason this signature returns a third value at all.
     """
     calls = []
     for tc in message.get("tool_calls") or []:
@@ -197,20 +209,32 @@ def extract_calls(message: dict) -> tuple[list[tuple[str, dict]], str | None]:
         raw = fn.get("arguments", "")
         try:
             args = json.loads(raw) if isinstance(raw, str) else raw
-        except json.JSONDecodeError:
-            return [], f"unparseable arguments JSON: {raw[:80]!r}"
+        except json.JSONDecodeError as e:
+            return (
+                [],
+                "unparseable arguments JSON",
+                {"error": str(e), "len": len(raw), "raw": raw},
+            )
         if not isinstance(args, dict):
-            return [], f"arguments not an object: {type(args).__name__}"
+            return (
+                [],
+                "arguments not an object",
+                {"type": type(args).__name__, "raw": raw},
+            )
         calls.append((fn.get("name", ""), args))
 
     if calls:
-        return calls, None
+        return calls, None, None
 
     content = (message.get("content") or "") + (message.get("reasoning_content") or "")
     for marker in ("<tool_call>", "<function=", '{"name"'):
         if marker in content:
-            return [], f"raw markup survived as text (saw {marker!r})"
-    return [], "no tool call emitted"
+            return (
+                [],
+                f"raw markup survived as text (saw {marker!r})",
+                {"content": content[:400]},
+            )
+    return [], "no tool call emitted", None
 
 
 def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> dict:
@@ -221,6 +245,8 @@ def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> 
         "violations": {},
         "notes": {},
         "examples": [],
+        "evidence": [],
+        "multi_call": 0,
     }
 
     for label, prompt in PROMPTS:
@@ -230,7 +256,12 @@ def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> 
                 "tools": [PROBE_TOOL],
                 "tool_choice": tool_choice,
                 "temperature": temp,
-                "max_tokens": 256,
+                # Generous on purpose. A 256 cap was suspected of truncating
+                # calls mid-arguments; measurement showed completions running
+                # 107-156 tokens and finish_reason `tool_calls`, so the cap was
+                # never binding — but a cap that cannot bind removes the
+                # question from the result entirely.
+                "max_tokens": 1024,
             }
             try:
                 resp = post(f"{base}/v1/chat/completions", payload, timeout)
@@ -243,11 +274,27 @@ def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> 
                 stats["notes"][note] = stats["notes"].get(note, 0) + 1
                 continue
 
-            msg = resp.get("choices", [{}])[0].get("message", {})
-            calls, note = extract_calls(msg)
+            choice = resp.get("choices", [{}])[0]
+            msg = choice.get("message", {})
+            calls, note, evidence = extract_calls(msg)
             if note:
                 stats["notes"][note] = stats["notes"].get(note, 0) + 1
+                if evidence and len(stats["evidence"]) < 8:
+                    stats["evidence"].append(
+                        {
+                            "tempted": label,
+                            "note": note,
+                            "finish_reason": choice.get("finish_reason"),
+                            "completion_tokens": resp.get("usage", {}).get(
+                                "completion_tokens"
+                            ),
+                            **evidence,
+                        }
+                    )
                 continue
+
+            if len(calls) > 1:
+                stats["multi_call"] += 1
 
             for name, args in calls:
                 stats["calls"] += 1
@@ -267,66 +314,85 @@ def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> 
 
 # ── Regression arm ────────────────────────────────────────────────────────────
 #
-# Replays the two upstream bugs as *assistant history* rather than trying to
-# coax a live model into reproducing them, which would be non-deterministic.
-# The question is whether llama-server can round-trip such content at all.
+# These bugs are about the parser mishandling what the model **generates**, so
+# the model has to be steered into generating the shape. An earlier version of
+# this arm replayed the markup as assistant *history* and reported that the
+# server "accepted" it — which proved only that llama-server will carry
+# arbitrary text in a prior message, and never exercised the parser at all. It
+# passed for the wrong reason. This version induces the shape instead.
+#
+# Each case names what a *broken* parser would produce, so a failure is
+# recognisable rather than merely different.
 
 REGRESSIONS = [
-    (
-        "R1 #24807",
-        "value containing a literal </parameter>",
-        "<tool_call><function=read_file><parameter=path>a</parameter>b</parameter>"
-        "</function></tool_call>",
-    ),
-    (
-        "R2 #20260",
-        "prose before the open marker",
-        "I'll read that file for you now.\n"
-        '<tool_call>{"name": "read_file", "arguments": {"path": "/etc/hosts", '
-        '"mode": "text"}}</tool_call>',
-    ),
+    {
+        "name": "R1 #24807",
+        "desc": "argument value containing a literal </parameter>",
+        "prompt": (
+            "Read the file whose name is exactly a</parameter>b in text mode. "
+            "The filename really does contain that text — pass it through "
+            "unchanged."
+        ),
+        "expect_key": "path",
+        "expect_value": "a</parameter>b",
+        "broken_looks_like": "path truncated at the first </parameter> (e.g. 'a')",
+    },
+    {
+        "name": "R2 #20260",
+        "desc": "prose in the content channel before the tool call",
+        "prompt": (
+            "First write one short sentence explaining what you are about to "
+            "do, then read /etc/hosts in text mode."
+        ),
+        "expect_key": "path",
+        "expect_value": "/etc/hosts",
+        "broken_looks_like": "no tool_call — parser fails on the leading prose",
+    },
 ]
 
 
-def run_regressions(base: str, timeout: int) -> list[dict]:
-    """Feed each known-bad shape back as history and see if the server copes."""
+def run_regressions(base: str, samples: int, timeout: int) -> list[dict]:
+    """Steer the model into each known-bad shape and inspect what comes back."""
     out = []
-    for name, desc, markup in REGRESSIONS:
-        payload = {
-            "messages": [
-                {"role": "user", "content": "Read /etc/hosts."},
-                {"role": "assistant", "content": markup},
-                {"role": "user", "content": "Thanks. Now say DONE and nothing else."},
-            ],
-            "tools": [PROBE_TOOL],
-            "tool_choice": "auto",
-            "temperature": 0.0,
-            "max_tokens": 64,
+    for case in REGRESSIONS:
+        result = {
+            "name": case["name"],
+            "desc": case["desc"],
+            "broken_looks_like": case["broken_looks_like"],
+            "attempts": 0,
+            "calls": 0,
+            "exact": 0,
+            "observed": [],
         }
-        try:
-            resp = post(f"{base}/v1/chat/completions", payload, timeout)
+        for _ in range(samples):
+            payload = {
+                "messages": [{"role": "user", "content": case["prompt"]}],
+                "tools": [PROBE_TOOL],
+                "tool_choice": "auto",
+                "temperature": 0.7,
+                "max_tokens": 1024,
+            }
+            result["attempts"] += 1
+            try:
+                resp = post(f"{base}/v1/chat/completions", payload, timeout)
+            except Exception as e:  # noqa: BLE001
+                result["observed"].append(f"request failed: {type(e).__name__}")
+                continue
+
             msg = resp.get("choices", [{}])[0].get("message", {})
-            out.append(
-                {
-                    "name": name,
-                    "desc": desc,
-                    "status": "server accepted the history",
-                    "detail": (msg.get("content") or "")[:60].replace("\n", " "),
-                }
-            )
-        except urllib.error.HTTPError as e:
-            out.append(
-                {
-                    "name": name,
-                    "desc": desc,
-                    "status": f"REJECTED — HTTP {e.code}",
-                    "detail": e.read()[:120].decode(errors="replace").replace("\n", " "),
-                }
-            )
-        except Exception as e:  # noqa: BLE001
-            out.append(
-                {"name": name, "desc": desc, "status": "ERROR", "detail": str(e)[:120]}
-            )
+            calls, note, _ = extract_calls(msg)
+            if note:
+                result["observed"].append(note)
+                continue
+
+            for name, args in calls:
+                result["calls"] += 1
+                got = args.get(case["expect_key"])
+                if got == case["expect_value"]:
+                    result["exact"] += 1
+                else:
+                    result["observed"].append(f"{case['expect_key']}={got!r}")
+        out.append(result)
     return out
 
 
@@ -368,17 +434,49 @@ def report(arms: dict, regressions: list[dict], samples: int) -> None:
         if s["notes"]:
             print(f"  {arm} non-call outcomes:")
             for k, n in sorted(s["notes"].items(), key=lambda kv: -kv[1]):
-                print(f"      {k[:60]:<62} {n}")
+                print(f"      {k:<40} {n}")
+        if s["multi_call"]:
+            print(f"  {arm} responses carrying >1 tool call: {s['multi_call']}")
+        if s["evidence"]:
+            print(f"  {arm} FULL evidence for non-call outcomes:")
+            for ev in s["evidence"]:
+                print(f"      [{ev['tempted']}] {ev['note']}")
+                print(
+                    f"         finish_reason={ev.get('finish_reason')} "
+                    f"completion_tokens={ev.get('completion_tokens')}"
+                )
+                if "error" in ev:
+                    print(f"         json error: {ev['error']}")
+                if "raw" in ev:
+                    print(f"         raw ({ev.get('len', len(ev['raw']))} chars): {ev['raw']!r}")
+                if "content" in ev:
+                    print(f"         content: {ev['content']!r}")
 
     print()
     print("─" * 74)
     print("  PARSER REGRESSIONS — do the bugs gglib fixed in #690 still bite?")
+    print("  (model steered into generating each shape; history replay proves")
+    print("   nothing about the parser and is deliberately not used)")
     print("─" * 74)
     for r in regressions:
         print(f"  {r['name']:<11} {r['desc']}")
-        print(f"              → {r['status']}")
-        if r["detail"]:
-            print(f"                {r['detail']}")
+        print(
+            f"              attempts={r['attempts']} calls={r['calls']} "
+            f"exact_match={r['exact']}"
+        )
+        if r["exact"] == r["attempts"] and r["attempts"] > 0:
+            print("              → PASS — upstream handled it every time")
+        elif r["calls"] == 0:
+            print("              → FAILS or untestable — no tool call produced")
+        else:
+            print("              → MIXED — see observations")
+        print(f"              broken would look like: {r['broken_looks_like']}")
+        if r["observed"]:
+            seen = {}
+            for o in r["observed"]:
+                seen[o] = seen.get(o, 0) + 1
+            for k, n in sorted(seen.items(), key=lambda kv: -kv[1])[:5]:
+                print(f"                observed: {k}  ×{n}")
     print()
 
 
@@ -409,7 +507,7 @@ def main() -> int:
         arms[label] = run_arm(base, choice, args.samples, args.temp, args.timeout)
 
     print("running regression arm ...", file=sys.stderr)
-    regressions = run_regressions(base, args.timeout)
+    regressions = run_regressions(base, max(3, args.samples), args.timeout)
 
     report(arms, regressions, args.samples)
 
