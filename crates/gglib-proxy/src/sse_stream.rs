@@ -12,7 +12,9 @@ use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
 use crate::connections::ConnectionGuard;
-use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visible_content_frame};
+use crate::forward::{
+    FIRST_BYTE_DEADLINE_SECS, RepairContext, stream_response_to_channel, visible_content_frame,
+};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -59,6 +61,7 @@ pub fn spawn_and_return(
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
     session_id: Option<String>,
+    repair_enabled: bool,
 ) -> Response {
     // `connection` is moved into this task so it lives exactly as long
     // as the streaming task does — dropped (unregistering from the
@@ -176,14 +179,32 @@ pub fn spawn_and_return(
                     status = resp.status().as_u16(),
                     "upstream accepted streaming request after slot-queue wait"
                 );
+                // The repair re-issue needs the same endpoint, headers and
+                // body the original went out with. `try_clone` succeeds
+                // because the body is `Bytes`; a `None` here simply means no
+                // repair is possible for this turn, which is a degradation
+                // rather than a failure.
+                let repair = req_builder.try_clone().map(|builder| RepairContext {
+                    req_builder: builder,
+                    request_body: body.clone(),
+                    enabled: repair_enabled,
+                });
                 let outcome = stream_response_to_channel(
                     resp,
                     model_name_owned.clone(),
                     dialect,
                     tx,
                     &connection,
+                    repair,
                 )
                 .await;
+                if outcome.repair_attempted {
+                    warn!(
+                        model = %model_name_owned,
+                        succeeded = outcome.repair_succeeded,
+                        "tool-call repair attempted"
+                    );
+                }
                 // Feed the terminal outcome to the watchdog: an empty
                 // response is a strike, visible output resets the streak.
                 //

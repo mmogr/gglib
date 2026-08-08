@@ -122,6 +122,14 @@ pub(crate) struct StreamOutcome {
     pub saw_reasoning: bool,
     /// The `finish_reason` from the terminating `Done` event, if one arrived.
     pub finish_reason: Option<String>,
+    /// A tool call failed schema validation and a repair re-issue was made.
+    ///
+    /// Recorded whether or not it worked: an attempt is evidence that this
+    /// model's `auto` path is unconstrained, which is the per-model
+    /// grammar-presence signal ADR 0002 left with no runtime source.
+    pub repair_attempted: bool,
+    /// The repair produced a conformant call and replaced the original.
+    pub repair_succeeded: bool,
     /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
     /// arrived. Feeds the per-model chars-per-token calibration.
     pub prompt_tokens: Option<u32>,
@@ -619,6 +627,9 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
+            // Repair is on by default; the env switch is the operator's way
+            // out without a rebuild, matching GGLIB_DISABLE_GRAMMAR.
+            true,
         ));
     }
 
@@ -737,12 +748,27 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 /// records them on `connection` (the dashboard registry entry for this
 /// request) as a side effect — the frame is still encoded and forwarded to
 /// the client unchanged; this never alters what the client receives.
+/// Everything a streaming turn needs to re-issue itself as a tool-call repair.
+///
+/// Carried into the stream because the decision cannot be made until the call
+/// is complete, and by then only this function knows what was emitted. The
+/// re-issue itself is non-streaming — see [`crate::repair`].
+pub(crate) struct RepairContext {
+    /// Cloneable builder for the same upstream endpoint and headers.
+    pub req_builder: reqwest::RequestBuilder,
+    /// The request body as forwarded upstream, which the repair derives from.
+    pub request_body: Bytes,
+    /// Whether repair is enabled at all.
+    pub enabled: bool,
+}
+
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     dialect: Option<DialectSpec>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
+    repair: Option<RepairContext>,
 ) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
@@ -794,6 +820,16 @@ pub(crate) async fn stream_response_to_channel(
     // Accumulates reasoning text for the promotion path below. Bounded in
     // practice by the request's `max_tokens`.
     let mut reasoning_buf = String::new();
+
+    // Tool-call hold-back. Frames are encoded as they arrive but withheld
+    // until the call is complete, because a repair decision cannot be made
+    // before then and bytes already sent cannot be recalled. Text and
+    // reasoning stream normally throughout — a tool call is the only part of
+    // a turn no client can consume incrementally, so it is the only part
+    // where withholding costs nothing.
+    let repairing = repair.is_some();
+    let mut held_tool_frames: Vec<Bytes> = Vec::new();
+    let mut tool_calls = crate::repair::ToolCallAccumulator::default();
     while let Some(event) = normalized.next().await {
         let frame: Option<Bytes> = match event {
             Ok(ev) => match &ev {
@@ -833,6 +869,21 @@ pub(crate) async fn stream_response_to_channel(
                     residue.feed(content);
                     encoder.encode(&ev).map(Bytes::from)
                 }
+                LlmStreamEvent::ToolCallDelta {
+                    index,
+                    id,
+                    name,
+                    arguments,
+                } if repairing => {
+                    connection.mark_generating();
+                    outcome.saw_visible_output = true;
+                    tool_calls.push(*index, id.as_deref(), name.as_deref(), arguments.as_deref());
+                    if let Some(frame) = encoder.encode(&ev) {
+                        held_tool_frames.push(Bytes::from(frame));
+                    }
+                    // Withheld, not dropped — flushed or discarded at `Done`.
+                    None
+                }
                 LlmStreamEvent::ToolCallDelta { .. } | LlmStreamEvent::UpstreamError { .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
@@ -841,6 +892,28 @@ pub(crate) async fn stream_response_to_channel(
                 LlmStreamEvent::Done { finish_reason } => {
                     connection.mark_generating();
                     outcome.finish_reason = Some(finish_reason.clone());
+
+                    // The turn's tool calls are complete exactly here, so this
+                    // is the only point at which a repair can be judged. The
+                    // `Done` frame is emitted after whichever set of tool-call
+                    // frames wins, never before — a client that sees
+                    // `finish_reason` first considers the turn over.
+                    if !held_tool_frames.is_empty() {
+                        let flush = resolve_held_tool_calls(
+                            repair.as_ref(),
+                            &tool_calls,
+                            std::mem::take(&mut held_tool_frames),
+                            &encoder,
+                            &mut outcome,
+                        )
+                        .await;
+                        for frame in flush {
+                            if tx.send(Ok(frame)).await.is_err() {
+                                client_connected = false;
+                                break;
+                            }
+                        }
+                    }
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Usage {
@@ -921,6 +994,86 @@ pub(crate) async fn stream_response_to_channel(
 
     outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
     outcome
+}
+
+/// Decide what to send in place of the withheld tool-call frames.
+///
+/// Returns the frames to emit, in order, before this turn's `Done`. On every
+/// path that does not produce a strictly better call it returns the originals,
+/// so a repair can slow a turn down but can never degrade it — the same
+/// fail-open rule truncation and the loop guard follow.
+async fn resolve_held_tool_calls(
+    repair: Option<&RepairContext>,
+    tool_calls: &crate::repair::ToolCallAccumulator,
+    original_frames: Vec<Bytes>,
+    encoder: &SseEncoder,
+    outcome: &mut StreamOutcome,
+) -> Vec<Bytes> {
+    let Some(ctx) = repair else {
+        return original_frames;
+    };
+
+    // The validator reads a non-streaming response shape, so the assembled
+    // deltas are wrapped to look like one.
+    let assembled = serde_json::json!({
+        "choices": [{"message": {"tool_calls": tool_calls.to_tool_calls()}}]
+    });
+    let Ok(assembled_bytes) = serde_json::to_vec(&assembled) else {
+        return original_frames;
+    };
+
+    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
+    let crate::repair::Decision::Reissue { body, violations } = decision else {
+        return original_frames;
+    };
+
+    warn!(
+        violations = ?violations,
+        "tool call does not match the advertised schema; re-issuing with tool_choice=required"
+    );
+    outcome.repair_attempted = true;
+
+    let Some(builder) = ctx.req_builder.try_clone() else {
+        return original_frames;
+    };
+    let repaired = match builder.body(body).send().await {
+        Ok(resp) if resp.status().is_success() => resp.bytes().await.ok(),
+        Ok(resp) => {
+            warn!(
+                status = resp.status().as_u16(),
+                "repair re-issue rejected upstream"
+            );
+            None
+        }
+        Err(e) => {
+            warn!(error = %e, "repair re-issue failed");
+            None
+        }
+    };
+    let Some(repaired) = repaired else {
+        return original_frames;
+    };
+
+    // `choose` re-validates: a repair that is still wrong is discarded.
+    let (chosen, did_repair) = crate::repair::choose(
+        &ctx.request_body,
+        Bytes::from(assembled_bytes),
+        repaired.clone(),
+    );
+    if !did_repair || chosen != repaired {
+        return original_frames;
+    }
+
+    let events = crate::repair::synthesize_tool_call_events(&repaired);
+    if events.is_empty() {
+        return original_frames;
+    }
+
+    outcome.repair_succeeded = true;
+    events
+        .iter()
+        .filter_map(|ev| encoder.encode(ev).map(Bytes::from))
+        .collect()
 }
 
 /// Extract `(prompt_tokens, cached_tokens)` from a non-streaming response body.

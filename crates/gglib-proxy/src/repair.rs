@@ -32,8 +32,9 @@
 //! [`the_repair_body_survives_the_pipeline_with_required_intact`]: tests::the_repair_body_survives_the_pipeline_with_required_intact
 
 use bytes::Bytes;
+use gglib_core::LlmStreamEvent;
 use gglib_core::request_pipeline::{Verdict, validate_tool_calls};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tracing::{debug, warn};
 
 /// Environment kill switch, matching the contract of `GGLIB_DISABLE_GRAMMAR`
@@ -160,19 +161,124 @@ fn first_tool_calls(response: &Value) -> Option<&Value> {
         .get("tool_calls")
 }
 
-/// The original request with `tool_choice` forced to `"required"`.
+/// The original request with `tool_choice` forced to `"required"`, sent
+/// non-streaming.
 ///
-/// Everything else is left alone deliberately. The prefix is unchanged so the
-/// prompt cache serves the prefill and the re-issue costs decode only; and
-/// changing sampling as well would confound which change produced the
-/// improvement, when the grammar is what does the work.
+/// Sampling and messages are left alone deliberately: the prefix is unchanged
+/// so the prompt cache serves the prefill and the re-issue costs decode only,
+/// and changing sampling too would confound which change produced the
+/// improvement when the grammar is what does the work.
+///
+/// `stream` is forced **off**. A repair cannot be judged until the call is
+/// complete, so streaming the re-issue would buy no latency while requiring a
+/// second SSE pipeline to run inside the first — with its own decoder,
+/// normalizer, encoder and `[DONE]` bookkeeping. A buffered body is parsed
+/// once and synthesized into events by [`synthesize_tool_call_events`], which
+/// keeps every frame the client sees flowing through the one `SseEncoder` that
+/// has been encoding this turn all along.
 fn repair_body(request: &Value) -> Option<Bytes> {
     let mut repaired = request.clone();
-    repaired.as_object_mut()?.insert(
+    let obj = repaired.as_object_mut()?;
+    obj.insert(
         "tool_choice".to_owned(),
         Value::String("required".to_owned()),
     );
+    obj.insert("stream".to_owned(), Value::Bool(false));
+    obj.remove("stream_options");
     serde_json::to_vec(&repaired).ok().map(Bytes::from)
+}
+
+/// Assembles streamed [`LlmStreamEvent::ToolCallDelta`] fragments into the
+/// `OpenAI` `tool_calls` shape the validator reads.
+///
+/// The stream carries `id` and `name` only on the first delta for an index and
+/// `arguments` in fragments, so reconstructing the call is the only way to know
+/// what was actually emitted.
+#[derive(Debug, Default)]
+pub struct ToolCallAccumulator {
+    calls: Vec<(Option<String>, Option<String>, String)>,
+}
+
+impl ToolCallAccumulator {
+    /// Fold one delta in.
+    pub fn push(&mut self, index: usize, id: Option<&str>, name: Option<&str>, args: Option<&str>) {
+        if self.calls.len() <= index {
+            self.calls.resize(index + 1, (None, None, String::new()));
+        }
+        let slot = &mut self.calls[index];
+        if let Some(id) = id {
+            slot.0 = Some(id.to_owned());
+        }
+        if let Some(name) = name {
+            slot.1 = Some(name.to_owned());
+        }
+        if let Some(args) = args {
+            slot.2.push_str(args);
+        }
+    }
+
+    /// Whether any delta has been seen.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.calls.is_empty()
+    }
+
+    /// The assembled calls in `OpenAI` non-streaming shape, for validation.
+    #[must_use]
+    pub fn to_tool_calls(&self) -> Value {
+        Value::Array(
+            self.calls
+                .iter()
+                .map(|(id, name, args)| {
+                    json!({
+                        "id": id.clone().unwrap_or_default(),
+                        "type": "function",
+                        "function": {
+                            "name": name.clone().unwrap_or_default(),
+                            "arguments": args,
+                        }
+                    })
+                })
+                .collect(),
+        )
+    }
+}
+
+/// Turn a buffered repair response's `tool_calls` into stream events.
+///
+/// One event per call rather than per fragment: the client reassembles deltas
+/// by index either way, and a single complete delta cannot be interleaved
+/// wrongly or truncated mid-arguments.
+#[must_use]
+pub fn synthesize_tool_call_events(response_body: &[u8]) -> Vec<LlmStreamEvent> {
+    let Ok(response) = serde_json::from_slice::<Value>(response_body) else {
+        return Vec::new();
+    };
+    let Some(calls) = first_tool_calls(&response).and_then(Value::as_array) else {
+        return Vec::new();
+    };
+
+    calls
+        .iter()
+        .enumerate()
+        .map(|(index, call)| LlmStreamEvent::ToolCallDelta {
+            index,
+            id: call
+                .get("id")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            name: call
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            arguments: call
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+        .collect()
 }
 
 /// Choose between the original response and a repair attempt's.
@@ -274,6 +380,123 @@ mod tests {
 
     fn request_value() -> Value {
         serde_json::from_slice(&request(json!("auto"))).unwrap()
+    }
+
+    // ── Accumulator and synthesis ────────────────────────────────────────
+
+    /// Streamed deltas carry `id`/`name` only on the first fragment and split
+    /// `arguments` arbitrarily, so reassembly is the only way to know what was
+    /// emitted.
+    #[test]
+    fn fragmented_deltas_reassemble_into_one_call() {
+        let mut acc = ToolCallAccumulator::default();
+        acc.push(0, Some("call_1"), Some("read_file"), Some(r#"{"path":"#));
+        acc.push(0, None, None, Some(r#""a","max_lines":"#));
+        acc.push(0, None, None, Some("42}"));
+
+        let calls = acc.to_tool_calls();
+        assert_eq!(calls[0]["function"]["name"], "read_file");
+        assert_eq!(calls[0]["id"], "call_1");
+        assert_eq!(
+            calls[0]["function"]["arguments"],
+            r#"{"path":"a","max_lines":42}"#
+        );
+    }
+
+    /// Parallel calls arrive interleaved by index, not in sequence.
+    #[test]
+    fn interleaved_indices_stay_separate() {
+        let mut acc = ToolCallAccumulator::default();
+        acc.push(0, Some("a"), Some("read_file"), Some(r#"{"path":"#));
+        acc.push(1, Some("b"), Some("read_file"), Some(r#"{"path":"#));
+        acc.push(1, None, None, Some(r#""two"}"#));
+        acc.push(0, None, None, Some(r#""one"}"#));
+
+        let calls = acc.to_tool_calls();
+        assert_eq!(calls.as_array().unwrap().len(), 2);
+        assert_eq!(calls[0]["function"]["arguments"], r#"{"path":"one"}"#);
+        assert_eq!(calls[1]["function"]["arguments"], r#"{"path":"two"}"#);
+    }
+
+    /// An index arriving before its predecessors must not panic or misplace.
+    #[test]
+    fn an_out_of_order_first_index_does_not_panic() {
+        let mut acc = ToolCallAccumulator::default();
+        acc.push(2, Some("c"), Some("read_file"), Some("{}"));
+
+        let calls = acc.to_tool_calls();
+        assert_eq!(calls.as_array().unwrap().len(), 3);
+        assert_eq!(calls[2]["id"], "c");
+    }
+
+    #[test]
+    fn an_empty_accumulator_is_empty() {
+        assert!(ToolCallAccumulator::default().is_empty());
+    }
+
+    /// The assembled shape must be exactly what the validator reads, or the
+    /// hold-back would validate something the client never receives.
+    #[test]
+    fn the_assembled_shape_validates_like_a_real_response() {
+        let mut acc = ToolCallAccumulator::default();
+        acc.push(
+            0,
+            Some("x"),
+            Some("read_file"),
+            Some(r#"{"path":"a","max_lines":"42"}"#),
+        );
+
+        let wrapped = json!({"choices": [{"message": {"tool_calls": acc.to_tool_calls()}}]});
+        let bytes = serde_json::to_vec(&wrapped).unwrap();
+
+        assert!(matches!(
+            decide(&request(json!("auto")), &bytes, true),
+            Decision::Reissue { .. }
+        ));
+    }
+
+    /// One event per call, not per fragment: a complete delta cannot be
+    /// truncated mid-arguments or interleaved wrongly on the wire.
+    #[test]
+    fn synthesis_emits_one_complete_event_per_call() {
+        let body = response(r#"{"path":"a","max_lines":42}"#);
+        let events = synthesize_tool_call_events(&body);
+
+        assert_eq!(events.len(), 1);
+        let LlmStreamEvent::ToolCallDelta {
+            index,
+            name,
+            arguments,
+            ..
+        } = &events[0]
+        else {
+            panic!("expected a ToolCallDelta");
+        };
+        assert_eq!(*index, 0);
+        assert_eq!(name.as_deref(), Some("read_file"));
+        assert_eq!(arguments.as_deref(), Some(r#"{"path":"a","max_lines":42}"#));
+    }
+
+    #[test]
+    fn synthesis_of_an_unreadable_body_yields_nothing() {
+        assert!(synthesize_tool_call_events(b"garbage").is_empty());
+    }
+
+    /// The repair must go out non-streaming, or a second SSE pipeline would
+    /// have to run inside the first.
+    #[test]
+    fn the_repair_request_is_non_streaming() {
+        let Decision::Reissue { body, .. } = decide(
+            &request(json!("auto")),
+            &response(r#"{"path":"a","max_lines":"42"}"#),
+            true,
+        ) else {
+            panic!("expected a re-issue");
+        };
+
+        let parsed: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["stream"], false);
+        assert!(parsed.get("stream_options").is_none());
     }
 
     #[test]

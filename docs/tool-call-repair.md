@@ -1,6 +1,6 @@
 # Tool-call repair
 
-**Status:** specification, not yet implemented.
+**Status:** implemented. Streaming and non-streaming both route through the hold-back.
 **Decided by:** [ADR 0002](adr/0002-defer-tool-call-constraint-to-llama-cpp.md), findings 4–5.
 
 ## What this solves
@@ -177,6 +177,25 @@ un-send them.
 content and reasoning stream normally with no added latency. `tool_calls`
 deltas are buffered until `finish_reason` arrives, validated, then emitted —
 either the original or the repaired call.
+
+**The re-issue itself is non-streaming.** A repair cannot be judged until the
+call is complete, so streaming it would buy no latency while requiring a second
+SSE pipeline — decoder, normalizer, encoder, `[DONE]` bookkeeping — to run
+inside the first. The buffered body is parsed once and synthesized back into
+`ToolCallDelta` events, so every frame the client sees still flows through the
+one `SseEncoder` that has been encoding the turn all along.
+
+**Ordering.** Held frames are flushed *before* the `Done` frame, never after: a
+client that sees `finish_reason` first considers the turn over. The trailing
+`Usage` frame and the single `[DONE]` sentinel are untouched by the hold-back
+and keep their existing ordering, which is what stops a client parser choking
+on a repaired turn.
+
+**One accepted wart.** A turn that emits text *then* a bad tool call will show
+the client attempt 1's text followed by attempt 2's call. The text was the
+model's preamble and the call is now correct, which beats the alternative; and
+under `tool_choice: "required"` the re-issue emits no text of its own. Measured
+turns on the `auto` path emitted empty content anyway.
 
 This is acceptable because a tool call is not consumable incrementally: no
 agentic client can act on half a call, and every one of them reassembles the
