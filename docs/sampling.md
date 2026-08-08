@@ -296,33 +296,63 @@ gglib config profile set coding --dry-multiplier 0.8 --dry-allowed-length 3
 Left unset they are omitted from the request entirely and llama.cpp applies its
 own defaults (1.75, 2, and -1), which are reasonable starting points.
 
-## The tool-call floor
+## The agentic-turn temperature ceiling
 
-A request carrying a non-empty `tools` array is asking for structured output,
-and resolves against a tighter floor than a chat turn: `temperature 0.15`,
-`top_p 1.0`, and **DRY forced off**.
+A request carrying a non-empty `tools` array may emit structured output, so its
+temperature is **capped** — at `0.6` on a `reasoning`-tagged model and `0.3`
+otherwise.
 
-DRY is disabled there deliberately. Structured output legitimately repeats
-tokens — braces, quoted keys, the same argument names across a batch of calls —
-so a repetition penalty attacks the very structure that makes the call
-parseable, and a malformed tool call is the failure the pipeline is least able
-to recover from.
+### It is a ceiling, and it only overrules a guess
 
-It engages on tools being *present*, not on `tool_choice: "required"`. Real
-agentic clients send `"auto"` almost universally, so a `required`-only trigger
-would describe nearly no traffic.
+The cap applies *after* resolution, and only when the temperature that won came
+from a source nobody deliberately chose: an auto-detected recipe, or the floor.
+Anything set by a person — request, profile, per-model, global, CLI — stands
+untouched. It never raises a temperature, only lowers one.
 
-It composes onto whichever class floor applies rather than replacing it, so a
-`reasoning`-tagged model calling tools keeps both of that floor's carve-outs:
-its anti-repetition guard, and its deliberately disabled min-p.
+That gate is the point. This shipped first as a *floor*, and a floor could never
+reach the models that needed it: every `reasoning`-tagged model carries an
+auto-detected recipe naming `temperature: 1.0`, and any layer outranks a floor,
+so the adjustment was inert on exactly the models used for agentic coding. An
+auto-detected recipe is an unreviewed guess written at import time — it already
+ranks below global settings for that reason, and a task-aware cap overruling it
+is consistent with that.
 
-Being a floor, every value is still outranked by any layer that names one — the
-way to override it for one model is that model's own defaults, not the global
-switch. Disable it entirely with
-`gglib config settings set --tool-call-floor false`, or per-process with
-`GGLIB_DISABLE_TOOL_FLOOR=1`.
+### Why reasoning models are capped so much higher
 
-Two surfaces do not apply it, both by construction: `gglib model explain` and
+A reasoning model does not decode its tool call in isolation. The `<think>`
+block and the call are one completion under one sampler configuration, so a cap
+imposed for structured output lands on the reasoning phase too. Qwen3 specifies
+~0.6 for thinking mode and warns against greedy decoding; DeepSeek-R1 specifies
+0.5–0.7 for the same reason. Below that range these models degrade into endless
+repetition — which the proxy's own loop guard would then reject as a 400. A
+near-greedy cap on a thinking model manufactures the failure that guard exists
+to catch.
+
+### DRY is not touched
+
+An earlier version forced `dry_multiplier` to `0` on these turns, on the grounds
+that structured output legitimately repeats tokens. That was wrong twice over.
+llama.cpp's DRY already ships sequence breakers defaulting to `\n`, `:`, `"`,
+`*` — two of which are pervasive in JSON — so the case is mitigated upstream.
+And because agentic clients send `tools` on *every* request, disabling DRY for
+them would disable it for an entire session, which is exactly the workload it
+was added for.
+
+If DRY is ever observed mangling tool calls, the lever is
+`--dry-sequence-breaker`, not switching the sampler off.
+
+### Scope
+
+It engages on tools being *present*, not on `tool_choice: "required"`: agentic
+clients send `"auto"` almost universally, so a `required`-only trigger would
+describe nearly no traffic. The corollary is that this is an *agentic-turn*
+adjustment, not a tool-emission one — it applies to prose turns in an agentic
+session too, which is why the cap is mild rather than near-greedy.
+
+Disable it with `gglib config settings set --agentic-sampling false`, or
+per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`.
+
+Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in
-hand, so they always report the reasoning or neutral floor. The proxy's
-`sampling resolved` debug line names the floor that actually ran.
+hand. The proxy's `sampling resolved` debug line carries `agentic_turn` and
+`agentic_ceiling` for the turns where it applied.
