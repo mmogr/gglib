@@ -41,14 +41,24 @@ The full set of configurable parameters:
 
 ## Temperature coupling
 
-**`temperature`, `presence_penalty`, `repeat_penalty`, `min_p` and the four
-DRY parameters are coupled.**
-The rest are only meaningful relative to how sharp `temperature` makes the
+**`temperature`, `presence_penalty`, `repeat_penalty` and `min_p` are coupled.**
+The last three are only meaningful relative to how sharp `temperature` makes the
 sampling distribution, so they always come from whichever layer supplied the
 `temperature` — never a lower layer, which would apply a penalty tuned for a
 distribution nothing above it asked for. If that layer left one of them
 unset (or if no layer names a temperature at all, in which case the pair-up
 doesn't apply), it falls to the floor rather than to a lower layer's value.
+
+**The DRY parameters are not coupled**, and gap-fill independently like
+`top_p` and `top_k`. They were coupled briefly, on the argument that a
+repetition penalty is a repetition penalty. That symmetry is false:
+`presence_penalty` and `repeat_penalty` are flat logit offsets competing
+directly with temperature's sharpening, whereas DRY's strength is set by its
+own `dry_base` and `dry_allowed_length` and it targets verbatim sequence
+repetition — which gets *worse* at low temperature, not milder. Coupling it
+meant `gglib config profile set coding --dry-multiplier 0.8` silently resolved
+to `0.0` on any model whose defaults name a temperature, which is every
+`reasoning`-tagged model.
 
 The floor itself is class-aware for two fields, `presence_penalty` and
 `min_p`: a plain `0.0` presence penalty is fine for most models, but a
@@ -290,6 +300,14 @@ enable it per model or per profile:
 ```bash
 gglib model update qwen3.6 --dry-multiplier 0.8
 gglib config profile set coding --dry-multiplier 0.8 --dry-allowed-length 3
+```
+
+To pick a value from measurement rather than guesswork, sweep it. `0.0` is a
+real candidate meaning "off", so one run compares disabled against two
+strengths on your own model and task suite:
+
+```bash
+gglib benchmark tune <model> --sweep dry_multiplier=0,0.4,0.8
 ```
 
 `dry_base`, `dry_allowed_length` and `dry_penalty_last_n` have no floor value.

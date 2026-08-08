@@ -1,10 +1,27 @@
 //! Structural normaliser for chat-completion request bodies.
 //!
-//! Scans the first system message for IDE-injected dynamic lines (date, time,
-//! terminal line count) and extracts them into a separate user message at the
-//! end of the array.  This makes the system prompt prefix byte-identical
-//! across requests, which stabilises BPE tokenisation for recurrent models
-//! that cache KV state per-prefix.
+//! IDE clients inject dynamic lines into the system prompt — the current date,
+//! the current time, the terminal's line count. They change on essentially
+//! every request, and because they sit *inside* the system prompt they break
+//! llama.cpp's common-prefix match at the very first tokens, forcing a full
+//! re-prefill every turn.
+//!
+//! This module stabilises them in place: the line count is dropped, the time is
+//! rounded down to the hour, and the date is left alone. The prompt then stays
+//! byte-identical for an hour at a stretch.
+//!
+//! # Why not extract them
+//!
+//! It used to move the lines into a `user` message appended after the
+//! conversation. That kept the prefix stable but put a synthetic turn in the
+//! position with the most attention — the model read `Current date: …` as the
+//! last thing before generating, instead of the user's actual instruction.
+//!
+//! It also did nothing at all for the client that motivated it: the extraction
+//! required string-form `content`, and the VS Code LLM Gateway sends the
+//! array-form the `OpenAI` spec allows, so the whole pass early-returned and
+//! the volatile lines stayed in the prompt. Stabilising in place fixes both,
+//! and handles either content shape.
 
 use std::sync::LazyLock;
 
@@ -13,6 +30,29 @@ use gglib_core::domain::ChatMessage;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
+
+/// Environment kill switch. Truthy values (case-insensitive `1`, `true`,
+/// `yes`, `on`) leave the system prompt exactly as the client sent it — the
+/// same contract as `GGLIB_DISABLE_GRAMMAR` and
+/// `GGLIB_DISABLE_AGENTIC_SAMPLING`.
+///
+/// An environment variable rather than a setting because this runs as the very
+/// first statement of the request handler, before the settings snapshot is
+/// read, and the session-id derivation downstream depends on it having already
+/// happened.
+pub const DISABLE_CANONICALIZATION_ENV: &str = "GGLIB_DISABLE_PROMPT_CANONICALIZATION";
+
+/// Whether [`DISABLE_CANONICALIZATION_ENV`] is set to a truthy value.
+fn canonicalization_disabled_via_env() -> bool {
+    std::env::var(DISABLE_CANONICALIZATION_ENV)
+        .ok()
+        .is_some_and(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+}
 
 /// Matches dynamic IDE-injected lines at the start of a line (multiline mode).
 ///
@@ -24,25 +64,102 @@ static DYNAMIC_LINE_PATTERNS: LazyLock<Regex> = LazyLock::new(|| {
         .expect("hardcoded regex should always compile")
 });
 
-/// Canonicalise the system prompt by extracting dynamic IDE-injected lines.
+/// Matches a whole `Current terminal line count …` line, newline included.
 ///
-/// This transform (Step 0 in the request pipeline) ensures the system prompt
-/// prefix is byte-identical across requests for BPE stability.
+/// Dropped rather than coarsened: it changes as the user scrolls, has no
+/// bucket that would hold still, and is of no use to a coding model.
+static LINE_COUNT_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^Current terminal line count[^\n]*(?:\r?\n|$)")
+        .expect("hardcoded regex should always compile")
+});
+
+/// Matches a clock time inside a `Current time:` line — `HH:MM`, optionally
+/// with seconds. Deliberately loose about what surrounds it so a 12-hour
+/// format with a trailing meridiem still matches.
+static CLOCK_TIME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(\d{1,2}):(\d{2})(:\d{2})?").expect("hardcoded regex should always compile")
+});
+
+/// Matches a whole `Current time: …` line, capturing it for rewriting.
+static TIME_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^Current time:[^\n]*").expect("hardcoded regex should always compile")
+});
+
+/// Round every clock time in the text down to the hour, and drop the terminal
+/// line count entirely. Returns `None` when nothing needed changing.
+///
+/// `Current date:` is deliberately untouched. It changes once a day, which is
+/// slow enough not to matter, and the date is genuinely useful to the model.
+///
+/// A `Current time:` line with no recognisable clock in it is removed rather
+/// than left alone: it cannot be coarsened, and leaving it would defeat the
+/// point.
+fn stabilise_dynamic_lines(text: &str) -> Option<String> {
+    let normalised = text.replace("\r\n", "\n").replace('\r', "\n");
+
+    let without_line_count = LINE_COUNT_LINE.replace_all(&normalised, "");
+
+    let stabilised = TIME_LINE.replace_all(&without_line_count, |caps: &regex::Captures| {
+        let line = &caps[0];
+        CLOCK_TIME.find(line).map_or_else(
+            || {
+                debug!("canonicalise: dropping a Current time line with no recognisable clock");
+                String::new()
+            },
+            |m| {
+                let hour = CLOCK_TIME
+                    .captures(line)
+                    .and_then(|c| c.get(1))
+                    .map_or("0", |h| h.as_str());
+                format!("{}{hour}:00{}", &line[..m.start()], &line[m.end()..])
+            },
+        )
+    });
+
+    (stabilised != text).then(|| stabilised.into_owned())
+}
+
+/// Stabilise the dynamic IDE-injected lines in the first system message.
+///
+/// Step 0 of the request pipeline. Rewrites the system prompt in place so it
+/// stops changing between requests, which is what lets llama.cpp match a
+/// common prefix and skip re-prefilling it.
 ///
 /// # Algorithm
 ///
 /// 1. Parse body as JSON — return unchanged on parse failure.
 /// 2. Locate the `"messages"` array — return unchanged if absent.
-/// 3. Find the first message with `"role": "system"` and string `"content"`.
-/// 4. Extract all matching dynamic lines into a new user message appended at
-///    the end of the messages array.
-/// 5. Remove matched lines from the system prompt content.
+/// 3. Find the first `"role": "system"` message, whatever shape its
+///    `"content"` takes.
+/// 4. Rewrite every text run in that content: drop the terminal line count,
+///    round any clock time down to the hour, leave the date alone.
+///
+/// # Both content shapes
+///
+/// `content` may be a plain string or the `OpenAI` array-of-parts form. Both
+/// are handled, and an array keeps its shape — only the `text` inside each
+/// part is rewritten. Handling only the string form is what made the previous
+/// version a no-op for the VS Code LLM Gateway.
 ///
 /// # Fail-open
 ///
 /// On any parse or serialisation failure the original `Bytes` are returned
 /// unchanged — zero blast radius for unexpected request shapes.
 pub fn canonicalize_system_prompt(body: Bytes) -> Bytes {
+    canonicalize_system_prompt_with(body, canonicalization_disabled_via_env())
+}
+
+/// [`canonicalize_system_prompt`] with the environment override supplied
+/// explicitly.
+///
+/// Split out so the behaviour itself is testable without mutating process-wide
+/// environment state (this crate denies `unsafe`, which `set_var` requires) —
+/// the same split `resolve_slot_restore` uses for its own env override.
+fn canonicalize_system_prompt_with(body: Bytes, disabled: bool) -> Bytes {
+    if disabled {
+        return body;
+    }
+
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return body;
     };
@@ -51,64 +168,46 @@ pub fn canonicalize_system_prompt(body: Bytes) -> Bytes {
         return body;
     };
 
-    // Find the first system message with string content.
+    // The first system message, regardless of content shape.
     let Some(sys_idx) = messages.iter().position(|m| {
         m.get("role")
             .and_then(|r| r.as_str())
             .is_some_and(|r| r == "system")
-            && m.get("content").and_then(|c| c.as_str()).is_some()
     }) else {
         return body;
     };
 
-    let original_content = messages[sys_idx]["content"].as_str().unwrap().to_string();
+    let Some(content) = messages[sys_idx].get_mut("content") else {
+        return body;
+    };
 
-    // Normalize line endings for cross-platform BPE prefix consistency.
-    let original_content = original_content.replace("\r\n", "\n").replace("\r", "\n");
-
-    // Collect matched dynamic lines (trimmed to remove trailing newlines the
-    // regex captures).
-    let extracted_lines: Vec<&str> = DYNAMIC_LINE_PATTERNS
-        .captures_iter(&original_content)
-        .filter_map(|cap| {
-            cap.get(0).and_then(|m| {
-                let trimmed = m.as_str().trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed)
-                }
+    let changed = match content {
+        serde_json::Value::String(text) => stabilise_dynamic_lines(text)
+            .map(|stabilised| {
+                *text = stabilised;
             })
-        })
-        .collect();
-
-    // Remove all matched lines from the system prompt content.
-    let new_content = DYNAMIC_LINE_PATTERNS
-        .replace_all(&original_content, "")
-        .trim()
-        .to_string();
-
-    if new_content.is_empty() {
-        // If the entire system content was dynamic lines, remove the key entirely.
-        if let Some(obj) = messages[sys_idx].as_object_mut() {
-            obj.remove("content");
+            .is_some(),
+        // Array-of-parts: rewrite the text inside each part, keep the shape.
+        serde_json::Value::Array(parts) => {
+            let mut any = false;
+            for part in parts.iter_mut() {
+                if let Some(serde_json::Value::String(text)) = part.get_mut("text")
+                    && let Some(stabilised) = stabilise_dynamic_lines(text)
+                {
+                    *text = stabilised;
+                    any = true;
+                }
+            }
+            any
         }
-    } else {
-        messages[sys_idx]["content"] = serde_json::Value::String(new_content);
+        _ => false,
+    };
+
+    if !changed {
+        return body;
     }
 
-    // Append extracted lines as a new user message at the end.
-    if !extracted_lines.is_empty() {
-        let joined = extracted_lines.join("\n");
-        messages.push(serde_json::json!({
-            "role": "user",
-            "content": joined,
-        }));
-        debug!(
-            lines = extracted_lines.len(),
-            "canonicalised system prompt: extracted dynamic lines"
-        );
-    }
+    debug!("canonicalised system prompt: stabilised dynamic lines in place");
 
     match serde_json::to_vec(&value) {
         Ok(v) => Bytes::from(v),
@@ -203,11 +302,12 @@ const FALLBACK_ID_DIGEST_BYTES: usize = 16;
 ///
 /// # Preconditions
 ///
-/// `body` must already be canonicalized (see [`canonicalize_system_prompt`]).
-/// This function does not canonicalize its input itself — the caller
-/// (`chat_completions`) canonicalizes once up front and reuses the result
-/// both for this hash and for the forwarded request, rather than paying the
-/// parse/regex/serialize cost twice on every request.
+/// None. This used to require pre-canonicalized input, because it hashed the
+/// system prompt verbatim and would otherwise have fingerprinted the clock.
+/// It now strips the dynamic lines itself, so the id is stable whether or not
+/// canonicalisation ran — including when it is switched off via
+/// [`DISABLE_CANONICALIZATION_ENV`], which previously would have rotated the
+/// session id on every request.
 ///
 /// Returns `None` when the body has no usable `messages` array, or neither
 /// a system nor a first user message is present — callers should treat that
@@ -225,11 +325,21 @@ pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
     let messages_raw = value.get_mut("messages")?.take();
     let messages: Vec<ChatMessage> = serde_json::from_value(messages_raw).ok()?;
 
+    // Every dynamic line is stripped before hashing, not just coarsened.
+    // `canonicalize_system_prompt` rounds the clock to the hour and leaves the
+    // date alone, both of which still turn over eventually — and a fingerprint
+    // that turns over costs the session its KV slot and its
+    // `TokenCalibration` snapshot at the boundary. Removing them here
+    // decouples the identity of a conversation from the clock entirely.
     let system_text = messages
         .iter()
         .find(|m| m.role == "system")
         .and_then(|m| m.content.clone())
-        .map(|c| c.into_string())
+        .map(|c| {
+            DYNAMIC_LINE_PATTERNS
+                .replace_all(&c.into_string(), "")
+                .into_owned()
+        })
         .unwrap_or_default();
 
     let first_user_text = messages
@@ -309,67 +419,132 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_all_three_dynamic_lines() {
-        let body = serde_json::to_vec(&serde_json::json!({
-            "messages": [
+    fn stabilises_dynamic_lines_in_place() {
+        let body = Bytes::from(
+            serde_json::json!({"messages": [
                 {"role": "system", "content": "You are an assistant.\nCurrent date: 2026-07-15\nCurrent time: 10:30\nCurrent terminal line count: 42\nMore instructions."},
-                {"role": "user", "content": "Hello"}
-            ]
-        }))
-        .unwrap();
-        let result = canonicalize_system_prompt(Bytes::from(body));
-        let value: serde_json::Value = serde_json::from_slice(&result).unwrap();
+                {"role": "user", "content": "hello"},
+            ]})
+            .to_string(),
+        );
+
+        let out = canonicalize_system_prompt(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
         let messages = value["messages"].as_array().unwrap();
-        // System prompt should NOT contain dynamic lines
-        let system_content = &messages[0]["content"];
-        assert!(
-            system_content
-                .as_str()
-                .unwrap()
-                .contains("You are an assistant")
+        let system = messages[0]["content"].as_str().unwrap();
+
+        // No synthetic turn: the user's message is still the last one.
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1]["content"], "hello");
+
+        // The date survives verbatim — it turns over once a day.
+        assert!(system.contains("Current date: 2026-07-15"), "{system}");
+        // The clock is rounded down to the hour.
+        assert!(system.contains("Current time: 10:00"), "{system}");
+        // The line count is gone entirely.
+        assert!(!system.contains("terminal line count"), "{system}");
+        // Surrounding instructions are untouched, with no torn blank line.
+        assert!(system.starts_with("You are an assistant."), "{system}");
+        assert!(system.ends_with("More instructions."), "{system}");
+        assert!(!system.contains("\n\n"), "{system}");
+    }
+
+    /// Two requests within the same hour must produce a byte-identical system
+    /// prompt — that is the whole point, and what lets the prefix match.
+    #[test]
+    fn requests_within_the_hour_are_byte_identical() {
+        let at = |clock: &str, lines: u32| {
+            Bytes::from(
+                serde_json::json!({"messages": [
+                    {"role": "system", "content": format!("Preamble.\nCurrent date: 2026-07-15\nCurrent time: {clock}\nCurrent terminal line count: {lines}")},
+                    {"role": "user", "content": "hi"},
+                ]})
+                .to_string(),
+            )
+        };
+
+        let first = canonicalize_system_prompt(at("10:03:11", 12));
+        let second = canonicalize_system_prompt(at("10:57:48", 300));
+
+        assert_eq!(first, second);
+    }
+
+    /// The shape the VS Code LLM Gateway actually sends. The previous
+    /// implementation required string content and silently did nothing here.
+    #[test]
+    fn array_form_system_content_is_stabilised() {
+        let body = Bytes::from(
+            serde_json::json!({"messages": [
+                {"role": "system", "content": [
+                    {"type": "text", "text": "You are an assistant.\nCurrent time: 14:32\nCurrent terminal line count: 7"},
+                ]},
+                {"role": "user", "content": "hello"},
+            ]})
+            .to_string(),
         );
-        assert!(
-            system_content
-                .as_str()
-                .unwrap()
-                .contains("More instructions")
+
+        let out = canonicalize_system_prompt(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        let parts = value["messages"][0]["content"].as_array().unwrap();
+
+        // The array shape is preserved; only the text inside is rewritten.
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0]["type"], "text");
+        let text = parts[0]["text"].as_str().unwrap();
+        assert!(text.contains("Current time: 14:00"), "{text}");
+        assert!(!text.contains("terminal line count"), "{text}");
+    }
+
+    /// A time we cannot read cannot be coarsened, so it is dropped rather than
+    /// left to churn the prefix.
+    #[test]
+    fn an_unparseable_time_line_is_dropped() {
+        let body = Bytes::from(
+            serde_json::json!({"messages": [
+                {"role": "system", "content": "Preamble.\nCurrent time: just after tea\nRest."},
+            ]})
+            .to_string(),
         );
-        assert!(!system_content.as_str().unwrap().contains("Current date"));
-        assert!(!system_content.as_str().unwrap().contains("Current time"));
-        assert!(
-            !system_content
-                .as_str()
-                .unwrap()
-                .contains("terminal line count")
+
+        let out = canonicalize_system_prompt(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        let system = value["messages"][0]["content"].as_str().unwrap();
+
+        assert!(!system.contains("Current time"), "{system}");
+        assert!(system.contains("Preamble."), "{system}");
+        assert!(system.contains("Rest."), "{system}");
+    }
+
+    /// A 12-hour clock keeps its meridiem.
+    #[test]
+    fn a_twelve_hour_clock_keeps_its_suffix() {
+        let body = Bytes::from(
+            serde_json::json!({"messages": [
+                {"role": "system", "content": "Current time: 2:05 PM"},
+            ]})
+            .to_string(),
         );
-        // Last message should be the extracted dynamic lines as user message
-        assert_eq!(messages.len(), 3); // system + original user + extracted
-        assert_eq!(messages[2]["role"], "user");
-        assert!(
-            messages[2]["content"]
-                .as_str()
-                .unwrap()
-                .contains("Current date: 2026-07-15")
-        );
-        // No dangling blank lines in cleaned system prompt (regex must consume \n)
-        assert!(!system_content.as_str().unwrap().contains("\n\n"));
+
+        let out = canonicalize_system_prompt(body);
+        let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(value["messages"][0]["content"], "Current time: 2:00 PM");
     }
 
     #[test]
-    fn handles_crlf_line_endings() {
-        let body = serde_json::to_vec(&serde_json::json!({
-            "messages": [
-                {"role": "system", "content": "You are an assistant.\r\nCurrent date: 2026-07-15\r\nMore instructions."},
-                {"role": "user", "content": "Hello"}
-            ]
-        }))
-        .unwrap();
-        let result = canonicalize_system_prompt(Bytes::from(body));
-        let value: serde_json::Value = serde_json::from_slice(&result).unwrap();
-        let system_content = &value["messages"][0]["content"];
-        assert!(!system_content.as_str().unwrap().contains("Current date"));
-        // No dangling blank lines (regex must consume \r\n)
-        assert!(!system_content.as_str().unwrap().contains("\n\n"));
+    fn the_kill_switch_leaves_the_prompt_byte_identical() {
+        let body = Bytes::from(
+            serde_json::json!({"messages": [
+                {"role": "system", "content": "Current time: 10:30"},
+            ]})
+            .to_string(),
+        );
+
+        assert_eq!(
+            canonicalize_system_prompt_with(body.clone(), true),
+            body,
+            "a disabled pass must not even re-serialize"
+        );
+        assert_ne!(canonicalize_system_prompt_with(body.clone(), false), body);
     }
 
     #[test]

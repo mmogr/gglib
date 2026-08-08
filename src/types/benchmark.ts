@@ -183,6 +183,8 @@ export interface SweepSpec {
   top_k: number[];
   min_p: number[];
   repeat_penalty: number[];
+  /** DRY multiplier; `0.0` disables DRY, so it is a meaningful candidate. */
+  dry_multiplier: number[];
 }
 
 /** Weights combining per-candidate metrics into a composite score. */

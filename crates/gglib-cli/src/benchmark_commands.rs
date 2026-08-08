@@ -87,8 +87,10 @@ pub enum BenchmarkCommand {
         /// Sweep a sampling parameter across candidate values, e.g.
         /// `--sweep temperature=0.2,0.5,0.8`. Repeatable — one flag per
         /// dimension (`temperature`, `top_p`, `top_k`, `min_p`,
-        /// `repeat_penalty`). A dimension left unswept is not varied; the
-        /// normal per-model/global/hardcoded fallback chain fills it in.
+        /// `repeat_penalty`, `dry_multiplier`). A dimension left unswept is
+        /// not varied; the normal per-model/global/hardcoded fallback chain
+        /// fills it in. The grid is the cartesian product, so dimensions
+        /// multiply.
         #[arg(long = "sweep", value_name = "DIM=V1,V2,...")]
         sweep: Vec<String>,
 
