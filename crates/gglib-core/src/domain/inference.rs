@@ -637,6 +637,47 @@ impl InferenceConfig {
         }
     }
 
+    /// This floor, adjusted for a request that carries tools.
+    ///
+    /// A tool-emission turn wants a near-deterministic decode: the output is
+    /// structured, there is a right answer, and creativity in a JSON envelope
+    /// is only ever a defect. This lowers the temperature and opens `top_p`
+    /// so the truncation is done by temperature alone.
+    ///
+    /// # DRY is switched off, not left alone
+    ///
+    /// Structured output legitimately repeats tokens — braces, quoted keys,
+    /// the same argument names across a batch of calls. A repetition penalty
+    /// there attacks the very structure that makes the call parseable, and a
+    /// malformed tool call is the failure this pipeline is least able to
+    /// recover from. So `dry_multiplier` is pinned to `0.0` regardless of what
+    /// the base floor says.
+    ///
+    /// # What it deliberately does not touch
+    ///
+    /// `presence_penalty`, `repeat_penalty`, `min_p`, `top_k` and `max_tokens`
+    /// are carried through unchanged. That keeps [`reasoning_floor`]'s two carve-outs
+    /// intact for a `reasoning`-tagged model that is also calling tools: its
+    /// anti-repetition guard survives, and its deliberately disabled min-p is
+    /// not quietly re-enabled by a floor that has no opinion about Qwen3.6.
+    ///
+    /// This is a *floor*, so every one of these values is still outranked by
+    /// any layer that names one.
+    ///
+    /// [`reasoning_floor`]: Self::reasoning_floor
+    #[must_use]
+    pub const fn for_tool_call(self) -> Self {
+        Self {
+            temperature: Some(0.15),
+            top_p: Some(1.0),
+            dry_multiplier: Some(0.0),
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
+            ..self
+        }
+    }
+
     /// Convert inference config to llama CLI arguments.
     ///
     /// Returns a vector of argument strings suitable for passing to llama-server.

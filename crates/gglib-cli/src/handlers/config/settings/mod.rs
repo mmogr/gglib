@@ -156,6 +156,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             proxy_api_key,
             trust_client_sampling,
             proxy_loop_detection,
+            tool_call_floor,
             proxy_autostart,
             close_to_tray,
             start_at_login,
@@ -201,6 +202,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if proxy_loop_detection.is_some() {
                 changed.insert("proxy-loop-detection");
             }
+            if tool_call_floor.is_some() {
+                changed.insert("tool-call-floor");
+            }
             if proxy_autostart.is_some() {
                 changed.insert("proxy-autostart");
             }
@@ -235,6 +239,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 proxy_api_key: proxy_api_key.map(Some),
                 trust_client_sampling: trust_client_sampling.map(Some),
                 proxy_loop_detection: proxy_loop_detection.map(Some),
+                tool_call_floor: tool_call_floor.map(Some),
                 proxy_autostart: proxy_autostart.map(Some),
                 close_to_tray: close_to_tray.map(Some),
                 start_at_login: start_at_login.map(Some),
@@ -281,6 +286,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.proxy_loop_detection {
                 prospective.proxy_loop_detection = Some(v);
+            }
+            if let Some(Some(v)) = update.tool_call_floor {
+                prospective.tool_call_floor = Some(v);
             }
             if let Some(Some(v)) = update.proxy_autostart {
                 prospective.proxy_autostart = Some(v);

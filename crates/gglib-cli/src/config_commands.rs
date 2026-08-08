@@ -244,6 +244,13 @@ pub enum SettingsCommand {
         /// that legitimately replays identical batches.
         #[arg(long)]
         proxy_loop_detection: Option<bool>,
+        /// Sample tool-emission turns against a tighter floor. Enabled by
+        /// default: a request carrying tools decodes near-deterministically
+        /// with DRY off, because its output is structured and a malformed
+        /// tool call is the hardest failure to recover from. Only ever
+        /// supplies a floor, so any layer that names a parameter still wins.
+        #[arg(long)]
+        tool_call_floor: Option<bool>,
         /// Start the OpenAI-compatible proxy as soon as the desktop app
         /// launches, instead of waiting for it to be switched on. Combined
         /// with --start-at-login and --close-to-tray this keeps the endpoint
