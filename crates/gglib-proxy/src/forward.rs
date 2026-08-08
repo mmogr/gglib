@@ -1459,4 +1459,248 @@ mod tests {
             "Context window limit reached. Please start a new conversation."
         );
     }
+
+    use serde_json::json;
+
+    // ── End-to-end repair over a real HTTP upstream ──────────────────────
+
+    /// A mock llama-server that answers the two halves of a repair turn
+    /// differently, and records what it was asked.
+    ///
+    /// Dispatching on `tool_choice` is the point: it asserts the repair
+    /// request really arrived carrying `"required"`, which is the property
+    /// stage-6 suppression exists to protect and the one a unit test over
+    /// bytes cannot observe.
+    async fn spawn_repair_mock(
+        seen: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+    ) -> (u16, tokio::task::JoinHandle<()>) {
+        use axum::routing::post;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = listener.local_addr().unwrap().port();
+
+        let app = axum::Router::new().route(
+            "/v1/chat/completions",
+            post(move |body: String| {
+                let seen = Arc::clone(&seen);
+                async move {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+                    let is_repair = parsed.get("tool_choice") == Some(&json!("required"));
+                    seen.lock().unwrap().push(parsed);
+
+                    if is_repair {
+                        // Non-streaming, schema-conformant: max_lines an integer.
+                        axum::response::Response::builder()
+                            .header("content-type", "application/json")
+                            .body(axum::body::Body::from(
+                                serde_json::to_vec(&json!({
+                                    "choices": [{"message": {"role": "assistant", "tool_calls": [{
+                                        "id": "call_fixed",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "read_file",
+                                            "arguments": "{\"path\":\"a\",\"max_lines\":42}"
+                                        }
+                                    }]}}]
+                                }))
+                                .unwrap(),
+                            ))
+                            .unwrap()
+                    } else {
+                        // Streaming, and wrong the way Llama 3.2 was measured
+                        // wrong: max_lines carrying a string.
+                        let sse = concat!(
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_bad\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a\\\",\"}}]},\"finish_reason\":null}]}\n\n",
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"max_lines\\\":\\\"42\\\"}\"}}]},\"finish_reason\":null}]}\n\n",
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+                            "data: [DONE]\n\n",
+                        );
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(sse))
+                            .unwrap()
+                    }
+                }
+            }),
+        );
+
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (port, handle)
+    }
+
+    fn repair_request_body() -> Bytes {
+        Bytes::from(
+            serde_json::to_vec(&json!({
+                "model": "m",
+                "stream": true,
+                "tool_choice": "auto",
+                "messages": [{"role": "user", "content": "read it"}],
+                "tools": [{
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "max_lines": {"type": "integer"}
+                            },
+                            "required": ["path"]
+                        }
+                    }
+                }]
+            }))
+            .unwrap(),
+        )
+    }
+
+    /// The whole loop over HTTP: a streamed non-conformant tool call is
+    /// withheld, re-issued with `tool_choice: "required"`, and the client
+    /// receives only the repaired call — in the right order, with `[DONE]`
+    /// last.
+    #[tokio::test]
+    async fn a_bad_streamed_tool_call_is_repaired_before_the_client_sees_it() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (port, server) = spawn_repair_mock(Arc::clone(&seen)).await;
+        let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+        let client = Client::new();
+        let body = repair_request_body();
+
+        let resp = client
+            .post(&url)
+            .body(body.clone())
+            .send()
+            .await
+            .expect("mock upstream reachable");
+
+        let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
+        let connection = registry.register("m", true, None);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+        let outcome = stream_response_to_channel(
+            resp,
+            "m".to_owned(),
+            None,
+            tx,
+            &connection,
+            Some(RepairContext {
+                req_builder: client.post(&url),
+                request_body: body,
+                enabled: true,
+            }),
+        )
+        .await;
+
+        let mut wire = String::new();
+        while let Ok(Some(Ok(chunk))) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
+        {
+            wire.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        server.abort();
+
+        assert!(outcome.repair_attempted, "repair should have fired");
+        assert!(
+            outcome.repair_succeeded,
+            "repair should have produced a conformant call"
+        );
+
+        // The upstream saw exactly two requests, the second demanding a call.
+        let requests = seen.lock().unwrap().clone();
+        assert_eq!(requests.len(), 2, "one original, one repair");
+        assert_eq!(requests[1]["tool_choice"], "required");
+        assert_eq!(
+            requests[1]["stream"], false,
+            "the re-issue must not stream — see repair::repair_body"
+        );
+
+        // The client saw the fixed arguments and never the broken ones.
+        assert!(
+            wire.contains(r#"\"max_lines\":42"#) || wire.contains("max_lines\\\":42"),
+            "repaired arguments should reach the client: {wire}"
+        );
+        assert!(
+            !wire.contains(r#"\"42\""#),
+            "the string-typed max_lines must never reach the client: {wire}"
+        );
+
+        // Ordering: the tool call precedes finish_reason, and [DONE] is last.
+        let call_at = wire.find("call_fixed").expect("repaired call on the wire");
+        // Matched on the *terminating* finish_reason, not the substring
+        // "tool_calls" — that also occurs inside the delta frame carrying the
+        // call itself, which made an earlier version of this assertion
+        // compare a position against itself.
+        let finish_at = wire
+            .find(r#""finish_reason":"tool_calls""#)
+            .expect("terminating finish_reason on the wire");
+        assert!(
+            call_at < finish_at,
+            "tool call must be flushed before finish_reason: {wire}"
+        );
+        assert!(
+            wire.trim_end().ends_with("data: [DONE]"),
+            "[DONE] must be the final frame: {wire}"
+        );
+    }
+
+    /// A conformant streamed call is passed through unchanged and costs no
+    /// second request — the hold-back must be invisible on the happy path.
+    #[tokio::test]
+    async fn a_conformant_streamed_tool_call_is_not_reissued() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (port, server) = spawn_repair_mock(Arc::clone(&seen)).await;
+        let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+        let client = Client::new();
+
+        // A schema with no integer field: the streamed call conforms.
+        let body = Bytes::from(
+            serde_json::to_vec(&json!({
+                "model": "m", "stream": true, "tool_choice": "auto",
+                "messages": [{"role": "user", "content": "read it"}],
+                "tools": [{"type": "function", "function": {
+                    "name": "read_file",
+                    "parameters": {"type": "object",
+                        "properties": {"path": {"type": "string"}, "max_lines": {}},
+                        "required": ["path"]}}}]
+            }))
+            .unwrap(),
+        );
+
+        let resp = client.post(&url).body(body.clone()).send().await.unwrap();
+        let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
+        let connection = registry.register("m", true, None);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+        let outcome = stream_response_to_channel(
+            resp,
+            "m".to_owned(),
+            None,
+            tx,
+            &connection,
+            Some(RepairContext {
+                req_builder: client.post(&url),
+                request_body: body,
+                enabled: true,
+            }),
+        )
+        .await;
+
+        let mut wire = String::new();
+        while let Ok(Some(Ok(chunk))) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
+        {
+            wire.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        server.abort();
+
+        assert!(!outcome.repair_attempted);
+        assert_eq!(seen.lock().unwrap().len(), 1, "no second request");
+        assert!(wire.contains("call_bad"), "original call forwarded: {wire}");
+        assert!(wire.trim_end().ends_with("data: [DONE]"));
+    }
 }
