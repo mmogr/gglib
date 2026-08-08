@@ -33,7 +33,7 @@ The full set of configurable parameters:
 | `max_tokens` | `--max-tokens` | int | *(none)* | Deliberately unset — see below |
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
 | `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0, or 1.0 on a `reasoning`-tagged model | See below |
-| `min_p` | `--min-p` | 0.0 – 1.0 | 0.0 (disabled) | 0.05 is llama.cpp built-in default when omitted |
+| `min_p` | `--min-p` | 0.0 – 1.0 | 0.05, or 0.0 on a `reasoning`-tagged model | Matches llama.cpp's own default — see below |
 
 ## Temperature coupling
 
@@ -59,6 +59,16 @@ that did not name its own — silently truncating long answers. Left unset, no
 `max_tokens` key is sent and llama-server applies its own `n_predict` default of
 `-1`, generating until a stop token or the context limit. Explicit per-request,
 per-profile and per-model values are unaffected.
+
+**`min_p` restates llama.cpp's default rather than disabling itself.** The floor
+is `0.05`, the same value llama.cpp applies when the flag is omitted. It is
+stated here rather than left out because resolution force-writes every set
+parameter, so llama-server receives a fully specified request and the value
+stays visible as `min_p=floor` in provenance. A `0.0` floor would not read as
+"unset" — it would be written too, explicitly turning off the tail cut on every
+request that did not set its own. `reasoning`-tagged models floor at `0.0`
+instead, matching Qwen3.6's guidance to disable min-p; that is the only other
+parameter besides `presence_penalty` whose floor depends on the model.
 
 ## Reasoning model auto-defaults
 

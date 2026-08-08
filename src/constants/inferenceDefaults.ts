@@ -71,10 +71,17 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
    * Rust: `with_hardcoded_defaults().presence_penalty`, range `0.0..=2.0`.
    *
    * `reasoning`-tagged models use `reasoning_floor()` instead, which overrides
-   * this one field to `1.0` — the only parameter whose floor is model-dependent.
+   * this to `1.0` — one of the two parameters whose floor is model-dependent
+   * (see `minP` for the other).
    */
   presencePenalty: { default: 0.0, min: 0, max: 2, step: 0.05 },
 
-  /** Rust: `with_hardcoded_defaults().min_p`, range `0.0..=1.0`. */
-  minP: { default: 0.0, min: 0, max: 1, step: 0.01 },
+  /**
+   * Rust: `with_hardcoded_defaults().min_p`, range `0.0..=1.0`.
+   *
+   * `0.05` matches llama.cpp's own default. `reasoning`-tagged models use
+   * `reasoning_floor()` instead, which overrides this to `0.0` per Qwen3.6's
+   * guidance to disable min-p.
+   */
+  minP: { default: 0.05, min: 0, max: 1, step: 0.01 },
 };

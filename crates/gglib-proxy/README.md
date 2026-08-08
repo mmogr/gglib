@@ -350,11 +350,15 @@ request params  →  profile  →  model defaults  →  global settings  →  ha
 4. **Global settings** — `Settings::inference_defaults`, read from the
    per-request settings snapshot (`settings_cache`).
 5. **Hardcoded fallback** — `temperature=0.7`, `top_p=0.95`, `top_k=40`,
-   `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.0`. **`max_tokens`
+   `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.05`. **`max_tokens`
    has no fallback**: because resolution force-writes every set parameter, one
    here would cap every request that did not name its own. Left unset, no
    `max_tokens` key is sent and llama-server generates until a stop token or the
-   context limit.
+   context limit. `min_p=0.05` restates llama.cpp's own default for the same
+   force-write reason, in reverse: a `0.0` here would not read as "unset", it
+   would be written, explicitly disabling the tail cut on every request.
+   A `reasoning`-tagged model floors at `presence_penalty=1.0` and `min_p=0.0`
+   instead — the two parameters whose floor is model-dependent.
 
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
