@@ -55,6 +55,11 @@ pub struct ContextSnapshot {
     /// `gglib_core::normalize::residue`). Back-patched after the response
     /// streams via [`ContextMetricsStore::flag_dialect_residue`].
     pub dialect_residue: bool,
+    /// `true` when this turn's tool call failed schema validation and a
+    /// re-issue with `tool_choice: "required"` produced a conformant one.
+    /// Back-patched after the response streams via
+    /// [`ContextMetricsStore::flag_tool_repair`].
+    pub tool_repaired: bool,
     /// `true` when the pre-dispatch loop guard rejected this request with an
     /// HTTP 400 instead of forwarding it (see `loop_guard`).
     pub loop_guard_tripped: bool,
@@ -89,6 +94,21 @@ pub struct ContextMetricsStore {
     /// residue, including flags for snapshots already evicted from the ring
     /// buffer — eviction must not lose the count.
     dialect_residue_total: AtomicU64,
+    /// Count of turns whose tool call failed schema validation and was
+    /// re-issued with `tool_choice: "required"`.
+    ///
+    /// Counted whether or not the re-issue worked. An attempt is evidence
+    /// that this model's `auto` path is unconstrained — the per-model
+    /// grammar-presence signal ADR 0002 left with no runtime source, readable
+    /// today only from a `--verbose` llama-server log.
+    tool_repairs_attempted: AtomicU64,
+    /// Of those, the ones that produced a conformant call.
+    ///
+    /// Tracked separately because the ratio is the interesting number: a high
+    /// attempt rate with a low success rate means `required` is not fixing
+    /// what this model gets wrong, which is a different problem from an
+    /// unconstrained `auto` path.
+    tool_repairs_succeeded: AtomicU64,
 }
 
 impl ContextMetricsStore {
@@ -99,6 +119,8 @@ impl ContextMetricsStore {
             snapshots: Mutex::new(VecDeque::with_capacity(MAX_SNAPSHOTS)),
             total_requests: AtomicU64::new(0),
             dialect_residue_total: AtomicU64::new(0),
+            tool_repairs_attempted: AtomicU64::new(0),
+            tool_repairs_succeeded: AtomicU64::new(0),
         }
     }
 
@@ -148,6 +170,32 @@ impl ContextMetricsStore {
         self.dialect_residue_total.load(Ordering::Relaxed)
     }
 
+    /// Record one tool-call repair attempt and whether it worked.
+    ///
+    /// Back-patches the per-snapshot flag the same best-effort way
+    /// [`Self::flag_dialect_residue`] does: the totals are exact, the flag is
+    /// visible only while the snapshot remains in the ring buffer.
+    pub fn flag_tool_repair(&self, seq: u64, succeeded: bool) {
+        self.tool_repairs_attempted.fetch_add(1, Ordering::Relaxed);
+        if succeeded {
+            self.tool_repairs_succeeded.fetch_add(1, Ordering::Relaxed);
+        }
+        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
+            snapshot.tool_repaired = succeeded;
+        }
+    }
+
+    /// Total tool-call repairs attempted, eviction-safe.
+    pub fn tool_repairs_attempted(&self) -> u64 {
+        self.tool_repairs_attempted.load(Ordering::Relaxed)
+    }
+
+    /// Total tool-call repairs that produced a conformant call.
+    pub fn tool_repairs_succeeded(&self) -> u64 {
+        self.tool_repairs_succeeded.load(Ordering::Relaxed)
+    }
+
     /// Return up to `n` of the most recent snapshots in chronological order
     /// (oldest first within the returned slice).
     ///
@@ -189,6 +237,7 @@ mod tests {
             was_clamped: false,
             grammar_enforced: false,
             dialect_residue: false,
+            tool_repaired: false,
             loop_guard_tripped: false,
             recorded_at_secs: 0,
             seq: 0,
@@ -329,5 +378,53 @@ mod tests {
         let json = serde_json::to_string(&store.recent(1)[0]).unwrap();
         assert!(json.contains("dialect_residue"));
         assert!(!json.contains("\"seq\""));
+    }
+
+    /// Attempts and successes are tracked separately because the ratio is the
+    /// diagnostic: many attempts with few successes means `required` is not
+    /// fixing what this model gets wrong, which is a different problem from an
+    /// unconstrained `auto` path.
+    #[test]
+    fn repair_totals_count_attempts_and_successes_separately() {
+        let store = ContextMetricsStore::new();
+        let a = store.record(make_snapshot("m"));
+        let b = store.record(make_snapshot("m"));
+
+        store.flag_tool_repair(a, true);
+        store.flag_tool_repair(b, false);
+
+        assert_eq!(store.tool_repairs_attempted(), 2);
+        assert_eq!(store.tool_repairs_succeeded(), 1);
+    }
+
+    /// The per-snapshot flag marks a repair that *worked*: a failed attempt
+    /// forwarded the original, so that turn's output was never repaired.
+    #[test]
+    fn only_a_successful_repair_flags_its_snapshot() {
+        let store = ContextMetricsStore::new();
+        let seq = store.record(make_snapshot("m"));
+
+        store.flag_tool_repair(seq, false);
+        assert!(!store.recent(10)[0].tool_repaired);
+
+        let seq2 = store.record(make_snapshot("m"));
+        store.flag_tool_repair(seq2, true);
+        assert!(store.recent(10).iter().any(|s| s.tool_repaired));
+    }
+
+    /// Eviction must not lose the totals — the same contract
+    /// `dialect_residue_total` holds.
+    #[test]
+    fn repair_totals_survive_eviction() {
+        let store = ContextMetricsStore::new();
+        let seq = store.record(make_snapshot("m"));
+        store.flag_tool_repair(seq, true);
+
+        for _ in 0..MAX_SNAPSHOTS + 5 {
+            store.record(make_snapshot("m"));
+        }
+
+        assert_eq!(store.tool_repairs_attempted(), 1);
+        assert_eq!(store.tool_repairs_succeeded(), 1);
     }
 }

@@ -280,6 +280,7 @@ mod tests {
             proxy_api_key: None,
             trust_client_sampling: None,
             proxy_loop_detection: None,
+            tool_call_repair: None,
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,

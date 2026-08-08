@@ -389,6 +389,13 @@ pub(crate) struct ForwardRequest<'a> {
     /// suppresses the grammar stage so llama.cpp's own schema-derived grammar
     /// is the one that fires. See [`gglib_core::request_pipeline::PipelinePass`].
     pub pass: PipelinePass,
+    /// Whether a tool call failing schema validation is re-issued with
+    /// `tool_choice: "required"`.
+    ///
+    /// From `Settings.tool_call_repair`, which is absent-means-on. Resolved
+    /// where the settings snapshot already lives rather than read again here,
+    /// so one request cannot see two different answers.
+    pub repair_enabled: bool,
 }
 
 impl ForwardRequest<'_> {
@@ -443,6 +450,7 @@ pub(crate) async fn forward_chat_completion(
         calibration_session_id,
         cache_metrics,
         pass,
+        repair_enabled,
     } = req;
 
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
@@ -490,6 +498,7 @@ pub(crate) async fn forward_chat_completion(
                     was_clamped: true,
                     grammar_enforced: false,
                     dialect_residue: false,
+                    tool_repaired: false,
                     loop_guard_tripped: false,
                     seq: 0,
                     recorded_at_secs: std::time::SystemTime::now()
@@ -525,6 +534,7 @@ pub(crate) async fn forward_chat_completion(
         was_clamped: false,
         grammar_enforced,
         dialect_residue: false,
+        tool_repaired: false,
         loop_guard_tripped: false,
         seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
@@ -627,9 +637,7 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
-            // Repair is on by default; the env switch is the operator's way
-            // out without a rebuild, matching GGLIB_DISABLE_GRAMMAR.
-            true,
+            repair_enabled,
         ));
     }
 

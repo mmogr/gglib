@@ -303,6 +303,16 @@ pub struct DashboardSnapshot {
     /// Total requests whose client-visible output carried dialect residue
     /// (the drift alarm), eviction-safe like `total_requests`.
     pub dialect_residue_total: u64,
+    /// Turns whose tool call failed schema validation and was re-issued with
+    /// `tool_choice: "required"`, counted whether or not the re-issue worked.
+    ///
+    /// A sustained non-zero rate says this model's `auto` path is
+    /// unconstrained upstream — the per-model signal ADR 0002 could otherwise
+    /// only read from a `--verbose` llama-server log.
+    pub tool_repairs_attempted: u64,
+    /// Of those, the ones that produced a conformant call. The ratio is the
+    /// number worth watching.
+    pub tool_repairs_succeeded: u64,
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.
     pub upstream_health: UpstreamHealthSnapshot,
@@ -371,6 +381,8 @@ impl DashboardSnapshot {
             recent_requests: metrics.recent(RECENT_REQUEST_LIMIT),
             total_requests: metrics.total_requests(),
             dialect_residue_total: metrics.dialect_residue_total(),
+            tool_repairs_attempted: metrics.tool_repairs_attempted(),
+            tool_repairs_succeeded: metrics.tool_repairs_succeeded(),
             upstream_health: upstream_health.snapshot(),
             // Stored config plus live reuse totals — see `CacheStatusCache`.
             cache: cache
@@ -559,6 +571,7 @@ mod tests {
         let metrics = ContextMetricsStore::new();
         metrics.record(crate::metrics::ContextSnapshot {
             dialect_residue: false,
+            tool_repaired: false,
             seq: 0,
             model_name: "qwen-3b".to_string(),
             payload_chars_before: 100,

@@ -773,6 +773,7 @@ async fn chat_completions(
                     .metrics
                     .record(crate::metrics::ContextSnapshot {
                         dialect_residue: false,
+                        tool_repaired: false,
                         seq: 0,
                         model_name: model_name.clone(),
                         payload_chars_before: body.len(),
@@ -979,6 +980,7 @@ async fn chat_completions(
     // Everything forward_chat_completion needs that doesn't vary across the
     // cache-branching below — see `ForwardRequest` docs.
     let req = ForwardRequest {
+        repair_enabled: settings.tool_call_repair != Some(false),
         pass: gglib_core::request_pipeline::PipelinePass::Initial,
         client: &state.client,
         upstream_url: &upstream_url,
@@ -1113,6 +1115,7 @@ async fn chat_completions(
             };
 
             let retry_req = ForwardRequest {
+                repair_enabled: settings.tool_call_repair != Some(false),
                 pass: gglib_core::request_pipeline::PipelinePass::Initial,
                 client: &state.client,
                 upstream_url: &retry_url,

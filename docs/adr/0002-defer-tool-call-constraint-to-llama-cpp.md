@@ -132,9 +132,10 @@ absence of enforcement. Where llama.cpp installs a grammar, arguments conform;
 where it does not, a 3B model's own discipline is all there is.
 
 **`auto` is the path every agentic client uses.** Cline, Roo Code, Zed and
-Copilot BYOK all send it. On this model, gglib users receive type-wrong
+Copilot BYOK all send it. On this model, gglib users received type-wrong
 arguments on the vast majority of tool calls with nothing in the stack
-noticing.
+noticing — true as written, and no longer true as of finding 6, which is the
+whole point of the repair loop.
 
 The true rate is worse than the table states: the harness validates nested
 *presence* but not nested *types*, so `options: {"follow_symlinks": "null"}`
@@ -158,6 +159,53 @@ Upstream already has the enforcing machinery; it is simply not engaged on the
 
 This is Tier B in its purest form: the policy (when to retry, and with what) is
 gglib's, and the mechanism it drives is entirely upstream's.
+
+### 6. Verified live on hardware
+
+The repair loop of finding 5 was run against the real stack — gglib proxy,
+Llama 3.2 3B, `b10327`, an AMD 840M — rather than only against a mock.
+
+```
+attempts:        19
+succeeded=true:  19
+succeeded=false:  0
+```
+
+| count | violation |
+|---|---|
+| 17 | `/max_lines is string, schema says integer` |
+| 5 | `/follow_symlinks is string, schema says boolean` |
+| 1 | `/retry_budget is string, schema says integer` |
+| 1 | `/options is string, schema says object` |
+| 1 | `/max_lines is null, schema says integer` |
+
+The 17 `max_lines` cases are finding 4's failure reproducing organically
+through the full proxy path. Repair round-trip was **1.1–1.8 s**, the
+decode-only cost the design predicted, since the prefix is cache-served.
+
+Three things this confirms that no unit test could:
+
+- **Stage-6 suppression holds in production.** Had it not, all 19 repairs
+  would have returned `succeeded=false` — the re-issue would have asked for no
+  tool call at all.
+- **Recursive validation earns its place.** Five of 19 were
+  `/follow_symlinks`, a *nested* boolean. The experiment harness's failure to
+  check nested types would have passed all five as conformant.
+- **The client never saw a bad call.** Every response was well-formed, with
+  the repaired call ahead of `finish_reason` and `[DONE]` last.
+
+**A methodological note worth keeping.** The first reading of this run
+concluded the opposite — that gglib's sampling authority was preventing the
+violations and repair never fired — because the wire output was clean and the
+grep found no repair lines. The grep was against the wrong file: debug builds
+write telemetry to `./logs/`, not stdout. The output was clean *because the
+repair had already fixed it*. A silent, invisible correction is indistinguishable
+from no fault at all, which is exactly why finding 5's counters are not optional
+decoration: without them, a working repair loop and an idle one look the same.
+
+19 attempts on one model is a small sample, and some violations were induced
+with a deliberately awkward schema. It establishes that the loop works end to
+end, not a general success rate.
 
 ## Decision
 
@@ -193,7 +241,15 @@ failure ADR 0001 exists to prevent, committed inside the ADR enforcing it.
 When validation fails on the `auto` path, gglib re-issues the turn with
 `tool_choice: "required"`, which demonstrably installs upstream's grammar and
 yields conformant arguments. Specified in
-[Tool-call repair](../tool-call-repair.md).
+[Tool-call repair](../tool-call-repair.md), verified live in finding 6.
+
+**6. Repair rates are surfaced, not just logged.** `tool_repairs_attempted`
+and `tool_repairs_succeeded` appear on `GET /v1/proxy/status`, and
+`ContextSnapshot` carries a per-turn `tool_repaired` flag. This is the runtime
+source for per-model grammar presence that this ADR previously listed as having
+none: a sustained non-zero attempt rate says a model's `auto` path is
+unconstrained upstream, and the attempt/success ratio distinguishes that from
+`required` failing to fix what the model gets wrong.
 
 ## Consequences
 
@@ -235,6 +291,7 @@ yields conformant arguments. Specified in
 - Submit the upstream issue (`upstream_issue_tool_dialect_escaping.md`); if a
   resolution lands, revisit findings 3 and 4.
 - Record grammar-presence per model in `RuntimeCapabilities` once a third data
-  point exists. Two models is a pattern, not a rule, and the harness reads it
-  from a `--verbose` log rather than from anything gglib could query at
-  runtime.
+  point exists. Two models is a pattern, not a rule. The repair counters from
+  finding 6 are now the runtime signal this previously lacked; a third model
+  measured against the harness would let a threshold be set rather than
+  observed.

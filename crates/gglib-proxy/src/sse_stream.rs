@@ -204,6 +204,10 @@ pub fn spawn_and_return(
                         succeeded = outcome.repair_succeeded,
                         "tool-call repair attempted"
                     );
+                    // Back-patched after the response streams, like the drift
+                    // alarm's flag: the decision is only known once the turn
+                    // has finished, by which time the snapshot already exists.
+                    context_metrics.flag_tool_repair(snapshot_seq, outcome.repair_succeeded);
                 }
                 // Feed the terminal outcome to the watchdog: an empty
                 // response is a strike, visible output resets the streak.
