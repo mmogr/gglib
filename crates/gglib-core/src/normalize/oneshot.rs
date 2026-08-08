@@ -1,5 +1,19 @@
 //! One-shot dialect normalization for non-streaming responses.
 //!
+//! **Tier A — Compensation** ([ADR 0001]), derived rather than independent:
+//! this module is the non-streaming application of whatever parser
+//! [`super::registry::get_parser`] selects, so it exists exactly as long as
+//! that parser does.
+//!
+//! *Deletion criterion:* it is deleted together with the parser it drives —
+//! see [`super::parsers::delimited`] for that criterion. It has one of its
+//! own only if llama-server begins returning `message.tool_calls` for
+//! dialect models on the non-streaming path while still requiring gglib to
+//! parse the streaming one, which would be an odd upstream state but is the
+//! condition under which this module could go independently.
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//!
 //! The streaming path runs every response through a [`ToolCallParser`] via
 //! [`super::stream::NormalizingStream`]; a `stream: false` request gets the
 //! same model, the same dialect, and — until this module — none of the

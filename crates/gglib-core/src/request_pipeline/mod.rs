@@ -8,8 +8,9 @@ pub mod resolve;
 pub mod sampling;
 pub mod tools;
 pub mod truncation;
+pub mod validate;
 
-pub use apply::apply;
+pub use apply::{PipelinePass, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
@@ -18,6 +19,7 @@ pub use resolve::resolve;
 pub use sampling::{DISABLE_AGENTIC_SAMPLING_ENV, SamplingLayers, resolve_sampling};
 pub use tools::strip_unsupported_tools;
 pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};
+pub use validate::{Verdict, Violation, ViolationKind, validate_tool_calls};
 
 #[cfg(test)]
 mod tests_support {

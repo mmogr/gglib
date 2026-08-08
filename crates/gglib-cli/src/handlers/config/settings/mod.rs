@@ -239,6 +239,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 proxy_api_key: proxy_api_key.map(Some),
                 trust_client_sampling: trust_client_sampling.map(Some),
                 proxy_loop_detection: proxy_loop_detection.map(Some),
+                tool_call_repair: None,
                 agentic_sampling: agentic_sampling.map(Some),
                 proxy_autostart: proxy_autostart.map(Some),
                 close_to_tray: close_to_tray.map(Some),

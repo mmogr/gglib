@@ -12,7 +12,7 @@ use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
     ports::{LlmCompletionPort, RetryObserver, UsageSink},
-    request_pipeline::{self, ModelContext, SamplingLayers},
+    request_pipeline::{self, ModelContext, PipelinePass, SamplingLayers},
     retry::RetryPolicy,
 };
 
@@ -349,6 +349,9 @@ impl LlmCompletionAdapter {
                 ..Default::default()
             },
             self.model_context.context_budget_chars(),
+            // The in-process agent path never repairs: it owns its own loop and
+            // handles a bad tool call by re-prompting, not by re-issuing.
+            PipelinePass::Initial,
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 

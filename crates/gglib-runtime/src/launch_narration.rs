@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    LaunchDecision, LaunchNarration, estimate_kv_bytes_for_context, format_gib, format_mib_as_gib,
-    kv_bytes_per_token,
+    LaunchDecision, LaunchNarration, RuntimeFlags, estimate_kv_bytes_for_context, format_gib,
+    format_mib_as_gib, kv_bytes_per_token,
 };
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::ModelLaunchSpec;
@@ -69,6 +69,8 @@ pub fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
         n.push(LaunchDecision::new("backend", backend, "llama build"));
     }
 
+    n.push(runtime_decision());
+
     n.push(kv_decision(inputs, ctx));
     n.push(cache_decision(inputs));
 
@@ -93,6 +95,46 @@ fn backend() -> Option<String> {
     let path = gglib_core::paths::llama_config_path().ok()?;
     let config = crate::llama::BuildConfig::load(&path).ok()?;
     Some(config.acceleration)
+}
+
+/// Which llama.cpp build is being spawned, and what it does natively.
+///
+/// Read through the same probe the compensation decisions will consult, so
+/// the banner cannot claim one runtime while the pipeline assumes another.
+/// Unlike [`backend`] this never returns `None`: an unidentified runtime is
+/// precisely the case worth printing, because it is the case where gglib
+/// keeps every compensation on and the user has no other way to find out.
+fn runtime_decision() -> LaunchDecision {
+    let Ok(path) = gglib_core::paths::llama_server_path() else {
+        return LaunchDecision::new("runtime", "unidentified", "no llama-server path");
+    };
+
+    let caps = crate::llama::probe_runtime_capabilities(&path);
+
+    let Some(build) = caps.build else {
+        return LaunchDecision::new("runtime", "unidentified", caps.version_line);
+    };
+
+    LaunchDecision::new("runtime", format!("b{build}"), native_summary(caps.flags))
+}
+
+/// How a runtime's native capabilities read on the banner.
+///
+/// "none" is a real answer rather than a gap: an older build genuinely offers
+/// nothing to defer to, and saying so is what distinguishes it from a build
+/// whose capabilities were never checked.
+fn native_summary(flags: RuntimeFlags) -> String {
+    let mut parts = Vec::new();
+
+    if flags.contains(RuntimeFlags::PEG_NATIVE_TOOL_CALLS) {
+        parts.push("peg-native tool calls");
+    }
+
+    if parts.is_empty() {
+        "native: none".to_owned()
+    } else {
+        format!("native: {}", parts.join(", "))
+    }
 }
 
 /// The KV line, including what quantization actually bought.

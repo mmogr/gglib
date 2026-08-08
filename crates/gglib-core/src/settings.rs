@@ -153,6 +153,23 @@ pub struct Settings {
     /// the two paths cannot drift.
     pub proxy_loop_detection: Option<bool>,
 
+    /// Whether a tool call that fails schema validation is re-issued with
+    /// `tool_choice: "required"`.
+    ///
+    /// `None` (the default) means **on**, the same inverse polarity as
+    /// [`Self::proxy_loop_detection`] and for the same reason: it is
+    /// protection the endpoint should not lose silently. `Some(false)`
+    /// forwards every call as emitted.
+    ///
+    /// Worth turning off only for a client that depends on receiving the
+    /// model's literal output — the repair costs one extra generation on a
+    /// failed call, and nothing on a conformant one. The
+    /// `GGLIB_DISABLE_TOOL_REPAIR` environment switch reaches the same gate
+    /// without persisting a setting.
+    ///
+    /// See [Tool-call repair](https://github.com/mmogr/gglib/blob/main/docs/tool-call-repair.md).
+    pub tool_call_repair: Option<bool>,
+
     // ── Agentic-turn sampling ───────────────────────────────────────
     /// Whether a request carrying tools gets the agentic-turn temperature
     /// ceiling — see
@@ -231,6 +248,7 @@ impl Settings {
             proxy_api_key: None,
             trust_client_sampling: None,
             proxy_loop_detection: None,
+            tool_call_repair: None,
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
@@ -308,6 +326,9 @@ impl Settings {
         if let Some(ref v) = other.trust_client_sampling {
             self.trust_client_sampling = *v;
         }
+        if let Some(v) = other.tool_call_repair {
+            self.tool_call_repair = v;
+        }
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;
         }
@@ -352,6 +373,7 @@ pub struct SettingsUpdate {
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     pub proxy_loop_detection: Option<Option<bool>>,
+    pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`].
     pub agentic_sampling: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,

@@ -76,7 +76,7 @@ use gglib_core::LlmStreamEvent;
 use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ModelContext, SamplingLayers, TruncationError, TruncationReport,
+    self, ModelContext, PipelinePass, SamplingLayers, TruncationError, TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
@@ -122,6 +122,14 @@ pub(crate) struct StreamOutcome {
     pub saw_reasoning: bool,
     /// The `finish_reason` from the terminating `Done` event, if one arrived.
     pub finish_reason: Option<String>,
+    /// A tool call failed schema validation and a repair re-issue was made.
+    ///
+    /// Recorded whether or not it worked: an attempt is evidence that this
+    /// model's `auto` path is unconstrained, which is the per-model
+    /// grammar-presence signal ADR 0002 left with no runtime source.
+    pub repair_attempted: bool,
+    /// The repair produced a conformant call and replaced the original.
+    pub repair_succeeded: bool,
     /// `usage.prompt_tokens` reported by the upstream, if a Usage frame
     /// arrived. Feeds the per-model chars-per-token calibration.
     pub prompt_tokens: Option<u32>,
@@ -291,6 +299,7 @@ fn shape_request_body(
     ctx: &ModelContext,
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
+    pass: PipelinePass,
 ) -> Result<(Bytes, TruncationReport, bool), TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return Ok((body, TruncationReport::default(), false));
@@ -299,7 +308,7 @@ fn shape_request_body(
     // The constrain stage never engages over a client-sent grammar, so
     // before-absent + after-present is exactly "the pipeline originated one".
     let grammar_before = value.get("grammar").is_some();
-    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars)?;
+    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars, pass)?;
     let grammar_enforced = !grammar_before && value.get("grammar").is_some();
 
     match serde_json::to_vec(&value) {
@@ -374,6 +383,19 @@ pub(crate) struct ForwardRequest<'a> {
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
+    /// Which trip through the request pipeline this is.
+    ///
+    /// [`PipelinePass::Repair`] on a tool-call repair re-issue, which
+    /// suppresses the grammar stage so llama.cpp's own schema-derived grammar
+    /// is the one that fires. See [`gglib_core::request_pipeline::PipelinePass`].
+    pub pass: PipelinePass,
+    /// Whether a tool call failing schema validation is re-issued with
+    /// `tool_choice: "required"`.
+    ///
+    /// From `Settings.tool_call_repair`, which is absent-means-on. Resolved
+    /// where the settings snapshot already lives rather than read again here,
+    /// so one request cannot see two different answers.
+    pub repair_enabled: bool,
 }
 
 impl ForwardRequest<'_> {
@@ -427,6 +449,8 @@ pub(crate) async fn forward_chat_completion(
         calibration,
         calibration_session_id,
         cache_metrics,
+        pass,
+        repair_enabled,
     } = req;
 
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
@@ -458,7 +482,7 @@ pub(crate) async fn forward_chat_completion(
     let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
 
     let (body, report, grammar_enforced) =
-        match shape_request_body(body, &context, &sampling, budget_chars) {
+        match shape_request_body(body, &context, &sampling, budget_chars, pass) {
             Ok(shaped) => shaped,
             Err(e) => {
                 // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -474,6 +498,7 @@ pub(crate) async fn forward_chat_completion(
                     was_clamped: true,
                     grammar_enforced: false,
                     dialect_residue: false,
+                    tool_repaired: false,
                     loop_guard_tripped: false,
                     seq: 0,
                     recorded_at_secs: std::time::SystemTime::now()
@@ -509,6 +534,7 @@ pub(crate) async fn forward_chat_completion(
         was_clamped: false,
         grammar_enforced,
         dialect_residue: false,
+        tool_repaired: false,
         loop_guard_tripped: false,
         seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
@@ -611,6 +637,7 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
+            repair_enabled,
         ));
     }
 
@@ -729,12 +756,27 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 /// records them on `connection` (the dashboard registry entry for this
 /// request) as a side effect — the frame is still encoded and forwarded to
 /// the client unchanged; this never alters what the client receives.
+/// Everything a streaming turn needs to re-issue itself as a tool-call repair.
+///
+/// Carried into the stream because the decision cannot be made until the call
+/// is complete, and by then only this function knows what was emitted. The
+/// re-issue itself is non-streaming — see [`crate::repair`].
+pub(crate) struct RepairContext {
+    /// Cloneable builder for the same upstream endpoint and headers.
+    pub req_builder: reqwest::RequestBuilder,
+    /// The request body as forwarded upstream, which the repair derives from.
+    pub request_body: Bytes,
+    /// Whether repair is enabled at all.
+    pub enabled: bool,
+}
+
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
     dialect: Option<DialectSpec>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
+    repair: Option<RepairContext>,
 ) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
@@ -786,6 +828,16 @@ pub(crate) async fn stream_response_to_channel(
     // Accumulates reasoning text for the promotion path below. Bounded in
     // practice by the request's `max_tokens`.
     let mut reasoning_buf = String::new();
+
+    // Tool-call hold-back. Frames are encoded as they arrive but withheld
+    // until the call is complete, because a repair decision cannot be made
+    // before then and bytes already sent cannot be recalled. Text and
+    // reasoning stream normally throughout — a tool call is the only part of
+    // a turn no client can consume incrementally, so it is the only part
+    // where withholding costs nothing.
+    let repairing = repair.is_some();
+    let mut held_tool_frames: Vec<Bytes> = Vec::new();
+    let mut tool_calls = crate::repair::ToolCallAccumulator::default();
     while let Some(event) = normalized.next().await {
         let frame: Option<Bytes> = match event {
             Ok(ev) => match &ev {
@@ -825,6 +877,21 @@ pub(crate) async fn stream_response_to_channel(
                     residue.feed(content);
                     encoder.encode(&ev).map(Bytes::from)
                 }
+                LlmStreamEvent::ToolCallDelta {
+                    index,
+                    id,
+                    name,
+                    arguments,
+                } if repairing => {
+                    connection.mark_generating();
+                    outcome.saw_visible_output = true;
+                    tool_calls.push(*index, id.as_deref(), name.as_deref(), arguments.as_deref());
+                    if let Some(frame) = encoder.encode(&ev) {
+                        held_tool_frames.push(Bytes::from(frame));
+                    }
+                    // Withheld, not dropped — flushed or discarded at `Done`.
+                    None
+                }
                 LlmStreamEvent::ToolCallDelta { .. } | LlmStreamEvent::UpstreamError { .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
@@ -833,6 +900,28 @@ pub(crate) async fn stream_response_to_channel(
                 LlmStreamEvent::Done { finish_reason } => {
                     connection.mark_generating();
                     outcome.finish_reason = Some(finish_reason.clone());
+
+                    // The turn's tool calls are complete exactly here, so this
+                    // is the only point at which a repair can be judged. The
+                    // `Done` frame is emitted after whichever set of tool-call
+                    // frames wins, never before — a client that sees
+                    // `finish_reason` first considers the turn over.
+                    if !held_tool_frames.is_empty() {
+                        let flush = resolve_held_tool_calls(
+                            repair.as_ref(),
+                            &tool_calls,
+                            std::mem::take(&mut held_tool_frames),
+                            &encoder,
+                            &mut outcome,
+                        )
+                        .await;
+                        for frame in flush {
+                            if tx.send(Ok(frame)).await.is_err() {
+                                client_connected = false;
+                                break;
+                            }
+                        }
+                    }
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Usage {
@@ -913,6 +1002,86 @@ pub(crate) async fn stream_response_to_channel(
 
     outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
     outcome
+}
+
+/// Decide what to send in place of the withheld tool-call frames.
+///
+/// Returns the frames to emit, in order, before this turn's `Done`. On every
+/// path that does not produce a strictly better call it returns the originals,
+/// so a repair can slow a turn down but can never degrade it — the same
+/// fail-open rule truncation and the loop guard follow.
+async fn resolve_held_tool_calls(
+    repair: Option<&RepairContext>,
+    tool_calls: &crate::repair::ToolCallAccumulator,
+    original_frames: Vec<Bytes>,
+    encoder: &SseEncoder,
+    outcome: &mut StreamOutcome,
+) -> Vec<Bytes> {
+    let Some(ctx) = repair else {
+        return original_frames;
+    };
+
+    // The validator reads a non-streaming response shape, so the assembled
+    // deltas are wrapped to look like one.
+    let assembled = serde_json::json!({
+        "choices": [{"message": {"tool_calls": tool_calls.to_tool_calls()}}]
+    });
+    let Ok(assembled_bytes) = serde_json::to_vec(&assembled) else {
+        return original_frames;
+    };
+
+    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
+    let crate::repair::Decision::Reissue { body, violations } = decision else {
+        return original_frames;
+    };
+
+    warn!(
+        violations = ?violations,
+        "tool call does not match the advertised schema; re-issuing with tool_choice=required"
+    );
+    outcome.repair_attempted = true;
+
+    let Some(builder) = ctx.req_builder.try_clone() else {
+        return original_frames;
+    };
+    let repaired = match builder.body(body).send().await {
+        Ok(resp) if resp.status().is_success() => resp.bytes().await.ok(),
+        Ok(resp) => {
+            warn!(
+                status = resp.status().as_u16(),
+                "repair re-issue rejected upstream"
+            );
+            None
+        }
+        Err(e) => {
+            warn!(error = %e, "repair re-issue failed");
+            None
+        }
+    };
+    let Some(repaired) = repaired else {
+        return original_frames;
+    };
+
+    // `choose` re-validates: a repair that is still wrong is discarded.
+    let (chosen, did_repair) = crate::repair::choose(
+        &ctx.request_body,
+        Bytes::from(assembled_bytes),
+        repaired.clone(),
+    );
+    if !did_repair || chosen != repaired {
+        return original_frames;
+    }
+
+    let events = crate::repair::synthesize_tool_call_events(&repaired);
+    if events.is_empty() {
+        return original_frames;
+    }
+
+    outcome.repair_succeeded = true;
+    events
+        .iter()
+        .filter_map(|ev| encoder.encode(ev).map(Bytes::from))
+        .collect()
 }
 
 /// Extract `(prompt_tokens, cached_tokens)` from a non-streaming response body.
@@ -1185,6 +1354,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             None,
+            PipelinePass::Initial,
         )
         .expect("no budget, so nothing to reject");
         assert!(!grammar_enforced, "passthrough context never constrains");
@@ -1213,9 +1383,14 @@ mod tests {
         let body = Bytes::from(
             r#"{"model":"m","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"required"}"#,
         );
-        let (out, _, grammar_enforced) =
-            shape_request_body(body, &ctx, &SamplingLayers::default(), None)
-                .expect("nothing to reject");
+        let (out, _, grammar_enforced) = shape_request_body(
+            body,
+            &ctx,
+            &SamplingLayers::default(),
+            None,
+            PipelinePass::Initial,
+        )
+        .expect("nothing to reject");
 
         assert!(grammar_enforced);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
@@ -1231,6 +1406,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(10),
+            PipelinePass::Initial,
         )
         .expect("a body we cannot read is forwarded, not rejected");
 
@@ -1245,6 +1421,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(20_000),
+            PipelinePass::Initial,
         )
         .expect("trimming the one oversized tool result is enough");
 
@@ -1260,6 +1437,7 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(200),
+            PipelinePass::Initial,
         )
         .expect_err("nothing left to trim, still over");
 
@@ -1288,5 +1466,249 @@ mod tests {
             parsed["error"]["message"],
             "Context window limit reached. Please start a new conversation."
         );
+    }
+
+    use serde_json::json;
+
+    // ── End-to-end repair over a real HTTP upstream ──────────────────────
+
+    /// A mock llama-server that answers the two halves of a repair turn
+    /// differently, and records what it was asked.
+    ///
+    /// Dispatching on `tool_choice` is the point: it asserts the repair
+    /// request really arrived carrying `"required"`, which is the property
+    /// stage-6 suppression exists to protect and the one a unit test over
+    /// bytes cannot observe.
+    async fn spawn_repair_mock(
+        seen: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+    ) -> (u16, tokio::task::JoinHandle<()>) {
+        use axum::routing::post;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = listener.local_addr().unwrap().port();
+
+        let app = axum::Router::new().route(
+            "/v1/chat/completions",
+            post(move |body: String| {
+                let seen = Arc::clone(&seen);
+                async move {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+                    let is_repair = parsed.get("tool_choice") == Some(&json!("required"));
+                    seen.lock().unwrap().push(parsed);
+
+                    if is_repair {
+                        // Non-streaming, schema-conformant: max_lines an integer.
+                        axum::response::Response::builder()
+                            .header("content-type", "application/json")
+                            .body(axum::body::Body::from(
+                                serde_json::to_vec(&json!({
+                                    "choices": [{"message": {"role": "assistant", "tool_calls": [{
+                                        "id": "call_fixed",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "read_file",
+                                            "arguments": "{\"path\":\"a\",\"max_lines\":42}"
+                                        }
+                                    }]}}]
+                                }))
+                                .unwrap(),
+                            ))
+                            .unwrap()
+                    } else {
+                        // Streaming, and wrong the way Llama 3.2 was measured
+                        // wrong: max_lines carrying a string.
+                        let sse = concat!(
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_bad\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a\\\",\"}}]},\"finish_reason\":null}]}\n\n",
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"max_lines\\\":\\\"42\\\"}\"}}]},\"finish_reason\":null}]}\n\n",
+                            "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+                            "data: [DONE]\n\n",
+                        );
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(sse))
+                            .unwrap()
+                    }
+                }
+            }),
+        );
+
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (port, handle)
+    }
+
+    fn repair_request_body() -> Bytes {
+        Bytes::from(
+            serde_json::to_vec(&json!({
+                "model": "m",
+                "stream": true,
+                "tool_choice": "auto",
+                "messages": [{"role": "user", "content": "read it"}],
+                "tools": [{
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "max_lines": {"type": "integer"}
+                            },
+                            "required": ["path"]
+                        }
+                    }
+                }]
+            }))
+            .unwrap(),
+        )
+    }
+
+    /// The whole loop over HTTP: a streamed non-conformant tool call is
+    /// withheld, re-issued with `tool_choice: "required"`, and the client
+    /// receives only the repaired call — in the right order, with `[DONE]`
+    /// last.
+    #[tokio::test]
+    async fn a_bad_streamed_tool_call_is_repaired_before_the_client_sees_it() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (port, server) = spawn_repair_mock(Arc::clone(&seen)).await;
+        let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+        let client = Client::new();
+        let body = repair_request_body();
+
+        let resp = client
+            .post(&url)
+            .body(body.clone())
+            .send()
+            .await
+            .expect("mock upstream reachable");
+
+        let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
+        let connection = registry.register("m", true, None);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+        let outcome = stream_response_to_channel(
+            resp,
+            "m".to_owned(),
+            None,
+            tx,
+            &connection,
+            Some(RepairContext {
+                req_builder: client.post(&url),
+                request_body: body,
+                enabled: true,
+            }),
+        )
+        .await;
+
+        let mut wire = String::new();
+        while let Ok(Some(Ok(chunk))) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
+        {
+            wire.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        server.abort();
+
+        assert!(outcome.repair_attempted, "repair should have fired");
+        assert!(
+            outcome.repair_succeeded,
+            "repair should have produced a conformant call"
+        );
+
+        // The upstream saw exactly two requests, the second demanding a call.
+        let requests = seen.lock().unwrap().clone();
+        assert_eq!(requests.len(), 2, "one original, one repair");
+        assert_eq!(requests[1]["tool_choice"], "required");
+        assert_eq!(
+            requests[1]["stream"], false,
+            "the re-issue must not stream — see repair::repair_body"
+        );
+
+        // The client saw the fixed arguments and never the broken ones.
+        assert!(
+            wire.contains(r#"\"max_lines\":42"#) || wire.contains("max_lines\\\":42"),
+            "repaired arguments should reach the client: {wire}"
+        );
+        assert!(
+            !wire.contains(r#"\"42\""#),
+            "the string-typed max_lines must never reach the client: {wire}"
+        );
+
+        // Ordering: the tool call precedes finish_reason, and [DONE] is last.
+        let call_at = wire.find("call_fixed").expect("repaired call on the wire");
+        // Matched on the *terminating* finish_reason, not the substring
+        // "tool_calls" — that also occurs inside the delta frame carrying the
+        // call itself, which made an earlier version of this assertion
+        // compare a position against itself.
+        let finish_at = wire
+            .find(r#""finish_reason":"tool_calls""#)
+            .expect("terminating finish_reason on the wire");
+        assert!(
+            call_at < finish_at,
+            "tool call must be flushed before finish_reason: {wire}"
+        );
+        assert!(
+            wire.trim_end().ends_with("data: [DONE]"),
+            "[DONE] must be the final frame: {wire}"
+        );
+    }
+
+    /// A conformant streamed call is passed through unchanged and costs no
+    /// second request — the hold-back must be invisible on the happy path.
+    #[tokio::test]
+    async fn a_conformant_streamed_tool_call_is_not_reissued() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (port, server) = spawn_repair_mock(Arc::clone(&seen)).await;
+        let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+        let client = Client::new();
+
+        // A schema with no integer field: the streamed call conforms.
+        let body = Bytes::from(
+            serde_json::to_vec(&json!({
+                "model": "m", "stream": true, "tool_choice": "auto",
+                "messages": [{"role": "user", "content": "read it"}],
+                "tools": [{"type": "function", "function": {
+                    "name": "read_file",
+                    "parameters": {"type": "object",
+                        "properties": {"path": {"type": "string"}, "max_lines": {}},
+                        "required": ["path"]}}}]
+            }))
+            .unwrap(),
+        );
+
+        let resp = client.post(&url).body(body.clone()).send().await.unwrap();
+        let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
+        let connection = registry.register("m", true, None);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+        let outcome = stream_response_to_channel(
+            resp,
+            "m".to_owned(),
+            None,
+            tx,
+            &connection,
+            Some(RepairContext {
+                req_builder: client.post(&url),
+                request_body: body,
+                enabled: true,
+            }),
+        )
+        .await;
+
+        let mut wire = String::new();
+        while let Ok(Some(Ok(chunk))) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
+        {
+            wire.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        server.abort();
+
+        assert!(!outcome.repair_attempted);
+        assert_eq!(seen.lock().unwrap().len(), 1, "no second request");
+        assert!(wire.contains("call_bad"), "original call forwarded: {wire}");
+        assert!(wire.trim_end().ends_with("data: [DONE]"));
     }
 }

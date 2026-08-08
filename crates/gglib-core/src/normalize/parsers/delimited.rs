@@ -1,5 +1,24 @@
 //! Spec-driven delimited tool-call parser.
 //!
+//! **Tier A — Compensation** ([ADR 0001]). This parser exists because
+//! llama-server handed dialect tool calls to the client as raw text. It is
+//! not gglib's job in principle; it is gglib's job until upstream does it
+//! correctly.
+//!
+//! *Deletion criterion:* llama.cpp's `peg-native` parser handles the
+//! delimited dialects gglib tags, for every tagged model, **and** the
+//! failure modes this parser was hardened against no longer reproduce —
+//! specifically a parameter value containing a literal `</parameter>`
+//! ([#24807]) and a reasoning model emitting prose before the open marker
+//! ([#20260]). Evidence is the drift alarm ([`crate::normalize::residue`])
+//! reporting zero residue across a release cycle with this parser bypassed,
+//! not the mere presence of [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`].
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`]: crate::domain::RuntimeFlags::PEG_NATIVE_TOOL_CALLS
+//! [#24807]: https://github.com/ggml-org/llama.cpp/issues/24807
+//! [#20260]: https://github.com/ggml-org/llama.cpp/issues/20260
+//!
 //! Rewrites `OPEN...CLOSE` tool-call markup — emitted inside the text or
 //! reasoning channel — into proper [`ToolCall`] values, where the envelope
 //! markers come from a [`DialectSpec`] rather than being hardcoded.  Bytes

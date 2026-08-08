@@ -16,6 +16,7 @@ pub mod error;
 mod install;
 pub mod progress;
 pub mod prompt;
+pub mod runtime_probe;
 mod server_availability;
 #[cfg(feature = "cli")]
 mod uninstall;
@@ -32,6 +33,10 @@ pub use error::{LlamaError, LlamaResult};
 // which acceleration the binary it is about to spawn was compiled for.
 pub use config::BuildConfig;
 pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama_server};
+
+// What the installed llama-server can do natively. Probed once per binary and
+// held for the run — see `runtime_probe` for why arbitration is static.
+pub use runtime_probe::probe as probe_runtime_capabilities;
 
 // Progress and prompt traits
 pub use progress::{NoopProgress, ProgressReporter};

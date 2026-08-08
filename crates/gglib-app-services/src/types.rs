@@ -508,6 +508,9 @@ pub struct AppSettings {
     pub trust_client_sampling: Option<bool>,
     // Proxy loop guard; `None` means enabled (see `gglib_core::Settings`)
     pub proxy_loop_detection: Option<bool>,
+    /// Whether a tool call failing schema validation is re-issued with
+    /// `tool_choice: "required"`. Absent means on.
+    pub tool_call_repair: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -535,6 +538,7 @@ impl From<gglib_core::Settings> for AppSettings {
             proxy_api_key: settings.proxy_api_key,
             trust_client_sampling: settings.trust_client_sampling,
             proxy_loop_detection: settings.proxy_loop_detection,
+            tool_call_repair: settings.tool_call_repair,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
@@ -596,6 +600,7 @@ pub struct UpdateSettingsRequest {
     // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
+    pub tool_call_repair: Option<Option<bool>>,
     // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(
         default,
@@ -633,6 +638,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
             proxy_loop_detection: request.proxy_loop_detection,
+            tool_call_repair: request.tool_call_repair,
             agentic_sampling: request.agentic_sampling,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,

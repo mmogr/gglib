@@ -1,5 +1,42 @@
 //! Stage 6: decode-time enforcement of dialect tool calls.
 //!
+//! **Tier A — Compensation** ([ADR 0001]). This stage originates a grammar
+//! because llama.cpp builds none for dialect models. It is the clearest
+//! deletion candidate in the tree, because upstream has the machinery
+//! already: `json_schema_to_grammar` converts tool schemas to GBNF, and
+//! lazily-triggered grammars exist for the `auto` case gglib cannot cover.
+//!
+//! *Deletion criterion:* llama.cpp constrains dialect tool calls under both
+//! `tool_choice: "required"` and `"auto"`, with arguments conforming to the
+//! tool's own JSON Schema rather than merely being well-formed JSON. Note
+//! that this stage's grammar is *weaker* than that today — it constrains the
+//! envelope, the function name, and JSON well-formedness, but admits
+//! `{"path": 42}` against a schema demanding a string. So the criterion is
+//! not "upstream matches this stage" but "upstream exceeds it", and meeting
+//! it deletes this stage and obviates the schema-constraint work it would
+//! otherwise need.
+//!
+//! Measured by `scripts/experiments/lazy_grammar_conformance.py`, whose
+//! result is recorded as its own ADR rather than assumed from
+//! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`].
+//!
+//! **Criterion met, stage retained** ([ADR 0002]). On `b10327` against
+//! Qwen3.5-4B, upstream held 60/60 across `auto` and `required` under prompts
+//! written to break types, enums, required fields and `additionalProperties`.
+//! It exceeds this stage on the measured path, and the schema-constraint work
+//! this stage would otherwise have needed is dropped rather than deferred.
+//!
+//! The stage stays anyway, and the reason is the scope of the evidence: one
+//! model, one build, one schema. Deleting a stage that also serves dialects
+//! nobody has measured would trade a known cost for an unmeasured risk — the
+//! same asymmetry [`RuntimeCapabilities::unknown`] encodes. What remains
+//! before removal is a second dialect family measured to the same standard.
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
+//! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`]: crate::domain::RuntimeFlags::PEG_NATIVE_TOOL_CALLS
+//! [`RuntimeCapabilities::unknown`]: crate::domain::RuntimeCapabilities::unknown
+//!
 //! For models with a resolved [`DialectSpec`], tool calls are free text —
 //! the model *chooses* to emit `OPEN{json}CLOSE` markup and the proxy
 //! parses it after the fact. Post-hoc parsing can rescue a well-formed call,

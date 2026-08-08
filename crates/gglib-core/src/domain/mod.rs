@@ -18,6 +18,7 @@ pub mod model_naming;
 pub mod query;
 pub mod recommendation;
 pub mod residency;
+pub mod runtime_capabilities;
 pub mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
@@ -48,6 +49,12 @@ pub use inference_profile::{
 
 // Re-export sampling provenance types at the domain level for convenience
 pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
+
+// Re-export runtime (llama-server) capability detection at the domain level
+pub use runtime_capabilities::{
+    MIN_BUILD_PEG_NATIVE_TOOL_CALLS, MIN_PLAUSIBLE_BUILD, RuntimeCapabilities, RuntimeFlags,
+    parse_build_number, parse_commit,
+};
 
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{

@@ -92,6 +92,11 @@ Everything between the OpenAI request and llama-server is the product:
   the built-in agent loop; sessions fail fast and loud instead of silently
   burning your GPU — see
   [Loop & Stagnation Defence](crates/gglib-proxy/README.md#loop--stagnation-defence).
+- **Tool-call repair** — emitted tool calls are validated against the schema
+  the client advertised; one that does not conform is re-issued with
+  `tool_choice: "required"`, which is where llama.cpp installs its own
+  schema-derived grammar. The client receives the corrected call and never
+  sees the broken one — see [Tool-call repair](docs/tool-call-repair.md).
 - **Sampling authority** — a 5-level resolution hierarchy decides every
   parameter; clients that hardcode `temperature: 0` don't silently win — see
   [Sampling resolution](docs/sampling.md).
@@ -189,6 +194,17 @@ directory. `gglib config fast-downloads status` says what is there;
   and retagging
 - [KV cache tiering](docs/cache.md) — quantization, RAM auto-sizing, disk
   slot offloading
+- [ADR 0001 — Compensation, Policy, Observation](docs/adr/0001-runtime-capability-tiers.md)
+  — which GGLib behaviours exist to work around llama.cpp and which are
+  GGLib's own job, and how the pinned build and runtime capability probe keep
+  the two apart
+- [ADR 0002 — Defer tool-call constraint to llama.cpp](docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
+  — the measurement behind that deferral: native schema conformance per model,
+  why it does not generalise, and the discovery that GGLib's dialect parser is
+  bypassed entirely
+- [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
+  against the advertised schema, and re-issuing with `tool_choice: "required"`
+  when they do not conform
 - [Full API documentation](https://mmogr.github.io/gglib) — generated from
   source on every release
 
