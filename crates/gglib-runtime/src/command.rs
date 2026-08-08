@@ -13,6 +13,17 @@ use std::sync::Arc;
 use tokio::process::Child;
 use tracing::{debug, info, warn};
 
+/// How many requests one llama-server instance serves at once.
+///
+/// Forced to one for the KV-cache reason given at its emission in
+/// [`build_command`], and read by the admission queue so it never grants more
+/// concurrent leases than the process behind them can start. The two must
+/// agree: anything admitted beyond this would queue *inside* llama-server,
+/// where the scheduler cannot see it and where it holds the slot's in-flight
+/// count off zero for as long as it sits there — which is exactly what stops a
+/// model under overlapping load from ever being swapped out.
+pub const SERVER_PARALLEL: u32 = 1;
+
 /// Whether the `GGLIB_DISABLE_MTP` environment variable requests that MTP
 /// speculative-decoding flags be suppressed.
 ///
@@ -180,10 +191,12 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
     // "Context size has been exceeded", surfacing as an empty response.
     //
     // Forcing a single slot gives every request the full `-c` context
-    // exclusively; a second concurrent request queues inside llama-server
-    // until the slot frees, which the proxy's streaming keepalive path is
-    // built to wait out.
-    cmd.arg("--parallel").arg("1");
+    // exclusively. A second concurrent request therefore has to wait, and the
+    // admission queue is what makes it wait *here* rather than inside
+    // llama-server: it caps in-flight requests per resident model at
+    // `SERVER_PARALLEL`, so the backlog stays visible, ordered, and out of the
+    // way of a model swap.
+    cmd.arg("--parallel").arg(SERVER_PARALLEL.to_string());
 
     // Add context size if specified
     if let Some(ctx) = config.context_size {
@@ -372,6 +385,24 @@ mod tests {
         cmd.get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect()
+    }
+
+    /// The admission queue caps in-flight requests per model at
+    /// [`SERVER_PARALLEL`], so the flag llama-server is actually launched with
+    /// has to be that same number. If these two ever drift apart the queue
+    /// either starves a slot llama-server could have kept busy, or admits work
+    /// that piles up invisibly inside it.
+    #[test]
+    fn parallelism_emitted_matches_what_admission_caps_at() {
+        let config = minimal_config();
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+
+        let idx = args
+            .iter()
+            .position(|a| a == "--parallel")
+            .expect("--parallel is always emitted");
+        assert_eq!(args[idx + 1], SERVER_PARALLEL.to_string());
     }
 
     #[test]
