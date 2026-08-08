@@ -180,12 +180,12 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     //
     // The gate is provenance, not rank. A ladder rung would have been the
     // obvious way to express "outranks the auto-detected recipe", and it is
-    // wrong: a rung that names a `temperature` *claims the coupled set* under
-    // `resolve_layers`, so DRY and the penalties would drop to the floor
-    // behind it. Anyone who had set `--dry-multiplier` without also naming a
-    // temperature would silently lose DRY on every agentic turn — the exact
-    // harm this adjustment is supposed to avoid. Clamping after the fold
-    // leaves the coupled set untouched.
+    // wrong: a rung that names a `temperature` *claims the coupled trio* under
+    // `resolve_layers`, so `presence_penalty`, `repeat_penalty` and `min_p`
+    // would drop to the floor behind it. A `reasoning` model would silently
+    // lose the 1.5 presence penalty its own recipe pairs with its temperature
+    // on every agentic turn. Clamping after the fold leaves the trio
+    // untouched.
     //
     // Eligible sources are the auto-detected rung and the floor. An
     // auto-detected recipe is an unreviewed guess written at import time, and
@@ -809,8 +809,6 @@ mod tests {
     }
 
     /// The regression guard for #743: the adjustment must not disable DRY.
-    /// A ladder rung would have claimed the coupled set and dropped it to the
-    /// floor; clamping after the fold leaves it alone.
     #[test]
     fn dry_survives_an_agentic_turn() {
         let mut body = tools_body();
@@ -832,6 +830,34 @@ mod tests {
         assert_param(&body, "dry_multiplier", 0.8);
         // Global is a deliberate setting, so its temperature stands uncapped.
         assert_param(&body, "temperature", 0.8);
+    }
+
+    /// Regression guard for #745. DRY is deliberately *not* part of the
+    /// temperature-coupled trio, so a layer naming a DRY value but no
+    /// temperature keeps it even though a lower layer claims the temperature —
+    /// which is the default state of every `reasoning`-tagged model.
+    #[test]
+    fn dry_survives_without_a_temperature_in_the_same_layer() {
+        let mut body = json!({});
+        // The model's auto-detected recipe names a temperature, so it claims
+        // the trio. The profile names only DRY.
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(
+            &mut body,
+            &ctx,
+            &SamplingLayers {
+                profile: Some(InferenceConfig {
+                    dry_multiplier: Some(0.8),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert_param(&body, "dry_multiplier", 0.8);
+        // The trio still comes from the claiming layer, untouched by this.
+        assert_param(&body, "presence_penalty", 1.5);
+        assert_param(&body, "temperature", 1.0);
     }
 
     /// The ceiling only ever lowers. A model already below it is untouched.
