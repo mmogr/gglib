@@ -28,23 +28,45 @@ gets a look in. N alternating requests cost two swaps instead of N.
 
 # Fairness
 
-Two rules, and they compose to bound the wait:
+Three rules, and they compose to bound the wait:
 
 | Rule | Effect |
 |---|---|
 | Global FIFO | The oldest waiting request decides which model is up next, so a model with a hundred requests behind it cannot bury one with a single older request |
 | [`DRAIN_QUANTUM`] | A turn ends once it has run this long with a rival waiting — or immediately, if nothing is left queued for the turn holder |
+| `SERVER_PARALLEL` | A resident model is admitted at most this many requests at once, matching what its llama-server can actually start |
 
-Together those cap an ordinary wait at roughly one quantum. They are not
-unconditional, though, and it is worth being exact about why:
+The first two decide *whose* turn it is. The third is what makes a turn able to
+end at all, and it is worth being exact about why.
 
 **A swap never preempts a request in flight.** A slot with outstanding leases is
 not evictable, full stop — no bound in this module can override that, because
-the alternative is killing a live generation mid-stream. A model under
-continuous overlapping load therefore holds its slot for as long as the load
-lasts. [`ADMISSION_DEADLINE`] is the backstop for exactly that case: the request
-gives up and gets a 503 with `Retry-After`, and the caller controls its own
-backoff from there.
+the alternative is killing a live generation mid-stream. So a turn can only
+change hands in a moment when the outgoing model has nothing in flight.
+
+llama-server is launched with `--parallel 1`. If the queue admits four
+concurrent requests for a resident model anyway, all four are forwarded, three
+of them queue up *inside* llama-server, and the slot stays pinned for the whole
+serialised run — invisibly, since those three are not in this queue and do not
+appear in its depth. A client that keeps one request outstanding at all times
+never lets the count reach zero, and the quantum expires against a slot that can
+never actually be handed over. Capping admission at what the instance can start
+is what keeps the backlog here, where it is visible and ordered, and where the
+count between requests genuinely returns to zero.
+
+The cap has to be exactly `SERVER_PARALLEL` rather than a little above it to
+keep the pipeline fed: a slot becomes evictable only at *zero* in flight, so any
+standing surplus would reintroduce the stall.
+
+One more rule follows from the same reasoning: a resident model **stands aside**
+once a rival is entitled to its slot under the two rules above, rather than
+renewing its lease. Without that the cap would only create an instant at zero
+in flight, and which of the woken requesters claims that instant is a race.
+
+What none of this covers is a single generation that simply runs for a very long
+time — it is indivisible, so the rival behind it waits. [`ADMISSION_DEADLINE`]
+is the backstop there: the request gives up and gets a 503 with `Retry-After`,
+and the caller controls its own backoff from there.
 
 This is why admission returns a lease rather than just a target — see
 [`AdmissionLease`](gglib_core::ports::AdmissionLease).

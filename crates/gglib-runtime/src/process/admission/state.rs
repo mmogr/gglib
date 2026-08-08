@@ -20,6 +20,8 @@ use gglib_core::domain::{
     SecondarySlotDecision, SecondarySlotStatus,
 };
 
+use crate::command::SERVER_PARALLEL;
+
 /// How many models may be resident in VRAM at once.
 ///
 /// Two: one primary, plus room for a small auxiliary model that would otherwise
@@ -54,9 +56,17 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(150);
 /// The hard cap on waiting, and the only bound that holds unconditionally.
 /// [`DRAIN_QUANTUM`] bounds how long a *turn* lasts, but a turn cannot end
 /// while the outgoing model still has requests in flight — no swap may preempt
-/// a live generation — so a model under continuous overlapping load can hold
-/// its slot indefinitely. This is what stops a request waiting on that from
-/// waiting forever.
+/// a live generation. What that leaves uncovered is one request that runs for a
+/// very long time: a single generation is indivisible, so the rival behind it
+/// has no bound but this one.
+///
+/// It used to cover a great deal more. A model under *overlapping* load could
+/// hold its slot indefinitely, because nothing capped how many requests were in
+/// flight at once and a client that always kept one outstanding meant the count
+/// never reached zero. `SERVER_PARALLEL` and `owes_slot_to_rival` close that
+/// off, so
+/// reaching this deadline is now the exception it was meant to be rather than
+/// the ordinary outcome of two clients sharing an endpoint.
 ///
 /// Comfortably above [`LAUNCH_TIMEOUT`], so a request waiting on its own launch
 /// can never expire before that launch has had its full budget.
@@ -96,6 +106,11 @@ pub struct Resident {
     ///
     /// The eviction guard. A slot with `inflight > 0` is never unloaded, so a
     /// swap can never cut off a live generation.
+    ///
+    /// Bounded by `SERVER_PARALLEL`: admitting more than the instance can
+    /// actually start would not serve anyone sooner, it would only move the
+    /// queue inside llama-server and keep this count off zero the whole time it
+    /// sat there.
     pub inflight: u32,
     /// When this model finished loading.
     pub resident_since: Instant,
@@ -284,9 +299,17 @@ impl QueueState {
         secondary: SecondarySlotDecision,
     ) -> AdmissionDecision {
         // The fast path, and the payoff of a second slot: a co-resident model
-        // serves without ever consulting the scheduler's fairness rules,
-        // because admitting it displaces nothing.
+        // serves without displacing anything, so it answers to the capacity of
+        // its own slot and not to the scheduler's fairness rules.
         if let Some(slot) = self.resident_slot(&ticket.model) {
+            if !self.may_serve(slot, now) {
+                // Held back by the slot's capacity, or standing aside for a
+                // rival the turn rules have promised it to. Either way this
+                // request is now genuinely waiting, so the deadline has to be
+                // tested here — nothing else on this branch would ever surface
+                // a 503, and a capped request would wait forever.
+                return self.expire_or_wait(ticket, now);
+            }
             self.forget(ticket);
             if let SlotState::Resident(r) = &mut self.slots[slot] {
                 r.inflight += 1;
@@ -300,7 +323,7 @@ impl QueueState {
             return AdmissionDecision::Wait;
         }
 
-        if now.duration_since(ticket.created_at) >= ADMISSION_DEADLINE {
+        if self.is_expired(ticket, now) {
             self.forget(ticket);
             return AdmissionDecision::Expired;
         }
@@ -345,6 +368,67 @@ impl QueueState {
         });
 
         AdmissionDecision::Launch { slot, evict }
+    }
+
+    /// Whether this request has outlasted [`ADMISSION_DEADLINE`].
+    fn is_expired(&self, ticket: &Ticket, now: Instant) -> bool {
+        now.duration_since(ticket.created_at) >= ADMISSION_DEADLINE
+    }
+
+    /// The answer for a request that cannot proceed: give up if it has waited
+    /// too long, otherwise go round again.
+    fn expire_or_wait(&mut self, ticket: &Ticket, now: Instant) -> AdmissionDecision {
+        if self.is_expired(ticket, now) {
+            self.forget(ticket);
+            return AdmissionDecision::Expired;
+        }
+        AdmissionDecision::Wait
+    }
+
+    /// Whether `slot`'s resident may take on one more request right now.
+    ///
+    /// Two things can stand in the way, and they bound different halves of the
+    /// same failure. The slot may already be serving everything its
+    /// llama-server was launched to serve at once, in which case forwarding
+    /// another would only queue it *inside* llama-server — invisible to the
+    /// dashboard, out of the queue's ordering, and holding `inflight` off zero
+    /// for as long as it sits there. Or a rival may have become entitled to the
+    /// slot, in which case granting now would re-pin a slot that is one release
+    /// away from changing hands.
+    fn may_serve(&self, slot: usize, now: Instant) -> bool {
+        let Some(resident) = self.slots[slot].resident() else {
+            return false;
+        };
+        resident.inflight < SERVER_PARALLEL && !self.owes_slot_to_rival(slot, now)
+    }
+
+    /// Whether `slot` is about to be handed to a waiting rival.
+    ///
+    /// Only an idle slot can be handed over at all, so a busy one has nothing
+    /// to stand aside for. Beyond that this is [`choose_slot`](Self::choose_slot)'s
+    /// own test asked on the rival's behalf: is a model waiting that needs a
+    /// slot, and have the turn rules stopped protecting the incumbent?
+    ///
+    /// Without this the cap alone would not be enough. It would create only an
+    /// *instant* at zero in-flight, and which of the woken requesters claims
+    /// that instant is a race — the incumbent's next request re-pins the slot
+    /// about as often as the rival takes it, which is a flaky fix rather than a
+    /// fix. Standing aside is what turns [`DRAIN_QUANTUM`] from a bound that
+    /// expires into one that actually hands the GPU over.
+    ///
+    /// Conservative in one direction on purpose: it does not work out *which*
+    /// slot the rival would be given, so a rival that could have co-loaded into
+    /// an empty secondary makes the primary stand aside for one request longer
+    /// than it strictly had to. That costs a little latency. Erring the other
+    /// way costs the stall this rule exists to prevent.
+    fn owes_slot_to_rival(&self, slot: usize, now: Instant) -> bool {
+        if !self.slots[slot].is_evictable() {
+            return false;
+        }
+        let Some(rival) = self.oldest_waiting_model() else {
+            return false;
+        };
+        self.swap_is_permitted(rival, now)
     }
 
     /// Pick the slot `model` should be launched into, if one can be had.

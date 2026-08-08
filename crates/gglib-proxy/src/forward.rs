@@ -203,11 +203,16 @@ const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output f
 /// would otherwise keep the client hanging on keepalive comments indefinitely
 /// — not to cap normal prefill latency.
 ///
-/// This is a *per-cycle* bound, not an absolute cap: with `--parallel 1` a
-/// second request legitimately queues behind an in-flight one, so when the
-/// deadline fires and another connection is still active the wait is extended
-/// for another cycle rather than failed (see the keepalive loop). Only an
-/// expiry with no other active request counts as degradation.
+/// This is a *per-cycle* bound, not an absolute cap: another connection can
+/// legitimately be occupying the upstream — a co-resident model serving from
+/// the second slot, or a request the admission queue admitted just before this
+/// one — so when the deadline fires and another connection is still active the
+/// wait is extended for another cycle rather than failed (see the keepalive
+/// loop). Only an expiry with no other active request counts as degradation.
+///
+/// Requests for the *same* model no longer stack up behind each other here:
+/// admission caps them at what llama-server was launched to serve at once, so
+/// that queue forms in the runtime rather than inside the upstream.
 pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 
 /// Force-insert the streaming-only overrides every forwarded chat-completion
