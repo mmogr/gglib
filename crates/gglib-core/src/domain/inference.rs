@@ -268,17 +268,14 @@ fn snake_to_camel(s: &str) -> String {
 ///
 /// Purely an intermediate inside [`InferenceConfig::resolve_layers_with_sources`]:
 /// the two arms of the coupling rule each produce one of these, and the
-/// provenance record is built from it. A struct rather than a tuple because
-/// the set is seven wide — positional destructuring stopped being readable.
+/// provenance record is built from it. Named fields rather than a tuple
+/// because both arms and the provenance construction read it positionally
+/// otherwise, and the three are easy to transpose.
 #[derive(Debug, Clone, Copy)]
 struct CoupledLayers {
     repeat_penalty: Option<usize>,
     presence_penalty: Option<usize>,
     min_p: Option<usize>,
-    dry_multiplier: Option<usize>,
-    dry_base: Option<usize>,
-    dry_allowed_length: Option<usize>,
-    dry_penalty_last_n: Option<usize>,
 }
 
 impl InferenceConfig {
@@ -356,29 +353,44 @@ impl InferenceConfig {
     ///
     /// # Uncoupled parameters
     ///
-    /// `top_p`, `top_k`, and `max_tokens` gap-fill independently: each takes
-    /// the first `Some` value found scanning the layers top to bottom.
+    /// `top_p`, `top_k`, `max_tokens` and the four DRY parameters gap-fill
+    /// independently: each takes the first `Some` value found scanning the
+    /// layers top to bottom.
     ///
     /// # Coupled parameters
     ///
-    /// `presence_penalty`, `repeat_penalty`, `min_p` and the four DRY
-    /// parameters are only meaningful relative to how sharp the sampling
-    /// distribution is, so they travel with the `temperature` they were chosen
-    /// for. [`reasoning_profile`] pairs `temperature 1.0` with
-    /// `presence_penalty 1.5` deliberately; a sparse profile that sets
-    /// `temperature 0.2` and leaves the penalty unset must not inherit that
-    /// `1.5` — that would run a recipe no layer ever intended, a penalty tuned
-    /// for a broad distribution applied to a near-greedy one. The DRY
-    /// parameters join the set for the same reason: they are a repetition
-    /// penalty, and a DRY strength chosen for one temperature is not a
-    /// statement about another.
+    /// `presence_penalty`, `repeat_penalty` and `min_p` are only meaningful
+    /// relative to how sharp the sampling distribution is, so they travel with
+    /// the `temperature` they were chosen for. [`reasoning_profile`] pairs
+    /// `temperature 1.0` with `presence_penalty 1.5` deliberately; a sparse
+    /// profile that sets `temperature 0.2` and leaves the penalty unset must
+    /// not inherit that `1.5` — that would run a recipe no layer ever
+    /// intended, a penalty tuned for a broad distribution applied to a
+    /// near-greedy one.
     ///
     /// So: `temperature` resolves to the first layer that sets one. If some
-    /// layer does, the coupled set comes *only* from that same layer — never
+    /// layer does, the coupled trio comes *only* from that same layer — never
     /// a layer beneath it — falling to `floor` for anything that layer itself
     /// left unset. If **no** layer sets a temperature at all, nothing has been
-    /// tuned against anything, so the coupled set gap-fills normally, exactly
-    /// like the uncoupled parameters.
+    /// tuned against anything, so the trio gap-fills normally, exactly like
+    /// the uncoupled parameters.
+    ///
+    /// # Why DRY is *not* coupled
+    ///
+    /// It was, briefly, on the symmetry argument that a repetition penalty is
+    /// a repetition penalty. Verification showed the symmetry is false and the
+    /// cost is real. `presence_penalty` and `repeat_penalty` are flat logit
+    /// offsets competing directly with temperature's sharpening; DRY's
+    /// strength is governed by its own `dry_base` and `dry_allowed_length`,
+    /// and it targets verbatim sequence repetition — a failure mode that is
+    /// *worse* at low temperature, not milder.
+    ///
+    /// Coupling it meant a layer naming a DRY value but no temperature lost
+    /// that value silently whenever any lower layer named one, which is the
+    /// default state of every `reasoning`-tagged model. Since no shipped
+    /// profile and not [`reasoning_profile`] itself pairs a temperature with
+    /// DRY values, the coupling protected nothing and cost the most natural
+    /// way to switch DRY on. See #745.
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
     /// [`reasoning_profile`]: Self::reasoning_profile
@@ -414,18 +426,10 @@ impl InferenceConfig {
             result.repeat_penalty = c.repeat_penalty;
             result.presence_penalty = c.presence_penalty;
             result.min_p = c.min_p;
-            result.dry_multiplier = c.dry_multiplier;
-            result.dry_base = c.dry_base;
-            result.dry_allowed_length = c.dry_allowed_length;
-            result.dry_penalty_last_n = c.dry_penalty_last_n;
             return CoupledLayers {
                 repeat_penalty: c.repeat_penalty.and(Some(claim)),
                 presence_penalty: c.presence_penalty.and(Some(claim)),
                 min_p: c.min_p.and(Some(claim)),
-                dry_multiplier: c.dry_multiplier.and(Some(claim)),
-                dry_base: c.dry_base.and(Some(claim)),
-                dry_allowed_length: c.dry_allowed_length.and(Some(claim)),
-                dry_penalty_last_n: c.dry_penalty_last_n.and(Some(claim)),
             };
         }
 
@@ -435,10 +439,6 @@ impl InferenceConfig {
             repeat_penalty: first(&|c| c.repeat_penalty.is_some()),
             presence_penalty: first(&|c| c.presence_penalty.is_some()),
             min_p: first(&|c| c.min_p.is_some()),
-            dry_multiplier: first(&|c| c.dry_multiplier.is_some()),
-            dry_base: first(&|c| c.dry_base.is_some()),
-            dry_allowed_length: first(&|c| c.dry_allowed_length.is_some()),
-            dry_penalty_last_n: first(&|c| c.dry_penalty_last_n.is_some()),
         };
         result.repeat_penalty = found
             .repeat_penalty
@@ -447,18 +447,6 @@ impl InferenceConfig {
             .presence_penalty
             .and_then(|i| layers[i].and_then(|c| c.presence_penalty));
         result.min_p = found.min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
-        result.dry_multiplier = found
-            .dry_multiplier
-            .and_then(|i| layers[i].and_then(|c| c.dry_multiplier));
-        result.dry_base = found
-            .dry_base
-            .and_then(|i| layers[i].and_then(|c| c.dry_base));
-        result.dry_allowed_length = found
-            .dry_allowed_length
-            .and_then(|i| layers[i].and_then(|c| c.dry_allowed_length));
-        result.dry_penalty_last_n = found
-            .dry_penalty_last_n
-            .and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
         found
     }
 
@@ -493,11 +481,22 @@ impl InferenceConfig {
         let top_k = first(&|c| c.top_k.is_some());
         let max_tokens = first(&|c| c.max_tokens.is_some());
         let temperature = first(&|c| c.temperature.is_some());
+        let dry_multiplier = first(&|c| c.dry_multiplier.is_some());
+        let dry_base = first(&|c| c.dry_base.is_some());
+        let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
+        let dry_penalty_last_n = first(&|c| c.dry_penalty_last_n.is_some());
 
         result.top_p = top_p.and_then(|i| layers[i].and_then(|c| c.top_p));
         result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
         result.max_tokens = max_tokens.and_then(|i| layers[i].and_then(|c| c.max_tokens));
         result.temperature = temperature.and_then(|i| layers[i].and_then(|c| c.temperature));
+        result.dry_multiplier =
+            dry_multiplier.and_then(|i| layers[i].and_then(|c| c.dry_multiplier));
+        result.dry_base = dry_base.and_then(|i| layers[i].and_then(|c| c.dry_base));
+        result.dry_allowed_length =
+            dry_allowed_length.and_then(|i| layers[i].and_then(|c| c.dry_allowed_length));
+        result.dry_penalty_last_n =
+            dry_penalty_last_n.and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
 
         let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
@@ -530,21 +529,17 @@ impl InferenceConfig {
                 coupled,
             ),
             min_p: source(coupled_layers.min_p, floor.min_p.is_some(), coupled),
-            dry_multiplier: source(
-                coupled_layers.dry_multiplier,
-                floor.dry_multiplier.is_some(),
-                coupled,
-            ),
-            dry_base: source(coupled_layers.dry_base, floor.dry_base.is_some(), coupled),
+            dry_multiplier: source(dry_multiplier, floor.dry_multiplier.is_some(), false),
+            dry_base: source(dry_base, floor.dry_base.is_some(), false),
             dry_allowed_length: source(
-                coupled_layers.dry_allowed_length,
+                dry_allowed_length,
                 floor.dry_allowed_length.is_some(),
-                coupled,
+                false,
             ),
             dry_penalty_last_n: source(
-                coupled_layers.dry_penalty_last_n,
+                dry_penalty_last_n,
                 floor.dry_penalty_last_n.is_some(),
-                coupled,
+                false,
             ),
             max_tokens: source(max_tokens, floor.max_tokens.is_some(), false),
         };

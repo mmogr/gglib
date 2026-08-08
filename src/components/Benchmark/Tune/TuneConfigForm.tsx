@@ -41,6 +41,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   const [topK, setTopK] = useState('');
   const [minP, setMinP] = useState('');
   const [repeatPenalty, setRepeatPenalty] = useState('');
+  const [dryMultiplier, setDryMultiplier] = useState('');
 
   const [suiteMode, setSuiteMode] = useState<'default' | 'custom'>('default');
   const [customTasks, setCustomTasks] = useState<TuneTask[] | null>(null);
@@ -93,6 +94,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         top_k: parseNumberList(topK),
         min_p: parseNumberList(minP),
         repeat_penalty: parseNumberList(repeatPenalty),
+        dry_multiplier: parseNumberList(dryMultiplier),
       },
       seed_from_gguf: seedFromGguf,
       seed_from_family_presets: seedFromFamilyPresets,
@@ -165,6 +167,12 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
             repeat_penalty
           </label>
           <Input value={repeatPenalty} onChange={e => setRepeatPenalty(e.target.value)} disabled={disabled} size="sm" placeholder="1.0,1.1" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dry_multiplier
+          </label>
+          <Input value={dryMultiplier} onChange={e => setDryMultiplier(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.4,0.8" />
         </div>
       </div>
 

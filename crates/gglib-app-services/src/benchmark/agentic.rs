@@ -112,18 +112,10 @@ pub async fn run_agentic_eval(
     };
     let base_url = admission.target.base_url.clone();
 
-    // The gglib arm's per-model facts, straight from the catalog row.
-    let model_context = ModelContext {
-        capabilities: model.capabilities,
-        // Same tag fallback the catalog resolution path applies in
-        // `From<&ModelSummary> for ModelContext`.
-        dialect: gglib_core::normalize::registry::dialect_for_tags(&model.tags),
-        tags: model.tags.clone(),
-        inference_defaults: model.inference_defaults.clone(),
-        defaults_origin: model.defaults_origin,
-        context_length: model.context_length,
-        catalog_resolved: true,
-    };
+    // The gglib arm's per-model facts, straight from the catalog row. Shared
+    // with the tune sweep, which needs the identical context so a tuned value
+    // means the same thing in both.
+    let model_context = super::tune::model_context_for(&model);
 
     let mut arm_results: Vec<Vec<TuneTaskResult>> = Vec::with_capacity(2);
     for arm in [EvalArm::Raw, EvalArm::Gglib] {
