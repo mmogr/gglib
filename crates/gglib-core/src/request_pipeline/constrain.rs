@@ -16,12 +16,26 @@
 //! it deletes this stage and obviates the schema-constraint work it would
 //! otherwise need.
 //!
-//! Measured by `scripts/experiments/lazy-grammar-conformance.py`, whose
+//! Measured by `scripts/experiments/lazy_grammar_conformance.py`, whose
 //! result is recorded as its own ADR rather than assumed from
 //! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`].
 //!
+//! **Criterion met, stage retained** ([ADR 0002]). On `b10327` against
+//! Qwen3.5-4B, upstream held 60/60 across `auto` and `required` under prompts
+//! written to break types, enums, required fields and `additionalProperties`.
+//! It exceeds this stage on the measured path, and the schema-constraint work
+//! this stage would otherwise have needed is dropped rather than deferred.
+//!
+//! The stage stays anyway, and the reason is the scope of the evidence: one
+//! model, one build, one schema. Deleting a stage that also serves dialects
+//! nobody has measured would trade a known cost for an unmeasured risk — the
+//! same asymmetry [`RuntimeCapabilities::unknown`] encodes. What remains
+//! before removal is a second dialect family measured to the same standard.
+//!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
 //! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`]: crate::domain::RuntimeFlags::PEG_NATIVE_TOOL_CALLS
+//! [`RuntimeCapabilities::unknown`]: crate::domain::RuntimeCapabilities::unknown
 //!
 //! For models with a resolved [`DialectSpec`], tool calls are free text —
 //! the model *chooses* to emit `OPEN{json}CLOSE` markup and the proxy
