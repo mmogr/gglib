@@ -108,8 +108,13 @@ pub struct InferenceConfig {
     /// Minimum-probability sampling threshold (0.0 - 1.0).
     ///
     /// Removes tokens whose probability is below `min_p × P(top token)`.
-    /// - 0.0: Disabled (explicit off; recommended by Qwen3.6)
-    /// - 0.05: llama.cpp built-in default when the flag is omitted
+    /// - 0.0: Disabled (explicit off; recommended by Qwen3.6, and the floor
+    ///   for `reasoning`-tagged models — see [`reasoning_floor`])
+    /// - 0.05: llama.cpp's own default, and the neutral floor here — see
+    ///   [`with_hardcoded_defaults`]
+    ///
+    /// [`reasoning_floor`]: Self::reasoning_floor
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     pub min_p: Option<f32>,
 }
 
@@ -428,7 +433,21 @@ impl InferenceConfig {
     /// Explicit per-request, per-profile, and per-model values are unaffected —
     /// [`reasoning_profile`] still sets its own ceiling.
     ///
+    /// # `min_p` matches llama.cpp rather than disabling itself
+    ///
+    /// `0.05` is llama.cpp's own default for the flag, restated here rather
+    /// than left to the upstream. It used to be `0.0`, which reads like an
+    /// absence but is not one: [`to_openai_json_patch`] drops only `None`, and
+    /// resolution force-writes what survives, so the floor was *explicitly
+    /// disabling* min-p on every request that did not set its own. At this
+    /// floor's own `temperature: 0.7` that removes the tail cut entirely.
+    ///
+    /// Stated rather than omitted so llama-server keeps receiving fully
+    /// specified parameters, and so the value stays visible as `min_p=floor`
+    /// in sampling provenance instead of reporting as unset.
+    ///
     /// [`reasoning_profile`]: Self::reasoning_profile
+    /// [`to_openai_json_patch`]: Self::to_openai_json_patch
     #[must_use]
     pub const fn with_hardcoded_defaults() -> Self {
         Self {
@@ -438,7 +457,7 @@ impl InferenceConfig {
             max_tokens: None,
             repeat_penalty: Some(1.0),
             presence_penalty: Some(0.0),
-            min_p: Some(0.0),
+            min_p: Some(0.05),
         }
     }
 
@@ -454,6 +473,13 @@ impl InferenceConfig {
     /// prevent this). `1.0` keeps a real guard in place at the floor without
     /// asserting the full recipe tuned for a different temperature.
     ///
+    /// `min_p` is pinned to `0.0` for the same class-specific reason, and
+    /// deliberately does *not* inherit the neutral floor's `0.05`: Qwen3.6's
+    /// published guidance is to disable min-p on these models, which
+    /// [`reasoning_profile`] already encodes. Spelling it out here keeps that
+    /// carve-out from silently disappearing the next time the neutral floor
+    /// moves.
+    ///
     /// [`resolve_layers`]: Self::resolve_layers
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`reasoning_profile`]: Self::reasoning_profile
@@ -461,6 +487,7 @@ impl InferenceConfig {
     pub const fn reasoning_floor() -> Self {
         Self {
             presence_penalty: Some(1.0),
+            min_p: Some(0.0),
             ..Self::with_hardcoded_defaults()
         }
     }
@@ -824,25 +851,32 @@ mod tests {
         assert_eq!(config.max_tokens, None);
         assert_eq!(config.repeat_penalty, Some(1.0));
         assert_eq!(config.presence_penalty, Some(0.0));
-        assert_eq!(config.min_p, Some(0.0));
+        // llama.cpp's own default, restated. `Some(0.0)` here would not read
+        // as "unset" — it would be force-written, explicitly disabling the
+        // tail cut on every request. See `with_hardcoded_defaults`.
+        assert_eq!(config.min_p, Some(0.05));
     }
 
-    /// The reasoning floor differs from the hardcoded floor in exactly one
-    /// field — a real anti-repetition guard where the neutral floor has none.
+    /// The reasoning floor differs from the hardcoded floor in exactly two
+    /// fields, both class-specific: a real anti-repetition guard where the
+    /// neutral floor has none, and min-p disabled per Qwen3.6's guidance
+    /// where the neutral floor matches llama.cpp.
     #[test]
-    fn test_reasoning_floor_differs_only_in_presence_penalty() {
+    fn test_reasoning_floor_differs_only_in_presence_penalty_and_min_p() {
         let neutral = InferenceConfig::with_hardcoded_defaults();
         let reasoning = InferenceConfig::reasoning_floor();
 
         assert_eq!(reasoning.presence_penalty, Some(1.0));
         assert_ne!(reasoning.presence_penalty, neutral.presence_penalty);
 
+        assert_eq!(reasoning.min_p, Some(0.0));
+        assert_ne!(reasoning.min_p, neutral.min_p);
+
         assert_eq!(reasoning.temperature, neutral.temperature);
         assert_eq!(reasoning.top_p, neutral.top_p);
         assert_eq!(reasoning.top_k, neutral.top_k);
         assert_eq!(reasoning.max_tokens, neutral.max_tokens);
         assert_eq!(reasoning.repeat_penalty, neutral.repeat_penalty);
-        assert_eq!(reasoning.min_p, neutral.min_p);
     }
 
     /// If nothing in the stack ever declares a temperature, nothing has been
