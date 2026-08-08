@@ -326,6 +326,21 @@ def run_arm(base: str, tool_choice, samples: int, temp: float, timeout: int) -> 
 
 REGRESSIONS = [
     {
+        "id": "delimiter-json",
+        "name": "R3 delimiter",
+        "desc": "argument value containing the JSON dialect's own delimiters",
+        "prompt": (
+            'Read the file whose name is exactly {"a": "b"} in text mode. The '
+            "filename really does contain those braces and quotes — pass it "
+            "through unchanged."
+        ),
+        "expect_key": "path",
+        "expect_value": '{"a": "b"}',
+        "broken_looks_like": "path truncated at the first quote or brace",
+        "dialects": ("json", "xml"),
+    },
+    {
+        "id": "param-close-xml",
         "name": "R1 #24807",
         "desc": "argument value containing a literal </parameter>",
         "prompt": (
@@ -336,6 +351,7 @@ REGRESSIONS = [
         "expect_key": "path",
         "expect_value": "a</parameter>b",
         "broken_looks_like": "path truncated at the first </parameter> (e.g. 'a')",
+        "dialects": ("xml",),
     },
     {
         "name": "R2 #20260",
@@ -347,14 +363,25 @@ REGRESSIONS = [
         "expect_key": "path",
         "expect_value": "/etc/hosts",
         "broken_looks_like": "no tool_call — parser fails on the leading prose",
+        "dialects": ("json", "xml"),
     },
 ]
 
 
-def run_regressions(base: str, samples: int, timeout: int) -> list[dict]:
-    """Steer the model into each known-bad shape and inspect what comes back."""
+def run_regressions(
+    base: str, samples: int, timeout: int, dialect: str
+) -> list[dict]:
+    """Steer the model into each known-bad shape and inspect what comes back.
+
+    Cases are filtered by `dialect`. A case probing `</parameter>` handling is
+    meaningless against a model whose dialect has no such marker, and running
+    it anyway would report a pass that means nothing — the same "green for the
+    wrong reason" failure this arm was already rewritten once to avoid.
+    """
     out = []
     for case in REGRESSIONS:
+        if dialect not in case["dialects"]:
+            continue
         result = {
             "name": case["name"],
             "desc": case["desc"],
@@ -400,13 +427,15 @@ def pct(n: int, d: int) -> str:
     return "n/a" if d == 0 else f"{100 * n / d:.0f}%"
 
 
-def report(arms: dict, regressions: list[dict], samples: int) -> None:
+def report(arms: dict, regressions: list[dict], samples: int, note: str = "") -> None:
     total = samples * len(PROMPTS)
     print()
     print("═" * 74)
     print("  NATIVE SCHEMA CONFORMANCE — raw llama-server, no gglib in the path")
     print("═" * 74)
     print(f"  {len(PROMPTS)} adversarial prompts × {samples} samples = {total} requests per arm")
+    if note:
+        print(f"  {note}")
     print()
     print(f"  {'arm':<12} {'calls':>7} {'conformant':>12} {'rate':>8}   verdict")
     print(f"  {'-' * 12} {'-' * 7} {'-' * 12} {'-' * 8}   {'-' * 24}")
@@ -487,6 +516,17 @@ def main() -> int:
     p.add_argument("--samples", type=int, default=5, help="samples per prompt per arm")
     p.add_argument("--temp", type=float, default=1.0, help="high on purpose — see docstring")
     p.add_argument("--timeout", type=int, default=180)
+    p.add_argument(
+        "--dialect",
+        choices=("xml", "json"),
+        default="xml",
+        help="tool-call dialect family; selects which regression cases apply",
+    )
+    p.add_argument(
+        "--note",
+        default="",
+        help="free-text note recorded in the header (model, build, observations)",
+    )
     p.add_argument("--json", action="store_true", help="emit raw results as JSON too")
     args = p.parse_args()
 
@@ -507,9 +547,11 @@ def main() -> int:
         arms[label] = run_arm(base, choice, args.samples, args.temp, args.timeout)
 
     print("running regression arm ...", file=sys.stderr)
-    regressions = run_regressions(base, max(3, args.samples), args.timeout)
+    regressions = run_regressions(
+        base, max(3, args.samples), args.timeout, args.dialect
+    )
 
-    report(arms, regressions, args.samples)
+    report(arms, regressions, args.samples, args.note)
 
     if args.json:
         print(json.dumps({"arms": arms, "regressions": regressions}, indent=2))

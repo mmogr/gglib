@@ -194,8 +194,12 @@ directory. `gglib config fast-downloads status` says what is there;
   GGLib's own job, and how the pinned build and runtime capability probe keep
   the two apart
 - [ADR 0002 — Defer tool-call constraint to llama.cpp](docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
-  — the measurement behind that deferral: 60/60 native schema conformance, and
-  the discovery that GGLib's dialect parser is bypassed entirely
+  — the measurement behind that deferral: native schema conformance per model,
+  why it does not generalise, and the discovery that GGLib's dialect parser is
+  bypassed entirely
+- [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
+  against the advertised schema, and re-issuing with `tool_choice: "required"`
+  when they do not conform
 - [Full API documentation](https://mmogr.github.io/gglib) — generated from
   source on every release
 
