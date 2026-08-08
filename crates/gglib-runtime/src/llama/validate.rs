@@ -99,16 +99,17 @@ pub async fn handle_status() -> Result<()> {
         println!("Warning: Build configuration not found");
     }
 
-    // Get binary version
-    if let Ok(output) = cmd(&binary_path).arg("--version").output()
-        && output.status.success()
-    {
-        let version = String::from_utf8_lossy(&output.stdout);
-        if let Some(first_line) = version.lines().next() {
-            println!();
-            println!("Binary version: {}", first_line.trim());
-        }
+    // What the binary is, and what it does natively. Read through the probe
+    // rather than a local `--version` call so this surface and the launch
+    // banner cannot report different runtimes for the same binary.
+    let caps = super::runtime_probe::probe(&binary_path);
+    println!();
+    println!("Binary version: {}", caps.version_line);
+    match caps.build {
+        Some(build) => println!("  Build: b{build}"),
+        None => println!("  Build: unidentified — gglib will apply every compensation"),
     }
+    println!("  Native capabilities: {:?}", caps.flags);
 
     Ok(())
 }

@@ -43,6 +43,102 @@ pub fn check_llama_installed() -> bool {
     server_path.exists()
 }
 
+/// The llama.cpp release gglib installs unless told otherwise.
+///
+/// # Why a pin rather than `latest`
+///
+/// Installs used to resolve `releases/latest`, so the inference engine
+/// underneath gglib changed whenever upstream cut a release — silently, and
+/// differently for two users who installed a day apart. Every compensation
+/// gglib applies (dialect normalization, grammar origination, capability
+/// detection) is a bet about what that engine does, and an unpinned engine
+/// makes those bets unfalsifiable: when behaviour changes, there is no way to
+/// tell a gglib regression from an upstream one.
+///
+/// Pinning does not stop gglib tracking upstream. It makes tracking a
+/// deliberate, reviewable event: bump this constant, run the suite, ship the
+/// bump as its own commit with the observed differences in the message.
+///
+/// The initial value is the release that was `latest` when the pin landed, so
+/// introducing it changed nothing for anyone installing that day — it only
+/// stops the drift from here on.
+#[cfg(feature = "prebuilt")]
+pub const PINNED_LLAMA_RELEASE: &str = "b10327";
+
+/// Environment override for [`PINNED_LLAMA_RELEASE`].
+///
+/// Accepts a release tag (`b10500`) to install that release, or the literal
+/// `latest` to restore the old float-with-upstream behaviour. Unset — the
+/// default — installs [`PINNED_LLAMA_RELEASE`].
+///
+/// Provided because a user debugging against an upstream fix should not have
+/// to rebuild gglib to get it, and because it is how the pin bump itself is
+/// tested before the constant moves.
+#[cfg(feature = "prebuilt")]
+pub const LLAMA_RELEASE_ENV: &str = "GGLIB_LLAMA_RELEASE";
+
+/// Which llama.cpp release an install should fetch.
+#[cfg(feature = "prebuilt")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReleaseSelector {
+    /// A specific tag — the pin, or an override naming one.
+    Tag(String),
+    /// Whatever upstream currently calls `latest`.
+    Latest,
+}
+
+#[cfg(feature = "prebuilt")]
+impl ReleaseSelector {
+    /// The GitHub API URL this selector resolves through.
+    fn api_url(&self) -> String {
+        match self {
+            Self::Tag(tag) => {
+                format!("https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{tag}")
+            }
+            Self::Latest => {
+                "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest".to_owned()
+            }
+        }
+    }
+
+    /// How this selector reads in console output.
+    fn describe(&self) -> String {
+        match self {
+            Self::Tag(tag) => format!("pinned release {tag}"),
+            Self::Latest => "latest release".to_owned(),
+        }
+    }
+}
+
+/// Interpret a raw [`LLAMA_RELEASE_ENV`] value.
+///
+/// An override of `latest` (any casing) floats; anything else is taken as a
+/// tag verbatim. A blank or whitespace-only value is treated as unset rather
+/// than as an empty tag, so `GGLIB_LLAMA_RELEASE=` does not produce a URL that
+/// cannot resolve.
+///
+/// Split from [`resolve_release_selector`] so the policy is testable without
+/// mutating process environment, which no test can do safely in parallel.
+#[cfg(feature = "prebuilt")]
+fn selector_from_override(raw: &str) -> ReleaseSelector {
+    let trimmed = raw.trim();
+
+    if trimmed.is_empty() {
+        return ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned());
+    }
+    if trimmed.eq_ignore_ascii_case("latest") {
+        return ReleaseSelector::Latest;
+    }
+    ReleaseSelector::Tag(trimmed.to_owned())
+}
+
+/// Resolve which release to install from [`LLAMA_RELEASE_ENV`], falling back
+/// to [`PINNED_LLAMA_RELEASE`].
+#[cfg(feature = "prebuilt")]
+fn resolve_release_selector() -> ReleaseSelector {
+    selector_from_override(&std::env::var(LLAMA_RELEASE_ENV).unwrap_or_default())
+}
+
 /// GitHub API response for a release
 #[cfg(feature = "prebuilt")]
 #[derive(Debug, Deserialize)]
@@ -177,18 +273,32 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
     }
 }
 
-/// Fetch the latest llama.cpp release information from GitHub.
+/// Fetch llama.cpp release information from GitHub for `selector`.
+///
+/// A 404 on a tag selector is reported as a missing release rather than a
+/// bare HTTP error, because the actionable cause — a pin naming a tag that
+/// upstream no longer publishes — is not obvious from the status code, and
+/// the way out is an environment variable the user has no reason to know
+/// about.
 #[cfg(feature = "prebuilt")]
-async fn fetch_latest_release(client: &Client) -> Result<GitHubRelease> {
-    let url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest";
-
+async fn fetch_release(client: &Client, selector: &ReleaseSelector) -> Result<GitHubRelease> {
     let response = client
-        .get(url)
+        .get(selector.api_url())
         .header("User-Agent", "gglib")
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
         .context("Failed to fetch llama.cpp releases from GitHub")?;
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND
+        && let ReleaseSelector::Tag(tag) = selector
+    {
+        bail!(
+            "llama.cpp release '{tag}' not found upstream. \
+             Set {LLAMA_RELEASE_ENV}=latest to install the current release, \
+             or {LLAMA_RELEASE_ENV}=<tag> to name a different one."
+        );
+    }
 
     if !response.status().is_success() {
         bail!(
@@ -649,8 +759,9 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     let client = Client::new();
 
     // Fetch latest release
-    println!("Fetching latest release information...");
-    let release = fetch_latest_release(&client).await?;
+    let selector = resolve_release_selector();
+    println!("Fetching {} information...", selector.describe());
+    let release = fetch_release(&client, &selector).await?;
     println!("  Found release: {}", release.tag_name);
 
     // Find matching asset
@@ -747,8 +858,8 @@ pub async fn download_prebuilt_binaries_with_callback(
 
     let client = Client::new();
 
-    // Fetch latest release
-    let release = fetch_latest_release(&client).await?;
+    // Fetch the pinned release (or whatever GGLIB_LLAMA_RELEASE names)
+    let release = fetch_release(&client, &resolve_release_selector()).await?;
 
     // Find matching asset
     let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
@@ -828,8 +939,8 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
 
     let client = Client::new();
 
-    // Fetch latest release
-    let release = fetch_latest_release(&client).await?;
+    // Fetch the pinned release (or whatever GGLIB_LLAMA_RELEASE names)
+    let release = fetch_release(&client, &resolve_release_selector()).await?;
 
     // Find matching asset
     let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
@@ -921,6 +1032,72 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
 mod tests {
     #[cfg(feature = "prebuilt")]
     use super::*;
+
+    /// The case the pin exists for: no override installs the pin, not
+    /// whatever upstream cut this morning.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn unset_override_resolves_to_the_pin() {
+        assert_eq!(
+            selector_from_override(""),
+            ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned())
+        );
+    }
+
+    /// A blank value is unset, not an empty tag — an empty tag would build a
+    /// URL ending in `/tags/` that can never resolve.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn blank_override_resolves_to_the_pin() {
+        assert_eq!(
+            selector_from_override("   \t "),
+            ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned())
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn latest_override_floats_with_upstream() {
+        assert_eq!(selector_from_override("latest"), ReleaseSelector::Latest);
+        assert_eq!(selector_from_override("  LATEST "), ReleaseSelector::Latest);
+    }
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn a_tag_override_is_taken_verbatim() {
+        assert_eq!(
+            selector_from_override(" b10500 "),
+            ReleaseSelector::Tag("b10500".to_owned())
+        );
+    }
+
+    /// The two selectors must hit different GitHub endpoints — a tag resolved
+    /// through the `latest` URL would silently install the wrong release.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn selectors_resolve_to_distinct_endpoints() {
+        let tag = ReleaseSelector::Tag("b10327".to_owned());
+        assert!(tag.api_url().ends_with("/releases/tags/b10327"));
+        assert!(
+            ReleaseSelector::Latest
+                .api_url()
+                .ends_with("/releases/latest")
+        );
+    }
+
+    /// The pin has to be a real tag shape; a stray `v` prefix or a bare
+    /// number would 404 at install time on a user's machine, not here.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn the_pin_is_a_well_formed_build_tag() {
+        let rest = PINNED_LLAMA_RELEASE
+            .strip_prefix('b')
+            .expect("pin must be a b-prefixed build tag");
+        assert!(
+            !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()),
+            "pin must be b<digits>, got {PINNED_LLAMA_RELEASE}"
+        );
+    }
 
     #[test]
     #[cfg(feature = "prebuilt")]

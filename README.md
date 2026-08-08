@@ -189,6 +189,10 @@ directory. `gglib config fast-downloads status` says what is there;
   and retagging
 - [KV cache tiering](docs/cache.md) — quantization, RAM auto-sizing, disk
   slot offloading
+- [ADR 0001 — Compensation, Policy, Observation](docs/adr/0001-runtime-capability-tiers.md)
+  — which GGLib behaviours exist to work around llama.cpp and which are
+  GGLib's own job, and how the pinned build and runtime capability probe keep
+  the two apart
 - [Full API documentation](https://mmogr.github.io/gglib) — generated from
   source on every release
 
