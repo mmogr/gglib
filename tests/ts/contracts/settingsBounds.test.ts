@@ -241,12 +241,13 @@ describe('sampling parameters vs validate_inference_config', () => {
     );
   });
 
-  it('only presence_penalty differs in the reasoning floor', () => {
-    // inferenceDefaults.ts annotates presencePenalty as the one model-dependent
-    // floor. If reasoning_floor() ever overrides a second field, that comment —
-    // and the settings-surface caption built on it — goes stale.
+  it('only presence_penalty and min_p differ in the reasoning floor', () => {
+    // inferenceDefaults.ts annotates presencePenalty and minP as the two
+    // model-dependent floors. If reasoning_floor() ever overrides a third
+    // field, those comments — and the settings-surface captions built on
+    // them — go stale.
     const overrides = [...structLiteral(INFERENCE_RS, 'reasoning_floor').keys()];
 
-    expect(overrides).toEqual(['presence_penalty']);
+    expect(overrides).toEqual(['presence_penalty', 'min_p']);
   });
 });
