@@ -15,11 +15,12 @@ This document is the definitive engineering guide for contributors. Read it befo
 7. [Subprocess Invocation](#subprocess-invocation)
 8. [Crate Boundaries](#crate-boundaries)
 9. [Documentation Standards](#documentation-standards)
-10. [Badges Pipeline](#badges-pipeline)
-11. [Development Workflow](#development-workflow)
-12. [CI Pipeline](#ci-pipeline)
-13. [Issue & PR Labeling](#issue--pr-labeling)
-14. [Pull Request Checklist](#pull-request-checklist)
+10. [Architecture Decision Records](#architecture-decision-records)
+11. [Badges Pipeline](#badges-pipeline)
+12. [Development Workflow](#development-workflow)
+13. [CI Pipeline](#ci-pipeline)
+14. [Issue & PR Labeling](#issue--pr-labeling)
+15. [Pull Request Checklist](#pull-request-checklist)
 
 ---
 
@@ -333,6 +334,8 @@ When adding a new flag-gated import in a surface crate, ensure its `Cargo.toml` 
 
 This codebase has three distinct documentation surfaces. Each has a defined purpose and a defined location. Understanding the split prevents duplication and keeps the right audience reading the right thing.
 
+A fourth surface — [Architecture Decision Records](#architecture-decision-records) — records *why* a decision was made, which none of the three below are for.
+
 ### Surface 1: Crate READMEs (shields.io badges + ASCII architecture diagrams)
 
 Each crate's `README.md` serves two narrow purposes:
@@ -460,6 +463,25 @@ cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 The published site redirects to `gglib_core/index.html`, which is the primary API reference. You can preview locally with `make doc` (opens the browser). Do not add a docs deployment step manually — the release workflow handles it.
 
 ---
+
+## Architecture Decision Records
+
+`docs/adr/NNNN-kebab-title.md`, numbered sequentially, never renumbered.
+
+An ADR records a decision and the evidence behind it. Rustdoc says what the code does; an ADR says why it is that way and what would have to change for it to be different. The two are complements — a module implementing a decision should link its ADR, and the ADR should name the modules it governs.
+
+### When to write one
+
+- A behaviour is added **because llama.cpp cannot do it, or does it wrong.** Classify it (see [ADR 0001](docs/adr/0001-runtime-capability-tiers.md)) and give it a deletion criterion, or it will be carried forever by default.
+- A capability is **deferred to upstream.** ADR 0001's rule is that capability presence is not permission to defer; the measurement that licensed the deferral belongs in an ADR, scoped to the models and build it was taken against.
+- A decision was **reached by measurement** and someone will otherwise re-derive it. [ADR 0002](docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md) exists so nobody re-runs a 60-request sweep to rediscover that upstream already enforces tool schemas.
+
+### Conventions
+
+- **Status, date, and dependencies in a header block.** Amend in place with a dated note rather than opening a near-duplicate.
+- **Record retractions, do not delete them.** When a later finding overturns an earlier one, strike the original and say why it was wrong. ADR 0002's finding 4 overturned its own finding 1; leaving both is what stops the same reasoning error recurring.
+- **State the scope of the evidence.** "60/60 on one model, one build, one schema" is a finding. "Upstream enforces schemas" is a claim the evidence does not support, and ADR 0002 was overturned by a second model precisely because that distinction was written down.
+- **Cite the reproducer.** A measurement that cannot be re-run is an opinion with a table.
 
 ## Badges Pipeline
 

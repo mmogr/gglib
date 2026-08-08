@@ -92,6 +92,11 @@ Everything between the OpenAI request and llama-server is the product:
   the built-in agent loop; sessions fail fast and loud instead of silently
   burning your GPU — see
   [Loop & Stagnation Defence](crates/gglib-proxy/README.md#loop--stagnation-defence).
+- **Tool-call repair** — emitted tool calls are validated against the schema
+  the client advertised; one that does not conform is re-issued with
+  `tool_choice: "required"`, which is where llama.cpp installs its own
+  schema-derived grammar. The client receives the corrected call and never
+  sees the broken one — see [Tool-call repair](docs/tool-call-repair.md).
 - **Sampling authority** — a 5-level resolution hierarchy decides every
   parameter; clients that hardcode `temperature: 0` don't silently win — see
   [Sampling resolution](docs/sampling.md).
