@@ -17,6 +17,7 @@ use gglib_core::domain::benchmark::tune::task::{TaskCategory, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::domain::{InferenceConfig, Model};
 use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort, UsageSink};
+use gglib_core::request_pipeline::ModelContext;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
@@ -55,6 +56,18 @@ pub async fn run_tune(
         .await
         .with_context(|| format!("model {} not found", config.model_id))?;
 
+    // Built and bounded before the run row exists, so an oversized grid is
+    // refused outright rather than recorded as a run that failed.
+    let candidates = build_candidates(&config.sweep, &model, &config);
+    anyhow::ensure!(
+        candidates.len() <= MAX_CANDIDATES,
+        "this sweep would run {} candidates, over the {MAX_CANDIDATES} limit. \
+         Every candidate costs at least one agent loop per pre-screen task, and \
+         pruning only starts after the whole grid has run, so the cost is the \
+         full count. Reduce the values per dimension, or sweep fewer dimensions.",
+        candidates.len()
+    );
+
     let config_json = serde_json::to_string(&config).ok();
     let run_id = deps
         .bench_repo
@@ -67,8 +80,6 @@ pub async fn run_tune(
         )
         .await
         .context("failed to create tune run record")?;
-
-    let candidates = build_candidates(&config.sweep, &model, &config);
 
     // ── Load the model once — every candidate only varies per-request
     // sampling parameters, never the loaded llama-server process. ──────────
@@ -119,6 +130,7 @@ pub async fn run_tune(
         .collect();
 
     let total = candidates.len();
+    let model_context = model_context_for(&model);
     let mut prescreen_results: Vec<Vec<TuneTaskResult>> = Vec::with_capacity(total);
 
     for (idx, (candidate_config, _)) in candidates.iter().enumerate() {
@@ -140,7 +152,15 @@ pub async fn run_tune(
 
         let mut results = Vec::with_capacity(prescreen_tasks.len());
         for task in &prescreen_tasks {
-            let result = run_task(&deps.http_client, target, &model, candidate_config, task).await;
+            let result = run_task(
+                &deps.http_client,
+                target,
+                &model,
+                &model_context,
+                candidate_config,
+                task,
+            )
+            .await;
             let _ = tx
                 .send(BenchmarkEvent::TuneTaskComplete {
                     candidate_index: idx,
@@ -174,8 +194,15 @@ pub async fn run_tune(
 
         if is_survivor {
             for task in &remaining_tasks {
-                let result =
-                    run_task(&deps.http_client, target, &model, &candidate_config, task).await;
+                let result = run_task(
+                    &deps.http_client,
+                    target,
+                    &model,
+                    &model_context,
+                    &candidate_config,
+                    task,
+                )
+                .await;
                 let _ = tx
                     .send(BenchmarkEvent::TuneTaskComplete {
                         candidate_index: idx,
@@ -245,6 +272,44 @@ fn select_prescreen_tasks(tasks: &[TuneTask]) -> Vec<TuneTask> {
     }
 }
 
+/// Hard ceiling on the candidate count, checked before any model work.
+///
+/// Every candidate costs at least `prescreen_tasks` real agent loops, and
+/// pruning cannot save you from a large grid: [`select_survivors`] runs only
+/// *after* the whole grid has completed the pre-screen round, and keeps a
+/// floor of three. So cost grows linearly in candidates with no upper bound —
+/// five axes at four values each is already 1,024 candidates and something
+/// like a day of generation.
+///
+/// This is a runaway guard, not a policy. It sits far above any sweep worth
+/// running, so hitting it means a dimension was mistyped or a grid was not
+/// thought through.
+const MAX_CANDIDATES: usize = 256;
+
+/// The per-model facts a candidate should resolve against.
+///
+/// Shared with the raw-vs-gglib agentic eval, which needs exactly the same
+/// thing for its `gglib` arm. Without it a candidate resolves against
+/// [`ModelContext::passthrough`], which quietly changes three things: a
+/// `reasoning`-tagged model is tuned against the neutral floor instead of
+/// `reasoning_floor`, the agentic temperature ceiling resolves to the
+/// non-reasoning 0.3 rather than 0.6, and no dialect or capability shaping
+/// applies. Values tuned that way do not transfer to production, which is the
+/// whole point of tuning them.
+pub(super) fn model_context_for(model: &Model) -> ModelContext {
+    ModelContext {
+        capabilities: model.capabilities,
+        // Same tag fallback the catalog resolution path applies in
+        // `From<&ModelSummary> for ModelContext`.
+        dialect: gglib_core::normalize::registry::dialect_for_tags(&model.tags),
+        tags: model.tags.clone(),
+        inference_defaults: model.inference_defaults.clone(),
+        defaults_origin: model.defaults_origin,
+        context_length: model.context_length,
+        catalog_resolved: true,
+    }
+}
+
 /// Build the full candidate list: the user's [`SweepSpec`] grid, plus
 /// optional seeded candidates from GGUF author defaults and per-family
 /// presets.
@@ -282,6 +347,7 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
     let top_ks = sweep_dimension(&sweep.top_k);
     let min_ps = sweep_dimension(&sweep.min_p);
     let repeat_penalties = sweep_dimension(&sweep.repeat_penalty);
+    let dry_multipliers = sweep_dimension(&sweep.dry_multiplier);
 
     let mut grid = Vec::new();
     for &temperature in &temps {
@@ -289,24 +355,24 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
             for &top_k in &top_ks {
                 for &min_p in &min_ps {
                     for &repeat_penalty in &repeat_penalties {
-                        grid.push(InferenceConfig {
-                            temperature,
-                            top_p,
-                            top_k,
-                            min_p,
-                            repeat_penalty,
-                            max_tokens: None,
-                            presence_penalty: None,
-                            // Not a sweep dimension yet: adding DRY to the
-                            // grid multiplies the candidate count by four
-                            // more axes. Sweeping it needs its own
-                            // `SweepSpec` fields and a deliberate decision
-                            // about grid size.
-                            dry_multiplier: None,
-                            dry_base: None,
-                            dry_allowed_length: None,
-                            dry_penalty_last_n: None,
-                        });
+                        for &dry_multiplier in &dry_multipliers {
+                            grid.push(InferenceConfig {
+                                temperature,
+                                top_p,
+                                top_k,
+                                min_p,
+                                repeat_penalty,
+                                dry_multiplier,
+                                max_tokens: None,
+                                presence_penalty: None,
+                                // Not dimensions: llama.cpp's defaults
+                                // (1.75, 2, 64) are reasonable, and varying
+                                // them too would multiply the grid by 81.
+                                dry_base: None,
+                                dry_allowed_length: None,
+                                dry_penalty_last_n: None,
+                            });
+                        }
                     }
                 }
             }
@@ -379,6 +445,7 @@ async fn run_task(
     http_client: &reqwest::Client,
     target: &RunningTarget,
     model: &Model,
+    model_context: &ModelContext,
     candidate: &InferenceConfig,
     task: &TuneTask,
 ) -> TuneTaskResult {
@@ -391,6 +458,9 @@ async fn run_task(
                     Some(model.name.clone()),
                 )
                 .with_sampling(Some(candidate.clone()))
+                // Resolve against the real model, not `passthrough` — see
+                // `model_context_for`.
+                .with_model_context(model_context.clone())
                 .with_usage_sink(Some(usage)),
             )
         },
@@ -738,9 +808,7 @@ mod tests {
         let sweep = SweepSpec {
             temperature: vec![0.2, 0.8],
             top_p: vec![0.9],
-            top_k: vec![],
-            min_p: vec![],
-            repeat_penalty: vec![],
+            ..Default::default()
         };
         let grid = build_candidate_grid(&sweep);
         assert_eq!(grid.len(), 2);
@@ -748,6 +816,66 @@ mod tests {
         assert!(grid.iter().any(|c| c.temperature == Some(0.8)));
         assert!(grid.iter().all(|c| c.top_p == Some(0.9)));
         assert!(grid.iter().all(|c| c.top_k.is_none()));
+    }
+
+    /// The new axis, and the reason it exists: `0.0` is a real candidate
+    /// meaning "DRY off", so one sweep measures off against two strengths.
+    #[test]
+    fn dry_multiplier_is_a_sweep_dimension() {
+        let sweep = SweepSpec {
+            dry_multiplier: vec![0.0, 0.4, 0.8],
+            ..Default::default()
+        };
+        let grid = build_candidate_grid(&sweep);
+        assert_eq!(grid.len(), 3);
+        for expected in [0.0, 0.4, 0.8] {
+            assert!(
+                grid.iter().any(|c| c.dry_multiplier == Some(expected)),
+                "missing dry_multiplier {expected}"
+            );
+        }
+        // The other three DRY parameters are not dimensions; they stay unset
+        // so llama.cpp's own defaults apply.
+        assert!(grid.iter().all(|c| c.dry_base.is_none()));
+        assert!(grid.iter().all(|c| c.dry_allowed_length.is_none()));
+        assert!(grid.iter().all(|c| c.dry_penalty_last_n.is_none()));
+    }
+
+    /// The grid multiplies, so the guard has to be checked against a product
+    /// rather than any single dimension's length.
+    #[test]
+    fn six_dimensions_multiply() {
+        let sweep = SweepSpec {
+            temperature: vec![0.2, 0.8],
+            top_p: vec![0.9, 0.95],
+            top_k: vec![20, 40],
+            min_p: vec![0.0, 0.05],
+            repeat_penalty: vec![1.0, 1.1],
+            dry_multiplier: vec![0.0, 0.8],
+        };
+        assert_eq!(build_candidate_grid(&sweep).len(), 64);
+    }
+
+    /// `MAX_CANDIDATES` is a runaway guard, so it must sit above any sweep
+    /// worth running and below the point where a mistyped grid burns a day.
+    #[test]
+    fn the_candidate_cap_admits_a_realistic_sweep_and_rejects_a_runaway() {
+        let realistic = SweepSpec {
+            temperature: vec![0.2, 0.5, 0.8],
+            dry_multiplier: vec![0.0, 0.4, 0.8],
+            ..Default::default()
+        };
+        assert!(build_candidate_grid(&realistic).len() <= MAX_CANDIDATES);
+
+        let runaway = SweepSpec {
+            temperature: vec![0.1, 0.2, 0.4, 0.6],
+            top_p: vec![0.8, 0.9, 0.95, 1.0],
+            top_k: vec![10, 20, 40, 80],
+            min_p: vec![0.0, 0.02, 0.05, 0.1],
+            repeat_penalty: vec![1.0, 1.05, 1.1, 1.2],
+            dry_multiplier: vec![0.0, 0.4, 0.8, 1.2],
+        };
+        assert!(build_candidate_grid(&runaway).len() > MAX_CANDIDATES);
     }
 
     #[test]
