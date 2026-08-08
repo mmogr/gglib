@@ -118,6 +118,10 @@ fn wire_key(field: &'static str) -> &'static str {
         "presence_penalty" => "presencePenalty",
         "repeat_penalty" => "repeatPenalty",
         "min_p" => "minP",
+        "dry_multiplier" => "dryMultiplier",
+        "dry_base" => "dryBase",
+        "dry_allowed_length" => "dryAllowedLength",
+        "dry_penalty_last_n" => "dryPenaltyLastN",
         "max_tokens" => "maxTokens",
         other => other,
     }
@@ -344,6 +348,10 @@ mod tests {
             repeat_penalty: Some(1.0),
             presence_penalty: Some(0.0),
             min_p: Some(0.0),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(-1),
         };
         let keys = serde_json::to_value(&populated).unwrap();
         let keys = keys.as_object().expect("config serializes as an object");
@@ -379,8 +387,9 @@ mod tests {
             value["sources"][0],
             json!({ "param": "temperature", "kind": "floor" })
         );
+        // maxTokens is last in the canonical order, after the DRY block.
         assert_eq!(
-            value["sources"][6],
+            value["sources"][10],
             json!({ "param": "maxTokens", "kind": "unset" })
         );
     }
@@ -399,6 +408,10 @@ mod tests {
                 "presencePenalty",
                 "repeatPenalty",
                 "minP",
+                "dryMultiplier",
+                "dryBase",
+                "dryAllowedLength",
+                "dryPenaltyLastN",
                 "maxTokens",
             ]
         );

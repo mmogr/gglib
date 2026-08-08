@@ -520,6 +520,41 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
     }
 
+    // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
+    if let Some(dm) = config.dry_multiplier
+        && !(0.0..=5.0).contains(&dm)
+    {
+        return Err(format!(
+            "DRY multiplier must be between 0.0 and 5.0, got {dm}"
+        ));
+    }
+
+    // Validate dry_base (> 1.0; the exponent base grows the penalty with
+    // matched sequence length, so a base at or below 1.0 cannot penalise)
+    if let Some(db) = config.dry_base
+        && db <= 1.0
+    {
+        return Err(format!("DRY base must be greater than 1.0, got {db}"));
+    }
+
+    // Validate dry_allowed_length (non-negative token count)
+    if let Some(dal) = config.dry_allowed_length
+        && dal < 0
+    {
+        return Err(format!(
+            "DRY allowed length must be non-negative, got {dal}"
+        ));
+    }
+
+    // Validate dry_penalty_last_n (-1 means the whole context)
+    if let Some(dpn) = config.dry_penalty_last_n
+        && dpn < -1
+    {
+        return Err(format!(
+            "DRY penalty last N must be -1 (whole context) or non-negative, got {dpn}"
+        ));
+    }
+
     Ok(())
 }
 
@@ -602,6 +637,10 @@ mod tests {
             repeat_penalty: Some(1.1),
             presence_penalty: Some(0.0),
             min_p: Some(0.0),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(-1),
         };
         assert!(validate_inference_config(&config).is_ok());
     }

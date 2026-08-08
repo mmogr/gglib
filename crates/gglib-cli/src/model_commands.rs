@@ -177,6 +177,18 @@ pub enum ModelCommand {
         /// Set default min-p sampling threshold for this model (0.0 = disabled)
         #[arg(long = "min-p")]
         min_p: Option<f32>,
+        /// Set default DRY repetition penalty strength (0.0 = disabled)
+        #[arg(long = "dry-multiplier")]
+        dry_multiplier: Option<f32>,
+        /// Set default DRY penalty base (llama.cpp default 1.75)
+        #[arg(long = "dry-base")]
+        dry_base: Option<f32>,
+        /// Set tokens of repeat DRY tolerates before penalising (default 2)
+        #[arg(long = "dry-allowed-length")]
+        dry_allowed_length: Option<i32>,
+        /// Set the DRY lookback window in tokens; -1 = whole context
+        #[arg(long = "dry-penalty-last-n")]
+        dry_penalty_last_n: Option<i32>,
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,

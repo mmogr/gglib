@@ -32,6 +32,10 @@ pub struct UpdateArgs {
     pub repeat_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
     pub min_p: Option<f32>,
+    pub dry_multiplier: Option<f32>,
+    pub dry_base: Option<f32>,
+    pub dry_allowed_length: Option<i32>,
+    pub dry_penalty_last_n: Option<i32>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -198,7 +202,11 @@ pub fn create_updated_model(
             || args.max_tokens.is_some()
             || args.repeat_penalty.is_some()
             || args.presence_penalty.is_some()
-            || args.min_p.is_some();
+            || args.min_p.is_some()
+            || args.dry_multiplier.is_some()
+            || args.dry_base.is_some()
+            || args.dry_allowed_length.is_some()
+            || args.dry_penalty_last_n.is_some();
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -225,6 +233,18 @@ pub fn create_updated_model(
             }
             if let Some(min_p) = args.min_p {
                 inference_config.min_p = Some(min_p);
+            }
+            if let Some(dry_multiplier) = args.dry_multiplier {
+                inference_config.dry_multiplier = Some(dry_multiplier);
+            }
+            if let Some(dry_base) = args.dry_base {
+                inference_config.dry_base = Some(dry_base);
+            }
+            if let Some(dry_allowed_length) = args.dry_allowed_length {
+                inference_config.dry_allowed_length = Some(dry_allowed_length);
+            }
+            if let Some(dry_penalty_last_n) = args.dry_penalty_last_n {
+                inference_config.dry_penalty_last_n = Some(dry_penalty_last_n);
             }
 
             // A deliberate flag from the user, so this is a user-set value
@@ -292,6 +312,10 @@ fn show_inference_defaults_changes(
                 || old.repeat_penalty != new.repeat_penalty
                 || old.presence_penalty != new.presence_penalty
                 || old.min_p != new.min_p
+                || old.dry_multiplier != new.dry_multiplier
+                || old.dry_base != new.dry_base
+                || old.dry_allowed_length != new.dry_allowed_length
+                || old.dry_penalty_last_n != new.dry_penalty_last_n
         }
     };
 
@@ -327,6 +351,18 @@ fn show_inference_defaults_changes(
             }
             if let Some(mp) = new.min_p {
                 println!("      Min-P: {}", mp);
+            }
+            if let Some(dm) = new.dry_multiplier {
+                println!("      DRY multiplier: {}", dm);
+            }
+            if let Some(db) = new.dry_base {
+                println!("      DRY base: {}", db);
+            }
+            if let Some(dal) = new.dry_allowed_length {
+                println!("      DRY allowed length: {}", dal);
+            }
+            if let Some(dpn) = new.dry_penalty_last_n {
+                println!("      DRY penalty last N: {}", dpn);
             }
         }
         (Some(old), Some(new)) => {
@@ -377,6 +413,34 @@ fn show_inference_defaults_changes(
                     "    Min-P: {} → {}",
                     format_option_f32(&old.min_p),
                     format_option_f32(&new.min_p)
+                );
+            }
+            if old.dry_multiplier != new.dry_multiplier {
+                println!(
+                    "    DRY multiplier: {} → {}",
+                    format_option_f32(&old.dry_multiplier),
+                    format_option_f32(&new.dry_multiplier)
+                );
+            }
+            if old.dry_base != new.dry_base {
+                println!(
+                    "    DRY base: {} → {}",
+                    format_option_f32(&old.dry_base),
+                    format_option_f32(&new.dry_base)
+                );
+            }
+            if old.dry_allowed_length != new.dry_allowed_length {
+                println!(
+                    "    DRY allowed length: {} → {}",
+                    format_option_i32(&old.dry_allowed_length),
+                    format_option_i32(&new.dry_allowed_length)
+                );
+            }
+            if old.dry_penalty_last_n != new.dry_penalty_last_n {
+                println!(
+                    "    DRY penalty last N: {} → {}",
+                    format_option_i32(&old.dry_penalty_last_n),
+                    format_option_i32(&new.dry_penalty_last_n)
                 );
             }
         }
@@ -556,6 +620,10 @@ mod tests {
             repeat_penalty: None,
             presence_penalty: None,
             min_p: None,
+            dry_multiplier: None,
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
             clear_inference_defaults: false,
         };
 

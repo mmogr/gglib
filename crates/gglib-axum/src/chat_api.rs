@@ -471,6 +471,14 @@ pub async fn proxy_chat(
         repeat_penalty: request.repeat_penalty,
         presence_penalty: request.presence_penalty,
         min_p: request.min_p,
+        // The WebUI chat request offers no DRY controls, so the request layer
+        // names none. The per-model, global and floor layers below still
+        // resolve in normally — this is an absent opinion, not a disabled
+        // feature.
+        dry_multiplier: None,
+        dry_base: None,
+        dry_allowed_length: None,
+        dry_penalty_last_n: None,
     }
     .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref(), model_ctx);
 
@@ -483,6 +491,10 @@ pub async fn proxy_chat(
         resolved_repeat_penalty = resolved.repeat_penalty,
         resolved_presence_penalty = resolved.presence_penalty,
         resolved_min_p = resolved.min_p,
+        resolved_dry_multiplier = resolved.dry_multiplier,
+        resolved_dry_base = resolved.dry_base,
+        resolved_dry_allowed_length = resolved.dry_allowed_length,
+        resolved_dry_penalty_last_n = resolved.dry_penalty_last_n,
         "Resolved inference parameters via hierarchy"
     );
 
@@ -557,19 +569,25 @@ pub async fn proxy_chat(
     // Build the llama-server URL
     let server_url = format!("http://127.0.0.1:{}/v1/chat/completions", request.port);
 
-    // Build the forwarded request body with resolved inference parameters
+    // Build the forwarded request body: transport fields here, sampling from
+    // the shared patch helper.
+    //
+    // Listing the sampling keys by hand emitted `"key": null` for every unset
+    // parameter — `max_tokens` is unset by design, so this path was already
+    // sending a null llama-server has no business receiving. It also meant a
+    // parameter added to `InferenceConfig` silently never reached this
+    // surface. `to_openai_json_patch` filters `None` and covers every field,
+    // present and future, which is why the other two request paths use it.
     let mut forward_body = serde_json::json!({
         "model": request.model,
         "messages": final_messages,
         "stream": request.stream,
-        "max_tokens": resolved.max_tokens,
-        "temperature": resolved.temperature,
-        "top_p": resolved.top_p,
-        "top_k": resolved.top_k,
-        "repeat_penalty": resolved.repeat_penalty,
-        "presence_penalty": resolved.presence_penalty,
-        "min_p": resolved.min_p,
     });
+    if let Some(obj) = forward_body.as_object_mut() {
+        for (key, value) in resolved.to_openai_json_patch() {
+            obj.insert(key, value);
+        }
+    }
 
     // Inject tools only when the model supports them.
     // Note: request.messages was consumed above, so we pass fields individually.

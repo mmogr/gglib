@@ -146,6 +146,18 @@ pub enum ProfileCommand {
         /// Min-p sampling threshold (0.0–1.0)
         #[arg(long)]
         min_p: Option<f32>,
+        /// DRY repetition penalty strength (0.0 disables)
+        #[arg(long)]
+        dry_multiplier: Option<f32>,
+        /// DRY penalty base (llama.cpp default 1.75)
+        #[arg(long)]
+        dry_base: Option<f32>,
+        /// Tokens of repeat DRY tolerates before penalising (default 2)
+        #[arg(long)]
+        dry_allowed_length: Option<i32>,
+        /// DRY lookback window in tokens; -1 = whole context
+        #[arg(long)]
+        dry_penalty_last_n: Option<i32>,
         /// Clear a parameter so it falls back to the model's own default.
         /// Repeatable, e.g. `--unset top-k --unset min-p`.
         #[arg(long, value_name = "PARAM")]

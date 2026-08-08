@@ -134,6 +134,14 @@ pub struct FieldSources {
     pub repeat_penalty: ParamSource,
     /// Where the resolved `min_p` came from.
     pub min_p: ParamSource,
+    /// Where the resolved `dry_multiplier` came from.
+    pub dry_multiplier: ParamSource,
+    /// Where the resolved `dry_base` came from.
+    pub dry_base: ParamSource,
+    /// Where the resolved `dry_allowed_length` came from.
+    pub dry_allowed_length: ParamSource,
+    /// Where the resolved `dry_penalty_last_n` came from.
+    pub dry_penalty_last_n: ParamSource,
     /// Where the resolved `max_tokens` came from.
     pub max_tokens: ParamSource,
 }
@@ -143,7 +151,7 @@ impl FieldSources {
     ///
     /// The single iteration order every consumer renders, so the CLI's table
     /// and the pipeline's debug line cannot disagree about which parameter is
-    /// which. The coupled trio is kept adjacent because it is only
+    /// which. The coupled set is kept adjacent because it is only
     /// interpretable as a group.
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, ParamSource)> {
         [
@@ -153,6 +161,10 @@ impl FieldSources {
             ("presence_penalty", self.presence_penalty),
             ("repeat_penalty", self.repeat_penalty),
             ("min_p", self.min_p),
+            ("dry_multiplier", self.dry_multiplier),
+            ("dry_base", self.dry_base),
+            ("dry_allowed_length", self.dry_allowed_length),
+            ("dry_penalty_last_n", self.dry_penalty_last_n),
             ("max_tokens", self.max_tokens),
         ]
         .into_iter()
@@ -192,6 +204,10 @@ mod tests {
             presence_penalty: ParamSource::FloorCoupled,
             repeat_penalty: ParamSource::FloorCoupled,
             min_p: ParamSource::FloorCoupled,
+            dry_multiplier: ParamSource::FloorCoupled,
+            dry_base: ParamSource::Unset,
+            dry_allowed_length: ParamSource::Unset,
+            dry_penalty_last_n: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
         };
         let fields: Vec<&str> = sources.iter().map(|(name, _)| name).collect();
@@ -204,6 +220,10 @@ mod tests {
                 "presence_penalty",
                 "repeat_penalty",
                 "min_p",
+                "dry_multiplier",
+                "dry_base",
+                "dry_allowed_length",
+                "dry_penalty_last_n",
                 "max_tokens",
             ]
         );
@@ -220,6 +240,10 @@ mod tests {
             presence_penalty: ParamSource::FloorCoupled,
             repeat_penalty: ParamSource::Layer(2),
             min_p: ParamSource::Floor,
+            dry_multiplier: ParamSource::Layer(2),
+            dry_base: ParamSource::Unset,
+            dry_allowed_length: ParamSource::Unset,
+            dry_penalty_last_n: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
         };
         let got = sources.describe(&["cli", "profile", "model"]);
@@ -228,6 +252,8 @@ mod tests {
         assert!(got.contains("top_k=floor"), "{got}");
         assert!(got.contains("presence_penalty=floor"), "{got}");
         assert!(got.contains("repeat_penalty=model"), "{got}");
+        assert!(got.contains("dry_multiplier=model"), "{got}");
+        assert!(got.contains("dry_base=unset"), "{got}");
         assert!(got.contains("max_tokens=unset"), "{got}");
     }
 
@@ -242,6 +268,10 @@ mod tests {
             presence_penalty: ParamSource::Floor,
             repeat_penalty: ParamSource::Floor,
             min_p: ParamSource::Floor,
+            dry_multiplier: ParamSource::Floor,
+            dry_base: ParamSource::Unset,
+            dry_allowed_length: ParamSource::Unset,
+            dry_penalty_last_n: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
         };
         assert!(sources.describe(&["cli"]).contains("temperature=?"));

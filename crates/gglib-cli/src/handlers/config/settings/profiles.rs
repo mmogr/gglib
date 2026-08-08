@@ -33,6 +33,10 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
             repeat_penalty,
             presence_penalty,
             min_p,
+            dry_multiplier,
+            dry_base,
+            dry_allowed_length,
+            dry_penalty_last_n,
             unset,
             list_in_models,
             no_list_in_models,
@@ -47,6 +51,10 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
                     repeat_penalty,
                     presence_penalty,
                     min_p,
+                    dry_multiplier,
+                    dry_base,
+                    dry_allowed_length,
+                    dry_penalty_last_n,
                 },
                 unset,
                 list_in_models: match (list_in_models, no_list_in_models) {
@@ -148,6 +156,10 @@ async fn show(ctx: &CliContext, name: &str) -> Result<()> {
     print_opt("  repeat-penalty  ", profile.config.repeat_penalty);
     print_opt("  presence-penalty", profile.config.presence_penalty);
     print_opt("  min-p           ", profile.config.min_p);
+    print_opt("  dry-multiplier  ", profile.config.dry_multiplier);
+    print_opt("  dry-base        ", profile.config.dry_base);
+    print_opt("  dry-allowed-len ", profile.config.dry_allowed_length);
+    print_opt("  dry-penalty-last", profile.config.dry_penalty_last_n);
     println!();
     println!("Select it per request as `<model>:{}`.", profile.name);
     Ok(())
@@ -272,6 +284,18 @@ fn merge_set(target: &mut InferenceConfig, edits: &InferenceConfig) {
     if edits.min_p.is_some() {
         target.min_p = edits.min_p;
     }
+    if edits.dry_multiplier.is_some() {
+        target.dry_multiplier = edits.dry_multiplier;
+    }
+    if edits.dry_base.is_some() {
+        target.dry_base = edits.dry_base;
+    }
+    if edits.dry_allowed_length.is_some() {
+        target.dry_allowed_length = edits.dry_allowed_length;
+    }
+    if edits.dry_penalty_last_n.is_some() {
+        target.dry_penalty_last_n = edits.dry_penalty_last_n;
+    }
 }
 
 /// Clear one parameter by its CLI flag name.
@@ -285,9 +309,14 @@ fn clear_param(config: &mut InferenceConfig, param: &str) -> Result<()> {
         "repeat-penalty" => config.repeat_penalty = None,
         "presence-penalty" => config.presence_penalty = None,
         "min-p" => config.min_p = None,
+        "dry-multiplier" => config.dry_multiplier = None,
+        "dry-base" => config.dry_base = None,
+        "dry-allowed-length" => config.dry_allowed_length = None,
+        "dry-penalty-last-n" => config.dry_penalty_last_n = None,
         other => bail!(
             "unknown parameter '{other}'; expected one of: temperature, top-p, \
-             top-k, max-tokens, repeat-penalty, presence-penalty, min-p"
+             top-k, max-tokens, repeat-penalty, presence-penalty, min-p, \
+             dry-multiplier, dry-base, dry-allowed-length, dry-penalty-last-n"
         ),
     }
     Ok(())
@@ -316,6 +345,18 @@ fn summarize(config: &InferenceConfig) -> String {
     }
     if let Some(v) = config.min_p {
         parts.push(format!("min-p={v}"));
+    }
+    if let Some(v) = config.dry_multiplier {
+        parts.push(format!("dry-multiplier={v}"));
+    }
+    if let Some(v) = config.dry_base {
+        parts.push(format!("dry-base={v}"));
+    }
+    if let Some(v) = config.dry_allowed_length {
+        parts.push(format!("dry-allowed-length={v}"));
+    }
+    if let Some(v) = config.dry_penalty_last_n {
+        parts.push(format!("dry-penalty-last-n={v}"));
     }
     parts.join("  ")
 }

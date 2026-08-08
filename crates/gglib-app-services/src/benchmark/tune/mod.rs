@@ -297,6 +297,15 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                             repeat_penalty,
                             max_tokens: None,
                             presence_penalty: None,
+                            // Not a sweep dimension yet: adding DRY to the
+                            // grid multiplies the candidate count by four
+                            // more axes. Sweeping it needs its own
+                            // `SweepSpec` fields and a deliberate decision
+                            // about grid size.
+                            dry_multiplier: None,
+                            dry_base: None,
+                            dry_allowed_length: None,
+                            dry_penalty_last_n: None,
                         });
                     }
                 }
@@ -349,6 +358,13 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
                 repeat_penalty: None,
                 max_tokens: None,
                 presence_penalty: None,
+                // Left open until a sweep validates values for this family,
+                // per the rule stated above this table: extend with measured
+                // presets, don't guess.
+                dry_multiplier: None,
+                dry_base: None,
+                dry_allowed_length: None,
+                dry_penalty_last_n: None,
             },
         ));
     }
