@@ -564,9 +564,10 @@ fn parse_sweep_args(args: &[String]) -> Result<SweepSpec> {
             "top_k" => sweep.top_k = parse_i32_list(values)?,
             "min_p" => sweep.min_p = parse_f32_list(values)?,
             "repeat_penalty" => sweep.repeat_penalty = parse_f32_list(values)?,
+            "dry_multiplier" => sweep.dry_multiplier = parse_f32_list(values)?,
             other => anyhow::bail!(
                 "unknown --sweep dimension '{other}': expected one of \
-                 temperature, top_p, top_k, min_p, repeat_penalty"
+                 temperature, top_p, top_k, min_p, repeat_penalty, dry_multiplier"
             ),
         }
     }
@@ -927,4 +928,86 @@ fn render_perf_complete(r: &ModelPerfResult) {
         SUCCESS = style::SUCCESS,
         RESET = style::RESET
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_every_sweep_dimension() {
+        let args: Vec<String> = [
+            "temperature=0.2,0.8",
+            "top_p=0.9",
+            "top_k=20,40",
+            "min_p=0,0.05",
+            "repeat_penalty=1.0,1.1",
+            "dry_multiplier=0,0.4,0.8",
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+
+        let sweep = parse_sweep_args(&args).expect("all six dimensions are valid");
+
+        assert_eq!(sweep.temperature, vec![0.2, 0.8]);
+        assert_eq!(sweep.top_p, vec![0.9]);
+        assert_eq!(sweep.top_k, vec![20, 40]);
+        assert_eq!(sweep.min_p, vec![0.0, 0.05]);
+        assert_eq!(sweep.repeat_penalty, vec![1.0, 1.1]);
+        assert_eq!(sweep.dry_multiplier, vec![0.0, 0.4, 0.8]);
+    }
+
+    /// An unswept dimension is empty, which downstream reads as "don't vary
+    /// this" rather than "no candidates".
+    #[test]
+    fn unswept_dimensions_stay_empty() {
+        let args = vec!["temperature=0.5".to_owned()];
+        let sweep = parse_sweep_args(&args).unwrap();
+
+        assert_eq!(sweep.temperature, vec![0.5]);
+        assert!(sweep.top_p.is_empty());
+        assert!(sweep.dry_multiplier.is_empty());
+    }
+
+    /// The error names the dimension the caller got wrong *and* the valid set,
+    /// since a typo is the likeliest cause.
+    #[test]
+    fn an_unknown_dimension_is_rejected_by_name() {
+        let args = vec!["dry_base=1.75".to_owned()];
+        let err = parse_sweep_args(&args).unwrap_err().to_string();
+
+        assert!(err.contains("dry_base"), "{err}");
+        assert!(err.contains("dry_multiplier"), "{err}");
+    }
+
+    #[test]
+    fn a_missing_equals_is_rejected() {
+        let args = vec!["temperature".to_owned()];
+        let err = parse_sweep_args(&args).unwrap_err().to_string();
+
+        assert!(err.contains("DIM=V1,V2"), "{err}");
+    }
+
+    #[test]
+    fn a_non_numeric_value_is_rejected() {
+        let args = vec!["temperature=0.2,hot".to_owned()];
+        assert!(parse_sweep_args(&args).is_err());
+
+        let args = vec!["top_k=20,many".to_owned()];
+        assert!(parse_sweep_args(&args).is_err());
+    }
+
+    #[test]
+    fn values_may_be_padded_with_spaces() {
+        let sweep = parse_sweep_args(&["temperature=0.2, 0.8 ".to_owned()]).unwrap();
+        assert_eq!(sweep.temperature, vec![0.2, 0.8]);
+    }
+
+    /// Negative values matter for `dry_penalty_last_n`-style integers even
+    /// though it is not a dimension today, and `parse_i32_list` is shared.
+    #[test]
+    fn integer_lists_accept_negatives() {
+        assert_eq!(parse_i32_list("-1,0,64").unwrap(), vec![-1, 0, 64]);
+    }
 }

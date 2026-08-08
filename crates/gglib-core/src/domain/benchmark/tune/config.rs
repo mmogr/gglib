@@ -69,6 +69,15 @@ pub struct SweepSpec {
     /// Candidate repeat-penalty values.
     #[serde(default)]
     pub repeat_penalty: Vec<f32>,
+    /// Candidate DRY multiplier values. `0.0` disables DRY, so a sweep of
+    /// `0.0,0.4,0.8` measures "off" against two strengths in one run.
+    ///
+    /// Only the multiplier is a dimension. `dry_base`, `dry_allowed_length`
+    /// and `dry_penalty_last_n` keep llama.cpp's defaults (1.75, 2, 64):
+    /// varying all four would multiply the grid by 81 for parameters whose
+    /// shipped values are already reasonable.
+    #[serde(default)]
+    pub dry_multiplier: Vec<f32>,
 }
 
 impl SweepSpec {
