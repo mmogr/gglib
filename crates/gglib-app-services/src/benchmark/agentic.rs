@@ -23,8 +23,8 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::agentic::{
-    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores, CONTROL_TEMPERATURE,
-    EvalArm,
+    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores,
+    CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EvalArm, control_sampling,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
@@ -236,14 +236,10 @@ pub async fn run_agentic_eval(
     // Said out loud, because a control that failed to move invalidates every
     // other number in the report and a reader scanning the deltas will not
     // otherwise notice.
-    if report.control_moved() == Some(false) {
-        warn!(
-            "agentic eval: the positive control did not move (gglib composite {:.3} vs control \
-             {:.3}). This run cannot distinguish 'no effect' from 'no sensitivity' — treat every \
-             delta below as uninterpretable.",
-            report.gglib.composite,
-            report.control.as_ref().map_or(f64::NAN, |c| c.composite)
-        );
+    if let Some(verdict) = report.control_verdict()
+        && !verdict.demonstrated_sensitivity()
+    {
+        warn_control(verdict, &report);
     }
 
     if let Err(e) = deps
@@ -298,13 +294,27 @@ fn build_arm_llm(
     // sampling before `raw_passthrough` returns, and a config naming nothing
     // but a seed adds no sampler policy to the body. So the control stays bare
     // — llama-server's own defaults — and becomes reproducible.
-    let sampling = InferenceConfig {
-        seed,
-        temperature: match arm {
-            EvalArm::Control => Some(CONTROL_TEMPERATURE),
-            EvalArm::Raw | EvalArm::Gglib => None,
+    // The control forces every truncation sampler off as well as the
+    // temperature. Temperature alone does not degrade: llama.cpp runs
+    // truncation first, so `top_k: 20` from a reasoning recipe leaves a
+    // temperature of 2.0 reshaping only twenty surviving tokens. Measured —
+    // that control scored *above* both real arms. See `control_sampling`.
+    let sampling = match arm {
+        EvalArm::Control => {
+            let (temperature, top_k, top_p, min_p) = control_sampling();
+            InferenceConfig {
+                seed,
+                temperature: Some(temperature),
+                top_k: Some(top_k),
+                top_p: Some(top_p),
+                min_p: Some(min_p),
+                ..InferenceConfig::default()
+            }
+        }
+        EvalArm::Raw | EvalArm::Gglib => InferenceConfig {
+            seed,
+            ..InferenceConfig::default()
         },
-        ..InferenceConfig::default()
     };
 
     let adapter = LlmCompletionAdapter::with_client(
@@ -318,10 +328,10 @@ fn build_arm_llm(
 
     let adapter = match arm {
         EvalArm::Raw => adapter.with_raw_passthrough(true),
-        // The control differs from the gglib arm in exactly one value, so a
-        // score gap between them can only be the temperature. Anything else
-        // varying would make the control prove something other than what it
-        // claims.
+        // The control runs the same pipeline as the gglib arm, so the gap
+        // between them is attributable to sampling rather than to shaping. It
+        // is not a one-variable ablation — see `control_sampling` — because its
+        // job is to be large and known-bad, not minimal.
         EvalArm::Gglib | EvalArm::Control => adapter.with_model_context(model_context.clone()),
     };
     Arc::new(adapter)
@@ -330,6 +340,33 @@ fn build_arm_llm(
 /// Whether a task's expected outcome demands at least one tool call.
 fn demands_tool_call(task: &TuneTask) -> bool {
     matches!(&task.expected, ExpectedOutcome::ToolCalls { calls } if !calls.is_empty())
+}
+
+/// Say why the control failed, in terms that name the fix.
+///
+/// The two failures want different actions and must not share wording. An
+/// earlier version reported both as "changed by only {gap}", which described a
+/// control that had moved 0.090 in the wrong direction as though it had barely
+/// moved at all.
+fn warn_control(verdict: ControlVerdict, report: &AgenticEvalReport) {
+    let control = report.control.as_ref().map_or(f64::NAN, |c| c.composite);
+    match verdict {
+        ControlVerdict::Moved { .. } => {}
+        ControlVerdict::TooSmall { gap } => warn!(
+            "agentic eval: the positive control moved only {gap:.3} (gglib {:.3} vs control \
+             {control:.3}), under the {CONTROL_MIN_COMPOSITE_GAP:.2} needed to demonstrate \
+             sensitivity. This run cannot distinguish 'no effect' from 'no sensitivity' — treat \
+             every delta as uninterpretable.",
+            report.gglib.composite
+        ),
+        ControlVerdict::WrongDirection { gap } => warn!(
+            "agentic eval: the positive control scored {gap:.3} ABOVE the gglib arm (gglib \
+             {:.3} vs control {control:.3}). The control's sampling was chosen to be bad, so this \
+             contradicts its premise rather than merely failing a threshold — the control needs \
+             fixing before any delta in this report means anything.",
+            report.gglib.composite
+        ),
+    }
 }
 
 /// Flatten per-task, per-seed results into one list.

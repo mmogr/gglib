@@ -83,6 +83,51 @@ const fn default_include_control() -> bool {
 /// to remove.
 pub const CONTROL_TEMPERATURE: f32 = 2.0;
 
+/// `top_k` the control arm forces. `0` disables the cut entirely.
+pub const CONTROL_TOP_K: i32 = 0;
+
+/// `top_p` the control arm forces. `1.0` keeps the whole nucleus.
+pub const CONTROL_TOP_P: f32 = 1.0;
+
+/// `min_p` the control arm forces. `0.0` disables the tail cut.
+pub const CONTROL_MIN_P: f32 = 0.0;
+
+/// The sampling the control arm applies, on top of a request's seed.
+///
+/// # Why the temperature alone was not enough
+///
+/// The first version of this control set only [`CONTROL_TEMPERATURE`], and it
+/// **failed to degrade anything** — measured on Qwen3.5-4B, it scored *above*
+/// both real arms. The reason is the sampler chain's order, which [ADR 0003]
+/// finding 5 measured: llama.cpp applies the truncation samplers *before*
+/// temperature. With a `reasoning` recipe's `top_k: 20` and `top_p: 0.95`
+/// already in force, temperature 2.0 was only flattening a distribution over
+/// twenty surviving tokens — a much tamer change than the number suggests.
+///
+/// So the control disables every truncation sampler as well. A temperature
+/// that cannot be absorbed by a `top_k` running ahead of it is the only kind
+/// that demonstrates anything.
+///
+/// # It differs from the gglib arm in more than one value, and that is fine
+///
+/// An earlier comment here claimed the control differed in exactly the
+/// temperature, so a gap could only be that. That was already untrue: naming a
+/// temperature claims the coupled trio, so the control's `presence_penalty`
+/// and `repeat_penalty` fall to the class floor rather than matching the
+/// model's recipe. Isolating one variable is a job for an ablation; this
+/// arm's job is to be *large and known-bad*, and breadth serves that.
+///
+/// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+#[must_use]
+pub const fn control_sampling() -> (f32, i32, f32, f32) {
+    (
+        CONTROL_TEMPERATURE,
+        CONTROL_TOP_K,
+        CONTROL_TOP_P,
+        CONTROL_MIN_P,
+    )
+}
+
 /// Which arm a task ran under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -301,25 +346,77 @@ pub struct AgenticEvalReport {
 /// not respond to a change that should have been impossible to miss.
 pub const CONTROL_MIN_COMPOSITE_GAP: f64 = 0.05;
 
-impl AgenticEvalReport {
-    /// Whether the positive control demonstrated that this run could detect a
-    /// sampling change.
+/// What the positive control demonstrated about this run's sensitivity.
+///
+/// Three outcomes rather than a bool, because the two ways of failing mean
+/// different things and want different fixes. Collapsing them is what made a
+/// real 0.090 swing render as "changed by only -0.090" — wording that reads as
+/// *barely moved* about a control that moved a great deal, in the wrong
+/// direction. That is [ADR 0004] decision 3's rule applied to a verdict rather
+/// than to a field: a state that licenses a different action must render
+/// differently.
+///
+/// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "verdict", rename_all = "snake_case")]
+pub enum ControlVerdict {
+    /// The control scored at least [`CONTROL_MIN_COMPOSITE_GAP`] below the
+    /// gglib arm. The apparatus moved under a known-bad change, so a null
+    /// result elsewhere in the report is evidence rather than silence.
+    Moved {
+        /// `gglib − control`, positive.
+        gap: f64,
+    },
+    /// The control scored below the gglib arm but by less than the threshold.
+    /// The apparatus may simply be insensitive at this suite size.
+    TooSmall {
+        /// `gglib − control`, positive but under the threshold.
+        gap: f64,
+    },
+    /// **The control scored *higher* than the gglib arm.**
     ///
-    /// - `Some(true)` — the control scored at least
-    ///   [`CONTROL_MIN_COMPOSITE_GAP`] below the gglib arm. The apparatus
-    ///   moved under a known-bad change, so a null result elsewhere in this
-    ///   report is evidence rather than silence.
-    /// - `Some(false)` — it did not. **Every other number here is
-    ///   uninterpretable**: the run cannot distinguish "no effect" from "no
-    ///   sensitivity".
-    /// - `None` — the control was not run, so nothing is claimed either way.
-    ///   Distinct from `Some(false)` for the same reason `Blind` is distinct
-    ///   from zero divergences.
+    /// Not a weak signal — a contradicted premise. The change was chosen to be
+    /// bad, so a control that wins says the degradation is not degrading, and
+    /// the control itself needs fixing before any delta in the report means
+    /// anything. Measured once already: temperature 2.0 without disabling
+    /// `top_k` is absorbed by the truncation samplers that run ahead of it.
+    WrongDirection {
+        /// How far *above* the gglib arm the control scored, positive.
+        gap: f64,
+    },
+}
+
+impl ControlVerdict {
+    /// Whether this run demonstrated it could detect a sampling change.
+    #[must_use]
+    pub const fn demonstrated_sensitivity(&self) -> bool {
+        matches!(self, Self::Moved { .. })
+    }
+}
+
+impl AgenticEvalReport {
+    /// What the positive control demonstrated, or `None` when it did not run.
+    ///
+    /// `None` is distinct from any failure for the same reason `Blind` is
+    /// distinct from zero divergences: nothing was claimed either way.
+    #[must_use]
+    pub fn control_verdict(&self) -> Option<ControlVerdict> {
+        let control = self.control.as_ref()?;
+        let gap = self.gglib.composite - control.composite;
+        Some(if gap >= CONTROL_MIN_COMPOSITE_GAP {
+            ControlVerdict::Moved { gap }
+        } else if gap >= 0.0 {
+            ControlVerdict::TooSmall { gap }
+        } else {
+            ControlVerdict::WrongDirection { gap: -gap }
+        })
+    }
+
+    /// Whether the control demonstrated sensitivity. `None` when it did not
+    /// run.
     #[must_use]
     pub fn control_moved(&self) -> Option<bool> {
-        self.control
-            .as_ref()
-            .map(|c| self.gglib.composite - c.composite >= CONTROL_MIN_COMPOSITE_GAP)
+        self.control_verdict().map(|v| v.demonstrated_sensitivity())
     }
 
     /// Tasks whose outcome was not stable across seeds under either arm.
@@ -527,12 +624,74 @@ mod tests {
         assert_eq!(report.control_moved(), Some(false));
     }
 
-    /// A control scoring *above* the gglib arm is a failure too: the change
-    /// was known-bad, so this is not a sensitivity demonstration either.
+    /// **The failure that was measured, and that the old bool hid.** A control
+    /// scoring *above* the gglib arm contradicts its premise rather than
+    /// failing a threshold, and it must not be reported as "barely moved".
     #[test]
-    fn a_control_that_scored_higher_is_not_a_demonstration() {
+    fn a_control_that_scored_higher_is_its_own_verdict() {
         let report = report_with(Some(scores(0.95, None, 0.99)), 0.90);
+
+        match report.control_verdict() {
+            Some(ControlVerdict::WrongDirection { gap }) => {
+                assert!((gap - 0.09).abs() < 1e-9, "gap is reported positive: {gap}");
+            }
+            other => panic!("expected WrongDirection, got {other:?}"),
+        }
         assert_eq!(report.control_moved(), Some(false));
+    }
+
+    /// The two failures are distinct states: one says the suite is too small
+    /// or the effect too subtle, the other says the control itself is broken.
+    /// They want different fixes, so they must not render the same.
+    #[test]
+    fn a_small_gap_and_a_wrong_direction_are_different_verdicts() {
+        let small = report_with(Some(scores(0.5, None, 0.88)), 0.90);
+        let wrong = report_with(Some(scores(0.5, None, 0.99)), 0.90);
+
+        assert!(matches!(
+            small.control_verdict(),
+            Some(ControlVerdict::TooSmall { .. })
+        ));
+        assert!(matches!(
+            wrong.control_verdict(),
+            Some(ControlVerdict::WrongDirection { .. })
+        ));
+        assert_ne!(small.control_verdict(), wrong.control_verdict());
+    }
+
+    /// Both failure gaps are reported as positive magnitudes, so neither
+    /// renders with a sign that has to be interpreted.
+    #[test]
+    fn every_verdict_reports_a_positive_gap() {
+        for report in [
+            report_with(Some(scores(0.2, None, 0.30)), 0.90),
+            report_with(Some(scores(0.5, None, 0.88)), 0.90),
+            report_with(Some(scores(0.5, None, 0.99)), 0.90),
+        ] {
+            let gap = match report.control_verdict().expect("a verdict") {
+                ControlVerdict::Moved { gap }
+                | ControlVerdict::TooSmall { gap }
+                | ControlVerdict::WrongDirection { gap } => gap,
+            };
+            assert!(gap >= 0.0, "{gap}");
+        }
+    }
+
+    /// **The control must disable truncation, not only raise the temperature.**
+    /// llama.cpp runs the truncation samplers first, so a `top_k` left in force
+    /// absorbs the temperature — measured on Qwen3.5-4B, where a
+    /// temperature-only control scored *above* both real arms.
+    #[test]
+    fn the_control_disables_every_truncation_sampler() {
+        let (temperature, top_k, top_p, min_p) = control_sampling();
+
+        assert!((temperature - CONTROL_TEMPERATURE).abs() < f32::EPSILON);
+        assert_eq!(top_k, 0, "top_k must be disabled, not merely widened");
+        assert!(
+            (top_p - 1.0).abs() < f32::EPSILON,
+            "top_p keeps the nucleus"
+        );
+        assert!(min_p.abs() < f32::EPSILON, "min_p cuts no tail");
     }
 
     /// Not run is not the same as ran-and-failed — the same distinction the

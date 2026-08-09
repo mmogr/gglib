@@ -10,7 +10,8 @@ pub mod tune;
 
 pub use agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmDelta, ArmScores,
-    CONTROL_MIN_COMPOSITE_GAP, CONTROL_TEMPERATURE, DEFAULT_SEEDS, EvalArm,
+    CONTROL_MIN_COMPOSITE_GAP, CONTROL_MIN_P, CONTROL_TEMPERATURE, CONTROL_TOP_K, CONTROL_TOP_P,
+    ControlVerdict, DEFAULT_SEEDS, EvalArm, control_sampling,
 };
 pub use compare::{CompareConfig, ModelCompareResult};
 pub use events::{BenchmarkEvent, BenchmarkModelResult};

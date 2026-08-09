@@ -14,7 +14,8 @@ use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CompareConfig, DEFAULT_SEEDS, ModelCompareResult, ModelPerfResult, PerfConfig,
+    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, ModelCompareResult,
+    ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -503,44 +504,62 @@ fn render_agentic_report(report: &AgenticEvalReport) {
 /// control that failed to move invalidates every delta above it, and a reader
 /// scanning for the headline number has to meet that fact first.
 fn render_control_block(report: &AgenticEvalReport) {
-    let (Some(control), Some(moved)) = (report.control.as_ref(), report.control_moved()) else {
+    let Some(verdict) = report.control_verdict() else {
         // Not run. Distinct from "ran and failed", and said so rather than
         // left silent — the same rule the sampling readback applies to blind.
         eprintln!();
         eprintln!(
-            "  {MUTED}no control arm ran, so nothing here shows whether this eval could have              detected a difference at all{RESET}",
+            "  {MUTED}no control arm ran, so nothing here shows whether this eval could have \
+             detected a difference at all{RESET}",
             MUTED = style::MUTED,
             RESET = style::RESET,
         );
         return;
     };
+    let control = report.control.as_ref().map_or(f64::NAN, |c| c.composite);
+    let gglib = report.gglib.composite;
 
-    let gap = report.gglib.composite - control.composite;
     eprintln!();
-    if moved {
-        eprintln!(
-            "  {SUCCESS}control moved{RESET}: forcing temperature {temp} cost {gap:.3} composite              ({control:.3} vs {gglib:.3}), so this run can detect a sampling change.",
-            temp = gglib_core::domain::benchmark::CONTROL_TEMPERATURE,
-            control = control.composite,
-            gglib = report.gglib.composite,
+    match verdict {
+        ControlVerdict::Moved { gap } => eprintln!(
+            "  {SUCCESS}control moved{RESET}: the deliberately broken sampling cost {gap:.3} \
+             composite ({control:.3} vs {gglib:.3}), so this run can detect a sampling change.",
             SUCCESS = style::SUCCESS,
             RESET = style::RESET,
-        );
-    } else {
-        eprintln!(
-            "  {DANGER}control did not move{RESET}: forcing temperature {temp} changed the              composite by only {gap:.3} ({control:.3} vs {gglib:.3}), below the {min} this              apparatus needs to demonstrate sensitivity.",
-            temp = gglib_core::domain::benchmark::CONTROL_TEMPERATURE,
-            control = control.composite,
-            gglib = report.gglib.composite,
-            min = gglib_core::domain::benchmark::CONTROL_MIN_COMPOSITE_GAP,
-            DANGER = style::DANGER,
-            RESET = style::RESET,
-        );
-        eprintln!(
-            "  {DANGER}Treat every delta above as uninterpretable: this run cannot tell \"no              effect\" from \"no sensitivity\".{RESET}",
-            DANGER = style::DANGER,
-            RESET = style::RESET,
-        );
+        ),
+        ControlVerdict::TooSmall { gap } => {
+            eprintln!(
+                "  {DANGER}control did not move{RESET}: the deliberately broken sampling changed \
+                 the composite by only {gap:.3} ({control:.3} vs {gglib:.3}), below the \
+                 {min:.2} this apparatus needs to demonstrate sensitivity.",
+                min = CONTROL_MIN_COMPOSITE_GAP,
+                DANGER = style::DANGER,
+                RESET = style::RESET,
+            );
+            eprintln!(
+                "  {DANGER}Treat every delta above as uninterpretable: this run cannot tell \"no \
+                 effect\" from \"no sensitivity\".{RESET}",
+                DANGER = style::DANGER,
+                RESET = style::RESET,
+            );
+        }
+        // Never worded as "barely moved". It moved a great deal, the wrong
+        // way, which contradicts the control's premise rather than failing a
+        // threshold — and the fix is to the control, not to the suite size.
+        ControlVerdict::WrongDirection { gap } => {
+            eprintln!(
+                "  {DANGER}control moved the WRONG WAY{RESET}: the deliberately broken sampling \
+                 scored {gap:.3} ABOVE the gglib arm ({control:.3} vs {gglib:.3}).",
+                DANGER = style::DANGER,
+                RESET = style::RESET,
+            );
+            eprintln!(
+                "  {DANGER}Its sampling was chosen to be bad, so this contradicts the control's \
+                 premise. Fix the control before reading any delta above.{RESET}",
+                DANGER = style::DANGER,
+                RESET = style::RESET,
+            );
+        }
     }
 }
 
