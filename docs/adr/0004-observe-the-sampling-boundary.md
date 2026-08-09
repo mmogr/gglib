@@ -3,7 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 1 overstated which
   launch paths pass sampler flags, and named launch flags as the only thing
-  that masks `/props`; see the amendment there and finding 7)
+  that masks `/props`; see the amendment there and finding 7. Addendum
+  2026-08-09 — why there are no request-level task overlays, moved out of
+  #744's PR body so the prohibition outlives it)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -371,6 +373,11 @@ Recorded because ADR 0003 made the same distinction about redundancy and it is
 equally tempting here: a boundary you can see across is not a policy you have
 evidence for. Those need an A/B instrument that does not exist yet.
 
+One policy question *was* settled while this ADR was being written, by running
+the code rather than by this organ. It is recorded in the addendum below,
+because the decision it reached is a prohibition and prohibitions decay when
+their reasons live only in a merged PR body.
+
 ## Consequences
 
 **Good:**
@@ -456,4 +463,163 @@ evidence for. Those need an A/B instrument that does not exist yet.
   recommendation is better evidence than gglib's guess, and ADR 0003's own
   argument — do not restate what upstream already decides — applies to it.
 
+## Addendum — request-level task overlays, and why there are none
+
+*Added 2026-08-09. Records a decision taken across #741, #743 and #744 whose
+reasons currently live in one doc comment and three merged PR bodies. It is
+here because the thing it prohibits is a recurring, plausible-sounding
+proposal, and because what refuted it was a measurement — the same pattern
+finding 1 and the two rules above keep arriving at.*
+
+### The proposal, and what exactly is banned
+
+The recurring idea: have the proxy read a request, infer what task it is —
+coding, tool emission, prose — and overlay a task-appropriate sampling recipe.
+Usually phrased as *"drop the temperature when it's a coding prompt."*
+
+gglib does not do this. **The ban is on the classifier, not on task-awareness**,
+and the distinction is the whole of it — a mild, provenance-gated ceiling
+*does* ship, and re-reading this section as "task-aware sampling was tried and
+removed" would contradict live code in `request_pipeline::sampling`.
+
+Three things are prohibited, and they compose:
+
+1. Inferring the task from request *content* (prompt sniffing).
+2. Driving the temperature to a task-appropriate low or near-greedy value on
+   the strength of that inference.
+3. Expressing either as a ladder rung.
+
+### 1. The single-completion dilemma
+
+The load-bearing argument, and the one that generalises past sampling.
+
+A reasoning model does not decode its tool call or its code in isolation. The
+`<think>` block and the payload are **one completion under one sampler
+configuration**. There is no point between them at which a proxy could change
+the temperature, because from the server's side there is no boundary — only a
+token stream that eventually contains a closing tag. So a temperature chosen
+for the code lands on the reasoning that precedes it.
+
+Both vendors specify the range this breaks, and specify it for this reason:
+
+| model | one completion contains | published guidance |
+|---|---|---|
+| Qwen3 (thinking) | `<think>` … `</think>` **and** the code or tool call | ~0.6; explicitly warns against greedy decoding |
+| DeepSeek-R1 | the same | 0.5 – 0.7 |
+
+Below that range these models degenerate into endless repetition — which the
+proxy's own pre-dispatch loop guard (#723) then rejects as a 400. A near-greedy
+overlay therefore does not merely sample poorly. It **manufactures the exact
+failure another organ exists to catch**, and it does so on the models most
+likely to be used for agentic coding, since `reasoning` tagging is automatic at
+import for Qwen3.x, DeepSeek-R1 and QwQ.
+
+Verified rather than reasoned: tool-carrying requests against Qwen3.5-4B
+returned populated `reasoning_content`, confirming the two phases share one
+completion in the traffic this would have applied to.
+
+### 2. The classifier cannot know what it claims to know
+
+Independent of the dilemma, and fatal on its own.
+
+`carries_tools` answers *"could this turn emit a call?"* — never *"will it?"*
+VS Code Copilot in agent mode sends `tools` on essentially every request, prose
+included, so on that traffic the two questions have visibly different answers
+and only one of them is askable.
+
+This is the same wall `constrain.rs` hits under `tool_choice: "auto"`, where it
+is documented and accepted: a grammar constrains from the first token, so
+installing one would forbid the plain-text answers `auto` exists to permit —
+and the stage therefore leaves `auto` unconstrained rather than guessing. Both
+stages want to know something about the output before any of it exists. One of
+them already concluded that you cannot.
+
+Prompt sniffing is strictly worse: it adds a content heuristic that is wrong in
+a way nobody can audit from a resolved value, in front of a decision that was
+already unable to justify itself.
+
+### 3. A ladder rung would have taken the coupled trio with it
+
+The implementation trap, recorded because expressing "outranks the
+auto-detected recipe" as a rung is the obvious way to build it.
+
+A rung that names a `temperature` **claims the coupled trio** under
+`resolve_layers`: `presence_penalty`, `repeat_penalty` and `min_p` then come
+only from the layer that named the temperature. A `reasoning` model would
+silently lose the `1.5` presence penalty its own recipe pairs with its
+temperature, on every agentic turn. Clamping after the fold and gating on
+`sources.temperature` leaves the trio untouched.
+
+> **A correction worth keeping.** #744 stated this trap as costing "DRY and the
+> penalties". DRY was coupled only between #741 and #746, which removed it on
+> the measurement that DRY's strength is governed by its own `dry_base` and
+> `dry_allowed_length`, and that it targets a failure mode which gets *worse*
+> at low temperature rather than milder. The clamp is still the right shape;
+> the reason is the trio, and a reader who checks the old wording against
+> `CoupledLayers` will find three fields, not seven.
+
+### What actually ships, and why it is not the banned thing
+
+A temperature **ceiling** of `0.6` on `reasoning`-tagged models and `0.3`
+otherwise ([`agentic_temperature_ceiling`]), clamped *after* the fold and gated
+on provenance.
+
+| | the banned overlay | the shipped ceiling |
+|---|---|---|
+| trigger | inferred from prompt content | `tools` present on the request |
+| value | task-appropriate, near-greedy | `0.6` / `0.3` — inside vendor range, never greedy |
+| overrides a person | yes | **no** — only the auto-detected rung and the floor |
+| can raise a temperature | yes | never |
+| mechanism | a ladder rung | clamp after the fold; the coupled trio is untouched |
+
+An auto-detected recipe is an unreviewed guess written at import time, and
+`DefaultsOrigin` already ranks it below global settings for that reason — so a
+cap overruling it is consistent with the hierarchy rather than an exception to
+it. Measured on Qwen3.5-4B: no tools → `1.0`; with tools → `0.6`; a profile
+setting `0.9` with tools → `0.9`, DRY intact.
+
+**A person may still ask for a near-greedy coding temperature.** That is what
+`{model}:{profile}` is for — `gglib config profile set coding --temperature
+0.15`, selected per request as part of the requested model name. The request
+*declares* the task instead of the proxy guessing it, and the value is one
+somebody chose and can be shown. The ban is on inference, not on the outcome.
+
+### The methodological point
+
+#741 shipped the floor. It was not reviewed into correctness — it was **run**,
+and measured inert: a tools request against Qwen3.5-4B resolved identically to
+a chat request, `temperature 1.0`, `top_p 0.95`, because every `reasoning`
+model carries an auto-detected recipe and any layer outranks a floor. The
+feature was doing nothing on precisely the models it was written for, and would
+have gone on reporting success indefinitely.
+
+This is [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md) finding 2's
+inert-module trap once more — decision 8 above was already counting its
+recurrences, and this is one it does not count, because it happened in policy
+rather than in an instrument.
+
+That is the part worth carrying forward. The two rules above were written about
+Tier C organs, on the reasoning that an observation which cannot fail is not an
+observation. #741 shows the rule is not confined to organs: **a sampling change
+that has not been observed firing has not been shown to fire**, and a floor
+beneath a layer that always names the same field can no more report its own
+inertness than a `/props` read can report a flag it is echoing. Both were
+answerable only by running them.
+
+### What would reopen this
+
+Not an argument — evidence from the A/B instrument the section above says this
+ADR's organ cannot supply. Specifically: a run showing that a task-conditioned
+temperature beats the ceiling on tool accuracy *without* degrading the same
+model's reasoning phase, on multiple seeds.
+
+Two cautions for whoever runs it. Single-sample scoring has already produced a
+`0.728` vs `0.543` spread between raw arms that were configured identically, so
+a difference smaller than that gap is not a result. And part of that spread was
+not stochastic at all — a runaway tool-call stream was destroying whole turns
+and scoring them `0`, on a different task in each arm, which made two identical
+arms look like they diverged. A control that proves the apparatus can move,
+again, is not optional here.
+
+[`agentic_temperature_ceiling`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/inference.rs
 [`props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs
