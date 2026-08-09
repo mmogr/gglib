@@ -190,6 +190,186 @@ impl ModelSamplingDefaults {
     }
 }
 
+// =============================================================================
+// What gglib does with what the model published
+// =============================================================================
+
+/// Tolerance for comparing a published value against a resolved one.
+///
+/// Same value and reason as `gglib_proxy::props`'s. A GGUF `FLOAT32` `0.7`
+/// stringifies to `"0.7"` and parses back to `f64` `0.7`, while gglib's own
+/// resolved `f32` `0.7` widens to `0.699999988079071`. The ~1.2e-8 gap is an
+/// artefact of the round trip, not a disagreement, and must not render as one.
+const FLOAT_EPSILON: f64 = 1e-6;
+
+/// What gglib is doing with one field's published recommendation.
+///
+/// # Why this is a configuration question, not an observation
+///
+/// [`gglib_proxy::props`]'s baseline check asks *"has this build's default
+/// table moved?"* and answers it from `/props`. This asks a different question
+/// with a different failure mode: *"is gglib sending something other than what
+/// the model author published?"* — which is decidable from stored
+/// configuration alone, with no server running and no request in flight.
+///
+/// Keeping them apart matters. The baseline check must abstain wherever
+/// attribution fails, because a wrong verdict there re-opens or falsely
+/// satisfies [ADR 0003]'s deletion criterion. This comparison has no such
+/// hazard: both sides are known exactly, so every field reaches a verdict and
+/// none of them is `Indeterminate`.
+///
+/// # The wire rule this encodes
+///
+/// A sampling value gglib resolves is sent in the request body, and the body
+/// wins over `default_generation_settings`. A value gglib leaves unresolved is
+/// sent as nothing at all, and llama.cpp then applies the model's own
+/// `general.sampling.*` key ([ADR 0004] finding 7). So the question "does the
+/// model's published value survive to the sampler?" is answered entirely by
+/// **whether gglib names the field**, not by which rung named it — which is
+/// why this keys on `Option<f64>` rather than on [`ParamSource`].
+///
+/// [`gglib_proxy::props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs
+/// [`ParamSource`]: crate::domain::ParamSource
+/// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+/// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+#[derive(Debug, Clone, PartialEq)]
+pub enum SamplingOverride {
+    /// The model published nothing gglib could act against — either it names
+    /// no value for this field, or the field has no GGUF key at all.
+    ///
+    /// The two are collapsed deliberately: both mean *there is no published
+    /// recommendation to override*, which is the only thing a surface needs in
+    /// order to stay quiet. [`ModelSamplingDefaults::gguf_key`] tells the two
+    /// apart where it matters.
+    NotPublished,
+    /// The model published a value and gglib names nothing, so llama.cpp
+    /// applies the model author's number.
+    ///
+    /// This is the state [ADR 0003]'s deferral was aiming at, and the one a
+    /// bare `—` in an explain table renders indistinguishably from a gap.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    Deferred {
+        /// The GGUF key carrying it.
+        key: &'static str,
+        /// What the model author published.
+        published: f64,
+    },
+    /// The model published a value and gglib sends the same number.
+    ///
+    /// Not an override in effect, and reporting it as one would cry wolf. Kept
+    /// distinct from [`Self::Deferred`] anyway, because gglib *asserting* a
+    /// value it happens to agree with is exactly the redundant restatement
+    /// [ADR 0003] argues against — it silently overrides whatever the model
+    /// author chooses next.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    Restated {
+        /// The GGUF key carrying it.
+        key: &'static str,
+        /// The value both sides name.
+        published: f64,
+    },
+    /// The model published a value and gglib sends a different one.
+    ///
+    /// The state this whole comparison exists to surface.
+    Overridden {
+        /// The GGUF key carrying it.
+        key: &'static str,
+        /// What the model author published.
+        published: f64,
+        /// What gglib puts on the wire instead.
+        sending: f64,
+    },
+    /// The model names the key and gglib could not read its value.
+    ///
+    /// Carried through rather than folded into [`Self::NotPublished`] for the
+    /// reason [`ModelSamplingDefault::Unreadable`] exists: llama.cpp's `strtof`
+    /// and Rust's `f64::from_str` need not agree on every string, so gglib
+    /// cannot say whether a recommendation was applied here or not.
+    Unreadable {
+        /// The GGUF key whose value could not be read.
+        key: &'static str,
+        /// What gglib sends regardless, if anything. Its own value still
+        /// reaches the sampler; what is unknown is what it displaced.
+        sending: Option<f64>,
+    },
+}
+
+impl SamplingOverride {
+    /// Whether gglib is putting a different number on the wire than the model
+    /// author published.
+    ///
+    /// The one predicate a surface should branch on to decide whether to warn.
+    /// [`Self::Unreadable`] is deliberately **not** included: gglib cannot tell
+    /// whether it is overriding anything there, and a warning that might be
+    /// about nothing is the [`Indeterminate`]-rendered-as-`Differs` mistake
+    /// [ADR 0004] decision 3 forbids one layer up.
+    ///
+    /// [`Indeterminate`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    #[must_use]
+    pub const fn is_override(&self) -> bool {
+        matches!(self, Self::Overridden { .. })
+    }
+
+    /// Whether the model published anything at all for this field.
+    #[must_use]
+    pub const fn model_published(&self) -> bool {
+        !matches!(self, Self::NotPublished)
+    }
+}
+
+impl ModelSamplingDefaults {
+    /// Compare one field's published value against what gglib will send.
+    ///
+    /// `sending` is what the ladder resolved: `None` means gglib names the
+    /// field nowhere and llama.cpp is left to apply the model's own value.
+    #[must_use]
+    pub fn compare_field(&self, field: &str, sending: Option<f64>) -> SamplingOverride {
+        let Some(key) = Self::gguf_key(field) else {
+            // No GGUF key exists, so no model can have published one. This is
+            // the `presence_penalty` / `dry_multiplier` arm, and it is a fact
+            // about the format rather than about this model.
+            return SamplingOverride::NotPublished;
+        };
+        match self.get(field) {
+            ModelSamplingDefault::Absent => SamplingOverride::NotPublished,
+            ModelSamplingDefault::Unreadable => SamplingOverride::Unreadable { key, sending },
+            ModelSamplingDefault::Declared(published) => match sending {
+                None => SamplingOverride::Deferred { key, published },
+                Some(sending) if (sending - published).abs() <= FLOAT_EPSILON => {
+                    SamplingOverride::Restated { key, published }
+                }
+                Some(sending) => SamplingOverride::Overridden {
+                    key,
+                    published,
+                    sending,
+                },
+            },
+        }
+    }
+
+    /// Compare every field a model can publish, in [`MODEL_SAMPLING_KEYS`]
+    /// order.
+    ///
+    /// `resolved` looks each field up by its gglib wire name and returns what
+    /// the ladder decided to send, so callers hand in whichever config they are
+    /// explaining rather than this module learning about [`InferenceConfig`].
+    ///
+    /// [`InferenceConfig`]: crate::domain::InferenceConfig
+    #[must_use]
+    pub fn compare_all(
+        &self,
+        resolved: impl Fn(&str) -> Option<f64>,
+    ) -> Vec<(&'static str, SamplingOverride)> {
+        MODEL_SAMPLING_KEYS
+            .iter()
+            .map(|(field, _)| (*field, self.compare_field(field, resolved(field))))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +500,187 @@ mod tests {
         let d = ModelSamplingDefaults::default();
         assert_eq!(d.get("mirostat"), ModelSamplingDefault::Absent);
         assert_eq!(ModelSamplingDefaults::gguf_key("mirostat"), None);
+    }
+
+    // =========================================================================
+    // The override comparison
+    // =========================================================================
+
+    /// The state the whole comparison exists to surface: a model author
+    /// published a number and gglib puts a different one on the wire.
+    #[test]
+    fn a_resolved_value_that_differs_from_the_published_one_is_an_override() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.temp", "0.33")]));
+
+        let verdict = d.compare_field("temperature", Some(1.0));
+
+        assert_eq!(
+            verdict,
+            SamplingOverride::Overridden {
+                key: "general.sampling.temp",
+                published: 0.33,
+                sending: 1.0,
+            }
+        );
+        assert!(verdict.is_override());
+    }
+
+    /// gglib naming nothing is what lets the model's own value through. This
+    /// must never read as an override, and it is the state a bare `—` in an
+    /// explain table cannot distinguish from a gap.
+    #[test]
+    fn naming_nothing_defers_to_the_published_value() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.top_p", "0.71")]));
+
+        let verdict = d.compare_field("top_p", None);
+
+        assert_eq!(
+            verdict,
+            SamplingOverride::Deferred {
+                key: "general.sampling.top_p",
+                published: 0.71,
+            }
+        );
+        assert!(!verdict.is_override());
+        assert!(verdict.model_published());
+    }
+
+    /// Sending the same number is not an override in effect, and warning about
+    /// it would cry wolf — but it is not deferral either, so it keeps its own
+    /// arm.
+    #[test]
+    fn sending_the_published_value_is_restated_rather_than_overridden() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.min_p", "0.05")]));
+
+        let verdict = d.compare_field("min_p", Some(0.05));
+
+        assert_eq!(
+            verdict,
+            SamplingOverride::Restated {
+                key: "general.sampling.min_p",
+                published: 0.05,
+            }
+        );
+        assert!(!verdict.is_override());
+    }
+
+    /// **The round-trip guard.** A GGUF `FLOAT32` `0.7` reaches this module as
+    /// the string `"0.7"` and parses to `f64` `0.7`, while gglib's own resolved
+    /// `f32` `0.7` widens to `0.699999988079071`. Comparing those exactly would
+    /// report an override on every model that publishes a value gglib agrees
+    /// with — the loudest possible false alarm.
+    #[test]
+    fn an_f32_round_trip_does_not_read_as_an_override() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.temp", "0.7")]));
+
+        let widened = f64::from(0.7_f32);
+        assert!(
+            (widened - 0.7).abs() > f64::EPSILON,
+            "guards the premise: the gap is real, not an artefact of this assertion"
+        );
+
+        assert!(matches!(
+            d.compare_field("temperature", Some(widened)),
+            SamplingOverride::Restated { .. }
+        ));
+    }
+
+    /// A difference larger than the epsilon still has to register, or the
+    /// tolerance above would have silenced the check rather than calibrated it.
+    #[test]
+    fn a_difference_above_the_epsilon_still_registers() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.temp", "0.7")]));
+
+        assert!(d.compare_field("temperature", Some(0.7001)).is_override());
+    }
+
+    /// gglib cannot tell whether it displaced anything here, so this must not
+    /// claim an override — the same rule ADR 0004 decision 3 applies to
+    /// `Indeterminate` one layer up.
+    #[test]
+    fn an_unreadable_published_value_is_not_reported_as_an_override() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[("general.sampling.temp", "warm")]));
+
+        let verdict = d.compare_field("temperature", Some(1.0));
+
+        assert_eq!(
+            verdict,
+            SamplingOverride::Unreadable {
+                key: "general.sampling.temp",
+                sending: Some(1.0),
+            }
+        );
+        assert!(!verdict.is_override(), "cannot claim what it cannot know");
+        assert!(verdict.model_published());
+    }
+
+    /// A model with no opinion leaves gglib free, and the surfaces silent.
+    #[test]
+    fn a_field_the_model_never_named_is_not_published() {
+        let d = ModelSamplingDefaults::default();
+
+        let verdict = d.compare_field("temperature", Some(1.0));
+
+        assert_eq!(verdict, SamplingOverride::NotPublished);
+        assert!(!verdict.is_override());
+        assert!(!verdict.model_published());
+    }
+
+    /// **The asymmetry, restated at the comparison layer.** These two have no
+    /// GGUF key, so gglib naming them can never be overriding a model author —
+    /// and a surface must not imply otherwise however loudly the model declares
+    /// keys with those names.
+    #[test]
+    fn a_field_with_no_gguf_key_can_never_be_an_override() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[
+            ("general.sampling.presence_penalty", "1.0"),
+            ("general.sampling.dry_multiplier", "0.8"),
+        ]));
+
+        for field in ["presence_penalty", "dry_multiplier"] {
+            assert_eq!(
+                d.compare_field(field, Some(1.5)),
+                SamplingOverride::NotPublished,
+                "{field} is unreachable by a model"
+            );
+        }
+    }
+
+    /// `compare_all` covers exactly the reachable set, in the mapping table's
+    /// order, so a surface iterating it cannot silently miss a field.
+    #[test]
+    fn compare_all_covers_every_reachable_field_in_table_order() {
+        let d = ModelSamplingDefaults::from_metadata(&meta(&[
+            ("general.sampling.temp", "0.33"),
+            ("general.sampling.penalty_repeat", "1.07"),
+        ]));
+
+        let all = d.compare_all(|field| match field {
+            "temperature" => Some(1.0),
+            "repeat_penalty" => Some(1.07),
+            _ => None,
+        });
+
+        let fields: Vec<&str> = all.iter().map(|(f, _)| *f).collect();
+        assert_eq!(
+            fields,
+            MODEL_SAMPLING_KEYS
+                .iter()
+                .map(|(f, _)| *f)
+                .collect::<Vec<_>>()
+        );
+
+        let by_field = |name: &str| {
+            all.iter()
+                .find(|(f, _)| *f == name)
+                .map(|(_, v)| v.clone())
+                .expect("field present")
+        };
+        assert!(by_field("temperature").is_override());
+        assert!(matches!(
+            by_field("repeat_penalty"),
+            SamplingOverride::Restated { .. }
+        ));
+        assert_eq!(by_field("top_p"), SamplingOverride::NotPublished);
     }
 }

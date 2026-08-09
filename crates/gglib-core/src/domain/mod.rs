@@ -66,7 +66,9 @@ pub use kv_estimate::{
 
 // Re-export KV memory-shape detection at the domain level for convenience
 pub use kv_memory::kv_memory_is_partial;
-pub use model_sampling::{MODEL_SAMPLING_KEYS, ModelSamplingDefault, ModelSamplingDefaults};
+pub use model_sampling::{
+    MODEL_SAMPLING_KEYS, ModelSamplingDefault, ModelSamplingDefaults, SamplingOverride,
+};
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
