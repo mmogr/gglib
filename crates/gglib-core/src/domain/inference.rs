@@ -36,6 +36,8 @@
 //! same resolution with no profile selected, for surfaces that have no notion
 //! of one.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::sampling_provenance::{FieldSources, ParamSource};
@@ -262,25 +264,203 @@ fn camel_to_snake(s: &str) -> String {
     out
 }
 
-/// Convert a `snake_case` string to camelCase.
+/// What reading one client-supplied sampling field did, when it was not
+/// simply "read it".
 ///
-/// Inverse of [`camel_to_snake`]; used to normalise OpenAI-format body keys
-/// (`top_p`, `max_tokens`, etc.) into the camelCase form expected by
-/// `InferenceConfig`'s serde impl before deserialisation.
-fn snake_to_camel(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut cap = false;
-    for ch in s.chars() {
-        if ch == '_' {
-            cap = true;
-        } else if cap {
-            out.push(ch.to_ascii_uppercase());
-            cap = false;
-        } else {
-            out.push(ch);
+/// Carried out of [`InferenceConfig::extract_client_sampling`] so the caller
+/// can log or count it. A value gglib declines to use is a fact about a
+/// client worth surfacing — before this existed, the entire client sampling
+/// layer could vanish over one key with nothing recording that it had.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldIssue {
+    /// Recognised, but not in the form this field takes. A documented
+    /// equivalent was substituted and the value is in use.
+    Normalised {
+        /// Wire key, as the client spelled it.
+        field: &'static str,
+        /// What arrived, rendered for a log line.
+        from: String,
+        /// What it was taken to mean.
+        to: &'static str,
+    },
+    /// Not readable as this field's type. **This field alone** is dropped;
+    /// every other field the client sent is unaffected.
+    Rejected {
+        /// Wire key, as the client spelled it.
+        field: &'static str,
+        /// What arrived, rendered for a log line.
+        value: String,
+        /// What the field accepts.
+        expected: &'static str,
+    },
+}
+
+impl fmt::Display for FieldIssue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Normalised { field, from, to } => {
+                write!(f, "{field}={from} read as {to}")
+            }
+            Self::Rejected {
+                field,
+                value,
+                expected,
+            } => write!(f, "{field}={value} dropped (expected {expected})"),
         }
     }
-    out
+}
+
+/// Render a JSON value compactly enough for a log line.
+fn brief(v: &serde_json::Value) -> String {
+    let s = v.to_string();
+    if s.len() > 40 {
+        format!("{}…", &s[..40])
+    } else {
+        s
+    }
+}
+
+/// Narrow a JSON number to the `f32` every sampling field stores.
+///
+/// Named rather than inline because an `#[allow]` cannot sit on an
+/// expression, and the truncation is deliberate: the wire carries `f64` and
+/// `InferenceConfig` has always been `f32`.
+#[allow(clippy::cast_possible_truncation)]
+const fn narrow(n: f64) -> f32 {
+    n as f32
+}
+
+/// Read one float field. Absent and `null` are both "no opinion".
+fn read_f32(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    key: &'static str,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<f32> {
+    let v = obj.get(key)?;
+    if v.is_null() {
+        return None;
+    }
+    v.as_f64().map_or_else(
+        || {
+            issues.push(FieldIssue::Rejected {
+                field: key,
+                value: brief(v),
+                expected: "a number",
+            });
+            None
+        },
+        |n| Some(narrow(n)),
+    )
+}
+
+/// Read one integer field.
+///
+/// A float with no fractional part is accepted, because llama.cpp accepts
+/// `top_k: 40.0` and several clients emit every number as a float. A float
+/// that would lose information is not.
+fn read_i32(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    key: &'static str,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<i32> {
+    let v = obj.get(key)?;
+    if v.is_null() {
+        return None;
+    }
+    if let Some(n) = v.as_i64() {
+        return i32::try_from(n).map_or_else(
+            |_| {
+                issues.push(FieldIssue::Rejected {
+                    field: key,
+                    value: brief(v),
+                    expected: "a 32-bit integer",
+                });
+                None
+            },
+            Some,
+        );
+    }
+    if let Some(f) = v.as_f64()
+        && f.fract() == 0.0
+        && f >= f64::from(i32::MIN)
+        && f <= f64::from(i32::MAX)
+    {
+        #[allow(clippy::cast_possible_truncation)]
+        let n = f as i32;
+        issues.push(FieldIssue::Normalised {
+            field: key,
+            from: brief(v),
+            to: "an integer",
+        });
+        return Some(n);
+    }
+    issues.push(FieldIssue::Rejected {
+        field: key,
+        value: brief(v),
+        expected: "an integer",
+    });
+    None
+}
+
+/// Read `max_tokens`, which is `u32` internally and `-1` on the wire.
+///
+/// `-1` is llama.cpp's own idiom for "no limit", and omitting the key means
+/// exactly that here — see
+/// [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults),
+/// which deliberately leaves `max_tokens` unset. So `-1` is not an error to
+/// be reported, it is a spelling of a value this type already has. Any other
+/// negative is a client bug.
+fn read_max_tokens(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<u32> {
+    let v = obj.get("max_tokens")?;
+    if v.is_null() {
+        return None;
+    }
+    // Not `read_i32_raw(v)?` — `?` would return before recording anything,
+    // which is the same silent-drop shape this whole function exists to end.
+    let Some(n) = read_i32_raw(v) else {
+        issues.push(FieldIssue::Rejected {
+            field: "max_tokens",
+            value: brief(v),
+            expected: "a non-negative integer, or -1 for no limit",
+        });
+        return None;
+    };
+    if n == -1 {
+        issues.push(FieldIssue::Normalised {
+            field: "max_tokens",
+            from: "-1".to_string(),
+            to: "no limit",
+        });
+        return None;
+    }
+    u32::try_from(n).map_or_else(
+        |_| {
+            issues.push(FieldIssue::Rejected {
+                field: "max_tokens",
+                value: brief(v),
+                expected: "a non-negative integer, or -1 for no limit",
+            });
+            None
+        },
+        Some,
+    )
+}
+
+/// The integer read behind [`read_max_tokens`], without issue reporting —
+/// its caller reports in terms of `max_tokens`' own accepted range.
+fn read_i32_raw(v: &serde_json::Value) -> Option<i32> {
+    if let Some(n) = v.as_i64() {
+        return i32::try_from(n).ok();
+    }
+    let f = v.as_f64()?;
+    if f.fract() != 0.0 || f < f64::from(i32::MIN) || f > f64::from(i32::MAX) {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    Some(f as i32)
 }
 
 /// Which ladder rung supplied each member of the temperature-coupled set.
@@ -993,24 +1173,74 @@ impl InferenceConfig {
 
     /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
     ///
-    /// Converts wire-format `snake_case` field names (`top_p`, `max_tokens`,
-    /// `repeat_penalty`, etc.) to the internal camelCase representation via
-    /// [`snake_to_camel`], then deserialises using the existing `serde` impl.
-    /// Unknown or missing fields default to `None`.
+    /// Missing keys, explicit `null`s and keys this type does not model all
+    /// yield `None` for that field and leave the rest untouched.
     ///
-    /// This is the inverse of [`to_openai_json_patch`].
+    /// This is the inverse of [`to_openai_json_patch`]. Use
+    /// [`extract_client_sampling`] when the caller can report what went wrong.
     ///
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
+    /// [`extract_client_sampling`]: Self::extract_client_sampling
     #[must_use]
     pub fn from_openai_json(value: &serde_json::Value) -> Self {
+        Self::extract_client_sampling(value).0
+    }
+
+    /// [`from_openai_json`] plus what it had to reject or normalise.
+    ///
+    /// # One bad field must not cost the other ten
+    ///
+    /// This read used to camel-case the whole body and hand it to
+    /// `serde_json::from_value(..).unwrap_or_default()`. Serde parses an
+    /// object as a unit, so a single wrongly-typed key failed the whole
+    /// deserialise and `unwrap_or_default()` returned an all-`None` config —
+    /// silently discarding every sampling value the client sent, with no log
+    /// and no test covering the failure path.
+    ///
+    /// Reading field by field means a bad `max_tokens` costs `max_tokens` and
+    /// nothing else.
+    ///
+    /// # The coercion policy is upstream's, not ours
+    ///
+    /// [ADR 0003] finding 6 measured what llama.cpp itself accepts on the
+    /// pinned build, so this does not have to invent a policy:
+    ///
+    /// | sent | llama.cpp | here |
+    /// |---|---|---|
+    /// | `max_tokens: -1` | 200 | [`Normalised`] to `None` — omission already means "no limit" |
+    /// | `top_k: 40.0` | 200 | accepted as `40`; a *fractional* float is rejected |
+    /// | `temperature: "0.7"` | 400 | [`Rejected`] — a numeric string is a client bug, and quietly parsing it teaches nobody |
+    ///
+    /// The principle is to accept what upstream accepts and reject what
+    /// upstream rejects, so gglib never becomes the stricter of the two on a
+    /// value that would have worked. Before this change it was: llama.cpp
+    /// takes `max_tokens: -1` and gglib threw away the entire layer over it.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    /// [`Normalised`]: FieldIssue::Normalised
+    /// [`Rejected`]: FieldIssue::Rejected
+    #[must_use]
+    pub fn extract_client_sampling(value: &serde_json::Value) -> (Self, Vec<FieldIssue>) {
         let Some(obj) = value.as_object() else {
-            return Self::default();
+            return (Self::default(), Vec::new());
         };
-        let camel: serde_json::Map<String, serde_json::Value> = obj
-            .iter()
-            .map(|(k, v)| (snake_to_camel(k), v.clone()))
-            .collect();
-        serde_json::from_value(serde_json::Value::Object(camel)).unwrap_or_default()
+        let mut issues = Vec::new();
+
+        let cfg = Self {
+            temperature: read_f32(obj, "temperature", &mut issues),
+            top_p: read_f32(obj, "top_p", &mut issues),
+            top_k: read_i32(obj, "top_k", &mut issues),
+            max_tokens: read_max_tokens(obj, &mut issues),
+            repeat_penalty: read_f32(obj, "repeat_penalty", &mut issues),
+            presence_penalty: read_f32(obj, "presence_penalty", &mut issues),
+            min_p: read_f32(obj, "min_p", &mut issues),
+            dry_multiplier: read_f32(obj, "dry_multiplier", &mut issues),
+            dry_base: read_f32(obj, "dry_base", &mut issues),
+            dry_allowed_length: read_i32(obj, "dry_allowed_length", &mut issues),
+            dry_penalty_last_n: read_i32(obj, "dry_penalty_last_n", &mut issues),
+        };
+
+        (cfg, issues)
     }
 
     /// Serialise as an OpenAI-format JSON patch (`snake_case` keys, `Some` fields only).
@@ -1238,17 +1468,6 @@ mod tests {
         assert_eq!(camel_to_snake("repeatPenalty"), "repeat_penalty");
         assert_eq!(camel_to_snake("presencePenalty"), "presence_penalty");
         assert_eq!(camel_to_snake("minP"), "min_p");
-    }
-
-    #[test]
-    fn test_snake_to_camel() {
-        assert_eq!(snake_to_camel("temperature"), "temperature");
-        assert_eq!(snake_to_camel("top_p"), "topP");
-        assert_eq!(snake_to_camel("top_k"), "topK");
-        assert_eq!(snake_to_camel("max_tokens"), "maxTokens");
-        assert_eq!(snake_to_camel("repeat_penalty"), "repeatPenalty");
-        assert_eq!(snake_to_camel("presence_penalty"), "presencePenalty");
-        assert_eq!(snake_to_camel("min_p"), "minP");
     }
 
     #[test]
@@ -1707,5 +1926,132 @@ mod tests {
         let config = InferenceConfig::from_openai_json(&val);
         assert_eq!(config.temperature, Some(0.5));
         assert!(config.top_p.is_none());
+    }
+
+    // ── Client sampling extraction ────────────────────────────────────────
+
+    /// **The defect this was written for.** The old implementation
+    /// camel-cased the whole body, deserialised it as one struct and called
+    /// `.unwrap_or_default()`, so a single unreadable key returned an
+    /// all-`None` config and the client's other ten values vanished with it.
+    #[test]
+    fn one_unreadable_field_does_not_cost_the_other_ten() {
+        let val = serde_json::json!({
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 30,
+            "max_tokens": "not a number",   // the offender
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.3,
+            "min_p": 0.02,
+            "dry_multiplier": 0.8,
+            "dry_base": 1.75,
+            "dry_allowed_length": 2,
+            "dry_penalty_last_n": 64,
+        });
+
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.max_tokens, None, "the bad field is dropped");
+        assert_eq!(
+            issues.len(),
+            1,
+            "and only that field is reported: {issues:?}"
+        );
+
+        assert_eq!(cfg.temperature, Some(0.2));
+        assert_eq!(cfg.top_p, Some(0.9));
+        assert_eq!(cfg.top_k, Some(30));
+        assert_eq!(cfg.repeat_penalty, Some(1.1));
+        assert_eq!(cfg.presence_penalty, Some(0.3));
+        assert_eq!(cfg.min_p, Some(0.02));
+        assert_eq!(cfg.dry_multiplier, Some(0.8));
+        assert_eq!(cfg.dry_base, Some(1.75));
+        assert_eq!(cfg.dry_allowed_length, Some(2));
+        assert_eq!(cfg.dry_penalty_last_n, Some(64));
+    }
+
+    /// llama.cpp answers 200 to this, so gglib accepting it is the whole
+    /// point — before, it was the trip case that discarded the layer.
+    /// ADR 0003 finding 6.
+    #[test]
+    fn max_tokens_minus_one_means_no_limit() {
+        let val = serde_json::json!({ "max_tokens": -1, "temperature": 0.4 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.max_tokens, None, "-1 is the wire spelling of unset");
+        assert_eq!(cfg.temperature, Some(0.4), "and the rest still lands");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Normalised { field, .. }] if *field == "max_tokens"),
+            "reported as normalised, not rejected: {issues:?}"
+        );
+    }
+
+    /// Some clients emit every number as a float. llama.cpp takes it.
+    #[test]
+    fn an_integer_valued_float_is_accepted_for_an_integer_field() {
+        let val = serde_json::json!({ "top_k": 40.0 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.top_k, Some(40));
+        assert!(matches!(issues.as_slice(), [FieldIssue::Normalised { .. }]));
+    }
+
+    /// A float that would lose information is not the same case.
+    #[test]
+    fn a_fractional_float_is_rejected_for_an_integer_field() {
+        let val = serde_json::json!({ "top_k": 40.5 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.top_k, None);
+        assert!(matches!(issues.as_slice(), [FieldIssue::Rejected { .. }]));
+    }
+
+    /// llama.cpp answers 400 to this, so gglib rejects it too rather than
+    /// quietly parsing a client bug into a working request.
+    #[test]
+    fn a_numeric_string_is_rejected_not_coerced() {
+        let val = serde_json::json!({ "temperature": "0.7", "top_p": 0.9 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.temperature, None);
+        assert_eq!(cfg.top_p, Some(0.9), "one bad field, one casualty");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Rejected { field, .. }] if *field == "temperature")
+        );
+    }
+
+    /// An explicit `null` is a client saying nothing, not a client erring —
+    /// several of them send it for every parameter they leave at default.
+    #[test]
+    fn an_explicit_null_is_silence_rather_than_an_issue() {
+        let val = serde_json::json!({ "temperature": null, "top_k": null });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.temperature, None);
+        assert_eq!(cfg.top_k, None);
+        assert!(issues.is_empty(), "no issue reported: {issues:?}");
+    }
+
+    /// The two halves have to agree, or a value gglib emits is a value gglib
+    /// cannot read back — which is how a round-trip through the pipeline
+    /// would quietly lose a field.
+    #[test]
+    fn to_patch_then_extract_is_the_identity() {
+        let original = InferenceConfig {
+            temperature: Some(0.35),
+            top_p: Some(0.9),
+            top_k: Some(30),
+            max_tokens: Some(2048),
+            repeat_penalty: Some(1.05),
+            presence_penalty: Some(1.5),
+            min_p: Some(0.05),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(64),
+        };
+
+        let patch = serde_json::Value::Object(original.to_openai_json_patch());
+        let (back, issues) = InferenceConfig::extract_client_sampling(&patch);
+
+        assert_eq!(back, original);
+        assert!(issues.is_empty(), "clean round trip: {issues:?}");
     }
 }

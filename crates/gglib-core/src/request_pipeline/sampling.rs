@@ -118,13 +118,43 @@ fn agentic_sampling_disabled_via_env() -> bool {
 ///
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
-    let client_params = InferenceConfig::from_openai_json(body);
+    let (client_params, issues) = InferenceConfig::extract_client_sampling(body);
+    if !issues.is_empty() {
+        // Not `warn!`: a client sending a field gglib cannot read is a fact
+        // about that client, not a fault in this server, and on the busiest
+        // path in the system a warning per request would be noise. It is
+        // recorded rather than swallowed because until now it was neither —
+        // one unreadable field discarded the client's whole sampling layer
+        // with nothing said.
+        debug!(
+            issues = %issues.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "),
+            "client sampling: some fields were not usable as sent"
+        );
+    }
+
     // `max_tokens` stays client-authoritative regardless of trust: it is a
     // budget, not a taste, and dropping it would silently truncate the
     // client's own turns. See `Settings::trust_client_sampling`.
     let client_layer = if layers.trust_client_sampling {
         client_params
     } else {
+        // What the gate is about to bin. This is the default posture and the
+        // highest-volume path in the system, so it is the largest silent
+        // discard gglib performs — a sustained non-empty list here says
+        // clients are trying to steer sampling and are being overruled,
+        // which an operator may well want to know.
+        let discarded: Vec<String> = client_params
+            .to_openai_json_patch()
+            .into_iter()
+            .map(|(k, _)| k)
+            .filter(|k| k != "max_tokens")
+            .collect();
+        if !discarded.is_empty() {
+            debug!(
+                discarded = %discarded.join(", "),
+                "client sampling: untrusted, dropping all but max_tokens"
+            );
+        }
         InferenceConfig {
             max_tokens: client_params.max_tokens,
             ..InferenceConfig::default()
