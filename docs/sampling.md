@@ -48,7 +48,24 @@ default is per-model, not per-build. `presence_penalty` and `dry_multiplier`
 have no GGUF key and remain the build's.
 
 The proxy dashboard's Sampling Readback panel names which of the two supplied
-each value on the running model.
+each value on the running model — and, separately, whether gglib is *overriding*
+what the model published. Those are different questions: `/props` reporting a
+value as model-supplied says the build's own default is unobservable for that
+field, not that the model's number is what the sampler uses. If gglib names the
+field, gglib's number wins.
+
+`gglib model explain` answers the same question per field, from stored
+configuration, with a note under any row the model published a value for:
+
+```
+temperature      1.0     ← per-model defaults (auto-detected: reasoning tag)
+      ! general.sampling.temp = 0.33; gglib is sending 1
+top_k            —       ← unset by design
+      · general.sampling.top_k = 17; gglib defers to it
+```
+
+`gglib model inspect` lists the raw `general.sampling.*` keys a model carries,
+including the seven llama.cpp reads that gglib does not model.
 
 **"Deferred" means gglib sends nothing and llama.cpp's own default applies.**
 [ADR 0003](adr/0003-defer-sampler-defaults-to-llama-cpp.md) measured each of
@@ -150,16 +167,50 @@ instead of gglib restating it.
 disable min-p. That is a measured divergence from upstream, so it stays
 force-written.
 
-## Reasoning model auto-defaults
+## Per-model defaults written at import
+
+A model arrives with one of two recipes stored as its per-model defaults, and
+gglib prefers the author's own wherever it can get it.
+
+### 1. The author's published recipe (preferred)
+
+On a `HuggingFace` download gglib fetches `generation_config.json` — the file
+every `transformers` user gets by default — and stores the sampling values it
+names. It looks in the base repo rather than the quant repo the GGUF came from,
+following the repo's own `base_model:` tags, because that is where the file
+lives.
+
+This is best-effort and every failure is the same failure: a repo publishing no
+such file, a gated base repo (Llama and Gemma, routinely), no network, or a
+file naming nothing gglib models all fall back to the guess below. Nothing
+fails an import over a sampling recipe.
+
+Three values are deliberately not adopted from it:
+
+| in the file | why gglib ignores it |
+|---|---|
+| `max_new_tokens` / `max_length` | `max_tokens` is unset by design, so nothing but the client bounds a response |
+| `do_sample: false` | gglib has no greedy mode, and forcing `temperature: 0` is the near-greedy setting [ADR 0004](adr/0004-observe-the-sampling-boundary.md)'s addendum bans for reasoning models. Logged, never applied |
+| anything out of range | dropped rather than clamped — clamping invents a number the author did not choose and attributes it to them |
+
+### 2. The `reasoning` tag guess (fallback)
 
 Models tagged `reasoning` at import time (Qwen3.6, DeepSeek R1, QwQ, etc. — see
-[docs/tags.md](tags.md)) automatically receive a pre-tuned `InferenceConfig`
-profile as their per-model defaults:
+[docs/tags.md](tags.md)) receive a pre-tuned `InferenceConfig` profile instead,
+when no published recipe could be fetched:
 
 ```
 temperature=1.0  top_p=0.95  top_k=20  max_tokens=8192
 presence_penalty=1.5  min_p=0.0  repeat_penalty=1.0
 ```
+
+A published recipe **replaces** this rather than merging with it. Merging would
+produce a recipe no author published and gglib cannot defend, labelled as
+though somebody had — and it would defeat the temperature-coupling rule, which
+exists so a layer naming a temperature is not paired with penalties tuned for a
+different one. A model whose published recipe names a temperature but no
+`presence_penalty` therefore falls to the reasoning floor's `1.0` for it, not
+to this table's `1.5`.
 
 These are baked into the database at download time and are fully user-overridable:
 
@@ -183,8 +234,7 @@ per-invocation overrides that sit at the top of the hierarchy.
 ## Where a model's defaults came from
 
 gglib tracks whether a model's stored `inference_defaults` were set by a person
-or written automatically by the auto-default behaviour above, and the two rank
-differently:
+or written automatically at import, and the two rank differently:
 
 ```
 Request override → Inference profile → Per-model defaults (user-set) → Global settings
@@ -207,13 +257,20 @@ five-wide against a six-wide ladder, so nothing caught the drift.
 
 A deliberate per-model choice (`gglib model update --presence-penalty …`, or an edit in
 the WebUI) keeps outranking global settings — that's what "per-model" is supposed to
-mean. An unreviewed guess from the `reasoning` tag does not: it ranks *below* global
-settings instead of silently shadowing them. Without this, a model tagged `reasoning`
+mean. An unreviewed recipe does not: it ranks *below* global
+settings instead of silently shadowing them.
+
+**Both unreviewed origins rank identically**, and the rung is labelled with
+which one it was. A `published` recipe read from the model author and an
+`auto_detected` guess from the `reasoning` tag are both things nobody in this
+installation chose, and rank is about exactly that. What differs is the
+evidence, and that decides which one gets *written* at import — not where it
+sits once it is. Without this, a model tagged `reasoning`
 would always resolve its full auto-written recipe over anything configured globally, with
 no way to tell the two apart in the resolved output.
 
 ```bash
-# Shows whether the current defaults are user-set or auto-detected
+# Shows whether the current defaults are user-set, published or auto-detected
 gglib model inspect <id>
 
 # Shows the rung each parameter actually resolved from, for this model
