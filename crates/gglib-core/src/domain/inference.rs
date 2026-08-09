@@ -173,6 +173,35 @@ pub struct InferenceConfig {
     /// penalty; llama.cpp resolves negative values against the context size.
     /// Unset defers to llama.cpp's own default (64).
     pub dry_penalty_last_n: Option<i32>,
+
+    /// RNG seed for the sampler.
+    ///
+    /// Unset means llama.cpp draws a fresh random seed per request, which is
+    /// what it reports as `4294967295` (`u32::MAX`) in `/slots`.
+    ///
+    /// # Request-scoped by design, like `max_tokens`
+    ///
+    /// This is the second field in this struct that is **not a sampling
+    /// policy**. Every other one answers "how should this model sample?" and is
+    /// worth storing per model; a seed answers "make *this run* reproducible",
+    /// and a seed stored per model would pin every response that model ever
+    /// produces to the same text. So:
+    ///
+    /// - no floor names it, on either class floor;
+    /// - nothing gglib writes at import names it;
+    /// - the CLI, profile and settings surfaces do not expose it.
+    ///
+    /// It lives here anyway, rather than beside the hierarchy, for the reason
+    /// `max_tokens` does: this struct is the single thing that becomes the
+    /// request body ([`Self::to_openai_json_patch`]), and a value that reaches
+    /// the wire any other way is a value the ladder cannot explain and the
+    /// [readback] cannot check. llama.cpp reports the applied seed in
+    /// `/slots`, so routing it through here is what makes "did my seed actually
+    /// land?" an answerable question rather than an assumption — which is the
+    /// whole point of seeding a benchmark.
+    ///
+    /// [readback]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/sampling_audit.rs
+    pub seed: Option<u32>,
 }
 
 /// Whether a model's stored `inference_defaults` were set by the user or
@@ -489,6 +518,50 @@ fn read_max_tokens(
     )
 }
 
+/// Read the `seed` field.
+///
+/// llama.cpp's own spelling for "pick one at random" is `-1`, and its `/slots`
+/// reports a random seed as `4294967295` (`u32::MAX`). Both are normalised to
+/// `None`, which is how this type spells the same thing — omission already
+/// means random, so carrying a sentinel would give the same state two
+/// representations and make `seed.is_some()` stop meaning "reproducible".
+fn read_seed(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<u32> {
+    let v = obj.get("seed")?;
+    if v.is_null() {
+        return None;
+    }
+    let Some(n) = v.as_i64() else {
+        issues.push(FieldIssue::Rejected {
+            field: "seed",
+            value: brief(v),
+            expected: "a non-negative integer, or -1 for a random seed",
+        });
+        return None;
+    };
+    if n == -1 || n == i64::from(u32::MAX) {
+        issues.push(FieldIssue::Normalised {
+            field: "seed",
+            from: brief(v),
+            to: "a random seed",
+        });
+        return None;
+    }
+    u32::try_from(n).map_or_else(
+        |_| {
+            issues.push(FieldIssue::Rejected {
+                field: "seed",
+                value: brief(v),
+                expected: "a non-negative integer, or -1 for a random seed",
+            });
+            None
+        },
+        Some,
+    )
+}
+
 /// The integer read behind [`read_max_tokens`], without issue reporting —
 /// its caller reports in terms of `max_tokens`' own accepted range.
 fn read_i32_raw(v: &serde_json::Value) -> Option<i32> {
@@ -725,6 +798,7 @@ impl InferenceConfig {
         let dry_base = first(&|c| c.dry_base.is_some());
         let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
         let dry_penalty_last_n = first(&|c| c.dry_penalty_last_n.is_some());
+        let seed = first(&|c| c.seed.is_some());
 
         result.top_p = top_p.and_then(|i| layers[i].and_then(|c| c.top_p));
         result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
@@ -737,6 +811,10 @@ impl InferenceConfig {
             dry_allowed_length.and_then(|i| layers[i].and_then(|c| c.dry_allowed_length));
         result.dry_penalty_last_n =
             dry_penalty_last_n.and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
+        // Uncoupled, and never coupled: a seed says nothing about how sharp the
+        // distribution is, so pairing it with a temperature would be
+        // meaningless. See the field docs for why no floor names it either.
+        result.seed = seed.and_then(|i| layers[i].and_then(|c| c.seed));
 
         let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
@@ -893,6 +971,10 @@ impl InferenceConfig {
     #[must_use]
     pub const fn with_hardcoded_defaults() -> Self {
         Self {
+            // No floor names a seed. See the field docs: a seed is not a
+            // sampling policy, and a floor that pinned one would make every
+            // untuned request in the installation decode identically.
+            seed: None,
             // The one value gglib asserts. Upstream's is 0.8; see above.
             temperature: Some(0.7),
             // Everything below is deferred to llama.cpp, which is a decision
@@ -1026,6 +1108,9 @@ impl InferenceConfig {
     #[must_use]
     pub const fn reasoning_profile() -> Self {
         Self {
+            // Never seeded: this recipe is stored per model, and a stored seed
+            // would pin every response that model ever produces.
+            seed: None,
             temperature: Some(1.0),
             top_p: Some(0.95),
             top_k: Some(20),
@@ -1288,6 +1373,7 @@ impl InferenceConfig {
             min_p: read_f32(obj, "min_p", &mut issues),
             dry_multiplier: read_f32(obj, "dry_multiplier", &mut issues),
             dry_base: read_f32(obj, "dry_base", &mut issues),
+            seed: read_seed(obj, &mut issues),
             dry_allowed_length: read_i32(obj, "dry_allowed_length", &mut issues),
             dry_penalty_last_n: read_i32(obj, "dry_penalty_last_n", &mut issues),
         };
@@ -1321,6 +1407,117 @@ impl InferenceConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // =========================================================================
+    // seed
+    // =========================================================================
+
+    /// A seed is request-scoped. No floor may name one, or every untuned
+    /// request in the installation would decode identically.
+    #[test]
+    fn no_floor_names_a_seed() {
+        assert_eq!(InferenceConfig::with_hardcoded_defaults().seed, None);
+        assert_eq!(InferenceConfig::reasoning_floor().seed, None);
+        assert_eq!(InferenceConfig::reasoning_profile().seed, None);
+    }
+
+    /// It still has to reach the wire, which is the whole reason it lives in
+    /// this struct rather than beside the hierarchy.
+    #[test]
+    fn a_seed_reaches_the_request_body() {
+        let config = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let patch = config.to_openai_json_patch();
+
+        assert_eq!(
+            patch.get("seed").and_then(serde_json::Value::as_u64),
+            Some(100)
+        );
+    }
+
+    /// An unseeded config must emit no key at all — llama.cpp then draws its
+    /// own, and a `null` or sentinel would be a different request.
+    #[test]
+    fn an_unseeded_config_emits_no_seed_key() {
+        assert!(
+            !InferenceConfig::with_hardcoded_defaults()
+                .to_openai_json_patch()
+                .contains_key("seed")
+        );
+    }
+
+    /// Seeds resolve like any uncoupled field: the first layer that names one
+    /// wins, and naming one does not claim the coupled trio.
+    #[test]
+    fn a_seed_resolves_without_claiming_the_coupled_trio() {
+        let top = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let below = InferenceConfig {
+            temperature: Some(0.6),
+            presence_penalty: Some(1.5),
+            ..InferenceConfig::default()
+        };
+
+        let resolved = InferenceConfig::resolve_layers(
+            &[Some(&top), Some(&below)],
+            &InferenceConfig::with_hardcoded_defaults(),
+        );
+
+        assert_eq!(resolved.seed, Some(100));
+        assert_eq!(
+            resolved.presence_penalty,
+            Some(1.5),
+            "a seed must not hijack the trio the way a temperature does"
+        );
+        assert_eq!(resolved.temperature, Some(0.6));
+    }
+
+    /// llama.cpp spells "random" two ways and this type spells it as absence.
+    /// Carrying a sentinel would give one state two representations and make
+    /// `seed.is_some()` stop meaning "reproducible".
+    #[test]
+    fn the_random_seed_sentinels_normalise_to_absence() {
+        for raw in ["-1", "4294967295"] {
+            let body: serde_json::Value =
+                serde_json::from_str(&format!(r#"{{"seed": {raw}}}"#)).unwrap();
+            let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+            assert_eq!(cfg.seed, None, "{raw}");
+            assert!(
+                issues
+                    .iter()
+                    .any(|i| matches!(i, FieldIssue::Normalised { field: "seed", .. })),
+                "{raw} should be reported as normalised, not dropped silently"
+            );
+        }
+    }
+
+    #[test]
+    fn a_client_seed_is_read_from_the_request_body() {
+        let body: serde_json::Value = serde_json::from_str(r#"{"seed": 12345}"#).unwrap();
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+        assert_eq!(cfg.seed, Some(12345));
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn a_seed_that_is_not_an_integer_is_rejected_rather_than_ignored() {
+        let body: serde_json::Value = serde_json::from_str(r#"{"seed": "abc"}"#).unwrap();
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+        assert_eq!(cfg.seed, None);
+        assert!(
+            issues
+                .iter()
+                .any(|i| matches!(i, FieldIssue::Rejected { field: "seed", .. })),
+            "{issues:?}"
+        );
+    }
 
     #[test]
     fn test_default_is_all_none() {
@@ -1554,6 +1751,7 @@ mod tests {
             dry_base: None,
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            seed: Some(100),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -2196,6 +2394,7 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(64),
+            seed: Some(100),
         };
 
         let patch = serde_json::Value::Object(original.to_openai_json_patch());

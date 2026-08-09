@@ -111,6 +111,11 @@ impl SamplingArgs {
             dry_base: self.dry_base,
             dry_allowed_length: self.dry_allowed_length,
             dry_penalty_last_n: self.dry_penalty_last_n,
+            // No `--seed` flag: these args populate stored configuration and
+            // long-lived operator overrides, where a pinned seed would make
+            // every request return the same text. A seed is set per request by
+            // the benchmark harness, which is the only caller that wants one.
+            seed: None,
         }
     }
 

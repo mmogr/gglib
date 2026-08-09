@@ -373,6 +373,11 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                                 dry_multiplier,
                                 max_tokens: None,
                                 presence_penalty: None,
+                                // The sweep varies sampling policy; a seed is
+                                // not one, and is stamped per run by the
+                                // executor so the same candidate can be
+                                // measured at several.
+                                seed: None,
                                 // Not dimensions: llama.cpp's defaults
                                 // (1.75, 2, 64) are reasonable, and varying
                                 // them too would multiply the grid by 81.
@@ -432,6 +437,7 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
                 repeat_penalty: None,
                 max_tokens: None,
                 presence_penalty: None,
+                seed: None,
                 // Left open until a sweep validates values for this family,
                 // per the rule stated above this table: extend with measured
                 // presets, don't guess.

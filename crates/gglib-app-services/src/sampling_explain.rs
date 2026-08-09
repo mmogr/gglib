@@ -490,6 +490,14 @@ mod tests {
 
     /// The client zips `sources[i].param` against `resolved`. If a field on
     /// `FieldSources` ever stops matching a key of the serialized config, that
+    /// Config fields that deliberately carry no provenance.
+    ///
+    /// `seed` is request-scoped: no rung ever names one, so a provenance entry
+    /// for it would read `unset by design` on every model forever. Listed
+    /// rather than subtracted silently, so a field that loses its provenance by
+    /// *accident* still fails the count below.
+    const NO_PROVENANCE: [&str; 1] = ["seed"];
+
     /// lookup silently yields nothing — so pin the pairing here.
     #[test]
     fn every_param_is_a_key_of_the_resolved_config() {
@@ -505,12 +513,23 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            seed: Some(100),
         };
         let keys = serde_json::to_value(&populated).unwrap();
         let keys = keys.as_object().expect("config serializes as an object");
 
         let dto = explain(&model(), &Settings::with_defaults(), None);
-        assert_eq!(dto.sources.len(), keys.len());
+        assert_eq!(dto.sources.len(), keys.len() - NO_PROVENANCE.len());
+        for excluded in NO_PROVENANCE {
+            assert!(
+                keys.contains_key(excluded),
+                "{excluded} is no longer a config field; drop it from NO_PROVENANCE"
+            );
+            assert!(
+                !dto.sources.iter().any(|e| e.param == excluded),
+                "{excluded} must not carry provenance"
+            );
+        }
         for entry in &dto.sources {
             assert!(
                 keys.contains_key(&entry.param),

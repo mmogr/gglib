@@ -43,6 +43,16 @@ export interface InferenceConfig {
   /** How far back DRY scans, in tokens; 0 disables. Unset defers to
    *  llama.cpp's default (64). */
   dryPenaltyLastN?: number;
+  /**
+   * RNG seed. Unset means llama.cpp draws a fresh one per request.
+   *
+   * Request-scoped, like `maxTokens` and unlike everything else here: it is
+   * not a sampling policy, and a seed stored per model would pin every
+   * response that model produces to the same text. No settings, profile or
+   * per-model surface offers it — the benchmark harness is the only caller
+   * that sets one.
+   */
+  seed?: number;
 }
 
 /**

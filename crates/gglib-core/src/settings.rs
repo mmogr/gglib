@@ -690,6 +690,7 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            seed: None,
         };
         assert!(validate_inference_config(&config).is_ok());
     }

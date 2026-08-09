@@ -473,6 +473,10 @@ pub async fn proxy_chat(
         dry_base: None,
         dry_allowed_length: None,
         dry_penalty_last_n: None,
+        // The WebUI chat is interactive, where a pinned seed would make every
+        // regeneration return the identical text. Reproducibility is a
+        // benchmark's need, not a chat's.
+        seed: None,
     }
     .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref(), model_ctx);
 

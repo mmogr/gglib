@@ -176,6 +176,17 @@ pub struct SlotParams {
     /// `dry_multiplier` as llama-server parsed it.
     #[serde(default, deserialize_with = "tolerant_f64")]
     pub dry_multiplier: Option<f64>,
+    /// The RNG seed llama-server applied to this slot.
+    ///
+    /// Reported as `4294967295` (`u32::MAX`) when the server drew its own,
+    /// which is what gglib sending no seed produces — so that value is the
+    /// observation matching an unseeded intent, not a divergence.
+    ///
+    /// Read as `f64` like every other field here so one tolerant parser covers
+    /// the struct; `u32::MAX` is exactly representable, so the round trip is
+    /// lossless across the whole range a seed can take.
+    #[serde(default, deserialize_with = "tolerant_f64")]
+    pub seed: Option<f64>,
     /// The sampler chain, in the order llama.cpp composes it.
     ///
     /// Not compared against anything — gglib never sets `--samplers`, so
@@ -299,6 +310,31 @@ pub fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<Divergen
     let names = &intent.layer_names;
 
     let mut out = Vec::new();
+
+    // Checked before `check` exists, because that closure holds a mutable
+    // borrow of `out` for the rest of the function.
+    //
+    // Seed has no `FieldSources` entry — it is request-scoped and never
+    // resolved from a rung — so it could not use `check` anyway, which gates on
+    // provenance. The gate here is simply whether gglib named one: an unseeded
+    // request has no intent to diverge from, and llama-server reporting its own
+    // random `u32::MAX` is then the expected observation rather than a fault.
+    //
+    // Worth comparing at all because "did my seed actually land?" is the
+    // premise every reproducibility claim rests on. It is also the one field
+    // where a silent drop would be invisible in the output — a benchmark would
+    // simply read the resulting variance as signal.
+    if let (Some(sent), Some(obs)) = (r.seed, observed.seed)
+        && (f64::from(sent) - obs).abs() > FLOAT_EPSILON
+    {
+        out.push(Divergence {
+            field: "seed",
+            sent: f64::from(sent),
+            observed: obs,
+            provenance: "request".to_string(),
+        });
+    }
+
     let mut check =
         |field: &'static str, sent: Option<f32>, source: ParamSource, obs: Option<f64>| {
             // `Unset` means gglib named no value: llama.cpp's own default
@@ -348,7 +384,6 @@ pub fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<Divergen
         s.dry_multiplier,
         observed.dry_multiplier,
     );
-
     out
 }
 
@@ -1207,6 +1242,66 @@ mod tests {
         let snap = store.snapshot();
         assert_eq!(snap.client_fields_discarded, 4);
         assert_eq!(snap.client_fields_rejected, 2);
+    }
+
+    // =========================================================================
+    // seed
+    // =========================================================================
+
+    /// **The premise every reproducibility claim rests on.** A seed that was
+    /// resolved but never reached the sampler would leave a benchmark reading
+    /// the resulting variance as signal, with nothing on any surface to say
+    /// otherwise.
+    #[test]
+    fn a_seed_that_did_not_reach_the_sampler_diverges() {
+        let resolved = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let observed = SlotParams {
+            // What llama-server reports when it drew its own seed.
+            seed: Some(4_294_967_295.0),
+            ..SlotParams::default()
+        };
+
+        let found = compare(&decision(resolved, all_from(ParamSource::Unset)), &observed);
+
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].field, "seed");
+        assert!((found[0].sent - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_seed_that_arrived_intact_does_not_diverge() {
+        let resolved = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let observed = SlotParams {
+            seed: Some(100.0),
+            ..SlotParams::default()
+        };
+
+        assert!(compare(&decision(resolved, all_from(ParamSource::Unset)), &observed).is_empty());
+    }
+
+    /// An unseeded request has no intent to diverge from, so llama-server
+    /// drawing its own random seed is the expected observation rather than a
+    /// fault. Without this the readback would fire on every ordinary request.
+    #[test]
+    fn an_unseeded_request_does_not_diverge_on_the_servers_random_seed() {
+        let observed = SlotParams {
+            seed: Some(4_294_967_295.0),
+            ..SlotParams::default()
+        };
+
+        assert!(
+            compare(
+                &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
+                &observed
+            )
+            .is_empty()
+        );
     }
 
     // =========================================================================
