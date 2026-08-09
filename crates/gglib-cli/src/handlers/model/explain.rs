@@ -56,6 +56,7 @@ pub async fn execute(ctx: &CliContext, identifier: &str, profile: Option<&str>) 
             // so `explain` and the proxy's readback cannot disagree about what
             // this model published.
             model_sampling: ModelSamplingDefaults::from_metadata(&model.metadata),
+            defaults_origin: model.defaults_origin,
         },
     );
 

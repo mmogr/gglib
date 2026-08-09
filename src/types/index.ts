@@ -146,7 +146,26 @@ export interface SamplingExplanation {
    * an error.
    */
   published?: PublishedDefault[];
+  /**
+   * Where the model's stored defaults came from.
+   *
+   * `published` and `autoDetected` share a ladder rung — both are unreviewed,
+   * so both rank below global settings — which means `ParamProvenance.layer`
+   * alone cannot name its own source. Without this, a recipe fetched from the
+   * model author renders as gglib's reasoning-tag guess.
+   */
+  defaultsOrigin?: DefaultsOriginName | null;
 }
+
+/**
+ * Where a model's stored `inferenceDefaults` came from.
+ *
+ * - `user` — set by a person. Outranks global settings.
+ * - `autoDetected` — gglib's `reasoning`-tag guess. Ranks below.
+ * - `published` — the author's `generation_config.json`, read at import. Ranks
+ *   exactly where `autoDetected` does; what differs is the evidence.
+ */
+export type DefaultsOriginName = 'user' | 'autoDetected' | 'published';
 
 /**
  * What gglib does with one field's published recommendation.

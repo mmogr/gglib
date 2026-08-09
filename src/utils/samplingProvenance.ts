@@ -8,6 +8,7 @@
  */
 
 import type {
+  DefaultsOriginName,
   InferenceConfig,
   ParamProvenance,
   PublishedDefault,
@@ -36,6 +37,14 @@ export interface SourceContext {
   profile?: string | null;
   /** Selects which floor the coupled set falls back to. */
   isReasoning: boolean;
+  /**
+   * Where the model's stored defaults came from.
+   *
+   * The auto-detected and published rungs are the same rung, so naming it
+   * needs this. Absent on a backend that predates the field, which reads as
+   * the previous behaviour.
+   */
+  defaultsOrigin?: DefaultsOriginName | null;
 }
 
 /**
@@ -60,7 +69,10 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
         case 'global':
           return 'global settings';
         case 'modelAutoDetected':
-          return 'per-model defaults (auto-detected: reasoning tag)';
+          // One rung, two possible sources — see `SourceContext.defaultsOrigin`.
+          return ctx.defaultsOrigin === 'published'
+            ? 'per-model defaults (published by the model author)'
+            : 'per-model defaults (auto-detected: reasoning tag)';
         default:
           return 'unknown layer';
       }

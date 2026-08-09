@@ -13,8 +13,8 @@
 //! differs from the one that runs.
 
 use gglib_core::domain::{
-    InferenceConfig, InferenceProfile, Model, ModelSamplingContext, ModelSamplingDefaults,
-    ParamSource, SamplingLayer, SamplingOverride,
+    DefaultsOrigin, InferenceConfig, InferenceProfile, Model, ModelSamplingContext,
+    ModelSamplingDefaults, ParamSource, SamplingLayer, SamplingOverride,
 };
 use gglib_core::settings::Settings;
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,38 @@ pub struct SamplingExplanationDto {
     /// this.
     #[serde(default)]
     pub published: Vec<PublishedDefaultDto>,
+    /// Where the model's stored defaults came from.
+    ///
+    /// `Published` and `AutoDetected` share a ladder rung — both are
+    /// unreviewed, so both rank below global settings — which means
+    /// [`ParamProvenanceDto::layer`] alone cannot name its own source. Without
+    /// this, a recipe fetched from the model author renders as gglib's
+    /// reasoning-tag guess.
+    #[serde(default)]
+    pub defaults_origin: Option<DefaultsOriginDto>,
+}
+
+/// The wire form of [`DefaultsOrigin`](gglib_core::domain::DefaultsOrigin).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DefaultsOriginDto {
+    /// Set by a person. Outranks global settings.
+    User,
+    /// gglib's own `reasoning`-tag guess. Ranks below global settings.
+    AutoDetected,
+    /// Read from the model author's `generation_config.json` at import.
+    /// Ranks below global settings, exactly where `AutoDetected` does.
+    Published,
+}
+
+impl From<DefaultsOrigin> for DefaultsOriginDto {
+    fn from(origin: DefaultsOrigin) -> Self {
+        match origin {
+            DefaultsOrigin::User => Self::User,
+            DefaultsOrigin::AutoDetected => Self::AutoDetected,
+            DefaultsOrigin::Published => Self::Published,
+        }
+    }
 }
 
 /// What gglib does with one field's published recommendation.
@@ -290,6 +322,7 @@ pub(crate) fn explain(
         is_reasoning: model_ctx.is_reasoning,
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         published,
+        defaults_origin: model.defaults_origin.map(DefaultsOriginDto::from),
     }
 }
 

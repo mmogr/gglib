@@ -127,6 +127,12 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
                 Some(DefaultsOrigin::AutoDetected) => {
                     " (auto-detected — ranks below global settings)"
                 }
+                // Same rank as auto-detected, and said so: neither was
+                // reviewed by a person, so neither may outrank a setting
+                // somebody chose. What differs is the evidence behind it.
+                Some(DefaultsOrigin::Published) => {
+                    " (published by the model author — ranks below global settings)"
+                }
                 Some(DefaultsOrigin::User) => " (user-set)",
                 None => "",
             };

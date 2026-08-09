@@ -7,8 +7,8 @@
 //! a fact about a model is not a state, so it borrows no state colour.
 
 use gglib_core::domain::{
-    FieldSources, InferenceConfig, ModelSamplingDefaults, ParamSource, SamplingLayer,
-    SamplingOverride,
+    DefaultsOrigin, FieldSources, InferenceConfig, ModelSamplingDefaults, ParamSource,
+    SamplingLayer, SamplingOverride,
 };
 
 use super::tables::print_separator;
@@ -74,6 +74,14 @@ pub struct ExplainContext<'a> {
     /// *the build's default applies* on a model that did not. Without this the
     /// two render identically.
     pub model_sampling: ModelSamplingDefaults,
+    /// Where the model's stored defaults came from.
+    ///
+    /// `DefaultsOrigin::Published` and `DefaultsOrigin::AutoDetected` share a
+    /// ladder rung — both are unreviewed, so both rank below global settings —
+    /// which means the rung alone cannot name its own source. Without this, a
+    /// recipe fetched from the model author renders as "auto-detected:
+    /// reasoning tag", crediting gglib's guess for somebody else's numbers.
+    pub defaults_origin: Option<DefaultsOrigin>,
 }
 
 /// Print the resolved parameters and their provenance.
@@ -231,9 +239,12 @@ fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
                 .map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'")),
             Some(SamplingLayer::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
             Some(SamplingLayer::Global) => "global settings".to_owned(),
-            Some(SamplingLayer::ModelAutoDetected) => {
-                "per-model defaults (auto-detected: reasoning tag)".to_owned()
-            }
+            Some(SamplingLayer::ModelAutoDetected) => match ctx.defaults_origin {
+                Some(DefaultsOrigin::Published) => {
+                    "per-model defaults (published by the model author)".to_owned()
+                }
+                _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
+            },
             None => format!("layer {index}"),
         },
         ParamSource::Floor => format!("{} floor", floor_name(ctx)),
@@ -307,6 +318,7 @@ mod tests {
             is_reasoning: false,
             trust_client_sampling: false,
             model_sampling: ModelSamplingDefaults::default(),
+            defaults_origin: None,
         }
     }
 

@@ -97,7 +97,11 @@ export const SamplingProvenanceSection: FC<SamplingProvenanceSectionProps> = ({
     );
   }
 
-  const ctx = { profile: explanation.profile, isReasoning: explanation.isReasoning };
+  const ctx = {
+    profile: explanation.profile,
+    isReasoning: explanation.isReasoning,
+    defaultsOrigin: explanation.defaultsOrigin,
+  };
   const published = publishedByParam(explanation.published);
 
   return (
