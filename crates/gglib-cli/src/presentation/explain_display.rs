@@ -13,9 +13,18 @@ use gglib_core::domain::{
 
 use super::tables::print_separator;
 
-/// Width of the parameter-name column. The longest name is
-/// `presence_penalty` at 16 characters.
-const NAME_WIDTH: usize = 17;
+/// Width of the parameter-name column.
+///
+/// The longest names are `dry_allowed_length` and `dry_penalty_last_n` at 18
+/// characters, so the column is 19 to keep one space before the value.
+///
+/// It was 17, on a comment claiming `presence_penalty` at 16 was the longest —
+/// true when it was written, and false since the four DRY parameters landed.
+/// `{:<17}` does not truncate, it just stops padding, so both DRY rows rendered
+/// their value hard against the name (`dry_penalty_last_n—`) rather than
+/// misaligning visibly enough to be noticed. `every_name_fits_its_column`
+/// now fails if a longer name is added.
+const NAME_WIDTH: usize = 19;
 
 /// Width of the value column, wide enough for `-0.0000` style floats without
 /// pushing the source column into a second screen.
@@ -23,8 +32,13 @@ const VALUE_WIDTH: usize = 7;
 
 /// Wide enough to span the longest row: the two-space indent, both columns,
 /// and the longest source label (`per-model defaults (auto-detected: reasoning
-/// tag)`).
-const SEP_WIDTH: usize = 78;
+/// tag)`) — 2 + 19 + 7 + 3 + 48 = 79.
+///
+/// Widened from 78 with [`NAME_WIDTH`], which it is derived from: a name column
+/// that grows pushes every row right, and a separator shorter than its own
+/// table looks like the table overflowed rather than like the rule was too
+/// short. `notes_fit_within_the_table_width` asserts both directions.
+const SEP_WIDTH: usize = 80;
 
 /// The arrow separating a value from its provenance.
 const ARROW: &str = "\u{2190}";
@@ -639,6 +653,34 @@ mod tests {
         );
 
         assert_eq!(note_for(&lines, "presence_penalty"), None, "{lines:#?}");
+    }
+
+    /// **The regression guard for the bug this column had.** `{:<NAME_WIDTH$}`
+    /// does not truncate an over-long name, it simply stops padding — so a
+    /// name that outgrows the column collides with the value beside it and
+    /// looks like a rendering glitch rather than a width bug. Both DRY names
+    /// did exactly that for as long as they have existed.
+    #[test]
+    fn every_name_fits_its_column() {
+        let lines = explanation_lines(
+            &InferenceConfig::with_hardcoded_defaults(),
+            &auto_detected_sources(),
+            ctx(),
+        );
+
+        for line in lines.iter().filter(|l| !l.starts_with(' ')) {
+            let name = line.split_whitespace().next().expect("a name");
+            assert!(
+                name.chars().count() < NAME_WIDTH,
+                "'{name}' is {} chars and needs at least one space before its value,                  but NAME_WIDTH is {NAME_WIDTH}",
+                name.chars().count()
+            );
+            // The value must be separated from the name, not butted against it.
+            assert!(
+                line.chars().nth(name.chars().count()) == Some(' '),
+                "no gap after the name in: {line}"
+            );
+        }
     }
 
     /// Every note has to fit the separator the table is drawn with, or the
