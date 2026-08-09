@@ -286,11 +286,19 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("--mlock");
     }
 
-    // No sampler flags. Sampling is a per-request decision that travels in the
-    // request body, and a launch flag could only ever restate or contradict
-    // it — see `llama::args::sampling`. `config.inference_config` is still
-    // carried for the launch narration to report; nothing turns it into a
-    // command-line argument.
+    // Sampling. Resolves to nothing — sampling is a per-request decision that
+    // travels in the request body, and a launch flag could only ever restate
+    // or contradict it, while also overwriting the `/props` table ADR 0004's
+    // baseline check reads. See `llama::args::sampling` for the measurement.
+    //
+    // Called rather than assumed. `sampler_flags()` returning an empty slice
+    // is what `no_sampler_flag_may_reappear_unnoticed` asserts against, and
+    // that assertion is only worth anything if the launch path is the thing
+    // being asserted about. Hard-coding the absence here as a comment left the
+    // guard watching a function nobody called.
+    for arg in crate::llama::args::sampler_flags() {
+        cmd.arg(arg);
+    }
 
     // Add extra arguments
     for arg in &config.extra_args {
@@ -598,6 +606,44 @@ mod tests {
             result.is_ok(),
             "build_and_spawn should succeed with valid bootstrap path"
         );
+    }
+
+    /// ADR 0003/0004's invariant, asserted against the command line every
+    /// launch surface actually funnels through.
+    ///
+    /// `no_sampler_flag_may_reappear_unnoticed` in `llama::args::sampling`
+    /// asserts the same thing one level up, against `sampler_flags()` and
+    /// `gglib_proxy::props::SAMPLER_LAUNCH_FLAGS_PASSED`. This is the half
+    /// that catches someone appending `--temp` here directly, which that one
+    /// structurally cannot see.
+    ///
+    /// Every sampler flag overwrites the field it names in
+    /// `default_generation_settings`, so one reappearing does not merely
+    /// duplicate what the request body already carries — it blinds the
+    /// baseline check by making it read gglib's own value back.
+    #[test]
+    fn no_sampler_flag_reaches_the_command_line() {
+        let config = minimal_config();
+        let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
+        let args = args_of(&cmd);
+
+        for flag in [
+            "--temp",
+            "--top-p",
+            "--top-k",
+            "--min-p",
+            "--repeat-penalty",
+            "--presence-penalty",
+            "--dry-multiplier",
+            "-n",
+        ] {
+            assert!(
+                !args.contains(&flag.to_string()),
+                "{flag} must not be passed at launch; sampling travels in the \
+                 request body and a launch flag masks /props (ADR 0004 finding 1). \
+                 Args were: {args:?}"
+            );
+        }
     }
 
     #[test]
