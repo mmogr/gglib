@@ -45,9 +45,38 @@ pub async fn probe(client: &reqwest::Client) -> DaemonProbe {
     };
     match response.json::<serde_json::Value>().await {
         Ok(body) if body.get("service").and_then(|s| s.as_str()) == Some("gglib-daemon") => {
+            warn_on_switch_mismatch(&body);
             DaemonProbe::Running
         }
         _ => DaemonProbe::ForeignServer,
+    }
+}
+
+/// Say so when this command's `GGLIB_DISABLE_*` switches are not the ones the
+/// daemon is running with.
+///
+/// Only meaningful for a daemon that was *already up*: one this CLI spawns
+/// inherits the environment, so the two agree by construction. A daemon
+/// already running was started from some other environment, and every switch
+/// set here is then silently ignored — the daemon does the work.
+///
+/// Printed rather than fatal. The command is still valid; it just is not
+/// measuring what the operator thinks, and that is a thing to be told rather
+/// than protected from.
+fn warn_on_switch_mismatch(health: &serde_json::Value) {
+    let daemon: Vec<String> = health
+        .get("debug_switches")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let here = gglib_core::debug_switches::active();
+    if let Some(message) = gglib_core::debug_switches::describe_mismatch(&here, &daemon) {
+        eprintln!("  warning: {message}");
     }
 }
 
