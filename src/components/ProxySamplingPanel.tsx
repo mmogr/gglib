@@ -17,11 +17,16 @@
  * and the whole point is lost if the UI collapses them back into a green tick.
  * So `blind` renders as a warning carrying its reason, never as health.
  *
- * The same discipline applies to the baseline check below it: an
- * `indeterminate` verdict is rendered as unknown, not as a match. Today every
- * field is indeterminate, because gglib passes sampler values as llama-server
- * launch flags and those overwrite the very `/props` table the check reads —
- * so a "matches" there would be gglib agreeing with itself.
+ * The same discipline applies to the baseline check below it, twice over. An
+ * `indeterminate` verdict renders as unknown, never as a match. And a read
+ * that was attempted and failed renders as a warning carrying its cause, never
+ * as the neutral "not read yet" — which is a statement about the poller, not
+ * about the server.
+ *
+ * gglib no longer passes sampler values as launch flags (ADR 0003), which is
+ * what un-blinded this check: a flag overwrites the very `/props` field it
+ * names, so while they were passed a "matches" here was gglib agreeing with
+ * itself and every field reported `indeterminate` by design.
  *
  * @module components/ProxySamplingPanel
  */

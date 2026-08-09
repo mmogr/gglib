@@ -253,9 +253,12 @@ export interface SamplingDivergence {
  * Mirrors `gglib_proxy::props::BaselineVerdict`
  * (`#[serde(tag = "verdict", rename_all = "snake_case")]`).
  *
- * `indeterminate` is the normal case today: gglib passes sampler values as
- * llama-server launch flags, and those overwrite the very `/props` table this
- * check reads. Rendering it as agreement would be reporting a tautology.
+ * `indeterminate` means the field could not be attributed — `/props` does not
+ * report it, or something is masking the build's own value. It must never
+ * render as agreement: that would report a tautology rather than an
+ * observation. Before ADR 0003 deleted the sampler launch flags it was the
+ * normal case for every field, because a flag overwrites the `/props` field it
+ * names and the check was reading gglib's own value back.
  */
 export type SamplingBaselineVerdict =
   | { verdict: 'matches' }

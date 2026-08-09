@@ -311,9 +311,15 @@ evidence for. Those need an A/B instrument that does not exist yet.
 
 **Bad, and accepted:**
 
-- The baseline check concludes nothing until the launch flags are deleted. It
+- ~~The baseline check concludes nothing until the launch flags are deleted. It
   ships blind and says so, which is better than shipping a check that cannot
-  fail — but it is a real gap until the follow-up lands.
+  fail — but it is a real gap until the follow-up lands.~~
+
+  *Resolved in this same arc, and struck rather than deleted because the shape
+  of the gap is the instructive part.* The flags went with ADR 0003's deferral;
+  the check went from `Indeterminate` on all seven fields to conclusive
+  `Matches` on all seven, and `SAMPLER_LAUNCH_FLAGS_PASSED` is now `false`. See
+  the follow-up below, which records the same thing from the other side.
 - Coverage is a sample biased toward long turns (finding 3), so a fault
   affecting only fast requests is systematically under-observed.
 - A clean reading does not mean the model sampled as intended (finding 5).
