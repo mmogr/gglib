@@ -21,8 +21,10 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::agentic::{
-    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores, EvalArm,
+    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores, CONTROL_TEMPERATURE,
+    EvalArm,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
@@ -117,73 +119,104 @@ pub async fn run_agentic_eval(
     // means the same thing in both.
     let model_context = super::tune::model_context_for(&model);
 
-    let mut arm_results: Vec<Vec<TuneTaskResult>> = Vec::with_capacity(2);
-    for arm in [EvalArm::Raw, EvalArm::Gglib] {
+    // One run per seed, per task. An empty seed list still runs once, with no
+    // seed named — the pre-multi-seed behaviour, kept reachable as a fast
+    // smoke test.
+    let seeds: Vec<Option<u32>> = if config.seeds.is_empty() {
+        vec![None]
+    } else {
+        config.seeds.iter().copied().map(Some).collect()
+    };
+
+    let mut arms = vec![EvalArm::Raw, EvalArm::Gglib];
+    if config.include_control {
+        arms.push(EvalArm::Control);
+    }
+
+    // Per arm, results are grouped by task and ordered by seed within each
+    // group, so the per-task drill-down can report N-of-M without re-keying.
+    let mut arm_results: Vec<Vec<Vec<TuneTaskResult>>> = Vec::with_capacity(arms.len());
+    for arm in arms.iter().copied() {
         let _ = tx
             .send(BenchmarkEvent::AgenticArmStarted {
                 arm,
-                total_tasks: tasks.len(),
+                total_tasks: tasks.len() * seeds.len(),
             })
             .await;
 
-        let mut results = Vec::with_capacity(tasks.len());
+        let mut per_task = Vec::with_capacity(tasks.len());
         for task in &tasks {
-            if cancel.is_cancelled() {
-                deps.bench_repo
-                    .fail_run(run_id, "Aborted by user")
-                    .await
-                    .ok();
-                deps.runtime.stop_current().await.ok();
+            let mut per_seed = Vec::with_capacity(seeds.len());
+            for seed in seeds.iter().copied() {
+                if cancel.is_cancelled() {
+                    deps.bench_repo
+                        .fail_run(run_id, "Aborted by user")
+                        .await
+                        .ok();
+                    deps.runtime.stop_current().await.ok();
+                    let _ = tx
+                        .send(BenchmarkEvent::RunFailed {
+                            error: "Aborted by user".into(),
+                        })
+                        .await;
+                    return Ok(());
+                }
+
+                let result = run_task_with_llm(
+                    |usage| {
+                        build_arm_llm(
+                            deps,
+                            &base_url,
+                            &model.name,
+                            arm,
+                            &model_context,
+                            task,
+                            seed,
+                            usage,
+                        )
+                    },
+                    task,
+                )
+                .await;
                 let _ = tx
-                    .send(BenchmarkEvent::RunFailed {
-                        error: "Aborted by user".into(),
+                    .send(BenchmarkEvent::AgenticTaskComplete {
+                        arm,
+                        task_id: task.id.clone(),
+                        passed: result.passed,
                     })
                     .await;
-                return Ok(());
+                per_seed.push(result);
             }
-
-            let result = run_task_with_llm(
-                |usage| {
-                    build_arm_llm(
-                        deps,
-                        &base_url,
-                        &model.name,
-                        arm,
-                        &model_context,
-                        task,
-                        usage,
-                    )
-                },
-                task,
-            )
-            .await;
-            let _ = tx
-                .send(BenchmarkEvent::AgenticTaskComplete {
-                    arm,
-                    task_id: task.id.clone(),
-                    passed: result.passed,
-                })
-                .await;
-            results.push(result);
+            per_task.push(per_seed);
         }
-        arm_results.push(results);
+        arm_results.push(per_task);
     }
 
+    // Popped in reverse push order.
+    let control_results = config
+        .include_control
+        .then(|| arm_results.pop().unwrap_or_default());
     let gglib_results = arm_results.pop().unwrap_or_default();
     let raw_results = arm_results.pop().unwrap_or_default();
 
-    let raw = arm_scores(&raw_results, &config);
-    let gglib = arm_scores(&gglib_results, &config);
+    let raw = arm_scores(&flatten(&raw_results), &config, seeds.len(), tasks.len());
+    let gglib = arm_scores(&flatten(&gglib_results), &config, seeds.len(), tasks.len());
+    let control = control_results
+        .as_ref()
+        .map(|r| arm_scores(&flatten(r), &config, seeds.len(), tasks.len()));
     let delta = AgenticEvalReport::delta_of(&raw, &gglib);
 
-    let tasks_cmp = raw_results
+    let tasks_cmp: Vec<AgenticTaskComparison> = raw_results
         .into_iter()
         .zip(gglib_results)
-        .map(|(raw, gglib)| AgenticTaskComparison {
-            task_id: raw.task_id.clone(),
-            category: raw.category,
-            raw,
-            gglib,
+        .filter_map(|(raw, gglib)| {
+            let first = raw.first().or_else(|| gglib.first())?;
+            Some(AgenticTaskComparison {
+                task_id: first.task_id.clone(),
+                category: first.category,
+                raw,
+                gglib,
+            })
         })
         .collect();
 
@@ -196,7 +229,22 @@ pub async fn run_agentic_eval(
         gglib,
         delta,
         tasks: tasks_cmp,
+        seeds: config.seeds.clone(),
+        control,
     };
+
+    // Said out loud, because a control that failed to move invalidates every
+    // other number in the report and a reader scanning the deltas will not
+    // otherwise notice.
+    if report.control_moved() == Some(false) {
+        warn!(
+            "agentic eval: the positive control did not move (gglib composite {:.3} vs control \
+             {:.3}). This run cannot distinguish 'no effect' from 'no sensitivity' — treat every \
+             delta below as uninterpretable.",
+            report.gglib.composite,
+            report.control.as_ref().map_or(f64::NAN, |c| c.composite)
+        );
+    }
 
     if let Err(e) = deps
         .bench_repo
@@ -210,7 +258,9 @@ pub async fn run_agentic_eval(
     }
 
     let _ = tx
-        .send(BenchmarkEvent::AgenticEvalComplete { report })
+        .send(BenchmarkEvent::AgenticEvalComplete {
+            report: Box::new(report),
+        })
         .await;
     Ok(())
 }
@@ -230,6 +280,7 @@ pub async fn run_agentic_eval(
 /// task's expected outcome demands a call — identical requests, different
 /// machinery — and both fall back to `"auto"` afterwards so the model can
 /// finish.
+#[allow(clippy::too_many_arguments)]
 fn build_arm_llm(
     deps: &BenchmarkDeps,
     base_url: &str,
@@ -237,9 +288,24 @@ fn build_arm_llm(
     arm: EvalArm,
     model_context: &ModelContext,
     task: &TuneTask,
+    seed: Option<u32>,
     usage: Arc<dyn UsageSink>,
 ) -> Arc<dyn LlmCompletionPort> {
     let tool_choice = demands_tool_call(task).then(|| "required".to_owned());
+
+    // The seed is the only sampling value the raw arm carries, and carrying it
+    // does not compromise the arm: `build_chat_body` writes the caller's
+    // sampling before `raw_passthrough` returns, and a config naming nothing
+    // but a seed adds no sampler policy to the body. So the control stays bare
+    // — llama-server's own defaults — and becomes reproducible.
+    let sampling = InferenceConfig {
+        seed,
+        temperature: match arm {
+            EvalArm::Control => Some(CONTROL_TEMPERATURE),
+            EvalArm::Raw | EvalArm::Gglib => None,
+        },
+        ..InferenceConfig::default()
+    };
 
     let adapter = LlmCompletionAdapter::with_client(
         base_url.to_owned(),
@@ -247,11 +313,16 @@ fn build_arm_llm(
         Some(model_name.to_owned()),
     )
     .with_first_turn_tool_choice(tool_choice)
+    .with_sampling(Some(sampling))
     .with_usage_sink(Some(usage));
 
     let adapter = match arm {
         EvalArm::Raw => adapter.with_raw_passthrough(true),
-        EvalArm::Gglib => adapter.with_model_context(model_context.clone()),
+        // The control differs from the gglib arm in exactly one value, so a
+        // score gap between them can only be the temperature. Anything else
+        // varying would make the control prove something other than what it
+        // claims.
+        EvalArm::Gglib | EvalArm::Control => adapter.with_model_context(model_context.clone()),
     };
     Arc::new(adapter)
 }
@@ -261,11 +332,28 @@ fn demands_tool_call(task: &TuneTask) -> bool {
     matches!(&task.expected, ExpectedOutcome::ToolCalls { calls } if !calls.is_empty())
 }
 
+/// Flatten per-task, per-seed results into one list.
+///
+/// Every mean below is taken over the flat list rather than over per-task
+/// means. With a balanced design — and this one is balanced by construction,
+/// every task running every seed — the two are arithmetically identical, and
+/// the flat form keeps one code path shared with the single-seed sweep.
+fn flatten(per_task: &[Vec<TuneTaskResult>]) -> Vec<TuneTaskResult> {
+    per_task.iter().flatten().cloned().collect()
+}
+
 /// Aggregate one arm's task results into [`ArmScores`].
-fn arm_scores(results: &[TuneTaskResult], config: &AgenticEvalConfig) -> ArmScores {
+fn arm_scores(
+    results: &[TuneTaskResult],
+    config: &AgenticEvalConfig,
+    seeds: usize,
+    tasks: usize,
+) -> ArmScores {
     let axes = axis_scores(results);
     let composite = super::tune::compute_composite_score(results, &config.weights);
     ArmScores {
+        seeds,
+        runs: tasks * seeds,
         tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
         loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
         loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),

@@ -677,6 +677,7 @@ mod tests {
     use crate::setup::setup_test_database;
 
     use super::*;
+    use gglib_core::domain::benchmark::DEFAULT_SEEDS;
 
     fn arm(composite: f64, loop_avoidance: Option<f64>) -> ArmScores {
         ArmScores {
@@ -689,6 +690,8 @@ mod tests {
             total_completion_tokens: Some(226_768),
             total_wall_ms: 1_104_543,
             mean_time_to_first_tool_call_ms: Some(2_100.0),
+            seeds: 3,
+            runs: 9,
         }
     }
 
@@ -711,6 +714,8 @@ mod tests {
             raw,
             gglib,
             tasks: vec![],
+            seeds: DEFAULT_SEEDS.to_vec(),
+            control: Some(arm(0.60, Some(1.0))),
         }
     }
 

@@ -181,6 +181,20 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         ctx_size: Option<u64>,
 
+        /// RNG seeds to repeat every task under, once each. Every score is
+        /// the mean across them. Defaults to three seeds — a single sample
+        /// per task is one draw from the model's output distribution, not a
+        /// measurement of it. Pass `--seeds ""` for one unseeded run
+        #[arg(long, value_delimiter = ',', num_args = 0..)]
+        seeds: Option<Vec<u32>>,
+
+        /// Skip the positive control arm. The control runs the gglib pipeline
+        /// at a deliberately bad temperature and must score below it; without
+        /// it, a null result cannot be told apart from a harness that is not
+        /// measuring anything
+        #[arg(long)]
+        no_control: bool,
+
         /// Print the full report as JSON to stdout (the leaderboard
         /// interchange format: per-arm scores, deltas, per-task drill-down,
         /// model/quant identity, hardware snapshot)

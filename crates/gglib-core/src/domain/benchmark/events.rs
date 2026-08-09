@@ -71,8 +71,13 @@ pub enum BenchmarkEvent {
         passed: bool,
     },
     /// The agentic eval finished; the full A/B report.
+    ///
+    /// Boxed because the report is by far the largest thing this enum carries
+    /// — per-arm scores, a per-axis delta, and a per-task drill-down holding
+    /// every seed's result — and an enum is as large as its widest variant.
+    /// Unboxed, every progress tick sent over this channel would pay for it.
     AgenticEvalComplete {
-        report: crate::domain::benchmark::agentic::AgenticEvalReport,
+        report: Box<crate::domain::benchmark::agentic::AgenticEvalReport>,
     },
 }
 

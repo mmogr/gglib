@@ -9,7 +9,8 @@ pub mod summary;
 pub mod tune;
 
 pub use agentic::{
-    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmDelta, ArmScores, EvalArm,
+    AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmDelta, ArmScores,
+    CONTROL_MIN_COMPOSITE_GAP, CONTROL_TEMPERATURE, DEFAULT_SEEDS, EvalArm,
 };
 pub use compare::{CompareConfig, ModelCompareResult};
 pub use events::{BenchmarkEvent, BenchmarkModelResult};
