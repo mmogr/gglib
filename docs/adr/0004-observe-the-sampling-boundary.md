@@ -1,7 +1,8 @@
 # ADR 0004 — Observe the sampling boundary
 
 - **Status:** Accepted
-- **Date:** 2026-08-09
+- **Date:** 2026-08-09 (amended 2026-08-09 — finding 1 overstated which
+  launch paths pass sampler flags; see the amendment there)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -70,8 +71,33 @@ The finding that shaped the design, and it inverts a dependency.
 | `min_p` | 0.05 | 0.11 | **0.11** |
 | `dry_multiplier` | 0.0 | 0.4 | **0.4** |
 
-Every sampler launch flag overwrites the field it names. gglib passes all seven
-on every launch, at values chosen to equal upstream's.
+Every sampler launch flag overwrites the field it names, and gglib passes all
+seven at values chosen to equal upstream's.
+
+> **Amended 2026-08-09.** As first written this said gglib passes them "on
+> every launch". That is wrong, and the correction matters because it changes
+> where the instrument is blind.
+>
+> - **`gglib serve <model>`** — the primary path — resolves the *full* config
+>   through the floor (`resolve_inference_config`) and hands it to the launch
+>   as `ServerConfigOptions::inference_params`. All seven flags are passed, so
+>   `/props` reports gglib's floor back to gglib. Blind.
+> - **`gglib proxy`** standalone passes only `inference_override`, the user's
+>   explicit CLI sampler flags, which is `None` unless they gave some
+>   (`SamplingArgs::into_override`). On a default run **no sampler flags are
+>   passed at all**, and `/props` would report the build's true defaults.
+>
+> So blindness is a property of *this launch*, not of the build, and
+> `SAMPLER_LAUNCH_FLAGS_PASSED` is a compile-time constant modelling a runtime
+> fact. It is wrong in the conservative direction — it claims blindness on a
+> path that can actually see, never sight on one that cannot — which is the
+> only direction decision 3 permits. It is also about to stop mattering:
+> deleting `to_cli_args` removes the flags from every path at once, at which
+> point the constant is unconditionally correct at `false`.
+>
+> Recorded rather than edited away because "the primary path is blind" and
+> "every path is blind" support the same decision by different amounts, and the
+> difference is exactly the sort of thing that gets re-derived later.
 
 ADR 0003 finding 3 called those flags "inert twice over" and was right about
 *request* behaviour: the body wins, so no model sees them. They are not inert
