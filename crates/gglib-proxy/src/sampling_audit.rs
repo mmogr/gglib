@@ -119,6 +119,10 @@
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 
+use std::collections::VecDeque;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use gglib_core::domain::ParamSource;
 use gglib_core::request_pipeline::SamplingDecision;
 use serde::{Deserialize, Serialize};
@@ -209,7 +213,11 @@ where
 }
 
 /// One parameter where what gglib sent and what llama-server reports differ.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// Serialize-only, like every type on the dashboard contract
+/// ([`crate::dashboard::DashboardSnapshot`]): `field` is a `&'static str`
+/// because the names are gglib's own, and nothing reads these back into Rust.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Divergence {
     /// Wire name of the parameter.
     pub field: &'static str,
@@ -226,7 +234,7 @@ pub struct Divergence {
 /// What the audit has actually been able to observe.
 ///
 /// Deliberately not a bare count — see the module docs on `Blind`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum AuditState {
     /// The poller is running but no in-flight request has been caught yet.
@@ -414,6 +422,180 @@ pub fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> Po
         }
     }
     out
+}
+
+// =============================================================================
+// SamplingAuditStore
+// =============================================================================
+
+/// How many recent divergences are kept for display.
+///
+/// Small on purpose. A divergence is meant to be rare and investigated; a long
+/// scrollback would imply it is a stream to be monitored, which is the wrong
+/// posture for a signal that should never fire.
+const MAX_RECENT_DIVERGENCES: usize = 20;
+
+/// Everything the sampling readback has observed since the proxy started.
+///
+/// Written by the `/slots` poller and the request path, read by the dashboard.
+/// `std::sync::Mutex` around the two small collections, following
+/// [`crate::metrics::ContextMetricsStore`]'s convention: every critical
+/// section is a push and a conditional pop, with no `.await` inside.
+#[derive(Default)]
+pub struct SamplingAuditStore {
+    comparisons: AtomicU64,
+    divergences: AtomicU64,
+    skipped_ambiguous: AtomicU64,
+    /// Client sampling fields that could not be read as sent.
+    client_fields_rejected: AtomicU64,
+    /// Client sampling fields dropped by the trust gate. Expected to be large
+    /// in the default configuration — `trust_client_sampling` is off, so every
+    /// client-supplied field is discarded by design. Counted so that "gglib is
+    /// ignoring my temperature" is answerable from the dashboard instead of
+    /// from the source.
+    client_fields_discarded: AtomicU64,
+    /// Why the organ cannot see, when it cannot. `None` means it can.
+    blind: Mutex<Option<String>>,
+    recent: Mutex<VecDeque<Divergence>>,
+    /// The most recent `/props` baseline reading, one per model launch.
+    baseline: Mutex<Option<crate::props::BaselineReport>>,
+}
+
+impl SamplingAuditStore {
+    /// Create an empty store.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record what the request pipeline resolved, for the counters that do not
+    /// need a wire observation to be meaningful.
+    pub fn record_intent(&self, decision: &SamplingDecision) {
+        let rejected = decision.client_fields_rejected.len() as u64;
+        let discarded = decision.client_fields_discarded.len() as u64;
+        if rejected > 0 {
+            self.client_fields_rejected
+                .fetch_add(rejected, Ordering::Relaxed);
+        }
+        if discarded > 0 {
+            self.client_fields_discarded
+                .fetch_add(discarded, Ordering::Relaxed);
+        }
+    }
+
+    /// Fold one poll's outcome into the totals.
+    ///
+    /// A poll that compared something clears any [`AuditState::Blind`] latch:
+    /// whatever was wrong before, the organ is demonstrably seeing now.
+    pub fn record_poll(&self, outcome: &PollOutcome) {
+        self.comparisons
+            .fetch_add(outcome.comparisons, Ordering::Relaxed);
+        self.divergences
+            .fetch_add(outcome.divergences, Ordering::Relaxed);
+        self.skipped_ambiguous
+            .fetch_add(outcome.skipped_ambiguous, Ordering::Relaxed);
+
+        if outcome.comparisons > 0 {
+            *self.blind.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        if !outcome.found.is_empty() {
+            let mut guard = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+            for d in &outcome.found {
+                guard.push_back(d.clone());
+                if guard.len() > MAX_RECENT_DIVERGENCES {
+                    guard.pop_front();
+                }
+            }
+        }
+    }
+
+    /// Latch the organ as unable to observe, with the reason.
+    ///
+    /// Idempotent, and deliberately not cleared here — only a successful
+    /// comparison clears it, so a transient recovery that never actually
+    /// compares anything cannot make the dashboard claim sight it does not
+    /// have.
+    pub fn mark_blind(&self, reason: impl Into<String>) {
+        *self.blind.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason.into());
+    }
+
+    /// Store the baseline reading for the currently running model.
+    pub fn set_baseline(&self, report: Option<crate::props::BaselineReport>) {
+        *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = report;
+    }
+
+    /// What the organ can currently say about itself.
+    #[must_use]
+    pub fn state(&self) -> AuditState {
+        if let Some(reason) = self
+            .blind
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
+            return AuditState::Blind {
+                reason: reason.clone(),
+            };
+        }
+        let comparisons = self.comparisons.load(Ordering::Relaxed);
+        if comparisons == 0 {
+            return AuditState::NotYetObserved;
+        }
+        AuditState::Comparing {
+            comparisons,
+            divergences: self.divergences.load(Ordering::Relaxed),
+        }
+    }
+
+    /// The full reading, for the dashboard.
+    #[must_use]
+    pub fn snapshot(&self) -> SamplingAuditSnapshot {
+        SamplingAuditSnapshot {
+            state: self.state(),
+            skipped_ambiguous: self.skipped_ambiguous.load(Ordering::Relaxed),
+            client_fields_rejected: self.client_fields_rejected.load(Ordering::Relaxed),
+            client_fields_discarded: self.client_fields_discarded.load(Ordering::Relaxed),
+            recent_divergences: self
+                .recent
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .iter()
+                .cloned()
+                .collect(),
+            baseline: self
+                .baseline
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
+        }
+    }
+}
+
+/// Serializable view of [`SamplingAuditStore`], carried on the dashboard
+/// snapshot.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamplingAuditSnapshot {
+    /// Whether the organ is observing, blind, or simply has not seen a
+    /// request yet. Never collapse this to its counts when rendering.
+    pub state: AuditState,
+    /// Polls that saw slots but could not attribute them to one intent.
+    ///
+    /// Beside the state rather than inside it: [`AuditState`] answers "can
+    /// this organ see", and abstaining is something an organ that *can* see
+    /// does. A large count here next to zero comparisons means the traffic is
+    /// too heterogeneous to attribute, which is a different problem from
+    /// blindness and wants a different fix.
+    pub skipped_ambiguous: u64,
+    /// Client sampling fields that could not be read as sent.
+    pub client_fields_rejected: u64,
+    /// Client sampling fields dropped by the trust gate.
+    pub client_fields_discarded: u64,
+    /// Most recent field-level disagreements, oldest first.
+    pub recent_divergences: Vec<Divergence>,
+    /// The `/props` baseline reading for the running model, when one has been
+    /// taken. See [`crate::props`] — this is the half that catches a pin bump.
+    pub baseline: Option<crate::props::BaselineReport>,
 }
 
 /// Render a rung for a log line: a name when the value came from a layer,
@@ -667,6 +849,113 @@ mod tests {
         assert_eq!(out.divergences, 2);
         assert_eq!(out.found.len(), 2);
         assert_eq!(out.found[0].field, "temperature");
+    }
+
+    // ── Store ─────────────────────────────────────────────────────────────
+
+    fn poll(comparisons: u64, divergences: u64, skipped: u64) -> PollOutcome {
+        PollOutcome {
+            comparisons,
+            divergences,
+            skipped_ambiguous: skipped,
+            found: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_fresh_store_has_not_yet_observed() {
+        let store = SamplingAuditStore::new();
+        assert_eq!(store.state(), AuditState::NotYetObserved);
+        assert!(!store.state().is_observing());
+    }
+
+    /// The trap this store exists to avoid: a poll that compared nothing is
+    /// not evidence of recovery, so it must not clear the latch.
+    #[test]
+    fn a_poll_that_compared_nothing_leaves_the_store_blind() {
+        let store = SamplingAuditStore::new();
+        store.mark_blind("upstream gone");
+
+        store.record_poll(&poll(0, 0, 3));
+
+        assert!(matches!(store.state(), AuditState::Blind { .. }));
+        assert_eq!(store.snapshot().skipped_ambiguous, 3);
+    }
+
+    #[test]
+    fn a_poll_that_compared_something_clears_the_latch() {
+        let store = SamplingAuditStore::new();
+        store.mark_blind("upstream gone");
+
+        store.record_poll(&poll(2, 1, 0));
+
+        assert_eq!(
+            store.state(),
+            AuditState::Comparing {
+                comparisons: 2,
+                divergences: 1
+            }
+        );
+    }
+
+    /// Abstention lives beside the state, not inside it: an organ that can
+    /// see but cannot attribute is a different problem from a blind one, and
+    /// collapsing them would hide which fix is needed.
+    #[test]
+    fn abstention_is_reported_without_claiming_blindness() {
+        let store = SamplingAuditStore::new();
+        store.record_poll(&poll(0, 0, 12));
+
+        assert_eq!(
+            store.state(),
+            AuditState::NotYetObserved,
+            "abstaining is something a sighted organ does"
+        );
+        assert_eq!(store.snapshot().skipped_ambiguous, 12);
+    }
+
+    #[test]
+    fn client_field_counters_accumulate_across_requests() {
+        let store = SamplingAuditStore::new();
+        let mut d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
+        d.client_fields_discarded = vec!["temperature".into(), "top_p".into()];
+        d.client_fields_rejected = vec![gglib_core::domain::FieldIssue::Rejected {
+            field: "top_k",
+            value: "banana".into(),
+            expected: "an integer",
+        }];
+
+        store.record_intent(&d);
+        store.record_intent(&d);
+
+        let snap = store.snapshot();
+        assert_eq!(snap.client_fields_discarded, 4);
+        assert_eq!(snap.client_fields_rejected, 2);
+    }
+
+    #[test]
+    fn recent_divergences_are_bounded_and_keep_the_newest() {
+        let store = SamplingAuditStore::new();
+        for i in 0..MAX_RECENT_DIVERGENCES + 5 {
+            store.record_poll(&PollOutcome {
+                comparisons: 1,
+                divergences: 1,
+                skipped_ambiguous: 0,
+                found: vec![Divergence {
+                    field: "temperature",
+                    sent: f64::from(u32::try_from(i).unwrap()),
+                    observed: 0.0,
+                    provenance: "floor".into(),
+                }],
+            });
+        }
+
+        let snap = store.snapshot();
+        assert_eq!(snap.recent_divergences.len(), MAX_RECENT_DIVERGENCES);
+        assert!(
+            (snap.recent_divergences.last().unwrap().sent - 24.0).abs() < f64::EPSILON,
+            "the newest divergence must survive eviction"
+        );
     }
 
     #[test]

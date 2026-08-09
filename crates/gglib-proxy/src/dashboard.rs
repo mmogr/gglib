@@ -42,6 +42,7 @@ use gglib_core::ports::ModelRuntimePort;
 
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
+use crate::sampling_audit::SamplingAuditStore;
 use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
 use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
@@ -435,6 +436,10 @@ pub struct DashboardState {
     /// Held here rather than reached through `AppState` because the publisher
     /// task runs on its own schedule with no request in hand to borrow from.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// Tier C sampling readback: what gglib resolved, what llama-server
+    /// reported, and whether the organ can see at all. Written by both the
+    /// request path and the `/slots` poller — see [`crate::sampling_audit`].
+    pub sampling_audit: Arc<SamplingAuditStore>,
 }
 
 impl DashboardState {
@@ -451,6 +456,7 @@ impl DashboardState {
         cache_metrics: Arc<CacheMetricsStore>,
         agent_metrics: Arc<CacheMetricsStore>,
         runtime: Arc<dyn ModelRuntimePort>,
+        sampling_audit: Arc<SamplingAuditStore>,
     ) -> Self {
         Self {
             connections,
@@ -463,6 +469,7 @@ impl DashboardState {
             agent_metrics,
             launch: Arc::new(LaunchNarrationCache::new()),
             runtime,
+            sampling_audit,
         }
     }
 
@@ -533,6 +540,7 @@ mod tests {
             Arc::new(CacheMetricsStore::new()),
             Arc::new(CacheMetricsStore::new()),
             Arc::new(gglib_core::ports::NoopModelRuntime),
+            Arc::new(SamplingAuditStore::new()),
         ))
     }
 
