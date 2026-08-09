@@ -388,9 +388,12 @@ and would be expensive to act on.
 
 ## Follow-ups
 
-- Build the readback and write its ADR. It is decision 6's precondition, and
-  finding 7's two limits — processing-slot-only, echo-not-applied — are its
-  starting constraints.
+- ~~Build the readback and write its ADR.~~ Done —
+  [ADR 0004](0004-observe-the-sampling-boundary.md). Its finding 1 inverts part
+  of this document's finding 3: the launch flags are inert for *request
+  behaviour* as recorded here, but they overwrite the `/props` table the
+  deletion criterion reads, so deleting them is a precondition for the
+  observation organ and not only a redundancy cleanup.
 - Fix `from_openai_json` per finding 6, calibrated to upstream's tolerance
   rather than to invention.
 - Correct `dry_penalty_last_n` in `docs/sampling.md:315` and

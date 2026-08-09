@@ -202,6 +202,13 @@ directory. `gglib config fast-downloads status` says what is there;
   — the measurement behind that deferral: native schema conformance per model,
   why it does not generalise, and the discovery that GGLib's dialect parser is
   bypassed entirely
+- [ADR 0003 — Defer sampler defaults to llama.cpp](docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md)
+  — six of the seven values GGLib force-wrote into every request were measured
+  to be llama.cpp's own defaults, and the launch flags that set them affect no
+  request that goes through the pipeline
+- [ADR 0004 — Observe the sampling boundary](docs/adr/0004-observe-the-sampling-boundary.md)
+  — reading back what llama-server says it sampled with, what that can and
+  cannot catch, and why an observation organ has to be able to fail
 - [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
   against the advertised schema, and re-issuing with `tool_choice: "required"`
   when they do not conform
