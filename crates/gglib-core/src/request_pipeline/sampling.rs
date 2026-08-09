@@ -268,10 +268,7 @@ pub fn resolve_sampling(
     // gets a real anti-repetition guard when nothing above the floor sets
     // one, rather than the universal neutral default. See
     // `InferenceConfig::reasoning_floor`.
-    let model_is_reasoning = ctx
-        .tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
+    let model_is_reasoning = crate::domain::capability_tags::is_reasoning(&ctx.tags);
     let floor = if model_is_reasoning {
         InferenceConfig::reasoning_floor()
     } else {

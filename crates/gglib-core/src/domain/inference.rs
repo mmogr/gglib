@@ -247,6 +247,26 @@ pub struct ModelSamplingContext {
     pub defaults_origin: Option<DefaultsOrigin>,
 }
 
+impl ModelSamplingContext {
+    /// Read both facts off a catalog row.
+    ///
+    /// Four call sites across three crates built this struct field-by-field
+    /// from a [`Model`](crate::domain::Model), each re-deriving `is_reasoning`
+    /// from the tag list inline. Two fields is exactly the size at which
+    /// hand-construction looks harmless and stops being so: the pair travels
+    /// together, both are read by the same fold, and a call site that filled
+    /// one and defaulted the other would resolve against the wrong floor or
+    /// mis-rank the model's own defaults against global settings — silently,
+    /// in both cases.
+    #[must_use]
+    pub fn for_model(model: &crate::domain::Model) -> Self {
+        Self {
+            is_reasoning: crate::domain::capability_tags::is_reasoning(&model.tags),
+            defaults_origin: model.defaults_origin,
+        }
+    }
+}
+
 /// Convert a camelCase string to `snake_case`.
 ///
 /// Used internally to rename `InferenceConfig`'s serde camelCase output to the

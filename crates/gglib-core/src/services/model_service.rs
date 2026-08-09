@@ -421,17 +421,12 @@ impl ModelService {
 
         if full {
             // Drop every tag in the auto-generated namespace, then re-add.
-            const AUTO_TAG_NAMES: &[&str] = &[
-                "reasoning",
-                "agent",
-                "vision",
-                "code",
-                "moe",
-                "mtp",
-                "embedding",
-            ];
+            // The list lives with the constants that produce it: a tag missing
+            // from it survives a refresh forever, silently keeping a
+            // capability the model no longer has.
             model.tags.retain(|t| {
-                !AUTO_TAG_NAMES.contains(&t.as_str()) && !crate::domain::is_system_tag(t)
+                !crate::domain::capability_tags::ALL.contains(&t.as_str())
+                    && !crate::domain::is_system_tag(t)
             });
         }
 

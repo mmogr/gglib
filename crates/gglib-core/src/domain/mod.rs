@@ -4,6 +4,7 @@ pub mod agent;
 pub mod benchmark;
 pub mod cache_budget;
 pub mod capabilities;
+pub mod capability_tags;
 pub mod chat;
 pub mod dialect;
 pub mod gguf;
@@ -41,6 +42,7 @@ pub use benchmark::{
 };
 
 // Re-export inference types at the domain level for convenience
+pub use capability_tags::is_reasoning;
 pub use inference::{DefaultsOrigin, FieldIssue, InferenceConfig, ModelSamplingContext};
 pub use inference_profile::{
     InferenceProfile, MAX_PROFILE_NAME_LEN, ProfileNameError, RESERVED_PROFILE_NAMES,

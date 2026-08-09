@@ -26,13 +26,7 @@ pub async fn resolve_inference_config(
     model: &gglib_core::Model,
 ) -> Result<InferenceConfig> {
     let settings = ctx.app.settings().get().await?;
-    let model_ctx = gglib_core::domain::ModelSamplingContext {
-        is_reasoning: model
-            .tags
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("reasoning")),
-        defaults_origin: model.defaults_origin,
-    };
+    let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(model);
     Ok(config.resolve_with_defaults(
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),

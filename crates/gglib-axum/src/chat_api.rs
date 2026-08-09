@@ -405,13 +405,7 @@ pub async fn proxy_chat(
                     requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
                     "Model capabilities loaded for chat request"
                 );
-                let model_ctx = gglib_core::domain::ModelSamplingContext {
-                    is_reasoning: model
-                        .tags
-                        .iter()
-                        .any(|tag| tag.eq_ignore_ascii_case("reasoning")),
-                    defaults_origin: model.defaults_origin,
-                };
+                let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(&model);
                 (model.capabilities, model.inference_defaults, model_ctx)
             }
             Ok(None) => {

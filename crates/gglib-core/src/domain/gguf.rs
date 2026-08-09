@@ -107,29 +107,32 @@ impl GgufCapabilities {
     pub fn to_tags(&self) -> Vec<String> {
         let mut tags = Vec::new();
 
+        // The producer side of `capability_tags`: every string here is read
+        // back somewhere by that module's constants, so both ends name the
+        // same thing rather than agreeing by convention.
         if self.has_reasoning() {
-            tags.push("reasoning".to_string());
+            tags.push(super::capability_tags::REASONING.to_string());
         }
         if self.has_tool_calling() {
-            // "agent" tag triggers --jinja auto-enable
-            tags.push("agent".to_string());
+            // triggers --jinja auto-enable
+            tags.push(super::capability_tags::AGENT.to_string());
         }
         if self.has_vision() {
-            tags.push("vision".to_string());
+            tags.push(super::capability_tags::VISION.to_string());
         }
         if self.flags.contains(CapabilityFlags::CODE) {
-            tags.push("code".to_string());
+            tags.push(super::capability_tags::CODE.to_string());
         }
         if self.flags.contains(CapabilityFlags::MOE) {
-            tags.push("moe".to_string());
+            tags.push(super::capability_tags::MOE.to_string());
         }
         if self.has_mtp() {
-            // "mtp" tag triggers --spec-type draft-mtp auto-enable
-            tags.push("mtp".to_string());
+            // triggers --spec-type draft-mtp auto-enable
+            tags.push(super::capability_tags::MTP.to_string());
         }
         if self.has_embedding() {
-            // "embedding" tag triggers --embeddings auto-enable
-            tags.push("embedding".to_string());
+            // triggers --embeddings auto-enable
+            tags.push(super::capability_tags::EMBEDDING.to_string());
         }
 
         // Add extension tags

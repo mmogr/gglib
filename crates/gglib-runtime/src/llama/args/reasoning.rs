@@ -87,8 +87,8 @@ pub fn resolve_reasoning_format_with_detection(
         // Invalid format, continue to other checks
     }
 
-    // 2. Check for "reasoning" tag
-    if tags.iter().any(|tag| tag.eq_ignore_ascii_case("reasoning")) {
+    // 2. Check for the reasoning capability tag
+    if gglib_core::domain::capability_tags::is_reasoning(tags) {
         return ReasoningFormatResolution {
             format: Some("deepseek".to_string()),
             source: ReasoningFormatSource::ReasoningTag,

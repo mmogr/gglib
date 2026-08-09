@@ -184,10 +184,7 @@ pub(crate) fn explain(
     profile: Option<&InferenceProfile>,
 ) -> SamplingExplanationDto {
     // The two facts about the model that change how resolution behaves.
-    let model_ctx = ModelSamplingContext {
-        is_reasoning: is_reasoning(&model.tags),
-        defaults_origin: model.defaults_origin,
-    };
+    let model_ctx = ModelSamplingContext::for_model(model);
 
     // An empty request layer: this explains the stored configuration, so there
     // are no per-request parameters to occupy the top rung.
@@ -208,11 +205,6 @@ pub(crate) fn explain(
         is_reasoning: model_ctx.is_reasoning,
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
     }
-}
-
-/// Whether the model carries the `reasoning` tag, which selects the floor.
-fn is_reasoning(tags: &[String]) -> bool {
-    tags.iter().any(|tag| tag.eq_ignore_ascii_case("reasoning"))
 }
 
 #[cfg(test)]

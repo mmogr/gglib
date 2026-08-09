@@ -26,12 +26,11 @@ pub async fn execute(ctx: &CliContext, identifier: &str, profile: Option<&str>) 
         None => None,
     };
 
-    // The two facts about the model that change how resolution behaves; built
-    // exactly as `handlers::inference::shared` builds them for the live path.
-    let model_ctx = ModelSamplingContext {
-        is_reasoning: is_reasoning(&model.tags),
-        defaults_origin: model.defaults_origin,
-    };
+    // The two facts about the model that change how resolution behaves. Built
+    // through the same constructor the live path uses, so this command cannot
+    // explain a resolution that differs from the one that runs — which is the
+    // entire value of the command.
+    let model_ctx = ModelSamplingContext::for_model(&model);
 
     // An empty request layer: this command explains the stored configuration,
     // so there are no per-request parameters to occupy the top rung.
@@ -69,11 +68,6 @@ fn find_profile(name: &str, profiles: Option<&[InferenceProfile]>) -> Result<Inf
         .find(|p| p.name == name)
         .cloned()
         .ok_or_else(|| anyhow!(not_found_message(name, profiles)))
-}
-
-/// Whether the model carries the `reasoning` tag, which selects the floor.
-fn is_reasoning(tags: &[String]) -> bool {
-    tags.iter().any(|tag| tag.eq_ignore_ascii_case("reasoning"))
 }
 
 #[cfg(test)]
@@ -116,13 +110,5 @@ mod tests {
     fn an_unset_profile_list_is_not_an_empty_list() {
         let err = find_profile("coding", None).unwrap_err().to_string();
         assert!(err.contains("install-templates"), "{err}");
-    }
-
-    #[test]
-    fn the_reasoning_tag_is_matched_case_insensitively() {
-        assert!(is_reasoning(&["Reasoning".to_owned()]));
-        assert!(is_reasoning(&["moe".to_owned(), "reasoning".to_owned()]));
-        assert!(!is_reasoning(&["code".to_owned()]));
-        assert!(!is_reasoning(&[]));
     }
 }

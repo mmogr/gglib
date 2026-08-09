@@ -158,10 +158,7 @@ pub fn build_new_model(
     // reviewed by a person — see `DefaultsOrigin` for why that changes how
     // resolution ranks it relative to the user's global settings.
     if model.inference_defaults.is_none()
-        && model
-            .tags
-            .iter()
-            .any(|t| t.eq_ignore_ascii_case("reasoning"))
+        && crate::domain::capability_tags::is_reasoning(&model.tags)
     {
         model.inference_defaults = Some(InferenceConfig::reasoning_profile());
         model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
