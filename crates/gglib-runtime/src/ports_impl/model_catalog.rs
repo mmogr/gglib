@@ -58,6 +58,9 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         gglib_core::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
     let kv_memory_is_partial =
         gglib_core::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
+    // Third fact derived from the same stored GGUF map. See
+    // `ModelSamplingDefaults` for why the proxy needs it.
+    let model_sampling = gglib_core::domain::ModelSamplingDefaults::from_metadata(&m.metadata);
 
     ModelLaunchSpec {
         id: m.id as u32,
@@ -71,6 +74,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         file_size_bytes,
         kv_elems_per_token,
         kv_memory_is_partial,
+        model_sampling,
     }
 }
 
@@ -243,5 +247,32 @@ mod tests {
     #[tokio::test]
     async fn unknown_model_resolves_to_none() {
         assert!(port().resolve_model("ghost").await.unwrap().is_none());
+    }
+
+    /// The launch spec derives what the model declares about sampling from the
+    /// metadata already on the catalog row — the same trip
+    /// `kv_elems_per_token` and `kv_memory_is_partial` make. Without it the
+    /// proxy's baseline check has no way to tell a model's own recommendation
+    /// from a pin bump.
+    #[test]
+    fn a_launch_spec_carries_what_the_models_gguf_declares() {
+        let mut m = OneModelRepo::model();
+        m.metadata
+            .insert("general.sampling.temp".to_string(), "0.33".to_string());
+
+        let spec = model_to_launch_spec(m);
+
+        assert_eq!(
+            spec.model_sampling.temperature,
+            gglib_core::domain::ModelSamplingDefault::Declared(0.33)
+        );
+    }
+
+    /// The ordinary model says nothing, and must arrive saying nothing rather
+    /// than arriving as "unknown" — the build's own table shows through.
+    #[test]
+    fn a_model_with_no_sampling_metadata_declares_nothing() {
+        let spec = model_to_launch_spec(OneModelRepo::model());
+        assert!(!spec.model_sampling.declares_anything());
     }
 }

@@ -330,6 +330,7 @@ mod tests {
 
     fn spec(tags: &[&str]) -> ModelLaunchSpec {
         ModelLaunchSpec {
+            model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
             id: 7,
             name: "qwen3-30b-a3b".to_string(),
             file_path: PathBuf::from("/models/q.gguf"),

@@ -16,6 +16,7 @@ pub mod launch_narration;
 pub mod mcp;
 mod model;
 pub mod model_naming;
+pub mod model_sampling;
 pub mod query;
 pub mod recommendation;
 pub mod residency;
@@ -65,6 +66,7 @@ pub use kv_estimate::{
 
 // Re-export KV memory-shape detection at the domain level for convenience
 pub use kv_memory::kv_memory_is_partial;
+pub use model_sampling::{MODEL_SAMPLING_KEYS, ModelSamplingDefault, ModelSamplingDefaults};
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};

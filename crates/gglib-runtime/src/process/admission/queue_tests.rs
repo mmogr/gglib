@@ -22,6 +22,7 @@ fn queue() -> Arc<AdmissionQueue> {
 
 fn resident(model_id: u32, name: &str) -> Resident {
     Resident {
+        model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
         model_id,
         model_name: name.to_string(),
         context_size: 4096,

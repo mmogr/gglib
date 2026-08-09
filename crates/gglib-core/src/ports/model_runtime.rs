@@ -23,7 +23,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
-use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration};
+use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults};
 use crate::ports::ProcessHandle;
 use crate::server_config::ServerConfigOptions;
 
@@ -96,6 +96,18 @@ pub struct RunningTarget {
     /// running model has no way to recover them otherwise. `None` for targets
     /// that did not come from a gglib launch.
     pub narration: Option<LaunchNarration>,
+    /// What this model's own GGUF declares about sampler defaults.
+    ///
+    /// `None` for targets that did not come from a gglib launch, in the same
+    /// sense as [`Self::narration`] — nobody read a GGUF for them, so nothing
+    /// is known either way. Distinct from `Some(ModelSamplingDefaults::default())`,
+    /// which is the ordinary case: a GGUF was read and it declares nothing.
+    ///
+    /// Consumers must not flatten those two. `None` means the model's
+    /// contribution to `/props` is unknown and no field can be attributed;
+    /// `Some(default())` means the build's own table is showing through
+    /// unmodified. See [`crate::domain::ModelSamplingDefaults`].
+    pub model_sampling: Option<ModelSamplingDefaults>,
 }
 
 impl RunningTarget {
@@ -124,7 +136,15 @@ impl RunningTarget {
             slot_restore_supported: true,
             cache_ram_health: CacheRamHealth::LlamaDefault,
             narration: None,
+            model_sampling: None,
         }
+    }
+
+    /// Attach what the launched model's GGUF declares about sampling.
+    #[must_use]
+    pub const fn with_model_sampling(mut self, declared: ModelSamplingDefaults) -> Self {
+        self.model_sampling = Some(declared);
+        self
     }
 
     /// Attach the narration of the launch that produced this target.

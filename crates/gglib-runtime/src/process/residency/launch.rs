@@ -238,6 +238,7 @@ async fn launch(
             port,
             model_path: spec.file_path.clone(),
             slot_restore_supported: slot_restore.enabled,
+            model_sampling: spec.model_sampling,
             cache_ram_health,
             narration: Some(narration.clone()),
             inflight: 0,
@@ -264,6 +265,7 @@ async fn launch(
         true, // fresh spawn — cache slots are stale
     )
     .with_slot_restore_supported(slot_restore.enabled)
+    .with_model_sampling(spec.model_sampling)
     .with_cache_ram_health(cache_ram_health)
     .with_narration(narration);
 

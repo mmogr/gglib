@@ -16,8 +16,8 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use gglib_core::domain::{
-    AdmissionSnapshot, CacheRamHealth, LaunchNarration, QueuedModelSnapshot, ResidentSlotSnapshot,
-    SecondarySlotDecision, SecondarySlotStatus,
+    AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults, QueuedModelSnapshot,
+    ResidentSlotSnapshot, SecondarySlotDecision, SecondarySlotStatus,
 };
 
 use crate::command::SERVER_PARALLEL;
@@ -92,6 +92,12 @@ pub struct Resident {
     pub model_path: PathBuf,
     /// Whether disk slot restore can resume this model.
     pub slot_restore_supported: bool,
+    /// What this model's GGUF declares about sampler defaults.
+    ///
+    /// Not `Option`: a resident always came from a `ModelLaunchSpec`, so a
+    /// GGUF was always read. "Read and declares nothing" is
+    /// `ModelSamplingDefaults::default()`, which is the ordinary case.
+    pub model_sampling: ModelSamplingDefaults,
     /// Health of the `--cache-ram` budget this instance launched with.
     pub cache_ram_health: CacheRamHealth,
     /// What this instance's launch decided.

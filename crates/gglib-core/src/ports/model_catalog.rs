@@ -14,6 +14,7 @@ use crate::domain::DialectSpec;
 use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
 use crate::domain::ModelCapabilities;
+use crate::domain::ModelSamplingDefaults;
 use crate::domain::ServerConfig;
 
 /// Domain model summary for catalog operations (listing).
@@ -134,6 +135,18 @@ pub struct ModelLaunchSpec {
     /// disable the disk slot layer for these models and rely on the in-RAM
     /// prompt cache, which does preserve checkpoints.
     pub kv_memory_is_partial: bool,
+    /// What this model's own GGUF declares about sampler defaults (see
+    /// [`crate::domain::ModelSamplingDefaults`]).
+    ///
+    /// llama.cpp applies these over its own build defaults for every field no
+    /// CLI flag sets, and reports the result as `/props`'s
+    /// `default_generation_settings`. Carried to the running target so the
+    /// proxy's baseline check can tell a model's own recommendation from a pin
+    /// bump, rather than reporting the first as the second.
+    ///
+    /// Derived from the metadata already on the catalog row, the same way
+    /// `kv_elems_per_token` and `kv_memory_is_partial` are.
+    pub model_sampling: ModelSamplingDefaults,
 }
 
 impl ModelSummary {
