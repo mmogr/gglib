@@ -203,6 +203,36 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
         self.get_commit_sha(&repo).await.map_err(map_error)
     }
 
+    /// Fetch `generation_config.json` from the `resolve` endpoint.
+    ///
+    /// A repo without one answers 404, which is the ordinary case for a GGUF
+    /// quant repo and is mapped to `Ok(None)` rather than an error — the file
+    /// being absent is not a failure to fetch it. Every other failure stays an
+    /// `Err` so the caller can tell "no config published" from "could not
+    /// look", even though today it treats both as a reason to fall back.
+    async fn fetch_generation_config(&self, model_id: &str) -> HfPortResult<Option<String>> {
+        if HfRepoRef::parse(model_id).is_none() {
+            return Err(HfPortError::InvalidResponse {
+                message: format!("Invalid model ID format: {model_id}"),
+            });
+        }
+
+        let raw = crate::url::build_file_url(model_id, "generation_config.json", None);
+        let url = url::Url::parse(&raw).map_err(|e| HfPortError::Configuration {
+            message: e.to_string(),
+        })?;
+
+        // Deserialized as a `Value` and re-serialized rather than fetched as
+        // text, because `HttpBackend` speaks JSON — which this file is. The
+        // domain parser takes a string so it can also report "this was not
+        // JSON at all", a case that cannot arise on this path.
+        match self.backend.get_json::<serde_json::Value>(&url).await {
+            Ok(value) => Ok(Some(value.to_string())),
+            Err(HfError::ApiRequestFailed { status: 404, .. }) => Ok(None),
+            Err(e) => Err(map_error(e)),
+        }
+    }
+
     async fn get_model_info(&self, model_id: &str) -> HfPortResult<HfRepoInfo> {
         let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
             message: format!("Invalid model ID format: {model_id}"),
