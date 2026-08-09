@@ -30,7 +30,7 @@ import type { FC } from 'react';
 import { Banner } from './ui/Banner';
 import type {
   SamplingAuditSnapshot,
-  SamplingBaselineReport,
+  SamplingBaselineState,
   SamplingDivergence,
 } from '../services/transport/types/dashboard';
 
@@ -102,8 +102,11 @@ const AuditStateLine: FC<{ audit: SamplingAuditSnapshot }> = ({ audit }) => {
 };
 
 /** The `/props` baseline check: has this build's own default table moved? */
-const BaselineRows: FC<{ baseline?: SamplingBaselineReport | null }> = ({ baseline }) => {
-  if (!baseline) {
+const BaselineRows: FC<{ baseline?: SamplingBaselineState | null }> = ({ baseline }) => {
+  // A proxy that predates the field sends nothing; a current one always sends
+  // a state, and `not_yet_read` is the honest answer only when no read has
+  // been attempted.
+  if (!baseline || baseline.state === 'not_yet_read') {
     return (
       <p className="text-sm text-text-muted">
         Build defaults not read yet.
@@ -111,7 +114,20 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineReport | null }> = ({ baseli
     );
   }
 
-  const drifted = baseline.fields.filter((f) => f.verdict.verdict === 'differs');
+  // A read that was attempted and failed is not a read that has not happened.
+  // Same rule as the liveness line above: the cause comes from the backend, so
+  // the UI never has to guess which of the several failures applies.
+  if (baseline.state === 'unreadable') {
+    return (
+      <Banner variant="warning" title="Build defaults could not be read">
+        {baseline.reason} Until this succeeds, nothing below is checked against
+        the table this build was measured at.
+      </Banner>
+    );
+  }
+
+  const { report } = baseline;
+  const drifted = report.fields.filter((f) => f.verdict.verdict === 'differs');
 
   if (drifted.length > 0) {
     return (
@@ -134,8 +150,8 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineReport | null }> = ({ baseli
   // Inconclusive is its own answer, not a quiet pass. The reason comes from
   // the backend so the UI never has to guess which of the several causes
   // applies.
-  if (!baseline.conclusive) {
-    const reason = baseline.fields.find(
+  if (!report.conclusive) {
+    const reason = report.fields.find(
       (f) => f.verdict.verdict === 'indeterminate',
     )?.verdict;
     return (
@@ -147,7 +163,7 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineReport | null }> = ({ baseli
 
   return (
     <p className="text-sm text-text-muted">
-      All {baseline.fields.length} sampler defaults match the values this build
+      All {report.fields.length} sampler defaults match the values this build
       was measured at.
     </p>
   );

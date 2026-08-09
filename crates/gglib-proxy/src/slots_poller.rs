@@ -35,7 +35,7 @@ use tracing::{debug, info, warn};
 use gglib_core::ports::ModelRuntimePort;
 
 use crate::connections::ActiveConnectionsRegistry;
-use crate::props::{BaselineReport, PropsResult, fetch_props};
+use crate::props::{BaselineReport, BaselineState, PropsResult, fetch_props};
 use crate::sampling_audit::{SamplingAuditStore, SlotParams, compare_poll};
 use crate::slots::{SlotsPollResult, fetch_slots};
 
@@ -235,12 +235,12 @@ async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditSto
                 conclusive = report.conclusive,
                 "read llama-server sampling defaults from /props"
             );
-            audit.set_baseline(Some(report));
+            audit.set_baseline(BaselineState::Read { report });
             true
         }
         PropsResult::Unavailable(reason) => {
             debug!("proxy dashboard: /props unreadable ({reason}); no sampling baseline");
-            audit.set_baseline(None);
+            audit.set_baseline(BaselineState::Unreadable { reason });
             false
         }
     }

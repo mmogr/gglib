@@ -11,7 +11,7 @@ function audit(overrides: Partial<SamplingAuditSnapshot> = {}): SamplingAuditSna
     client_fields_rejected: 0,
     client_fields_discarded: 0,
     recent_divergences: [],
-    baseline: null,
+    baseline: { state: 'not_yet_read' },
     ...overrides,
   };
 }
@@ -99,31 +99,33 @@ describe('ProxySamplingPanel', () => {
   });
 
   describe('baseline check', () => {
-    // The state the instrument is actually in today: gglib's own launch flags
-    // overwrite the /props table, so an "all match" would be gglib agreeing
-    // with itself.
+    // A field this build's /props does not report is unknown, never
+    // agreement — the same discipline as `RuntimeCapabilities::unknown`.
     it('renders an inconclusive baseline as unknown, not as a match', () => {
       render(
         <ProxySamplingPanel
           audit={audit({
             baseline: {
-              conclusive: false,
-              fields: [
-                {
-                  field: 'temperature',
-                  verdict: {
-                    verdict: 'indeterminate',
-                    reason: 'gglib passes this as a llama-server launch flag',
+              state: 'read',
+              report: {
+                conclusive: false,
+                fields: [
+                  {
+                    field: 'temperature',
+                    verdict: {
+                      verdict: 'indeterminate',
+                      reason: 'this build\u2019s /props does not report temperature',
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
           })}
         />,
       );
 
       expect(screen.getByText(/could not be checked/i)).toBeInTheDocument();
-      expect(screen.getByText(/launch flag/i)).toBeInTheDocument();
+      expect(screen.getByText(/does not report temperature/i)).toBeInTheDocument();
       expect(screen.queryByText(/match the values/i)).not.toBeInTheDocument();
     });
 
@@ -134,11 +136,14 @@ describe('ProxySamplingPanel', () => {
         <ProxySamplingPanel
           audit={audit({
             baseline: {
-              conclusive: true,
-              fields: [
-                { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
-                { field: 'min_p', verdict: { verdict: 'matches' } },
-              ],
+              state: 'read',
+              report: {
+                conclusive: true,
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                ],
+              },
             },
           })}
         />,
@@ -155,17 +160,48 @@ describe('ProxySamplingPanel', () => {
         <ProxySamplingPanel
           audit={audit({
             baseline: {
-              conclusive: true,
-              fields: [
-                { field: 'top_p', verdict: { verdict: 'matches' } },
-                { field: 'min_p', verdict: { verdict: 'matches' } },
-              ],
+              state: 'read',
+              report: {
+                conclusive: true,
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                ],
+              },
             },
           })}
         />,
       );
 
       expect(screen.getByText(/All 2 sampler defaults match/i)).toBeInTheDocument();
+    });
+
+    // The baseline half's version of the rule the whole panel obeys. A read
+    // that was attempted and failed is not a read that has not happened, and
+    // "not read yet" is a claim about the poller rather than about the server.
+    it('renders an unreadable baseline as a warning carrying its cause', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'unreadable',
+              reason: '/props is unreadable: connection refused.',
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/could not be read/i)).toBeInTheDocument();
+      expect(screen.getByText(/connection refused/i)).toBeInTheDocument();
+      expect(screen.queryByText(/not read yet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/match the values/i)).not.toBeInTheDocument();
+    });
+
+    it('says so plainly when no read has been attempted yet', () => {
+      render(<ProxySamplingPanel audit={audit({ baseline: { state: 'not_yet_read' } })} />);
+
+      expect(screen.getByText(/not read yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/could not be read/i)).not.toBeInTheDocument();
     });
   });
 

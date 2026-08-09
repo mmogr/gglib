@@ -869,6 +869,40 @@ mod tests {
         assert!(clean_json.contains("\"divergences\":0"), "{clean_json}");
     }
 
+    /// The baseline half's version of the rule above. A `/props` read that was
+    /// attempted and failed must not serialize the same as one the poller has
+    /// not reached yet — otherwise the panel says "not read yet" about a read
+    /// that happened, and the cause never reaches anyone.
+    #[test]
+    fn an_unreadable_baseline_serializes_differently_from_an_unread_one() {
+        let unread = SamplingAuditStore::new();
+
+        let failed = SamplingAuditStore::new();
+        failed.set_baseline(crate::props::BaselineState::Unreadable {
+            reason: "connection refused".to_string(),
+        });
+
+        let render = |store: &SamplingAuditStore| {
+            serde_json::to_string(&store.snapshot()).expect("snapshot serializes")
+        };
+        let unread_json = render(&unread);
+        let failed_json = render(&failed);
+
+        assert_ne!(unread_json, failed_json);
+        assert!(
+            unread_json.contains("\"state\":\"not_yet_read\""),
+            "{unread_json}"
+        );
+        assert!(
+            failed_json.contains("\"state\":\"unreadable\""),
+            "{failed_json}"
+        );
+        assert!(
+            failed_json.contains("connection refused"),
+            "an unreadable baseline must carry its cause: {failed_json}"
+        );
+    }
+
     /// The store the poller writes must be the store the snapshot reads —
     /// two `Arc`s of the same thing, not two stores.
     #[test]

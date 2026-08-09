@@ -276,6 +276,21 @@ export interface SamplingBaselineReport {
 }
 
 /**
+ * Mirrors `gglib_proxy::props::BaselineState`
+ * (`#[serde(tag = "state", rename_all = "snake_case")]`).
+ *
+ * Three states rather than a nullable report, for `SamplingAuditState`'s
+ * reason. `not_yet_read` and `unreadable` both mean "no table to show" and mean
+ * opposite things: one is a poller that has not got there yet, the other is a
+ * read that happened and failed. Rendering the second as the first is the same
+ * blind-as-health collapse the slot half carries `blind { reason }` to avoid.
+ */
+export type SamplingBaselineState =
+  | { state: 'not_yet_read' }
+  | { state: 'unreadable'; reason: string }
+  | { state: 'read'; report: SamplingBaselineReport };
+
+/**
  * Mirrors `gglib_proxy::sampling_audit::SamplingAuditSnapshot` — whether the
  * sampling gglib resolved is the sampling llama-server applied.
  */
@@ -301,8 +316,13 @@ export interface SamplingAuditSnapshot {
   client_fields_discarded: number;
   /** Most recent field-level disagreements, oldest first. */
   recent_divergences: SamplingDivergence[];
-  /** `/props` baseline reading for the running model; `null` before one is taken. */
-  baseline?: SamplingBaselineReport | null;
+  /**
+   * `/props` baseline reading for the running model.
+   *
+   * Optional only so this mirror still parses a payload from a proxy that
+   * predates the field; a current proxy always sends one of the three states.
+   */
+  baseline?: SamplingBaselineState | null;
 }
 
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */

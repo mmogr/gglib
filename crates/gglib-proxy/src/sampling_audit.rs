@@ -457,7 +457,7 @@ pub struct SamplingAuditStore {
     blind: Mutex<Option<String>>,
     recent: Mutex<VecDeque<Divergence>>,
     /// The most recent `/props` baseline reading, one per model launch.
-    baseline: Mutex<Option<crate::props::BaselineReport>>,
+    baseline: Mutex<crate::props::BaselineState>,
 }
 
 impl SamplingAuditStore {
@@ -519,8 +519,13 @@ impl SamplingAuditStore {
     }
 
     /// Store the baseline reading for the currently running model.
-    pub fn set_baseline(&self, report: Option<crate::props::BaselineReport>) {
-        *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = report;
+    ///
+    /// Overwrites rather than merges: a model swap must not leave the previous
+    /// model's table on display, and
+    /// [`Unreadable`](crate::props::BaselineState::Unreadable) is a more
+    /// honest thing to show in its place than a stale `Read`.
+    pub fn set_baseline(&self, state: crate::props::BaselineState) {
+        *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = state;
     }
 
     /// What the organ can currently say about itself.
@@ -591,9 +596,12 @@ pub struct SamplingAuditSnapshot {
     pub client_fields_discarded: u64,
     /// Most recent field-level disagreements, oldest first.
     pub recent_divergences: Vec<Divergence>,
-    /// The `/props` baseline reading for the running model, when one has been
-    /// taken. See [`crate::props`] — this is the half that catches a pin bump.
-    pub baseline: Option<crate::props::BaselineReport>,
+    /// The `/props` baseline reading for the running model. See
+    /// [`crate::props`] — this is the half that catches a pin bump.
+    ///
+    /// Carries its own three states rather than being an `Option`, so a read
+    /// that failed cannot render as one that has not happened yet.
+    pub baseline: crate::props::BaselineState,
 }
 
 /// Render a rung for a log line: a name when the value came from a layer,

@@ -319,6 +319,52 @@ impl BaselineReport {
     }
 }
 
+/// What the `/props` baseline read has produced for the running model.
+///
+/// A tagged union rather than `Option<BaselineReport>`, for
+/// [`AuditState`](crate::sampling_audit::AuditState)'s reason. "Nobody has
+/// read it yet" and "the read was attempted and failed, and here is why" are
+/// different facts, and an `Option` flattens both into the same `None` — after
+/// which the only thing a surface can say is "not read yet", which is a claim
+/// about a read that did happen.
+///
+/// That is the blind-rendered-as-health collapse this subsystem exists to
+/// prevent, one level down from where it was being prevented: the slot half
+/// carried `Blind { reason }` from the start, and the baseline half did not.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum BaselineState {
+    /// No `/props` read has completed for the running model yet. The ordinary
+    /// state for the first second of a launch.
+    #[default]
+    NotYetRead,
+    /// The read was attempted and did not produce a table.
+    ///
+    /// Usually a server that has not finished starting, which is why the
+    /// poller retries rather than latching — see `slots_poller`'s
+    /// `BaselineLatch`.
+    Unreadable {
+        /// Cause, in words a dashboard can show.
+        reason: String,
+    },
+    /// The build's default table was read.
+    Read {
+        /// Per-field verdicts.
+        report: BaselineReport,
+    },
+}
+
+impl BaselineState {
+    /// The report, when one was read.
+    #[must_use]
+    pub const fn report(&self) -> Option<&BaselineReport> {
+        match self {
+            Self::Read { report } => Some(report),
+            Self::NotYetRead | Self::Unreadable { .. } => None,
+        }
+    }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
