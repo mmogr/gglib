@@ -90,6 +90,15 @@
 //! whole decisions would abstain constantly, because `max_tokens` is
 //! client-authoritative and varies per request while nothing else does.
 //!
+//! It abstains for a second reason too: **a busy slot gglib has no request to
+//! explain did not come through this proxy.** llama-server is reachable
+//! directly, and `llama::args::sampling` records that as the one population the
+//! deleted launch flags ever served. Comparing such a slot against a gglib
+//! intent would invent a divergence and attach a confident provenance to it.
+//! So when there are more busy slots than intents in flight, the whole poll is
+//! skipped rather than the surplus — slots arrive in no order, so comparing a
+//! subset would make the false positive rarer without making it less wrong.
+//!
 //! # It never acts
 //!
 //! ADR 0001's static-arbitration rule, and the case is stronger here than
@@ -386,8 +395,27 @@ pub struct PollOutcome {
 ///
 /// `intents` is the set of recently-issued [`SamplingDecision`]s for the
 /// running model; `observed` is the `params` of every slot that was
-/// processing. Abstains rather than guessing when the intents disagree — see
-/// the module docs.
+/// processing. Abstains rather than guessing — see the module docs.
+///
+/// # Two ways an observation cannot be attributed
+///
+/// The intents in flight disagree on a compared field, so which one an
+/// observation belongs to changes the answer. That is the case the module docs
+/// measure the cost of.
+///
+/// Or there are **more busy slots than gglib has requests to explain them**, in
+/// which case at least one is somebody else's — a client curling llama-server
+/// directly, which is precisely the population `llama::args::sampling` records
+/// the deleted launch flags as having served. Comparing an arbitrary slot
+/// against a gglib intent would then manufacture a `Divergence` carrying a
+/// confident provenance string, on the instrument whose only value is that it
+/// is worth believing when it fires.
+///
+/// Both abstain over the whole poll rather than over the surplus. Comparing
+/// `min(observed, intents)` of them would be worse than useless: the slots
+/// arrive in no particular order, so the ones compared would be an arbitrary
+/// subset and the false positive would merely become less frequent and no less
+/// wrong.
 #[must_use]
 pub fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> PollOutcome {
     let mut out = PollOutcome {
@@ -405,6 +433,13 @@ pub fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> Po
     let Some(first) = intents.first() else {
         return out;
     };
+
+    // More busy slots than gglib can account for: at least one belongs to
+    // something that did not come through this proxy.
+    if observed.len() > intents.len() {
+        out.skipped_ambiguous = observed.len() as u64;
+        return out;
+    }
 
     let key = comparable_key(first);
     if intents.iter().any(|i| comparable_key(i) != key) {
@@ -833,6 +868,56 @@ mod tests {
         assert_eq!(out.skipped_ambiguous, 0);
     }
 
+    /// **A false positive this used to produce.** llama-server is reachable
+    /// directly, and `llama::args::sampling` records that as the one
+    /// population the deleted launch flags ever served. Such a request
+    /// occupies a slot gglib has no intent for, and comparing it against
+    /// gglib's own intent invented a divergence with a confident provenance
+    /// string attached — on the instrument whose only value is being worth
+    /// believing when it fires.
+    #[test]
+    fn a_busy_slot_gglib_cannot_account_for_abstains_rather_than_diverging() {
+        let mine: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let someone_elses = SlotParams {
+            temperature: Some(1.9),
+            ..mine.clone()
+        };
+        // One gglib request in flight, two slots busy: the second is not ours.
+        let out = compare_poll(&[intent_at(0.12)], &[mine, someone_elses]);
+
+        assert_eq!(out.divergences, 0, "must not report a stranger's slot");
+        assert_eq!(out.comparisons, 0);
+        assert_eq!(out.skipped_ambiguous, 2, "the whole poll is unattributable");
+    }
+
+    /// The surplus is not compared "as far as it goes". Slots arrive in no
+    /// particular order, so comparing `min(observed, intents)` of them would
+    /// pick an arbitrary subset — making the false positive rarer without
+    /// making it less wrong.
+    #[test]
+    fn a_surplus_slot_abstains_over_the_whole_poll_not_just_the_extra() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let out = compare_poll(
+            &[intent_at(0.12), intent_at(0.12)],
+            &[observed.clone(), observed.clone(), observed],
+        );
+
+        assert_eq!(out.comparisons, 0, "not two of the three");
+        assert_eq!(out.skipped_ambiguous, 3);
+    }
+
+    /// Fewer busy slots than intents is the ordinary case — a request can be
+    /// queued, or between shaping and reaching a slot — and must still compare.
+    #[test]
+    fn fewer_busy_slots_than_intents_still_compares() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let intents = vec![intent_at(0.12), intent_at(0.12), intent_at(0.12)];
+
+        let out = compare_poll(&intents, std::slice::from_ref(&observed));
+        assert_eq!(out.comparisons, 1);
+        assert_eq!(out.skipped_ambiguous, 0);
+    }
+
     #[test]
     fn no_recorded_intent_compares_nothing() {
         let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
@@ -847,7 +932,10 @@ mod tests {
     #[test]
     fn a_real_divergence_is_counted_once_per_slot() {
         let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
-        let intents = vec![intent_at(0.90)]; // slot reports 0.12
+        // One intent per busy slot: two turns in flight, both resolving to
+        // 0.90 while the slots report 0.12. Fewer intents than slots is the
+        // unattributable case below, not this one.
+        let intents = vec![intent_at(0.90), intent_at(0.90)];
         let slots = vec![observed.clone(), observed];
 
         let out = compare_poll(&intents, &slots);
