@@ -14,7 +14,8 @@ use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, ModelCompareResult,
+    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, EFFECT_NOISE_RATIO,
+    ModelCompareResult,
     ModelPerfResult, PerfConfig,
 };
 
@@ -93,6 +94,8 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             ctx_size,
             seeds,
             no_control,
+            no_replicate,
+            control_seeds,
             json,
             output,
         } => {
@@ -103,6 +106,8 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
                 ctx_size,
                 seeds,
                 !no_control,
+                !no_replicate,
+                control_seeds,
                 json,
                 output,
             )
@@ -312,6 +317,8 @@ async fn cmd_agentic(
     ctx_size: Option<u64>,
     seeds: Option<Vec<u32>>,
     include_control: bool,
+    replicate_raw: bool,
+    control_seeds: usize,
     json: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
@@ -332,17 +339,21 @@ async fn cmd_agentic(
         ctx_size,
         seeds: seeds.clone(),
         include_control,
+        replicate_raw,
+        control_seeds,
     };
 
-    let arms = if include_control {
-        "raw (pipeline bypassed) vs gglib (full pipeline) vs control"
-    } else {
-        "raw (pipeline bypassed) vs gglib (full pipeline)"
-    };
+    let mut arms = vec!["raw (pipeline bypassed)", "gglib (full pipeline)"];
+    if replicate_raw {
+        arms.push("raw again (A/A, disjoint seeds)");
+    }
+    if include_control {
+        arms.push("control (sampling deliberately broken)");
+    }
     style::print_info_banner("Agentic A/B Eval", "\u{2696}\u{fe0f}");
     eprintln!("  Model : {model}");
     eprintln!("  Suite : {task_suite}");
-    eprintln!("  Arms  : {arms}");
+    eprintln!("  Arms  : {}", arms.join(" vs "));
     if seeds.is_empty() {
         eprintln!(
             "  Seeds : none — one unseeded run per task, so scores carry full decode variance"
@@ -356,6 +367,15 @@ async fn cmd_agentic(
                 .collect::<Vec<_>>()
                 .join(", "),
             seeds.len()
+        );
+    }
+    // Stated up front rather than discovered in the report: the control's
+    // composite sits beside two five-seed numbers and is not one of them.
+    if include_control && !seeds.is_empty() && control_seeds < seeds.len() {
+        eprintln!(
+            "  Note  : the control repeats only {n} of them — it is the slowest arm by far and \
+             only has to clear a detection threshold",
+            n = control_seeds.max(1),
         );
     }
     style::print_banner_close();
@@ -492,10 +512,81 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         );
     }
 
+    render_noise_block(report);
     render_control_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
     eprintln!();
+}
+
+/// What the A/A arm says about the size of the delta just rendered.
+///
+/// Placed immediately under the axis table, because it is the sentence that
+/// decides how the composite row should be read — not a footnote to it. A delta
+/// of 0.082 above a drift of 0.031 is a finding; the same 0.082 above a drift
+/// of 0.070 is a coin landing the same way twice, and the table alone cannot
+/// tell them apart.
+fn render_noise_block(report: &AgenticEvalReport) {
+    let Some(verdict) = report.effect_verdict() else {
+        eprintln!();
+        eprintln!(
+            "  {MUTED}no A/A arm ran, so nothing here shows how much of the delta above is \
+             drift — read it as a direction, not a magnitude{RESET}",
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
+        return;
+    };
+    let replicate = report.raw_replicate.as_ref().map_or(f64::NAN, |r| r.composite);
+    let ratio = verdict
+        .ratio()
+        .map_or_else(|| "—".to_owned(), |r| format!("{r:.1}×"));
+
+    eprintln!();
+    eprintln!(
+        "  {MUTED}A/A: the raw arm re-run on {n} disjoint seeds scored {replicate:.3} against its \
+         own {raw:.3}{RESET}",
+        n = report.replicate_seeds.len(),
+        raw = report.raw.composite,
+        MUTED = style::MUTED,
+        RESET = style::RESET,
+    );
+    if verdict.exceeds_noise() {
+        eprintln!(
+            "  {SUCCESS}effect exceeds drift{RESET}: the {effect:+.3} composite delta is {ratio} \
+             the {noise:.3} this eval moves with nothing changed.",
+            effect = verdict.effect(),
+            noise = verdict.noise(),
+            SUCCESS = style::SUCCESS,
+            RESET = style::RESET,
+        );
+    } else {
+        eprintln!(
+            "  {WARN}effect is within drift{RESET}: the {effect:+.3} composite delta is {ratio} \
+             the {noise:.3} this eval moves with nothing changed, under the {min:.0}× needed to \
+             call it more than noise.",
+            effect = verdict.effect(),
+            noise = verdict.noise(),
+            min = EFFECT_NOISE_RATIO,
+            WARN = style::WARNING,
+            RESET = style::RESET,
+        );
+        eprintln!(
+            "  {WARN}That is unresolved, not absent — the fix is more seeds, not a different \
+             conclusion.{RESET}",
+            WARN = style::WARNING,
+            RESET = style::RESET,
+        );
+    }
+    // Printed on success as well as failure. A ratio computed from a single
+    // pair is the kind of number that gets quoted as though it were a p-value,
+    // and the caveat has to travel with it.
+    eprintln!(
+        "  {MUTED}one A/A pair estimates that drift from a single degree of freedom — this is a \
+         sanity ratio, not a significance test{RESET}",
+        MUTED = style::MUTED,
+        RESET = style::RESET,
+    );
 }
 
 /// The positive control's verdict.
@@ -560,6 +651,40 @@ fn render_control_block(report: &AgenticEvalReport) {
                 RESET = style::RESET,
             );
         }
+    }
+
+    // The control's composite is a coarser number than the two it is printed
+    // beside, and nothing else on the line says so.
+    let control_seeds = report.control.as_ref().map_or(0, |c| c.seeds);
+    if control_seeds < report.gglib.seeds {
+        eprintln!(
+            "  {MUTED}measured on {control_seeds} of the run's {run_seeds} seeds — enough for a \
+             gap this size, and it is the slowest arm in the eval{RESET}",
+            run_seeds = report.gglib.seeds,
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
+    }
+
+    // What the control does *not* establish, said where it will be read. A
+    // control that clears 0.5 licenses no claim about resolving 0.08 — that is
+    // the A/A arm's job, and conflating them is the easiest misreading of this
+    // whole report.
+    if verdict.demonstrated_sensitivity()
+        && let Some(effect) = report.effect_verdict()
+    {
+        eprintln!(
+            "  {MUTED}that demonstrates sensitivity at {gap:.3}, not at the {effect:.3} measured \
+             above — see the A/A line for that{RESET}",
+            gap = match verdict {
+                ControlVerdict::Moved { gap }
+                | ControlVerdict::TooSmall { gap }
+                | ControlVerdict::WrongDirection { gap } => gap,
+            },
+            effect = effect.effect().abs(),
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
     }
 }
 

@@ -24,7 +24,8 @@ use anyhow::{Context as _, Result};
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores,
-    CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EvalArm, control_sampling,
+    CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
+    control_sampling, replicate_seeds,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
@@ -119,24 +120,15 @@ pub async fn run_agentic_eval(
     // means the same thing in both.
     let model_context = super::tune::model_context_for(&model);
 
-    // One run per seed, per task. An empty seed list still runs once, with no
-    // seed named — the pre-multi-seed behaviour, kept reachable as a fast
-    // smoke test.
-    let seeds: Vec<Option<u32>> = if config.seeds.is_empty() {
-        vec![None]
-    } else {
-        config.seeds.iter().copied().map(Some).collect()
-    };
-
-    let mut arms = vec![EvalArm::Raw, EvalArm::Gglib];
-    if config.include_control {
-        arms.push(EvalArm::Control);
-    }
+    let plans = plan_arms(&config);
 
     // Per arm, results are grouped by task and ordered by seed within each
     // group, so the per-task drill-down can report N-of-M without re-keying.
-    let mut arm_results: Vec<Vec<Vec<TuneTaskResult>>> = Vec::with_capacity(arms.len());
-    for arm in arms.iter().copied() {
+    let mut arm_results: Vec<(EvalArm, Vec<Vec<TuneTaskResult>>)> =
+        Vec::with_capacity(plans.len());
+    for plan in &plans {
+        let arm = plan.arm;
+        let seeds = &plan.seeds;
         let _ = tx
             .send(BenchmarkEvent::AgenticArmStarted {
                 arm,
@@ -189,26 +181,41 @@ pub async fn run_agentic_eval(
             }
             per_task.push(per_seed);
         }
-        arm_results.push(per_task);
+        arm_results.push((arm, per_task));
     }
 
-    // Popped in reverse push order.
-    let control_results = config
-        .include_control
-        .then(|| arm_results.pop().unwrap_or_default());
-    let gglib_results = arm_results.pop().unwrap_or_default();
-    let raw_results = arm_results.pop().unwrap_or_default();
+    // Taken by arm rather than popped in reverse push order: two of the four
+    // arms are conditional, and an ordering the reader has to reconstruct from
+    // the push sequence is one refactor away from silently attributing the
+    // control's scores to the pipeline.
+    let raw_results = take_arm(&mut arm_results, EvalArm::Raw);
+    let gglib_results = take_arm(&mut arm_results, EvalArm::Gglib);
+    let replicate_results = take_arm(&mut arm_results, EvalArm::RawReplicate);
+    let control_results = take_arm(&mut arm_results, EvalArm::Control);
 
-    let raw = arm_scores(&flatten(&raw_results), &config, seeds.len(), tasks.len());
-    let gglib = arm_scores(&flatten(&gglib_results), &config, seeds.len(), tasks.len());
-    let control = control_results
-        .as_ref()
-        .map(|r| arm_scores(&flatten(r), &config, seeds.len(), tasks.len()));
+    // Each arm is scored against *its own* seed count, not the run's: the
+    // control repeats fewer seeds than the arms it is compared with, and
+    // dividing its totals by the wrong denominator would misreport it.
+    let score_arm = |results: &Option<Vec<Vec<TuneTaskResult>>>, arm: EvalArm| {
+        results.as_ref().map(|r| {
+            let seeds = plans
+                .iter()
+                .find(|p| p.arm == arm)
+                .map_or(1, |p| p.seeds.len());
+            arm_scores(&flatten(r), &config, seeds, tasks.len())
+        })
+    };
+
+    let raw = score_arm(&raw_results, EvalArm::Raw).unwrap_or_else(|| empty_scores(&config));
+    let gglib = score_arm(&gglib_results, EvalArm::Gglib).unwrap_or_else(|| empty_scores(&config));
+    let raw_replicate = score_arm(&replicate_results, EvalArm::RawReplicate);
+    let control = score_arm(&control_results, EvalArm::Control);
     let delta = AgenticEvalReport::delta_of(&raw, &gglib);
 
     let tasks_cmp: Vec<AgenticTaskComparison> = raw_results
+        .unwrap_or_default()
         .into_iter()
-        .zip(gglib_results)
+        .zip(gglib_results.unwrap_or_default())
         .filter_map(|(raw, gglib)| {
             let first = raw.first().or_else(|| gglib.first())?;
             Some(AgenticTaskComparison {
@@ -231,6 +238,12 @@ pub async fn run_agentic_eval(
         tasks: tasks_cmp,
         seeds: config.seeds.clone(),
         control,
+        replicate_seeds: if raw_replicate.is_some() {
+            replicate_seeds(&config.seeds)
+        } else {
+            Vec::new()
+        },
+        raw_replicate,
     };
 
     // Said out loud, because a control that failed to move invalidates every
@@ -240,6 +253,13 @@ pub async fn run_agentic_eval(
         && !verdict.demonstrated_sensitivity()
     {
         warn_control(verdict, &report);
+    }
+    // Same rule, one step weaker: an effect inside its own noise does not
+    // invalidate the report, but reading it as a result would.
+    if let Some(verdict) = report.effect_verdict()
+        && !verdict.exceeds_noise()
+    {
+        warn_effect(verdict);
     }
 
     if let Err(e) = deps
@@ -259,6 +279,92 @@ pub async fn run_agentic_eval(
         })
         .await;
     Ok(())
+}
+
+/// One arm and the seeds it repeats every task under.
+struct ArmPlan {
+    arm: EvalArm,
+    /// `None` entries name no seed at all — the pre-multi-seed behaviour.
+    seeds: Vec<Option<u32>>,
+}
+
+/// Decide which arms run, and on which seeds.
+///
+/// The two real arms share the primary seed set, because they are being
+/// compared with each other and any asymmetry between them would land in the
+/// delta. The other two do not:
+///
+/// - the A/A arm runs **different** seeds, which is the entire point of it;
+/// - the control runs **fewer**, because it is by far the most expensive arm
+///   and the gap it has to clear is an order of magnitude above the threshold
+///   that reads it.
+///
+/// Order matters for a run that gets interrupted: the real arms finish first,
+/// then the cheap A/A arm, and the control — which on measured runs costs more
+/// wall time than everything above it combined — goes last.
+fn plan_arms(config: &AgenticEvalConfig) -> Vec<ArmPlan> {
+    // An empty seed list still runs once with no seed named, which stays the
+    // fastest smoke test.
+    let primary: Vec<Option<u32>> = if config.seeds.is_empty() {
+        vec![None]
+    } else {
+        config.seeds.iter().copied().map(Some).collect()
+    };
+
+    let mut plans = vec![
+        ArmPlan {
+            arm: EvalArm::Raw,
+            seeds: primary.clone(),
+        },
+        ArmPlan {
+            arm: EvalArm::Gglib,
+            seeds: primary.clone(),
+        },
+    ];
+
+    if config.replicate_raw {
+        // Unseeded, the A/A arm is simply the same request twice — which still
+        // measures drift, since nothing was pinned in the first place.
+        let seeds = if config.seeds.is_empty() {
+            primary.clone()
+        } else {
+            replicate_seeds(&config.seeds)
+                .into_iter()
+                .map(Some)
+                .collect()
+        };
+        plans.push(ArmPlan {
+            arm: EvalArm::RawReplicate,
+            seeds,
+        });
+    }
+
+    if config.include_control {
+        // Clamped rather than trusted: zero would produce an arm with no runs
+        // whose empty scores would then be compared against as if measured.
+        let count = config.control_seeds.clamp(1, primary.len());
+        plans.push(ArmPlan {
+            arm: EvalArm::Control,
+            seeds: primary.into_iter().take(count).collect(),
+        });
+    }
+
+    plans
+}
+
+/// Remove one arm's results, or `None` if it did not run.
+fn take_arm(
+    results: &mut Vec<(EvalArm, Vec<Vec<TuneTaskResult>>)>,
+    arm: EvalArm,
+) -> Option<Vec<Vec<TuneTaskResult>>> {
+    let index = results.iter().position(|(a, _)| *a == arm)?;
+    Some(results.remove(index).1)
+}
+
+/// Scores for an arm that produced nothing, so a cancelled run still yields a
+/// well-formed report rather than a panic.
+fn empty_scores(config: &AgenticEvalConfig) -> ArmScores {
+    arm_scores(&[], config, 0, 0)
 }
 
 /// Build the LLM port for one arm and one task.
@@ -311,7 +417,7 @@ fn build_arm_llm(
                 ..InferenceConfig::default()
             }
         }
-        EvalArm::Raw | EvalArm::Gglib => InferenceConfig {
+        EvalArm::Raw | EvalArm::RawReplicate | EvalArm::Gglib => InferenceConfig {
             seed,
             ..InferenceConfig::default()
         },
@@ -327,7 +433,10 @@ fn build_arm_llm(
     .with_usage_sink(Some(usage));
 
     let adapter = match arm {
-        EvalArm::Raw => adapter.with_raw_passthrough(true),
+        // The A/A arm is the raw arm in every respect but its seeds. Any other
+        // difference here — however small — would turn the noise floor it
+        // measures into a second A/B comparison wearing the wrong name.
+        EvalArm::Raw | EvalArm::RawReplicate => adapter.with_raw_passthrough(true),
         // The control runs the same pipeline as the gglib arm, so the gap
         // between them is attributable to sampling rather than to shaping. It
         // is not a one-variable ablation — see `control_sampling` — because its
@@ -367,6 +476,26 @@ fn warn_control(verdict: ControlVerdict, report: &AgenticEvalReport) {
             report.gglib.composite
         ),
     }
+}
+
+/// Say that the headline delta did not clear the eval's own drift.
+///
+/// Deliberately worded as unresolved rather than absent. The A/A arm cannot
+/// show that a pipeline does nothing; it can only show that this run lacked the
+/// resolution to tell, and the action that follows is more seeds — not a
+/// different conclusion about the pipeline.
+fn warn_effect(verdict: EffectVerdict) {
+    let ratio = verdict
+        .ratio()
+        .map_or_else(|| "unmeasurable".to_owned(), |r| format!("{r:.1}×"));
+    warn!(
+        "agentic eval: the composite delta of {effect:+.3} is {ratio} the {noise:.3} drift \
+         measured between two runs of the *same* raw arm, under the {EFFECT_NOISE_RATIO:.0}× this \
+         report needs before calling a delta more than noise. Read the direction, not the \
+         magnitude, and add seeds before quoting this figure.",
+        effect = verdict.effect(),
+        noise = verdict.noise(),
+    );
 }
 
 /// Flatten per-task, per-seed results into one list.

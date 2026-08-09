@@ -16,6 +16,24 @@
 //! The per-axis deltas in the [`AgenticEvalReport`] are the product: the
 //! measured difference in tool-call accuracy, loop avoidance, and task
 //! completion, on this model, on this machine.
+//!
+//! Two further arms exist to keep those deltas honest, and neither is a
+//! measurement of the pipeline:
+//!
+//! - **`raw_replicate`** ([`EvalArm::RawReplicate`]) runs the raw arm a second
+//!   time on a *disjoint* seed set. Nothing differs between it and the raw arm
+//!   except which seeds were drawn, so whatever gap it opens is the eval's own
+//!   drift — the floor a raw-versus-gglib delta has to clear before it means
+//!   anything. An A/A test.
+//! - **`control`** ([`EvalArm::Control`]) runs the gglib pipeline with sampling
+//!   deliberately broken, and must score far below it. It answers the opposite
+//!   question: not *is this difference real* but *could this apparatus have
+//!   seen a difference at all*.
+//!
+//! They answer different failures and neither substitutes for the other. A
+//! control that moves 0.5 says the eval can detect a large change; it says
+//! nothing about whether it can resolve a 0.08 one, which is what the A/A arm
+//! is for.
 
 use serde::{Deserialize, Serialize};
 
@@ -56,6 +74,33 @@ pub struct AgenticEvalConfig {
     /// Whether to run the positive control arm. See [`EvalArm::Control`].
     #[serde(default = "default_include_control")]
     pub include_control: bool,
+    /// Whether to run the A/A arm. See [`EvalArm::RawReplicate`].
+    ///
+    /// On by default, and cheap: the raw arm is the fastest of the three, so
+    /// repeating it costs a fraction of what the control does and is the only
+    /// thing in the report that speaks to the *size* of an effect rather than
+    /// its direction.
+    #[serde(default = "default_replicate_raw")]
+    pub replicate_raw: bool,
+    /// How many of [`Self::seeds`] the positive control repeats, from the
+    /// front. Clamped into `1..=seeds.len()`.
+    ///
+    /// # Why this is not the full seed set
+    ///
+    /// Because the control is the most expensive arm in the eval by an order
+    /// of magnitude, and it does not need the precision. Measured on
+    /// Qwen3.5-4B: broken sampling makes the model ramble, so the control took
+    /// **161 of one run's 174 wall-clock minutes** and generated 5× the tokens
+    /// of the two real arms combined.
+    ///
+    /// It can afford to be imprecise because of what it is asked. The two real
+    /// arms are being compared to each other and need every seed they can get;
+    /// the control only has to clear [`CONTROL_MIN_COMPOSITE_GAP`], and the gap
+    /// it actually opens is an order of magnitude above that threshold. Paying
+    /// five seeds to resolve a 0.5 gap more precisely buys nothing the report
+    /// reads.
+    #[serde(default = "default_control_seeds")]
+    pub control_seeds: usize,
 }
 
 /// The seeds an eval uses when its config names none.
@@ -71,6 +116,45 @@ fn default_seeds() -> Vec<u32> {
 
 const fn default_include_control() -> bool {
     true
+}
+
+const fn default_replicate_raw() -> bool {
+    true
+}
+
+const fn default_control_seeds() -> usize {
+    1
+}
+
+/// Offset added to each primary seed to derive the A/A arm's seeds.
+///
+/// The 32-bit golden-ratio constant, chosen for nothing but being a fixed,
+/// well-spread, unremarkable number. Derived rather than drawn because the A/A
+/// arm has to be as reproducible as the arms it is calibrating: a noise floor
+/// that changes every run cannot be compared against anything.
+pub const REPLICATE_SEED_OFFSET: u32 = 0x9E37_79B9;
+
+/// The seed set the A/A arm runs, derived from the primary one.
+///
+/// # Why the seeds must differ
+///
+/// This is the whole design of the arm. Re-running the *same* seeds would
+/// measure how reproducible a fixed seed is — which, given a deterministic
+/// decode, is approximately "perfectly", and would report a noise floor near
+/// zero. That number is true and useless: the primary comparison's precision
+/// is not limited by whether seed `12345` replays, it is limited by *which five
+/// seeds happened to be drawn*. So the replicate draws five different ones and
+/// measures exactly that.
+///
+/// A pathological seed list can still overlap — `[1, 1 + OFFSET]` maps onto
+/// itself by one element — so the seeds the replicate actually used are
+/// recorded in [`AgenticEvalReport::replicate_seeds`] rather than left implicit.
+#[must_use]
+pub fn replicate_seeds(seeds: &[u32]) -> Vec<u32> {
+    seeds
+        .iter()
+        .map(|seed| seed.wrapping_add(REPLICATE_SEED_OFFSET))
+        .collect()
 }
 
 /// The temperature the control arm forces.
@@ -136,6 +220,21 @@ pub enum EvalArm {
     Raw,
     /// The full gglib request/response pipeline.
     Gglib,
+    /// **A/A control.** The raw arm again, on a disjoint seed set.
+    ///
+    /// Nothing about the request differs from [`Self::Raw`] — same bypass, same
+    /// tasks, same machine, same loaded model — so any gap between the two is
+    /// the eval measuring itself. That gap is the floor a raw-versus-gglib
+    /// delta has to clear, and without it a small delta has two readings that
+    /// the report cannot separate: the pipeline helped a little, or five seeds
+    /// is not enough seeds.
+    ///
+    /// It answers a strictly different question from [`Self::Control`]. The
+    /// control establishes that a *large* change registers; this establishes
+    /// how large a change has to be before it registers as anything but drift.
+    /// A run carrying only the control can say "the apparatus works" about an
+    /// effect it has no ability to resolve.
+    RawReplicate,
     /// **Positive control.** The gglib pipeline with the temperature forced to
     /// [`CONTROL_TEMPERATURE`], which should sample visibly worse.
     ///
@@ -159,6 +258,7 @@ impl std::fmt::Display for EvalArm {
         match self {
             Self::Raw => write!(f, "raw"),
             Self::Gglib => write!(f, "gglib"),
+            Self::RawReplicate => write!(f, "raw (A/A)"),
             Self::Control => write!(f, "control"),
         }
     }
@@ -333,9 +433,26 @@ pub struct AgenticEvalReport {
     /// Scores under the positive control arm, when it ran.
     ///
     /// Read [`Self::control_moved`] rather than these numbers directly: what
-    /// matters is not the control's score but whether it *differs*.
+    /// matters is not the control's score but whether it *differs*. Its
+    /// [`ArmScores::seeds`] is usually smaller than the real arms' — see
+    /// [`AgenticEvalConfig::control_seeds`] — so its composite is a coarser
+    /// number than the ones it sits beside.
     #[serde(default)]
     pub control: Option<ArmScores>,
+    /// Scores under the A/A arm — the raw pipeline again, different seeds.
+    ///
+    /// Read [`Self::effect_verdict`] rather than this directly: the number that
+    /// matters is its *distance* from [`Self::raw`], not its own value.
+    #[serde(default)]
+    pub raw_replicate: Option<ArmScores>,
+    /// The seeds the A/A arm ran under. Empty when it did not run, and when it
+    /// ran unseeded.
+    ///
+    /// Recorded rather than derived at read time so an overlap with
+    /// [`Self::seeds`] is visible in the report instead of having to be
+    /// recomputed from [`replicate_seeds`].
+    #[serde(default)]
+    pub replicate_seeds: Vec<u32>,
 }
 
 /// The smallest composite gap the control arm must open for the apparatus to
@@ -394,6 +511,91 @@ impl ControlVerdict {
     }
 }
 
+/// How many times the raw-versus-gglib effect must exceed the A/A drift before
+/// the report will call it more than noise.
+///
+/// # This is a rule of thumb, not a test
+///
+/// A single A/A pair estimates the drift from one degree of freedom. Two draws
+/// of a noisy quantity can land close together by luck, and a factor derived
+/// from them carries no confidence level, no *p*, and no power. `2.0` is chosen
+/// because it is the smallest factor at which the two numbers are plainly not
+/// the same size — enough to stop a delta that is *within* its own noise from
+/// being reported as a finding, and not enough to license the word
+/// "significant" about one that clears it.
+///
+/// The honest way to strengthen this is more A/A pairs, not a bigger factor.
+pub const EFFECT_NOISE_RATIO: f64 = 2.0;
+
+/// What the A/A arm says about the size of the measured effect.
+///
+/// Deliberately not a p-value or a confidence interval: with one replicate
+/// there is nothing to compute either from, and rendering a statistic that the
+/// design cannot support would be worse than rendering none. The two arms of
+/// this enum are the honest resolution of a one-pair comparison — the effect is
+/// clearly bigger than the drift, or it is not clearly bigger than the drift.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "verdict", rename_all = "snake_case")]
+pub enum EffectVerdict {
+    /// `|gglib − raw|` is at least [`EFFECT_NOISE_RATIO`] times the A/A gap.
+    ExceedsNoise {
+        /// `gglib − raw`, signed: a negative effect that clears the noise floor
+        /// is still a finding, just not the hoped-for one.
+        effect: f64,
+        /// `|raw − raw_replicate|`, the drift between two identical arms.
+        noise: f64,
+    },
+    /// The effect is not clearly larger than the drift between two runs of the
+    /// same arm. It is not thereby *absent* — it is unresolved at this seed
+    /// count, and the fix is more seeds rather than a different conclusion.
+    WithinNoise {
+        /// `gglib − raw`, signed.
+        effect: f64,
+        /// `|raw − raw_replicate|`, the drift between two identical arms.
+        noise: f64,
+    },
+}
+
+impl EffectVerdict {
+    /// `|effect| ÷ noise`, or `None` when the two arms landed on exactly the
+    /// same composite and the ratio would divide by zero.
+    ///
+    /// A zero denominator is not a licence to report an infinite ratio: two
+    /// identical scores on a suite this small means the drift went unresolved,
+    /// not that there is none.
+    #[must_use]
+    pub fn ratio(&self) -> Option<f64> {
+        let (effect, noise) = match *self {
+            Self::ExceedsNoise { effect, noise } | Self::WithinNoise { effect, noise } => {
+                (effect, noise)
+            }
+        };
+        (noise > 0.0).then(|| effect.abs() / noise)
+    }
+
+    /// The signed `gglib − raw` difference this verdict is about.
+    #[must_use]
+    pub const fn effect(&self) -> f64 {
+        match *self {
+            Self::ExceedsNoise { effect, .. } | Self::WithinNoise { effect, .. } => effect,
+        }
+    }
+
+    /// The A/A drift this verdict measured the effect against.
+    #[must_use]
+    pub const fn noise(&self) -> f64 {
+        match *self {
+            Self::ExceedsNoise { noise, .. } | Self::WithinNoise { noise, .. } => noise,
+        }
+    }
+
+    /// Whether the effect cleared the drift by [`EFFECT_NOISE_RATIO`].
+    #[must_use]
+    pub const fn exceeds_noise(&self) -> bool {
+        matches!(self, Self::ExceedsNoise { .. })
+    }
+}
+
 impl AgenticEvalReport {
     /// What the positive control demonstrated, or `None` when it did not run.
     ///
@@ -417,6 +619,37 @@ impl AgenticEvalReport {
     #[must_use]
     pub fn control_moved(&self) -> Option<bool> {
         self.control_verdict().map(|v| v.demonstrated_sensitivity())
+    }
+
+    /// The eval's own drift: how far two identical raw arms landed apart.
+    ///
+    /// `None` when the A/A arm did not run, which is distinct from a measured
+    /// zero for the same reason `Blind` is distinct from zero divergences.
+    #[must_use]
+    pub fn noise_floor(&self) -> Option<f64> {
+        let replicate = self.raw_replicate.as_ref()?;
+        Some((self.raw.composite - replicate.composite).abs())
+    }
+
+    /// Whether the measured effect is larger than the eval's own drift.
+    ///
+    /// `None` when no A/A arm ran — in which case the report contains no basis
+    /// for the judgement at all, and the composite delta above it should be
+    /// read as a direction rather than as a magnitude.
+    #[must_use]
+    pub fn effect_verdict(&self) -> Option<EffectVerdict> {
+        let noise = self.noise_floor()?;
+        let effect = self.delta.composite;
+        // A zero effect never "exceeds" anything, however quiet the arm was:
+        // with both terms at zero the inequality would hold vacuously and
+        // report no difference as a finding.
+        Some(
+            if effect.abs() > 0.0 && effect.abs() >= EFFECT_NOISE_RATIO * noise {
+                EffectVerdict::ExceedsNoise { effect, noise }
+            } else {
+                EffectVerdict::WithinNoise { effect, noise }
+            },
+        )
     }
 
     /// Tasks whose outcome was not stable across seeds under either arm.
@@ -527,6 +760,24 @@ mod tests {
             tasks: vec![],
             seeds: DEFAULT_SEEDS.to_vec(),
             control,
+            raw_replicate: None,
+            replicate_seeds: vec![],
+        }
+    }
+
+    /// A report whose raw and A/A arms differ by `noise` and whose gglib arm
+    /// sits `effect` above raw, with everything else held fixed.
+    fn report_with_replicate(effect: f64, noise: f64) -> AgenticEvalReport {
+        let raw = scores(0.5, None, 0.500);
+        let gglib = scores(0.9, None, 0.500 + effect);
+        let replicate = scores(0.5, None, 0.500 + noise);
+        AgenticEvalReport {
+            delta: AgenticEvalReport::delta_of(&raw, &gglib),
+            raw,
+            gglib,
+            raw_replicate: Some(replicate),
+            replicate_seeds: replicate_seeds(&DEFAULT_SEEDS),
+            ..report_with(None, 0.9)
         }
     }
 
@@ -551,6 +802,11 @@ mod tests {
 
         assert_eq!(config.seeds, DEFAULT_SEEDS.to_vec());
         assert!(config.include_control);
+        assert!(config.replicate_raw, "the A/A arm is on by default");
+        assert_eq!(
+            config.control_seeds, 1,
+            "the control does not pay for precision it is never read for"
+        );
     }
 
     /// An explicitly empty seed list is a real choice — one unseeded run — and
@@ -699,6 +955,145 @@ mod tests {
     #[test]
     fn no_control_arm_claims_nothing_either_way() {
         assert_eq!(report_with(None, 0.90).control_moved(), None);
+    }
+
+    // =========================================================================
+    // The A/A arm
+    // =========================================================================
+
+    /// The design of the arm in one assertion: replaying the same seeds would
+    /// measure decode determinism, not the seed-draw variance that actually
+    /// limits the primary comparison.
+    #[test]
+    fn the_replicate_seeds_are_disjoint_from_the_primary_ones() {
+        let replicate = replicate_seeds(&DEFAULT_SEEDS);
+
+        assert_eq!(replicate.len(), DEFAULT_SEEDS.len());
+        for seed in &DEFAULT_SEEDS {
+            assert!(
+                !replicate.contains(seed),
+                "seed {seed} was reused, so the A/A arm would measure nothing"
+            );
+        }
+    }
+
+    /// Derived, not drawn: a noise floor that changed every run could not be
+    /// compared against the run before it.
+    #[test]
+    fn the_replicate_seeds_are_reproducible() {
+        assert_eq!(
+            replicate_seeds(&DEFAULT_SEEDS),
+            replicate_seeds(&DEFAULT_SEEDS)
+        );
+        const { assert!(REPLICATE_SEED_OFFSET != 0) };
+    }
+
+    /// The noise floor is a distance, so which arm scored higher is irrelevant
+    /// to it — an A/A arm that came out *ahead* of raw is drift just the same.
+    #[test]
+    fn the_noise_floor_is_a_distance_not_a_direction() {
+        let above = report_with_replicate(0.20, 0.05);
+        let below = report_with_replicate(0.20, -0.05);
+
+        assert!((above.noise_floor().unwrap() - 0.05).abs() < 1e-9);
+        assert!((below.noise_floor().unwrap() - 0.05).abs() < 1e-9);
+    }
+
+    /// **What the arm exists for.** An effect the same size as the eval's own
+    /// drift must not be reported as a finding.
+    #[test]
+    fn an_effect_no_bigger_than_the_drift_is_within_noise() {
+        let report = report_with_replicate(0.04, 0.03);
+
+        let verdict = report.effect_verdict().expect("the A/A arm ran");
+        assert!(!verdict.exceeds_noise());
+        assert!((verdict.ratio().unwrap() - 4.0 / 3.0).abs() < 1e-9);
+    }
+
+    /// And an effect several times the drift must clear it, or the arm would
+    /// veto every result it was added to qualify.
+    #[test]
+    fn an_effect_well_past_the_drift_clears_it() {
+        let report = report_with_replicate(0.30, 0.03);
+
+        let verdict = report.effect_verdict().expect("the A/A arm ran");
+        assert!(verdict.exceeds_noise());
+        assert!((verdict.ratio().unwrap() - 10.0).abs() < 1e-9);
+    }
+
+    /// A negative effect that clears the drift is still a resolved measurement.
+    /// Reporting only favourable findings as real is the failure mode an A/A
+    /// arm is supposed to prevent, not introduce.
+    #[test]
+    fn a_negative_effect_can_also_exceed_the_noise() {
+        let verdict = report_with_replicate(-0.30, 0.03)
+            .effect_verdict()
+            .expect("the A/A arm ran");
+
+        assert!(verdict.exceeds_noise());
+        assert!(verdict.effect() < 0.0, "the sign survives the verdict");
+    }
+
+    /// Two arms landing on the identical composite is an unresolved drift, not
+    /// an infinitely precise one, so nothing may divide by it.
+    #[test]
+    fn a_zero_drift_yields_no_ratio() {
+        let report = report_with_replicate(0.08, 0.0);
+        let verdict = report.effect_verdict().expect("the A/A arm ran");
+
+        assert_eq!(verdict.ratio(), None);
+        assert!(verdict.exceeds_noise(), "a real effect over no measured drift");
+    }
+
+    /// Both terms zero is the vacuous case: no effect, no drift, and nothing
+    /// that may be reported as having exceeded anything.
+    #[test]
+    fn no_effect_over_no_drift_is_not_a_finding() {
+        let report = report_with_replicate(0.0, 0.0);
+
+        assert!(!report.effect_verdict().expect("ran").exceeds_noise());
+    }
+
+    /// Without the arm there is no basis for the judgement, and the report
+    /// must decline to make it rather than assume a floor of zero.
+    #[test]
+    fn no_replicate_arm_yields_no_effect_verdict() {
+        let report = report_with(None, 0.90);
+
+        assert_eq!(report.noise_floor(), None);
+        assert!(report.effect_verdict().is_none());
+    }
+
+    /// The threshold has to be above 1.0: an effect merely *equal* to the
+    /// drift is exactly the case the arm was added to catch.
+    #[test]
+    fn the_noise_ratio_demands_more_than_parity() {
+        const { assert!(EFFECT_NOISE_RATIO > 1.0) };
+        assert!(
+            !report_with_replicate(0.05, 0.05)
+                .effect_verdict()
+                .expect("ran")
+                .exceeds_noise()
+        );
+    }
+
+    /// A stored report from before the A/A arm existed must read as "no
+    /// replicate ran" rather than failing to deserialize.
+    #[test]
+    fn a_legacy_report_has_no_replicate_arm() {
+        let json = r#"{
+            "model_name": "m", "quantization": null, "param_count_b": 1.0,
+            "ctx_size": 4096,
+            "raw": {"tool_accuracy": 0.5, "task_completion": 0.5, "composite": 0.5},
+            "gglib": {"tool_accuracy": 0.9, "task_completion": 0.9, "composite": 0.9},
+            "delta": {"tool_accuracy": 0.4, "task_completion": 0.4, "composite": 0.4},
+            "tasks": []
+        }"#;
+        let report: AgenticEvalReport = serde_json::from_str(json).expect("deserializes");
+
+        assert!(report.raw_replicate.is_none());
+        assert!(report.replicate_seeds.is_empty());
+        assert!(report.effect_verdict().is_none());
     }
 
     /// The threshold has to be a real gap, not any difference at all, or noise

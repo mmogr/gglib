@@ -195,6 +195,20 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         no_control: bool,
 
+        /// Skip the A/A arm. It re-runs the raw arm on a disjoint seed set,
+        /// so the gap it opens is the eval's own drift — the floor a
+        /// raw-vs-gglib delta has to clear before it means anything. Without
+        /// it the report can state a delta's direction but not its size
+        #[arg(long)]
+        no_replicate: bool,
+
+        /// How many of `--seeds` the positive control repeats. One is enough:
+        /// broken sampling makes the model ramble, so the control is by far
+        /// the most expensive arm, and it only has to clear a detection
+        /// threshold an order of magnitude below the gap it opens
+        #[arg(long, default_value_t = 1, value_name = "N")]
+        control_seeds: usize,
+
         /// Print the full report as JSON to stdout (the leaderboard
         /// interchange format: per-arm scores, deltas, per-task drill-down,
         /// model/quant identity, hardware snapshot)
