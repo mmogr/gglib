@@ -38,6 +38,7 @@ import type {
   SamplingBaselineReport,
   SamplingBaselineState,
   SamplingDivergence,
+  SamplingPublishedOverrides,
 } from '../services/transport/types/dashboard';
 
 export interface ProxySamplingPanelProps {
@@ -234,6 +235,83 @@ const ReasonList: FC<{ report: SamplingBaselineReport }> = ({ report }) => {
   );
 };
 
+/**
+ * What gglib is sending against what this model's GGUF publishes.
+ *
+ * The baseline rows above answer a different question and can look like an
+ * all-clear about this one. `/props` reports `model_supplied` for a field the
+ * model published — true, and about the *build's* value being unobservable. It
+ * says nothing about gglib then overriding that value in the request body,
+ * which is what actually reaches the sampler.
+ *
+ * So the rule here is the panel's own, one level down: **an empty list is not
+ * agreement.** `fields` is empty both on a model that published nothing and
+ * before any request has been resolved, so `intents` is rendered whenever it is
+ * zero rather than being collapsed into silence.
+ */
+const PublishedRows: FC<{ published?: SamplingPublishedOverrides | null }> = ({ published }) => {
+  // A proxy that predates the field sends nothing. Distinct from a current
+  // proxy reporting zero intents, which is a statement about traffic.
+  if (!published) {
+    return null;
+  }
+
+  const overridden = published.fields.filter((f) => f.state === 'overridden');
+
+  if (overridden.length > 0) {
+    return (
+      <Banner variant="warning" title="gglib is overriding this model's published sampling">
+        <ul className="flex flex-col gap-xs">
+          {overridden.map((f) => (
+            <li key={f.field} className="text-sm">
+              {f.field}: model publishes {f.state === 'overridden' && formatValue(f.published)}{' '}
+              via {f.key} — gglib is sending{' '}
+              {f.state === 'overridden' && formatValue(f.sending)}
+            </li>
+          ))}
+        </ul>
+      </Banner>
+    );
+  }
+
+  // Nothing overridden. Whether that is meaningful depends entirely on whether
+  // anything was compared, so the two cases are never rendered the same way.
+  if (published.intents === 0) {
+    return (
+      <p className="text-sm text-text-muted">
+        No request resolved yet, so nothing has been compared against what this
+        model publishes.
+      </p>
+    );
+  }
+
+  if (published.fields.length === 0) {
+    return (
+      <p className="text-sm text-text-muted">
+        This model publishes no sampler defaults of its own.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-xs">
+      {published.fields.map((f) => (
+        <div key={f.field} className="flex items-baseline gap-md">
+          <span className="text-xs text-text-muted w-32 shrink-0">{f.field}</span>
+          <span className="text-sm text-text">
+            {f.state === 'deferred' &&
+              `model publishes ${formatValue(f.published)} — gglib defers to it`}
+            {f.state === 'restated' &&
+              `model publishes ${formatValue(f.published)} — gglib sends the same value`}
+            {f.state === 'unreadable' &&
+              `${f.key} is set to a value gglib cannot read`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 /** The recent-divergence list. Rare by design, so a short list is enough. */
 const DivergenceRows: FC<{ divergences: SamplingDivergence[] }> = ({ divergences }) => {
   if (divergences.length === 0) {
@@ -268,6 +346,7 @@ export const ProxySamplingPanel: FC<ProxySamplingPanelProps> = ({ audit }) => {
       <AuditStateLine audit={audit} />
       <DivergenceRows divergences={audit.recent_divergences} />
       <BaselineRows baseline={audit.baseline} />
+      <PublishedRows published={audit.published} />
 
       {/*
         Discarded client fields are not a fault — `trust_client_sampling` is

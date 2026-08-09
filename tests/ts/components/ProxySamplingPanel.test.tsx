@@ -347,4 +347,103 @@ describe('ProxySamplingPanel', () => {
     expect(formatValue(1.5)).toBe('1.5');
     expect(formatValue(40)).toBe('40');
   });
+
+  describe('published-vs-sent', () => {
+    // The headline case, and the one the baseline rows above actively obscure:
+    // `/props` reports this same field as `model_supplied`, which is true and
+    // is about the *build's* value being unobservable. It says nothing about
+    // gglib then overriding the model's number in the request body.
+    it('warns when gglib is sending something other than what the model published', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 12,
+              fields: [
+                {
+                  field: 'temperature',
+                  key: 'general.sampling.temp',
+                  state: 'overridden',
+                  published: 0.33,
+                  sending: 1.0,
+                },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/gglib is overriding/i)).toBeInTheDocument();
+      expect(screen.getByText(/model publishes 0\.33/)).toBeInTheDocument();
+      expect(screen.getByText(/gglib is sending 1/)).toBeInTheDocument();
+    });
+
+    // The panel's own rule, one level down. An empty field list means either
+    // "this model publishes nothing" or "nothing has been resolved yet", and
+    // rendering those the same way would report an all-clear for a comparison
+    // that never ran.
+    it('distinguishes nothing-compared-yet from nothing-published', () => {
+      const { unmount } = render(
+        <ProxySamplingPanel audit={audit({ published: { intents: 0, fields: [] } })} />,
+      );
+      expect(screen.getByText(/no request resolved yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/publishes no sampler defaults/i)).not.toBeInTheDocument();
+      unmount();
+
+      render(<ProxySamplingPanel audit={audit({ published: { intents: 9, fields: [] } })} />);
+      expect(screen.getByText(/publishes no sampler defaults/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no request resolved yet/i)).not.toBeInTheDocument();
+    });
+
+    // Deferral is what ADR 0003's decision looks like when it works. It must
+    // not carry the override warning.
+    it('reports deferral without warning', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 4,
+              fields: [
+                {
+                  field: 'topP',
+                  key: 'general.sampling.top_p',
+                  state: 'deferred',
+                  published: 0.71,
+                },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/gglib defers to it/i)).toBeInTheDocument();
+      expect(screen.queryByText(/gglib is overriding/i)).not.toBeInTheDocument();
+    });
+
+    // gglib cannot tell what it displaced here, so this must read as unknown
+    // rather than picking a side — ADR 0004 decision 3, applied per field.
+    it('renders an unreadable published value as unknown, not as an override', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 3,
+              fields: [
+                { field: 'temperature', key: 'general.sampling.temp', state: 'unreadable' },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/cannot read/i)).toBeInTheDocument();
+      expect(screen.queryByText(/gglib is overriding/i)).not.toBeInTheDocument();
+    });
+
+    it('renders nothing at all on a proxy that predates the field', () => {
+      render(<ProxySamplingPanel audit={audit({ published: null })} />);
+      expect(screen.queryByText(/no request resolved yet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/publishes no sampler defaults/i)).not.toBeInTheDocument();
+    });
+  });
 });

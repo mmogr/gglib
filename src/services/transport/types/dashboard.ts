@@ -355,7 +355,52 @@ export interface SamplingAuditSnapshot {
    * predates the field; a current proxy always sends one of the three states.
    */
   baseline?: SamplingBaselineState | null;
+  /**
+   * What gglib's own requests do with the running model's published sampler
+   * defaults.
+   *
+   * Optional only so this mirror still parses a payload from a proxy that
+   * predates the field.
+   */
+  published?: SamplingPublishedOverrides | null;
 }
+
+/**
+ * Published-vs-sent for the running model.
+ *
+ * Mirrors `gglib_proxy::sampling_audit::PublishedOverrides`. A *different*
+ * question from the baseline check above, and the two report the same field
+ * differently without either being wrong: `/props` says `model_supplied`
+ * because the *build's* value is unobservable there, while this says
+ * `overridden` because gglib's request body wins over the table `/props`
+ * renders. A reader seeing only the first would reasonably conclude the model's
+ * value is what the sampler uses.
+ */
+export interface SamplingPublishedOverrides {
+  /**
+   * Resolved intents folded in since this model launched.
+   *
+   * **Zero means nothing has been compared, never "nothing is overridden".**
+   * `fields` is empty both when a model publishes nothing and when no request
+   * has been resolved yet, and those license opposite conclusions.
+   */
+  intents: number;
+  /** One entry per field this model publishes. Empty on almost every model. */
+  fields: SamplingPublishedField[];
+}
+
+/** One published field and what gglib's most recent intent did with it. */
+export type SamplingPublishedField = {
+  /** gglib's wire name for the parameter. */
+  field: string;
+  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
+  key: string;
+} & (
+  | { state: 'deferred'; published: number }
+  | { state: 'restated'; published: number }
+  | { state: 'overridden'; published: number; sending: number }
+  | { state: 'unreadable' }
+);
 
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
 export interface DashboardSnapshot {

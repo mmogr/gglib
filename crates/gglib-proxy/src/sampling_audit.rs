@@ -132,7 +132,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use gglib_core::domain::ParamSource;
+use gglib_core::domain::{InferenceConfig, ModelSamplingDefaults, ParamSource, SamplingOverride};
 use gglib_core::request_pipeline::SamplingDecision;
 use serde::{Deserialize, Serialize};
 
@@ -493,6 +493,12 @@ pub struct SamplingAuditStore {
     recent: Mutex<VecDeque<Divergence>>,
     /// The most recent `/props` baseline reading, one per model launch.
     baseline: Mutex<crate::props::BaselineState>,
+    /// The running model's name and what its GGUF publishes, set once per
+    /// launch by the poller. `None` until the first poll names a model; the
+    /// inner `Option` is `None` for a model with no metadata read.
+    model_sampling: Mutex<Option<(String, Option<ModelSamplingDefaults>)>>,
+    /// The published-vs-sent comparison, refreshed from each resolved intent.
+    published: Mutex<PublishedOverrides>,
 }
 
 impl SamplingAuditStore {
@@ -514,6 +520,23 @@ impl SamplingAuditStore {
         if discarded > 0 {
             self.client_fields_discarded
                 .fetch_add(discarded, Ordering::Relaxed);
+        }
+
+        // Compare what this request resolved against what the model published.
+        // Skipped entirely until a poll has named the running model — a
+        // comparison against defaults gglib does not have yet would report
+        // "nothing overridden" about a model it has not read.
+        let model = self
+            .model_sampling
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|(_, defaults)| *defaults);
+        if let Some(model) = model {
+            let fields = compare_published(&model, &decision.resolved);
+            let mut guard = self.published.lock().unwrap_or_else(|e| e.into_inner());
+            guard.intents = guard.intents.saturating_add(1);
+            guard.fields = fields;
         }
     }
 
@@ -563,6 +586,31 @@ impl SamplingAuditStore {
         *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = state;
     }
 
+    /// Record what the running model's GGUF publishes.
+    ///
+    /// Called beside [`Self::set_baseline`], from the poller that already reads
+    /// it. Resets the comparison rather than merging: a model swap must not
+    /// leave the previous model's published values on display, and the intent
+    /// count must not carry across either — it counts requests resolved
+    /// *against this model*.
+    ///
+    /// Keyed on the model **name**, not on the defaults themselves. Two models
+    /// that publish nothing compare equal, so a value-keyed reset would carry
+    /// one model's intent count into the next and report a comparison that had
+    /// not happened. The poller retries this until `/props` reads, so it must
+    /// also be idempotent within one launch — which name-keying gives.
+    pub fn set_model_sampling(&self, model_name: &str, model: Option<ModelSamplingDefaults>) {
+        let mut current = self
+            .model_sampling
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if current.as_ref().is_some_and(|(name, _)| name == model_name) {
+            return;
+        }
+        *current = Some((model_name.to_owned(), model));
+        *self.published.lock().unwrap_or_else(|e| e.into_inner()) = PublishedOverrides::default();
+    }
+
     /// What the organ can currently say about itself.
     #[must_use]
     pub fn state(&self) -> AuditState {
@@ -606,8 +654,54 @@ impl SamplingAuditStore {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .clone(),
+            published: self
+                .published
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone(),
         }
     }
+}
+
+/// Compare one resolved config against what the model published.
+///
+/// Reads gglib's side from [`InferenceConfig::to_openai_json_patch`] — the very
+/// map the request pipeline merges into the body — rather than from the struct
+/// fields. A parameter missing from it is one gglib names nowhere, which is
+/// exactly the condition under which the model's own value reaches the sampler.
+/// Deriving it any other way would let this report and the request disagree.
+fn compare_published(
+    model: &ModelSamplingDefaults,
+    resolved: &InferenceConfig,
+) -> Vec<PublishedOverrideField> {
+    let patch = resolved.to_openai_json_patch();
+    model
+        .compare_all(|field| patch.get(field).and_then(serde_json::Value::as_f64))
+        .into_iter()
+        .filter_map(|(field, verdict)| {
+            let (key, state) = match verdict {
+                SamplingOverride::NotPublished => return None,
+                SamplingOverride::Deferred { key, published } => {
+                    (key, PublishedOverrideState::Deferred { published })
+                }
+                SamplingOverride::Restated { key, published } => {
+                    (key, PublishedOverrideState::Restated { published })
+                }
+                SamplingOverride::Overridden {
+                    key,
+                    published,
+                    sending,
+                } => (
+                    key,
+                    PublishedOverrideState::Overridden { published, sending },
+                ),
+                SamplingOverride::Unreadable { key, .. } => {
+                    (key, PublishedOverrideState::Unreadable)
+                }
+            };
+            Some(PublishedOverrideField { field, key, state })
+        })
+        .collect()
 }
 
 /// Serializable view of [`SamplingAuditStore`], carried on the dashboard
@@ -637,6 +731,94 @@ pub struct SamplingAuditSnapshot {
     /// Carries its own three states rather than being an `Option`, so a read
     /// that failed cannot render as one that has not happened yet.
     pub baseline: crate::props::BaselineState,
+    /// What gglib's own requests do with the running model's published
+    /// sampler defaults.
+    pub published: PublishedOverrides,
+}
+
+/// What gglib is sending against what this model's GGUF publishes.
+///
+/// # A different question from the baseline check, on purpose
+///
+/// [`crate::props`]'s check asks *"has this build's default table moved?"* and
+/// must abstain wherever attribution fails, because a wrong verdict there
+/// re-opens or falsely satisfies [ADR 0003]'s deletion criterion. This asks
+/// *"is gglib displacing the model author's recommendation?"* — both sides of
+/// which gglib knows exactly, with no slot correlation and no sampling bias.
+///
+/// So the two report the same field differently and neither is wrong.
+/// `/props` says `ModelSupplied` because the *build's* value is unobservable
+/// there; this says `Overridden` because gglib's request body wins over the
+/// table `/props` renders. A reader seeing only the first would reasonably
+/// conclude the model's value is what the sampler uses.
+///
+/// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct PublishedOverrides {
+    /// Resolved intents folded in since this model launched.
+    ///
+    /// **Zero means nothing has been compared, never "nothing is overridden".**
+    /// [`AuditState`]'s rule applied to this section: the fields below are
+    /// empty both when a model publishes nothing and when no request has been
+    /// resolved yet, and those license opposite conclusions.
+    pub intents: u64,
+    /// One entry per field this model publishes, in
+    /// [`MODEL_SAMPLING_KEYS`](gglib_core::domain::MODEL_SAMPLING_KEYS) order.
+    ///
+    /// Empty on a model that publishes nothing, which is almost all of them.
+    pub fields: Vec<PublishedOverrideField>,
+}
+
+/// One published field and what gglib's most recent intent did with it.
+///
+/// The most recent rather than an aggregate, because with
+/// `trust_client_sampling` off every request against one model and profile
+/// resolves identically — the same property [ADR 0004] finding 4 relies on for
+/// attribution. [`PublishedOverrides::intents`] is what says whether that
+/// premise held.
+///
+/// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PublishedOverrideField {
+    /// gglib's wire name for the parameter.
+    pub field: &'static str,
+    /// The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`.
+    pub key: &'static str,
+    /// What gglib is doing with it.
+    #[serde(flatten)]
+    pub state: PublishedOverrideState,
+}
+
+/// The verdict arm of [`PublishedOverrideField`].
+///
+/// Mirrors [`SamplingOverride`](gglib_core::domain::SamplingOverride) minus its
+/// `NotPublished` arm — a field with nothing published is absent from
+/// [`PublishedOverrides::fields`] rather than carried as an empty verdict.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum PublishedOverrideState {
+    /// gglib names nothing, so llama.cpp applies the model author's value.
+    Deferred {
+        /// What the sampler will use.
+        published: f64,
+    },
+    /// gglib sends the same number the model published.
+    Restated {
+        /// The value both sides name.
+        published: f64,
+    },
+    /// gglib sends a different number. The one arm that warrants a warning.
+    Overridden {
+        /// What the model author published.
+        published: f64,
+        /// What gglib puts on the wire instead.
+        sending: f64,
+    },
+    /// The published value could not be read, so gglib cannot say what it
+    /// displaced. Never rendered as an override — [ADR 0004] decision 3.
+    ///
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    Unreadable,
 }
 
 /// Render a rung for a log line: a name when the value came from a layer,
@@ -1025,6 +1207,152 @@ mod tests {
         let snap = store.snapshot();
         assert_eq!(snap.client_fields_discarded, 4);
         assert_eq!(snap.client_fields_rejected, 2);
+    }
+
+    // =========================================================================
+    // Published-vs-sent
+    // =========================================================================
+
+    fn publishing(pairs: &[(&str, &str)]) -> ModelSamplingDefaults {
+        let metadata: std::collections::HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        ModelSamplingDefaults::from_metadata(&metadata)
+    }
+
+    /// **The rule this section exists to obey.** An empty field list means
+    /// either "this model publishes nothing" or "nothing has been resolved
+    /// yet", and those license opposite conclusions — so the intent count has
+    /// to be readable separately, exactly as `AuditState` is.
+    #[test]
+    fn an_intent_before_any_model_is_known_compares_nothing() {
+        let store = SamplingAuditStore::new();
+
+        store.record_intent(&decision(
+            InferenceConfig {
+                temperature: Some(1.0),
+                ..InferenceConfig::default()
+            },
+            all_from(ParamSource::Layer(3)),
+        ));
+
+        let published = store.snapshot().published;
+        assert_eq!(published.intents, 0, "nothing was compared");
+        assert!(published.fields.is_empty());
+    }
+
+    /// The headline case: the model asks for 0.33 and gglib resolves 1.0.
+    #[test]
+    fn a_resolved_value_displacing_a_published_one_is_reported_as_an_override() {
+        let store = SamplingAuditStore::new();
+        store.set_model_sampling(
+            "qwen",
+            Some(publishing(&[("general.sampling.temp", "0.33")])),
+        );
+
+        store.record_intent(&decision(
+            InferenceConfig {
+                temperature: Some(1.0),
+                ..InferenceConfig::default()
+            },
+            all_from(ParamSource::Layer(3)),
+        ));
+
+        let published = store.snapshot().published;
+        assert_eq!(published.intents, 1);
+        assert_eq!(published.fields.len(), 1);
+        assert_eq!(published.fields[0].field, "temperature");
+        assert_eq!(published.fields[0].key, "general.sampling.temp");
+        match published.fields[0].state {
+            PublishedOverrideState::Overridden { published, sending } => {
+                assert!((published - 0.33).abs() < 1e-9, "{published}");
+                assert!((sending - 1.0).abs() < 1e-6, "{sending}");
+            }
+            ref other => panic!("expected overridden, got {other:?}"),
+        }
+    }
+
+    /// gglib naming nothing is what lets the model's value through, and must
+    /// never read as an override.
+    #[test]
+    fn a_value_gglib_never_names_defers_to_the_model() {
+        let store = SamplingAuditStore::new();
+        store.set_model_sampling(
+            "qwen",
+            Some(publishing(&[("general.sampling.top_p", "0.71")])),
+        );
+
+        store.record_intent(&decision(
+            InferenceConfig::default(),
+            all_from(ParamSource::Unset),
+        ));
+
+        let published = store.snapshot().published;
+        assert_eq!(
+            published.fields[0].state,
+            PublishedOverrideState::Deferred { published: 0.71 }
+        );
+    }
+
+    /// A model swap must not leave the previous model's comparison on display,
+    /// nor carry its intent count across.
+    #[test]
+    fn a_model_swap_resets_the_comparison() {
+        let store = SamplingAuditStore::new();
+        store.set_model_sampling(
+            "qwen",
+            Some(publishing(&[("general.sampling.temp", "0.33")])),
+        );
+        store.record_intent(&decision(
+            InferenceConfig {
+                temperature: Some(1.0),
+                ..InferenceConfig::default()
+            },
+            all_from(ParamSource::Layer(3)),
+        ));
+        assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
+
+        store.set_model_sampling("llama", None);
+
+        let published = store.snapshot().published;
+        assert_eq!(published.intents, 0);
+        assert!(published.fields.is_empty());
+    }
+
+    /// **Two models that publish nothing compare equal.** A value-keyed reset
+    /// would carry the first model's intent count into the second and report a
+    /// comparison that never happened for it.
+    #[test]
+    fn a_swap_between_two_silent_models_still_resets() {
+        let store = SamplingAuditStore::new();
+        store.set_model_sampling("qwen", Some(publishing(&[])));
+        store.record_intent(&decision(
+            InferenceConfig::default(),
+            all_from(ParamSource::Unset),
+        ));
+        assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
+
+        store.set_model_sampling("llama", Some(publishing(&[])));
+
+        assert_eq!(store.snapshot().published.intents, 0);
+    }
+
+    /// The poller retries until `/props` reads, so this is called repeatedly
+    /// within one launch and must not reset the count each time.
+    #[test]
+    fn re_setting_the_same_model_is_idempotent() {
+        let store = SamplingAuditStore::new();
+        let model = publishing(&[("general.sampling.temp", "0.33")]);
+        store.set_model_sampling("qwen", Some(model));
+        store.record_intent(&decision(
+            InferenceConfig::default(),
+            all_from(ParamSource::Unset),
+        ));
+
+        store.set_model_sampling("qwen", Some(model));
+
+        assert_eq!(store.snapshot().published.intents, 1);
     }
 
     #[test]

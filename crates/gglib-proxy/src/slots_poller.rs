@@ -223,9 +223,15 @@ fn next_delay(result: &SlotsPollResult, current_backoff: Duration) -> Option<Dur
 async fn read_baseline(
     client: &Client,
     base_url: &str,
+    model_name: &str,
     model: Option<&ModelSamplingDefaults>,
     audit: &SamplingAuditStore,
 ) -> bool {
+    // Set before the read is attempted, and from the same value the baseline
+    // check uses: an unreadable `/props` says nothing about what the model
+    // publishes, which gglib knows from the GGUF either way.
+    audit.set_model_sampling(model_name, model.copied());
+
     match fetch_props(client, base_url).await {
         PropsResult::Available(params) => {
             let report = BaselineReport::from_params(&params, model);
@@ -353,6 +359,7 @@ pub fn spawn_slots_poller(
                         && read_baseline(
                             &client,
                             &target.base_url,
+                            &target.model_name,
                             target.model_sampling.as_ref(),
                             &audit,
                         )
