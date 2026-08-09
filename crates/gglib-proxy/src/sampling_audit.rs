@@ -6,46 +6,89 @@
 //!
 //! # Why this exists
 //!
-//! Every defect in the sampling hierarchy since June was found the same way:
-//! by a human running `curl /slots` by hand. #621 ("measured against a live
-//! `/slots` probe"), #745 ("measured on Qwen3.5-4B via `GET /slots`"), and
-//! #743/#744 ("all found by running it against a real model rather than by
-//! review"). Four times, the same technique, because nothing in gglib ever
-//! read back what llama-server actually applied.
+//! [ADR 0003] deletes six of the seven values gglib force-wrote into every
+//! request, because all six were measured to be exactly llama.cpp's own
+//! defaults on the pinned build. That deferral is safe **only while the
+//! build is pinned**: if a bump moves an upstream default gglib now defers
+//! to, nothing else in the system is in a position to notice. This is what
+//! notices.
 //!
-//! ADR 0001 is explicit that Tier C "is what makes the other two tiers
-//! honest. Without it, 'is this compensation still needed?' is answered by
-//! argument." Sampling had no Tier C and was answered by argument for its
-//! entire life — which is why it produced roughly a dozen fixes and one
-//! outright reversal in two months.
+//! Secondarily it catches transmission faults — a value resolved but lost to
+//! serialization or overwritten downstream — and a client's own unmodelled
+//! sampler changing what the server does.
+//!
+//! # What it does *not* catch
+//!
+//! Stated up front because an earlier version of this doc claimed the
+//! opposite, and the claim survived into an accepted ADR.
+//!
+//! **It cannot see a resolution bug.** #621 resolved `presence_penalty: 1.5`
+//! from the wrong layer and sent 1.5; #745 resolved `dry_multiplier: 0.0`
+//! after the coupling rule discarded 0.8, and sent 0.0. In both, intent and
+//! wire agreed perfectly. Comparing them reports nothing. gglib decided the
+//! wrong thing and transmitted it faithfully.
+//!
+//! Those belong to the other half of the arc — the `Displaced` provenance
+//! variant and property tests over the fold, which ask "is what we resolved
+//! what the user asked for?". This asks "is what we resolved what the server
+//! got?". Complementary questions; neither instrument substitutes for the
+//! other, and conflating them is how this module's purpose got overstated in
+//! the first place.
+//!
+//! [ADR 0001]'s point still stands, though: Tier C "is what makes the other
+//! two tiers honest. Without it, 'is this compensation still needed?' is
+//! answered by argument." Sampling had no Tier C at all, and produced
+//! roughly a dozen fixes and one outright reversal in two months.
 //!
 //! The instrument was nearly built already. `slots_poller` has polled
 //! `GET /slots` every second for other reasons since #536, and `slots.rs`
 //! deliberately discarded the one field that answers this question.
 //!
-//! # What it can and cannot see
+//! # Coverage, and the two limits on it
 //!
-//! Both limits are measured, not assumed — [ADR 0003] finding 7.
+//! Both measured, not assumed — [ADR 0003] finding 7.
 //!
-//! **It samples; it does not census.** `params` appears only on a slot that
-//! is actively processing. An idle slot carries `id`, `n_ctx`, `speculative`
-//! and `is_processing` and nothing else. So a comparison happens when a poll
-//! lands during a generation, and short requests between polls are never
-//! seen. `comparisons` is a count of requests *observed*, never of requests
-//! sent, and no rate derived from it is a rate over traffic.
+//! **It samples; it does not census, and it is biased toward long turns.**
+//! `params` appears only on a slot that is actively processing; an idle slot
+//! omits it. So coverage depends on how long a turn runs relative to the
+//! poll interval. Measured at 1 Hz on the pinned build: ~5 s turns were
+//! caught 12/12, ~0.6 s turns 6/12. `comparisons` counts requests
+//! *observed*, never requests sent, and no rate derived from it is a rate
+//! over traffic.
+//!
+//! The upside of the same fact: an idle slot reports *nothing* rather than
+//! the previous request's values, so there are no stale readings to defend
+//! against and no ring of recent observations is needed.
 //!
 //! **It reads an echo, not the applied chain.** Sending `mirostat: 2`
 //! alongside `top_k: 7` leaves `params` reporting `top_k: 7` with a
-//! `samplers` array identical to a run without mirostat. So this answers
-//! "did what gglib resolved reach llama-server as gglib meant it", and never
-//! "what did the model actually sample with". That is the weaker of the two
-//! readings and it is still the one that catches #621 and #745, which were
-//! both "a value gglib resolved did not arrive intact".
+//! `samplers` array identical to a run without mirostat. So a client's own
+//! unmodelled sampler can render gglib's values inert with no divergence
+//! reported, because the echo still shows them. Absence of divergence is not
+//! proof the model sampled the way gglib intended.
 //!
-//! A consequence worth stating: a client's own unmodelled sampler can make
-//! gglib's values inert without any divergence being reported, because the
-//! echo still shows them. Absence of divergence is not proof the model
-//! sampled the way gglib intended.
+//! # Ambiguity, and why it abstains
+//!
+//! gglib never sees llama-server's `id_task` in a chat-completions response,
+//! so a slot cannot be joined to the request that filled it. With four slots
+//! processing at once — the norm under any parallel client — an observation
+//! cannot be attributed.
+//!
+//! Rather than invent a correlation, [`compare_poll`] **abstains**: it
+//! compares only when every intent in flight agrees on the fields being
+//! compared, and otherwise counts `skipped_ambiguous`.
+//!
+//! That costs almost nothing in practice, which was measured rather than
+//! assumed. With `trust_client_sampling` off — the default — all compared
+//! fields come from the ladder rather than the client, so concurrent
+//! requests against one model and profile resolve identically. Four
+//! concurrent turns with identical resolution produced 0 ambiguous polls out
+//! of 10; four whose parameters genuinely differed produced 9 out of 9. The
+//! abstention fires exactly where guessing would have been wrong.
+//!
+//! Note "identical" means identical **on the compared fields**. Comparing
+//! whole decisions would abstain constantly, because `max_tokens` is
+//! client-authoritative and varies per request while nothing else does.
 //!
 //! # It never acts
 //!
@@ -271,6 +314,86 @@ pub fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<Divergen
     out
 }
 
+/// The comparable fingerprint of an intent: the seven fields
+/// [`compare`] checks, and nothing else.
+///
+/// Two intents are interchangeable for audit purposes when these agree, even
+/// if the requests differed in `max_tokens` or anything else. Using the whole
+/// [`SamplingDecision`] here would abstain on almost every poll, because
+/// `max_tokens` is client-authoritative and varies request to request while
+/// the ladder-supplied fields do not.
+fn comparable_key(d: &SamplingDecision) -> [Option<u64>; 7] {
+    let r = &d.resolved;
+    // Bit patterns rather than floats: this is an equality check between two
+    // values gglib itself produced from the same code path, not a tolerance
+    // question. `to_bits` also sidesteps `f32` not being `Eq`.
+    let b = |v: Option<f32>| v.map(|x| u64::from(x.to_bits()));
+    [
+        b(r.temperature),
+        b(r.top_p),
+        r.top_k.map(|v| v as u64),
+        b(r.repeat_penalty),
+        b(r.presence_penalty),
+        b(r.min_p),
+        b(r.dry_multiplier),
+    ]
+}
+
+/// What one poll of `/slots` yielded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PollOutcome {
+    /// Slots compared against an intent.
+    pub comparisons: u64,
+    /// Of those, how many disagreed on at least one field.
+    pub divergences: u64,
+    /// Observations skipped because the intents in flight disagreed, so no
+    /// observation could be attributed to one of them.
+    pub skipped_ambiguous: u64,
+    /// Every field-level disagreement found, for logging.
+    pub found: Vec<Divergence>,
+}
+
+/// Compare one `/slots` poll against the intents currently in flight.
+///
+/// `intents` is the set of recently-issued [`SamplingDecision`]s for the
+/// running model; `observed` is the `params` of every slot that was
+/// processing. Abstains rather than guessing when the intents disagree — see
+/// the module docs.
+#[must_use]
+pub fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> PollOutcome {
+    let mut out = PollOutcome {
+        comparisons: 0,
+        divergences: 0,
+        skipped_ambiguous: 0,
+        found: Vec::new(),
+    };
+    if observed.is_empty() {
+        return out;
+    }
+
+    // No intent recorded yet for this model — nothing to compare against.
+    // Not ambiguity; just nothing to say.
+    let Some(first) = intents.first() else {
+        return out;
+    };
+
+    let key = comparable_key(first);
+    if intents.iter().any(|i| comparable_key(i) != key) {
+        out.skipped_ambiguous = observed.len() as u64;
+        return out;
+    }
+
+    for params in observed {
+        out.comparisons += 1;
+        let found = compare(first, params);
+        if !found.is_empty() {
+            out.divergences += 1;
+            out.found.extend(found);
+        }
+    }
+    out
+}
+
 /// Render a rung for a log line: a name when the value came from a layer,
 /// otherwise what kind of fallback supplied it.
 fn describe_source(source: ParamSource, names: &[&'static str]) -> String {
@@ -439,6 +562,89 @@ mod tests {
         assert!(!blind.is_observing());
         assert!(clean.is_observing());
         assert!(!AuditState::NotYetObserved.is_observing());
+    }
+
+    // ── Abstention ────────────────────────────────────────────────────────
+
+    fn intent_at(temp: f32) -> SamplingDecision {
+        decision(
+            InferenceConfig {
+                temperature: Some(temp),
+                ..Default::default()
+            },
+            all_from(ParamSource::Layer(3)),
+        )
+    }
+
+    /// The measured common case: four concurrent turns resolving identically,
+    /// which is what the default configuration produces because every
+    /// compared field comes from the ladder rather than the client. Measured
+    /// 0 ambiguous polls out of 10 against a real server.
+    #[test]
+    fn identical_intents_are_compared_not_skipped() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let intents = vec![intent_at(0.12), intent_at(0.12), intent_at(0.12)];
+        let slots = vec![observed.clone(), observed.clone(), observed];
+
+        let out = compare_poll(&intents, &slots);
+        assert_eq!(out.comparisons, 3);
+        assert_eq!(out.divergences, 0);
+        assert_eq!(out.skipped_ambiguous, 0);
+    }
+
+    /// gglib cannot join a slot to the request that filled it, so when the
+    /// intents in flight disagree an observation cannot be attributed to one.
+    /// Guessing would produce a divergence that is an artefact of the guess.
+    #[test]
+    fn disagreeing_intents_abstain_rather_than_guess() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let intents = vec![intent_at(0.12), intent_at(0.90)];
+        let slots = vec![observed.clone(), observed];
+
+        let out = compare_poll(&intents, &slots);
+        assert_eq!(out.comparisons, 0, "nothing may be compared");
+        assert_eq!(out.divergences, 0);
+        assert_eq!(out.skipped_ambiguous, 2, "and the gap is counted");
+    }
+
+    /// `max_tokens` is client-authoritative and varies request to request,
+    /// while the compared fields do not. Keying ambiguity on the whole
+    /// decision would abstain on essentially every poll.
+    #[test]
+    fn a_differing_max_tokens_alone_is_not_ambiguity() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let mut a = intent_at(0.12);
+        let mut b = intent_at(0.12);
+        a.resolved.max_tokens = Some(128);
+        b.resolved.max_tokens = Some(4096);
+
+        let out = compare_poll(&[a, b], std::slice::from_ref(&observed));
+        assert_eq!(out.comparisons, 1);
+        assert_eq!(out.skipped_ambiguous, 0);
+    }
+
+    #[test]
+    fn no_recorded_intent_compares_nothing() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let out = compare_poll(&[], std::slice::from_ref(&observed));
+        assert_eq!(out.comparisons, 0);
+        assert_eq!(
+            out.skipped_ambiguous, 0,
+            "absence of intent is not ambiguity"
+        );
+    }
+
+    #[test]
+    fn a_real_divergence_is_counted_once_per_slot() {
+        let observed: SlotParams = serde_json::from_str(REAL_SLOT).unwrap();
+        let intents = vec![intent_at(0.90)]; // slot reports 0.12
+        let slots = vec![observed.clone(), observed];
+
+        let out = compare_poll(&intents, &slots);
+        assert_eq!(out.comparisons, 2);
+        assert_eq!(out.divergences, 2);
+        assert_eq!(out.found.len(), 2);
+        assert_eq!(out.found[0].field, "temperature");
     }
 
     #[test]

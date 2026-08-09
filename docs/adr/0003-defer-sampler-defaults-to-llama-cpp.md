@@ -1,7 +1,8 @@
 # ADR 0003 — Defer sampler defaults to llama.cpp
 
 - **Status:** Accepted
-- **Date:** 2026-08-09
+- **Date:** 2026-08-09 (amended 2026-08-09 — finding 7 overclaimed what the
+  readback can catch; see the amendment there)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -220,8 +221,52 @@ measured:
 
 That is the weaker of the two possible readings and it must not be overstated.
 It cannot answer "what did the model sample with". It can answer "did what
-gglib resolved reach llama-server intact", which is precisely the class both
-#621 and #745 belong to.
+gglib resolved reach llama-server intact".
+
+> **Amendment, 2026-08-09.** The sentence that followed claimed this is
+> "precisely the class both #621 and #745 belong to". That is wrong, and it
+> was written from plausible reasoning rather than from checking.
+>
+> Both are **resolution** defects, not **transmission** defects. In #621 the
+> `:coding` profile resolved `presence_penalty: 1.5` and gglib faithfully
+> sent 1.5. In #745 the coupling rule resolved `dry_multiplier: 0.0` and
+> gglib faithfully sent 0.0. In each case intent and wire agreed perfectly,
+> so an intent-versus-wire comparator reports no divergence on either.
+>
+> What the readback is actually for:
+>
+> 1. **Making the deferral in this ADR safe to keep.** Once gglib stops
+>    sending six values, nothing else in the system can notice a pin bump
+>    moving an upstream default. This is the reverse deletion criterion
+>    below, and it is sufficient on its own to justify building the organ.
+> 2. Transmission faults — a value resolved but lost to serialization or
+>    overwritten downstream.
+> 3. A client's own unmodelled sampler changing what the server does.
+>
+> What catches #621 and #745 is the *other* half of the arc: the `Displaced`
+> provenance variant and property tests over the fold. Those ask "is what we
+> resolved what the user asked for?", which is a different question from "is
+> what we resolved what the server got?". The two instruments are
+> complementary and neither substitutes for the other.
+>
+> Recorded rather than quietly reworded, per CONTRIBUTING's retraction rule
+> and ADR 0002's finding-4 precedent. The error is instructive: a capability
+> was asserted from reasoning, survived review into an accepted ADR and a
+> shipped module doc, and was caught only when someone sat down to wire the
+> thing up and checked it against the actual issues.
+
+**Measured coverage.** The instrument samples rather than censuses, and how
+much it sees depends on turn length. On the pinned build with a 1 Hz poll:
+~5 s turns were caught 12/12, ~0.6 s turns 6/12. It is therefore **biased
+toward long turns**, and a rate derived from its counters is a rate over
+observed traffic, never over all traffic.
+
+**Measured ambiguity.** With four concurrent turns resolving *identically* —
+what the default configuration produces, since all compared fields come from
+the ladder rather than the client — 0 of 10 multi-slot polls were ambiguous.
+With four concurrent turns whose parameters genuinely differed, 9 of 9 were.
+So abstaining when live intents disagree costs nothing in the common case and
+declines to guess in the case where guessing would be wrong.
 
 ## Decision
 
