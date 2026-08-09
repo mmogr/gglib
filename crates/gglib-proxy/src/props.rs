@@ -65,10 +65,38 @@
 //!
 //! `/props` always truthfully answers **"what will this server default to"**.
 //! It answers **"what does this *build* default to"** only while nothing is
-//! masking it — which is true today and is exactly what
-//! [`SAMPLER_LAUNCH_FLAGS_PASSED`] tracks. The distinction is not pedantry:
-//! the deletion criterion needs the second claim, and the second claim is the
-//! one that can quietly stop holding.
+//! masking it. The distinction is not pedantry: the deletion criterion needs
+//! the second claim, and the second claim is the one that can quietly stop
+//! holding.
+//!
+//! # Three things can mask it, not one
+//!
+//! [`SAMPLER_LAUNCH_FLAGS_PASSED`] tracks the first and was for a while
+//! presented as the whole story. It is not.
+//!
+//! 1. **A gglib launch flag.** Measured above. `false` since ADR 0003.
+//! 2. **The model's own GGUF.** llama.cpp PR #17120 — in the pinned build —
+//!    added `common_init_sampler_from_model`, which overwrites
+//!    `params.sampling` from `general.sampling.*` for every field no CLI flag
+//!    set, and this endpoint is rendered from that struct. Five of the seven
+//!    fields here can be moved that way; `presence_penalty` and
+//!    `dry_multiplier` have no GGUF key and cannot. See
+//!    [`ModelSamplingDefaults`].
+//! 3. **Not having launched the server.** A target gglib did not spawn has no
+//!    catalog row behind it, so nothing is known about what its model
+//!    declares and no field can be attributed.
+//!
+//! The second is why the check takes the model's declarations as an argument
+//! rather than comparing `/props` against a per-build constant alone. Without
+//! it, a model shipping its author's recommended temperature reports as *the
+//! build's default having moved* — ADR 0003's deferral re-opened, in red, for
+//! a model doing exactly what llama.cpp intends.
+//!
+//! Note what this does **not** do: it never compares `/props` against the
+//! model's value and calls agreement a match. The observed value *is* the
+//! model's value by construction, so such a comparison could not fail — the
+//! same inert-check trap as the launch flags, in a third guise. A
+//! model-supplied field gets its own verdict and counts against coverage.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-pin-the-llama-cpp-build.md
@@ -78,6 +106,8 @@ use std::time::Duration;
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+
+use gglib_core::domain::{ModelSamplingDefault, ModelSamplingDefaults};
 
 use crate::sampling_audit::SlotParams;
 
@@ -220,8 +250,30 @@ pub enum BaselineVerdict {
         /// What this server reports.
         observed: f64,
     },
-    /// Nothing can be concluded. Either the field was absent from `/props`, or
-    /// gglib's own launch flag is overwriting it — see the module docs.
+    /// The effective default came from **this model's own GGUF**, not the
+    /// build.
+    ///
+    /// Not agreement and not drift — a third answer, and since llama.cpp PR
+    /// #17120 the common one. `common_init_sampler_from_model` overwrites
+    /// `params.sampling` from `general.sampling.*` for every field no CLI flag
+    /// sets, and `/props` is rendered from that struct, so the number here is
+    /// the model's, faithfully reported.
+    ///
+    /// [ADR 0003]'s reverse deletion criterion is neither fired nor satisfied
+    /// by this: a model moving a value says nothing about whether a pin bump
+    /// moved the value gglib defers to. What it does mean is that **the
+    /// build's own default is unobservable on this launch for this field**,
+    /// which is why it counts toward coverage rather than toward agreement.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    ModelSupplied {
+        /// The GGUF key that moved it, e.g. `general.sampling.temp`.
+        key: &'static str,
+        /// What the model asked for, and what `/props` confirms it got.
+        value: f64,
+    },
+    /// Nothing can be concluded. The field was absent from `/props`, or
+    /// something is masking the build's own value — see the module docs.
     Indeterminate {
         /// Why, in words a dashboard can show.
         reason: String,
@@ -246,22 +298,31 @@ pub struct BaselineField {
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 #[must_use]
-pub fn check_baseline(observed: &SlotParams) -> Vec<BaselineField> {
+pub fn check_baseline(
+    observed: &SlotParams,
+    model: Option<&ModelSamplingDefaults>,
+) -> Vec<BaselineField> {
     UPSTREAM_DEFAULTS
         .iter()
         .map(|&(field, expected)| BaselineField {
             field,
-            verdict: verdict_for(field, expected, observed),
+            verdict: verdict_for(field, expected, observed, model),
         })
         .collect()
 }
 
-fn verdict_for(field: &str, expected: f64, observed: &SlotParams) -> BaselineVerdict {
+fn verdict_for(
+    field: &'static str,
+    expected: f64,
+    observed: &SlotParams,
+    model: Option<&ModelSamplingDefaults>,
+) -> BaselineVerdict {
     if SAMPLER_LAUNCH_FLAGS_PASSED {
         // Not "probably masked" — measured. Every one of the seven flags was
         // shown to overwrite its field in `/props`. Reporting `Matches` here
         // would be reporting agreement between gglib's floor and gglib's own
-        // launch flag, which is a tautology dressed as an observation.
+        // launch flag, which is a tautology dressed as an observation. A flag
+        // also beats the model's GGUF, which is why this stays first.
         return BaselineVerdict::Indeterminate {
             reason: "gglib passes this as a llama-server launch flag, which overwrites \
                      what /props reports (ADR 0003 follow-up: delete the flags)"
@@ -273,12 +334,52 @@ fn verdict_for(field: &str, expected: f64, observed: &SlotParams) -> BaselineVer
             reason: format!("this build's /props does not report {field}"),
         };
     };
-    if (actual - expected).abs() <= FLOAT_EPSILON {
-        BaselineVerdict::Matches
-    } else {
-        BaselineVerdict::Differs {
-            expected,
-            observed: actual,
+
+    let Some(model) = model else {
+        return BaselineVerdict::Indeterminate {
+            reason: "gglib did not launch this instance, so it has no GGUF metadata to \
+                     attribute this against"
+                .to_string(),
+        };
+    };
+
+    match model.get(field) {
+        ModelSamplingDefault::Unreadable => {
+            let key = ModelSamplingDefaults::gguf_key(field).unwrap_or("general.sampling.*");
+            BaselineVerdict::Indeterminate {
+                reason: format!(
+                    "this model declares {key} and gglib could not read it as a number, \
+                     so {field} cannot be attributed to the build or to the model"
+                ),
+            }
+        }
+        ModelSamplingDefault::Declared(declared) => {
+            let key = ModelSamplingDefaults::gguf_key(field).unwrap_or("general.sampling.*");
+            if (declared - actual).abs() <= FLOAT_EPSILON {
+                BaselineVerdict::ModelSupplied { key, value: actual }
+            } else {
+                // The model asked for one thing and the server reports
+                // another, so the attribution premise fails here. Not
+                // `Differs`: that would blame the build for a disagreement
+                // gglib cannot locate. This arm is also a free positive
+                // control on the model-metadata path itself.
+                BaselineVerdict::Indeterminate {
+                    reason: format!(
+                        "this model's {key} declares {declared} but /props reports {actual}; \
+                         gglib cannot say which supplied it"
+                    ),
+                }
+            }
+        }
+        ModelSamplingDefault::Absent => {
+            if (actual - expected).abs() <= FLOAT_EPSILON {
+                BaselineVerdict::Matches
+            } else {
+                BaselineVerdict::Differs {
+                    expected,
+                    observed: actual,
+                }
+            }
         }
     }
 }
@@ -311,6 +412,9 @@ pub enum BaselineCoverage {
     Partial {
         /// Fields compared against the recorded table.
         checked: usize,
+        /// Fields whose value came from the model's own GGUF, so the build's
+        /// default is unobservable for them on this launch.
+        model_supplied: usize,
         /// Fields nothing could be concluded about.
         indeterminate: usize,
     },
@@ -319,34 +423,51 @@ pub enum BaselineCoverage {
     /// meaning, same discipline, and the parallel between this organ's two
     /// halves is worth being able to see.
     Blind {
-        /// Fields nothing could be concluded about — all of them.
+        /// Fields whose value came from the model's own GGUF.
+        model_supplied: usize,
+        /// Fields nothing could be concluded about.
         indeterminate: usize,
     },
 }
 
 impl BaselineCoverage {
     /// Classify a set of per-field verdicts.
+    ///
+    /// `ModelSupplied` counts against coverage rather than toward it: the
+    /// field was read successfully and nothing is wrong, but what was read is
+    /// the model's number, so the build's own default was not observed.
     fn of(fields: &[BaselineField]) -> Self {
         let indeterminate = fields
             .iter()
             .filter(|f| matches!(f.verdict, BaselineVerdict::Indeterminate { .. }))
             .count();
-        let checked = fields.len() - indeterminate;
+        let model_supplied = fields
+            .iter()
+            .filter(|f| matches!(f.verdict, BaselineVerdict::ModelSupplied { .. }))
+            .count();
+        let checked = fields.len() - indeterminate - model_supplied;
 
         // An empty table is not a clean sweep over nothing. Unreachable while
         // `UPSTREAM_DEFAULTS` is a fixed array, and spelled out anyway because
         // "zero problems found" is exactly the answer this type exists to stop
         // being ambiguous.
         if fields.is_empty() {
-            return Self::Blind { indeterminate: 0 };
+            return Self::Blind {
+                model_supplied: 0,
+                indeterminate: 0,
+            };
         }
-        if indeterminate == 0 {
+        if checked == fields.len() {
             Self::Complete
         } else if checked == 0 {
-            Self::Blind { indeterminate }
+            Self::Blind {
+                model_supplied,
+                indeterminate,
+            }
         } else {
             Self::Partial {
                 checked,
+                model_supplied,
                 indeterminate,
             }
         }
@@ -365,10 +486,19 @@ pub struct BaselineReport {
 impl BaselineReport {
     /// Build a report from a `/props` reading.
     #[must_use]
-    pub fn from_params(observed: &SlotParams) -> Self {
-        let fields = check_baseline(observed);
+    pub fn from_params(observed: &SlotParams, model: Option<&ModelSamplingDefaults>) -> Self {
+        let fields = check_baseline(observed, model);
         let coverage = BaselineCoverage::of(&fields);
         Self { fields, coverage }
+    }
+
+    /// Fields whose value came from the model's own GGUF rather than the build.
+    #[must_use]
+    pub fn model_supplied(&self) -> Vec<&BaselineField> {
+        self.fields
+            .iter()
+            .filter(|f| matches!(f.verdict, BaselineVerdict::ModelSupplied { .. }))
+            .collect()
     }
 
     /// Fields whose default has moved since ADR 0003 measured it.
@@ -456,6 +586,24 @@ mod tests {
         }
     }"#;
 
+    /// A model that declares nothing — the ordinary case, and the one under
+    /// which the build's own table is what `/props` shows.
+    fn silent_model() -> ModelSamplingDefaults {
+        ModelSamplingDefaults::default()
+    }
+
+    /// A model that declares `general.sampling.temp = 0.33`, built through the
+    /// real parser rather than by hand so these tests exercise the same code
+    /// the launch path runs.
+    ///
+    /// One key, so a test that wants a second effect has to arrange it. Two
+    /// would leave every assertion here with an incidental extra verdict in it.
+    fn declaring_model() -> ModelSamplingDefaults {
+        let mut meta = std::collections::HashMap::new();
+        meta.insert("general.sampling.temp".to_string(), "0.33".to_string());
+        ModelSamplingDefaults::from_metadata(&meta)
+    }
+
     fn real_params() -> SlotParams {
         match parse_props(StatusCode::OK, REAL_PROPS) {
             PropsResult::Available(p) => p,
@@ -500,7 +648,7 @@ mod tests {
     /// bare build agrees with the recorded table, on every field.
     #[test]
     fn the_baseline_verdict_tracks_whether_gglib_is_masking_the_table() {
-        let report = BaselineReport::from_params(&real_params());
+        let report = BaselineReport::from_params(&real_params(), Some(&silent_model()));
         assert_eq!(report.fields.len(), UPSTREAM_DEFAULTS.len());
         assert!(report.drifted().is_empty(), "{report:?}");
 
@@ -508,6 +656,7 @@ mod tests {
             assert_eq!(
                 report.coverage,
                 BaselineCoverage::Blind {
+                    model_supplied: 0,
                     indeterminate: UPSTREAM_DEFAULTS.len()
                 },
                 "gglib's own flags overwrite every field, so nothing can be concluded"
@@ -571,12 +720,13 @@ mod tests {
         observed.top_p = None;
         observed.min_p = None;
 
-        let report = BaselineReport::from_params(&observed);
+        let report = BaselineReport::from_params(&observed, Some(&silent_model()));
 
         assert_eq!(
             report.coverage,
             BaselineCoverage::Partial {
                 checked: 5,
+                model_supplied: 0,
                 indeterminate: 2
             }
         );
@@ -591,7 +741,7 @@ mod tests {
     #[test]
     fn a_fully_readable_table_is_complete() {
         assert_eq!(
-            BaselineReport::from_params(&real_params()).coverage,
+            BaselineReport::from_params(&real_params(), Some(&silent_model())).coverage,
             BaselineCoverage::Complete
         );
     }
@@ -600,11 +750,12 @@ mod tests {
     /// shares a word with `AuditState::Blind` on purpose.
     #[test]
     fn a_table_with_nothing_readable_is_blind_not_partial() {
-        let report = BaselineReport::from_params(&SlotParams::default());
+        let report = BaselineReport::from_params(&SlotParams::default(), Some(&silent_model()));
 
         assert_eq!(
             report.coverage,
             BaselineCoverage::Blind {
+                model_supplied: 0,
                 indeterminate: UPSTREAM_DEFAULTS.len()
             }
         );
@@ -618,10 +769,182 @@ mod tests {
         let mut observed = real_params();
         observed.top_p = Some(0.90);
 
-        let report = BaselineReport::from_params(&observed);
+        let report = BaselineReport::from_params(&observed, Some(&silent_model()));
 
         assert_eq!(report.coverage, BaselineCoverage::Complete);
         assert_eq!(report.drifted().len(), 1);
+    }
+
+    // ── Model-embedded sampling defaults ──────────────────────────────────
+
+    /// **The false alarm this fixes.** A model shipping `general.sampling.*`
+    /// moves `/props`, and the check reported that as the *build's* default
+    /// having moved — a red banner and a `warn!` saying ADR 0003's deferral is
+    /// re-opened, for a model doing exactly what llama.cpp intends.
+    #[test]
+    fn a_default_supplied_by_the_models_own_gguf_is_not_reported_as_drift() {
+        let mut observed = real_params();
+        observed.temperature = Some(0.33);
+
+        let report = BaselineReport::from_params(&observed, Some(&declaring_model()));
+
+        assert!(report.drifted().is_empty(), "{report:?}");
+        let temperature = &report.fields[0];
+        assert_eq!(temperature.field, "temperature");
+        assert_eq!(
+            temperature.verdict,
+            BaselineVerdict::ModelSupplied {
+                key: "general.sampling.temp",
+                value: 0.33
+            }
+        );
+    }
+
+    /// A model can only reach five of the seven, so the rest are still checked
+    /// against the build. Attribution narrows the instrument; it must not
+    /// switch it off.
+    #[test]
+    fn a_field_the_model_does_not_name_is_still_compared_against_the_build() {
+        let mut observed = real_params();
+        observed.temperature = Some(0.33);
+
+        let report = BaselineReport::from_params(&observed, Some(&declaring_model()));
+
+        let by_name = |name: &str| {
+            report
+                .fields
+                .iter()
+                .find(|f| f.field == name)
+                .unwrap_or_else(|| panic!("{name} present"))
+        };
+        assert_eq!(by_name("top_p").verdict, BaselineVerdict::Matches);
+        assert_eq!(
+            by_name("presence_penalty").verdict,
+            BaselineVerdict::Matches
+        );
+        assert_eq!(by_name("dry_multiplier").verdict, BaselineVerdict::Matches);
+    }
+
+    /// **The can-it-still-fail test.** Partial masking must not disable the
+    /// alarm on the fields that are still observable — otherwise a model
+    /// shipping one key would hide a genuine pin bump in another.
+    #[test]
+    fn a_moved_build_default_is_still_caught_on_a_model_that_supplies_others() {
+        let mut observed = real_params();
+        observed.temperature = Some(0.33); // the model's own
+        observed.top_p = Some(0.90); // upstream moved this one
+
+        let report = BaselineReport::from_params(&observed, Some(&declaring_model()));
+
+        let drifted = report.drifted();
+        assert_eq!(drifted.len(), 1, "{report:?}");
+        assert_eq!(drifted[0].field, "top_p");
+    }
+
+    /// The model asked for one thing and the server reports another, so the
+    /// attribution premise fails. Blaming the build would be reporting a
+    /// disagreement gglib cannot locate.
+    #[test]
+    fn a_model_declared_value_that_props_contradicts_concludes_nothing() {
+        let mut observed = real_params();
+        observed.temperature = Some(0.55); // model declares 0.33
+
+        let report = BaselineReport::from_params(&observed, Some(&declaring_model()));
+
+        assert!(report.drifted().is_empty(), "must not blame the build");
+        match &report.fields[0].verdict {
+            BaselineVerdict::Indeterminate { reason } => {
+                assert!(reason.contains("0.33"), "{reason}");
+                assert!(reason.contains("0.55"), "{reason}");
+            }
+            other => panic!("expected Indeterminate, got {other:?}"),
+        }
+    }
+
+    /// llama.cpp's `strtof` and Rust's `f64::from_str` need not agree on every
+    /// string, so an unreadable declaration means gglib cannot tell whether
+    /// the model or the build supplied the value.
+    #[test]
+    fn an_unreadable_model_sampling_value_concludes_nothing_rather_than_alarming() {
+        let mut meta = std::collections::HashMap::new();
+        meta.insert("general.sampling.temp".to_string(), "warm".to_string());
+        let model = ModelSamplingDefaults::from_metadata(&meta);
+
+        let report = BaselineReport::from_params(&real_params(), Some(&model));
+
+        assert!(report.drifted().is_empty());
+        assert!(matches!(
+            report.fields[0].verdict,
+            BaselineVerdict::Indeterminate { .. }
+        ));
+    }
+
+    /// A target with no GGUF behind it — a remote backend, a test double —
+    /// knows nothing either way. Wrong in the conservative direction, which is
+    /// the only one ADR 0004 allows.
+    #[test]
+    fn a_target_gglib_did_not_launch_concludes_nothing_rather_than_alarming() {
+        let report = BaselineReport::from_params(&real_params(), None);
+
+        assert!(report.drifted().is_empty());
+        assert!(
+            report
+                .fields
+                .iter()
+                .all(|f| matches!(f.verdict, BaselineVerdict::Indeterminate { .. })),
+            "{report:?}"
+        );
+        assert!(matches!(report.coverage, BaselineCoverage::Blind { .. }));
+    }
+
+    /// A model-supplied field counts against coverage, not toward it: the
+    /// value was read fine, but it is not the build's, so the build's own
+    /// default was not observed for it.
+    #[test]
+    fn model_supplied_fields_reduce_coverage_rather_than_completing_it() {
+        let mut observed = real_params();
+        observed.temperature = Some(0.33);
+
+        let report = BaselineReport::from_params(&observed, Some(&declaring_model()));
+
+        assert_eq!(
+            report.coverage,
+            BaselineCoverage::Partial {
+                checked: 6,
+                model_supplied: 1,
+                indeterminate: 0
+            },
+            "six fields still measured against the build; one is the model's"
+        );
+    }
+
+    /// The cross-crate table guard, in the spirit of
+    /// `no_sampler_flag_may_reappear_unnoticed`. `MODEL_SAMPLING_KEYS` lives
+    /// in `gglib-core` and `UPSTREAM_DEFAULTS` here; a name added to one and
+    /// not the other is silent in both directions.
+    #[test]
+    fn every_model_sampling_key_names_a_field_the_baseline_check_compares() {
+        let checked: Vec<&str> = UPSTREAM_DEFAULTS.iter().map(|(f, _)| *f).collect();
+
+        for (field, key) in gglib_core::domain::MODEL_SAMPLING_KEYS {
+            assert!(
+                checked.contains(&field),
+                "{key} moves {field}, which the baseline check does not compare"
+            );
+        }
+
+        let unreachable: Vec<&str> = checked
+            .iter()
+            .copied()
+            .filter(|f| ModelSamplingDefaults::gguf_key(f).is_none())
+            .collect();
+        assert_eq!(
+            unreachable,
+            vec!["presence_penalty", "dry_multiplier"],
+            "these two have no general.sampling.* key, so no model can move them \
+             and the build stays observable through them. If this list changed, \
+             llama.cpp gained or lost a key and both tables need re-checking."
+        );
     }
 
     /// A field `/props` does not report is unknown, never agreement. Same

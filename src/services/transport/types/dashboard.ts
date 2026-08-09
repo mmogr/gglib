@@ -263,6 +263,14 @@ export interface SamplingDivergence {
 export type SamplingBaselineVerdict =
   | { verdict: 'matches' }
   | { verdict: 'differs'; expected: number; observed: number }
+  /**
+   * The effective default came from this model's own GGUF
+   * (`general.sampling.*`), not the build. Neither agreement nor drift: the
+   * model asked for it and llama.cpp applied it, which is gglib's deferral
+   * working — it just means the build's own value is unobservable for that
+   * field on this launch. Never render it as either of the other two.
+   */
+  | { verdict: 'model_supplied'; key: string; value: number }
   | { verdict: 'indeterminate'; reason: string };
 
 /** Mirrors `gglib_proxy::props::BaselineField`. */
@@ -284,8 +292,14 @@ export interface SamplingBaselineField {
  */
 export type SamplingBaselineCoverage =
   | { coverage: 'complete' }
-  | { coverage: 'partial'; checked: number; indeterminate: number }
-  | { coverage: 'blind'; indeterminate: number };
+  | {
+      coverage: 'partial';
+      checked: number;
+      /** Fields the model's own GGUF supplied, so the build's value is hidden. */
+      model_supplied: number;
+      indeterminate: number;
+    }
+  | { coverage: 'blind'; model_supplied: number; indeterminate: number };
 
 /** Mirrors `gglib_proxy::props::BaselineReport`. */
 export interface SamplingBaselineReport {

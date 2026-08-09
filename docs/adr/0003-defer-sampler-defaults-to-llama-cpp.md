@@ -2,8 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 7 overclaimed what the
-  readback can catch, and decision 5's mechanism was dropped on
-  implementation; see the amendments there)
+  readback can catch, decision 5's mechanism was dropped on implementation,
+  and finding 2's generalisation from build to every GGUF is overturned by
+  llama.cpp's model-embedded sampling parameters; see the amendments there)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -140,17 +141,62 @@ The four values that carried no documentation — `top_p`, `top_k`,
 
 ### 2. This is a property of the build, not of a model or of the harness
 
-Identical across both models, across all eleven parameters and the sampler
-chain, and identical on a bare launch. So a single measurement per build is
-sufficient, and the result does not need re-taking per GGUF.
+> **Amended 2026-08-09 — the second half of this finding is wrong, and wrong
+> in the way it congratulates itself for avoiding.** The measurement stands;
+> the generalisation from it does not. Struck rather than rewritten, per
+> CONTRIBUTING's retraction rule, because the error is more instructive than
+> the correction.
 
-This is a **stronger** claim than ADR 0002 was able to make, and the contrast
+~~Identical across both models, across all eleven parameters and the sampler
+chain, and identical on a bare launch. So a single measurement per build is
+sufficient, and the result does not need re-taking per GGUF.~~
+
+~~This is a **stronger** claim than ADR 0002 was able to make, and the contrast
 is worth recording. There, finding 1 was taken on one model and finding 4
 overturned it on a second: tool-call conformance is model behaviour and did not
 generalise. Sampler defaults are a server-level table and do. Different kind of
 fact, different reach — and the reason to say so is that ADR 0002's caveat
 about scope "was written as a formality and turned out to be the load-bearing
-sentence in the document."
+sentence in the document."~~
+
+**What is true:** identical across the two models measured, across all eleven
+parameters and the sampler chain, on a bare launch of build `b1-69bf643`.
+
+**What does not follow:** that a single measurement per build is sufficient.
+llama.cpp PR #17120 ("model-embedded sampling parameters", merged 2025-11-25 —
+and the pin at `69bf643` is 3176 commits ahead of it, `behind: 0`) added
+`common_init_sampler_from_model`, which overwrites `params.sampling` from a
+model's own `general.sampling.*` keys for every field no CLI flag sets.
+`tools/server/server-context.cpp` renders `/props` from that same struct. Five
+of the seven parameters in finding 1's table can be moved that way; only
+`presence_penalty` and `dry_multiplier` have no GGUF key and stay
+build-attributable.
+
+The two models measured were both silent on those keys, so the tables agreed —
+and would have agreed whether the build decided or the model did.
+
+**Why `--compare-model-defaults` did not catch it.** The harness has a control
+for exactly this, trap 4, and it was run. It diffs two models' default tables
+to show the result is build-level. But two silent models produce identical
+tables under both hypotheses, so the control could not distinguish its own two
+outcomes. That is the fourth time in this arc a comparison in which nothing
+could vary reported that nothing varied, and the first three are already listed
+in the method notes.
+
+**And the boast failed in precisely ADR 0002's way.** The struck paragraph
+claims a stronger reach than ADR 0002 could manage, and cites ADR 0002's scope
+caveat as "the load-bearing sentence in the document" — while omitting an
+equivalent caveat here. A second model overturned ADR 0002's finding 1; a
+second *class* of model overturns this one. Left in full because "we are not
+making that mistake" is the sentence that most reliably precedes making it.
+
+**Re-measured, not re-argued.** `--arm model-embedded` in
+`scripts/experiments/sampler_wire_semantics.py` stamps `general.sampling.*`
+into a copy of a GGUF and reads `/props` back, which is the positive control
+the model diff could not be. Scope: the stamping is verified against
+llama.cpp's own `GGUFReader`; the live `/props` reading has not yet been taken,
+for want of a servable model in the environment where this was written. The
+mechanism above is read from llama.cpp source at the pinned commit.
 
 ### 3. The launch flags are inert twice over
 
@@ -360,6 +406,15 @@ But it is only true while the build is pinned. So this ADR carries a
 > If a pin bump moves an upstream default that gglib now defers to, the
 > readback flags the divergence and this decision is re-taken for that
 > parameter.
+
+*Amended 2026-08-09.* The criterion is unchanged, but finding 2's amendment
+narrows where it can be applied. A model that declares `general.sampling.*`
+supplies the value itself, so the build's own default is **unobservable** for
+that field on that model's launches. That does not re-open this decision —
+gglib defers, and llama.cpp applies the model author's number, which is the
+deferral working one layer further out than it was written for — but it does
+mean the criterion has nothing to watch there. A coverage gap, not a licence,
+and `BaselineCoverage` reports it as one.
 
 That closes ADR 0001's loop rather than opening a hole in it: the pin makes
 deferral safe, and the observation organ makes the pin's movement visible. It

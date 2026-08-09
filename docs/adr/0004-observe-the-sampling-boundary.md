@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 1 overstated which
-  launch paths pass sampler flags; see the amendment there)
+  launch paths pass sampler flags, and named launch flags as the only thing
+  that masks `/props`; see the amendment there and finding 7)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -220,6 +221,49 @@ progress frames, so a non-streaming request stays `Queued` for its whole life.
 Filtering would hide the very intent an observation might belong to, converting
 a correct abstention into a confident misattribution.
 
+### 7. A model's own GGUF moves the table too, and finding 1 said only flags do
+
+*Added 2026-08-09, from llama.cpp source at the pinned commit.*
+
+Finding 1 named launch flags as what blinds `/props` and implied they were the
+whole of it. They are one of three.
+
+llama.cpp PR #17120 ("model-embedded sampling parameters", merged 2025-11-25;
+the pin at `69bf643` is 3176 commits ahead of it, `behind: 0`) added
+`common_init_sampler_from_model` in `common/common.cpp`, which overwrites
+`params.sampling` from a model's own `general.sampling.*` metadata for every
+field no CLI flag sets — tracked by a `user_sampling_config` bitmask, so the
+precedence is **CLI flag > model metadata > build default**.
+`tools/server/server-context.cpp` builds `default_generation_settings` from
+that same struct.
+
+Twelve keys exist. Five map onto a field this check compares:
+
+```text
+  gglib field        GGUF key
+  temperature        general.sampling.temp
+  top_p              general.sampling.top_p
+  top_k              general.sampling.top_k
+  min_p              general.sampling.min_p
+  repeat_penalty     general.sampling.penalty_repeat
+
+  presence_penalty   (no key — a model cannot move it)
+  dry_multiplier     (no key — a model cannot move it)
+```
+
+The asymmetry at the bottom matters: the check cannot go fully blind on a
+model's account, because two fields stay build-attributable whatever a model
+ships. The other seven keys — `sequence`, `xtc_*`, `penalty_last_n`,
+`mirostat*` — move sampling with nothing in gglib watching, since gglib has no
+floor for them to contradict.
+
+**The sting.** ADR 0003's flag deletion is what opened this instrument's eyes,
+and the same pinned build had independently half-closed them. Worse, deleting
+the flags is what *guarantees* model metadata wins, because a flag was the only
+thing that would have suppressed it. Finding 1's conclusion — "blindness is a
+property of this launch, not of the build" — was right and did not go far
+enough: it is a property of this launch **and this model**.
+
 ## Decision
 
 **1. The sampling boundary gets a Tier C organ, always on and never gated.**
@@ -264,6 +308,36 @@ neither claim sight it lacks nor stay blind after it is freed.
 **7. The stated limits are part of the contract.** Findings 2, 3 and 5 are in
 the module documentation, not only here. An instrument whose limits live in a
 document nobody opens is one whose clean readings will be over-trusted.
+
+**8. A model-supplied default is its own verdict.** Finding 7's consequence.
+`ModelSupplied { key, value }` — never `Matches`, never `Differs`. It does not
+fire the reverse deletion criterion (a model moving a value says nothing about
+whether a pin bump moved the value gglib defers to) and it does not satisfy it
+either (the build's own default is unobservable for that field), so it counts
+against coverage rather than toward agreement.
+
+*The alternative, recorded because it is the tempting one.* Compare `/props`
+against `model_value ?? UPSTREAM_DEFAULTS` and report `Matches` when they
+agree. That comparison **cannot fail**: the observed value *is* the model value
+by construction, because llama.cpp wrote the model's number into the struct
+`/props` renders. It would report health forever, including on a build whose
+default had moved to something else entirely. That is finding 1's trap and ADR
+0002 finding 2's inert-module trap for the fourth time in this subsystem, which
+is roughly once per opportunity.
+
+A model value that `/props` *contradicts* is `Indeterminate`, not `Differs`:
+the attribution premise has failed and gglib cannot say which source won, so
+blaming the build would be inventing a culprit. That arm doubles as a positive
+control on the model-metadata path itself.
+
+**9. Coverage is a property of the whole table, not of any field.**
+`BaselineCoverage` replaces a `conclusive: bool` computed as "any field reached
+a verdict" — under which a report covering two of seven fields rendered as "All
+7 sampler defaults match the values this build was measured at". That is
+decision 3's rule one level up: not a field claiming agreement it lacks, but a
+*report* claiming completeness it lacks. Only `Complete` may render an
+all-clear, and drift is checked before coverage so a partial reading can still
+raise an alarm.
 
 ## Two rules that follow
 
@@ -320,6 +394,10 @@ evidence for. Those need an A/B instrument that does not exist yet.
   the check went from `Indeterminate` on all seven fields to conclusive
   `Matches` on all seven, and `SAMPLER_LAUNCH_FLAGS_PASSED` is now `false`. See
   the follow-up below, which records the same thing from the other side.
+- The build's own default is unobservable for any field a model supplies from
+  its GGUF (finding 7), so baseline coverage is per-launch-and-model rather
+  than per-build. A model declaring all five reachable keys leaves only
+  `presence_penalty` and `dry_multiplier` under observation.
 - Coverage is a sample biased toward long turns (finding 3), so a fault
   affecting only fast requests is systematically under-observed.
 - A clean reading does not mean the model sampled as intended (finding 5).
@@ -340,7 +418,12 @@ evidence for. Those need an A/B instrument that does not exist yet.
   `SAMPLER_LAUNCH_FLAGS_PASSED` is now `false`. It was kept rather than deleted
   with the flags, because the failure it guards against is a flag *reappearing*
   — `no_sampler_flag_may_reappear_unnoticed` asserts both halves across the two
-  crates.
+  crates, and `build_command` now calls `sampler_flags()` so that assertion is
+  about the launch path rather than about a function nobody called.
+
+  *Annotated 2026-08-09:* that verification was taken on a model carrying no
+  `general.sampling.*`, which is why finding 7's gap survived it. "Conclusive
+  `Matches` on all seven" was true of that model, not of every model.
 - Render the readback in the CLI dashboard, for parity with the GUI.
 - Have `model explain` print the build's default beside a deferred field, so a
   `—` reads as "llama.cpp chose 0.95" rather than as a gap. This is what ADR
@@ -348,9 +431,25 @@ evidence for. Those need an A/B instrument that does not exist yet.
   turned out not to be the mechanism (see the amendment there) — `Unset`
   already carries the distinction, and what is missing is the number, which
   comes from [`props`].
-- Correlating a slot to a request needs `id_task`, which llama.cpp does not
-  return on the chat-completions path. Finding 4's abstention is the right
-  answer without it; an upstream request for it would make the instrument a
-  census rather than a sample, and would remove finding 3's bias too.
+- Correlating a slot to a request is closer to hand than this ADR assumed.
+  `to_json_non_oaicompat()` (`tools/server/server-task.cpp:368` at the pin)
+  emits both `id_slot` **and** `"generation_settings"` — the complete
+  per-request resolved sampling — and PR #12246 (merged 2025-03-23, also in the
+  pin) attaches that object as `__verbose` on the OAI chat path *including the
+  streaming first delta*. It is unreachable only because `task_params.verbose`
+  is never parsed from a request body nor assigned anywhere in the pinned
+  server; it is a declared field with no way to set it.
+
+  So the upstream ask is "make `verbose` settable per request", which is a much
+  smaller change than "add `id_task`" — and it would retire finding 4's
+  abstention entirely, remove finding 3's sampling bias, and make the whole
+  slot-poll comparison a census. Finding 4's abstention is the right answer
+  today; it should be read as a workaround with a known exit rather than a
+  permanent constraint.
+- Read `general.sampling.*` at import into the *inference hierarchy*, not only
+  into the baseline check. gglib currently writes its own `reasoning_profile()`
+  recipe for `reasoning`-tagged models; a model author's published
+  recommendation is better evidence than gglib's guess, and ADR 0003's own
+  argument — do not restate what upstream already decides — applies to it.
 
 [`props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs

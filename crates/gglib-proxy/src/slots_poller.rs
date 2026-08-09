@@ -32,6 +32,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
+use gglib_core::domain::ModelSamplingDefaults;
 use gglib_core::ports::ModelRuntimePort;
 
 use crate::connections::ActiveConnectionsRegistry;
@@ -219,16 +220,38 @@ fn next_delay(result: &SlotsPollResult, current_backoff: Duration) -> Option<Dur
 /// starting, which is precisely when the first poll after a model change
 /// lands — so latching on the attempt lost the baseline for the whole of that
 /// model's run, and the surface said "not read yet" forever.
-async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditStore) -> bool {
+async fn read_baseline(
+    client: &Client,
+    base_url: &str,
+    model: Option<&ModelSamplingDefaults>,
+    audit: &SamplingAuditStore,
+) -> bool {
     match fetch_props(client, base_url).await {
         PropsResult::Available(params) => {
-            let report = BaselineReport::from_params(&params);
+            let report = BaselineReport::from_params(&params, model);
             for field in report.drifted() {
                 warn!(
                     field = field.field,
                     verdict = ?field.verdict,
                     "sampling baseline: this build's default has moved since it was measured; \
                      ADR 0003's deferral is re-opened for this parameter"
+                );
+            }
+            // Not a warning: a model shipping its own recipe is llama.cpp
+            // working as designed, and gglib deferring to it is ADR 0003's
+            // decision reaching one layer further than it was written for.
+            // Worth one line per launch because it is the reason the baseline
+            // check cannot speak for those fields.
+            let supplied = report.model_supplied();
+            if !supplied.is_empty() {
+                info!(
+                    fields = %supplied
+                        .iter()
+                        .map(|f| f.field)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    "sampling baseline: this model's own GGUF supplies these defaults, so \
+                     the build's own values are not observable for them"
                 );
             }
             debug!(
@@ -327,7 +350,13 @@ pub fn spawn_slots_poller(
                 None => BASE_POLL_INTERVAL,
                 Some(target) => {
                     if baseline.due(&target.model_name)
-                        && read_baseline(&client, &target.base_url, &audit).await
+                        && read_baseline(
+                            &client,
+                            &target.base_url,
+                            target.model_sampling.as_ref(),
+                            &audit,
+                        )
+                        .await
                     {
                         baseline.succeeded(&target.model_name);
                     }
@@ -434,7 +463,10 @@ mod tests {
 
         assert!(latch.due("m"));
         latch.succeeded("m");
-        assert!(!latch.due("m"), "a stored baseline is not re-read every tick");
+        assert!(
+            !latch.due("m"),
+            "a stored baseline is not re-read every tick"
+        );
     }
 
     /// **The defect.** `/props` fails most often because llama-server has not

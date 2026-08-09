@@ -108,7 +108,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                coverage: { coverage: 'blind', indeterminate: 1 },
+                coverage: { coverage: 'blind', model_supplied: 0, indeterminate: 1 },
                 fields: [
                   {
                     field: 'temperature',
@@ -186,7 +186,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                coverage: { coverage: 'partial', checked: 2, indeterminate: 1 },
+                coverage: { coverage: 'partial', checked: 2, model_supplied: 0, indeterminate: 1 },
                 fields: [
                   { field: 'top_p', verdict: { verdict: 'matches' } },
                   { field: 'min_p', verdict: { verdict: 'matches' } },
@@ -206,6 +206,40 @@ describe('ProxySamplingPanel', () => {
       expect(screen.getByText(/not reported by this build/i)).toBeInTheDocument();
     });
 
+    // A model shipping general.sampling.* is llama.cpp working as intended and
+    // gglib deferring one layer further than ADR 0003 was written for. It must
+    // read as an explanation, never as drift.
+    it('names the model as the source of a default it supplied', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 1, model_supplied: 1, indeterminate: 0 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  {
+                    field: 'temperature',
+                    verdict: {
+                      verdict: 'model_supplied',
+                      key: 'general.sampling.temp',
+                      value: 0.33,
+                    },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/defaults have moved/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/All \d+ sampler defaults match/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/general\.sampling\.temp/)).toBeInTheDocument();
+      expect(screen.getByText(/0\.33/)).toBeInTheDocument();
+    });
+
     // Coverage is checked after drift, so a partial reading that found a moved
     // default still raises the alarm rather than being softened into "some
     // fields could not be checked".
@@ -216,7 +250,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                coverage: { coverage: 'partial', checked: 1, indeterminate: 1 },
+                coverage: { coverage: 'partial', checked: 1, model_supplied: 0, indeterminate: 1 },
                 fields: [
                   { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
                   {
@@ -242,7 +276,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                coverage: { coverage: 'blind', indeterminate: 2 },
+                coverage: { coverage: 'blind', model_supplied: 0, indeterminate: 2 },
                 fields: [
                   {
                     field: 'top_p',

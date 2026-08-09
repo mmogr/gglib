@@ -176,6 +176,10 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineState | null }> = ({ baselin
     );
   }
 
+  // `complete` still reports what the model supplied, when it supplied
+  // nothing: the all-clear below is about the build's table, and a reader
+  // should not have to infer that no field was model-supplied.
+
   // The only branch permitted to render an all-clear: every field compared.
   return (
     <p className="text-sm text-text-muted">
@@ -194,6 +198,7 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineState | null }> = ({ baselin
  */
 const ReasonList: FC<{ report: SamplingBaselineReport }> = ({ report }) => {
   const groups = new Map<string, string[]>();
+  const supplied = report.fields.filter((f) => f.verdict.verdict === 'model_supplied');
   for (const f of report.fields) {
     if (f.verdict.verdict === 'indeterminate') {
       const fields = groups.get(f.verdict.reason) ?? [];
@@ -201,11 +206,25 @@ const ReasonList: FC<{ report: SamplingBaselineReport }> = ({ report }) => {
       groups.set(f.verdict.reason, fields);
     }
   }
-  if (groups.size === 0) {
+  if (groups.size === 0 && supplied.length === 0) {
     return <>No field could be concluded on.</>;
   }
   return (
     <ul className="flex flex-col gap-xs">
+      {/*
+        Model-supplied first: it is the benign explanation, and reading it
+        after a list of failures makes an ordinary model look broken. This is
+        llama.cpp applying the model author's own recommendation, which gglib
+        defers to by design — it just means the build's own value for that
+        field is not observable here.
+      */}
+      {supplied.map((f) => (
+        <li key={f.field} className="text-sm">
+          {f.field}:{' '}
+          {f.verdict.verdict === 'model_supplied' &&
+            `${formatValue(f.verdict.value)}, set by this model's own ${f.verdict.key}`}
+        </li>
+      ))}
       {[...groups].map(([reason, fields]) => (
         <li key={reason} className="text-sm">
           {fields.join(', ')}: {reason}

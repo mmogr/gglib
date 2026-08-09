@@ -39,6 +39,17 @@ The full set of configurable parameters:
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
 | `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
 
+**These are the *build's* defaults, and a model can move five of them.** Since
+llama.cpp PR #17120 a GGUF can carry `general.sampling.*` keys, which llama.cpp
+applies over its own defaults for every field no launch flag sets — and gglib
+sets none. So for `temperature` (`general.sampling.temp`), `top_p`, `top_k`,
+`min_p` and `repeat_penalty` (`general.sampling.penalty_repeat`) the effective
+default is per-model, not per-build. `presence_penalty` and `dry_multiplier`
+have no GGUF key and remain the build's.
+
+The proxy dashboard's Sampling Readback panel names which of the two supplied
+each value on the running model.
+
 **"Deferred" means gglib sends nothing and llama.cpp's own default applies.**
 [ADR 0003](adr/0003-defer-sampler-defaults-to-llama-cpp.md) measured each of
 those six against a bare `llama-server` on the pinned build and found gglib's
@@ -49,7 +60,8 @@ shipped a `min_p` floor that disabled the tail cut on every untuned request.
 
 The numbers a model actually decodes at are unchanged. What changed is who
 supplies them, and therefore what happens when llama.cpp changes its mind:
-gglib now follows rather than overrides. The pinned build plus the `/props`
+gglib now follows rather than overrides — and llama.cpp may in turn follow the
+model author, where the GGUF declares a preference. The pinned build plus the `/props`
 baseline check in
 [ADR 0004](adr/0004-observe-the-sampling-boundary.md) are what make that safe —
 a pin bump that moves one of these defaults is flagged rather than absorbed.
