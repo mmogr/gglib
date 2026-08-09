@@ -201,6 +201,24 @@ pub enum DefaultsOrigin {
     /// Written automatically at import time from the model's `reasoning`
     /// tag, never reviewed by a person. Ranks below global settings.
     AutoDetected,
+    /// Read at import time from the model author's own
+    /// `generation_config.json` on `HuggingFace`.
+    ///
+    /// Ranks **exactly where [`Self::AutoDetected`] does** — below global
+    /// settings — and is a distinct variant because of what it is, not where
+    /// it sits. Both are written without a person reviewing them, so neither
+    /// may outrank a setting somebody chose.
+    ///
+    /// It never *coexists* with `AutoDetected`: the import prefers this when
+    /// it can fetch one, because a published recipe is evidence about this
+    /// model where [`InferenceConfig::reasoning_profile`] is a generic guess
+    /// keyed off a tag. So "above generic tag guesses" holds by replacement
+    /// rather than by rank, and no new ladder rung is needed to express it.
+    ///
+    /// Kept apart from `User` for the reason that distinction exists at all:
+    /// this is not a value anybody in this installation decided, so the
+    /// agentic-turn ceiling may still cap it and global settings still win.
+    Published,
 }
 
 impl std::fmt::Display for DefaultsOrigin {
@@ -208,6 +226,7 @@ impl std::fmt::Display for DefaultsOrigin {
         match self {
             Self::User => write!(f, "user"),
             Self::AutoDetected => write!(f, "auto_detected"),
+            Self::Published => write!(f, "published"),
         }
     }
 }
@@ -219,8 +238,9 @@ impl std::str::FromStr for DefaultsOrigin {
         match s {
             "user" => Ok(Self::User),
             "auto_detected" => Ok(Self::AutoDetected),
+            "published" => Ok(Self::Published),
             other => Err(format!(
-                "unknown defaults origin '{other}'; expected user or auto_detected"
+                "unknown defaults origin '{other}'; expected user, auto_detected or published"
             )),
         }
     }
@@ -1189,9 +1209,13 @@ impl InferenceConfig {
         } else {
             Self::with_hardcoded_defaults()
         };
+        // Exhaustive on purpose. The catch-all this replaced sent every
+        // not-`AutoDetected` origin to the user-set rung, so adding
+        // `Published` would silently have ranked a fetched recipe *above*
+        // global settings — the one thing an unreviewed origin must never do.
         let (user_model, auto_model) = match model_ctx.defaults_origin {
-            Some(DefaultsOrigin::AutoDetected) => (None, model),
-            _ => (model, None),
+            Some(DefaultsOrigin::AutoDetected | DefaultsOrigin::Published) => (None, model),
+            Some(DefaultsOrigin::User) | None => (model, None),
         };
         Self::resolve_layers_with_sources(
             &[Some(&self), profile, user_model, global, auto_model],

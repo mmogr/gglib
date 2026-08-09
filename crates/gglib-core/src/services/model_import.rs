@@ -14,6 +14,7 @@ use crate::domain::{
 };
 use crate::download::Quantization;
 use crate::ports::GgufParserPort;
+use tracing::{debug, info, warn};
 
 /// Provenance-specific inputs for [`build_new_model`].
 ///
@@ -46,6 +47,15 @@ pub struct HfOrigin<'a> {
     pub quantization_fallback: Quantization,
     /// Ordered file paths for sharded models.
     pub file_paths: Option<&'a [PathBuf]>,
+    /// The model author's own recipe, if one was fetched from the base repo.
+    ///
+    /// `None` on every path that could not or did not look — no network, a
+    /// gated repo, a repo publishing no `generation_config.json`, or a
+    /// local-file import, which has no repo to ask. All of those fall back to
+    /// the `reasoning` tag guess exactly as before, which is why this is an
+    /// `Option` rather than a result carrying a reason: by the time it reaches
+    /// here the reason has already been logged and the decision is the same.
+    pub published_sampling: Option<&'a InferenceConfig>,
 }
 
 /// Filter `HuggingFace` tags using a blocklist.
@@ -87,6 +97,96 @@ fn merge_tags(gguf_tags: Vec<String>, hf_tags: &[String]) -> Vec<String> {
 
     result
 }
+
+/// Fetch the model author's published sampling recipe, if one can be found.
+///
+/// Tries each repo [`generation_config_candidates`] names, in order, and stops
+/// at the first that yields a usable recipe.
+///
+/// # Every failure is the same failure
+///
+/// This returns `None` and never an error, because there is exactly one
+/// response to *any* negative answer: carry on with the import and let the
+/// `reasoning` tag guess apply as it always has. A sampling recipe is a nicety;
+/// failing an import over one would be absurd. The distinct causes are logged
+/// rather than propagated:
+///
+/// - **404** — the repo publishes no `generation_config.json`. The ordinary
+///   case for a quant repo, and the reason the candidate list exists.
+/// - **Gated or private** (401/403) — the base repo needs a token this
+///   installation does not have. Common for Llama and Gemma.
+/// - **Offline, rate-limited, malformed** — nothing to do but proceed.
+/// - **Published nothing usable** — a file carrying only token ids. Treated as
+///   a miss so it cannot displace the tag guess with an all-`None` recipe, and
+///   the search continues to the next candidate.
+///
+/// # Bounded work
+///
+/// At most [`MAX_GENERATION_CONFIG_LOOKUPS`] requests, and it stops at the
+/// first hit. An import is already dominated by downloading gigabytes of
+/// weights, but this runs on the local-add path too, where it must not turn a
+/// fast operation into a network-bound one.
+pub async fn fetch_published_sampling(
+    client: &dyn crate::ports::huggingface::HfClientPort,
+    repo_id: &str,
+    tags: &[String],
+) -> Option<InferenceConfig> {
+    let candidates = crate::domain::generation_config_candidates(repo_id, tags);
+
+    for candidate in candidates.iter().take(MAX_GENERATION_CONFIG_LOOKUPS) {
+        let body = match client.fetch_generation_config(candidate).await {
+            Ok(Some(body)) => body,
+            Ok(None) => {
+                debug!("{candidate} publishes no generation_config.json");
+                continue;
+            }
+            Err(e) => {
+                // Info rather than warn: on the common path this is a gated
+                // base repo, which is not a fault in this installation and
+                // costs nothing but a fallback to the tag guess.
+                info!("could not read {candidate}'s generation_config.json: {e}");
+                continue;
+            }
+        };
+
+        let Some(parsed) = crate::domain::parse_generation_config(&body) else {
+            warn!("{candidate}'s generation_config.json is not a JSON object; ignoring");
+            continue;
+        };
+
+        for reason in &parsed.rejected {
+            warn!("{candidate}'s generation_config.json: {reason}; that value is not applied");
+        }
+        if parsed.requests_greedy {
+            // Not applied: gglib has no greedy mode, and the nearest
+            // equivalent is the near-greedy setting ADR 0004's addendum bans
+            // for reasoning models. Said out loud so the divergence from the
+            // author's file is visible rather than silent.
+            info!(
+                "{candidate} publishes do_sample: false (greedy); gglib does not apply greedy \
+                 decoding and is using the published sampler values instead"
+            );
+        }
+        if parsed.is_empty() {
+            debug!("{candidate}'s generation_config.json names no sampler values gglib models");
+            continue;
+        }
+
+        info!("using the sampling recipe {candidate} publishes");
+        return Some(parsed.config);
+    }
+
+    None
+}
+
+/// How many repos to ask for a `generation_config.json` before giving up.
+///
+/// [`generation_config_candidates`] yields at most three, and this bounds it
+/// independently so a future candidate source cannot quietly make an import
+/// issue an unbounded number of requests.
+///
+/// [`generation_config_candidates`]: crate::domain::generation_config_candidates
+pub const MAX_GENERATION_CONFIG_LOOKUPS: usize = 3;
 
 /// Build the `NewModel` row for a model being added, from either the
 /// local-file or `HuggingFace` path.
@@ -149,19 +249,39 @@ pub fn build_new_model(
         }
     }
 
-    // Apply tag-based inference defaults for reasoning models. Only set when
-    // the model has no explicit defaults already (always true here, since
-    // `model` was just constructed) — this is where a future caller that
-    // starts pre-populating `inference_defaults` would need to add a guard.
+    // Seed the model's own rung of the sampling hierarchy, from the best
+    // evidence available about *this* model.
     //
-    // `defaults_origin: AutoDetected` marks this as gglib's own guess, never
-    // reviewed by a person — see `DefaultsOrigin` for why that changes how
-    // resolution ranks it relative to the user's global settings.
-    if model.inference_defaults.is_none()
-        && crate::domain::capability_tags::is_reasoning(&model.tags)
-    {
-        model.inference_defaults = Some(InferenceConfig::reasoning_profile());
-        model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
+    // Both origins rank identically — below global settings — because neither
+    // was reviewed by a person. What differs is their quality, and that is why
+    // a published recipe replaces the guess rather than merging with it:
+    //
+    // - **Published** — the author's `generation_config.json`, fetched from
+    //   the base repo. Evidence about this model.
+    // - **AutoDetected** — `reasoning_profile()`, keyed off a tag. A generic
+    //   guess that happens to be right for the Qwen3 family it was written
+    //   from.
+    //
+    // Merging them would produce a recipe no author published and gglib cannot
+    // defend, labelled as though somebody had. It would also defeat the
+    // temperature-coupling rule, which exists precisely so a layer naming a
+    // temperature is not silently paired with penalties tuned for a different
+    // one.
+    //
+    // Only set when the model has no explicit defaults already (always true
+    // here, since `model` was just constructed).
+    if model.inference_defaults.is_none() {
+        let published = match origin {
+            ModelOrigin::HuggingFace(hf) => hf.published_sampling,
+            ModelOrigin::LocalFile { .. } => None,
+        };
+        if let Some(config) = published {
+            model.inference_defaults = Some(config.clone());
+            model.defaults_origin = Some(DefaultsOrigin::Published);
+        } else if crate::domain::capability_tags::is_reasoning(&model.tags) {
+            model.inference_defaults = Some(InferenceConfig::reasoning_profile());
+            model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
+        }
     }
 
     // Infer capabilities from chat template OR architecture — OR'd so either
@@ -223,12 +343,21 @@ mod tests {
     }
 
     fn hf_origin<'a>(repo_id: &'a str, hf_tags: &'a [String]) -> ModelOrigin<'a> {
+        hf_origin_with(repo_id, hf_tags, None)
+    }
+
+    fn hf_origin_with<'a>(
+        repo_id: &'a str,
+        hf_tags: &'a [String],
+        published_sampling: Option<&'a InferenceConfig>,
+    ) -> ModelOrigin<'a> {
         ModelOrigin::HuggingFace(HfOrigin {
             repo_id,
             commit_sha: "abc123",
             hf_tags,
             quantization_fallback: Quantization::Q4KM,
             file_paths: None,
+            published_sampling,
         })
     }
 
@@ -352,6 +481,148 @@ mod tests {
             Utc::now(),
         );
         assert_eq!(model.tags, vec!["chat".to_string()]);
+    }
+
+    /// **The point of the whole lookup.** A recipe the author published is
+    /// evidence about this model; `reasoning_profile()` is a generic guess
+    /// keyed off a tag. So the published one wins where it exists.
+    #[test]
+    fn a_published_recipe_replaces_the_reasoning_tag_guess() {
+        let hf_tags = vec!["reasoning".to_string()];
+        let published = InferenceConfig {
+            temperature: Some(0.6),
+            top_p: Some(0.95),
+            top_k: Some(20),
+            ..InferenceConfig::default()
+        };
+        let origin = hf_origin_with("unsloth/Qwen3-8B-GGUF", &hf_tags, Some(&published));
+
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+
+        assert_eq!(model.inference_defaults, Some(published));
+        assert_eq!(model.defaults_origin, Some(DefaultsOrigin::Published));
+    }
+
+    /// **It replaces rather than merges.** Filling the published recipe's gaps
+    /// from `reasoning_profile()` would produce a recipe no author published
+    /// and gglib cannot defend, labelled as though somebody had — and it would
+    /// defeat the temperature-coupling rule, which exists so a layer naming a
+    /// temperature is not paired with penalties tuned for a different one.
+    #[test]
+    fn a_published_recipe_is_not_merged_with_the_tag_guess() {
+        let hf_tags = vec!["reasoning".to_string()];
+        let published = InferenceConfig {
+            temperature: Some(0.6),
+            ..InferenceConfig::default()
+        };
+        let origin = hf_origin_with("unsloth/Qwen3-8B-GGUF", &hf_tags, Some(&published));
+
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+
+        let stored = model.inference_defaults.expect("defaults stored");
+        assert_eq!(stored.temperature, Some(0.6));
+        assert_eq!(
+            stored.presence_penalty, None,
+            "reasoning_profile's 1.5 must not be grafted on"
+        );
+        assert_eq!(stored.top_p, None, "nor anything else it names");
+    }
+
+    /// A published recipe must rank exactly where the tag guess does — below
+    /// global settings. Neither was reviewed by a person, so neither may
+    /// outrank a setting somebody chose.
+    #[test]
+    fn a_published_recipe_ranks_below_global_settings() {
+        let hf_tags: Vec<String> = vec![];
+        let published = InferenceConfig {
+            temperature: Some(0.6),
+            ..InferenceConfig::default()
+        };
+        let origin = hf_origin_with("Qwen/Qwen3-4B", &hf_tags, Some(&published));
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+
+        let global = InferenceConfig {
+            temperature: Some(0.9),
+            ..InferenceConfig::default()
+        };
+        let (resolved, _) = InferenceConfig::default().resolve_with_profile_explained(
+            None,
+            model.inference_defaults.as_ref(),
+            Some(&global),
+            crate::domain::ModelSamplingContext {
+                is_reasoning: false,
+                defaults_origin: model.defaults_origin,
+            },
+        );
+
+        assert_eq!(
+            resolved.temperature,
+            Some(0.9),
+            "the operator's global setting must win over a fetched recipe"
+        );
+    }
+
+    /// A published recipe reaches a model with no `reasoning` tag too — the
+    /// lookup is about the author's repo, not about gglib's tagging.
+    #[test]
+    fn a_published_recipe_applies_without_a_reasoning_tag() {
+        let hf_tags: Vec<String> = vec![];
+        let published = InferenceConfig {
+            temperature: Some(0.4),
+            ..InferenceConfig::default()
+        };
+        let origin = hf_origin_with("some/Model", &hf_tags, Some(&published));
+
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+
+        assert_eq!(model.defaults_origin, Some(DefaultsOrigin::Published));
+    }
+
+    /// The degradation path, and the one that must keep working: every fetch
+    /// failure arrives here as `None`, and the import behaves exactly as it
+    /// did before the lookup existed.
+    #[test]
+    fn no_published_recipe_falls_back_to_the_tag_guess() {
+        let hf_tags = vec!["reasoning".to_string()];
+        let origin = hf_origin_with("unsloth/Qwen3-8B-GGUF", &hf_tags, None);
+
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+
+        assert_eq!(
+            model.inference_defaults,
+            Some(InferenceConfig::reasoning_profile())
+        );
+        assert_eq!(model.defaults_origin, Some(DefaultsOrigin::AutoDetected));
     }
 
     #[test]

@@ -295,9 +295,14 @@ pub fn resolve_sampling(
     // both — so an auto-detected guess can't silently outrank global
     // settings the way a deliberate per-model choice should. See
     // `DefaultsOrigin` and `InferenceConfig::resolve_with_profile`.
+    // Exhaustive on purpose — see the twin in `resolve_with_profile_explained`.
+    // A catch-all here would rank any future unreviewed origin above global
+    // settings, which is precisely backwards.
     let (user_model, auto_model) = match ctx.defaults_origin {
-        Some(DefaultsOrigin::AutoDetected) => (None, ctx.inference_defaults.as_ref()),
-        _ => (ctx.inference_defaults.as_ref(), None),
+        Some(DefaultsOrigin::AutoDetected | DefaultsOrigin::Published) => {
+            (None, ctx.inference_defaults.as_ref())
+        }
+        Some(DefaultsOrigin::User) | None => (ctx.inference_defaults.as_ref(), None),
     };
 
     // Highest priority first. The single ordering both resolution and
