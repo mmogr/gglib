@@ -223,7 +223,11 @@ a correct abstention into a confident misattribution.
 
 ### 7. A model's own GGUF moves the table too, and finding 1 said only flags do
 
-*Added 2026-08-09, from llama.cpp source at the pinned commit.*
+*Added 2026-08-09. Mechanism read from llama.cpp source at the pinned commit,
+then measured — see ADR 0003 finding 2's amendment for the table. Stamping
+`general.sampling.temp=0.33`, `top_k=17` and `min_p=0.011` into a copy of
+`Llama-3.2-3B-Instruct-UD-Q6_K_XL` moved all three in `/props` on a bare
+launch, and moved nothing else.*
 
 Finding 1 named launch flags as what blinds `/props` and implied they were the
 whole of it. They are one of three.

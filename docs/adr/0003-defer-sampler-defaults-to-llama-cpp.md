@@ -192,11 +192,30 @@ making that mistake" is the sentence that most reliably precedes making it.
 
 **Re-measured, not re-argued.** `--arm model-embedded` in
 `scripts/experiments/sampler_wire_semantics.py` stamps `general.sampling.*`
-into a copy of a GGUF and reads `/props` back, which is the positive control
-the model diff could not be. Scope: the stamping is verified against
-llama.cpp's own `GGUFReader`; the live `/props` reading has not yet been taken,
-for want of a servable model in the environment where this was written. The
-mechanism above is read from llama.cpp source at the pinned commit.
+into a copy of a GGUF and reads `/props` back — the positive control the model
+diff could not be. Run against the pin on
+`Llama-3.2-3B-Instruct-UD-Q6_K_XL`, one of the two models finding 1 was taken
+on, launched bare both times:
+
+```text
+  field              unstamped   stamped GGUF   /props reports
+  temperature              0.8           0.33   0.33   <- MOVED
+  top_k                     40             17   17     <- MOVED
+  min_p                   0.05          0.011   0.011  <- MOVED
+  top_p                   0.95              —   0.95   unmoved (not stamped)
+  repeat_penalty           1.0              —   1.0    unmoved
+  presence_penalty         0.0              —   0.0    unmoved (no GGUF key)
+  dry_multiplier           0.0              —   0.0    unmoved (no GGUF key)
+```
+
+Three of three stamped values reached `/props`; nothing unstamped moved. The
+unstamped column is finding 1's table reproduced exactly, which is what makes
+the stamped column a reading rather than a coincidence.
+
+The stamped model still serves: `POST /v1/chat/completions` returns coherent
+output with `finish_reason: stop`, so the metadata insertion did not corrupt
+the file. The copy grew by 128 bytes — three key-value pairs plus the data
+section's re-alignment.
 
 ### 3. The launch flags are inert twice over
 
