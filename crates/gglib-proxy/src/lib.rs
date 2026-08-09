@@ -17,6 +17,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod models;
 pub mod profiles;
+pub mod props;
 pub mod repair;
 pub mod sampling_audit;
 pub mod server;

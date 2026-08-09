@@ -173,6 +173,28 @@ pub struct SlotParams {
     pub samplers: Option<Vec<String>>,
 }
 
+impl SlotParams {
+    /// Look one parameter up by its wire name.
+    ///
+    /// For callers iterating a table of field names — [`crate::props`]'s
+    /// baseline check — rather than reading fields it knows statically.
+    /// An unknown name is `None`, indistinguishable from a field this build
+    /// did not report, which is correct: both mean "no reading".
+    #[must_use]
+    pub fn get(&self, field: &str) -> Option<f64> {
+        match field {
+            "temperature" => self.temperature,
+            "top_p" => self.top_p,
+            "top_k" => self.top_k,
+            "repeat_penalty" => self.repeat_penalty,
+            "presence_penalty" => self.presence_penalty,
+            "min_p" => self.min_p,
+            "dry_multiplier" => self.dry_multiplier,
+            _ => None,
+        }
+    }
+}
+
 /// Read a numeric field as `f64`, degrading a type change to `None`.
 ///
 /// `top_k` is an integer on the wire and the rest are floats; taking them
