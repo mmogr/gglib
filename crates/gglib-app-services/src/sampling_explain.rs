@@ -13,7 +13,8 @@
 //! differs from the one that runs.
 
 use gglib_core::domain::{
-    InferenceConfig, InferenceProfile, Model, ModelSamplingContext, ParamSource, SamplingLayer,
+    InferenceConfig, InferenceProfile, Model, ModelSamplingContext, ModelSamplingDefaults,
+    ParamSource, SamplingLayer, SamplingOverride,
 };
 use gglib_core::settings::Settings;
 use serde::{Deserialize, Serialize};
@@ -44,6 +45,78 @@ pub struct SamplingExplanationDto {
     /// Whether client-supplied sampling is trusted, which the table cannot
     /// show: that rung is never stored on the model.
     pub trust_client_sampling: bool,
+    /// What this model's own GGUF publishes, for the fields where it publishes
+    /// anything at all.
+    ///
+    /// Empty on almost every model, and empty is the *interesting* default:
+    /// carrying a `notPublished` entry per field would put five noise rows on
+    /// every ordinary model to say nothing. A parameter absent from this list
+    /// has no author recommendation to honour or displace.
+    ///
+    /// The provenance column alone cannot answer this. Since llama.cpp PR
+    /// #17120 a `general.sampling.*` key is the server's default for every
+    /// field gglib does not name, so `unset` means *the model's own number
+    /// applies* on a model that published one, and *the build's default
+    /// applies* on a model that did not — and those render identically without
+    /// this.
+    #[serde(default)]
+    pub published: Vec<PublishedDefaultDto>,
+}
+
+/// What gglib does with one field's published recommendation.
+///
+/// The wire form of [`SamplingOverride`](gglib_core::domain::SamplingOverride),
+/// minus its `NotPublished` arm — a field with nothing published is omitted
+/// from [`SamplingExplanationDto::published`] rather than carried as an empty
+/// verdict.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedDefaultDto {
+    /// The camelCase key this entry describes, e.g. `topP`. Joins to
+    /// [`ParamProvenanceDto::param`] so a surface can render the two together.
+    pub param: String,
+    /// The GGUF key carrying the value, e.g. `general.sampling.temp`.
+    ///
+    /// Shown rather than derived, because `repeat_penalty` is published under
+    /// `general.sampling.penalty_repeat` and no client should have to know
+    /// that.
+    pub key: String,
+    /// What gglib is doing about it.
+    #[serde(flatten)]
+    pub state: PublishedStateDto,
+}
+
+/// The verdict arm of [`PublishedDefaultDto`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum PublishedStateDto {
+    /// gglib names nothing, so llama.cpp applies the model author's value.
+    Deferred {
+        /// What the model author published, and what the sampler will use.
+        published: f64,
+    },
+    /// gglib sends the same number the model published.
+    Restated {
+        /// The value both sides name.
+        published: f64,
+    },
+    /// gglib sends a different number than the model published.
+    ///
+    /// The one arm a surface should render as a warning.
+    Overridden {
+        /// What the model author published.
+        published: f64,
+        /// What gglib puts on the wire instead.
+        sending: f64,
+    },
+    /// The model names the key and gglib could not read its value.
+    ///
+    /// Never rendered as an override: gglib cannot tell what it displaced, and
+    /// claiming otherwise is the mistake [ADR 0004] decision 3 forbids one
+    /// layer up.
+    ///
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    Unreadable,
 }
 
 /// Where one resolved parameter's value came from.
@@ -195,6 +268,18 @@ pub(crate) fn explain(
         model_ctx,
     );
 
+    // What gglib actually puts on the wire, read from the patch the request
+    // pipeline merges into the body rather than from the struct fields. A
+    // parameter missing from this map is one gglib names nowhere, which is
+    // exactly the condition under which the model's own GGUF value survives to
+    // the sampler.
+    let patch = resolved.to_openai_json_patch();
+    let published = ModelSamplingDefaults::from_metadata(&model.metadata)
+        .compare_all(|field| patch.get(field).and_then(serde_json::Value::as_f64))
+        .into_iter()
+        .filter_map(|(field, verdict)| published_default(field, &verdict))
+        .collect();
+
     SamplingExplanationDto {
         resolved,
         sources: sources
@@ -204,7 +289,50 @@ pub(crate) fn explain(
         profile: profile.map(|selected| selected.name.clone()),
         is_reasoning: model_ctx.is_reasoning,
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
+        published,
     }
+}
+
+/// Translate one override verdict into its wire form.
+///
+/// `None` for [`SamplingOverride::NotPublished`], which is how a field with no
+/// author recommendation stays out of the payload entirely.
+fn published_default(
+    field: &'static str,
+    verdict: &SamplingOverride,
+) -> Option<PublishedDefaultDto> {
+    let (key, state) = match verdict {
+        SamplingOverride::NotPublished => return None,
+        SamplingOverride::Deferred { key, published } => (
+            *key,
+            PublishedStateDto::Deferred {
+                published: *published,
+            },
+        ),
+        SamplingOverride::Restated { key, published } => (
+            *key,
+            PublishedStateDto::Restated {
+                published: *published,
+            },
+        ),
+        SamplingOverride::Overridden {
+            key,
+            published,
+            sending,
+        } => (
+            *key,
+            PublishedStateDto::Overridden {
+                published: *published,
+                sending: *sending,
+            },
+        ),
+        SamplingOverride::Unreadable { key, .. } => (*key, PublishedStateDto::Unreadable),
+    };
+    Some(PublishedDefaultDto {
+        param: wire_key(field).to_owned(),
+        key: key.to_owned(),
+        state,
+    })
 }
 
 #[cfg(test)]
@@ -578,5 +706,150 @@ mod tests {
             ..Settings::with_defaults()
         };
         assert!(explain(&model(), &settings, None).trust_client_sampling);
+    }
+
+    // =========================================================================
+    // What the model published
+    // =========================================================================
+
+    /// A model carrying `general.sampling.*` keys in its stored GGUF metadata.
+    fn model_publishing(pairs: &[(&str, &str)]) -> Model {
+        Model {
+            metadata: pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+            ..model()
+        }
+    }
+
+    fn published_for<'a>(dto: &'a SamplingExplanationDto, param: &str) -> &'a PublishedDefaultDto {
+        dto.published
+            .iter()
+            .find(|entry| entry.param == param)
+            .unwrap_or_else(|| panic!("no published entry for {param} in {:?}", dto.published))
+    }
+
+    /// **The payload cost on every ordinary model.** Almost no GGUF carries
+    /// these keys, and a `notPublished` entry per field would be five rows of
+    /// nothing on every model in the library.
+    #[test]
+    fn a_model_publishing_nothing_carries_an_empty_list() {
+        assert!(
+            explain(&model(), &Settings::with_defaults(), None)
+                .published
+                .is_empty()
+        );
+    }
+
+    /// The headline case: the model asks for one temperature and gglib sends
+    /// another, so both numbers have to reach the client.
+    #[test]
+    fn an_overridden_value_carries_both_numbers() {
+        let model = model_publishing(&[("general.sampling.temp", "0.33")]);
+        let settings = Settings {
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(1.0),
+                ..InferenceConfig::default()
+            }),
+            ..Settings::with_defaults()
+        };
+
+        let dto = explain(&model, &settings, None);
+        let entry = published_for(&dto, "temperature");
+
+        assert_eq!(entry.key, "general.sampling.temp");
+        match entry.state {
+            PublishedStateDto::Overridden { published, sending } => {
+                assert!((published - 0.33).abs() < 1e-9, "{published}");
+                assert!((sending - 1.0).abs() < 1e-6, "{sending}");
+            }
+            ref other => panic!("expected overridden, got {other:?}"),
+        }
+    }
+
+    /// **The one the provenance column cannot express.** `unset` renders the
+    /// same whether the model published a value or not, and the two mean
+    /// opposite things about what the sampler will do.
+    #[test]
+    fn a_deferred_value_is_reported_beside_an_unset_provenance() {
+        let model = model_publishing(&[("general.sampling.top_p", "0.71")]);
+
+        let dto = explain(&model, &Settings::with_defaults(), None);
+
+        assert_eq!(
+            source_for(&dto, "topP").kind,
+            ProvenanceKindDto::Unset,
+            "guards the premise: gglib names nothing here"
+        );
+        assert_eq!(
+            published_for(&dto, "topP").state,
+            PublishedStateDto::Deferred { published: 0.71 }
+        );
+    }
+
+    /// The `repeat_penalty` / `penalty_repeat` spelling gap is the backend's to
+    /// close — no client should have to know the two names are one knob.
+    #[test]
+    fn the_gguf_key_is_carried_rather_than_left_to_the_client_to_derive() {
+        let model = model_publishing(&[("general.sampling.penalty_repeat", "1.07")]);
+
+        let dto = explain(&model, &Settings::with_defaults(), None);
+        let entry = published_for(&dto, "repeatPenalty");
+
+        assert_eq!(entry.key, "general.sampling.penalty_repeat");
+        assert_ne!(entry.param, entry.key);
+    }
+
+    /// A value gglib cannot parse must reach the client as its own state, so
+    /// the UI can render unknown rather than picking a side.
+    #[test]
+    fn an_unreadable_value_is_its_own_state() {
+        let model = model_publishing(&[("general.sampling.temp", "warm")]);
+
+        let dto = explain(&model, &Settings::with_defaults(), None);
+
+        assert_eq!(
+            published_for(&dto, "temperature").state,
+            PublishedStateDto::Unreadable
+        );
+    }
+
+    /// The wire contract the frontend is written against. Asserted on the
+    /// serialized string for the reason the sources test gives: `to_value`
+    /// widens `f32` and would report numbers no client receives.
+    #[test]
+    fn published_entries_serialize_with_a_flattened_state_tag() {
+        let model = model_publishing(&[("general.sampling.temp", "0.33")]);
+        let settings = Settings {
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(1.0),
+                ..InferenceConfig::default()
+            }),
+            ..Settings::with_defaults()
+        };
+
+        let json = serde_json::to_string(&explain(&model, &settings, None)).expect("serializes");
+
+        assert!(json.contains(r#""param":"temperature""#), "{json}");
+        assert!(json.contains(r#""key":"general.sampling.temp""#), "{json}");
+        assert!(json.contains(r#""state":"overridden""#), "{json}");
+        assert!(json.contains(r#""published":0.33"#), "{json}");
+    }
+
+    /// A field no model can reach must never appear here, however the metadata
+    /// spells it — `presence_penalty` and `dry_multiplier` have no GGUF key.
+    #[test]
+    fn a_field_with_no_gguf_key_never_appears() {
+        let model = model_publishing(&[
+            ("general.sampling.presence_penalty", "0.0"),
+            ("general.sampling.dry_multiplier", "0.8"),
+        ]);
+
+        assert!(
+            explain(&model, &Settings::with_defaults(), None)
+                .published
+                .is_empty()
+        );
     }
 }

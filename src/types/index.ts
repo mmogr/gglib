@@ -138,6 +138,50 @@ export interface SamplingExplanation {
   isReasoning: boolean;
   /** Whether client-supplied sampling is trusted — a rung the table cannot show. */
   trustClientSampling: boolean;
+  /**
+   * What the model's own GGUF publishes, for the fields it publishes at all.
+   *
+   * Empty on almost every model, and absent entirely from a backend that
+   * predates the field — so treat `undefined` as "nothing published", never as
+   * an error.
+   */
+  published?: PublishedDefault[];
+}
+
+/**
+ * What gglib does with one field's published recommendation.
+ *
+ * Mirrors the backend `PublishedStateDto`. There is no `notPublished` arm: a
+ * field with no author recommendation is simply absent from the list.
+ *
+ * - `deferred` — gglib names nothing, so llama.cpp applies the model's number.
+ * - `restated` — gglib sends the same number the model published.
+ * - `overridden` — gglib sends a different number. The only one that warns.
+ * - `unreadable` — the published value could not be parsed, so gglib cannot say
+ *   what it displaced. Renders as unknown, never as an override.
+ */
+export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadable';
+
+/**
+ * One field's published value and what gglib does with it — the `published`
+ * entries of `GET /api/models/:id/explain`.
+ *
+ * Since llama.cpp PR #17120 a `general.sampling.*` key becomes the server's
+ * default for every field gglib does not name, so a `kind: 'unset'` provenance
+ * means *the model's own number applies* on a model that published one, and
+ * *the build's default applies* on one that did not. Those render identically
+ * without this.
+ */
+export interface PublishedDefault {
+  /** Joins to {@link ParamProvenance.param}. */
+  param: SamplingParamKey;
+  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
+  key: string;
+  state: PublishedState;
+  /** What the model author published. Absent only when `state` is `unreadable`. */
+  published?: number;
+  /** What gglib sends instead. Present only when `state` is `overridden`. */
+  sending?: number;
 }
 
 // ============================================================================
