@@ -331,13 +331,13 @@ impl fmt::Display for FieldIssue {
 }
 
 /// Render a JSON value compactly enough for a log line.
+///
+/// The budget is bytes, and the cut is taken at a character boundary — this
+/// renders a value the *client* sent, so it is arbitrary UTF-8 and `&s[..40]`
+/// would panic on the first request whose 40th byte fell inside a character.
+/// See [`crate::utils::text`].
 fn brief(v: &serde_json::Value) -> String {
-    let s = v.to_string();
-    if s.len() > 40 {
-        format!("{}…", &s[..40])
-    } else {
-        s
-    }
+    crate::utils::text::truncate_with_ellipsis(&v.to_string(), 40).into_owned()
 }
 
 /// Narrow a JSON number to the `f32` every sampling field stores.
@@ -2072,6 +2072,29 @@ mod tests {
         assert_eq!(cfg.dry_base, Some(1.75));
         assert_eq!(cfg.dry_allowed_length, Some(2));
         assert_eq!(cfg.dry_penalty_last_n, Some(64));
+    }
+
+    /// **A client-reachable panic.** The rejected-field log line renders the
+    /// offending value, and it used to do so with `&s[..40]`. `serde_json`
+    /// does not escape non-ASCII and nothing type-checks `temperature` before
+    /// the pipeline, so any client could take the request task down with a
+    /// long enough Greek string. Asserted here rather than only in
+    /// `utils::text` because this is the path that actually panicked.
+    #[test]
+    fn a_multibyte_client_value_is_reported_rather_than_panicking() {
+        let val = serde_json::json!({ "temperature": "α".repeat(60), "top_p": 0.9 });
+
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.temperature, None, "the bad field is dropped");
+        assert_eq!(cfg.top_p, Some(0.9), "and the rest still lands");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Rejected { field, .. }] if *field == "temperature"),
+            "{issues:?}"
+        );
+        // The rendered value must be valid UTF-8 and marked as truncated.
+        let rendered = issues[0].to_string();
+        assert!(rendered.contains('…'), "{rendered}");
     }
 
     /// llama.cpp answers 200 to this, so gglib accepting it is the whole

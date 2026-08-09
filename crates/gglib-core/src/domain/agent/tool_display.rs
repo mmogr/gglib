@@ -120,15 +120,14 @@ fn title_case_word(word: &str) -> String {
     })
 }
 
-/// Truncate a string to `max_len` characters, appending `…` if truncated.
+/// Truncate a string to at most `max_len` bytes, cutting at a char boundary.
+///
+/// No ellipsis: these are argument summaries that already sit inside quotes or
+/// a label, and a `…` reads as part of the path.
+/// [`crate::utils::text::truncate_with_ellipsis`] is the variant that marks
+/// the cut.
 fn truncate(s: &str, max_len: usize) -> &str {
-    if s.len() <= max_len {
-        s
-    } else {
-        // Find a valid char boundary at or before max_len.
-        let end = s.floor_char_boundary(max_len);
-        &s[..end]
-    }
+    crate::utils::text::truncate_at_char_boundary(s, max_len)
 }
 
 // =============================================================================
