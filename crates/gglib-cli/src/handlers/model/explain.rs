@@ -9,7 +9,9 @@
 //! cannot describe a hierarchy that differs from the one that runs.
 
 use anyhow::{Result, anyhow};
-use gglib_core::domain::{InferenceConfig, InferenceProfile, ModelSamplingContext};
+use gglib_core::domain::{
+    InferenceConfig, InferenceProfile, ModelSamplingContext, ModelSamplingDefaults,
+};
 
 use super::resolver;
 use crate::bootstrap::CliContext;
@@ -50,6 +52,10 @@ pub async fn execute(ctx: &CliContext, identifier: &str, profile: Option<&str>) 
             profile: selected.as_ref().map(|p| p.name.as_str()),
             is_reasoning: model_ctx.is_reasoning,
             trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
+            // Read from the same stored GGUF metadata the baseline check reads,
+            // so `explain` and the proxy's readback cannot disagree about what
+            // this model published.
+            model_sampling: ModelSamplingDefaults::from_metadata(&model.metadata),
         },
     );
 

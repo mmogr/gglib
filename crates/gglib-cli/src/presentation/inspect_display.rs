@@ -6,7 +6,7 @@
 
 use gglib_app_services::types::ModelDetailDto;
 use gglib_core::ModelCapabilities;
-use gglib_core::domain::DefaultsOrigin;
+use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS};
 
 use crate::presentation::{format_relative_time, print_separator};
 
@@ -147,6 +147,11 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
         }
     }
 
+    // ── Published Sampling Defaults ───────────────────────────────────────────
+    for line in published_sampling_lines(&dto.metadata) {
+        println!("{line}");
+    }
+
     // ── Timestamps ────────────────────────────────────────────────────────────
     println!();
     println!("  Timestamps");
@@ -172,6 +177,84 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     print_separator(SEP_WIDTH);
 }
 
+// ── Published sampling defaults ───────────────────────────────────────────────
+
+/// The GGUF key prefix llama.cpp reads sampler defaults from.
+const SAMPLING_PREFIX: &str = "general.sampling.";
+
+/// Render the `general.sampling.*` keys this model carries, if it carries any.
+///
+/// # Why these are not left to `--metadata`
+///
+/// Every other key in that dump describes the model. These *change what the
+/// server does*: since llama.cpp PR #17120, `common_init_sampler_from_model`
+/// overwrites `params.sampling` from them for every field no CLI flag sets, and
+/// gglib passes no sampler flags at all ([ADR 0003]). A key here is therefore
+/// the effective default for any parameter gglib leaves unset — which is most
+/// of them.
+///
+/// Behind `--metadata` they would sit in a several-hundred-line dictionary,
+/// alphabetically adjacent to `general.quantization_version`, indistinguishable
+/// from trivia. So they get their own always-on section.
+///
+/// This command reports what the *file* says, so it lists all twelve keys
+/// llama.cpp reads rather than only the five gglib compares — an unmodelled key
+/// still moves sampling, and hiding it here would make it unfindable. Which of
+/// them gglib overrides is [`super::explain_display`]'s question, and the
+/// pointer at the end says so rather than answering it twice.
+///
+/// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>) -> Vec<String> {
+    let mut published: Vec<(&String, &String)> = metadata
+        .iter()
+        .filter(|(k, _)| k.starts_with(SAMPLING_PREFIX))
+        .collect();
+    if published.is_empty() {
+        return Vec::new();
+    }
+    published.sort_by_key(|(k, _)| k.as_str());
+
+    let width = published
+        .iter()
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let mut lines = vec![
+        String::new(),
+        "  Published Sampling Defaults  (this model's own GGUF)".to_owned(),
+        "-".repeat(SEP_WIDTH),
+    ];
+    lines.extend(published.iter().map(|(key, value)| {
+        // Naming the gglib parameter a key maps onto is the whole reason the
+        // reverse lookup exists: `general.sampling.penalty_repeat` and
+        // `repeat_penalty` are the same knob under two spellings, and nothing
+        // else on screen connects them.
+        match gglib_field_for(key) {
+            Some(field) => format!("  {key:<width$} = {value}   ({field})"),
+            None => format!("  {key:<width$} = {value}   (not modelled by gglib)"),
+        }
+    }));
+    lines.push(String::new());
+    lines.push("  llama.cpp applies these to every field gglib does not send.".to_owned());
+    lines.push("  Run 'gglib model explain' to see which ones gglib overrides.".to_owned());
+    lines
+}
+
+/// The gglib parameter a `general.sampling.*` key maps onto, if gglib models
+/// it.
+///
+/// Reverse of [`MODEL_SAMPLING_KEYS`], which is the single mapping table — so
+/// this cannot name a pairing the resolution and baseline check disagree with.
+///
+/// [`MODEL_SAMPLING_KEYS`]: gglib_core::domain::MODEL_SAMPLING_KEYS
+fn gglib_field_for(key: &str) -> Option<&'static str> {
+    MODEL_SAMPLING_KEYS
+        .iter()
+        .find(|(_, gguf)| *gguf == key)
+        .map(|(field, _)| *field)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn flag_str(v: bool) -> &'static str {
@@ -193,5 +276,118 @@ fn print_opt_i32(label: &str, value: Option<i32>) {
 fn print_opt_u32(label: &str, value: Option<u32>) {
     if let Some(v) = value {
         println!("{label} : {v}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn meta(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
+    }
+
+    /// The ordinary model. Almost no GGUF carries these keys, so the section
+    /// must cost nothing on the models that do not.
+    #[test]
+    fn a_model_publishing_nothing_gets_no_section() {
+        let lines = published_sampling_lines(&meta(&[
+            ("general.architecture", "qwen3"),
+            ("general.quantization_version", "2"),
+        ]));
+        assert!(lines.is_empty(), "{lines:#?}");
+    }
+
+    /// A published key is shown with the gglib parameter it moves, because
+    /// `penalty_repeat` and `repeat_penalty` are the same knob under two
+    /// spellings and nothing else on screen connects them.
+    #[test]
+    fn a_published_key_names_the_gglib_parameter_it_moves() {
+        let lines = published_sampling_lines(&meta(&[("general.sampling.penalty_repeat", "1.07")]));
+
+        let row = lines
+            .iter()
+            .find(|l| l.contains("penalty_repeat"))
+            .expect("the key is listed");
+        assert!(row.contains("= 1.07"), "{row}");
+        assert!(row.contains("(repeat_penalty)"), "{row}");
+    }
+
+    /// **The seven keys gglib does not model still move sampling.** Listing
+    /// only the five it compares would make an `xtc_probability` that is
+    /// silently reshaping output impossible to find from this command.
+    #[test]
+    fn an_unmodelled_key_is_listed_and_marked_as_unmodelled() {
+        let lines = published_sampling_lines(&meta(&[
+            ("general.sampling.xtc_probability", "0.5"),
+            ("general.sampling.mirostat", "2"),
+        ]));
+
+        for key in ["xtc_probability", "mirostat"] {
+            let row = lines
+                .iter()
+                .find(|l| l.contains(key))
+                .unwrap_or_else(|| panic!("{key} is listed"));
+            assert!(row.contains("not modelled by gglib"), "{row}");
+        }
+    }
+
+    /// Only this prefix counts. A near-miss key is ordinary metadata and must
+    /// not be promoted into a section about what the server will do.
+    #[test]
+    fn only_the_general_sampling_prefix_is_collected() {
+        let lines = published_sampling_lines(&meta(&[
+            ("general.sampling.temp", "0.33"),
+            ("qwen3.sampling.temp", "0.44"),
+            ("sampling.temp", "0.55"),
+            ("general.sample_count", "10"),
+        ]));
+
+        assert_eq!(
+            lines.iter().filter(|l| l.contains("= 0.33")).count(),
+            1,
+            "{lines:#?}"
+        );
+        for stray in ["0.44", "0.55", "sample_count"] {
+            assert!(
+                !lines.iter().any(|l| l.contains(stray)),
+                "{stray} must not appear in {lines:#?}"
+            );
+        }
+    }
+
+    /// The section says what the keys do and hands the override question to
+    /// `explain`, rather than answering it here with a second implementation.
+    #[test]
+    fn the_section_points_at_explain_for_the_override_comparison() {
+        let lines = published_sampling_lines(&meta(&[("general.sampling.temp", "0.33")]));
+        let text = lines.join("\n");
+
+        assert!(text.contains("every field gglib does not send"), "{text}");
+        assert!(text.contains("gglib model explain"), "{text}");
+    }
+
+    /// Keys are aligned and sorted, matching the raw-metadata dump below them.
+    #[test]
+    fn keys_are_sorted_and_aligned() {
+        let lines = published_sampling_lines(&meta(&[
+            ("general.sampling.top_k", "17"),
+            ("general.sampling.temp", "0.33"),
+        ]));
+
+        let rows: Vec<&String> = lines
+            .iter()
+            .filter(|l| l.contains("general.sampling."))
+            .collect();
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].contains("temp "), "sorted: {rows:#?}");
+        assert!(rows[1].contains("top_k"), "sorted: {rows:#?}");
+
+        let equals: Vec<usize> = rows.iter().filter_map(|r| r.find(" = ")).collect();
+        assert_eq!(equals[0], equals[1], "aligned: {rows:#?}");
     }
 }

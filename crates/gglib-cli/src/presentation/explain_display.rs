@@ -6,7 +6,10 @@
 //! source. Plain text with no colour, matching [`super::inspect_display`] —
 //! a fact about a model is not a state, so it borrows no state colour.
 
-use gglib_core::domain::{FieldSources, InferenceConfig, ParamSource, SamplingLayer};
+use gglib_core::domain::{
+    FieldSources, InferenceConfig, ModelSamplingDefaults, ParamSource, SamplingLayer,
+    SamplingOverride,
+};
 
 use super::tables::print_separator;
 
@@ -29,6 +32,24 @@ const ARROW: &str = "\u{2190}";
 /// Shown for a parameter that resolved to no value at all.
 const ABSENT: &str = "\u{2014}";
 
+/// Indent for a note hanging under its parameter row.
+///
+/// Not aligned to the value column, which was the first choice and does not
+/// fit: `general.sampling.penalty_repeat` is 31 characters, and a note naming
+/// it plus both numbers overruns [`SEP_WIDTH`] from that far in. Indenting past
+/// the name column is enough to read as a sub-item of the row above.
+const NOTE_INDENT: usize = 6;
+
+/// Marks a note that reports gglib displacing the model author's own value.
+const MARK_OVERRIDE: char = '!';
+
+/// Marks a note that reports agreement or deferral — present so the reader can
+/// see the model published *something*, without it reading as a fault.
+const MARK_INFO: char = '\u{b7}';
+
+/// Marks a note gglib cannot draw a conclusion from.
+const MARK_UNKNOWN: char = '?';
+
 /// How the model's own defaults should be described, once resolved.
 ///
 /// The wording matches `inspect_display`'s, so the two commands describe the
@@ -43,6 +64,16 @@ pub struct ExplainContext<'a> {
     /// time. Shown as a caveat, since this command explains stored
     /// configuration and cannot see a live request.
     pub trust_client_sampling: bool,
+    /// What this model's own GGUF publishes, so a row can say whether gglib is
+    /// displacing the model author's recommendation.
+    ///
+    /// Since llama.cpp PR #17120 a `general.sampling.*` key becomes the
+    /// server's default for every field gglib does not name, so the provenance
+    /// column alone is no longer the whole story: `unset by design` means *the
+    /// model's own number applies* on a model that published one, and means
+    /// *the build's default applies* on a model that did not. Without this the
+    /// two render identically.
+    pub model_sampling: ModelSamplingDefaults,
 }
 
 /// Print the resolved parameters and their provenance.
@@ -95,20 +126,97 @@ pub fn explanation_lines(
         ("max_tokens", fmt_u32(resolved.max_tokens)),
     ];
 
+    // What gglib actually puts on the wire, read from the patch the request
+    // pipeline merges into the body rather than from the struct fields. A
+    // parameter missing from this map is one gglib names nowhere, which is
+    // precisely the condition under which the model's own GGUF value survives
+    // to the sampler. Deriving it any other way would let this table and the
+    // request disagree.
+    let patch = resolved.to_openai_json_patch();
+
     sources
         .iter()
         .zip(values)
-        .map(|((field, source), (value_field, value))| {
+        .flat_map(|((field, source), (value_field, value))| {
             debug_assert_eq!(
                 field, value_field,
                 "provenance and value rows must stay aligned"
             );
-            format!(
+            let row = format!(
                 "{field:<NAME_WIDTH$}{value:<VALUE_WIDTH$} {ARROW} {}",
                 describe(source, ctx)
-            )
+            );
+            let sending = patch.get(field).and_then(serde_json::Value::as_f64);
+            let note = published_note(&ctx.model_sampling.compare_field(field, sending))
+                .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
+            std::iter::once(row).chain(note)
         })
         .collect()
+}
+
+/// Describe what the model published for one field, if it published anything.
+///
+/// `None` for a field no model can reach (`presence_penalty`,
+/// `dry_multiplier`) and for one this model left alone — in both cases there is
+/// no author recommendation, so there is nothing to say and a note would be
+/// noise on every ordinary model.
+fn published_note(verdict: &SamplingOverride) -> Option<String> {
+    match verdict {
+        SamplingOverride::NotPublished => None,
+        SamplingOverride::Overridden {
+            key,
+            published,
+            sending,
+        } => Some(format!(
+            "{MARK_OVERRIDE} {key} = {}; gglib is sending {}",
+            fmt_published(*published),
+            fmt_published(*sending)
+        )),
+        // Named separately from `Restated` because the row above reads `—`, and
+        // a dash with no note is indistinguishable from a gap. This is ADR
+        // 0004's follow-up: the missing number is the model's, not nobody's.
+        SamplingOverride::Deferred { key, published } => Some(format!(
+            "{MARK_INFO} {key} = {}; gglib defers to it",
+            fmt_published(*published)
+        )),
+        SamplingOverride::Restated { key, published } => Some(format!(
+            "{MARK_INFO} {key} = {}; gglib sends the same value",
+            fmt_published(*published)
+        )),
+        SamplingOverride::Unreadable { key, .. } => Some(format!(
+            "{MARK_UNKNOWN} {key} is set to a value gglib cannot read"
+        )),
+    }
+}
+
+/// Render a value that reaches this module as `f64` — either read from the
+/// GGUF, or widened out of the request patch.
+///
+/// Deliberately *not* [`fmt_f32`]'s one-decimal rule. That rule exists so a
+/// resolved `1` does not read as a count, but these notes mix `top_k`'s genuine
+/// count with the sampling floats, and `general.sampling.top_k = 17.0` would
+/// read as an error in the file.
+///
+/// The precision trim matters more than it looks. gglib's own values are `f32`
+/// and reach here through JSON as `f64`, so a resolved temperature of `0.7`
+/// arrives as `0.699999988079071` — which would render an ordinary override as
+/// though gglib were sending some bizarre high-precision number, and overrun
+/// the table besides. `ProxySamplingPanel.formatValue` does the same thing to
+/// the same values for the same reason.
+fn fmt_published(value: f64) -> String {
+    format!("{}", trim_f32_artifact(value))
+}
+
+/// Round to six significant digits, the precision an `f32` actually carries.
+///
+/// The Rust half of `Number(value.toPrecision(6))`.
+fn trim_f32_artifact(value: f64) -> f64 {
+    if value == 0.0 || !value.is_finite() {
+        return value;
+    }
+    let magnitude = value.abs().log10().floor();
+    let factor = 10f64.powf(5.0 - magnitude);
+    (value * factor).round() / factor
 }
 
 /// Name the rung a parameter resolved from, in the user's terms.
@@ -198,7 +306,29 @@ mod tests {
             profile: None,
             is_reasoning: false,
             trust_client_sampling: false,
+            model_sampling: ModelSamplingDefaults::default(),
         }
+    }
+
+    /// A context for a model that published `general.sampling.*` keys.
+    fn ctx_publishing(pairs: &[(&str, &str)]) -> ExplainContext<'static> {
+        let metadata: std::collections::HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        ExplainContext {
+            model_sampling: ModelSamplingDefaults::from_metadata(&metadata),
+            ..ctx()
+        }
+    }
+
+    /// The line reporting what the model published for `field`, if any.
+    fn note_for(lines: &[String], field: &str) -> Option<String> {
+        let row = lines.iter().position(|l| l.starts_with(field))?;
+        lines
+            .get(row + 1)
+            .filter(|l| l.starts_with(' '))
+            .map(|l| l.trim().to_owned())
     }
 
     /// A model whose auto-detected recipe claims the temperature, with global
@@ -345,6 +475,185 @@ mod tests {
         // top_k and max_tokens are counts and must not gain a decimal.
         assert_eq!(fmt_i32(Some(20)), "20");
         assert_eq!(fmt_u32(Some(8192)), "8192");
+    }
+
+    // =========================================================================
+    // What the model published
+    // =========================================================================
+
+    /// The headline case. A `reasoning` model's auto-detected recipe names
+    /// `temperature: 1.0`; the model's own GGUF asks for `0.33`. gglib wins on
+    /// the wire, and the table has to say so rather than showing `1.0` beside a
+    /// provenance label that never mentions the model author.
+    #[test]
+    fn an_overridden_published_value_names_both_numbers() {
+        let resolved = InferenceConfig {
+            temperature: Some(1.0),
+            ..InferenceConfig::with_hardcoded_defaults()
+        };
+        let lines = explanation_lines(
+            &resolved,
+            &auto_detected_sources(),
+            ctx_publishing(&[("general.sampling.temp", "0.33")]),
+        );
+
+        let note = note_for(&lines, "temperature").expect("temperature carries a note");
+        assert!(note.starts_with(MARK_OVERRIDE), "{note}");
+        assert!(note.contains("general.sampling.temp = 0.33"), "{note}");
+        assert!(note.contains("gglib is sending 1"), "{note}");
+    }
+
+    /// **ADR 0004's follow-up, and the reason a note is shown at all for a
+    /// benign case.** A deferred field renders as `—`, which reads as "nothing
+    /// set" — when in fact the model's own number is what the sampler will use.
+    #[test]
+    fn a_deferred_field_says_the_missing_number_is_the_models() {
+        let resolved = InferenceConfig {
+            top_k: None,
+            ..InferenceConfig::with_hardcoded_defaults()
+        };
+        let lines = explanation_lines(
+            &resolved,
+            &FieldSources {
+                top_k: ParamSource::Unset,
+                ..auto_detected_sources()
+            },
+            ctx_publishing(&[("general.sampling.top_k", "17")]),
+        );
+
+        let row = lines
+            .iter()
+            .find(|l| l.starts_with("top_k"))
+            .expect("top_k is rendered");
+        assert!(
+            row.contains(ABSENT),
+            "the value column is still a dash: {row}"
+        );
+
+        let note = note_for(&lines, "top_k").expect("top_k carries a note");
+        assert!(note.contains("general.sampling.top_k = 17"), "{note}");
+        assert!(note.contains("defers to it"), "{note}");
+        assert!(
+            !note.starts_with(MARK_OVERRIDE),
+            "deferral is not an override: {note}"
+        );
+    }
+
+    /// An integer key must not grow a decimal — `general.sampling.top_k = 17.0`
+    /// reads as a defect in the file.
+    #[test]
+    fn a_published_integer_keeps_its_integer_form() {
+        assert_eq!(fmt_published(17.0), "17");
+        assert_eq!(fmt_published(0.33), "0.33");
+    }
+
+    /// **The artifact this note would otherwise publish.** gglib's values are
+    /// `f32` and arrive here widened, so an ordinary `0.7` reads as
+    /// `0.699999988079071` — which looks like a defect and overruns the table.
+    #[test]
+    fn an_f32_widened_value_renders_as_the_number_it_is() {
+        assert_eq!(fmt_published(f64::from(0.7_f32)), "0.7");
+        assert_eq!(fmt_published(f64::from(0.05_f32)), "0.05");
+        assert_eq!(fmt_published(f64::from(1.07_f32)), "1.07");
+        assert_eq!(fmt_published(f64::from(1.5_f32)), "1.5");
+
+        // Small values must keep their significant digits rather than being
+        // rounded toward zero — `min_p` is routinely three decimals.
+        assert_eq!(fmt_published(f64::from(0.011_f32)), "0.011");
+
+        assert_eq!(fmt_published(0.0), "0");
+    }
+
+    /// gglib restating a value it agrees with is not a fault and must not carry
+    /// the override marker, but it is still worth seeing.
+    #[test]
+    fn a_restated_value_is_marked_as_information_not_as_an_override() {
+        let resolved = InferenceConfig {
+            temperature: Some(0.7),
+            ..InferenceConfig::with_hardcoded_defaults()
+        };
+        let lines = explanation_lines(
+            &resolved,
+            &auto_detected_sources(),
+            ctx_publishing(&[("general.sampling.temp", "0.7")]),
+        );
+
+        let note = note_for(&lines, "temperature").expect("temperature carries a note");
+        assert!(note.starts_with(MARK_INFO), "{note}");
+        assert!(note.contains("the same value"), "{note}");
+    }
+
+    /// A value gglib cannot parse must read as unknown, never as an override —
+    /// gglib does not know what it displaced.
+    #[test]
+    fn an_unreadable_published_value_reads_as_unknown() {
+        let lines = explanation_lines(
+            &InferenceConfig::with_hardcoded_defaults(),
+            &auto_detected_sources(),
+            ctx_publishing(&[("general.sampling.temp", "warm")]),
+        );
+
+        let note = note_for(&lines, "temperature").expect("temperature carries a note");
+        assert!(note.starts_with(MARK_UNKNOWN), "{note}");
+        assert!(note.contains("cannot read"), "{note}");
+    }
+
+    /// The ordinary model — nothing published — must render exactly as before.
+    /// A note on every row would train the reader to ignore all of them.
+    #[test]
+    fn a_model_that_publishes_nothing_gains_no_notes() {
+        let lines = explanation_lines(
+            &InferenceConfig::with_hardcoded_defaults(),
+            &auto_detected_sources(),
+            ctx(),
+        );
+
+        assert_eq!(lines.len(), 11, "one row per parameter and nothing else");
+        assert!(lines.iter().all(|l| !l.starts_with(' ')), "{lines:#?}");
+    }
+
+    /// `presence_penalty` has no GGUF key, so gglib naming it can never be
+    /// overriding a model author — however the metadata is spelled.
+    #[test]
+    fn a_field_no_model_can_reach_never_gains_a_note() {
+        let resolved = InferenceConfig {
+            presence_penalty: Some(1.5),
+            ..InferenceConfig::with_hardcoded_defaults()
+        };
+        let lines = explanation_lines(
+            &resolved,
+            &auto_detected_sources(),
+            ctx_publishing(&[("general.sampling.presence_penalty", "0.0")]),
+        );
+
+        assert_eq!(note_for(&lines, "presence_penalty"), None, "{lines:#?}");
+    }
+
+    /// Every note has to fit the separator the table is drawn with, or the
+    /// alignment the rest of this module maintains is pointless.
+    #[test]
+    fn notes_fit_within_the_table_width() {
+        let lines = explanation_lines(
+            &InferenceConfig::with_hardcoded_defaults(),
+            &auto_detected_sources(),
+            ctx_publishing(&[
+                ("general.sampling.temp", "0.33"),
+                ("general.sampling.top_p", "0.71"),
+                ("general.sampling.top_k", "17"),
+                ("general.sampling.min_p", "0.011"),
+                ("general.sampling.penalty_repeat", "1.07"),
+            ]),
+        );
+
+        // Every reachable field published, so every one carries a note.
+        assert_eq!(lines.iter().filter(|l| l.starts_with(' ')).count(), 5);
+        for line in &lines {
+            assert!(
+                line.chars().count() + 2 <= SEP_WIDTH,
+                "{} chars: {line}",
+                line.chars().count()
+            );
+        }
     }
 
     /// Both caveats are always shown, and the client one reflects the setting.
