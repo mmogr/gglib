@@ -34,10 +34,12 @@ use serde::{Deserialize, Serialize};
 /// Which rung of a sampling ladder supplied one resolved parameter.
 ///
 /// [`Layer`](Self::Layer) carries an index into the ladder that was resolved,
-/// rather than a name, because the ladders differ: the request pipeline adds
-/// `cli` and `client` rungs above the five that
-/// [`SamplingLayer`] describes. Callers map the index back to whatever names
-/// their own ladder used.
+/// rather than a name, because the ladders differ. [`SamplingLayer`] describes
+/// the five-rung ladder
+/// [`resolve_with_profile_explained`](crate::domain::InferenceConfig::resolve_with_profile_explained)
+/// builds; the request pipeline builds a **six**-rung one, adding `cli` and
+/// `client` above the rest. Callers map the index back to whatever names their
+/// own ladder used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParamSource {
     /// The layer at this index in the resolved ladder named the value.
@@ -49,9 +51,13 @@ pub enum ParamSource {
     /// supply one. Distinct from [`Floor`](Self::Floor): here a lower layer
     /// may well have named a value and was deliberately passed over.
     FloorCoupled,
-    /// Nothing named it and the floor carries none either — `max_tokens` is
-    /// the only parameter with no floor value, deliberately. See
-    /// [`InferenceConfig::with_hardcoded_defaults`](crate::domain::InferenceConfig::with_hardcoded_defaults).
+    /// Nothing named it and the class floor carries none either, so no value
+    /// is sent and llama.cpp's own default applies. Which fields those are is
+    /// whatever
+    /// [`InferenceConfig::with_hardcoded_defaults`](crate::domain::InferenceConfig::with_hardcoded_defaults)
+    /// leaves unset — deliberately not restated here, because the last
+    /// restatement said "`max_tokens` is the only one" and stayed that way
+    /// through #741 adding three floorless DRY fields.
     Unset,
 }
 

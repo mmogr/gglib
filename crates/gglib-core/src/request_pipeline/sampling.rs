@@ -2,6 +2,21 @@
 //!
 //! Unlike [`super::messages`], nothing here reads `messages` — these transforms
 //! only ever touch top-level keys.
+//!
+//! **Tier B — Policy** ([ADR 0001]). llama-server is one process serving one
+//! model with no catalog, no profiles and no view of the client, so it cannot
+//! arbitrate between a `:coding` profile and a per-model default. The ladder,
+//! the trust gate and the provenance are permanently gglib's, and nothing here
+//! gates on [`RuntimeCapabilities`].
+//!
+//! The **floor beneath** the ladder is a separate question with a different
+//! answer: six of its seven values were measured to restate llama.cpp's own
+//! defaults, which makes them compensation rather than policy. See
+//! [ADR 0003], which decides they are deferred.
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
 
 use serde_json::Value;
 use tracing::debug;
@@ -125,13 +140,11 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
         .tags
         .iter()
         .any(|tag| tag.eq_ignore_ascii_case("reasoning"));
-    let class_floor = if model_is_reasoning {
+    let floor = if model_is_reasoning {
         InferenceConfig::reasoning_floor()
     } else {
         InferenceConfig::with_hardcoded_defaults()
     };
-
-    let floor = class_floor;
 
     // Whether an agentic-turn temperature ceiling is eligible to apply. Only
     // eligibility — whether it actually bites depends on where the resolved
@@ -393,12 +406,26 @@ mod tests {
 
     // ── Provenance ────────────────────────────────────────────────────────
 
-    /// The five names the pipeline's own ladder uses, for the provenance
+    /// The six names the pipeline's own ladder uses, for the provenance
     /// tests below.
-    const LAYER_NAMES: [&str; 5] = ["cli", "client", "profile", "model", "global"];
+    ///
+    /// Six, not five. This helper was 5-wide while `resolve_sampling` built a
+    /// 6-rung ladder, so nothing exercised the real index→name mapping and
+    /// three separate doc comments drifted to three different rung counts
+    /// before anyone noticed. Keep it the same width as the array at the top
+    /// of `resolve_sampling` or it stops testing the thing it looks like it
+    /// tests.
+    const LAYER_NAMES: [&str; 6] = [
+        "cli",
+        "client",
+        "profile",
+        "model",
+        "global",
+        "model (auto-detected)",
+    ];
 
     /// Resolve a ladder and render its provenance the way the debug line does.
-    fn provenance_of(layers: &[Option<&InferenceConfig>; 5]) -> String {
+    fn provenance_of(layers: &[Option<&InferenceConfig>; 6]) -> String {
         let floor = InferenceConfig::with_hardcoded_defaults();
         InferenceConfig::resolve_layers_with_sources(layers, &floor)
             .1
@@ -417,7 +444,7 @@ mod tests {
             ..Default::default()
         };
         let profile = temp(0.2);
-        let got = provenance_of(&[None, None, Some(&profile), Some(&model), None]);
+        let got = provenance_of(&[None, None, Some(&profile), Some(&model), None, None]);
 
         assert!(got.contains("temperature=profile"), "{got}");
         assert!(got.contains("presence_penalty=floor"), "{got}");
@@ -434,7 +461,7 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let got = provenance_of(&[None, None, None, Some(&model), None]);
+        let got = provenance_of(&[None, None, None, Some(&model), None, None]);
 
         assert!(got.contains("temperature=model"), "{got}");
         assert!(got.contains("presence_penalty=model"), "{got}");
@@ -445,7 +472,7 @@ mod tests {
     fn provenance_names_the_cli_layer() {
         let cli = temp(0.3);
         let client = temp(0.9);
-        let got = provenance_of(&[Some(&cli), Some(&client), None, None, None]);
+        let got = provenance_of(&[Some(&cli), Some(&client), None, None, None, None]);
 
         assert!(got.contains("temperature=cli"), "{got}");
     }
@@ -468,7 +495,7 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let layers = [Some(&cli), None, None, Some(&model), None];
+        let layers = [Some(&cli), None, None, Some(&model), None, None];
 
         let got = provenance_of(&layers);
         assert!(

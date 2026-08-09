@@ -109,9 +109,11 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
   dryAllowedLength: { default: null, min: 0, max: 20, step: 1 },
 
   /**
-   * Rust: unset at the floor; llama.cpp defaults to -1, meaning scan the whole
-   * context. Validation accepts -1 or non-negative, which is why `min` is -1
-   * rather than 0.
+   * Rust: unset at the floor; llama.cpp defaults to 64 — measured against the
+   * pinned build, see `scripts/experiments/sampler_wire_semantics.py`. This
+   * comment previously said -1, which is a legal *value* meaning "scan the
+   * whole context" but is not the default. Validation accepts -1 or
+   * non-negative, which is why `min` is -1 rather than 0.
    */
   dryPenaltyLastN: { default: null, min: -1, max: 8192, step: 1 },
 };

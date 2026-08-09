@@ -4,6 +4,25 @@
 //! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`,
 //! `presence_penalty`, `min_p`).
 //!
+//! **Tier B — Policy** ([ADR 0001]) for the hierarchy: the ordered fold,
+//! profiles, the user-set versus auto-detected split and the class floors are
+//! decisions llama-server is structurally not in a position to make, so
+//! nothing here gates on [`RuntimeCapabilities`].
+//!
+//! [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults) is
+//! the exception, and it is the same shape as ADR 0001's `truncation` caveat:
+//! the *policy* of having a floor is gglib's, but a floor *value* that equals
+//! llama.cpp's own default is a redundant assertion rather than a decision.
+//! Six of the seven were measured to be exactly that. [ADR 0003] decides they
+//! are deferred, leaving `temperature` — the one genuine divergence, 0.7
+//! against upstream's 0.8 — plus
+//! [`reasoning_floor`](InferenceConfig::reasoning_floor)'s class-aware
+//! overrides.
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
+//!
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
 //! - Global settings (`Settings.inference_defaults`)
@@ -347,9 +366,10 @@ impl InferenceConfig {
     /// This is the one fold every multi-layer resolution surface goes
     /// through: [`resolve_with_profile`] wraps it for the simple
     /// request/profile/model/global shape, and
-    /// [`crate::request_pipeline::sampling`] builds its own five-layer
-    /// (cli/client/profile/model/global) array and calls it directly. There
-    /// is exactly one place that decides what "wins" means.
+    /// [`crate::request_pipeline::sampling`] builds its own **six**-layer
+    /// (`cli`, `client`, `profile`, `model`, `global`, `model auto-detected`)
+    /// array and calls it directly. There is exactly one place that decides
+    /// what "wins" means.
     ///
     /// # Uncoupled parameters
     ///
@@ -503,9 +523,10 @@ impl InferenceConfig {
         result.merge_with(floor);
 
         // A field no layer claimed came from the floor — or from nowhere, when
-        // the floor has none either (only `max_tokens`). When a layer claimed
-        // the temperature, the trio's fall-through is the coupling rule at
-        // work rather than a plain absence, and says so.
+        // the floor has none either, which is whatever `with_hardcoded_defaults`
+        // leaves unset rather than a list worth restating here. When a layer
+        // claimed the temperature, the trio's fall-through is the coupling
+        // rule at work rather than a plain absence, and says so.
         let coupled = temperature.is_some();
         let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
             Some(i) => ParamSource::Layer(i),
@@ -855,10 +876,11 @@ impl InferenceConfig {
     /// across every gglib surface that does not need its own layer set;
     /// [`resolve_with_defaults`] delegates here so there is exactly one merge
     /// order to reason about and to test.
-    /// [`crate::request_pipeline::sampling`] needs a seventh layer (the
-    /// client's own request, sitting between `self` and `profile`) and calls
-    /// the underlying [`resolve_layers`] directly for that reason — the merge
-    /// semantics are identical either way.
+    /// [`crate::request_pipeline::sampling`] needs a sixth rung (the client's
+    /// own request, sitting *below* the CLI override rather than between
+    /// `self` and `profile`) and calls the underlying [`resolve_layers`]
+    /// directly for that reason — the merge semantics are identical either
+    /// way.
     ///
     /// # Why the profile sits above the model
     ///

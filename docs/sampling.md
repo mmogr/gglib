@@ -39,6 +39,26 @@ The full set of configurable parameters:
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
 | `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
 
+## The order llama.cpp applies them in
+
+gglib sends four truncation samplers on every request and never sets
+`--samplers`, so the order they compose in is llama.cpp's and it is
+load-bearing — `top_k` running before `min_p` is a different distribution from
+the reverse. Measured on the pinned build:
+
+```
+penalties → dry → top_n_sigma → top_k → typ_p → top_p → min_p → xtc → temperature
+```
+
+Note where `temperature` sits: **last**. The truncation samplers cut the
+candidate set from the *unscaled* distribution, and temperature reshapes
+whatever survives. This is worth knowing before reasoning about the coupling
+rule below, which is justified on `presence_penalty` and `repeat_penalty`
+competing with "how sharp the temperature makes the distribution".
+
+Re-measure with `scripts/experiments/sampler_wire_semantics.py` after a pin
+bump; the chain is a property of the build.
+
 ## Temperature coupling
 
 **`temperature`, `presence_penalty`, `repeat_penalty` and `min_p` are coupled.**
@@ -125,6 +145,20 @@ differently:
 Request override → Inference profile → Per-model defaults (user-set) → Global settings
   → Per-model defaults (auto-detected) → Floor
 ```
+
+Inside `gglib proxy` there is one more distinction. "Request override" is two
+separate rungs there — an operator's own `gglib proxy --temperature …` flags
+sit **above** the client's request parameters, because the person running the
+server stating what the server does cannot be true if any client silently
+outranks it. So the pipeline folds **six** rungs:
+
+```
+cli → client → profile → model (user-set) → global → model (auto-detected) → Floor
+```
+
+Six is the number to hold onto. Three separate doc comments in the code said
+five, six and seven at various points, and the provenance test helper was built
+five-wide against a six-wide ladder, so nothing caught the drift.
 
 A deliberate per-model choice (`gglib model update --presence-penalty …`, or an edit in
 the WebUI) keeps outranking global settings — that's what "per-model" is supposed to
@@ -312,7 +346,14 @@ gglib benchmark tune <model> --sweep dry_multiplier=0,0.4,0.8
 
 `dry_base`, `dry_allowed_length` and `dry_penalty_last_n` have no floor value.
 Left unset they are omitted from the request entirely and llama.cpp applies its
-own defaults (1.75, 2, and -1), which are reasonable starting points.
+own defaults (1.75, 2, and 64), which are reasonable starting points.
+
+Those three numbers are measured against the pinned build, not read from
+release notes — `scripts/experiments/sampler_wire_semantics.py`. This paragraph
+previously claimed `dry_penalty_last_n` defaults to `-1`, contradicting the
+table at the top of this document; the measured value is 64. `-1` is a legal
+*value* meaning "scan the whole context", which is probably how the two got
+confused, but it is not the default.
 
 ## The agentic-turn temperature ceiling
 
