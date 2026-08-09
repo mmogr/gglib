@@ -198,13 +198,12 @@ pub async fn fetch_props(client: &Client, base_url: &str) -> PropsResult {
 /// One field's answer to "does this build still default to what ADR 0003
 /// measured?".
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "verdict", rename_all = "camelCase")]
+#[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum BaselineVerdict {
     /// The build agrees with the recorded table.
     Matches,
     /// The build's default has moved. For a field gglib defers to, this is
     /// ADR 0003's reverse deletion criterion firing.
-    #[serde(rename_all = "camelCase")]
     Differs {
         /// What ADR 0003 recorded for the pinned build.
         expected: f64,
@@ -213,7 +212,6 @@ pub enum BaselineVerdict {
     },
     /// Nothing can be concluded. Either the field was absent from `/props`, or
     /// gglib's own launch flag is overwriting it — see the module docs.
-    #[serde(rename_all = "camelCase")]
     Indeterminate {
         /// Why, in words a dashboard can show.
         reason: String,
@@ -277,7 +275,6 @@ fn verdict_for(field: &str, expected: f64, observed: &SlotParams) -> BaselineVer
 
 /// The whole baseline reading, ready to surface.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct BaselineReport {
     /// Per-field verdicts, in [`UPSTREAM_DEFAULTS`] order.
     pub fields: Vec<BaselineField>,

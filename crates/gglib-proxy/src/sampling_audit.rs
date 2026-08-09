@@ -235,7 +235,7 @@ pub struct Divergence {
 ///
 /// Deliberately not a bare count — see the module docs on `Blind`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "state", rename_all = "camelCase")]
+#[serde(tag = "state", rename_all = "snake_case")]
 pub enum AuditState {
     /// The poller is running but no in-flight request has been caught yet.
     /// Expected on a quiet server, and on a busy one for a short while.
@@ -251,7 +251,6 @@ pub enum AuditState {
         reason: String,
     },
     /// Actively comparing.
-    #[serde(rename_all = "camelCase")]
     Comparing {
         /// Requests *observed in flight* — never requests sent. See the
         /// module docs: this instrument samples.
@@ -574,7 +573,6 @@ impl SamplingAuditStore {
 /// Serializable view of [`SamplingAuditStore`], carried on the dashboard
 /// snapshot.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SamplingAuditSnapshot {
     /// Whether the organ is observing, blind, or simply has not seen a
     /// request yet. Never collapse this to its counts when rendering.

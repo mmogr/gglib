@@ -1,0 +1,193 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import ProxySamplingPanel, { formatValue } from '../../../src/components/ProxySamplingPanel';
+import type { SamplingAuditSnapshot } from '../../../src/services/transport/types/dashboard';
+
+function audit(overrides: Partial<SamplingAuditSnapshot> = {}): SamplingAuditSnapshot {
+  return {
+    state: { state: 'not_yet_observed' },
+    skipped_ambiguous: 0,
+    client_fields_rejected: 0,
+    client_fields_discarded: 0,
+    recent_divergences: [],
+    baseline: null,
+    ...overrides,
+  };
+}
+
+describe('ProxySamplingPanel', () => {
+  // The rule the whole Tier C contract rests on. A blind organ and a healthy
+  // one both report zero divergences and mean opposite things; the backend
+  // keeps them apart as distinct states, and collapsing them here would throw
+  // that away at the last step.
+  it('renders a blind readback as a warning with its cause, never as health', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({
+          state: {
+            state: 'blind',
+            reason: 'llama-server was launched with --no-slots, so nothing can be read back.',
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/readback is blind/i)).toBeInTheDocument();
+    expect(screen.getByText(/--no-slots/)).toBeInTheDocument();
+    expect(screen.queryByText('Requests observed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Diverged')).not.toBeInTheDocument();
+  });
+
+  it('renders a clean readback with its counts, distinctly from blind', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({ state: { state: 'comparing', comparisons: 412, divergences: 0 } })}
+      />,
+    );
+
+    expect(screen.getByText('Requests observed')).toBeInTheDocument();
+    expect(screen.getByText('412')).toBeInTheDocument();
+    expect(screen.getByText('Diverged')).toBeInTheDocument();
+    expect(screen.queryByText(/readback is blind/i)).not.toBeInTheDocument();
+  });
+
+  it('says nothing has been caught yet rather than reporting a zero', () => {
+    render(<ProxySamplingPanel audit={audit()} />);
+    expect(screen.getByText(/no request caught mid-generation yet/i)).toBeInTheDocument();
+    expect(screen.queryByText('Diverged')).not.toBeInTheDocument();
+  });
+
+  it('lists a divergence with what was sent, what was seen, and where it came from', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({
+          state: { state: 'comparing', comparisons: 10, divergences: 1 },
+          recent_divergences: [
+            { field: 'temperature', sent: 0.7, observed: 1.5, provenance: 'profile' },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('temperature')).toBeInTheDocument();
+    expect(screen.getByText(/sent 0\.7 · server reports 1\.5/)).toBeInTheDocument();
+    expect(screen.getByText('(profile)')).toBeInTheDocument();
+  });
+
+  // Abstention is something a *sighted* organ does, so it must not read as a
+  // failure — but it must be visible, because a high count means the traffic
+  // cannot be attributed and no comparison is happening.
+  it('surfaces unattributable polls only when there are some', () => {
+    const { rerender } = render(
+      <ProxySamplingPanel
+        audit={audit({ state: { state: 'comparing', comparisons: 5, divergences: 0 } })}
+      />,
+    );
+    expect(screen.queryByText('Unattributable')).not.toBeInTheDocument();
+
+    rerender(
+      <ProxySamplingPanel
+        audit={audit({
+          state: { state: 'comparing', comparisons: 5, divergences: 0 },
+          skipped_ambiguous: 31,
+        })}
+      />,
+    );
+    expect(screen.getByText('Unattributable')).toBeInTheDocument();
+    expect(screen.getByText('31')).toBeInTheDocument();
+  });
+
+  describe('baseline check', () => {
+    // The state the instrument is actually in today: gglib's own launch flags
+    // overwrite the /props table, so an "all match" would be gglib agreeing
+    // with itself.
+    it('renders an inconclusive baseline as unknown, not as a match', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              conclusive: false,
+              fields: [
+                {
+                  field: 'temperature',
+                  verdict: {
+                    verdict: 'indeterminate',
+                    reason: 'gglib passes this as a llama-server launch flag',
+                  },
+                },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/could not be checked/i)).toBeInTheDocument();
+      expect(screen.getByText(/launch flag/i)).toBeInTheDocument();
+      expect(screen.queryByText(/match the values/i)).not.toBeInTheDocument();
+    });
+
+    // ADR 0003's reverse deletion criterion firing: a pin bump moved a default
+    // gglib defers to.
+    it('raises drift as a danger with both numbers', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              conclusive: true,
+              fields: [
+                { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
+                { field: 'min_p', verdict: { verdict: 'matches' } },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/defaults have moved/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/top_p: expected 0\.95, this build reports 0\.9/),
+      ).toBeInTheDocument();
+    });
+
+    it('reports a clean conclusive baseline plainly', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              conclusive: true,
+              fields: [
+                { field: 'top_p', verdict: { verdict: 'matches' } },
+                { field: 'min_p', verdict: { verdict: 'matches' } },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/All 2 sampler defaults match/i)).toBeInTheDocument();
+    });
+  });
+
+  // Discarding client values is the default configuration working, not a
+  // fault — but it is the answer to "why is my temperature ignored", so it has
+  // to be visible and it has to say why.
+  it('explains discarded client values rather than presenting them as errors', () => {
+    render(<ProxySamplingPanel audit={audit({ client_fields_discarded: 88 })} />);
+    expect(screen.getByText(/88 \(trust_client_sampling is off\)/)).toBeInTheDocument();
+  });
+
+  it('degrades to a plain note on a proxy that does not report the readback', () => {
+    render(<ProxySamplingPanel audit={null} />);
+    expect(screen.getByText(/does not report the sampling readback/i)).toBeInTheDocument();
+  });
+
+  // `0.05f32` widened to f64 is 0.05000000074505806. Printing that verbatim
+  // would make every correctly-transmitted value look like a defect.
+  it('trims f32-through-JSON noise out of displayed values', () => {
+    expect(formatValue(0.05000000074505806)).toBe('0.05');
+    expect(formatValue(0.949999988079071)).toBe('0.95');
+    expect(formatValue(1.5)).toBe('1.5');
+    expect(formatValue(40)).toBe('40');
+  });
+});
