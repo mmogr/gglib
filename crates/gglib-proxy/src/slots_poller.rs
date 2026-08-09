@@ -210,9 +210,16 @@ fn next_delay(result: &SlotsPollResult, current_backoff: Duration) -> Option<Dur
 ///
 /// Once per launch, not per poll: `default_generation_settings` cannot change
 /// while a server runs. See [`crate::props`] for what the check can and cannot
-/// currently conclude — today the answer is "nothing", because gglib's own
-/// launch flags overwrite the table it reads.
-async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditStore) {
+/// conclude.
+///
+/// # Returns whether a reading was actually stored
+///
+/// The caller latches on this rather than on having made the attempt. A
+/// `/props` read fails most often because llama-server has not finished
+/// starting, which is precisely when the first poll after a model change
+/// lands — so latching on the attempt lost the baseline for the whole of that
+/// model's run, and the surface said "not read yet" forever.
+async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditStore) -> bool {
     match fetch_props(client, base_url).await {
         PropsResult::Available(params) => {
             let report = BaselineReport::from_params(&params);
@@ -229,11 +236,50 @@ async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditSto
                 "read llama-server sampling defaults from /props"
             );
             audit.set_baseline(Some(report));
+            true
         }
         PropsResult::Unavailable(reason) => {
             debug!("proxy dashboard: /props unreadable ({reason}); no sampling baseline");
             audit.set_baseline(None);
+            false
         }
+    }
+}
+
+/// Decides when `/props` is due to be re-read.
+///
+/// Pulled out of the task body for the same reason [`audit_one_poll`] is: the
+/// interesting behaviour is a state transition across model swaps and failed
+/// reads, and it should be testable without a server, a timer or a spawned
+/// task.
+///
+/// The rule is "re-read whenever the running model is not the one we last read
+/// *successfully* for". Latching on the attempt instead is what lost the
+/// baseline for a whole run, and latching only on success without clearing
+/// first has its own hole — see [`Self::due`].
+#[derive(Default)]
+struct BaselineLatch {
+    read_for: Option<String>,
+}
+
+impl BaselineLatch {
+    /// Whether `/props` should be read for `model_name` now.
+    ///
+    /// Clears the latch as a side effect when it names a different model, so a
+    /// failed read cannot leave the *previous* model's name recorded. Without
+    /// that, swapping A → B where B's `/props` fails, then back to B → A,
+    /// would find A still latched and skip a read that never succeeded.
+    fn due(&mut self, model_name: &str) -> bool {
+        if self.read_for.as_deref() == Some(model_name) {
+            return false;
+        }
+        self.read_for = None;
+        true
+    }
+
+    /// Record that a read for `model_name` stored a baseline.
+    fn succeeded(&mut self, model_name: &str) {
+        self.read_for = Some(model_name.to_owned());
     }
 }
 
@@ -259,7 +305,11 @@ async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditSto
 ///
 /// A model change also triggers a one-off `/props` read for the baseline
 /// check. Keyed on the model name rather than on `just_started`, because this
-/// task has no launch hook and a name change is the only swap signal it sees.
+/// task has no launch hook and a name change is the only swap signal it sees —
+/// and on a *successful* read rather than on the attempt, so a server that was
+/// still starting when the first poll landed gets read on the next tick
+/// instead of going without a baseline for the rest of its run. See
+/// [`BaselineLatch`].
 pub fn spawn_slots_poller(
     runtime_port: Arc<dyn ModelRuntimePort>,
     client: Client,
@@ -270,15 +320,16 @@ pub fn spawn_slots_poller(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut backoff = BASE_POLL_INTERVAL;
-        let mut baseline_read_for: Option<String> = None;
+        let mut baseline = BaselineLatch::default();
 
         loop {
             let sleep_for = match runtime_port.current_model().await {
                 None => BASE_POLL_INTERVAL,
                 Some(target) => {
-                    if baseline_read_for.as_deref() != Some(target.model_name.as_str()) {
-                        read_baseline(&client, &target.base_url, &audit).await;
-                        baseline_read_for = Some(target.model_name.clone());
+                    if baseline.due(&target.model_name)
+                        && read_baseline(&client, &target.base_url, &audit).await
+                    {
+                        baseline.succeeded(&target.model_name);
                     }
 
                     let result = fetch_slots(&client, &target.base_url).await;
@@ -371,6 +422,60 @@ mod tests {
         assert_eq!(
             next_delay(&SlotsPollResult::Disabled, Duration::from_secs(1)),
             None
+        );
+    }
+
+    // ── The /props baseline latch ─────────────────────────────────────────
+
+    /// The ordinary path: read once per model, not once per second.
+    #[test]
+    fn a_baseline_is_read_once_per_model_and_not_again() {
+        let mut latch = BaselineLatch::default();
+
+        assert!(latch.due("m"));
+        latch.succeeded("m");
+        assert!(!latch.due("m"), "a stored baseline is not re-read every tick");
+    }
+
+    /// **The defect.** `/props` fails most often because llama-server has not
+    /// finished starting, which is exactly when the first poll after a model
+    /// change lands. Latching on the attempt meant one such failure left the
+    /// model with no baseline for the whole of its run.
+    #[test]
+    fn a_failed_read_is_retried_on_the_next_tick() {
+        let mut latch = BaselineLatch::default();
+
+        assert!(latch.due("m"));
+        // read_baseline returned false, so `succeeded` is never called.
+        assert!(latch.due("m"), "a failed read must not latch");
+        assert!(latch.due("m"), "and must keep being retried");
+
+        latch.succeeded("m");
+        assert!(!latch.due("m"));
+    }
+
+    #[test]
+    fn a_model_swap_forces_a_fresh_read() {
+        let mut latch = BaselineLatch::default();
+        latch.succeeded("model-a");
+
+        assert!(latch.due("model-b"), "a different model needs its own read");
+    }
+
+    /// The hole that "latch only on success" leaves if the latch is not also
+    /// cleared on the way in: B's failed read would leave A's name recorded,
+    /// and swapping back to A would skip a read whose result had since been
+    /// cleared by that failure.
+    #[test]
+    fn swapping_away_and_back_after_a_failure_still_reads() {
+        let mut latch = BaselineLatch::default();
+        latch.succeeded("model-a");
+
+        assert!(latch.due("model-b"));
+        // model-b's read fails: no `succeeded` call.
+        assert!(
+            latch.due("model-a"),
+            "model-a's baseline was cleared by model-b's attempt, so it must be re-read"
         );
     }
 
