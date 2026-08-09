@@ -42,10 +42,24 @@ confidently wrong answer rather than an obvious failure.
    Anything built on it inherits that limit, and `probe_echo_or_applied`
    exists to keep the claim honest rather than assumed.
 
-4. **Defaults could in principle be model-dependent.** If they were, the whole
-   comparison would be a property of one GGUF rather than of the build. Run
-   `--compare-model-defaults` against a second model and diff; it is one HTTP
-   call and it converts an assumption into a line in the report.
+4. **Defaults ARE model-dependent, and diffing two models does not prove
+   otherwise.** This trap was identified and the mitigation was too weak. Run
+   `--compare-model-defaults` against a second model and the tables match — but
+   they match whenever *both* models are silent, which is what "no
+   `general.sampling.*` in either GGUF" looks like. Two silent models cannot
+   distinguish "the build decides" from "the model decides and neither of these
+   two has an opinion".
+
+   Since llama.cpp PR #17120 (merged 2025-11-25, in the pin),
+   `common_init_sampler_from_model` overwrites `params.sampling` from the
+   model's own `general.sampling.*` keys for every field no CLI flag set, and
+   `/props` is rendered from that same struct. So `/props` answers "what will
+   this server with this model default to", never "what does this build default
+   to", and the two coincide only while the model is silent.
+
+   `--arm model-embedded` is the positive control the diff could not be: stamp
+   a key into a copy of a GGUF with `--stamp`, launch bare on it, and watch the
+   table move.
 
 ## What this does NOT measure
 
@@ -68,6 +82,8 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
+import struct
 import sys
 import threading
 import time
@@ -125,6 +141,53 @@ ODD = {
     "dry_multiplier": 0.321,
 }
 
+# ── Model-embedded sampling (llama.cpp PR #17120) ────────────────────────────
+#
+# The GGUF keys a model author can use to move llama.cpp's own defaults, keyed
+# by the short name this script takes on the command line. Valued by the GGUF
+# key, the wire name `/props` reports it under, and the GGUF value type — which
+# has to match what llama.cpp reads it back as (`get_int32` vs `get_float` in
+# `common_init_sampler_from_model`).
+#
+# Five of the twelve `general.sampling.*` keys map onto a parameter gglib has a
+# floor opinion about. `presence_penalty` and `dry_multiplier` have NO GGUF key
+# at all, which is why they stay build-attributable no matter what a model
+# ships — that asymmetry is the finding, not an implementation detail.
+
+GGUF_F32, GGUF_I32 = 6, 5
+
+MODEL_EMBEDDED = {
+    "temp": ("general.sampling.temp", "temperature", GGUF_F32),
+    "top_p": ("general.sampling.top_p", "top_p", GGUF_F32),
+    "top_k": ("general.sampling.top_k", "top_k", GGUF_I32),
+    "min_p": ("general.sampling.min_p", "min_p", GGUF_F32),
+    "penalty_repeat": ("general.sampling.penalty_repeat", "repeat_penalty", GGUF_F32),
+}
+
+# `general.sampling.*` keys llama.cpp reads that no gglib floor field tracks.
+# Listed so the report can say what a model asked for that gglib is not
+# watching, rather than silently ignoring it.
+MODEL_EMBEDDED_UNTRACKED = (
+    "general.sampling.sequence",
+    "general.sampling.xtc_probability",
+    "general.sampling.xtc_threshold",
+    "general.sampling.penalty_last_n",
+    "general.sampling.mirostat",
+    "general.sampling.mirostat_tau",
+    "general.sampling.mirostat_eta",
+)
+
+# What this build defaults to with a silent model, so `--stamp` can refuse a
+# value that could not possibly move anything. Same discipline as trap 1: a
+# control that cannot move proves nothing when it does not move.
+BUILD_DEFAULTS = {
+    "temp": 0.8,
+    "top_p": 0.95,
+    "top_k": 40,
+    "min_p": 0.05,
+    "penalty_repeat": 1.0,
+}
+
 LONG_PROMPT = (
     "Write a long, detailed essay on the history of clockmaking. "
     "At least 800 words, covering escapements, marine chronometers, and quartz."
@@ -136,6 +199,173 @@ LONG_PROMPT = (
 # probe's `/slots` read picks up the previous request's params and reports a
 # confidently wrong echo.
 ECHO_MAX_TOKENS = 256
+
+
+# ── GGUF metadata surgery ────────────────────────────────────────────────────
+#
+# Appending a key-value pair to a GGUF, in stdlib, so the positive control for
+# trap 4 is committed alongside the claim it supports rather than depending on
+# llama.cpp's `gguf-py` being checked out.
+#
+# The layout, all little-endian:
+#
+#   magic "GGUF" | version u32 | tensor_count u64 | kv_count u64
+#   kv block     : [ key:string, type:u32, value ] * kv_count
+#   tensor infos : [ name:string, n_dims:u32, dims:u64*, type:u32, offset:u64 ]
+#   padding      : to `general.alignment` (default 32)
+#   tensor data
+#
+# where string = len:u64 followed by that many bytes, unterminated.
+#
+# The one fact that makes this tractable: **a tensor's `offset` is relative to
+# the start of the data section**, not to the start of the file (`gguf-py`'s
+# reader computes `data_offs = start_offs + offset_tensor[0]`). So inserting
+# metadata shifts where the data section begins and rewrites none of the
+# offsets inside it. Only a value *skipper* is needed to find the block
+# boundaries — the values themselves are copied through as bytes.
+
+GGUF_MAGIC = b"GGUF"
+
+# Fixed-width value type ids → size in bytes. STRING (8) and ARRAY (9) are
+# variable and handled separately.
+_GGUF_FIXED = {0: 1, 1: 1, 7: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 10: 8, 11: 8, 12: 8}
+_GGUF_STRING, _GGUF_ARRAY = 8, 9
+
+
+class GgufError(Exception):
+    """The file is not a GGUF this script knows how to rewrite."""
+
+
+def _u32(b: bytes, o: int) -> int:
+    return struct.unpack_from("<I", b, o)[0]
+
+
+def _u64(b: bytes, o: int) -> int:
+    return struct.unpack_from("<Q", b, o)[0]
+
+
+def _skip_value(b: bytes, o: int, vtype: int) -> int:
+    """Byte offset just past one metadata value."""
+    if vtype in _GGUF_FIXED:
+        return o + _GGUF_FIXED[vtype]
+    if vtype == _GGUF_STRING:
+        return o + 8 + _u64(b, o)
+    if vtype == _GGUF_ARRAY:
+        elem, count = _u32(b, o), _u64(b, o + 4)
+        o += 12
+        if elem in _GGUF_FIXED:
+            return o + _GGUF_FIXED[elem] * count
+        for _ in range(count):
+            o = _skip_value(b, o, elem)
+        return o
+    raise GgufError(f"unknown GGUF value type {vtype}")
+
+
+def _scan_gguf(head: bytes) -> dict:
+    """Locate the block boundaries. `head` must cover through the tensor infos."""
+    if head[:4] != GGUF_MAGIC:
+        raise GgufError("not a GGUF file (bad magic)")
+    version = _u32(head, 4)
+    if version not in (2, 3):
+        raise GgufError(f"unsupported GGUF version {version}")
+    tensor_count, kv_count = _u64(head, 8), _u64(head, 16)
+
+    o = 24
+    kv_start = o
+    keys, alignment = set(), 32
+    for _ in range(kv_count):
+        klen = _u64(head, o)
+        key = head[o + 8 : o + 8 + klen].decode("utf-8", "replace")
+        o += 8 + klen
+        vtype = _u32(head, o)
+        o += 4
+        vstart = o
+        o = _skip_value(head, o, vtype)
+        keys.add(key)
+        if key == "general.alignment" and vtype == 4:
+            alignment = _u32(head, vstart)
+    kv_end = o
+
+    for _ in range(tensor_count):
+        o += 8 + _u64(head, o)  # name
+        ndims = _u32(head, o)
+        o += 4 + 8 * ndims + 4 + 8  # dims, type, offset
+    tensor_info_end = o
+
+    data_start = (tensor_info_end + alignment - 1) // alignment * alignment
+    return {
+        "kv_start": kv_start,
+        "kv_end": kv_end,
+        "tensor_info_end": tensor_info_end,
+        "data_start": data_start,
+        "kv_count": kv_count,
+        "keys": keys,
+        "alignment": alignment,
+    }
+
+
+def _read_head(path: Path) -> tuple[bytes, dict]:
+    """Read enough of the file to scan, growing the window if it was short."""
+    size = path.stat().st_size
+    want = min(size, 1 << 20)
+    while True:
+        with path.open("rb") as fh:
+            head = fh.read(want)
+        try:
+            return head, _scan_gguf(head)
+        except (struct.error, IndexError):
+            if want >= size:
+                raise GgufError("header region is truncated or malformed") from None
+            want = min(size, want * 8)
+
+
+def _kv_bytes(key: str, vtype: int, raw: str) -> bytes:
+    kb = key.encode()
+    out = struct.pack("<Q", len(kb)) + kb + struct.pack("<I", vtype)
+    if vtype == GGUF_F32:
+        return out + struct.pack("<f", float(raw))
+    if vtype == GGUF_I32:
+        return out + struct.pack("<i", int(raw))
+    raise GgufError(f"cannot encode value type {vtype}")
+
+
+def stamp_gguf(src: Path, dst: Path, pairs: dict[str, str]) -> None:
+    """Write `general.sampling.*` keys into a copy of `src`.
+
+    Appends rather than edits: a key the file already carries is refused, so a
+    stamped model can never end up with two values for one key and a reading
+    that depends on which one llama.cpp happens to take.
+    """
+    head, layout = _read_head(src)
+
+    additions = b""
+    for short, value in pairs.items():
+        gguf_key, _, vtype = MODEL_EMBEDDED[short]
+        if gguf_key in layout["keys"]:
+            raise GgufError(
+                f"{src.name} already carries {gguf_key}; this script only appends, "
+                "so stamping it again would leave two values for one key"
+            )
+        additions += _kv_bytes(gguf_key, vtype, value)
+
+    # The padding is recomputed, not copied: the metadata just grew, so the
+    # data section starts at a different offset and needs its own run-up to
+    # the alignment boundary. Copying the original padding would leave the
+    # tensor data misaligned by exactly `len(additions) % alignment`.
+    align = layout["alignment"]
+    shifted_end = layout["tensor_info_end"] + len(additions)
+    pad = b"\0" * (((shifted_end + align - 1) // align * align) - shifted_end)
+
+    with src.open("rb") as fin, dst.open("wb") as fout:
+        fout.write(head[:8])  # magic + version
+        fout.write(head[8:16])  # tensor_count
+        fout.write(struct.pack("<Q", layout["kv_count"] + len(pairs)))
+        fout.write(head[layout["kv_start"] : layout["kv_end"]])
+        fout.write(additions)
+        fout.write(head[layout["kv_end"] : layout["tensor_info_end"]])
+        fout.write(pad)
+        fin.seek(layout["data_start"])
+        shutil.copyfileobj(fin, fout, length=8 << 20)
 
 
 # ── Transport ────────────────────────────────────────────────────────────────
@@ -470,6 +700,51 @@ def probe_determinism(base: str, timeout: int, samples: int) -> dict:
     }
 
 
+def probe_model_embedded(base: str, timeout: int, expected: dict[str, str]) -> dict:
+    """Did the model's own `general.sampling.*` keys move `/props`?
+
+    The positive control trap 4's model-diff could not be. A stamped value
+    that reaches `/props` proves the default table is a property of the model
+    as well as of the build — which is what makes `UPSTREAM_DEFAULTS` alone an
+    insufficient baseline.
+    """
+    props = get(base, "/props", timeout)
+    if not isinstance(props, dict):
+        return {"status": "unmeasurable", "why": "/props did not return an object"}
+    params = (props.get("default_generation_settings") or {}).get("params")
+    if not isinstance(params, dict):
+        return {
+            "status": "unmeasurable",
+            "why": "no default_generation_settings.params in /props",
+        }
+
+    rows = []
+    for short, raw in expected.items():
+        _, wire, _ = MODEL_EMBEDDED[short]
+        want, got = float(raw), params.get(wire)
+        if got is None:
+            verdict = "unmeasurable — /props does not report this field"
+        elif abs(float(got) - want) < 1e-6:
+            verdict = "MOVED → the model decides this, not the build"
+        elif abs(float(got) - float(BUILD_DEFAULTS[short])) < 1e-6:
+            verdict = "unmoved — still the build default; was the model stamped?"
+        else:
+            verdict = "unexpected — neither the stamp nor the build default"
+        rows.append(
+            {
+                "param": short,
+                "wire": wire,
+                "stamped": want,
+                "build_default": BUILD_DEFAULTS[short],
+                "observed": got,
+                "verdict": verdict,
+            }
+        )
+
+    untracked = [k for k in MODEL_EMBEDDED_UNTRACKED]
+    return {"status": "ok", "rows": rows, "untracked_keys": untracked}
+
+
 # ── Report ───────────────────────────────────────────────────────────────────
 
 
@@ -521,6 +796,42 @@ def report_floor(defaults: dict, floor: dict, arm: str) -> list[dict]:
     return rows
 
 
+def report_model_embedded(res: dict) -> None:
+    print("── Model-embedded sampling defaults " + "─" * 42)
+    print()
+    if res["status"] != "ok":
+        print(f"  UNMEASURABLE: {res['why']}")
+        print()
+        return
+    print(f"  {'parameter':16} {'stamped':>10} {'build':>10} {'/props':>12}   verdict")
+    print(f"  {'-' * 16} {'-' * 10} {'-' * 10} {'-' * 12}   {'-' * 34}")
+    for r in res["rows"]:
+        print(
+            f"  {r['param']:16} {fmt(r['stamped']):>10} {fmt(r['build_default']):>10} "
+            f"{fmt(r['observed']):>12}   {r['verdict']}"
+        )
+    print()
+    moved = sum(1 for r in res["rows"] if r["verdict"].startswith("MOVED"))
+    print(f"  → {moved} of {len(res['rows'])} stamped values reached /props.")
+    print()
+    if moved:
+        print("  So `/props` answers 'what will this server with THIS MODEL default")
+        print("  to', not 'what does this build default to'. A baseline check that")
+        print("  compares it against a per-build constant reports drift that is the")
+        print("  model's recommendation, not a pin bump.")
+        print()
+    print("  gglib tracks no floor field for these keys, so a model setting them")
+    print("  moves sampling with nothing watching:")
+    for key in res["untracked_keys"]:
+        print(f"    {key}")
+    print()
+    print("  And these two have NO general.sampling.* key at all, so they stay")
+    print("  attributable to the build whatever a model ships:")
+    print("    presence_penalty")
+    print("    dry_multiplier")
+    print()
+
+
 def report(results: dict, floor: dict, note: str, arm: str) -> None:
     print()
     print("═" * 78)
@@ -532,6 +843,10 @@ def report(results: dict, floor: dict, note: str, arm: str) -> None:
         print(f"  note:  {note}")
     print("═" * 78)
     print()
+
+    if arm == "model-embedded":
+        report_model_embedded(results.get("model_embedded", {"status": "unmeasurable", "why": "not probed"}))
+        return
 
     report_floor(d, floor, arm)
 
@@ -607,10 +922,28 @@ def main() -> int:
     p.add_argument("--samples", type=int, default=5, help="draws per determinism arm")
     p.add_argument(
         "--arm",
-        choices=("defaults", "flagged"),
+        choices=("defaults", "flagged", "model-embedded"),
         default="defaults",
         help="`defaults` needs a server launched with NO sampler flags (see trap 1); "
-        "`flagged` needs one launched with gglib's floor as flags",
+        "`flagged` needs one launched with gglib's floor as flags; "
+        "`model-embedded` needs one launched bare on a GGUF stamped by --stamp",
+    )
+    p.add_argument(
+        "--stamp",
+        nargs=2,
+        metavar=("SRC", "DST"),
+        help="write the --set keys into a copy of SRC at DST and exit; no server "
+        "is contacted. Launch llama-server on DST, then re-run with "
+        "--arm model-embedded and the same --set flags",
+    )
+    p.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=f"model-embedded sampler to stamp or expect, one of "
+        f"{'/'.join(MODEL_EMBEDDED)} — e.g. temp=0.33. Repeatable. The same "
+        f"flags describe the stamp and the expectation, so the two cannot drift",
     )
     p.add_argument(
         "--launch-temp",
@@ -633,6 +966,64 @@ def main() -> int:
     p.add_argument("--note", default="", help="free text recorded in the header")
     p.add_argument("--json", action="store_true", help="emit raw results as JSON too")
     args = p.parse_args()
+
+    # `--set` is parsed and validated the same way for both modes, so a value
+    # that could not be stamped cannot be expected either.
+    stamped: dict[str, str] = {}
+    for item in args.set:
+        key, _, value = item.partition("=")
+        if key not in MODEL_EMBEDDED:
+            print(
+                f"error: --set {key}: not a model-embedded sampler. "
+                f"Choose from {', '.join(MODEL_EMBEDDED)}.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            numeric = float(value)
+        except ValueError:
+            print(f"error: --set {key}={value!r}: not a number", file=sys.stderr)
+            return 2
+        # Trap 1's discipline, applied to this arm: a control that cannot move
+        # proves nothing when it does not move.
+        if abs(numeric - float(BUILD_DEFAULTS[key])) < 1e-6:
+            print(
+                f"error: --set {key}={value} is already this build's default, so "
+                f"a /props reading of {value} would prove nothing. Pick a value "
+                f"no default could be mistaken for.",
+                file=sys.stderr,
+            )
+            return 2
+        stamped[key] = value
+
+    if args.stamp:
+        if not stamped:
+            print("error: --stamp needs at least one --set KEY=VALUE", file=sys.stderr)
+            return 2
+        src, dst = Path(args.stamp[0]), Path(args.stamp[1])
+        try:
+            stamp_gguf(src, dst, stamped)
+        except (GgufError, OSError) as exc:
+            print(f"error: could not stamp {src}: {exc}", file=sys.stderr)
+            return 2
+        print(f"wrote {dst} ({dst.stat().st_size} bytes)", file=sys.stderr)
+        for short, value in stamped.items():
+            print(f"  {MODEL_EMBEDDED[short][0]} = {value}", file=sys.stderr)
+        print(
+            f"\nnow: llama-server -m {dst} --port {args.port} -c 8192 -ngl 99\n"
+            f"then: {sys.argv[0]} --arm model-embedded "
+            + " ".join(f"--set {k}={v}" for k, v in stamped.items()),
+            file=sys.stderr,
+        )
+        return 0
+
+    if args.arm == "model-embedded" and not stamped:
+        print(
+            "error: --arm model-embedded needs the --set flags the model was "
+            "stamped with, so it knows what to look for",
+            file=sys.stderr,
+        )
+        return 2
 
     base = f"http://{args.host}:{args.port}"
 
@@ -672,7 +1063,10 @@ def main() -> int:
             )
             return 2
 
-    if args.arm == "flagged":
+    if args.arm == "model-embedded":
+        print("probing model-embedded sampling defaults ...", file=sys.stderr)
+        results["model_embedded"] = probe_model_embedded(base, args.timeout, stamped)
+    elif args.arm == "flagged":
         print("probing body-vs-launch precedence ...", file=sys.stderr)
         results["body_vs_launch"] = probe_body_vs_launch(
             base, args.timeout, args.launch_temp
