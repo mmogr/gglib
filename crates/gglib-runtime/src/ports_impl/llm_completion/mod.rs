@@ -355,11 +355,11 @@ impl LlmCompletionAdapter {
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
-        if report.messages_truncated > 0 {
+        if report.truncation.messages_truncated > 0 {
             tracing::info!(
-                messages_truncated = report.messages_truncated,
-                payload_chars_before = report.payload_chars_before,
-                payload_chars_after = report.payload_chars_after,
+                messages_truncated = report.truncation.messages_truncated,
+                payload_chars_before = report.truncation.payload_chars_before,
+                payload_chars_after = report.truncation.payload_chars_after,
                 "history truncated: reduced payload before sending upstream"
             );
         }

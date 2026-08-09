@@ -312,7 +312,7 @@ fn shape_request_body(
     let grammar_enforced = !grammar_before && value.get("grammar").is_some();
 
     match serde_json::to_vec(&value) {
-        Ok(v) => Ok((Bytes::from(v), report, grammar_enforced)),
+        Ok(v) => Ok((Bytes::from(v), report.truncation, grammar_enforced)),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
             Ok((body, TruncationReport::default(), false))

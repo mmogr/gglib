@@ -63,9 +63,49 @@ pub enum ParamSource {
 
 impl ParamSource {
     /// Whether the value came from the floor rather than from any layer.
+    ///
+    /// Written as an exhaustive `match` rather than a `matches!` so adding a
+    /// variant is a compile error here. See
+    /// [`is_deliberate_choice`](Self::is_deliberate_choice) for why that
+    /// distinction is not stylistic.
     #[must_use]
     pub const fn is_floor(self) -> bool {
-        matches!(self, Self::Floor | Self::FloorCoupled)
+        match self {
+            Self::Floor | Self::FloorCoupled => true,
+            Self::Layer(_) | Self::Unset => false,
+        }
+    }
+
+    /// Whether a person actually chose this value.
+    ///
+    /// `auto_detected_rung` is the index of the auto-detected per-model rung
+    /// in the ladder being asked about — a recipe written at import time is a
+    /// guess, not a choice, which is why it already ranks below global
+    /// settings.
+    ///
+    /// # Why this is a method and not a `matches!` at the call site
+    ///
+    /// It was a `matches!` in `request_pipeline::sampling`, listing the
+    /// variants that count as *unchosen*. That shape fails open in the worst
+    /// direction: a new `ParamSource` variant is not in the list, so it reads
+    /// as "deliberately chosen", and the agentic temperature ceiling silently
+    /// stops firing for it. No compile error, no test failure, and the
+    /// symptom is a ceiling that quietly does nothing — which is exactly how
+    /// #741's floor and #744's ceiling both shipped inert.
+    ///
+    /// Here the `match` is exhaustive and the arms are the *positive* case,
+    /// so a new variant breaks the build at the one place that defines what
+    /// "deliberate" means, and whoever adds it has to decide.
+    #[must_use]
+    pub const fn is_deliberate_choice(self, auto_detected_rung: usize) -> bool {
+        match self {
+            // A rung someone configured — unless it is the auto-detected
+            // recipe, which nobody reviewed.
+            Self::Layer(i) => i != auto_detected_rung,
+            // Nothing named it, or the coupling rule passed over whatever
+            // did. Neither is a choice about *this* parameter.
+            Self::Floor | Self::FloorCoupled | Self::Unset => false,
+        }
     }
 }
 

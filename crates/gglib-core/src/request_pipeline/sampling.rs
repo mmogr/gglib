@@ -22,7 +22,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
-use crate::domain::{DefaultsOrigin, InferenceConfig, ParamSource};
+use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -72,6 +72,89 @@ pub struct SamplingLayers {
     pub agentic_adjustments: bool,
 }
 
+/// Which class floor sat beneath the ladder.
+///
+/// `sources` records that a value came from "the floor" but not *which* one,
+/// and the explain surfaces cannot show it at all — they resolve stored
+/// configuration with no request in hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FloorClass {
+    /// [`InferenceConfig::with_hardcoded_defaults`].
+    Default,
+    /// [`InferenceConfig::reasoning_floor`] — a `reasoning`-tagged model.
+    Reasoning,
+}
+
+impl FloorClass {
+    /// The label the debug line and the readback use.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Reasoning => "reasoning",
+        }
+    }
+}
+
+/// Everything [`resolve_sampling`] decided, and why.
+///
+/// # Why this is returned rather than logged
+///
+/// It used to be neither: `resolve_sampling` computed `sources` and consumed
+/// them only inside a `debug!`. Three consequences, all of which cost real
+/// defects:
+///
+/// - **No test could assert on the pipeline's own provenance.** The tests
+///   that look like they do build a ladder by hand and call
+///   `resolve_layers_with_sources` directly, bypassing this function
+///   entirely — and did so five rungs wide against a six-rung ladder.
+/// - **The agentic ceiling's provenance interaction is invisible.** Six tests
+///   assert the resulting temperature; none could assert what provenance
+///   reports when the ceiling bites, because nothing was reachable.
+/// - **There is no intent side to compare a readback against.** Verifying
+///   that what gglib resolved is what llama-server applied needs both halves,
+///   and this is the half that did not exist outside a log line.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SamplingDecision {
+    /// The values written into the body.
+    pub resolved: InferenceConfig,
+    /// Which rung supplied each one. Indices are into [`Self::layer_names`].
+    pub sources: FieldSources,
+    /// The ladder's rung names, highest priority first.
+    pub layer_names: [&'static str; LADDER_RUNGS],
+    /// Which class floor sat beneath it.
+    pub floor: FloorClass,
+    /// Whether the request was eligible for the agentic-turn ceiling.
+    pub agentic_turn: bool,
+    /// The ceiling value, if it actually capped the temperature.
+    ///
+    /// `Some` does **not** mean `sources.temperature` is wrong: the cap is
+    /// applied after the fold and deliberately leaves the rung that supplied
+    /// the value named, because that rung did supply it — the ceiling capped
+    /// what it supplied.
+    pub agentic_ceiling_applied: Option<f32>,
+    /// Client fields that could not be read as sent. See [`FieldIssue`].
+    pub client_fields_rejected: Vec<FieldIssue>,
+    /// Client fields dropped by the trust gate rather than by a parse
+    /// failure — empty whenever `trust_client_sampling` is on.
+    pub client_fields_discarded: Vec<String>,
+    /// Whether the resolved values actually reached `body`.
+    ///
+    /// `false` when the body was not a JSON object, in which case everything
+    /// above describes a resolution that was computed and then not applied.
+    /// Distinguishing the two matters to a readback: nothing was sent, so
+    /// nothing can diverge.
+    pub applied: bool,
+}
+
+/// Rungs in the pipeline's ladder: `cli`, `client`, `profile`, `model`,
+/// `global`, `model (auto-detected)`.
+///
+/// Named because three separate doc comments drifted to three different
+/// numbers while the ladder stayed six wide, and because the provenance test
+/// helper was built five wide against it and so never checked the mapping.
+pub const LADDER_RUNGS: usize = 6;
+
 /// Environment kill switch for the agentic-turn adjustments.
 ///
 /// Truthy values (case-insensitive `1`, `true`, `yes`, `on`) disable it for
@@ -117,7 +200,16 @@ fn agentic_sampling_disabled_via_env() -> bool {
 /// gap-fills from below exactly as if it had never sent that key.
 ///
 /// A body that is not a JSON object is left alone.
-pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingLayers) {
+/// Read the client's own sampling parameters and apply the trust gate.
+///
+/// Returns the layer to fold, what could not be read, and what the gate
+/// dropped. Both lists are reported rather than swallowed: between them they
+/// are every way a value the client actually sent can fail to reach
+/// llama-server from this stage, and until recently neither was visible.
+fn read_client_layer(
+    body: &Value,
+    trust_client_sampling: bool,
+) -> (InferenceConfig, Vec<FieldIssue>, Vec<String>) {
     let (client_params, issues) = InferenceConfig::extract_client_sampling(body);
     if !issues.is_empty() {
         // Not `warn!`: a client sending a field gglib cannot read is a fact
@@ -135,31 +227,41 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // `max_tokens` stays client-authoritative regardless of trust: it is a
     // budget, not a taste, and dropping it would silently truncate the
     // client's own turns. See `Settings::trust_client_sampling`.
-    let client_layer = if layers.trust_client_sampling {
-        client_params
-    } else {
-        // What the gate is about to bin. This is the default posture and the
-        // highest-volume path in the system, so it is the largest silent
-        // discard gglib performs — a sustained non-empty list here says
-        // clients are trying to steer sampling and are being overruled,
-        // which an operator may well want to know.
-        let discarded: Vec<String> = client_params
-            .to_openai_json_patch()
-            .into_iter()
-            .map(|(k, _)| k)
-            .filter(|k| k != "max_tokens")
-            .collect();
-        if !discarded.is_empty() {
-            debug!(
-                discarded = %discarded.join(", "),
-                "client sampling: untrusted, dropping all but max_tokens"
-            );
-        }
-        InferenceConfig {
-            max_tokens: client_params.max_tokens,
-            ..InferenceConfig::default()
-        }
+    if trust_client_sampling {
+        return (client_params, issues, Vec::new());
+    }
+
+    // What the gate is about to bin. This is the default posture and the
+    // highest-volume path in the system, so it is the largest silent discard
+    // gglib performs — a sustained non-empty list here says clients are
+    // trying to steer sampling and are being overruled, which an operator may
+    // well want to know.
+    let discarded: Vec<String> = client_params
+        .to_openai_json_patch()
+        .into_iter()
+        .map(|(k, _)| k)
+        .filter(|k| k != "max_tokens")
+        .collect();
+    if !discarded.is_empty() {
+        debug!(
+            discarded = %discarded.join(", "),
+            "client sampling: untrusted, dropping all but max_tokens"
+        );
+    }
+
+    let gated = InferenceConfig {
+        max_tokens: client_params.max_tokens,
+        ..InferenceConfig::default()
     };
+    (gated, issues, discarded)
+}
+
+pub fn resolve_sampling(
+    body: &mut Value,
+    ctx: &ModelContext,
+    layers: &SamplingLayers,
+) -> SamplingDecision {
+    let (client_layer, issues, discarded) = read_client_layer(body, layers.trust_client_sampling);
 
     // The `reasoning` tag selects the floor beneath every layer here — a
     // model that degrades into repetitive loops under greedy decoding still
@@ -237,11 +339,7 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // actually set — cli, client, profile, per-model, global — stands.
     let ceiling = InferenceConfig::agentic_temperature_ceiling(model_is_reasoning);
     let auto_detected_rung = ordered.len() - 1;
-    let temperature_is_unchosen = matches!(
-        sources.temperature,
-        ParamSource::Floor | ParamSource::FloorCoupled | ParamSource::Unset
-    ) || sources.temperature
-        == ParamSource::Layer(auto_detected_rung);
+    let temperature_is_unchosen = !sources.temperature.is_deliberate_choice(auto_detected_rung);
     let ceiling_applied = agentic_turn
         && temperature_is_unchosen
         && resolved.temperature.is_some_and(|t| t > ceiling);
@@ -278,8 +376,25 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
         );
     }
 
+    let layer_names: [&'static str; LADDER_RUNGS] = ordered.map(|(name, _)| name);
+    let decision = |applied| SamplingDecision {
+        resolved: resolved.clone(),
+        sources,
+        layer_names,
+        floor: if model_is_reasoning {
+            FloorClass::Reasoning
+        } else {
+            FloorClass::Default
+        },
+        agentic_turn,
+        agentic_ceiling_applied: ceiling_applied.then_some(ceiling),
+        client_fields_rejected: issues.clone(),
+        client_fields_discarded: discarded.clone(),
+        applied,
+    };
+
     let Some(obj) = body.as_object_mut() else {
-        return;
+        return decision(false);
     };
 
     for (key, value) in resolved.to_openai_json_patch() {
@@ -295,11 +410,14 @@ pub fn resolve_sampling(body: &mut Value, ctx: &ModelContext, layers: &SamplingL
     // actually matches. The whole KV cache session persistence feature depends
     // on this staying true, so pin it rather than trusting it implicitly.
     obj.insert("cache_prompt".to_owned(), Value::Bool(true));
+
+    decision(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::ParamSource;
     use serde_json::json;
 
     fn temp(value: f32) -> InferenceConfig {
@@ -432,6 +550,134 @@ mod tests {
         assert_param(&body, "temperature", 0.2);
         assert_param(&body, "top_p", 0.87);
         assert_param(&body, "top_k", 20.0);
+    }
+
+    // ── The returned decision ─────────────────────────────────────────────
+
+    /// The pipeline's own provenance, end to end.
+    ///
+    /// Every other provenance test in this file rebuilds a ladder by hand and
+    /// calls `resolve_layers_with_sources` directly, so none of them touches
+    /// the ladder `resolve_sampling` actually builds. That is how three doc
+    /// comments drifted to three different rung counts unnoticed.
+    #[test]
+    fn the_returned_sources_describe_the_ladder_the_pipeline_built() {
+        let mut body = json!({ "messages": [], "temperature": 0.25 });
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(decision.layer_names.len(), LADDER_RUNGS);
+        assert_eq!(decision.layer_names[0], "cli");
+        assert_eq!(decision.layer_names[1], "client");
+        assert_eq!(
+            decision.layer_names[LADDER_RUNGS - 1],
+            "model (auto-detected)"
+        );
+
+        // The client rung is index 1, and the client is what named it.
+        assert_eq!(decision.sources.temperature, ParamSource::Layer(1));
+        assert_eq!(decision.resolved.temperature, Some(0.25));
+        assert!(decision.applied);
+        assert_eq!(decision.floor, FloorClass::Default);
+
+        // And the decision agrees with what actually reached the body.
+        assert_param(&body, "temperature", 0.25);
+    }
+
+    /// A body that is not an object resolves but does not apply. A readback
+    /// needs the two distinguishable: nothing was sent, so nothing can
+    /// diverge.
+    #[test]
+    fn a_non_object_body_reports_resolved_but_not_applied() {
+        let mut body = json!("not an object");
+        let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+        assert!(!decision.applied);
+        assert!(decision.resolved.temperature.is_some(), "still resolved");
+    }
+
+    /// The interaction six existing tests could only assert by value.
+    ///
+    /// When the ceiling bites, `sources.temperature` must still name the rung
+    /// that supplied the value — the cap does not replace that rung, it caps
+    /// what the rung supplied. Reporting `floor` here would make the log say
+    /// nobody chose a temperature on a model whose recipe did.
+    #[test]
+    fn the_ceiling_caps_the_value_without_rewriting_its_provenance() {
+        let mut body = json!({
+            "messages": [],
+            "tools": [{ "type": "function", "function": { "name": "f" } }],
+        });
+        let ctx = ModelContext {
+            tags: vec!["reasoning".into()],
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(1.0),
+                ..Default::default()
+            }),
+            defaults_origin: Some(DefaultsOrigin::AutoDetected),
+            ..ModelContext::passthrough()
+        };
+        let decision = resolve_sampling(
+            &mut body,
+            &ctx,
+            &SamplingLayers {
+                agentic_adjustments: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(decision.agentic_turn);
+        assert_eq!(decision.agentic_ceiling_applied, Some(0.6));
+        assert_eq!(decision.resolved.temperature, Some(0.6), "capped");
+        assert_eq!(
+            decision.sources.temperature,
+            ParamSource::Layer(LADDER_RUNGS - 1),
+            "provenance still names the auto-detected rung that supplied 1.0"
+        );
+        assert_eq!(decision.floor, FloorClass::Reasoning);
+    }
+
+    /// The trust gate's discard is the largest silent drop gglib performs, and
+    /// it is the default posture. It has to be nameable.
+    #[test]
+    fn the_trust_gate_reports_what_it_dropped() {
+        let mut body = json!({
+            "messages": [],
+            "temperature": 0.9,
+            "top_p": 0.5,
+            "max_tokens": 128,
+        });
+        let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+        let dropped = &decision.client_fields_discarded;
+        assert!(dropped.contains(&"temperature".to_string()), "{dropped:?}");
+        assert!(dropped.contains(&"top_p".to_string()), "{dropped:?}");
+        assert!(
+            !dropped.contains(&"max_tokens".to_string()),
+            "max_tokens survives the gate by design: {dropped:?}"
+        );
+    }
+
+    /// An unreadable client field is carried out rather than swallowed.
+    #[test]
+    fn an_unreadable_client_field_is_reported_on_the_decision() {
+        let mut body = json!({ "messages": [], "temperature": "0.7" });
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(decision.client_fields_rejected.len(), 1);
     }
 
     // ── Provenance ────────────────────────────────────────────────────────
