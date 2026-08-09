@@ -20,10 +20,17 @@
 //! plus [`tolerant_u64`] on every numeric field whose *type* has been known
 //! to shift (so a future schema change degrades that one field to `None`
 //! instead of failing the entire response). Fields we don't care about
-//! (`params`, `speculative`, etc.) are simply never named, so serde
+//! (`speculative`, `n_keep`, etc.) are simply never named, so serde
 //! silently drops them — no `deny_unknown_fields`, no brittle JSON-pointer
 //! probing, no risk of a partially-unknown schema causing the whole
 //! response to fail to parse.
+//!
+//! `params` used to be on that list. It carries the sampler settings
+//! llama-server actually parsed for the request occupying the slot — the
+//! wire evidence #621 and #745 were both read by hand — so it is now named
+//! and handed to [`crate::sampling_audit`]. It appears **only on a slot that
+//! is processing**; an idle slot omits it entirely, which is why that audit
+//! samples rather than censuses.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -96,6 +103,15 @@ pub struct SlotSnapshot {
     /// Whether this slot is actively processing a request right now.
     #[serde(default)]
     pub is_processing: bool,
+    /// The sampler settings llama-server parsed for the request in this
+    /// slot, when one is in flight.
+    ///
+    /// `None` on an idle slot — llama.cpp omits the whole object rather than
+    /// reporting the previous request's values, which is convenient: there
+    /// are no stale readings to guard against. See
+    /// [`crate::sampling_audit`].
+    #[serde(default)]
+    pub params: Option<crate::sampling_audit::SlotParams>,
     /// Legacy field (older llama.cpp versions): tokens already resident in
     /// this slot's KV cache. Superseded by `n_prompt_tokens`/`next_token` in
     /// current upstream versions, where it is simply absent — kept only as

@@ -18,6 +18,7 @@ pub mod metrics;
 pub mod models;
 pub mod profiles;
 pub mod repair;
+pub mod sampling_audit;
 pub mod server;
 pub mod settings_cache;
 pub mod slot_eviction;
