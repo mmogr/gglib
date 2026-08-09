@@ -379,7 +379,7 @@ mod tests {
         let wire = serde_json::to_string(&dto).unwrap();
         let value: serde_json::Value = serde_json::from_str(&wire).unwrap();
 
-        assert_eq!(value["resolved"]["topP"], json!(0.95), "{wire}");
+        assert_eq!(value["resolved"]["temperature"], json!(0.7), "{wire}");
         assert_eq!(value["isReasoning"], json!(false));
         assert_eq!(value["trustClientSampling"], json!(false));
         assert_eq!(value["profile"], json!(null));
@@ -392,6 +392,23 @@ mod tests {
             value["sources"][10],
             json!({ "param": "maxTokens", "kind": "unset" })
         );
+
+        // ADR 0003: an untuned model resolves exactly one sampler, and every
+        // other field is llama.cpp's to decide. Asserted on the wire because
+        // this is the shape the frontend renders — a `null` here has to read
+        // as "llama.cpp's default", never as "nothing configured this".
+        assert_eq!(value["resolved"]["topP"], json!(null), "{wire}");
+        assert_eq!(value["resolved"]["minP"], json!(null), "{wire}");
+        assert_eq!(value["resolved"]["dryMultiplier"], json!(null), "{wire}");
+        for entry in value["sources"].as_array().expect("sources is an array") {
+            let param = entry["param"].as_str().unwrap();
+            let expected = if param == "temperature" {
+                "floor"
+            } else {
+                "unset"
+            };
+            assert_eq!(entry["kind"], json!(expected), "{param} in {wire}");
+        }
     }
 
     /// Order is the contract: the client renders `sources` as it arrives.
@@ -546,7 +563,16 @@ mod tests {
 
         let dto = explain(&tuned, &Settings::with_defaults(), Some(&coding));
 
-        assert_eq!(dto.resolved.presence_penalty, Some(0.0));
+        // The model's 1.5 was discarded because the profile claimed the
+        // temperature, and since ADR 0003 the floor has no `presence_penalty`
+        // to land on — so nothing is sent and llama.cpp's own default applies.
+        assert_eq!(dto.resolved.presence_penalty, None);
+
+        // The provenance must still name the coupling rule. Reporting `Unset`
+        // here would say "nobody named a value" about a parameter a layer did
+        // name and the rule deliberately passed over, which is the one thing
+        // the resolved number alone can never explain. See the arm ordering in
+        // `resolve_layers_with_sources`.
         assert_eq!(
             source_for(&dto, "presencePenalty").kind,
             ProvenanceKindDto::FloorCoupled

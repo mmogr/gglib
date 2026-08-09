@@ -27,17 +27,37 @@ The full set of configurable parameters:
 
 | Parameter | CLI flag | Range | Floor | Notes |
 |-----------|----------|-------|-------|-------|
-| `temperature` | `--temperature` | 0.0 – 2.0 | 0.7 | |
-| `top_p` | `--top-p` | 0.0 – 1.0 | 0.95 | |
-| `top_k` | `--top-k` | int | 40 | |
+| `temperature` | `--temperature` | 0.0 – 2.0 | **0.7** | The only value gglib asserts; upstream's is 0.8 |
+| `top_p` | `--top-p` | 0.0 – 1.0 | *(deferred)* | llama.cpp default 0.95 |
+| `top_k` | `--top-k` | int | *(deferred)* | llama.cpp default 40 |
 | `max_tokens` | `--max-tokens` | int | *(none)* | Deliberately unset — see below |
-| `repeat_penalty` | `--repeat-penalty` | > 0.0 | 1.0 | |
-| `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | 0.0, or 1.0 on a `reasoning`-tagged model | See below |
-| `min_p` | `--min-p` | 0.0 – 1.0 | 0.05, or 0.0 on a `reasoning`-tagged model | Matches llama.cpp's own default — see below |
-| `dry_multiplier` | `--dry-multiplier` | 0.0 – 5.0 | 0.0 (disabled) | DRY repetition penalty; see below |
+| `repeat_penalty` | `--repeat-penalty` | > 0.0 | *(deferred)* | llama.cpp default 1.0 |
+| `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | *(deferred)*, or **1.0** on a `reasoning`-tagged model | llama.cpp default 0.0; see below |
+| `min_p` | `--min-p` | 0.0 – 1.0 | *(deferred)*, or **0.0** on a `reasoning`-tagged model | llama.cpp default 0.05; see below |
+| `dry_multiplier` | `--dry-multiplier` | 0.0 – 5.0 | *(deferred)* | llama.cpp default 0.0, i.e. DRY off |
 | `dry_base` | `--dry-base` | > 1.0 | *(none)* | llama.cpp default 1.75 |
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
 | `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
+
+**"Deferred" means gglib sends nothing and llama.cpp's own default applies.**
+[ADR 0003](adr/0003-defer-sampler-defaults-to-llama-cpp.md) measured each of
+those six against a bare `llama-server` on the pinned build and found gglib's
+floor value was *exactly* the upstream default in every case. Restating a value
+that is already the answer is not a decision — it is a redundant assertion that
+silently overrides whatever upstream chooses next, which is precisely how #739
+shipped a `min_p` floor that disabled the tail cut on every untuned request.
+
+The numbers a model actually decodes at are unchanged. What changed is who
+supplies them, and therefore what happens when llama.cpp changes its mind:
+gglib now follows rather than overrides. The pinned build plus the `/props`
+baseline check in
+[ADR 0004](adr/0004-observe-the-sampling-boundary.md) are what make that safe —
+a pin bump that moves one of these defaults is flagged rather than absorbed.
+
+gglib also no longer passes *any* sampler flags on the llama-server command
+line. They were inert for request behaviour (the request body wins) and
+actively harmful to observation, because a launch flag overwrites the `/props`
+table the baseline check reads.
 
 ## The order llama.cpp applies them in
 
@@ -81,12 +101,21 @@ to `0.0` on any model whose defaults name a temperature, which is every
 `reasoning`-tagged model.
 
 The floor itself is class-aware for two fields, `presence_penalty` and
-`min_p`: a plain `0.0` presence penalty is fine for most models, but a
+`min_p`. Most models get neither — both are deferred to llama.cpp — but a
 `reasoning`-tagged model (Qwen3.6, DeepSeek-R1, QwQ, …) degrades into
-repetitive reasoning loops under greedy or near-greedy decoding, so its floor
-is `1.0` — a real guard, without asserting the model's full tuned recipe onto
-a temperature it wasn't chosen for. `top_p`, `top_k` and `max_tokens` are
-uncoupled and fill from any layer independently regardless of temperature.
+repetitive reasoning loops under greedy or near-greedy decoding, so gglib
+asserts `presence_penalty: 1.0` for those: a real guard, without asserting the
+model's full tuned recipe onto a temperature it wasn't chosen for.
+
+**This makes the floor non-uniform in what it names, not just in what it names
+it as.** A reasoning model is sent `min_p: 0.0` on the wire; every other model
+is sent no `min_p` key at all and decodes at llama.cpp's 0.05. That asymmetry
+is deliberate — one is a measured divergence from upstream, the other is
+agreement with it — but it will look like a bug to anyone diffing two requests
+without this paragraph.
+
+`top_p`, `top_k` and `max_tokens` are uncoupled and fill from any layer
+independently regardless of temperature.
 
 **`max_tokens` has no fallback, by design.** Resolution force-writes every set
 parameter into the outgoing request, so a fallback here would cap *every* request
@@ -95,15 +124,19 @@ that did not name its own — silently truncating long answers. Left unset, no
 `-1`, generating until a stop token or the context limit. Explicit per-request,
 per-profile and per-model values are unaffected.
 
-**`min_p` restates llama.cpp's default rather than disabling itself.** The floor
-is `0.05`, the same value llama.cpp applies when the flag is omitted. It is
-stated here rather than left out because resolution force-writes every set
-parameter, so llama-server receives a fully specified request and the value
-stays visible as `min_p=floor` in provenance. A `0.0` floor would not read as
-"unset" — it would be written too, explicitly turning off the tail cut on every
-request that did not set its own. `reasoning`-tagged models floor at `0.0`
-instead, matching Qwen3.6's guidance to disable min-p; that is the only other
-parameter besides `presence_penalty` whose floor depends on the model.
+**`min_p` is deferred rather than restated, and that took two attempts.**
+The floor was once `0.0`, which reads like an absence but was not one:
+resolution force-writes every set parameter, so it explicitly turned off the
+tail cut on every request that did not set its own. #739 fixed the behaviour by
+restating llama.cpp's `0.05` — correct in its effect, and it kept the value
+"visible as `min_p=floor` in provenance" at the cost of a permanent silent
+override. Deferral answers the same objection better: provenance reports it as
+unset *because it is unset*, and the readback names llama.cpp's own number
+instead of gglib restating it.
+
+`reasoning`-tagged models still assert `0.0`, matching Qwen3.6's guidance to
+disable min-p. That is a measured divergence from upstream, so it stays
+force-written.
 
 ## Reasoning model auto-defaults
 
@@ -201,8 +234,15 @@ settings.
 temperature      0.2     ← profile 'coding'
 top_k            20      ← global settings
 presence_penalty 1.0     ← reasoning floor (coupled to temperature layer)
+top_p            —       ← unset by design (llama.cpp's own default applies)
 max_tokens       —       ← unset by design
 ```
+
+A `—` is not a gap. Since ADR 0003 it is the normal answer for six of the seven
+samplers on a model that is not `reasoning`-tagged: gglib names no value and
+llama.cpp supplies its own. The row is still worth printing, because "gglib
+chose 0.95" and "llama.cpp chose 0.95" are different facts and only one of them
+changes when the pinned build moves.
 
 ## Client sampling authority
 
@@ -327,7 +367,8 @@ DRY penalises a token in proportion to the length of the repeated *sequence* it
 would extend, which is the shape degenerate loops actually take in long agentic
 sessions.
 
-The floor leaves it off (`dry_multiplier: 0.0`, llama.cpp's own default).
+The floor names nothing, so llama.cpp's own default of `0.0` applies and DRY
+stays off — by silence now rather than by gglib restating the zero.
 Turning it on for every untuned model is a tuning decision, not a default —
 enable it per model or per profile:
 

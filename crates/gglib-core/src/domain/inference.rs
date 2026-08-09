@@ -704,14 +704,21 @@ impl InferenceConfig {
 
         // A field no layer claimed came from the floor — or from nowhere, when
         // the floor has none either, which is whatever `with_hardcoded_defaults`
-        // leaves unset rather than a list worth restating here. When a layer
-        // claimed the temperature, the trio's fall-through is the coupling
-        // rule at work rather than a plain absence, and says so.
+        // leaves unset rather than a list worth restating here.
+        //
+        // The coupling rule is checked **before** the floor's emptiness, and
+        // the order is load-bearing. `Unset` means "nobody named this"; when a
+        // layer named it and the coupling rule passed it over, that is a
+        // different and more interesting fact, and it stays true whether or
+        // not the floor then had a value to offer. Testing `!has_floor` first
+        // was harmless while the floor filled all seven, and became a silent
+        // loss of provenance the moment ADR 0003 emptied six of them — the
+        // coupled trio would have reported as a plain absence.
         let coupled = temperature.is_some();
         let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
             Some(i) => ParamSource::Layer(i),
-            None if !has_floor => ParamSource::Unset,
             None if is_coupled => ParamSource::FloorCoupled,
+            None if !has_floor => ParamSource::Unset,
             None => ParamSource::Floor,
         };
 
@@ -748,10 +755,67 @@ impl InferenceConfig {
         (result, sources)
     }
 
-    /// Create a new config with all fields set to sensible defaults.
+    /// The floor beneath every sampling ladder: what gglib asserts when no
+    /// layer named a value.
     ///
-    /// These are the hardcoded fallback values used when no other
-    /// defaults are configured.
+    /// # It asserts one parameter, not seven
+    ///
+    /// [ADR 0003] measured this floor against a bare `llama-server` on the
+    /// pinned build and found six of its seven values were *exactly* the
+    /// upstream default:
+    ///
+    /// ```text
+    ///   parameter          gglib floor   upstream   verdict
+    ///   temperature                0.7        0.8   DIVERGES -> policy
+    ///   top_p                     0.95       0.95   EQUALS   -> deleted
+    ///   top_k                       40         40   EQUALS   -> deleted
+    ///   repeat_penalty             1.0        1.0   EQUALS   -> deleted
+    ///   presence_penalty           0.0        0.0   EQUALS   -> deleted
+    ///   min_p                     0.05       0.05   EQUALS   -> deleted
+    ///   dry_multiplier             0.0        0.0   EQUALS   -> deleted
+    /// ```
+    ///
+    /// Restating a value that is already the answer is not a decision, it is
+    /// a redundant assertion — and a costly one, because it silently overrides
+    /// whatever upstream chooses next. #739 was exactly that failure: a floor
+    /// of `min_p: 0.0` disabled the tail cut on every untuned request, and
+    /// nothing in the system was positioned to notice. Six such overrides are
+    /// now impossible.
+    ///
+    /// The six are **deferred**, not disabled. Nothing is emitted for them, so
+    /// llama.cpp applies its own default — which on this build is the same
+    /// number that used to be written here. Provenance reports them as
+    /// [`ParamSource::Unset`](crate::domain::ParamSource::Unset), which is
+    /// precisely what deferral is: gglib names no value.
+    ///
+    /// # `temperature: 0.7` stays, and upstream's is 0.8
+    ///
+    /// The one genuine policy choice in the set, and stated here because an
+    /// undocumented divergence is how the other six became invisible in the
+    /// first place. gglib decodes slightly more conservatively than
+    /// llama.cpp's default for agentic work.
+    ///
+    /// # The floor is no longer uniform
+    ///
+    /// [`reasoning_floor`] still asserts `presence_penalty: 1.0` and
+    /// `min_p: 0.0` for `reasoning`-tagged models, which are class-aware
+    /// policy llama.cpp has no notion of. So after this change `min_p` is
+    /// asserted for reasoning models and deferred for every other model.
+    /// That is the correct shape and it needs saying out loud, because it is
+    /// the first time the floor has differed by model class in what it
+    /// *names* rather than only in what it names it as.
+    ///
+    /// # Deferral is safe only while the build is pinned
+    ///
+    /// [ADR 0002] pins the llama.cpp build; [ADR 0004]'s `/props` baseline
+    /// check reads the default table back and flags any field that moves.
+    /// That pairing is what makes deleting a value behaviour-preserving
+    /// rather than hopeful.
+    ///
+    /// [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    /// [`reasoning_floor`]: Self::reasoning_floor
     ///
     /// # `max_tokens` has no fallback
     ///
@@ -771,44 +835,49 @@ impl InferenceConfig {
     /// Explicit per-request, per-profile, and per-model values are unaffected —
     /// [`reasoning_profile`] still sets its own ceiling.
     ///
-    /// # `min_p` matches llama.cpp rather than disabling itself
+    /// # A note on `min_p`, because it moved twice
     ///
-    /// `0.05` is llama.cpp's own default for the flag, restated here rather
-    /// than left to the upstream. It used to be `0.0`, which reads like an
-    /// absence but is not one: [`to_openai_json_patch`] drops only `None`, and
-    /// resolution force-writes what survives, so the floor was *explicitly
-    /// disabling* min-p on every request that did not set its own. At this
-    /// floor's own `temperature: 0.7` that removes the tail cut entirely.
-    ///
-    /// Stated rather than omitted so llama-server keeps receiving fully
-    /// specified parameters, and so the value stays visible as `min_p=floor`
-    /// in sampling provenance instead of reporting as unset.
+    /// #739 changed it from `0.0` to `0.05`, correctly: `0.0` reads like an
+    /// absence but was not one — [`to_openai_json_patch`] drops only `None`,
+    /// so the floor was *explicitly disabling* the tail cut on every untuned
+    /// request. The fix was right, and the mechanism it used was the problem.
+    /// #739 restated upstream's value to keep it "visible as `min_p=floor` in
+    /// sampling provenance instead of reporting as unset", which bought
+    /// visibility at the price of a permanent silent override. Deferral is the
+    /// better answer to the same objection: it reports as unset *because it is
+    /// unset*, and [ADR 0004]'s readback names llama.cpp's own number instead
+    /// of gglib restating it.
     ///
     /// [`reasoning_profile`]: Self::reasoning_profile
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
     #[must_use]
     pub const fn with_hardcoded_defaults() -> Self {
         Self {
+            // The one value gglib asserts. Upstream's is 0.8; see above.
             temperature: Some(0.7),
-            top_p: Some(0.95),
-            top_k: Some(40),
-            max_tokens: None,
-            repeat_penalty: Some(1.0),
-            presence_penalty: Some(0.0),
-            min_p: Some(0.05),
-            // DRY expressible but inert. Enabling it fleet-wide is a tuning
-            // decision that belongs to a per-model or per-profile layer with
-            // sweep data behind it, not to the floor every untuned model
-            // silently lands on. `0.0` is also llama.cpp's own default, so
-            // stating it changes nothing about what the model sees.
-            dry_multiplier: Some(0.0),
-            // Left unset rather than restated: with the multiplier at zero
-            // they have no effect, and asserting values here would claim a
-            // recipe nobody has measured. llama.cpp's own defaults apply if a
-            // layer above turns DRY on without naming them.
+            // Everything below is deferred to llama.cpp, which is a decision
+            // and not an omission — ADR 0003 finding 1 measured each of them
+            // equal to the upstream default on the pinned build. Setting any
+            // of these again means overriding whatever upstream chooses next,
+            // so do it only with a measurement saying upstream is wrong.
+            top_p: None,
+            top_k: None,
+            repeat_penalty: None,
+            presence_penalty: None,
+            min_p: None,
+            // DRY stays off, and now says so by silence rather than by
+            // asserting the zero llama.cpp already defaults to. Enabling it
+            // fleet-wide is a tuning decision for a per-model or per-profile
+            // layer with sweep data behind it, not for the floor every untuned
+            // model lands on.
+            dry_multiplier: None,
+            // Never had a floor: with the multiplier off they have no effect,
+            // and asserting values would claim a recipe nobody has measured.
             dry_base: None,
             dry_allowed_length: None,
             dry_penalty_last_n: None,
+            // No fallback by design — see above.
+            max_tokens: None,
         }
     }
 
@@ -824,12 +893,29 @@ impl InferenceConfig {
     /// prevent this). `1.0` keeps a real guard in place at the floor without
     /// asserting the full recipe tuned for a different temperature.
     ///
-    /// `min_p` is pinned to `0.0` for the same class-specific reason, and
-    /// deliberately does *not* inherit the neutral floor's `0.05`: Qwen3.6's
+    /// `min_p` is pinned to `0.0` for the same class-specific reason: Qwen3.6's
     /// published guidance is to disable min-p on these models, which
-    /// [`reasoning_profile`] already encodes. Spelling it out here keeps that
-    /// carve-out from silently disappearing the next time the neutral floor
-    /// moves.
+    /// [`reasoning_profile`] already encodes.
+    ///
+    /// # These two are now the only class-specific *assertions*
+    ///
+    /// The neutral floor used to name `min_p: 0.05` and `presence_penalty:
+    /// 0.0`, so this function read as "the same seven values, two of them
+    /// different". [ADR 0003] deferred both of those to llama.cpp, so it now
+    /// reads as "two values the neutral floor does not name at all".
+    ///
+    /// The consequence is worth stating because it makes the floor non-uniform
+    /// in a way it never was: **`min_p` is asserted for reasoning models and
+    /// deferred for everything else.** A reasoning model gets `min_p: 0.0` on
+    /// the wire; every other model gets no `min_p` key and llama.cpp's own
+    /// 0.05. That asymmetry is deliberate — one is a measured divergence from
+    /// upstream, the other is agreement with it — but it will look like a bug
+    /// to anyone diffing two requests without this paragraph.
+    ///
+    /// `presence_penalty: 1.0` is the same shape: asserted here, deferred
+    /// elsewhere.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
     ///
     /// [`resolve_layers`]: Self::resolve_layers
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
@@ -876,86 +962,6 @@ impl InferenceConfig {
     #[must_use]
     pub const fn agentic_temperature_ceiling(is_reasoning: bool) -> f32 {
         if is_reasoning { 0.6 } else { 0.3 }
-    }
-
-    /// Convert inference config to llama CLI arguments.
-    ///
-    /// Returns a vector of argument strings suitable for passing to llama-server.
-    /// Uses the same flag names as llama.cpp: `--temp`, `--top-p`, `--top-k`, `-n`, `--repeat-penalty`.
-    ///
-    /// This is the single source of truth for CLI flag conversion, reached by
-    /// every launch surface through `build_server_config` and
-    /// `ServerConfig.extra_args`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use gglib_core::domain::InferenceConfig;
-    ///
-    /// let config = InferenceConfig {
-    ///     temperature: Some(0.8),
-    ///     top_p: Some(0.9),
-    ///     max_tokens: Some(1024),
-    ///     dry_multiplier: Some(0.8),
-    ///     ..Default::default()
-    /// };
-    ///
-    /// let args = config.to_cli_args();
-    /// assert_eq!(
-    ///     args,
-    ///     vec!["--temp", "0.8", "--top-p", "0.9", "-n", "1024", "--dry-multiplier", "0.8"]
-    /// );
-    /// ```
-    #[must_use]
-    pub fn to_cli_args(&self) -> Vec<String> {
-        let mut args = Vec::new();
-
-        if let Some(temp) = self.temperature {
-            args.push("--temp".to_string());
-            args.push(temp.to_string());
-        }
-        if let Some(top_p) = self.top_p {
-            args.push("--top-p".to_string());
-            args.push(top_p.to_string());
-        }
-        if let Some(top_k) = self.top_k {
-            args.push("--top-k".to_string());
-            args.push(top_k.to_string());
-        }
-        if let Some(max_tokens) = self.max_tokens {
-            args.push("-n".to_string());
-            args.push(max_tokens.to_string());
-        }
-        if let Some(repeat_penalty) = self.repeat_penalty {
-            args.push("--repeat-penalty".to_string());
-            args.push(repeat_penalty.to_string());
-        }
-        if let Some(presence_penalty) = self.presence_penalty {
-            args.push("--presence-penalty".to_string());
-            args.push(presence_penalty.to_string());
-        }
-        if let Some(min_p) = self.min_p {
-            args.push("--min-p".to_string());
-            args.push(min_p.to_string());
-        }
-        if let Some(dry_multiplier) = self.dry_multiplier {
-            args.push("--dry-multiplier".to_string());
-            args.push(dry_multiplier.to_string());
-        }
-        if let Some(dry_base) = self.dry_base {
-            args.push("--dry-base".to_string());
-            args.push(dry_base.to_string());
-        }
-        if let Some(dry_allowed_length) = self.dry_allowed_length {
-            args.push("--dry-allowed-length".to_string());
-            args.push(dry_allowed_length.to_string());
-        }
-        if let Some(dry_penalty_last_n) = self.dry_penalty_last_n {
-            args.push("--dry-penalty-last-n".to_string());
-            args.push(dry_penalty_last_n.to_string());
-        }
-
-        args
     }
 
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.
@@ -1023,7 +1029,9 @@ impl InferenceConfig {
     /// let resolved = request.resolve_with_defaults(Some(&model), None, ModelSamplingContext::default());
     /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
     /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
-    /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
+    /// assert_eq!(resolved.top_k,       None);      // no layer named it, and
+    ///                                              // the floor defers top_k
+    ///                                              // to llama.cpp (ADR 0003)
     /// ```
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
@@ -1305,23 +1313,6 @@ mod tests {
         assert!(request.max_tokens.is_none()); // Still None
     }
 
-    #[test]
-    fn test_hardcoded_defaults() {
-        let config = InferenceConfig::with_hardcoded_defaults();
-        assert_eq!(config.temperature, Some(0.7));
-        assert_eq!(config.top_p, Some(0.95));
-        assert_eq!(config.top_k, Some(40));
-        // Deliberately absent: a fallback here would cap every request that
-        // did not name its own. See `with_hardcoded_defaults`.
-        assert_eq!(config.max_tokens, None);
-        assert_eq!(config.repeat_penalty, Some(1.0));
-        assert_eq!(config.presence_penalty, Some(0.0));
-        // llama.cpp's own default, restated. `Some(0.0)` here would not read
-        // as "unset" — it would be force-written, explicitly disabling the
-        // tail cut on every request. See `with_hardcoded_defaults`.
-        assert_eq!(config.min_p, Some(0.05));
-    }
-
     /// The reasoning floor differs from the hardcoded floor in exactly two
     /// fields, both class-specific: a real anti-repetition guard where the
     /// neutral floor has none, and min-p disabled per Qwen3.6's guidance
@@ -1380,13 +1371,16 @@ mod tests {
         );
     }
 
-    /// The two ways an unset `max_tokens` could still reach llama-server and
-    /// cap generation: as a `max_tokens` key in the forwarded request body, or
-    /// as a `-n` flag on the launch command line. `-n` is the more dangerous of
-    /// the two — it sets `global_params.n_predict`, a server-wide ceiling that
-    /// overrides even a per-request `-1`.
+    /// An unset `max_tokens` must not be written into the request body.
+    ///
+    /// This used to check a second route as well — a `-n` flag on the launch
+    /// command line, which is the more dangerous of the two because it sets
+    /// `global_params.n_predict`, a server-wide ceiling overriding even a
+    /// per-request `-1`. ADR 0003 deleted `to_cli_args`, so that route no
+    /// longer exists for any parameter and there is nothing left to assert
+    /// about it: the guarantee moved from a test to the type system.
     #[test]
-    fn test_unset_max_tokens_reaches_llama_server_by_neither_route() {
+    fn test_unset_max_tokens_is_not_written_into_the_body() {
         let resolved = InferenceConfig::default().resolve_with_defaults(
             None,
             None,
@@ -1397,14 +1391,9 @@ mod tests {
             !resolved.to_openai_json_patch().contains_key("max_tokens"),
             "an unset max_tokens must not be written into the request body"
         );
-        assert!(
-            !resolved.to_cli_args().contains(&"-n".to_string()),
-            "an unset max_tokens must not become a server-wide -n ceiling"
-        );
     }
 
-    /// An explicit value must still travel by both routes — this change removes
-    /// the *fallback*, not the parameter.
+    /// This change removed the *fallback*, not the parameter.
     #[test]
     fn test_explicit_max_tokens_is_still_forwarded() {
         let resolved = InferenceConfig {
@@ -1418,9 +1407,79 @@ mod tests {
             resolved.to_openai_json_patch().get("max_tokens"),
             Some(&serde_json::json!(512))
         );
-        let args = resolved.to_cli_args();
-        let n_index = args.iter().position(|a| a == "-n").expect("-n emitted");
-        assert_eq!(args[n_index + 1], "512");
+    }
+
+    /// The floor asserts exactly one parameter, and it is the one ADR 0003
+    /// measured as diverging from upstream.
+    ///
+    /// Written as an exhaustive field-by-field check rather than an equality
+    /// against a literal so that adding a value back is a *failure with a
+    /// name*, not a diff someone re-blesses. Every `None` here is a field
+    /// llama.cpp supplies; setting one again overrides whatever upstream
+    /// chooses next, which is #739's failure mode.
+    #[test]
+    fn the_floor_asserts_only_the_value_that_diverges_from_upstream() {
+        let floor = InferenceConfig::with_hardcoded_defaults();
+
+        assert_eq!(
+            floor.temperature,
+            Some(0.7),
+            "the one genuine policy choice; upstream's is 0.8"
+        );
+
+        for (field, value) in [
+            ("top_p", floor.top_p),
+            ("min_p", floor.min_p),
+            ("repeat_penalty", floor.repeat_penalty),
+            ("presence_penalty", floor.presence_penalty),
+            ("dry_multiplier", floor.dry_multiplier),
+            ("dry_base", floor.dry_base),
+        ] {
+            assert_eq!(value, None, "{field} is deferred to llama.cpp (ADR 0003)");
+        }
+        assert_eq!(floor.top_k, None, "top_k is deferred to llama.cpp");
+        assert_eq!(
+            floor.max_tokens, None,
+            "max_tokens has no fallback by design"
+        );
+        assert_eq!(floor.dry_allowed_length, None);
+        assert_eq!(floor.dry_penalty_last_n, None);
+    }
+
+    /// The non-uniformity ADR 0003 decision 3 called out: `min_p` is asserted
+    /// for reasoning models and deferred for everything else. Pinned because
+    /// it reads like a bug when you diff two requests.
+    #[test]
+    fn min_p_is_asserted_for_reasoning_models_and_deferred_for_the_rest() {
+        assert_eq!(InferenceConfig::reasoning_floor().min_p, Some(0.0));
+        assert_eq!(InferenceConfig::with_hardcoded_defaults().min_p, None);
+
+        assert_eq!(
+            InferenceConfig::reasoning_floor().presence_penalty,
+            Some(1.0)
+        );
+        assert_eq!(
+            InferenceConfig::with_hardcoded_defaults().presence_penalty,
+            None
+        );
+    }
+
+    /// The whole point of the deferral: an untuned request names one sampler,
+    /// not seven, so llama.cpp's own defaults apply to the rest.
+    #[test]
+    fn an_untuned_request_body_carries_only_the_temperature() {
+        let resolved = InferenceConfig::default().resolve_with_defaults(
+            None,
+            None,
+            ModelSamplingContext::default(),
+        );
+        let patch = resolved.to_openai_json_patch();
+
+        assert_eq!(
+            patch.keys().collect::<Vec<_>>(),
+            vec!["temperature"],
+            "anything else here is gglib overriding an upstream default: {patch:?}"
+        );
     }
 
     #[test]
@@ -1496,7 +1555,9 @@ mod tests {
         assert_eq!(resolved.top_p, Some(0.8)); // model fills in
         assert_eq!(resolved.top_k, Some(10)); // global fills in
         assert_eq!(resolved.max_tokens, None); // no layer sets it; stays unset
-        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+        // Deferred to llama.cpp since ADR 0003 — no layer named it and the
+        // floor no longer restates upstream's own 1.0.
+        assert_eq!(resolved.repeat_penalty, None);
     }
 
     #[test]
@@ -1542,9 +1603,13 @@ mod tests {
         assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
         assert_eq!(resolved.top_k, Some(10)); // global fills in
         // The request claimed the temperature, so the model's 1.5 — tuned for
-        // its own 0.5 — must not fall through. Neutral hardcoded value instead.
-        assert_eq!(resolved.presence_penalty, Some(0.0));
-        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+        // its own 0.5 — must not fall through. Nothing is sent instead: the
+        // neutral floor used to restate upstream's 0.0 here and ADR 0003
+        // deferred it, so llama.cpp supplies the same number it always did.
+        // The suppression is still visible in the provenance, which reports
+        // `FloorCoupled` rather than a plain absence.
+        assert_eq!(resolved.presence_penalty, None);
+        assert_eq!(resolved.repeat_penalty, None);
     }
 
     /// The invariant that makes one global profile safe across differing
@@ -1624,9 +1689,8 @@ mod tests {
             "must not inherit 1.5, but must not go silently to zero either"
         );
         assert_eq!(
-            resolved.repeat_penalty,
-            Some(1.0),
-            "neutral, not the model's"
+            resolved.repeat_penalty, None,
+            "not the model's 1.2, and no longer restated at the floor either"
         );
         assert_eq!(resolved.min_p, Some(0.05), "the profile's own value stands");
     }
@@ -1798,8 +1862,12 @@ mod tests {
             &InferenceConfig::with_hardcoded_defaults(),
         );
         assert_eq!(sources.max_tokens, ParamSource::Unset);
-        // Every other field does have a floor to fall back on.
+        // `temperature` is now the only field with a floor to fall back on —
+        // ADR 0003 deferred the other six, so they report as `Unset` for the
+        // same reason `max_tokens` always has.
         assert_eq!(sources.temperature, ParamSource::Floor);
+        assert_eq!(sources.top_p, ParamSource::Unset);
+        assert_eq!(sources.min_p, ParamSource::Unset);
     }
 
     /// The two floor variants are distinguishable: a trio suppressed by the
@@ -1815,8 +1883,23 @@ mod tests {
         let (_, claimed) = InferenceConfig::resolve_layers_with_sources(&[Some(&claim)], &floor);
         assert_eq!(claimed.presence_penalty, ParamSource::FloorCoupled);
 
+        // Since ADR 0003 the neutral floor names no `presence_penalty`, so an
+        // untouched one is a genuine absence rather than a floor value. The
+        // distinction the test exists for is unaffected and now sharper: the
+        // coupling rule is still reported, and "nobody set this" is still a
+        // different answer from "the rule discarded something".
         let (_, untouched) = InferenceConfig::resolve_layers_with_sources(&[None], &floor);
-        assert_eq!(untouched.presence_penalty, ParamSource::Floor);
+        assert_eq!(untouched.presence_penalty, ParamSource::Unset);
+        assert_ne!(claimed.presence_penalty, untouched.presence_penalty);
+
+        // And a reasoning model, whose floor *does* name it, still reports the
+        // plain floor — the two floors now differ in provenance, not only in
+        // value.
+        let (_, reasoning) = InferenceConfig::resolve_layers_with_sources(
+            &[None],
+            &InferenceConfig::reasoning_floor(),
+        );
+        assert_eq!(reasoning.presence_penalty, ParamSource::Floor);
     }
 
     /// `resolve_with_profile` delegates to the explained form, so the two must

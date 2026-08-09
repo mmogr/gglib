@@ -27,7 +27,10 @@
 //! slot comparison it is a census: one read per launch, no sampling, no
 //! attribution problem, nothing to abstain over.
 //!
-//! # The instrument is currently blind, and gglib is what blinds it
+//! # What blinded it, and what un-blinded it
+//!
+//! Worth keeping in full, because the failure mode is easy to re-create and
+//! looks like health while it lasts.
 //!
 //! Measured on the pinned build, not assumed:
 //!
@@ -43,29 +46,33 @@
 //! ```
 //!
 //! Every sampler launch flag overwrites the field it names in
-//! `default_generation_settings.params`. gglib passes all seven on every
-//! launch ([`InferenceConfig::to_cli_args`]), so what `/props` reports back is
-//! gglib's own floor — not the build's default.
+//! `default_generation_settings.params`. gglib used to pass all seven on the
+//! `gglib serve` path, at values chosen to equal upstream's — so this check
+//! would have compared gglib's floor against gglib's own flag and reported an
+//! agreement it could never have failed to report. [ADR 0002] finding 2's
+//! inert-module trap in a new place: an organ reading its own reflection and
+//! calling it health.
 //!
-//! ADR 0003 finding 3 called those flags "inert twice over" and it was right
-//! about *request behaviour*: the body wins, so the flags change nothing a
-//! model sees. They are emphatically **not** inert for observation. They
-//! overwrite the exact table the deletion criterion needs to read, and they do
-//! it with values chosen to match — so the check would report agreement it
-//! could never have failed to report. That is
-//! [ADR 0002] finding 2's inert-module trap in a new place: an organ reading
-//! its own reflection and reporting health.
+//! ADR 0003 finding 3 had called those flags "inert twice over", correctly
+//! about *request behaviour* — the body wins, so no model saw them. They were
+//! never inert for observation.
 //!
-//! So the reading is labelled by what it actually supports. `/props` always
-//! truthfully answers **"what will this server default to"**. It answers
-//! **"what does this build default to"** only once nothing is masking it,
-//! which is why [`SAMPLER_LAUNCH_FLAGS_PASSED`] exists and why deleting the
-//! flags is what switches this instrument on.
+//! [ADR 0003]'s deferral deleted them, which is what opened this instrument's
+//! eyes. [`SAMPLER_LAUNCH_FLAGS_PASSED`] is now `false` and stays as a guard
+//! against re-adding one.
+//!
+//! # Two claims, and only one of them is always safe
+//!
+//! `/props` always truthfully answers **"what will this server default to"**.
+//! It answers **"what does this *build* default to"** only while nothing is
+//! masking it — which is true today and is exactly what
+//! [`SAMPLER_LAUNCH_FLAGS_PASSED`] tracks. The distinction is not pedantry:
+//! the deletion criterion needs the second claim, and the second claim is the
+//! one that can quietly stop holding.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-pin-the-llama-cpp-build.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
-//! [`InferenceConfig::to_cli_args`]: gglib_core::domain::InferenceConfig::to_cli_args
 
 use std::time::Duration;
 
@@ -83,19 +90,22 @@ const PROPS_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 /// Same value and same reason as [`crate::sampling_audit`]'s.
 const FLOAT_EPSILON: f64 = 1e-6;
 
-/// Whether gglib still passes sampler values as llama-server launch flags.
+/// Whether gglib passes sampler values as llama-server launch flags.
 ///
-/// While this is `true`, every field in [`UPSTREAM_DEFAULTS`] is masked and
-/// [`check_baseline`] can only return
-/// [`BaselineVerdict::Indeterminate`] — see the module docs.
+/// **`false` since [ADR 0003]'s deferral shipped**, which is what opened this
+/// instrument's eyes: while it was `true` every field in [`UPSTREAM_DEFAULTS`]
+/// was masked and [`check_baseline`] could only return
+/// [`BaselineVerdict::Indeterminate`].
 ///
-/// This is not a reminder to be honoured. `flag_deletion_flips_the_switch`
-/// fails the build if [`InferenceConfig::to_cli_args`] stops emitting sampler
-/// flags while this still says it does, so the constant cannot drift away from
-/// the code it describes.
+/// Kept rather than deleted along with the flags, because the failure it
+/// guards against is *re-adding* one. A sampler flag overwrites the field it
+/// names in `/props`, so a well-meaning launch-path change could silently
+/// return this module to reading gglib's own values back — reporting agreement
+/// it cannot fail to report. `no_sampler_flag_may_reappear_unnoticed` fails
+/// the build if that happens without this constant being flipped back.
 ///
-/// [`InferenceConfig::to_cli_args`]: gglib_core::domain::InferenceConfig::to_cli_args
-pub const SAMPLER_LAUNCH_FLAGS_PASSED: bool = true;
+/// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+pub const SAMPLER_LAUNCH_FLAGS_PASSED: bool = false;
 
 /// llama.cpp's own sampler defaults on the pinned build (`b1-69bf643`).
 ///
@@ -452,35 +462,37 @@ mod tests {
         );
     }
 
-    /// The constant cannot rot. When the follow-up deletes `to_cli_args`'s
-    /// sampler arms, this fails until `SAMPLER_LAUNCH_FLAGS_PASSED` is flipped,
-    /// which is what un-blinds the instrument.
+    /// The floor stopped asserting the six, so nothing masks the table any
+    /// more. Anchored to the floor rather than to the launch path because
+    /// that is what this crate can see; the launch-path half of the invariant
+    /// is `gglib_runtime::llama::args::sampling`'s guard, which asserts
+    /// against this very constant.
     #[test]
-    fn flag_deletion_flips_the_switch() {
-        let emitted = InferenceConfig::with_hardcoded_defaults().to_cli_args();
-        let sampler_flags: Vec<_> = emitted
+    fn the_floor_no_longer_restates_what_props_reports() {
+        let floor = InferenceConfig::with_hardcoded_defaults();
+        let asserted = |field: &str| match field {
+            "temperature" => floor.temperature.is_some(),
+            "top_p" => floor.top_p.is_some(),
+            "top_k" => floor.top_k.is_some(),
+            "repeat_penalty" => floor.repeat_penalty.is_some(),
+            "presence_penalty" => floor.presence_penalty.is_some(),
+            "min_p" => floor.min_p.is_some(),
+            "dry_multiplier" => floor.dry_multiplier.is_some(),
+            other => panic!("UPSTREAM_DEFAULTS names {other}, which this test cannot read"),
+        };
+        let restated: Vec<_> = UPSTREAM_DEFAULTS
             .iter()
-            .filter(|a| {
-                matches!(
-                    a.as_str(),
-                    "--temp"
-                        | "--top-p"
-                        | "--top-k"
-                        | "--repeat-penalty"
-                        | "--presence-penalty"
-                        | "--min-p"
-                        | "--dry-multiplier"
-                )
-            })
+            .filter(|(field, _)| asserted(field))
+            .map(|(field, _)| *field)
             .collect();
 
         assert_eq!(
-            !sampler_flags.is_empty(),
-            SAMPLER_LAUNCH_FLAGS_PASSED,
-            "the launch path emits {sampler_flags:?}, but SAMPLER_LAUNCH_FLAGS_PASSED says \
-             {SAMPLER_LAUNCH_FLAGS_PASSED}. These must agree: while flags are passed the \
-             baseline check reads gglib's own values back, so flipping one without the other \
-             either blinds a working instrument or makes a blind one claim it can see."
+            restated,
+            vec!["temperature"],
+            "every field here is one gglib asserts a value for. `temperature` is the \
+             measured divergence ADR 0003 kept; anything else is a floor value that was \
+             supposed to be deferred, and while it is set the launch path may restate it \
+             into /props and blind the baseline check."
         );
     }
 }

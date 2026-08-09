@@ -286,12 +286,11 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("--mlock");
     }
 
-    // Add inference parameters if specified
-    if let Some(ref inference) = config.inference_config {
-        for arg in inference.to_cli_args() {
-            cmd.arg(arg);
-        }
-    }
+    // No sampler flags. Sampling is a per-request decision that travels in the
+    // request body, and a launch flag could only ever restate or contradict
+    // it — see `llama::args::sampling`. `config.inference_config` is still
+    // carried for the launch narration to report; nothing turns it into a
+    // command-line argument.
 
     // Add extra arguments
     for arg in &config.extra_args {

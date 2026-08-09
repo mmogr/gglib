@@ -447,6 +447,20 @@ mod tests {
         );
     }
 
+    /// The parameter reached the wire as an *absence*, so llama.cpp's own
+    /// default applies.
+    ///
+    /// The normal outcome for six of the seven since ADR 0003. Asserting the
+    /// key is missing is the whole point — a value here, even the right one,
+    /// means gglib is overriding whatever upstream chooses next.
+    #[track_caller]
+    fn assert_deferred(body: &Value, key: &str) {
+        assert!(
+            body.get(key).is_none(),
+            "{key} must be deferred to llama.cpp, but the body carries {body}"
+        );
+    }
+
     // ── The hierarchy ─────────────────────────────────────────────────────
 
     /// One table, one row per layer: each wins only over the ones beneath it.
@@ -852,7 +866,11 @@ mod tests {
         );
 
         assert_param(&body, "temperature", 0.2);
-        assert_param(&body, "presence_penalty", 0.0);
+        // The profile claimed the temperature and named no penalty, so the
+        // model's 1.5 is passed over. Nothing is sent: the floor used to
+        // restate upstream's 0.0 here, and ADR 0003 deferred it, so the model
+        // still decodes at 0.0 — supplied by llama.cpp rather than by gglib.
+        assert_deferred(&body, "presence_penalty");
     }
 
     /// When the client IS trusted (`trust_client_sampling: true` — an
@@ -904,7 +922,10 @@ mod tests {
         );
 
         assert_param(&body, "temperature", 0.0);
-        assert_param(&body, "presence_penalty", 0.0);
+        // The client claimed the temperature, so the model's 0.6 is passed
+        // over and no penalty is asserted — a non-reasoning model gets
+        // llama.cpp's neutral 0.0 rather than gglib restating it.
+        assert_deferred(&body, "presence_penalty");
     }
 
     // ── Client sampling authority (Settings.trust_client_sampling) ─────────
@@ -979,10 +1000,12 @@ mod tests {
         assert_param(&body, "temperature", 0.2); // global beats the auto-detected guess
         assert_param(&body, "top_k", 20.0);
         assert_param(&body, "min_p", 0.05);
-        // The claiming layer (global) left presence_penalty unset, so it
-        // falls to the floor — never to the auto-detected model's 1.5,
-        // which was tuned for a temperature global didn't choose.
-        assert_param(&body, "presence_penalty", 0.0);
+        // The claiming layer (global) left presence_penalty unset, so nothing
+        // is asserted — and in particular never the auto-detected model's
+        // 1.5, which was tuned for a temperature global didn't choose. The
+        // provenance still reports the coupling rule rather than a plain
+        // absence; see `resolve_layers_with_sources`.
+        assert_deferred(&body, "presence_penalty");
     }
 
     /// The same model, but with a deliberate per-model choice instead of an

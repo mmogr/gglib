@@ -5,6 +5,7 @@ pub mod jinja;
 pub mod kv_cache_type;
 pub mod mtp;
 pub mod reasoning;
+pub mod sampling;
 pub mod slot_restore;
 
 // Re-export public API
@@ -19,4 +20,5 @@ pub use reasoning::{
     ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource, resolve_reasoning_format,
     resolve_reasoning_format_with_detection,
 };
+pub use sampling::{SAMPLING_SOURCE, SAMPLING_VALUE, sampler_flags};
 pub use slot_restore::{SlotRestoreResolution, SlotRestoreSource, resolve_slot_restore};

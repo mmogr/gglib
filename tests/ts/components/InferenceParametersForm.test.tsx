@@ -16,13 +16,13 @@ import type { InferenceConfig, SamplingExplanation } from '../../../src/types';
  */
 const PARAMS: { label: string; floor: string | null; min: number; max: number }[] = [
   { label: 'Temperature', floor: '0.7', min: 0, max: 2 },
-  { label: 'Top P', floor: '0.95', min: 0, max: 1 },
-  { label: 'Top K', floor: '40', min: 1, max: 200 },
+  { label: 'Top P', floor: null, min: 0, max: 1 },
+  { label: 'Top K', floor: null, min: 1, max: 200 },
   { label: 'Max Tokens', floor: null, min: 1, max: 8192 },
-  { label: 'Repeat Penalty', floor: '1.0', min: 0.05, max: 2 },
-  { label: 'Presence Penalty', floor: '0.0', min: 0, max: 2 },
-  { label: 'Min P', floor: '0.05', min: 0, max: 1 },
-  { label: 'DRY Multiplier', floor: '0.0', min: 0, max: 2 },
+  { label: 'Repeat Penalty', floor: null, min: 0.05, max: 2 },
+  { label: 'Presence Penalty', floor: null, min: 0, max: 2 },
+  { label: 'Min P', floor: null, min: 0, max: 1 },
+  { label: 'DRY Multiplier', floor: null, min: 0, max: 2 },
   { label: 'DRY Base', floor: null, min: 1.05, max: 4 },
   { label: 'DRY Allowed Length', floor: null, min: 0, max: 20 },
   { label: 'DRY Penalty Last N', floor: null, min: -1, max: 8192 },
@@ -107,8 +107,14 @@ describe('InferenceParametersForm', () => {
       );
     });
 
-    // reasoning_floor() overrides exactly these two, and this surface has no
+    // reasoning_floor() asserts exactly these two, and this surface has no
     // model to check the tag against, so both captions name the alternative.
+    //
+    // Load-bearing since ADR 0003 in a way it was not before: these are now
+    // the only parameters gglib asserts for one model class and defers for
+    // every other, so the note is the sole on-screen explanation of why two
+    // models decode differently. An earlier draft of the deferral dropped it,
+    // because the deferred branch returned before consulting the overrides.
     it.each([
       ['Presence Penalty', /1\.0 for reasoning models/],
       ['Min P', /0\.0 for reasoning models/],
@@ -118,10 +124,21 @@ describe('InferenceParametersForm', () => {
       expect(screen.getByLabelText(label)).toHaveAccessibleDescription(pattern);
     });
 
-    // Max Tokens' "No limit" wording describes unbounded generation. The DRY
-    // parameters are also floorless, but unset means llama.cpp's own default
-    // applies — a number worth naming, and nothing to do with a limit.
+    // Max Tokens' "No limit" wording describes unbounded generation. Every
+    // other floorless parameter means something different: gglib names no
+    // value and llama.cpp's own default applies — a number worth naming, and
+    // nothing to do with a limit.
+    //
+    // Since ADR 0003 that is most of the list. The six deferred parameters
+    // must keep stating the number that actually applies; a blank caption
+    // would read as "nothing happens here", which is the opposite of true.
     it.each([
+      ['Top P', /llama\.cpp default: 0\.95/],
+      ['Top K', /llama\.cpp default: 40/],
+      ['Repeat Penalty', /llama\.cpp default: 1\.0/],
+      ['Presence Penalty', /llama\.cpp default: 0\.0/],
+      ['Min P', /llama\.cpp default: 0\.05/],
+      ['DRY Multiplier', /llama\.cpp default: 0\.0 \(DRY off\)/],
       ['DRY Base', /llama\.cpp default: 1\.75/],
       ['DRY Allowed Length', /llama\.cpp default: 2/],
       ['DRY Penalty Last N', /llama\.cpp default: 64/],

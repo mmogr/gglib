@@ -46,10 +46,29 @@ pub enum ParamSource {
     Layer(usize),
     /// The class floor, because no layer named a value at all.
     Floor,
-    /// The class floor, because a layer claimed `temperature` and this
-    /// parameter is tuned against it, so no layer beneath was eligible to
-    /// supply one. Distinct from [`Floor`](Self::Floor): here a lower layer
-    /// may well have named a value and was deliberately passed over.
+    /// A layer claimed `temperature` and this parameter is tuned against it,
+    /// so no layer beneath was eligible to supply one.
+    ///
+    /// Distinct from [`Floor`](Self::Floor) in the fact that matters: here a
+    /// lower layer may well have named a value and was **deliberately passed
+    /// over**. That is what the coupling rule does, and it is the one thing a
+    /// bare resolved number can never explain.
+    ///
+    /// # It does not imply a value was supplied
+    ///
+    /// The name predates [ADR 0003], when the floor filled all seven
+    /// parameters and being passed over always meant landing on a floor value.
+    /// Six of those are now deferred to llama.cpp, so a coupled parameter can
+    /// resolve to `None`: the rule fired, nothing beneath was eligible, and
+    /// the floor had nothing to offer either.
+    ///
+    /// The variant still reports the rule rather than degrading to
+    /// [`Unset`](Self::Unset), because "a value was discarded here" and
+    /// "nobody ever named one" are different explanations and only the first
+    /// tells a reader where to look. Check the resolved value for whether
+    /// anything was ultimately sent.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
     FloorCoupled,
     /// Nothing named it and the class floor carries none either, so no value
     /// is sent and llama.cpp's own default applies. Which fields those are is

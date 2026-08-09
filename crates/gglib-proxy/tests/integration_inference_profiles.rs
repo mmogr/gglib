@@ -304,6 +304,16 @@ fn assert_param(body: &Value, key: &str, expected: f64) {
     );
 }
 
+/// Assert a sampling parameter never reached the wire, so llama.cpp's own
+/// default applies. The normal outcome for six of the seven since ADR 0003.
+#[track_caller]
+fn assert_deferred(body: &Value, key: &str) {
+    assert!(
+        body.get(key).is_none(),
+        "{key} must be deferred to llama.cpp, but the forwarded body carries {body}"
+    );
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
 /// The core behaviour: the suffix selects the profile, and its temperature is
@@ -433,7 +443,24 @@ async fn sparse_profile_does_not_forward_model_penalties() {
 
     let body = h.only_forwarded();
     assert_param(&body, "temperature", 0.2);
-    assert_param(&body, "presence_penalty", 0.0);
+    assert_deferred(&body, "presence_penalty");
+
+    // The end-to-end shape ADR 0003 produces, asserted here because this is
+    // the only test that sees a real forwarded body: one sampler, plus the
+    // pipeline's own `cache_prompt`. Anything else is gglib overriding an
+    // upstream default on a request nobody tuned.
+    let mut keys: Vec<_> = body
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        vec!["cache_prompt", "messages", "model", "stream", "temperature"],
+        "{body}"
+    );
 }
 
 /// A profile that was renamed or deleted must fail loudly, and must not reach
