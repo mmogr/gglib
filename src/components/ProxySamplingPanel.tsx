@@ -35,6 +35,7 @@ import type { FC } from 'react';
 import { Banner } from './ui/Banner';
 import type {
   SamplingAuditSnapshot,
+  SamplingBaselineReport,
   SamplingBaselineState,
   SamplingDivergence,
 } from '../services/transport/types/dashboard';
@@ -152,25 +153,65 @@ const BaselineRows: FC<{ baseline?: SamplingBaselineState | null }> = ({ baselin
     );
   }
 
-  // Inconclusive is its own answer, not a quiet pass. The reason comes from
-  // the backend so the UI never has to guess which of the several causes
-  // applies.
-  if (!report.conclusive) {
-    const reason = report.fields.find(
-      (f) => f.verdict.verdict === 'indeterminate',
-    )?.verdict;
+  // Coverage second, and drift first above, so a partial reading can still
+  // raise an alarm and a complete one is never silenced by the check below.
+  const { coverage } = report;
+
+  if (coverage.coverage === 'blind') {
     return (
-      <Banner variant="info" title="Build defaults could not be checked">
-        {reason?.verdict === 'indeterminate' ? reason.reason : 'No field could be concluded on.'}
+      <Banner variant="warning" title="Build defaults could not be checked">
+        <ReasonList report={report} />
       </Banner>
     );
   }
 
+  if (coverage.coverage === 'partial') {
+    return (
+      <Banner
+        variant="info"
+        title={`Checked ${coverage.checked} of ${report.fields.length} sampler defaults`}
+      >
+        <ReasonList report={report} />
+      </Banner>
+    );
+  }
+
+  // The only branch permitted to render an all-clear: every field compared.
   return (
     <p className="text-sm text-text-muted">
       All {report.fields.length} sampler defaults match the values this build
       was measured at.
     </p>
+  );
+};
+
+/**
+ * Why each unchecked field could not be concluded on.
+ *
+ * Groups by reason rather than showing the first one. There are several
+ * distinct causes now, and `.find(...)` picked whichever happened to sort
+ * first — which is not necessarily the interesting one.
+ */
+const ReasonList: FC<{ report: SamplingBaselineReport }> = ({ report }) => {
+  const groups = new Map<string, string[]>();
+  for (const f of report.fields) {
+    if (f.verdict.verdict === 'indeterminate') {
+      const fields = groups.get(f.verdict.reason) ?? [];
+      fields.push(f.field);
+      groups.set(f.verdict.reason, fields);
+    }
+  }
+  if (groups.size === 0) {
+    return <>No field could be concluded on.</>;
+  }
+  return (
+    <ul className="flex flex-col gap-xs">
+      {[...groups].map(([reason, fields]) => (
+        <li key={reason} className="text-sm">
+          {fields.join(', ')}: {reason}
+        </li>
+      ))}
+    </ul>
   );
 };
 

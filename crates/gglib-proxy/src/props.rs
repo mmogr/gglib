@@ -283,19 +283,83 @@ fn verdict_for(field: &str, expected: f64, observed: &SlotParams) -> BaselineVer
     }
 }
 
+/// How much of the table a reading actually covered.
+///
+/// A tagged union rather than the `conclusive: bool` it replaced, and the bool
+/// is worth describing because of how it failed. It was computed as *"any
+/// field reached a verdict"*, so a report in which two of seven fields were
+/// checked and five could not be reported itself as conclusive — and the
+/// dashboard's only conclusive-and-undrifted rendering is the sentence "All 7
+/// sampler defaults match the values this build was measured at."
+///
+/// That is [`AuditState`](crate::sampling_audit::AuditState)'s failure one
+/// level up: not a field rendered as agreeing when it was unknown, but a
+/// *report* rendered as complete when it was partial. The same rule applies
+/// and the same remedy — make the state carry what it knows instead of
+/// collapsing it to a yes/no.
+///
+/// Orthogonal to whether anything drifted. [`Complete`](Self::Complete) says
+/// every field was compared, not that every field agreed, so surfaces check
+/// [`BaselineReport::drifted`] first and coverage second.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "coverage", rename_all = "snake_case")]
+pub enum BaselineCoverage {
+    /// Every field in [`UPSTREAM_DEFAULTS`] was compared against the recorded
+    /// table. The only state in which an all-clear may be rendered.
+    Complete,
+    /// Some fields were compared and some could not be.
+    Partial {
+        /// Fields compared against the recorded table.
+        checked: usize,
+        /// Fields nothing could be concluded about.
+        indeterminate: usize,
+    },
+    /// No field was compared at all. Deliberately shares a word with
+    /// [`AuditState::Blind`](crate::sampling_audit::AuditState::Blind): same
+    /// meaning, same discipline, and the parallel between this organ's two
+    /// halves is worth being able to see.
+    Blind {
+        /// Fields nothing could be concluded about — all of them.
+        indeterminate: usize,
+    },
+}
+
+impl BaselineCoverage {
+    /// Classify a set of per-field verdicts.
+    fn of(fields: &[BaselineField]) -> Self {
+        let indeterminate = fields
+            .iter()
+            .filter(|f| matches!(f.verdict, BaselineVerdict::Indeterminate { .. }))
+            .count();
+        let checked = fields.len() - indeterminate;
+
+        // An empty table is not a clean sweep over nothing. Unreachable while
+        // `UPSTREAM_DEFAULTS` is a fixed array, and spelled out anyway because
+        // "zero problems found" is exactly the answer this type exists to stop
+        // being ambiguous.
+        if fields.is_empty() {
+            return Self::Blind { indeterminate: 0 };
+        }
+        if indeterminate == 0 {
+            Self::Complete
+        } else if checked == 0 {
+            Self::Blind { indeterminate }
+        } else {
+            Self::Partial {
+                checked,
+                indeterminate,
+            }
+        }
+    }
+}
+
 /// The whole baseline reading, ready to surface.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BaselineReport {
     /// Per-field verdicts, in [`UPSTREAM_DEFAULTS`] order.
     pub fields: Vec<BaselineField>,
-    /// Whether any field could be concluded on at all.
-    ///
-    /// `false` while gglib masks the table. Surfaces must render an
-    /// inconclusive report differently from a clean one — the same discipline
-    /// [`crate::sampling_audit::AuditState::Blind`] enforces, for the same
-    /// reason: a silent instrument and a healthy one produce the same output
-    /// and mean opposite things.
-    pub conclusive: bool,
+    /// How much of the table this reading covered. See [`BaselineCoverage`].
+    pub coverage: BaselineCoverage,
 }
 
 impl BaselineReport {
@@ -303,10 +367,8 @@ impl BaselineReport {
     #[must_use]
     pub fn from_params(observed: &SlotParams) -> Self {
         let fields = check_baseline(observed);
-        let conclusive = fields
-            .iter()
-            .any(|f| !matches!(f.verdict, BaselineVerdict::Indeterminate { .. }));
-        Self { fields, conclusive }
+        let coverage = BaselineCoverage::of(&fields);
+        Self { fields, coverage }
     }
 
     /// Fields whose default has moved since ADR 0003 measured it.
@@ -443,8 +505,11 @@ mod tests {
         assert!(report.drifted().is_empty(), "{report:?}");
 
         if SAMPLER_LAUNCH_FLAGS_PASSED {
-            assert!(
-                !report.conclusive,
+            assert_eq!(
+                report.coverage,
+                BaselineCoverage::Blind {
+                    indeterminate: UPSTREAM_DEFAULTS.len()
+                },
                 "gglib's own flags overwrite every field, so nothing can be concluded"
             );
             assert!(
@@ -455,7 +520,7 @@ mod tests {
                 "{report:?}"
             );
         } else {
-            assert!(report.conclusive, "{report:?}");
+            assert_eq!(report.coverage, BaselineCoverage::Complete, "{report:?}");
             assert!(
                 report
                     .fields
@@ -494,6 +559,69 @@ mod tests {
             (actual - 0.95).abs() > FLOAT_EPSILON,
             "a moved default must not compare equal"
         );
+    }
+
+    /// **The defect.** `conclusive` was `any(|f| !indeterminate)`, so a single
+    /// concluded field made a seven-field report "conclusive" — and the
+    /// dashboard's conclusive-and-undrifted rendering is the sentence "All 7
+    /// sampler defaults match the values this build was measured at."
+    #[test]
+    fn a_partly_checked_table_is_not_a_clean_sweep() {
+        let mut observed = real_params();
+        observed.top_p = None;
+        observed.min_p = None;
+
+        let report = BaselineReport::from_params(&observed);
+
+        assert_eq!(
+            report.coverage,
+            BaselineCoverage::Partial {
+                checked: 5,
+                indeterminate: 2
+            }
+        );
+        assert_ne!(
+            report.coverage,
+            BaselineCoverage::Complete,
+            "five of seven is not a complete reading"
+        );
+        assert!(report.drifted().is_empty(), "and nothing actually drifted");
+    }
+
+    #[test]
+    fn a_fully_readable_table_is_complete() {
+        assert_eq!(
+            BaselineReport::from_params(&real_params()).coverage,
+            BaselineCoverage::Complete
+        );
+    }
+
+    /// Nothing concluded is its own state, not the bottom of a scale. It
+    /// shares a word with `AuditState::Blind` on purpose.
+    #[test]
+    fn a_table_with_nothing_readable_is_blind_not_partial() {
+        let report = BaselineReport::from_params(&SlotParams::default());
+
+        assert_eq!(
+            report.coverage,
+            BaselineCoverage::Blind {
+                indeterminate: UPSTREAM_DEFAULTS.len()
+            }
+        );
+    }
+
+    /// Coverage answers "how much was compared", drift answers "did any of it
+    /// disagree". A complete reading with a moved default is both complete and
+    /// alarming, and a surface that checks coverage first would hide it.
+    #[test]
+    fn coverage_and_drift_are_independent() {
+        let mut observed = real_params();
+        observed.top_p = Some(0.90);
+
+        let report = BaselineReport::from_params(&observed);
+
+        assert_eq!(report.coverage, BaselineCoverage::Complete);
+        assert_eq!(report.drifted().len(), 1);
     }
 
     /// A field `/props` does not report is unknown, never agreement. Same

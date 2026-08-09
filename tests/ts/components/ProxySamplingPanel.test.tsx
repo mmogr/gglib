@@ -108,7 +108,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                conclusive: false,
+                coverage: { coverage: 'blind', indeterminate: 1 },
                 fields: [
                   {
                     field: 'temperature',
@@ -138,7 +138,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                conclusive: true,
+                coverage: { coverage: 'complete' },
                 fields: [
                   { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
                   { field: 'min_p', verdict: { verdict: 'matches' } },
@@ -162,7 +162,7 @@ describe('ProxySamplingPanel', () => {
             baseline: {
               state: 'read',
               report: {
-                conclusive: true,
+                coverage: { coverage: 'complete' },
                 fields: [
                   { field: 'top_p', verdict: { verdict: 'matches' } },
                   { field: 'min_p', verdict: { verdict: 'matches' } },
@@ -174,6 +174,93 @@ describe('ProxySamplingPanel', () => {
       );
 
       expect(screen.getByText(/All 2 sampler defaults match/i)).toBeInTheDocument();
+    });
+
+    // **The defect.** `conclusive` was "any field reached a verdict", so two
+    // of seven checked rendered as an all-clear over all seven — the panel's
+    // own blind-as-health rule, applied to the report instead of to a field.
+    it('never reports an all-clear when only some fields could be checked', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 2, indeterminate: 1 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                  {
+                    field: 'temperature',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/All \d+ sampler defaults match/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Checked 2 of 3 sampler defaults/i)).toBeInTheDocument();
+      expect(screen.getByText(/not reported by this build/i)).toBeInTheDocument();
+    });
+
+    // Coverage is checked after drift, so a partial reading that found a moved
+    // default still raises the alarm rather than being softened into "some
+    // fields could not be checked".
+    it('still raises drift when coverage is only partial', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 1, indeterminate: 1 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
+                  {
+                    field: 'min_p',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/defaults have moved/i)).toBeInTheDocument();
+    });
+
+    // Several distinct causes exist now; showing only the first hid whichever
+    // did not happen to sort first.
+    it('lists every distinct reason a field could not be checked', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'blind', indeterminate: 2 },
+                fields: [
+                  {
+                    field: 'top_p',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                  {
+                    field: 'min_p',
+                    verdict: { verdict: 'indeterminate', reason: 'something else entirely' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/not reported by this build/i)).toBeInTheDocument();
+      expect(screen.getByText(/something else entirely/i)).toBeInTheDocument();
     });
 
     // The baseline half's version of the rule the whole panel obeys. A read

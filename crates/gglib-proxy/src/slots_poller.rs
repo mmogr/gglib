@@ -232,7 +232,7 @@ async fn read_baseline(client: &Client, base_url: &str, audit: &SamplingAuditSto
                 );
             }
             debug!(
-                conclusive = report.conclusive,
+                coverage = ?report.coverage,
                 "read llama-server sampling defaults from /props"
             );
             audit.set_baseline(BaselineState::Read { report });

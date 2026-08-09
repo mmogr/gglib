@@ -271,11 +271,26 @@ export interface SamplingBaselineField {
   verdict: SamplingBaselineVerdict;
 }
 
+/**
+ * Mirrors `gglib_proxy::props::BaselineCoverage`
+ * (`#[serde(tag = "coverage", rename_all = "snake_case")]`).
+ *
+ * Replaces a `conclusive: boolean` that was computed as "any field reached a
+ * verdict", so a report covering two of seven fields claimed to be conclusive
+ * and rendered as an all-clear over all seven. Only `complete` may render one.
+ *
+ * Orthogonal to drift: `complete` says every field was compared, not that
+ * every field agreed. Check the field verdicts first.
+ */
+export type SamplingBaselineCoverage =
+  | { coverage: 'complete' }
+  | { coverage: 'partial'; checked: number; indeterminate: number }
+  | { coverage: 'blind'; indeterminate: number };
+
 /** Mirrors `gglib_proxy::props::BaselineReport`. */
 export interface SamplingBaselineReport {
   fields: SamplingBaselineField[];
-  /** `false` when nothing could be concluded about any field. */
-  conclusive: boolean;
+  coverage: SamplingBaselineCoverage;
 }
 
 /**
