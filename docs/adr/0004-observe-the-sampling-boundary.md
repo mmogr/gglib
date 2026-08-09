@@ -91,9 +91,12 @@ seven at values chosen to equal upstream's.
 > `SAMPLER_LAUNCH_FLAGS_PASSED` is a compile-time constant modelling a runtime
 > fact. It is wrong in the conservative direction — it claims blindness on a
 > path that can actually see, never sight on one that cannot — which is the
-> only direction decision 3 permits. It is also about to stop mattering:
-> deleting `to_cli_args` removes the flags from every path at once, at which
-> point the constant is unconditionally correct at `false`.
+> only direction decision 3 permits.
+>
+> **Resolved.** Deleting `to_cli_args` removed the flags from every path at
+> once, so the constant is now unconditionally correct at `false` and the
+> distinction between the two launch paths no longer affects what this
+> instrument can conclude.
 >
 > Recorded rather than edited away because "the primary path is blind" and
 > "every path is blind" support the same decision by different amounts, and the
@@ -325,13 +328,23 @@ evidence for. Those need an A/B instrument that does not exist yet.
 
 ## Follow-ups
 
-- Delete the sampler launch flags (ADR 0003's decision), which is what switches
-  the baseline check on. Flip `SAMPLER_LAUNCH_FLAGS_PASSED`; the guard test
-  will insist.
+- ~~Delete the sampler launch flags, which is what switches the baseline check
+  on.~~ Done. Verified live: the check went from `Indeterminate` on all seven
+  fields to conclusive `Matches` on all seven, and
+  `SAMPLER_LAUNCH_FLAGS_PASSED` is now `false`. It was kept rather than deleted
+  with the flags, because the failure it guards against is a flag *reappearing*
+  — `no_sampler_flag_may_reappear_unnoticed` asserts both halves across the two
+  crates.
 - Render the readback in the CLI dashboard, for parity with the GUI.
-- `ParamSource::Deferred`, so `model explain` can print "llama.cpp's default"
-  and name the number `/props` reports, rather than showing a field as unset.
+- Have `model explain` print the build's default beside a deferred field, so a
+  `—` reads as "llama.cpp chose 0.95" rather than as a gap. This is what ADR
+  0003 decision 5 was after; the `ParamSource::Deferred` variant it proposed
+  turned out not to be the mechanism (see the amendment there) — `Unset`
+  already carries the distinction, and what is missing is the number, which
+  comes from [`props`].
 - Correlating a slot to a request needs `id_task`, which llama.cpp does not
   return on the chat-completions path. Finding 4's abstention is the right
   answer without it; an upstream request for it would make the instrument a
   census rather than a sample, and would remove finding 3's bias too.
+
+[`props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs

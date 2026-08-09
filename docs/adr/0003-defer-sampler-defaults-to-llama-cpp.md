@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 7 overclaimed what the
-  readback can catch; see the amendment there)
+  readback can catch, and decision 5's mechanism was dropped on
+  implementation; see the amendments there)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -297,17 +298,42 @@ Beyond removing a write that does nothing, this makes
 own defaults — turning the one-off probe in this ADR into a continuously
 available instrument.
 
-**5. A `ParamSource::Deferred` variant carries the provenance.** #739 chose
-force-write partly so the value "stays visible as `min_p=floor`". Deferring
-answers that objection *better* than force-writing did:
+**5. Provenance distinguishes "gglib picked 40" from "llama.cpp picked 40".**
+#739 chose force-write partly so the value "stays visible as `min_p=floor`".
+Deferring answers that objection *better* than force-writing did:
 
 ```
 top_k    —    <- deferred to llama.cpp (b1-69bf643 default: 40)
 ```
 
-This distinguishes "gglib picked 40" from "llama.cpp picked 40", which the
-current output cannot express at all. The build's default is read from
-`/props` and **omitted rather than invented** when unavailable.
+The build's default is read from `/props` and **omitted rather than invented**
+when unavailable.
+
+> **Amended 2026-08-09, on implementation.** As written this decision called
+> for a `ParamSource::Deferred` variant, and building it showed the variant is
+> not what produces the output above.
+>
+> `ParamSource::Unset` already means precisely "gglib names no value, so
+> llama.cpp's default applies" — that is its documented meaning, and
+> `explain_display` already renders it "unset by design". The distinction this
+> decision asks for is therefore *already carried*: `Layer(i)`/`Floor` means
+> gglib picked it, `Unset` means upstream did. What was missing is the
+> **number** beside it, which comes from `/props` and not from a provenance
+> variant.
+>
+> A second variant with semantics identical to `Unset` would be a distinction
+> without a difference, in an enum whose exhaustiveness is CI-enforced
+> (`check_param_source_exhaustive.sh`) precisely because each variant is meant
+> to force a decision at every match site. So the decision stands and the
+> mechanism does not: the implementation renders `Unset` with the build's
+> default attached.
+>
+> One nuance the deferral did surface, and it is a real one: `Unset` now covers
+> both "gglib measured upstream's value and agreed with it" (the six) and
+> "gglib has no opinion at all" (`dry_base` and friends). Those differ in
+> whether a pin bump should re-open a decision — but that set is already named
+> where it is needed, in `props::UPSTREAM_DEFAULTS`, rather than in the
+> per-request provenance of a value nobody sent.
 
 **6. Deferral ships only after the readback exists.** The observation organ of
 finding 7 lands first, and its own decisions — liveness contract, refusal to
@@ -388,6 +414,9 @@ and would be expensive to act on.
 
 ## Follow-ups
 
+- ~~Delete the six redundant floor values and the launch-flag emission.~~ Done.
+  Verified behaviour-preserving against a live pinned server: a body carrying
+  only `temperature` produces a slot reporting all seven original values.
 - ~~Build the readback and write its ADR.~~ Done —
   [ADR 0004](0004-observe-the-sampling-boundary.md). Its finding 1 inverts part
   of this document's finding 3: the launch flags are inert for *request
