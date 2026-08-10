@@ -199,6 +199,12 @@ pub struct FieldSources {
     pub repeat_penalty: ParamSource,
     /// Where the resolved `min_p` came from.
     pub min_p: ParamSource,
+    /// Where the resolved `dynatemp_range` came from.
+    pub dynatemp_range: ParamSource,
+    /// Where the resolved `dynatemp_exponent` came from.
+    pub dynatemp_exponent: ParamSource,
+    /// Where the resolved `top_n_sigma` came from.
+    pub top_n_sigma: ParamSource,
     /// Where the resolved `dry_multiplier` came from.
     pub dry_multiplier: ParamSource,
     /// Where the resolved `dry_base` came from.
@@ -226,6 +232,9 @@ impl FieldSources {
             ("presence_penalty", self.presence_penalty),
             ("repeat_penalty", self.repeat_penalty),
             ("min_p", self.min_p),
+            ("dynatemp_range", self.dynatemp_range),
+            ("dynatemp_exponent", self.dynatemp_exponent),
+            ("top_n_sigma", self.top_n_sigma),
             ("dry_multiplier", self.dry_multiplier),
             ("dry_base", self.dry_base),
             ("dry_allowed_length", self.dry_allowed_length),
@@ -269,6 +278,9 @@ mod tests {
             presence_penalty: ParamSource::FloorCoupled,
             repeat_penalty: ParamSource::FloorCoupled,
             min_p: ParamSource::FloorCoupled,
+            dynatemp_range: ParamSource::Unset,
+            dynatemp_exponent: ParamSource::Unset,
+            top_n_sigma: ParamSource::Unset,
             dry_multiplier: ParamSource::FloorCoupled,
             dry_base: ParamSource::Unset,
             dry_allowed_length: ParamSource::Unset,
@@ -285,6 +297,9 @@ mod tests {
                 "presence_penalty",
                 "repeat_penalty",
                 "min_p",
+                "dynatemp_range",
+                "dynatemp_exponent",
+                "top_n_sigma",
                 "dry_multiplier",
                 "dry_base",
                 "dry_allowed_length",
@@ -305,6 +320,9 @@ mod tests {
             presence_penalty: ParamSource::FloorCoupled,
             repeat_penalty: ParamSource::Layer(2),
             min_p: ParamSource::Floor,
+            dynatemp_range: ParamSource::Unset,
+            dynatemp_exponent: ParamSource::Unset,
+            top_n_sigma: ParamSource::Unset,
             dry_multiplier: ParamSource::Layer(2),
             dry_base: ParamSource::Unset,
             dry_allowed_length: ParamSource::Unset,
@@ -333,6 +351,9 @@ mod tests {
             presence_penalty: ParamSource::Floor,
             repeat_penalty: ParamSource::Floor,
             min_p: ParamSource::Floor,
+            dynatemp_range: ParamSource::Unset,
+            dynatemp_exponent: ParamSource::Unset,
+            top_n_sigma: ParamSource::Unset,
             dry_multiplier: ParamSource::Floor,
             dry_base: ParamSource::Unset,
             dry_allowed_length: ParamSource::Unset,

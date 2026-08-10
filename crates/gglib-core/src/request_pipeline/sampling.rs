@@ -359,6 +359,9 @@ pub fn resolve_sampling(
             presence_penalty = ?resolved.presence_penalty,
             repeat_penalty = ?resolved.repeat_penalty,
             min_p = ?resolved.min_p,
+            dynatemp_range = ?resolved.dynatemp_range,
+            dynatemp_exponent = ?resolved.dynatemp_exponent,
+            top_n_sigma = ?resolved.top_n_sigma,
             dry_multiplier = ?resolved.dry_multiplier,
             dry_base = ?resolved.dry_base,
             dry_allowed_length = ?resolved.dry_allowed_length,
@@ -1158,6 +1161,43 @@ mod tests {
         assert_param(&body, "dry_multiplier", 0.8);
         // Global is a deliberate setting, so its temperature stands uncapped.
         assert_param(&body, "temperature", 0.8);
+    }
+
+    /// The entropy-adaptive fields ride the same uncoupled rules DRY does: a
+    /// layer naming only `dynatemp_range` keeps it when a lower layer claims
+    /// the temperature, and nothing is emitted for them when no layer names
+    /// one — llama.cpp's own "off" defaults apply by silence, per ADR 0003.
+    #[test]
+    fn dynatemp_survives_without_a_temperature_in_the_same_layer_and_defers_otherwise() {
+        // Nothing names the entropy-adaptive fields: they must not reach the
+        // wire at all.
+        let mut body = json!({});
+        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+        assert_deferred(&body, "dynatemp_range");
+        assert_deferred(&body, "dynatemp_exponent");
+        assert_deferred(&body, "top_n_sigma");
+
+        // A profile naming only the entropy-adaptive fields keeps them even
+        // though the model's auto-detected recipe claims the temperature.
+        let mut body = json!({});
+        resolve_sampling(
+            &mut body,
+            &ctx,
+            &SamplingLayers {
+                profile: Some(InferenceConfig {
+                    dynatemp_range: Some(0.5),
+                    top_n_sigma: Some(1.0),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert_param(&body, "dynatemp_range", 0.5);
+        assert_param(&body, "top_n_sigma", 1.0);
+        // The trio still comes from the claiming layer, untouched.
+        assert_param(&body, "temperature", 1.0);
+        assert_param(&body, "presence_penalty", 1.5);
     }
 
     /// Regression guard for #745. DRY is deliberately *not* part of the

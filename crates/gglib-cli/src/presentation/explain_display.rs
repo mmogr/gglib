@@ -141,6 +141,9 @@ pub fn explanation_lines(
         ("presence_penalty", fmt_f32(resolved.presence_penalty)),
         ("repeat_penalty", fmt_f32(resolved.repeat_penalty)),
         ("min_p", fmt_f32(resolved.min_p)),
+        ("dynatemp_range", fmt_f32(resolved.dynatemp_range)),
+        ("dynatemp_exponent", fmt_f32(resolved.dynatemp_exponent)),
+        ("top_n_sigma", fmt_f32(resolved.top_n_sigma)),
         ("dry_multiplier", fmt_f32(resolved.dry_multiplier)),
         ("dry_base", fmt_f32(resolved.dry_base)),
         ("dry_allowed_length", fmt_i32(resolved.dry_allowed_length)),
@@ -369,6 +372,9 @@ mod tests {
             repeat_penalty: ParamSource::FloorCoupled,
             min_p: ParamSource::FloorCoupled,
             dry_multiplier: ParamSource::FloorCoupled,
+            dynatemp_range: ParamSource::Unset,
+            dynatemp_exponent: ParamSource::Unset,
+            top_n_sigma: ParamSource::Unset,
             dry_base: ParamSource::Unset,
             dry_allowed_length: ParamSource::Unset,
             dry_penalty_last_n: ParamSource::Unset,
@@ -383,7 +389,7 @@ mod tests {
             &auto_detected_sources(),
             ctx(),
         );
-        assert_eq!(lines.len(), 11, "{lines:#?}");
+        assert_eq!(lines.len(), 14, "{lines:#?}");
         for field in [
             "temperature",
             "top_p",
@@ -634,7 +640,7 @@ mod tests {
             ctx(),
         );
 
-        assert_eq!(lines.len(), 11, "one row per parameter and nothing else");
+        assert_eq!(lines.len(), 14, "one row per parameter and nothing else");
         assert!(lines.iter().all(|l| !l.starts_with(' ')), "{lines:#?}");
     }
 

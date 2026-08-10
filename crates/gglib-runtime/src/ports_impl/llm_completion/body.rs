@@ -169,6 +169,9 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            dynatemp_range: Some(0.5),
+            dynatemp_exponent: Some(1.5),
+            top_n_sigma: Some(1.0),
             seed: Some(100),
         }
     }

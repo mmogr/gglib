@@ -137,6 +137,46 @@ pub struct InferenceConfig {
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     pub min_p: Option<f32>,
 
+    /// Dynamic-temperature half-range — entropy-adaptive temperature.
+    ///
+    /// llama.cpp scales the effective temperature within
+    /// `[temperature − range, temperature + range]` by the entropy of each
+    /// step's token distribution: confident (low-entropy) steps decode
+    /// cooler, uncertain (high-entropy) steps decode hotter. On a completion
+    /// that mixes free-form reasoning with structured tool-call tokens this
+    /// is a per-token soft version of phase-aware sampling, with no phase
+    /// detection required.
+    /// - 0.0: Disabled (llama.cpp's default)
+    /// - 0.3–0.75: Exploratory range around a 0.6–1.0 base temperature
+    ///
+    /// Unset defers to llama.cpp's own default (0.0, disabled).
+    ///
+    /// Deliberately **not** part of the temperature-coupled trio, for the
+    /// reason DRY is not (#746): coupling would make a layer naming only a
+    /// `dynatemp_range` lose it to any lower layer naming a `temperature` —
+    /// the default state of every `reasoning`-tagged model — which costs the
+    /// most natural way of switching it on. Unlike the trio, its meaning is
+    /// anchored to whatever base temperature actually resolves, so an
+    /// orphaned range stays coherent.
+    pub dynatemp_range: Option<f32>,
+
+    /// Dynamic-temperature exponent, shaping how sharply the effective
+    /// temperature responds to entropy. Inert while
+    /// [`dynatemp_range`](Self::dynatemp_range) is unset or zero.
+    /// Unset defers to llama.cpp's own default (1.0).
+    pub dynatemp_exponent: Option<f32>,
+
+    /// Top-n-sigma: keep only tokens whose *pre-softmax* logit is within
+    /// `n × σ` of the maximum (arXiv 2411.07641). Because it truncates the
+    /// unscaled logits, the candidate set does not widen as temperature
+    /// rises — the property that makes it a candidate for keeping tool-call
+    /// tokens stable while a reasoning model decodes hot.
+    /// - ≤ 0.0: Disabled (llama.cpp's default is −1.0)
+    /// - 1.0–2.0: The paper's evaluated range
+    ///
+    /// Unset defers to llama.cpp's own default (−1.0, disabled).
+    pub top_n_sigma: Option<f32>,
+
     /// DRY (Don't Repeat Yourself) penalty strength.
     ///
     /// Penalises tokens that would extend a sequence already present in the
@@ -638,6 +678,15 @@ impl InferenceConfig {
         if self.min_p.is_none() {
             self.min_p = other.min_p;
         }
+        if self.dynatemp_range.is_none() {
+            self.dynatemp_range = other.dynatemp_range;
+        }
+        if self.dynatemp_exponent.is_none() {
+            self.dynatemp_exponent = other.dynatemp_exponent;
+        }
+        if self.top_n_sigma.is_none() {
+            self.top_n_sigma = other.top_n_sigma;
+        }
         if self.dry_multiplier.is_none() {
             self.dry_multiplier = other.dry_multiplier;
         }
@@ -794,6 +843,9 @@ impl InferenceConfig {
         let top_k = first(&|c| c.top_k.is_some());
         let max_tokens = first(&|c| c.max_tokens.is_some());
         let temperature = first(&|c| c.temperature.is_some());
+        let dynatemp_range = first(&|c| c.dynatemp_range.is_some());
+        let dynatemp_exponent = first(&|c| c.dynatemp_exponent.is_some());
+        let top_n_sigma = first(&|c| c.top_n_sigma.is_some());
         let dry_multiplier = first(&|c| c.dry_multiplier.is_some());
         let dry_base = first(&|c| c.dry_base.is_some());
         let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
@@ -804,6 +856,11 @@ impl InferenceConfig {
         result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
         result.max_tokens = max_tokens.and_then(|i| layers[i].and_then(|c| c.max_tokens));
         result.temperature = temperature.and_then(|i| layers[i].and_then(|c| c.temperature));
+        result.dynatemp_range =
+            dynatemp_range.and_then(|i| layers[i].and_then(|c| c.dynatemp_range));
+        result.dynatemp_exponent =
+            dynatemp_exponent.and_then(|i| layers[i].and_then(|c| c.dynatemp_exponent));
+        result.top_n_sigma = top_n_sigma.and_then(|i| layers[i].and_then(|c| c.top_n_sigma));
         result.dry_multiplier =
             dry_multiplier.and_then(|i| layers[i].and_then(|c| c.dry_multiplier));
         result.dry_base = dry_base.and_then(|i| layers[i].and_then(|c| c.dry_base));
@@ -855,6 +912,9 @@ impl InferenceConfig {
                 coupled,
             ),
             min_p: source(coupled_layers.min_p, floor.min_p.is_some(), coupled),
+            dynatemp_range: source(dynatemp_range, floor.dynatemp_range.is_some(), false),
+            dynatemp_exponent: source(dynatemp_exponent, floor.dynatemp_exponent.is_some(), false),
+            top_n_sigma: source(top_n_sigma, floor.top_n_sigma.is_some(), false),
             dry_multiplier: source(dry_multiplier, floor.dry_multiplier.is_some(), false),
             dry_base: source(dry_base, floor.dry_base.is_some(), false),
             dry_allowed_length: source(
@@ -987,6 +1047,15 @@ impl InferenceConfig {
             repeat_penalty: None,
             presence_penalty: None,
             min_p: None,
+            // Never floored: introduced after ADR 0003, under its rule — the
+            // floor asserts only measured divergences from upstream, and no
+            // measurement says llama.cpp's own defaults (range 0.0 / exponent
+            // 1.0 / sigma −1.0, all "off") are wrong as a fleet-wide floor.
+            // Switching either mechanism on is a per-model or per-profile
+            // tuning decision with sweep data behind it.
+            dynatemp_range: None,
+            dynatemp_exponent: None,
+            top_n_sigma: None,
             // DRY stays off, and now says so by silence rather than by
             // asserting the zero llama.cpp already defaults to. Enabling it
             // fleet-wide is a tuning decision for a per-model or per-profile
@@ -1124,11 +1193,15 @@ impl InferenceConfig {
             // written before DRY existed deserialize these as `None`, so any
             // value here would make every one of them compare unequal and
             // silently reclassify as user-set, moving them up a resolution
-            // rung.
+            // rung. The same holds for every field added since — dynatemp and
+            // top-n-sigma included.
             dry_multiplier: None,
             dry_base: None,
             dry_allowed_length: None,
             dry_penalty_last_n: None,
+            dynatemp_range: None,
+            dynatemp_exponent: None,
+            top_n_sigma: None,
         }
     }
 
@@ -1371,6 +1444,9 @@ impl InferenceConfig {
             repeat_penalty: read_f32(obj, "repeat_penalty", &mut issues),
             presence_penalty: read_f32(obj, "presence_penalty", &mut issues),
             min_p: read_f32(obj, "min_p", &mut issues),
+            dynatemp_range: read_f32(obj, "dynatemp_range", &mut issues),
+            dynatemp_exponent: read_f32(obj, "dynatemp_exponent", &mut issues),
+            top_n_sigma: read_f32(obj, "top_n_sigma", &mut issues),
             dry_multiplier: read_f32(obj, "dry_multiplier", &mut issues),
             dry_base: read_f32(obj, "dry_base", &mut issues),
             seed: read_seed(obj, &mut issues),
@@ -1751,6 +1827,10 @@ mod tests {
             dry_base: None,
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            // Same coverage shape for the entropy-adaptive fields.
+            dynatemp_range: Some(0.5),
+            dynatemp_exponent: None,
+            top_n_sigma: Some(1.5),
             seed: Some(100),
         };
 
@@ -1769,6 +1849,9 @@ mod tests {
         assert_eq!(camel_to_snake("repeatPenalty"), "repeat_penalty");
         assert_eq!(camel_to_snake("presencePenalty"), "presence_penalty");
         assert_eq!(camel_to_snake("minP"), "min_p");
+        assert_eq!(camel_to_snake("dynatempRange"), "dynatemp_range");
+        assert_eq!(camel_to_snake("dynatempExponent"), "dynatemp_exponent");
+        assert_eq!(camel_to_snake("topNSigma"), "top_n_sigma");
     }
 
     #[test]
@@ -2394,6 +2477,9 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(64),
+            dynatemp_range: Some(0.5),
+            dynatemp_exponent: Some(1.0),
+            top_n_sigma: Some(1.0),
             seed: Some(100),
         };
 

@@ -55,6 +55,11 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
                     dry_base,
                     dry_allowed_length,
                     dry_penalty_last_n,
+                    // Entropy-adaptive flags arrive with the operator-surface
+                    // change; until then the profile layer names no opinion.
+                    dynatemp_range: None,
+                    dynatemp_exponent: None,
+                    top_n_sigma: None,
                     // Profiles are stored and reused across every request that
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.

@@ -568,6 +568,32 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
     }
 
+    // Validate dynatemp_range (non-negative; 0.0 disables dynamic temperature)
+    if let Some(dr) = config.dynatemp_range
+        && dr < 0.0
+    {
+        return Err(format!(
+            "Dynatemp range must be non-negative (0.0 disables), got {dr}"
+        ));
+    }
+
+    // Validate dynatemp_exponent (must be positive; inert without a range)
+    if let Some(de) = config.dynatemp_exponent
+        && de <= 0.0
+    {
+        return Err(format!("Dynatemp exponent must be positive, got {de}"));
+    }
+
+    // Validate top_n_sigma (-1.0 disables; llama.cpp treats any value at or
+    // below zero as off, and -1.0 is its own spelling of the default)
+    if let Some(ts) = config.top_n_sigma
+        && ts < -1.0
+    {
+        return Err(format!(
+            "Top-n-sigma must be -1.0 (disabled) or greater, got {ts}"
+        ));
+    }
+
     // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
     if let Some(dm) = config.dry_multiplier
         && !(0.0..=5.0).contains(&dm)
@@ -690,6 +716,9 @@ mod tests {
             dry_base: Some(1.75),
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            dynatemp_range: Some(0.5),
+            dynatemp_exponent: Some(1.0),
+            top_n_sigma: Some(1.0),
             seed: None,
         };
         assert!(validate_inference_config(&config).is_ok());

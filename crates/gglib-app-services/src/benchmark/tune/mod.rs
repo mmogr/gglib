@@ -384,6 +384,9 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                                 dry_base: None,
                                 dry_allowed_length: None,
                                 dry_penalty_last_n: None,
+                                dynatemp_range: None,
+                                dynatemp_exponent: None,
+                                top_n_sigma: None,
                             });
                         }
                     }
@@ -445,6 +448,9 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
                 dry_base: None,
                 dry_allowed_length: None,
                 dry_penalty_last_n: None,
+                dynatemp_range: None,
+                dynatemp_exponent: None,
+                top_n_sigma: None,
             },
         ));
     }

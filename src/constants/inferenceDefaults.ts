@@ -97,6 +97,29 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
   minP: { default: null, min: 0, max: 1, step: 0.01 },
 
   /**
+   * Rust: unset at the floor, deferred to llama.cpp's own 0.0 (disabled) —
+   * introduced after ADR 0003, so it was never floored at all. Validation
+   * requires non-negative; the `max` here is a UI guard rail (useful ranges
+   * sit at or below the base temperature).
+   */
+  dynatempRange: { default: null, min: 0, max: 2, step: 0.05 },
+
+  /**
+   * Rust: unset at the floor; llama.cpp's own default is 1.0. Inert unless
+   * `dynatempRange` is set. Validation requires a positive value, so the
+   * minimum is one step above zero.
+   */
+  dynatempExponent: { default: null, min: 0.05, max: 5, step: 0.05 },
+
+  /**
+   * Rust: unset at the floor; llama.cpp's own default is -1.0 (disabled, and
+   * any value at or below zero reads as off). Validation accepts -1.0 or
+   * greater, which is why `min` is -1. The paper's evaluated range tops out
+   * near 3; 5 is the UI guard rail.
+   */
+  topNSigma: { default: null, min: -1, max: 5, step: 0.05 },
+
+  /**
    * Rust: unset at the floor, deferred to llama.cpp's own 0.0 (ADR 0003), so
    * DRY stays off by silence rather than by gglib restating the zero upstream
    * already defaults to. Turning it on for every untuned model would be a

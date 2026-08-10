@@ -31,6 +31,17 @@ export interface InferenceConfig {
   /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
    *  0.0 = disabled (recommended by Qwen3.6). */
   minP?: number;
+  /** Dynamic-temperature half-range: entropy-scales the effective temperature
+   *  within [temp − range, temp + range]. 0.0 = disabled; unset defers to
+   *  llama.cpp's default (0.0). */
+  dynatempRange?: number;
+  /** Dynamic-temperature exponent; inert unless dynatempRange is set. Unset
+   *  defers to llama.cpp's default (1.0). */
+  dynatempExponent?: number;
+  /** Top-n-sigma: keep tokens within n·σ of the max pre-softmax logit, so the
+   *  candidate set does not widen with temperature. −1.0 = disabled; unset
+   *  defers to llama.cpp's default (−1.0). */
+  topNSigma?: number;
   /** DRY repetition penalty strength. 0.0 = disabled; catches multi-token
    *  loops that the flat `repeatPenalty` cannot see. */
   dryMultiplier?: number;
@@ -110,6 +121,9 @@ export type SamplingParamKey =
   | 'presencePenalty'
   | 'repeatPenalty'
   | 'minP'
+  | 'dynatempRange'
+  | 'dynatempExponent'
+  | 'topNSigma'
   | 'dryMultiplier'
   | 'dryBase'
   | 'dryAllowedLength'
