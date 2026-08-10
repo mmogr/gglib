@@ -28,6 +28,8 @@ export interface StartServerRequest {
     topK?: number;
     maxTokens?: number;
     repeatPenalty?: number;
+    presencePenalty?: number;
+    minP?: number;
   };
 }
 
@@ -42,18 +44,22 @@ export interface StartServerRequest {
  */
 export function toStartServerRequest(config: ServeConfig): StartServerRequest {
   // Build inference params object only if any values are set
-  const hasInferenceParams = config.temperature !== undefined || 
-    config.topP !== undefined || 
-    config.topK !== undefined || 
-    config.maxTokens !== undefined || 
-    config.repeatPenalty !== undefined;
-  
+  const hasInferenceParams = config.temperature !== undefined ||
+    config.topP !== undefined ||
+    config.topK !== undefined ||
+    config.maxTokens !== undefined ||
+    config.repeatPenalty !== undefined ||
+    config.presencePenalty !== undefined ||
+    config.minP !== undefined;
+
   const inferenceParams = hasInferenceParams ? {
     temperature: config.temperature,
     topP: config.topP,
     topK: config.topK,
     maxTokens: config.maxTokens,
     repeatPenalty: config.repeatPenalty,
+    presencePenalty: config.presencePenalty,
+    minP: config.minP,
   } : undefined;
 
   return {
