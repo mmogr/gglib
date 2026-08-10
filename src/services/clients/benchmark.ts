@@ -12,11 +12,14 @@
 
 import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
 import type {
+  AgenticEvalConfig,
+  AgenticEvalReport,
   BenchmarkEvent,
   BenchmarkRun,
   CompareConfig,
   GetBenchmarkRunResponse,
   ListBenchmarkRunsResponse,
+  ModelAgenticHistoryResponse,
   ModelBenchmarkHistoryResponse,
   ModelTuneHistoryResponse,
   PerfConfig,
@@ -74,6 +77,20 @@ export async function getModelTuneHistory(
     `/api/models/${modelId}/tune-history?limit=${limit}`,
   );
   return response.results;
+}
+
+/**
+ * GET /api/models/{id}/agentic-history — past raw-vs-gglib reports,
+ * most recent first. `limit` is clamped to 1..=100 server-side.
+ */
+export async function getModelAgenticHistory(
+  modelId: number,
+  limit = 20,
+): Promise<AgenticEvalReport[]> {
+  const response = await get<ModelAgenticHistoryResponse>(
+    `/api/models/${modelId}/agentic-history?limit=${limit}`,
+  );
+  return response.reports;
 }
 
 // ─── SSE streaming helpers ────────────────────────────────────────────────────
@@ -216,6 +233,40 @@ export async function startTuneRun(
     throw new Error(
       (body as { error?: string }).error ??
         `Tune run failed: ${response.status}`,
+    );
+  }
+
+  await consumeSseStream(response, onEvent);
+}
+
+/**
+ * POST /api/benchmark/agentic  (SSE)
+ * Start a raw-vs-gglib agentic eval and stream events via `onEvent`.
+ * Aborting the signal genuinely cancels the server-side run (the stream
+ * guard drop-cancels the eval task). Resolves when the stream ends.
+ */
+export async function startAgenticRun(
+  config: AgenticEvalConfig,
+  onEvent: (event: BenchmarkEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+
+  const response = await fetch(`${baseUrl}/api/benchmark/agentic`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers as Record<string, string>),
+    },
+    body: JSON.stringify(config),
+    signal,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ??
+        `Agentic eval failed: ${response.status}`,
     );
   }
 
