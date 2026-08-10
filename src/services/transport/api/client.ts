@@ -72,7 +72,7 @@ export interface HttpClient {
  * Request options for HTTP client.
  */
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
 }
 
@@ -316,6 +316,14 @@ export async function post<T>(path: string, body?: unknown): Promise<T> {
 export async function put<T>(path: string, body: unknown): Promise<T> {
   const client = await getClient();
   return client.request<T>(path, { method: 'PUT', body });
+}
+
+/**
+ * Helper for PATCH requests.
+ */
+export async function patch<T>(path: string, body: unknown): Promise<T> {
+  const client = await getClient();
+  return client.request<T>(path, { method: 'PATCH', body });
 }
 
 /**

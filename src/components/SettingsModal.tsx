@@ -213,11 +213,11 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setTrustClientSampling(false); // Default is disabled
       setProxyLoopDetection(true); // Default is enabled
       resetDesktop();
-    setDownloadPathInput('');
-    network.reset();
-    agentGuards.reset();
+      setDownloadPathInput('');
+      network.reset();
+      agentGuards.reset();
     }
-  }, [info, settings, resetDesktop]);
+  }, [info, settings, resetDesktop, network, agentGuards]);
 
   const handleRefresh = useCallback(() => {
     refreshDir();

@@ -9,6 +9,7 @@ export { TagAddInput } from './TagAddInput';
 export { ServeModal } from './ServeModal';
 export { DeleteModal } from './DeleteModal';
 export { InspectorTags } from './InspectorTags';
+export { InspectorCapabilities } from './InspectorCapabilities';
 export { InspectorHeader } from './InspectorHeader';
 export { InspectorFooter } from './InspectorFooter';
 export { InspectorEmptyState } from './InspectorEmptyState';
