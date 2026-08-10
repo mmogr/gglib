@@ -446,13 +446,36 @@ has an accessible name.
 - Green means running/online only, expressed as a **dot + neutral text** —
   never a filled pill.
 - Amber (`primary`) is selection, focus, links, and the single primary CTA.
+- Warning is always an icon or label **plus text**, never color alone —
+  accent amber and warning gold are hue neighbors by design, so the words
+  carry the distinction.
 
 ### Type hierarchy
 
 No all-caps micro-labels. Panel/modal titles `text-lg font-semibold`;
 section headings `text-sm font-semibold text-text`; body and controls
-`text-sm`; meta `text-xs text-text-muted`; ports/paths/quant strings
-`font-mono text-xs tabular-nums`. `text-2xs` is reserved for badge numerals.
+`text-sm`; meta `text-xs text-text-muted`; ports/paths/quant strings and
+**all numeric telemetry** (counts, rates, percentages, sizes)
+`font-mono tabular-nums`. `text-2xs` is reserved for badge numerals and
+readout unit suffixes.
+
+### Readouts & live charts
+
+Every live metric renders through `primitives/Readout`: mono `tabular-nums`
+value, quiet unit suffix, label in `text-xs text-text-muted`. Intent colors
+the value only — labels and units always stay quiet, and warning/danger
+intents never appear without the label naming the metric.
+
+Exactly **one sparkline style app-wide**: `primitives/Sparkline` with its
+defaults (currentColor stroke, 2px terminus dot, faint `stroke-border`
+baseline) — no per-screen variants; only width/height flex with context.
+A sparkline never appears without an adjacent current-value Readout.
+Percentage series pin the domain (`min={0} max={100}`) so lines show real
+movement, not autoscaled noise.
+
+Usage-meter severity thresholds (donut, KV readouts) are **70 warning /
+90 danger**; below 70 meters wear `primary` — green is reserved for
+running/online and never means "usage is fine".
 
 ### Density & radius
 
