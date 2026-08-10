@@ -730,13 +730,22 @@ impl McpService {
     }
 
     /// Test connection to a server configuration (starts, gets tools, then stops).
+    ///
+    /// The throwaway instance is registered under a unique negative id rather
+    /// than a fixed one. Real servers use positive ids, so negatives are free;
+    /// a *constant* negative was not, because two overlapping tests would both
+    /// claim it and the first to finish would stop the other's process — one
+    /// user would see a working configuration reported as broken.
     pub async fn test_connection(
         &self,
         new_server: NewMcpServer,
     ) -> Result<Vec<McpTool>, McpServiceError> {
-        // Create a temporary server with fake ID for testing
+        static NEXT_TEST_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-2);
+        let test_id = NEXT_TEST_ID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Create a temporary server with a private id for testing
         let test_server = McpServer {
-            id: -1,
+            id: test_id,
             name: new_server.name,
             server_type: new_server.server_type,
             config: new_server.config,
@@ -749,17 +758,19 @@ impl McpService {
             last_error: None,
         };
 
-        let tools = self
+        let started = self
             .manager
             .start_server(test_server)
             .await
-            .map_err(|e| McpServiceError::StartFailed(e.to_string()))?;
+            .map_err(|e| McpServiceError::StartFailed(e.to_string()));
 
-        // Stop the test server
-        self.manager
-            .stop_server(-1)
-            .await
-            .map_err(|e| McpServiceError::StopFailed(e.to_string()))?;
+        // Stop unconditionally: a start that failed part-way can still have
+        // left a process behind, and leaking one per failed test is worse than
+        // a redundant stop.
+        let stopped = self.manager.stop_server(test_id).await;
+
+        let tools = started?;
+        stopped.map_err(|e| McpServiceError::StopFailed(e.to_string()))?;
 
         Ok(tools)
     }

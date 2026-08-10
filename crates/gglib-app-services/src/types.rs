@@ -803,6 +803,22 @@ pub struct McpToolInfo {
     pub title: Option<String>,
 }
 
+/// The outcome of `gglib mcp test`: did the server start, and what does it
+/// offer.
+///
+/// A failed connection is a result, not an error — a misconfigured command is
+/// the ordinary case this exists to diagnose, so `ok: false` carries the
+/// reason rather than the request failing.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpTestResult {
+    pub ok: bool,
+    /// Why the connection failed. Absent when `ok`.
+    pub error: Option<String>,
+    /// What the server offered. Empty unless `ok`.
+    pub tools: Vec<McpToolInfo>,
+}
+
 /// Request to call an MCP tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolCallRequest {

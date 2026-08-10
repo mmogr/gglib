@@ -234,6 +234,17 @@ impl SetupOps {
             .map_err(|e| GuiError::Internal(format!("Failed to remove Python environment: {e}")))
     }
 
+    /// A model sized to this machine, from the same shortlist `gglib up` uses
+    /// on a first run.
+    ///
+    /// `None` when nothing fits, which is a real answer rather than an error:
+    /// a machine too small for the smallest candidate has to be told so, not
+    /// handed a recommendation it cannot run.
+    pub fn recommend_model(&self) -> Option<gglib_core::domain::recommendation::Recommendation> {
+        let memory = self.deps.system_probe.get_system_memory_info();
+        gglib_core::domain::recommendation::recommend(&memory)
+    }
+
     /// Everything the diagnostics panel shows: dependency matrix, resolved
     /// paths, detected acceleration, accelerator state.
     ///

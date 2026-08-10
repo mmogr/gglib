@@ -125,6 +125,51 @@ pub struct DiagnosticsDto {
     pub fast_downloads: FastDownloadsDto,
 }
 
+/// A hardware-sized model suggestion — what `gglib up` picks on a first run.
+///
+/// `null` from the route rather than an empty object when nothing fits: "no
+/// model in the shortlist fits this machine" is a real answer and the UI has
+/// to say so, not show a recommendation card with blanks in it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendationDto {
+    pub repo: String,
+    pub quantization: String,
+    /// Why this model, in the user's terms.
+    pub rationale: String,
+    /// Weights plus KV cache at the candidate's context, at the quantization
+    /// the runtime actually launches with.
+    pub required_bytes: u64,
+    /// The memory figure it was sized against.
+    pub budget_bytes: u64,
+    /// Where that figure came from: `"vram" | "unifiedMemory" | "systemRam"`.
+    pub budget_source: String,
+    pub headroom_bytes: u64,
+    pub context: u64,
+}
+
+impl From<gglib_core::domain::recommendation::Recommendation> for RecommendationDto {
+    fn from(rec: gglib_core::domain::recommendation::Recommendation) -> Self {
+        use gglib_core::domain::recommendation::BudgetSource;
+
+        Self {
+            repo: rec.candidate.repo.to_string(),
+            quantization: rec.candidate.quantization.to_string(),
+            rationale: rec.candidate.rationale.to_string(),
+            required_bytes: rec.candidate.required_bytes(),
+            budget_bytes: rec.budget_bytes,
+            budget_source: match rec.budget_source {
+                BudgetSource::Vram => "vram",
+                BudgetSource::UnifiedMemory => "unifiedMemory",
+                BudgetSource::SystemRam => "systemRam",
+            }
+            .to_string(),
+            headroom_bytes: rec.headroom_bytes,
+            context: rec.candidate.context,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

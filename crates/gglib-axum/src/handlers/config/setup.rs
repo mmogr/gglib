@@ -10,7 +10,7 @@ use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::dto::diagnostics::{
-    AccelerationDto, DiagnosticsDto, FastDownloadsDto, ResolvedPathsDto,
+    AccelerationDto, DiagnosticsDto, FastDownloadsDto, RecommendationDto, ResolvedPathsDto,
 };
 use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
@@ -383,4 +383,16 @@ fn build_event_to_sse(event: BuildEvent) -> Result<Event, Infallible> {
     };
     let data = serde_json::to_string(&event).unwrap_or_default();
     Ok(Event::default().event(event_type).data(data))
+}
+
+/// A hardware-sized model suggestion — the shortlist `gglib up` picks from,
+/// sized against this machine's memory.
+///
+/// Returns `null` when nothing in the shortlist fits. That is a real answer,
+/// not an error: a machine too small for the smallest candidate needs to be
+/// told so, not handed a recommendation it cannot run.
+pub async fn recommend_model(
+    State(state): State<AppState>,
+) -> Result<Json<Option<RecommendationDto>>, HttpError> {
+    Ok(Json(state.setup.recommend_model().map(Into::into)))
 }
