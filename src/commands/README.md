@@ -215,7 +215,6 @@ when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
   `set <PATH>`.
 - **`llama`** — install, status, check-updates, update, rebuild, uninstall.
   gglib manages llama.cpp itself; see [Llama Management](llama/README.md).
-- **`assistant-ui`** — install, status, update.
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.
 - **`fast-downloads`** — `status`, `enable`, `disable`, `prompt` for the

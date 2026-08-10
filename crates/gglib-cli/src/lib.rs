@@ -27,7 +27,6 @@ use gglib_axum as _;
 // handlers/proxy_dashboard.rs
 use gglib_proxy as _;
 
-pub mod assistant_ui_commands;
 pub mod benchmark_commands;
 pub mod bootstrap;
 pub mod commands;
@@ -45,7 +44,6 @@ pub mod shared_args;
 pub mod utils;
 
 // Re-export primary types for convenient access
-pub use assistant_ui_commands::AssistantUiCommand;
 pub use bootstrap::{CliConfig, CliContext, bootstrap};
 pub use commands::Commands;
 pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};

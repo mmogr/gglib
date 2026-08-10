@@ -46,11 +46,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │  │   facade    │     │  llama-cli  │     │   routing   │     │  management │        │
 │  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
 │                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │  health.rs  │     │   system/   │     │assistant_ui/│                            │
-│  │ Health check│     │ GPU, memory │     │  Terminal   │                            │
-│  │  endpoints  │     │   probes    │     │  chat UI    │                            │
-│  └─────────────┘     └─────────────┘     └─────────────┘                            │
+│  ┌─────────────┐     ┌─────────────┐                                                │
+│  │  health.rs  │     │   system/   │                                                │
+│  │ Health check│     │ GPU, memory │                                                │
+│  │  endpoints  │     │   probes    │                                                │
+│  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
 │  │ command.rs  │     │process_core │     │ compose.rs  │                            │
@@ -81,7 +81,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | [`launch_narration.rs`](src/launch_narration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-launch_narration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-launch_narration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-launch_narration-coverage.json) |
 | [`server_config.rs`](src/server_config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-server_config-coverage.json) |
 | [`unified_server_config.rs`](src/unified_server_config.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-unified_server_config-coverage.json) |
-| [`assistant_ui/`](src/assistant_ui/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-assistant_ui-coverage.json) |
 | [`llama/`](src/llama/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llama-coverage.json) |
 | [`pidfile/`](src/pidfile/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-pidfile-coverage.json) |
 | [`ports_impl/`](src/ports_impl/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-ports_impl-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-ports_impl-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-ports_impl-coverage.json) |
@@ -103,7 +102,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`process/`** — Generic process lifecycle (start, stop, signal)
 - **`system/`** — System probes (GPU detection, memory info)
-- **`assistant_ui/`** — Terminal-based interactive chat UI for llama-cli
 - **`ports_impl/`** — Port trait implementations for runtime
 
 ## Features

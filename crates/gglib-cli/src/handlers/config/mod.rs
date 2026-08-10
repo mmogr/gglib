@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-pub mod assistant_ui;
 pub mod check_deps;
 pub mod fast_downloads;
 pub mod llama;
@@ -23,7 +22,6 @@ pub async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
         ConfigCommand::Settings { command } => settings::handle_settings(ctx, command).await,
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
         ConfigCommand::Llama { command } => llama::dispatch(command).await,
-        ConfigCommand::AssistantUi { command } => assistant_ui::dispatch(command),
         ConfigCommand::CheckDeps {
             setup_fast_downloads,
         } => {
