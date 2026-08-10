@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { agentOverridesToWire } from '../../services/agentOverrides';
 import { appLogger } from '../../services/platform';
 import {
   useExternalStoreRuntime,
@@ -163,6 +164,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         setCurrentStreamingAssistantMessageId,
         config: {
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
+          // Per-chat limits from the Tools popover, read fresh per send.
+          ...agentOverridesToWire(),
         },
         supportsToolCalls,
         onSystemWarning,

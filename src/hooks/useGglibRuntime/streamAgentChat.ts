@@ -56,10 +56,14 @@ import { isAbortError } from '../../utils/errors';
 export interface PartialAgentConfig {
   /** Maps to `AgentConfig::max_iterations` (default 25). */
   max_iterations?: number;
-  /** Maps to `AgentConfig::max_parallel_tools` (default 5). */
+  /** Maps to `AgentConfig::max_parallel_tools` (default 25). */
   max_parallel_tools?: number;
   /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
   tool_timeout_ms?: number;
+  /** Tool names classified as observations; `[]` disables classification. */
+  observation_tools?: string[];
+  /** Maps to `AgentConfig::max_observation_steps` (default 15). */
+  max_observation_steps?: number;
 }
 
 export interface StreamAgentChatOptions {
