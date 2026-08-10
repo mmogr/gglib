@@ -11,7 +11,11 @@ Left panel in the console view showing the served model's identity, real-time in
 
 | File | Role |
 |------|------|
-| `ConsoleInfoPanel.tsx` | Metrics polling, uptime tick, stop-server action; syncs display with `serverRegistry` state |
+| `ConsoleInfoPanel.tsx` | Composition root: wires hooks to sections, stop-server action; syncs display with `serverRegistry` state |
+| `useServerMetrics.ts` | 2s `/metrics` poll (Prometheus parse); each poll's fresh object doubles as the metric-history tick |
+| `useUptime.ts` | Wall-clock-synced uptime string |
+| `TelemetrySections.tsx` | Context-usage and generation-rate readouts with sparklines (`useMetricHistory`, reset per server run) |
+| `StaticSections.tsx` | Server info rows and the API endpoint list |
 
 ## Props
 
