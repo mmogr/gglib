@@ -49,6 +49,18 @@ pub struct ServerConfig {
     /// throughput regression.  Recommended value: `0.75`.
     pub spec_draft_p_min: Option<f32>,
     /// Inference sampling parameters (temperature, `top_p`, etc.).
+    ///
+    /// **Nothing reads this.** ADR 0003 deleted `to_cli_args` and its one
+    /// caller, so no sampler value becomes a command-line argument any more,
+    /// and the launch narration reports sampling from
+    /// `llama::args::sampling`'s constants rather than from here. The field is
+    /// written by `build_server_config` and read by nobody.
+    ///
+    /// Kept for now rather than removed because the plumbing that fills it
+    /// (`ServerConfigOptions::inference_params`, threaded from four call
+    /// sites) is a larger removal than it looks and belongs in its own change.
+    /// Said out loud so the next reader does not wire something to it on the
+    /// assumption that it already does something.
     pub inference_config: Option<InferenceConfig>,
     /// Additional server-specific options (escape hatch).
     pub extra_args: Vec<String>,

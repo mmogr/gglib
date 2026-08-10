@@ -365,13 +365,7 @@ fn build_compare_request_body(
     model: &gglib_core::domain::Model,
     global_inf: Option<&InferenceConfig>,
 ) -> serde_json::Value {
-    let model_ctx = gglib_core::domain::ModelSamplingContext {
-        is_reasoning: model
-            .tags
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("reasoning")),
-        defaults_origin: model.defaults_origin,
-    };
+    let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(model);
     let resolved = config
         .inference
         .clone()

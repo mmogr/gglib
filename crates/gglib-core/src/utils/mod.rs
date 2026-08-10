@@ -2,5 +2,6 @@
 pub mod process;
 pub mod shard_filename;
 pub mod system;
+pub mod text;
 pub mod timing;
 pub mod validation;

@@ -7,7 +7,13 @@
  * mapping is directly testable.
  */
 
-import type { InferenceConfig, ParamProvenance, SamplingParamKey } from '../types';
+import type {
+  DefaultsOriginName,
+  InferenceConfig,
+  ParamProvenance,
+  PublishedDefault,
+  SamplingParamKey,
+} from '../types';
 import { UNKNOWN } from './format';
 
 /** Human-readable label per parameter, in the order the server sends them. */
@@ -31,6 +37,14 @@ export interface SourceContext {
   profile?: string | null;
   /** Selects which floor the coupled set falls back to. */
   isReasoning: boolean;
+  /**
+   * Where the model's stored defaults came from.
+   *
+   * The auto-detected and published rungs are the same rung, so naming it
+   * needs this. Absent on a backend that predates the field, which reads as
+   * the previous behaviour.
+   */
+  defaultsOrigin?: DefaultsOriginName | null;
 }
 
 /**
@@ -55,7 +69,10 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
         case 'global':
           return 'global settings';
         case 'modelAutoDetected':
-          return 'per-model defaults (auto-detected: reasoning tag)';
+          // One rung, two possible sources — see `SourceContext.defaultsOrigin`.
+          return ctx.defaultsOrigin === 'published'
+            ? 'per-model defaults (published by the model author)'
+            : 'per-model defaults (auto-detected: reasoning tag)';
         default:
           return 'unknown layer';
       }
@@ -97,6 +114,60 @@ export function resolvedValue(
   param: SamplingParamKey,
 ): number | undefined {
   return resolved[param];
+}
+
+/**
+ * Trim a value that made a round trip through `f32` and JSON.
+ *
+ * gglib's own numbers are `f32`, so a resolved `0.7` arrives as
+ * `0.699999988079071`. Rendering that verbatim makes an ordinary override look
+ * like a defect. `ProxySamplingPanel.formatValue` and the CLI's
+ * `fmt_published` do the same thing to the same values.
+ */
+function trimFloat(value: number): string {
+  return Number(value.toPrecision(6)).toString();
+}
+
+/**
+ * Describe what the model's own GGUF published for one parameter.
+ *
+ * `null` when the model published nothing for it, which is the case for almost
+ * every model and every parameter — `presencePenalty` and `dryMultiplier` have
+ * no GGUF key at all, so they can never appear here.
+ *
+ * The wording matches `explain_display.rs`'s notes so the two surfaces describe
+ * the same fact the same way.
+ */
+export function describePublished(entry: PublishedDefault): string {
+  switch (entry.state) {
+    case 'overridden':
+      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib is sending ${trimFloat(
+        entry.sending ?? 0,
+      )}`;
+    // Named even though it is benign: the row above reads as unset, and an
+    // unset row with no note is indistinguishable from a gap. The missing
+    // number is the model author's, not nobody's.
+    case 'deferred':
+      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib defers to it`;
+    case 'restated':
+      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib sends the same value`;
+    case 'unreadable':
+      return `${entry.key} is set to a value gglib cannot read`;
+    default:
+      return UNKNOWN;
+  }
+}
+
+/**
+ * Index published entries by parameter, for rendering beside their rows.
+ *
+ * Tolerates the field being absent: a backend that predates it sends nothing,
+ * and that must read as "this model published nothing" rather than as an error.
+ */
+export function publishedByParam(
+  published: PublishedDefault[] | undefined,
+): Map<SamplingParamKey, PublishedDefault> {
+  return new Map((published ?? []).map((entry) => [entry.param, entry]));
 }
 
 /**

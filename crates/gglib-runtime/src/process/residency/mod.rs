@@ -380,6 +380,7 @@ impl ResidentSet {
             false, // already resident — not a fresh spawn
         )
         .with_slot_restore_supported(resident.slot_restore_supported)
+        .with_model_sampling(resident.model_sampling)
         .with_cache_ram_health(resident.cache_ram_health);
 
         // Reused verbatim rather than re-narrated: this instance was launched
@@ -501,6 +502,7 @@ fn target_of(resident: Resident) -> RunningTarget {
         false,
     )
     .with_slot_restore_supported(resident.slot_restore_supported)
+    .with_model_sampling(resident.model_sampling)
     .with_cache_ram_health(resident.cache_ram_health)
 }
 

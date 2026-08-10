@@ -4,6 +4,25 @@
 //! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`,
 //! `presence_penalty`, `min_p`).
 //!
+//! **Tier B — Policy** ([ADR 0001]) for the hierarchy: the ordered fold,
+//! profiles, the user-set versus auto-detected split and the class floors are
+//! decisions llama-server is structurally not in a position to make, so
+//! nothing here gates on [`RuntimeCapabilities`].
+//!
+//! [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults) is
+//! the exception, and it is the same shape as ADR 0001's `truncation` caveat:
+//! the *policy* of having a floor is gglib's, but a floor *value* that equals
+//! llama.cpp's own default is a redundant assertion rather than a decision.
+//! Six of the seven were measured to be exactly that. [ADR 0003] decides they
+//! are deferred, leaving `temperature` — the one genuine divergence, 0.7
+//! against upstream's 0.8 — plus
+//! [`reasoning_floor`](InferenceConfig::reasoning_floor)'s class-aware
+//! overrides.
+//!
+//! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
+//! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
+//!
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
 //! - Global settings (`Settings.inference_defaults`)
@@ -16,6 +35,8 @@
 //! truth for the hierarchy. [`InferenceConfig::resolve_with_defaults`] is the
 //! same resolution with no profile selected, for surfaces that have no notion
 //! of one.
+
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -152,6 +173,35 @@ pub struct InferenceConfig {
     /// penalty; llama.cpp resolves negative values against the context size.
     /// Unset defers to llama.cpp's own default (64).
     pub dry_penalty_last_n: Option<i32>,
+
+    /// RNG seed for the sampler.
+    ///
+    /// Unset means llama.cpp draws a fresh random seed per request, which is
+    /// what it reports as `4294967295` (`u32::MAX`) in `/slots`.
+    ///
+    /// # Request-scoped by design, like `max_tokens`
+    ///
+    /// This is the second field in this struct that is **not a sampling
+    /// policy**. Every other one answers "how should this model sample?" and is
+    /// worth storing per model; a seed answers "make *this run* reproducible",
+    /// and a seed stored per model would pin every response that model ever
+    /// produces to the same text. So:
+    ///
+    /// - no floor names it, on either class floor;
+    /// - nothing gglib writes at import names it;
+    /// - the CLI, profile and settings surfaces do not expose it.
+    ///
+    /// It lives here anyway, rather than beside the hierarchy, for the reason
+    /// `max_tokens` does: this struct is the single thing that becomes the
+    /// request body ([`Self::to_openai_json_patch`]), and a value that reaches
+    /// the wire any other way is a value the ladder cannot explain and the
+    /// [readback] cannot check. llama.cpp reports the applied seed in
+    /// `/slots`, so routing it through here is what makes "did my seed actually
+    /// land?" an answerable question rather than an assumption — which is the
+    /// whole point of seeding a benchmark.
+    ///
+    /// [readback]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/sampling_audit.rs
+    pub seed: Option<u32>,
 }
 
 /// Whether a model's stored `inference_defaults` were set by the user or
@@ -180,6 +230,24 @@ pub enum DefaultsOrigin {
     /// Written automatically at import time from the model's `reasoning`
     /// tag, never reviewed by a person. Ranks below global settings.
     AutoDetected,
+    /// Read at import time from the model author's own
+    /// `generation_config.json` on `HuggingFace`.
+    ///
+    /// Ranks **exactly where [`Self::AutoDetected`] does** — below global
+    /// settings — and is a distinct variant because of what it is, not where
+    /// it sits. Both are written without a person reviewing them, so neither
+    /// may outrank a setting somebody chose.
+    ///
+    /// It never *coexists* with `AutoDetected`: the import prefers this when
+    /// it can fetch one, because a published recipe is evidence about this
+    /// model where [`InferenceConfig::reasoning_profile`] is a generic guess
+    /// keyed off a tag. So "above generic tag guesses" holds by replacement
+    /// rather than by rank, and no new ladder rung is needed to express it.
+    ///
+    /// Kept apart from `User` for the reason that distinction exists at all:
+    /// this is not a value anybody in this installation decided, so the
+    /// agentic-turn ceiling may still cap it and global settings still win.
+    Published,
 }
 
 impl std::fmt::Display for DefaultsOrigin {
@@ -187,6 +255,7 @@ impl std::fmt::Display for DefaultsOrigin {
         match self {
             Self::User => write!(f, "user"),
             Self::AutoDetected => write!(f, "auto_detected"),
+            Self::Published => write!(f, "published"),
         }
     }
 }
@@ -198,8 +267,9 @@ impl std::str::FromStr for DefaultsOrigin {
         match s {
             "user" => Ok(Self::User),
             "auto_detected" => Ok(Self::AutoDetected),
+            "published" => Ok(Self::Published),
             other => Err(format!(
-                "unknown defaults origin '{other}'; expected user or auto_detected"
+                "unknown defaults origin '{other}'; expected user, auto_detected or published"
             )),
         }
     }
@@ -226,6 +296,26 @@ pub struct ModelSamplingContext {
     pub defaults_origin: Option<DefaultsOrigin>,
 }
 
+impl ModelSamplingContext {
+    /// Read both facts off a catalog row.
+    ///
+    /// Four call sites across three crates built this struct field-by-field
+    /// from a [`Model`](crate::domain::Model), each re-deriving `is_reasoning`
+    /// from the tag list inline. Two fields is exactly the size at which
+    /// hand-construction looks harmless and stops being so: the pair travels
+    /// together, both are read by the same fold, and a call site that filled
+    /// one and defaulted the other would resolve against the wrong floor or
+    /// mis-rank the model's own defaults against global settings — silently,
+    /// in both cases.
+    #[must_use]
+    pub fn for_model(model: &crate::domain::Model) -> Self {
+        Self {
+            is_reasoning: crate::domain::capability_tags::is_reasoning(&model.tags),
+            defaults_origin: model.defaults_origin,
+        }
+    }
+}
+
 /// Convert a camelCase string to `snake_case`.
 ///
 /// Used internally to rename `InferenceConfig`'s serde camelCase output to the
@@ -243,25 +333,247 @@ fn camel_to_snake(s: &str) -> String {
     out
 }
 
-/// Convert a `snake_case` string to camelCase.
+/// What reading one client-supplied sampling field did, when it was not
+/// simply "read it".
 ///
-/// Inverse of [`camel_to_snake`]; used to normalise OpenAI-format body keys
-/// (`top_p`, `max_tokens`, etc.) into the camelCase form expected by
-/// `InferenceConfig`'s serde impl before deserialisation.
-fn snake_to_camel(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut cap = false;
-    for ch in s.chars() {
-        if ch == '_' {
-            cap = true;
-        } else if cap {
-            out.push(ch.to_ascii_uppercase());
-            cap = false;
-        } else {
-            out.push(ch);
+/// Carried out of [`InferenceConfig::extract_client_sampling`] so the caller
+/// can log or count it. A value gglib declines to use is a fact about a
+/// client worth surfacing — before this existed, the entire client sampling
+/// layer could vanish over one key with nothing recording that it had.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldIssue {
+    /// Recognised, but not in the form this field takes. A documented
+    /// equivalent was substituted and the value is in use.
+    Normalised {
+        /// Wire key, as the client spelled it.
+        field: &'static str,
+        /// What arrived, rendered for a log line.
+        from: String,
+        /// What it was taken to mean.
+        to: &'static str,
+    },
+    /// Not readable as this field's type. **This field alone** is dropped;
+    /// every other field the client sent is unaffected.
+    Rejected {
+        /// Wire key, as the client spelled it.
+        field: &'static str,
+        /// What arrived, rendered for a log line.
+        value: String,
+        /// What the field accepts.
+        expected: &'static str,
+    },
+}
+
+impl fmt::Display for FieldIssue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Normalised { field, from, to } => {
+                write!(f, "{field}={from} read as {to}")
+            }
+            Self::Rejected {
+                field,
+                value,
+                expected,
+            } => write!(f, "{field}={value} dropped (expected {expected})"),
         }
     }
-    out
+}
+
+/// Render a JSON value compactly enough for a log line.
+///
+/// The budget is bytes, and the cut is taken at a character boundary — this
+/// renders a value the *client* sent, so it is arbitrary UTF-8 and `&s[..40]`
+/// would panic on the first request whose 40th byte fell inside a character.
+/// See [`crate::utils::text`].
+fn brief(v: &serde_json::Value) -> String {
+    crate::utils::text::truncate_with_ellipsis(&v.to_string(), 40).into_owned()
+}
+
+/// Narrow a JSON number to the `f32` every sampling field stores.
+///
+/// Named rather than inline because an `#[allow]` cannot sit on an
+/// expression, and the truncation is deliberate: the wire carries `f64` and
+/// `InferenceConfig` has always been `f32`.
+#[allow(clippy::cast_possible_truncation)]
+const fn narrow(n: f64) -> f32 {
+    n as f32
+}
+
+/// Read one float field. Absent and `null` are both "no opinion".
+fn read_f32(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    key: &'static str,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<f32> {
+    let v = obj.get(key)?;
+    if v.is_null() {
+        return None;
+    }
+    v.as_f64().map_or_else(
+        || {
+            issues.push(FieldIssue::Rejected {
+                field: key,
+                value: brief(v),
+                expected: "a number",
+            });
+            None
+        },
+        |n| Some(narrow(n)),
+    )
+}
+
+/// Read one integer field.
+///
+/// A float with no fractional part is accepted, because llama.cpp accepts
+/// `top_k: 40.0` and several clients emit every number as a float. A float
+/// that would lose information is not.
+fn read_i32(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    key: &'static str,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<i32> {
+    let v = obj.get(key)?;
+    if v.is_null() {
+        return None;
+    }
+    if let Some(n) = v.as_i64() {
+        return i32::try_from(n).map_or_else(
+            |_| {
+                issues.push(FieldIssue::Rejected {
+                    field: key,
+                    value: brief(v),
+                    expected: "a 32-bit integer",
+                });
+                None
+            },
+            Some,
+        );
+    }
+    if let Some(f) = v.as_f64()
+        && f.fract() == 0.0
+        && f >= f64::from(i32::MIN)
+        && f <= f64::from(i32::MAX)
+    {
+        #[allow(clippy::cast_possible_truncation)]
+        let n = f as i32;
+        issues.push(FieldIssue::Normalised {
+            field: key,
+            from: brief(v),
+            to: "an integer",
+        });
+        return Some(n);
+    }
+    issues.push(FieldIssue::Rejected {
+        field: key,
+        value: brief(v),
+        expected: "an integer",
+    });
+    None
+}
+
+/// Read `max_tokens`, which is `u32` internally and `-1` on the wire.
+///
+/// `-1` is llama.cpp's own idiom for "no limit", and omitting the key means
+/// exactly that here — see
+/// [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults),
+/// which deliberately leaves `max_tokens` unset. So `-1` is not an error to
+/// be reported, it is a spelling of a value this type already has. Any other
+/// negative is a client bug.
+fn read_max_tokens(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<u32> {
+    let v = obj.get("max_tokens")?;
+    if v.is_null() {
+        return None;
+    }
+    // Not `read_i32_raw(v)?` — `?` would return before recording anything,
+    // which is the same silent-drop shape this whole function exists to end.
+    let Some(n) = read_i32_raw(v) else {
+        issues.push(FieldIssue::Rejected {
+            field: "max_tokens",
+            value: brief(v),
+            expected: "a non-negative integer, or -1 for no limit",
+        });
+        return None;
+    };
+    if n == -1 {
+        issues.push(FieldIssue::Normalised {
+            field: "max_tokens",
+            from: "-1".to_string(),
+            to: "no limit",
+        });
+        return None;
+    }
+    u32::try_from(n).map_or_else(
+        |_| {
+            issues.push(FieldIssue::Rejected {
+                field: "max_tokens",
+                value: brief(v),
+                expected: "a non-negative integer, or -1 for no limit",
+            });
+            None
+        },
+        Some,
+    )
+}
+
+/// Read the `seed` field.
+///
+/// llama.cpp's own spelling for "pick one at random" is `-1`, and its `/slots`
+/// reports a random seed as `4294967295` (`u32::MAX`). Both are normalised to
+/// `None`, which is how this type spells the same thing — omission already
+/// means random, so carrying a sentinel would give the same state two
+/// representations and make `seed.is_some()` stop meaning "reproducible".
+fn read_seed(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<u32> {
+    let v = obj.get("seed")?;
+    if v.is_null() {
+        return None;
+    }
+    let Some(n) = v.as_i64() else {
+        issues.push(FieldIssue::Rejected {
+            field: "seed",
+            value: brief(v),
+            expected: "a non-negative integer, or -1 for a random seed",
+        });
+        return None;
+    };
+    if n == -1 || n == i64::from(u32::MAX) {
+        issues.push(FieldIssue::Normalised {
+            field: "seed",
+            from: brief(v),
+            to: "a random seed",
+        });
+        return None;
+    }
+    u32::try_from(n).map_or_else(
+        |_| {
+            issues.push(FieldIssue::Rejected {
+                field: "seed",
+                value: brief(v),
+                expected: "a non-negative integer, or -1 for a random seed",
+            });
+            None
+        },
+        Some,
+    )
+}
+
+/// The integer read behind [`read_max_tokens`], without issue reporting —
+/// its caller reports in terms of `max_tokens`' own accepted range.
+fn read_i32_raw(v: &serde_json::Value) -> Option<i32> {
+    if let Some(n) = v.as_i64() {
+        return i32::try_from(n).ok();
+    }
+    let f = v.as_f64()?;
+    if f.fract() != 0.0 || f < f64::from(i32::MIN) || f > f64::from(i32::MAX) {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    Some(f as i32)
 }
 
 /// Which ladder rung supplied each member of the temperature-coupled set.
@@ -347,9 +659,10 @@ impl InferenceConfig {
     /// This is the one fold every multi-layer resolution surface goes
     /// through: [`resolve_with_profile`] wraps it for the simple
     /// request/profile/model/global shape, and
-    /// [`crate::request_pipeline::sampling`] builds its own five-layer
-    /// (cli/client/profile/model/global) array and calls it directly. There
-    /// is exactly one place that decides what "wins" means.
+    /// [`crate::request_pipeline::sampling`] builds its own **six**-layer
+    /// (`cli`, `client`, `profile`, `model`, `global`, `model auto-detected`)
+    /// array and calls it directly. There is exactly one place that decides
+    /// what "wins" means.
     ///
     /// # Uncoupled parameters
     ///
@@ -485,6 +798,7 @@ impl InferenceConfig {
         let dry_base = first(&|c| c.dry_base.is_some());
         let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
         let dry_penalty_last_n = first(&|c| c.dry_penalty_last_n.is_some());
+        let seed = first(&|c| c.seed.is_some());
 
         result.top_p = top_p.and_then(|i| layers[i].and_then(|c| c.top_p));
         result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
@@ -497,20 +811,32 @@ impl InferenceConfig {
             dry_allowed_length.and_then(|i| layers[i].and_then(|c| c.dry_allowed_length));
         result.dry_penalty_last_n =
             dry_penalty_last_n.and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
+        // Uncoupled, and never coupled: a seed says nothing about how sharp the
+        // distribution is, so pairing it with a temperature would be
+        // meaningless. See the field docs for why no floor names it either.
+        result.seed = seed.and_then(|i| layers[i].and_then(|c| c.seed));
 
         let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
         result.merge_with(floor);
 
         // A field no layer claimed came from the floor — or from nowhere, when
-        // the floor has none either (only `max_tokens`). When a layer claimed
-        // the temperature, the trio's fall-through is the coupling rule at
-        // work rather than a plain absence, and says so.
+        // the floor has none either, which is whatever `with_hardcoded_defaults`
+        // leaves unset rather than a list worth restating here.
+        //
+        // The coupling rule is checked **before** the floor's emptiness, and
+        // the order is load-bearing. `Unset` means "nobody named this"; when a
+        // layer named it and the coupling rule passed it over, that is a
+        // different and more interesting fact, and it stays true whether or
+        // not the floor then had a value to offer. Testing `!has_floor` first
+        // was harmless while the floor filled all seven, and became a silent
+        // loss of provenance the moment ADR 0003 emptied six of them — the
+        // coupled trio would have reported as a plain absence.
         let coupled = temperature.is_some();
         let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
             Some(i) => ParamSource::Layer(i),
-            None if !has_floor => ParamSource::Unset,
             None if is_coupled => ParamSource::FloorCoupled,
+            None if !has_floor => ParamSource::Unset,
             None => ParamSource::Floor,
         };
 
@@ -547,10 +873,67 @@ impl InferenceConfig {
         (result, sources)
     }
 
-    /// Create a new config with all fields set to sensible defaults.
+    /// The floor beneath every sampling ladder: what gglib asserts when no
+    /// layer named a value.
     ///
-    /// These are the hardcoded fallback values used when no other
-    /// defaults are configured.
+    /// # It asserts one parameter, not seven
+    ///
+    /// [ADR 0003] measured this floor against a bare `llama-server` on the
+    /// pinned build and found six of its seven values were *exactly* the
+    /// upstream default:
+    ///
+    /// ```text
+    ///   parameter          gglib floor   upstream   verdict
+    ///   temperature                0.7        0.8   DIVERGES -> policy
+    ///   top_p                     0.95       0.95   EQUALS   -> deleted
+    ///   top_k                       40         40   EQUALS   -> deleted
+    ///   repeat_penalty             1.0        1.0   EQUALS   -> deleted
+    ///   presence_penalty           0.0        0.0   EQUALS   -> deleted
+    ///   min_p                     0.05       0.05   EQUALS   -> deleted
+    ///   dry_multiplier             0.0        0.0   EQUALS   -> deleted
+    /// ```
+    ///
+    /// Restating a value that is already the answer is not a decision, it is
+    /// a redundant assertion — and a costly one, because it silently overrides
+    /// whatever upstream chooses next. #739 was exactly that failure: a floor
+    /// of `min_p: 0.0` disabled the tail cut on every untuned request, and
+    /// nothing in the system was positioned to notice. Six such overrides are
+    /// now impossible.
+    ///
+    /// The six are **deferred**, not disabled. Nothing is emitted for them, so
+    /// llama.cpp applies its own default — which on this build is the same
+    /// number that used to be written here. Provenance reports them as
+    /// [`ParamSource::Unset`](crate::domain::ParamSource::Unset), which is
+    /// precisely what deferral is: gglib names no value.
+    ///
+    /// # `temperature: 0.7` stays, and upstream's is 0.8
+    ///
+    /// The one genuine policy choice in the set, and stated here because an
+    /// undocumented divergence is how the other six became invisible in the
+    /// first place. gglib decodes slightly more conservatively than
+    /// llama.cpp's default for agentic work.
+    ///
+    /// # The floor is no longer uniform
+    ///
+    /// [`reasoning_floor`] still asserts `presence_penalty: 1.0` and
+    /// `min_p: 0.0` for `reasoning`-tagged models, which are class-aware
+    /// policy llama.cpp has no notion of. So after this change `min_p` is
+    /// asserted for reasoning models and deferred for every other model.
+    /// That is the correct shape and it needs saying out loud, because it is
+    /// the first time the floor has differed by model class in what it
+    /// *names* rather than only in what it names it as.
+    ///
+    /// # Deferral is safe only while the build is pinned
+    ///
+    /// [ADR 0002] pins the llama.cpp build; [ADR 0004]'s `/props` baseline
+    /// check reads the default table back and flags any field that moves.
+    /// That pairing is what makes deleting a value behaviour-preserving
+    /// rather than hopeful.
+    ///
+    /// [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    /// [`reasoning_floor`]: Self::reasoning_floor
     ///
     /// # `max_tokens` has no fallback
     ///
@@ -570,44 +953,53 @@ impl InferenceConfig {
     /// Explicit per-request, per-profile, and per-model values are unaffected —
     /// [`reasoning_profile`] still sets its own ceiling.
     ///
-    /// # `min_p` matches llama.cpp rather than disabling itself
+    /// # A note on `min_p`, because it moved twice
     ///
-    /// `0.05` is llama.cpp's own default for the flag, restated here rather
-    /// than left to the upstream. It used to be `0.0`, which reads like an
-    /// absence but is not one: [`to_openai_json_patch`] drops only `None`, and
-    /// resolution force-writes what survives, so the floor was *explicitly
-    /// disabling* min-p on every request that did not set its own. At this
-    /// floor's own `temperature: 0.7` that removes the tail cut entirely.
-    ///
-    /// Stated rather than omitted so llama-server keeps receiving fully
-    /// specified parameters, and so the value stays visible as `min_p=floor`
-    /// in sampling provenance instead of reporting as unset.
+    /// #739 changed it from `0.0` to `0.05`, correctly: `0.0` reads like an
+    /// absence but was not one — [`to_openai_json_patch`] drops only `None`,
+    /// so the floor was *explicitly disabling* the tail cut on every untuned
+    /// request. The fix was right, and the mechanism it used was the problem.
+    /// #739 restated upstream's value to keep it "visible as `min_p=floor` in
+    /// sampling provenance instead of reporting as unset", which bought
+    /// visibility at the price of a permanent silent override. Deferral is the
+    /// better answer to the same objection: it reports as unset *because it is
+    /// unset*, and [ADR 0004]'s readback names llama.cpp's own number instead
+    /// of gglib restating it.
     ///
     /// [`reasoning_profile`]: Self::reasoning_profile
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
     #[must_use]
     pub const fn with_hardcoded_defaults() -> Self {
         Self {
+            // No floor names a seed. See the field docs: a seed is not a
+            // sampling policy, and a floor that pinned one would make every
+            // untuned request in the installation decode identically.
+            seed: None,
+            // The one value gglib asserts. Upstream's is 0.8; see above.
             temperature: Some(0.7),
-            top_p: Some(0.95),
-            top_k: Some(40),
-            max_tokens: None,
-            repeat_penalty: Some(1.0),
-            presence_penalty: Some(0.0),
-            min_p: Some(0.05),
-            // DRY expressible but inert. Enabling it fleet-wide is a tuning
-            // decision that belongs to a per-model or per-profile layer with
-            // sweep data behind it, not to the floor every untuned model
-            // silently lands on. `0.0` is also llama.cpp's own default, so
-            // stating it changes nothing about what the model sees.
-            dry_multiplier: Some(0.0),
-            // Left unset rather than restated: with the multiplier at zero
-            // they have no effect, and asserting values here would claim a
-            // recipe nobody has measured. llama.cpp's own defaults apply if a
-            // layer above turns DRY on without naming them.
+            // Everything below is deferred to llama.cpp, which is a decision
+            // and not an omission — ADR 0003 finding 1 measured each of them
+            // equal to the upstream default on the pinned build. Setting any
+            // of these again means overriding whatever upstream chooses next,
+            // so do it only with a measurement saying upstream is wrong.
+            top_p: None,
+            top_k: None,
+            repeat_penalty: None,
+            presence_penalty: None,
+            min_p: None,
+            // DRY stays off, and now says so by silence rather than by
+            // asserting the zero llama.cpp already defaults to. Enabling it
+            // fleet-wide is a tuning decision for a per-model or per-profile
+            // layer with sweep data behind it, not for the floor every untuned
+            // model lands on.
+            dry_multiplier: None,
+            // Never had a floor: with the multiplier off they have no effect,
+            // and asserting values would claim a recipe nobody has measured.
             dry_base: None,
             dry_allowed_length: None,
             dry_penalty_last_n: None,
+            // No fallback by design — see above.
+            max_tokens: None,
         }
     }
 
@@ -623,12 +1015,29 @@ impl InferenceConfig {
     /// prevent this). `1.0` keeps a real guard in place at the floor without
     /// asserting the full recipe tuned for a different temperature.
     ///
-    /// `min_p` is pinned to `0.0` for the same class-specific reason, and
-    /// deliberately does *not* inherit the neutral floor's `0.05`: Qwen3.6's
+    /// `min_p` is pinned to `0.0` for the same class-specific reason: Qwen3.6's
     /// published guidance is to disable min-p on these models, which
-    /// [`reasoning_profile`] already encodes. Spelling it out here keeps that
-    /// carve-out from silently disappearing the next time the neutral floor
-    /// moves.
+    /// [`reasoning_profile`] already encodes.
+    ///
+    /// # These two are now the only class-specific *assertions*
+    ///
+    /// The neutral floor used to name `min_p: 0.05` and `presence_penalty:
+    /// 0.0`, so this function read as "the same seven values, two of them
+    /// different". [ADR 0003] deferred both of those to llama.cpp, so it now
+    /// reads as "two values the neutral floor does not name at all".
+    ///
+    /// The consequence is worth stating because it makes the floor non-uniform
+    /// in a way it never was: **`min_p` is asserted for reasoning models and
+    /// deferred for everything else.** A reasoning model gets `min_p: 0.0` on
+    /// the wire; every other model gets no `min_p` key and llama.cpp's own
+    /// 0.05. That asymmetry is deliberate — one is a measured divergence from
+    /// upstream, the other is agreement with it — but it will look like a bug
+    /// to anyone diffing two requests without this paragraph.
+    ///
+    /// `presence_penalty: 1.0` is the same shape: asserted here, deferred
+    /// elsewhere.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
     ///
     /// [`resolve_layers`]: Self::resolve_layers
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
@@ -677,86 +1086,6 @@ impl InferenceConfig {
         if is_reasoning { 0.6 } else { 0.3 }
     }
 
-    /// Convert inference config to llama CLI arguments.
-    ///
-    /// Returns a vector of argument strings suitable for passing to llama-server.
-    /// Uses the same flag names as llama.cpp: `--temp`, `--top-p`, `--top-k`, `-n`, `--repeat-penalty`.
-    ///
-    /// This is the single source of truth for CLI flag conversion, reached by
-    /// every launch surface through `build_server_config` and
-    /// `ServerConfig.extra_args`.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use gglib_core::domain::InferenceConfig;
-    ///
-    /// let config = InferenceConfig {
-    ///     temperature: Some(0.8),
-    ///     top_p: Some(0.9),
-    ///     max_tokens: Some(1024),
-    ///     dry_multiplier: Some(0.8),
-    ///     ..Default::default()
-    /// };
-    ///
-    /// let args = config.to_cli_args();
-    /// assert_eq!(
-    ///     args,
-    ///     vec!["--temp", "0.8", "--top-p", "0.9", "-n", "1024", "--dry-multiplier", "0.8"]
-    /// );
-    /// ```
-    #[must_use]
-    pub fn to_cli_args(&self) -> Vec<String> {
-        let mut args = Vec::new();
-
-        if let Some(temp) = self.temperature {
-            args.push("--temp".to_string());
-            args.push(temp.to_string());
-        }
-        if let Some(top_p) = self.top_p {
-            args.push("--top-p".to_string());
-            args.push(top_p.to_string());
-        }
-        if let Some(top_k) = self.top_k {
-            args.push("--top-k".to_string());
-            args.push(top_k.to_string());
-        }
-        if let Some(max_tokens) = self.max_tokens {
-            args.push("-n".to_string());
-            args.push(max_tokens.to_string());
-        }
-        if let Some(repeat_penalty) = self.repeat_penalty {
-            args.push("--repeat-penalty".to_string());
-            args.push(repeat_penalty.to_string());
-        }
-        if let Some(presence_penalty) = self.presence_penalty {
-            args.push("--presence-penalty".to_string());
-            args.push(presence_penalty.to_string());
-        }
-        if let Some(min_p) = self.min_p {
-            args.push("--min-p".to_string());
-            args.push(min_p.to_string());
-        }
-        if let Some(dry_multiplier) = self.dry_multiplier {
-            args.push("--dry-multiplier".to_string());
-            args.push(dry_multiplier.to_string());
-        }
-        if let Some(dry_base) = self.dry_base {
-            args.push("--dry-base".to_string());
-            args.push(dry_base.to_string());
-        }
-        if let Some(dry_allowed_length) = self.dry_allowed_length {
-            args.push("--dry-allowed-length".to_string());
-            args.push(dry_allowed_length.to_string());
-        }
-        if let Some(dry_penalty_last_n) = self.dry_penalty_last_n {
-            args.push("--dry-penalty-last-n".to_string());
-            args.push(dry_penalty_last_n.to_string());
-        }
-
-        args
-    }
-
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.
     ///
     /// Applied automatically at import time when the `"reasoning"` capability tag is
@@ -779,6 +1108,9 @@ impl InferenceConfig {
     #[must_use]
     pub const fn reasoning_profile() -> Self {
         Self {
+            // Never seeded: this recipe is stored per model, and a stored seed
+            // would pin every response that model ever produces.
+            seed: None,
             temperature: Some(1.0),
             top_p: Some(0.95),
             top_k: Some(20),
@@ -822,7 +1154,9 @@ impl InferenceConfig {
     /// let resolved = request.resolve_with_defaults(Some(&model), None, ModelSamplingContext::default());
     /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
     /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
-    /// assert_eq!(resolved.top_k,       Some(40));  // hardcoded fallback
+    /// assert_eq!(resolved.top_k,       None);      // no layer named it, and
+    ///                                              // the floor defers top_k
+    ///                                              // to llama.cpp (ADR 0003)
     /// ```
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
@@ -855,10 +1189,11 @@ impl InferenceConfig {
     /// across every gglib surface that does not need its own layer set;
     /// [`resolve_with_defaults`] delegates here so there is exactly one merge
     /// order to reason about and to test.
-    /// [`crate::request_pipeline::sampling`] needs a seventh layer (the
-    /// client's own request, sitting between `self` and `profile`) and calls
-    /// the underlying [`resolve_layers`] directly for that reason — the merge
-    /// semantics are identical either way.
+    /// [`crate::request_pipeline::sampling`] needs a sixth rung (the client's
+    /// own request, sitting *below* the CLI override rather than between
+    /// `self` and `profile`) and calls the underlying [`resolve_layers`]
+    /// directly for that reason — the merge semantics are identical either
+    /// way.
     ///
     /// # Why the profile sits above the model
     ///
@@ -959,9 +1294,13 @@ impl InferenceConfig {
         } else {
             Self::with_hardcoded_defaults()
         };
+        // Exhaustive on purpose. The catch-all this replaced sent every
+        // not-`AutoDetected` origin to the user-set rung, so adding
+        // `Published` would silently have ranked a fetched recipe *above*
+        // global settings — the one thing an unreviewed origin must never do.
         let (user_model, auto_model) = match model_ctx.defaults_origin {
-            Some(DefaultsOrigin::AutoDetected) => (None, model),
-            _ => (model, None),
+            Some(DefaultsOrigin::AutoDetected | DefaultsOrigin::Published) => (None, model),
+            Some(DefaultsOrigin::User) | None => (model, None),
         };
         Self::resolve_layers_with_sources(
             &[Some(&self), profile, user_model, global, auto_model],
@@ -971,24 +1310,75 @@ impl InferenceConfig {
 
     /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
     ///
-    /// Converts wire-format `snake_case` field names (`top_p`, `max_tokens`,
-    /// `repeat_penalty`, etc.) to the internal camelCase representation via
-    /// [`snake_to_camel`], then deserialises using the existing `serde` impl.
-    /// Unknown or missing fields default to `None`.
+    /// Missing keys, explicit `null`s and keys this type does not model all
+    /// yield `None` for that field and leave the rest untouched.
     ///
-    /// This is the inverse of [`to_openai_json_patch`].
+    /// This is the inverse of [`to_openai_json_patch`]. Use
+    /// [`extract_client_sampling`] when the caller can report what went wrong.
     ///
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
+    /// [`extract_client_sampling`]: Self::extract_client_sampling
     #[must_use]
     pub fn from_openai_json(value: &serde_json::Value) -> Self {
+        Self::extract_client_sampling(value).0
+    }
+
+    /// [`from_openai_json`] plus what it had to reject or normalise.
+    ///
+    /// # One bad field must not cost the other ten
+    ///
+    /// This read used to camel-case the whole body and hand it to
+    /// `serde_json::from_value(..).unwrap_or_default()`. Serde parses an
+    /// object as a unit, so a single wrongly-typed key failed the whole
+    /// deserialise and `unwrap_or_default()` returned an all-`None` config —
+    /// silently discarding every sampling value the client sent, with no log
+    /// and no test covering the failure path.
+    ///
+    /// Reading field by field means a bad `max_tokens` costs `max_tokens` and
+    /// nothing else.
+    ///
+    /// # The coercion policy is upstream's, not ours
+    ///
+    /// [ADR 0003] finding 6 measured what llama.cpp itself accepts on the
+    /// pinned build, so this does not have to invent a policy:
+    ///
+    /// | sent | llama.cpp | here |
+    /// |---|---|---|
+    /// | `max_tokens: -1` | 200 | [`Normalised`] to `None` — omission already means "no limit" |
+    /// | `top_k: 40.0` | 200 | accepted as `40`; a *fractional* float is rejected |
+    /// | `temperature: "0.7"` | 400 | [`Rejected`] — a numeric string is a client bug, and quietly parsing it teaches nobody |
+    ///
+    /// The principle is to accept what upstream accepts and reject what
+    /// upstream rejects, so gglib never becomes the stricter of the two on a
+    /// value that would have worked. Before this change it was: llama.cpp
+    /// takes `max_tokens: -1` and gglib threw away the entire layer over it.
+    ///
+    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+    /// [`Normalised`]: FieldIssue::Normalised
+    /// [`Rejected`]: FieldIssue::Rejected
+    #[must_use]
+    pub fn extract_client_sampling(value: &serde_json::Value) -> (Self, Vec<FieldIssue>) {
         let Some(obj) = value.as_object() else {
-            return Self::default();
+            return (Self::default(), Vec::new());
         };
-        let camel: serde_json::Map<String, serde_json::Value> = obj
-            .iter()
-            .map(|(k, v)| (snake_to_camel(k), v.clone()))
-            .collect();
-        serde_json::from_value(serde_json::Value::Object(camel)).unwrap_or_default()
+        let mut issues = Vec::new();
+
+        let cfg = Self {
+            temperature: read_f32(obj, "temperature", &mut issues),
+            top_p: read_f32(obj, "top_p", &mut issues),
+            top_k: read_i32(obj, "top_k", &mut issues),
+            max_tokens: read_max_tokens(obj, &mut issues),
+            repeat_penalty: read_f32(obj, "repeat_penalty", &mut issues),
+            presence_penalty: read_f32(obj, "presence_penalty", &mut issues),
+            min_p: read_f32(obj, "min_p", &mut issues),
+            dry_multiplier: read_f32(obj, "dry_multiplier", &mut issues),
+            dry_base: read_f32(obj, "dry_base", &mut issues),
+            seed: read_seed(obj, &mut issues),
+            dry_allowed_length: read_i32(obj, "dry_allowed_length", &mut issues),
+            dry_penalty_last_n: read_i32(obj, "dry_penalty_last_n", &mut issues),
+        };
+
+        (cfg, issues)
     }
 
     /// Serialise as an OpenAI-format JSON patch (`snake_case` keys, `Some` fields only).
@@ -1017,6 +1407,117 @@ impl InferenceConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // =========================================================================
+    // seed
+    // =========================================================================
+
+    /// A seed is request-scoped. No floor may name one, or every untuned
+    /// request in the installation would decode identically.
+    #[test]
+    fn no_floor_names_a_seed() {
+        assert_eq!(InferenceConfig::with_hardcoded_defaults().seed, None);
+        assert_eq!(InferenceConfig::reasoning_floor().seed, None);
+        assert_eq!(InferenceConfig::reasoning_profile().seed, None);
+    }
+
+    /// It still has to reach the wire, which is the whole reason it lives in
+    /// this struct rather than beside the hierarchy.
+    #[test]
+    fn a_seed_reaches_the_request_body() {
+        let config = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let patch = config.to_openai_json_patch();
+
+        assert_eq!(
+            patch.get("seed").and_then(serde_json::Value::as_u64),
+            Some(100)
+        );
+    }
+
+    /// An unseeded config must emit no key at all — llama.cpp then draws its
+    /// own, and a `null` or sentinel would be a different request.
+    #[test]
+    fn an_unseeded_config_emits_no_seed_key() {
+        assert!(
+            !InferenceConfig::with_hardcoded_defaults()
+                .to_openai_json_patch()
+                .contains_key("seed")
+        );
+    }
+
+    /// Seeds resolve like any uncoupled field: the first layer that names one
+    /// wins, and naming one does not claim the coupled trio.
+    #[test]
+    fn a_seed_resolves_without_claiming_the_coupled_trio() {
+        let top = InferenceConfig {
+            seed: Some(100),
+            ..InferenceConfig::default()
+        };
+        let below = InferenceConfig {
+            temperature: Some(0.6),
+            presence_penalty: Some(1.5),
+            ..InferenceConfig::default()
+        };
+
+        let resolved = InferenceConfig::resolve_layers(
+            &[Some(&top), Some(&below)],
+            &InferenceConfig::with_hardcoded_defaults(),
+        );
+
+        assert_eq!(resolved.seed, Some(100));
+        assert_eq!(
+            resolved.presence_penalty,
+            Some(1.5),
+            "a seed must not hijack the trio the way a temperature does"
+        );
+        assert_eq!(resolved.temperature, Some(0.6));
+    }
+
+    /// llama.cpp spells "random" two ways and this type spells it as absence.
+    /// Carrying a sentinel would give one state two representations and make
+    /// `seed.is_some()` stop meaning "reproducible".
+    #[test]
+    fn the_random_seed_sentinels_normalise_to_absence() {
+        for raw in ["-1", "4294967295"] {
+            let body: serde_json::Value =
+                serde_json::from_str(&format!(r#"{{"seed": {raw}}}"#)).unwrap();
+            let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+            assert_eq!(cfg.seed, None, "{raw}");
+            assert!(
+                issues
+                    .iter()
+                    .any(|i| matches!(i, FieldIssue::Normalised { field: "seed", .. })),
+                "{raw} should be reported as normalised, not dropped silently"
+            );
+        }
+    }
+
+    #[test]
+    fn a_client_seed_is_read_from_the_request_body() {
+        let body: serde_json::Value = serde_json::from_str(r#"{"seed": 12345}"#).unwrap();
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+        assert_eq!(cfg.seed, Some(12345));
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn a_seed_that_is_not_an_integer_is_rejected_rather_than_ignored() {
+        let body: serde_json::Value = serde_json::from_str(r#"{"seed": "abc"}"#).unwrap();
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&body);
+
+        assert_eq!(cfg.seed, None);
+        assert!(
+            issues
+                .iter()
+                .any(|i| matches!(i, FieldIssue::Rejected { field: "seed", .. })),
+            "{issues:?}"
+        );
+    }
 
     #[test]
     fn test_default_is_all_none() {
@@ -1051,23 +1552,6 @@ mod tests {
         assert_eq!(request.top_p, Some(0.9)); // Fallback to model
         assert_eq!(request.top_k, Some(50)); // Fallback to model
         assert!(request.max_tokens.is_none()); // Still None
-    }
-
-    #[test]
-    fn test_hardcoded_defaults() {
-        let config = InferenceConfig::with_hardcoded_defaults();
-        assert_eq!(config.temperature, Some(0.7));
-        assert_eq!(config.top_p, Some(0.95));
-        assert_eq!(config.top_k, Some(40));
-        // Deliberately absent: a fallback here would cap every request that
-        // did not name its own. See `with_hardcoded_defaults`.
-        assert_eq!(config.max_tokens, None);
-        assert_eq!(config.repeat_penalty, Some(1.0));
-        assert_eq!(config.presence_penalty, Some(0.0));
-        // llama.cpp's own default, restated. `Some(0.0)` here would not read
-        // as "unset" — it would be force-written, explicitly disabling the
-        // tail cut on every request. See `with_hardcoded_defaults`.
-        assert_eq!(config.min_p, Some(0.05));
     }
 
     /// The reasoning floor differs from the hardcoded floor in exactly two
@@ -1128,13 +1612,16 @@ mod tests {
         );
     }
 
-    /// The two ways an unset `max_tokens` could still reach llama-server and
-    /// cap generation: as a `max_tokens` key in the forwarded request body, or
-    /// as a `-n` flag on the launch command line. `-n` is the more dangerous of
-    /// the two — it sets `global_params.n_predict`, a server-wide ceiling that
-    /// overrides even a per-request `-1`.
+    /// An unset `max_tokens` must not be written into the request body.
+    ///
+    /// This used to check a second route as well — a `-n` flag on the launch
+    /// command line, which is the more dangerous of the two because it sets
+    /// `global_params.n_predict`, a server-wide ceiling overriding even a
+    /// per-request `-1`. ADR 0003 deleted `to_cli_args`, so that route no
+    /// longer exists for any parameter and there is nothing left to assert
+    /// about it: the guarantee moved from a test to the type system.
     #[test]
-    fn test_unset_max_tokens_reaches_llama_server_by_neither_route() {
+    fn test_unset_max_tokens_is_not_written_into_the_body() {
         let resolved = InferenceConfig::default().resolve_with_defaults(
             None,
             None,
@@ -1145,14 +1632,9 @@ mod tests {
             !resolved.to_openai_json_patch().contains_key("max_tokens"),
             "an unset max_tokens must not be written into the request body"
         );
-        assert!(
-            !resolved.to_cli_args().contains(&"-n".to_string()),
-            "an unset max_tokens must not become a server-wide -n ceiling"
-        );
     }
 
-    /// An explicit value must still travel by both routes — this change removes
-    /// the *fallback*, not the parameter.
+    /// This change removed the *fallback*, not the parameter.
     #[test]
     fn test_explicit_max_tokens_is_still_forwarded() {
         let resolved = InferenceConfig {
@@ -1166,9 +1648,79 @@ mod tests {
             resolved.to_openai_json_patch().get("max_tokens"),
             Some(&serde_json::json!(512))
         );
-        let args = resolved.to_cli_args();
-        let n_index = args.iter().position(|a| a == "-n").expect("-n emitted");
-        assert_eq!(args[n_index + 1], "512");
+    }
+
+    /// The floor asserts exactly one parameter, and it is the one ADR 0003
+    /// measured as diverging from upstream.
+    ///
+    /// Written as an exhaustive field-by-field check rather than an equality
+    /// against a literal so that adding a value back is a *failure with a
+    /// name*, not a diff someone re-blesses. Every `None` here is a field
+    /// llama.cpp supplies; setting one again overrides whatever upstream
+    /// chooses next, which is #739's failure mode.
+    #[test]
+    fn the_floor_asserts_only_the_value_that_diverges_from_upstream() {
+        let floor = InferenceConfig::with_hardcoded_defaults();
+
+        assert_eq!(
+            floor.temperature,
+            Some(0.7),
+            "the one genuine policy choice; upstream's is 0.8"
+        );
+
+        for (field, value) in [
+            ("top_p", floor.top_p),
+            ("min_p", floor.min_p),
+            ("repeat_penalty", floor.repeat_penalty),
+            ("presence_penalty", floor.presence_penalty),
+            ("dry_multiplier", floor.dry_multiplier),
+            ("dry_base", floor.dry_base),
+        ] {
+            assert_eq!(value, None, "{field} is deferred to llama.cpp (ADR 0003)");
+        }
+        assert_eq!(floor.top_k, None, "top_k is deferred to llama.cpp");
+        assert_eq!(
+            floor.max_tokens, None,
+            "max_tokens has no fallback by design"
+        );
+        assert_eq!(floor.dry_allowed_length, None);
+        assert_eq!(floor.dry_penalty_last_n, None);
+    }
+
+    /// The non-uniformity ADR 0003 decision 3 called out: `min_p` is asserted
+    /// for reasoning models and deferred for everything else. Pinned because
+    /// it reads like a bug when you diff two requests.
+    #[test]
+    fn min_p_is_asserted_for_reasoning_models_and_deferred_for_the_rest() {
+        assert_eq!(InferenceConfig::reasoning_floor().min_p, Some(0.0));
+        assert_eq!(InferenceConfig::with_hardcoded_defaults().min_p, None);
+
+        assert_eq!(
+            InferenceConfig::reasoning_floor().presence_penalty,
+            Some(1.0)
+        );
+        assert_eq!(
+            InferenceConfig::with_hardcoded_defaults().presence_penalty,
+            None
+        );
+    }
+
+    /// The whole point of the deferral: an untuned request names one sampler,
+    /// not seven, so llama.cpp's own defaults apply to the rest.
+    #[test]
+    fn an_untuned_request_body_carries_only_the_temperature() {
+        let resolved = InferenceConfig::default().resolve_with_defaults(
+            None,
+            None,
+            ModelSamplingContext::default(),
+        );
+        let patch = resolved.to_openai_json_patch();
+
+        assert_eq!(
+            patch.keys().collect::<Vec<_>>(),
+            vec!["temperature"],
+            "anything else here is gglib overriding an upstream default: {patch:?}"
+        );
     }
 
     #[test]
@@ -1199,6 +1751,7 @@ mod tests {
             dry_base: None,
             dry_allowed_length: Some(2),
             dry_penalty_last_n: Some(-1),
+            seed: Some(100),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -1216,17 +1769,6 @@ mod tests {
         assert_eq!(camel_to_snake("repeatPenalty"), "repeat_penalty");
         assert_eq!(camel_to_snake("presencePenalty"), "presence_penalty");
         assert_eq!(camel_to_snake("minP"), "min_p");
-    }
-
-    #[test]
-    fn test_snake_to_camel() {
-        assert_eq!(snake_to_camel("temperature"), "temperature");
-        assert_eq!(snake_to_camel("top_p"), "topP");
-        assert_eq!(snake_to_camel("top_k"), "topK");
-        assert_eq!(snake_to_camel("max_tokens"), "maxTokens");
-        assert_eq!(snake_to_camel("repeat_penalty"), "repeatPenalty");
-        assert_eq!(snake_to_camel("presence_penalty"), "presencePenalty");
-        assert_eq!(snake_to_camel("min_p"), "minP");
     }
 
     #[test]
@@ -1255,7 +1797,9 @@ mod tests {
         assert_eq!(resolved.top_p, Some(0.8)); // model fills in
         assert_eq!(resolved.top_k, Some(10)); // global fills in
         assert_eq!(resolved.max_tokens, None); // no layer sets it; stays unset
-        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+        // Deferred to llama.cpp since ADR 0003 — no layer named it and the
+        // floor no longer restates upstream's own 1.0.
+        assert_eq!(resolved.repeat_penalty, None);
     }
 
     #[test]
@@ -1301,9 +1845,13 @@ mod tests {
         assert_eq!(resolved.top_p, Some(0.85)); // profile beats model
         assert_eq!(resolved.top_k, Some(10)); // global fills in
         // The request claimed the temperature, so the model's 1.5 — tuned for
-        // its own 0.5 — must not fall through. Neutral hardcoded value instead.
-        assert_eq!(resolved.presence_penalty, Some(0.0));
-        assert_eq!(resolved.repeat_penalty, Some(1.0)); // hardcoded fallback
+        // its own 0.5 — must not fall through. Nothing is sent instead: the
+        // neutral floor used to restate upstream's 0.0 here and ADR 0003
+        // deferred it, so llama.cpp supplies the same number it always did.
+        // The suppression is still visible in the provenance, which reports
+        // `FloorCoupled` rather than a plain absence.
+        assert_eq!(resolved.presence_penalty, None);
+        assert_eq!(resolved.repeat_penalty, None);
     }
 
     /// The invariant that makes one global profile safe across differing
@@ -1383,9 +1931,8 @@ mod tests {
             "must not inherit 1.5, but must not go silently to zero either"
         );
         assert_eq!(
-            resolved.repeat_penalty,
-            Some(1.0),
-            "neutral, not the model's"
+            resolved.repeat_penalty, None,
+            "not the model's 1.2, and no longer restated at the floor either"
         );
         assert_eq!(resolved.min_p, Some(0.05), "the profile's own value stands");
     }
@@ -1557,8 +2104,12 @@ mod tests {
             &InferenceConfig::with_hardcoded_defaults(),
         );
         assert_eq!(sources.max_tokens, ParamSource::Unset);
-        // Every other field does have a floor to fall back on.
+        // `temperature` is now the only field with a floor to fall back on —
+        // ADR 0003 deferred the other six, so they report as `Unset` for the
+        // same reason `max_tokens` always has.
         assert_eq!(sources.temperature, ParamSource::Floor);
+        assert_eq!(sources.top_p, ParamSource::Unset);
+        assert_eq!(sources.min_p, ParamSource::Unset);
     }
 
     /// The two floor variants are distinguishable: a trio suppressed by the
@@ -1574,8 +2125,23 @@ mod tests {
         let (_, claimed) = InferenceConfig::resolve_layers_with_sources(&[Some(&claim)], &floor);
         assert_eq!(claimed.presence_penalty, ParamSource::FloorCoupled);
 
+        // Since ADR 0003 the neutral floor names no `presence_penalty`, so an
+        // untouched one is a genuine absence rather than a floor value. The
+        // distinction the test exists for is unaffected and now sharper: the
+        // coupling rule is still reported, and "nobody set this" is still a
+        // different answer from "the rule discarded something".
         let (_, untouched) = InferenceConfig::resolve_layers_with_sources(&[None], &floor);
-        assert_eq!(untouched.presence_penalty, ParamSource::Floor);
+        assert_eq!(untouched.presence_penalty, ParamSource::Unset);
+        assert_ne!(claimed.presence_penalty, untouched.presence_penalty);
+
+        // And a reasoning model, whose floor *does* name it, still reports the
+        // plain floor — the two floors now differ in provenance, not only in
+        // value.
+        let (_, reasoning) = InferenceConfig::resolve_layers_with_sources(
+            &[None],
+            &InferenceConfig::reasoning_floor(),
+        );
+        assert_eq!(reasoning.presence_penalty, ParamSource::Floor);
     }
 
     /// `resolve_with_profile` delegates to the explained form, so the two must
@@ -1685,5 +2251,156 @@ mod tests {
         let config = InferenceConfig::from_openai_json(&val);
         assert_eq!(config.temperature, Some(0.5));
         assert!(config.top_p.is_none());
+    }
+
+    // ── Client sampling extraction ────────────────────────────────────────
+
+    /// **The defect this was written for.** The old implementation
+    /// camel-cased the whole body, deserialised it as one struct and called
+    /// `.unwrap_or_default()`, so a single unreadable key returned an
+    /// all-`None` config and the client's other ten values vanished with it.
+    #[test]
+    fn one_unreadable_field_does_not_cost_the_other_ten() {
+        let val = serde_json::json!({
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 30,
+            "max_tokens": "not a number",   // the offender
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.3,
+            "min_p": 0.02,
+            "dry_multiplier": 0.8,
+            "dry_base": 1.75,
+            "dry_allowed_length": 2,
+            "dry_penalty_last_n": 64,
+        });
+
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.max_tokens, None, "the bad field is dropped");
+        assert_eq!(
+            issues.len(),
+            1,
+            "and only that field is reported: {issues:?}"
+        );
+
+        assert_eq!(cfg.temperature, Some(0.2));
+        assert_eq!(cfg.top_p, Some(0.9));
+        assert_eq!(cfg.top_k, Some(30));
+        assert_eq!(cfg.repeat_penalty, Some(1.1));
+        assert_eq!(cfg.presence_penalty, Some(0.3));
+        assert_eq!(cfg.min_p, Some(0.02));
+        assert_eq!(cfg.dry_multiplier, Some(0.8));
+        assert_eq!(cfg.dry_base, Some(1.75));
+        assert_eq!(cfg.dry_allowed_length, Some(2));
+        assert_eq!(cfg.dry_penalty_last_n, Some(64));
+    }
+
+    /// **A client-reachable panic.** The rejected-field log line renders the
+    /// offending value, and it used to do so with `&s[..40]`. `serde_json`
+    /// does not escape non-ASCII and nothing type-checks `temperature` before
+    /// the pipeline, so any client could take the request task down with a
+    /// long enough Greek string. Asserted here rather than only in
+    /// `utils::text` because this is the path that actually panicked.
+    #[test]
+    fn a_multibyte_client_value_is_reported_rather_than_panicking() {
+        let val = serde_json::json!({ "temperature": "α".repeat(60), "top_p": 0.9 });
+
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.temperature, None, "the bad field is dropped");
+        assert_eq!(cfg.top_p, Some(0.9), "and the rest still lands");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Rejected { field, .. }] if *field == "temperature"),
+            "{issues:?}"
+        );
+        // The rendered value must be valid UTF-8 and marked as truncated.
+        let rendered = issues[0].to_string();
+        assert!(rendered.contains('…'), "{rendered}");
+    }
+
+    /// llama.cpp answers 200 to this, so gglib accepting it is the whole
+    /// point — before, it was the trip case that discarded the layer.
+    /// ADR 0003 finding 6.
+    #[test]
+    fn max_tokens_minus_one_means_no_limit() {
+        let val = serde_json::json!({ "max_tokens": -1, "temperature": 0.4 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+
+        assert_eq!(cfg.max_tokens, None, "-1 is the wire spelling of unset");
+        assert_eq!(cfg.temperature, Some(0.4), "and the rest still lands");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Normalised { field, .. }] if *field == "max_tokens"),
+            "reported as normalised, not rejected: {issues:?}"
+        );
+    }
+
+    /// Some clients emit every number as a float. llama.cpp takes it.
+    #[test]
+    fn an_integer_valued_float_is_accepted_for_an_integer_field() {
+        let val = serde_json::json!({ "top_k": 40.0 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.top_k, Some(40));
+        assert!(matches!(issues.as_slice(), [FieldIssue::Normalised { .. }]));
+    }
+
+    /// A float that would lose information is not the same case.
+    #[test]
+    fn a_fractional_float_is_rejected_for_an_integer_field() {
+        let val = serde_json::json!({ "top_k": 40.5 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.top_k, None);
+        assert!(matches!(issues.as_slice(), [FieldIssue::Rejected { .. }]));
+    }
+
+    /// llama.cpp answers 400 to this, so gglib rejects it too rather than
+    /// quietly parsing a client bug into a working request.
+    #[test]
+    fn a_numeric_string_is_rejected_not_coerced() {
+        let val = serde_json::json!({ "temperature": "0.7", "top_p": 0.9 });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.temperature, None);
+        assert_eq!(cfg.top_p, Some(0.9), "one bad field, one casualty");
+        assert!(
+            matches!(issues.as_slice(), [FieldIssue::Rejected { field, .. }] if *field == "temperature")
+        );
+    }
+
+    /// An explicit `null` is a client saying nothing, not a client erring —
+    /// several of them send it for every parameter they leave at default.
+    #[test]
+    fn an_explicit_null_is_silence_rather_than_an_issue() {
+        let val = serde_json::json!({ "temperature": null, "top_k": null });
+        let (cfg, issues) = InferenceConfig::extract_client_sampling(&val);
+        assert_eq!(cfg.temperature, None);
+        assert_eq!(cfg.top_k, None);
+        assert!(issues.is_empty(), "no issue reported: {issues:?}");
+    }
+
+    /// The two halves have to agree, or a value gglib emits is a value gglib
+    /// cannot read back — which is how a round-trip through the pipeline
+    /// would quietly lose a field.
+    #[test]
+    fn to_patch_then_extract_is_the_identity() {
+        let original = InferenceConfig {
+            temperature: Some(0.35),
+            top_p: Some(0.9),
+            top_k: Some(30),
+            max_tokens: Some(2048),
+            repeat_penalty: Some(1.05),
+            presence_penalty: Some(1.5),
+            min_p: Some(0.05),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(64),
+            seed: Some(100),
+        };
+
+        let patch = serde_json::Value::Object(original.to_openai_json_patch());
+        let (back, issues) = InferenceConfig::extract_client_sampling(&patch);
+
+        assert_eq!(back, original);
+        assert!(issues.is_empty(), "clean round trip: {issues:?}");
     }
 }

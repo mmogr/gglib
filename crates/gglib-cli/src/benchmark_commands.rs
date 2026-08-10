@@ -181,6 +181,34 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         ctx_size: Option<u64>,
 
+        /// RNG seeds to repeat every task under, once each. Every score is
+        /// the mean across them. Defaults to three seeds — a single sample
+        /// per task is one draw from the model's output distribution, not a
+        /// measurement of it. Pass `--seeds ""` for one unseeded run
+        #[arg(long, value_delimiter = ',', num_args = 0..)]
+        seeds: Option<Vec<u32>>,
+
+        /// Skip the positive control arm. The control runs the gglib pipeline
+        /// at a deliberately bad temperature and must score below it; without
+        /// it, a null result cannot be told apart from a harness that is not
+        /// measuring anything
+        #[arg(long)]
+        no_control: bool,
+
+        /// Skip the A/A arm. It re-runs the raw arm on a disjoint seed set,
+        /// so the gap it opens is the eval's own drift — the floor a
+        /// raw-vs-gglib delta has to clear before it means anything. Without
+        /// it the report can state a delta's direction but not its size
+        #[arg(long)]
+        no_replicate: bool,
+
+        /// How many of `--seeds` the positive control repeats. One is enough:
+        /// broken sampling makes the model ramble, so the control is by far
+        /// the most expensive arm, and it only has to clear a detection
+        /// threshold an order of magnitude below the gap it opens
+        #[arg(long, default_value_t = 1, value_name = "N")]
+        control_seeds: usize,
+
         /// Print the full report as JSON to stdout (the leaderboard
         /// interchange format: per-arm scores, deltas, per-task drill-down,
         /// model/quant identity, hardware snapshot)

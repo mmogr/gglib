@@ -58,20 +58,36 @@ impl CoreBootstrap {
         // 4. Model-files repository (used by registrar + verification service)
         let model_files_repo = Arc::new(ModelFilesRepository::new(pool.clone()));
 
-        // 5. Model registrar — composes model repository + GGUF parser so
+        // Keep the concrete registrar type so it satisfies the Sized bound in
+        // DownloadManagerDeps<R, ..>; erased to a trait object only in BuiltCore.
+        // 5. HuggingFace client. Built before the registrar because the
+        //    registrar uses it to look up a model author's published sampling
+        //    recipe at import time.
+        //
+        //    The token is passed through so a gated base repo — Llama and
+        //    Gemma, routinely — can answer that lookup for a user who has
+        //    configured one. Without it the lookup 401s and the import falls
+        //    back to the tag guess, which is the designed degradation.
+        let hf_client_concrete = Arc::new(DefaultHfClient::new(
+            &HfClientConfig::default().with_optional_token(config.hf_token.clone()),
+        ));
+        let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
+
+        // 6. Model registrar — composes model repository + GGUF parser so
         //    that both GUI and CLI download paths use the identical
         //    registration logic.
-        // Keep the concrete type so it satisfies the Sized bound in
-        // DownloadManagerDeps<R, ..>; erased to trait object only in BuiltCore.
-        let model_registrar_concrete = Arc::new(ModelRegistrar::new(
-            repos.models.clone(),
-            gguf_parser.clone(),
-            Some(Arc::clone(&model_files_repo)
-                as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
-        ));
+        let model_registrar_concrete = Arc::new(
+            ModelRegistrar::new(
+                repos.models.clone(),
+                gguf_parser.clone(),
+                Some(Arc::clone(&model_files_repo)
+                    as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
+            )
+            .with_hf_client(hf_client.clone()),
+        );
         let model_registrar: Arc<dyn ModelRegistrarPort> = model_registrar_concrete.clone();
 
-        // 6. Download manager configuration
+        // 7. Download manager configuration
         let download_config = {
             let mut cfg = DownloadManagerConfig::new(config.models_dir);
             if let Some(token) = config.hf_token {
@@ -79,10 +95,6 @@ impl CoreBootstrap {
             }
             cfg
         };
-
-        // 7. HuggingFace client
-        let hf_client_concrete = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
-        let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
 
         // 8. Download state repository
         let download_repo = CoreFactory::download_state_repository(pool.clone());

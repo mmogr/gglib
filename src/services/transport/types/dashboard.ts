@@ -222,6 +222,186 @@ export interface LaunchNarration {
   decisions: LaunchDecision[];
 }
 
+/**
+ * Mirrors `gglib_proxy::sampling_audit::AuditState`
+ * (`#[serde(tag = "state", rename_all = "snake_case")]`).
+ *
+ * A tagged union rather than a count, deliberately. `blind` and
+ * `{comparing, divergences: 0}` both mean "no divergences reported" and mean
+ * opposite things: one is an instrument that cannot see, the other is one that
+ * sees and finds nothing wrong. Consumers must render them differently — see
+ * the Rust module docs on ADR 0002 finding 2's inert-module trap.
+ */
+export type SamplingAuditState =
+  | { state: 'not_yet_observed' }
+  | { state: 'blind'; reason: string }
+  | { state: 'comparing'; comparisons: number; divergences: number };
+
+/** Mirrors `gglib_proxy::sampling_audit::Divergence`. */
+export interface SamplingDivergence {
+  /** Wire name of the parameter. */
+  field: string;
+  /** What gglib resolved and wrote into the request body. */
+  sent: number;
+  /** What llama-server reported for the request in flight. */
+  observed: number;
+  /** Ladder rung the sent value came from, or `floor`/`unset`. */
+  provenance: string;
+}
+
+/**
+ * Mirrors `gglib_proxy::props::BaselineVerdict`
+ * (`#[serde(tag = "verdict", rename_all = "snake_case")]`).
+ *
+ * `indeterminate` means the field could not be attributed — `/props` does not
+ * report it, or something is masking the build's own value. It must never
+ * render as agreement: that would report a tautology rather than an
+ * observation. Before ADR 0003 deleted the sampler launch flags it was the
+ * normal case for every field, because a flag overwrites the `/props` field it
+ * names and the check was reading gglib's own value back.
+ */
+export type SamplingBaselineVerdict =
+  | { verdict: 'matches' }
+  | { verdict: 'differs'; expected: number; observed: number }
+  /**
+   * The effective default came from this model's own GGUF
+   * (`general.sampling.*`), not the build. Neither agreement nor drift: the
+   * model asked for it and llama.cpp applied it, which is gglib's deferral
+   * working — it just means the build's own value is unobservable for that
+   * field on this launch. Never render it as either of the other two.
+   */
+  | { verdict: 'model_supplied'; key: string; value: number }
+  | { verdict: 'indeterminate'; reason: string };
+
+/** Mirrors `gglib_proxy::props::BaselineField`. */
+export interface SamplingBaselineField {
+  field: string;
+  verdict: SamplingBaselineVerdict;
+}
+
+/**
+ * Mirrors `gglib_proxy::props::BaselineCoverage`
+ * (`#[serde(tag = "coverage", rename_all = "snake_case")]`).
+ *
+ * Replaces a `conclusive: boolean` that was computed as "any field reached a
+ * verdict", so a report covering two of seven fields claimed to be conclusive
+ * and rendered as an all-clear over all seven. Only `complete` may render one.
+ *
+ * Orthogonal to drift: `complete` says every field was compared, not that
+ * every field agreed. Check the field verdicts first.
+ */
+export type SamplingBaselineCoverage =
+  | { coverage: 'complete' }
+  | {
+      coverage: 'partial';
+      checked: number;
+      /** Fields the model's own GGUF supplied, so the build's value is hidden. */
+      model_supplied: number;
+      indeterminate: number;
+    }
+  | { coverage: 'blind'; model_supplied: number; indeterminate: number };
+
+/** Mirrors `gglib_proxy::props::BaselineReport`. */
+export interface SamplingBaselineReport {
+  fields: SamplingBaselineField[];
+  coverage: SamplingBaselineCoverage;
+}
+
+/**
+ * Mirrors `gglib_proxy::props::BaselineState`
+ * (`#[serde(tag = "state", rename_all = "snake_case")]`).
+ *
+ * Three states rather than a nullable report, for `SamplingAuditState`'s
+ * reason. `not_yet_read` and `unreadable` both mean "no table to show" and mean
+ * opposite things: one is a poller that has not got there yet, the other is a
+ * read that happened and failed. Rendering the second as the first is the same
+ * blind-as-health collapse the slot half carries `blind { reason }` to avoid.
+ */
+export type SamplingBaselineState =
+  | { state: 'not_yet_read' }
+  | { state: 'unreadable'; reason: string }
+  | { state: 'read'; report: SamplingBaselineReport };
+
+/**
+ * Mirrors `gglib_proxy::sampling_audit::SamplingAuditSnapshot` — whether the
+ * sampling gglib resolved is the sampling llama-server applied.
+ */
+export interface SamplingAuditSnapshot {
+  state: SamplingAuditState;
+  /**
+   * Polls that saw busy slots but could not attribute them to one intent,
+   * because the requests in flight had resolved differently and llama-server
+   * gives no way to join a slot to the request that filled it.
+   *
+   * Beside the state, not inside it: abstaining is something a *sighted* organ
+   * does, and a large count here alongside zero comparisons is a different
+   * problem from blindness.
+   */
+  skipped_ambiguous: number;
+  /** Client sampling fields that could not be read as sent. */
+  client_fields_rejected: number;
+  /**
+   * Client sampling fields dropped by the trust gate. Expected to be large by
+   * default — `trust_client_sampling` is off, so every client-supplied value
+   * is discarded by design.
+   */
+  client_fields_discarded: number;
+  /** Most recent field-level disagreements, oldest first. */
+  recent_divergences: SamplingDivergence[];
+  /**
+   * `/props` baseline reading for the running model.
+   *
+   * Optional only so this mirror still parses a payload from a proxy that
+   * predates the field; a current proxy always sends one of the three states.
+   */
+  baseline?: SamplingBaselineState | null;
+  /**
+   * What gglib's own requests do with the running model's published sampler
+   * defaults.
+   *
+   * Optional only so this mirror still parses a payload from a proxy that
+   * predates the field.
+   */
+  published?: SamplingPublishedOverrides | null;
+}
+
+/**
+ * Published-vs-sent for the running model.
+ *
+ * Mirrors `gglib_proxy::sampling_audit::PublishedOverrides`. A *different*
+ * question from the baseline check above, and the two report the same field
+ * differently without either being wrong: `/props` says `model_supplied`
+ * because the *build's* value is unobservable there, while this says
+ * `overridden` because gglib's request body wins over the table `/props`
+ * renders. A reader seeing only the first would reasonably conclude the model's
+ * value is what the sampler uses.
+ */
+export interface SamplingPublishedOverrides {
+  /**
+   * Resolved intents folded in since this model launched.
+   *
+   * **Zero means nothing has been compared, never "nothing is overridden".**
+   * `fields` is empty both when a model publishes nothing and when no request
+   * has been resolved yet, and those license opposite conclusions.
+   */
+  intents: number;
+  /** One entry per field this model publishes. Empty on almost every model. */
+  fields: SamplingPublishedField[];
+}
+
+/** One published field and what gglib's most recent intent did with it. */
+export type SamplingPublishedField = {
+  /** gglib's wire name for the parameter. */
+  field: string;
+  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
+  key: string;
+} & (
+  | { state: 'deferred'; published: number }
+  | { state: 'restated'; published: number }
+  | { state: 'overridden'; published: number; sending: number }
+  | { state: 'unreadable' }
+);
+
 /** Mirrors `gglib_proxy::dashboard::DashboardSnapshot` — the full hydration/tick payload. */
 export interface DashboardSnapshot {
   active_connections: ActiveConnectionSnapshot[];
@@ -258,4 +438,10 @@ export interface DashboardSnapshot {
    * predates M9.
    */
   admission?: AdmissionSnapshot | null;
+  /**
+   * Whether the sampling gglib resolved reached llama-server intact, and
+   * whether anyone is in a position to know. Optional here so this mirror
+   * still parses a payload from a proxy that predates it.
+   */
+  sampling_audit?: SamplingAuditSnapshot | null;
 }

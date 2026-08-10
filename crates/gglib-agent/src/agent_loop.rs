@@ -41,7 +41,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
-use crate::stream_collector::collect_stream;
+use crate::stream_collector::{MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
 use crate::util::emit_error_event;
 use gglib_core::domain::agent::{LoopDetector, StagnationDetector};
@@ -64,6 +64,42 @@ use gglib_core::domain::agent::{LoopDetector, StagnationDetector};
 async fn fail_loop<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
     emit_error_event(tx, &msg).await;
     Err(AgentError::Internal(msg))
+}
+
+/// Surface a runaway tool-call stream, when the collector had to drop deltas.
+///
+/// Reported separately from — and before — the `max_parallel_tools` check, for
+/// two reasons. The collector drops fragments past
+/// [`MAX_TOOL_CALL_INDEX`] rather than failing the turn, so the count that
+/// check sees is what *survived* and understates what the model did. And a
+/// stream carrying only out-of-range indices leaves `tool_calls` empty, which
+/// that check would not fire on at all.
+///
+/// A warning rather than an error: the model looping is not a gglib fault, and
+/// this used to surface as "internal agent error" with zero tokens and zero
+/// iterations, which reads as one.
+async fn report_tool_call_truncation(response: &CollectedResponse, tx: &mpsc::Sender<AgentEvent>) {
+    if response.tool_calls_truncated == 0 {
+        return;
+    }
+    let dropped = response.tool_calls_truncated;
+    let kept = response.tool_calls.len();
+    warn!(
+        kept,
+        dropped,
+        "model ran away emitting tool calls; fragments past the collector's slot limit \
+         were dropped"
+    );
+    let _ = tx
+        .send(AgentEvent::SystemWarning {
+            message: format!(
+                "The model emitted more tool calls than one turn can carry: {kept} kept, \
+                 {dropped} fragment(s) beyond slot {MAX_TOOL_CALL_INDEX} dropped. This is \
+                 a runaway generation by the model, not a gglib failure."
+            ),
+            suggested_action: None,
+        })
+        .await;
 }
 
 // =============================================================================
@@ -279,6 +315,8 @@ impl AgentLoopPort for AgentLoop {
                 total_completion_tokens =
                     Some(total_completion_tokens.unwrap_or(0) + u64::from(ct));
             }
+
+            report_tool_call_truncation(&response, &tx).await;
 
             if response.tool_calls.len() > config.max_parallel_tools {
                 // Soft recovery (was: hard `Err(ParallelToolLimitExceeded)`).

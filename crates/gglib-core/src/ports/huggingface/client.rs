@@ -56,6 +56,25 @@ pub trait HfClientPort: Send + Sync {
 
     /// Get detailed information about a model.
     async fn get_model_info(&self, model_id: &str) -> HfPortResult<HfRepoInfo>;
+
+    /// Fetch a repository's `generation_config.json`, if it has one.
+    ///
+    /// `Ok(None)` means the repo has no such file — the ordinary answer for a
+    /// GGUF quant repo, and not a fault. `Err` means the fetch itself failed:
+    /// gated repo, no network, rate limit.
+    ///
+    /// # Why this has a default implementation
+    ///
+    /// It returns `Ok(None)`, which is semantically exact for a client that
+    /// cannot fetch one. The caller
+    /// ([`crate::services::model_import`]) treats every negative answer the
+    /// same way — carry on and fall back to the tag guess — so a client that
+    /// does not implement this degrades to gglib's pre-existing behaviour
+    /// rather than failing an import.
+    async fn fetch_generation_config(&self, model_id: &str) -> HfPortResult<Option<String>> {
+        let _ = model_id;
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

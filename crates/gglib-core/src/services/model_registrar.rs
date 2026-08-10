@@ -9,8 +9,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 
+use super::model_import::fetch_published_sampling;
 use super::{HfOrigin, ModelOrigin, build_new_model};
 use crate::domain::{Model, NewModelFile};
+use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
     CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RepositoryError,
 };
@@ -36,6 +38,14 @@ pub struct ModelRegistrar {
     gguf_parser: Arc<dyn GgufParserPort>,
     /// Repository for persisting model file metadata.
     model_files_repo: Option<Arc<dyn ModelFilesRepositoryPort>>,
+    /// Used to look up the model author's published sampling recipe.
+    ///
+    /// Optional, and absent means "do not look" rather than "cannot register".
+    /// A registrar without one behaves exactly as it did before this existed:
+    /// the `reasoning` tag guess applies. That keeps the feature off in tests
+    /// and in any embedding that has no HF client, without either having to
+    /// know it exists.
+    hf_client: Option<Arc<dyn HfClientPort>>,
 }
 
 impl ModelRegistrar {
@@ -55,7 +65,19 @@ impl ModelRegistrar {
             model_repo,
             gguf_parser,
             model_files_repo,
+            hf_client: None,
         }
+    }
+
+    /// Look up published sampling recipes at import, using `client`.
+    ///
+    /// A builder method rather than a fourth constructor parameter: every
+    /// existing call site wants the previous behaviour, and only the
+    /// application wiring has an HF client to give.
+    #[must_use]
+    pub fn with_hf_client(mut self, client: Arc<dyn HfClientPort>) -> Self {
+        self.hf_client = Some(client);
+        self
     }
 }
 
@@ -67,12 +89,26 @@ impl ModelRegistrarPort for ModelRegistrar {
         // Parse GGUF metadata from the downloaded file
         let gguf_metadata = self.gguf_parser.parse(file_path).ok();
 
+        // Best-effort, and deliberately before the row is built: a recipe the
+        // author published is better evidence than the tag guess
+        // `build_new_model` would otherwise write. Returns `None` for every
+        // failure — gated repo, offline, nothing published — and the import
+        // proceeds unchanged. See `fetch_published_sampling`.
+        let published = match &self.hf_client {
+            Some(client) => {
+                fetch_published_sampling(client.as_ref(), &download.repo_id, &download.hf_tags)
+                    .await
+            }
+            None => None,
+        };
+
         let origin = ModelOrigin::HuggingFace(HfOrigin {
             repo_id: &download.repo_id,
             commit_sha: &download.commit_sha,
             hf_tags: &download.hf_tags,
             quantization_fallback: download.quantization,
             file_paths: download.file_paths.as_deref(),
+            published_sampling: published.as_ref(),
         });
         let model = build_new_model(
             file_path,

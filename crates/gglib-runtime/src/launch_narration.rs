@@ -80,6 +80,7 @@ pub fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
     if let Some(flags) = flags_decision(inputs) {
         n.push(flags);
     }
+    n.push(sampling_decision());
     n.push(dialect_decision(inputs));
 
     n
@@ -302,6 +303,21 @@ fn dialect_decision(inputs: &NarrationInputs<'_>) -> LaunchDecision {
     }
 }
 
+/// Sampling is decided per request, not at launch.
+///
+/// Unconditional, and stated rather than omitted for the same reason
+/// `dialect_decision` is: the launch used to carry seven sampler flags, and a
+/// banner that simply stopped mentioning them would read as a regression or an
+/// oversight. This says the absence is the decision, and where the real one is
+/// made. See `llama::args::sampling`.
+fn sampling_decision() -> LaunchDecision {
+    LaunchDecision::new(
+        "sampling",
+        crate::llama::args::SAMPLING_VALUE,
+        crate::llama::args::SAMPLING_SOURCE,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,6 +330,7 @@ mod tests {
 
     fn spec(tags: &[&str]) -> ModelLaunchSpec {
         ModelLaunchSpec {
+            model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
             id: 7,
             name: "qwen3-30b-a3b".to_string(),
             file_path: PathBuf::from("/models/q.gguf"),
@@ -597,6 +614,12 @@ mod tests {
 
     /// The mission caps the banner at ~12 lines; the decision list is what
     /// drives that, so it is asserted here rather than in the renderer.
+    ///
+    /// The renderer spends three lines on chrome (blank, headline, blank), so
+    /// nine decisions is the hard ceiling and this now sits exactly on it —
+    /// ADR 0003's `sampling` row took the last slot. That is deliberate: the
+    /// cap stops being notional, and the next decision anyone wants has to
+    /// displace one rather than quietly widen the banner.
     #[test]
     fn narration_stays_within_the_banner_budget() {
         let (s, r) = (
@@ -620,7 +643,7 @@ mod tests {
         };
         let n = narrate(&inputs(&s, &c, &r));
         assert!(
-            n.decisions.len() <= 8,
+            n.decisions.len() <= 9,
             "{} decisions would overflow the banner",
             n.decisions.len()
         );

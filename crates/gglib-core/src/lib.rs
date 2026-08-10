@@ -6,6 +6,7 @@ pub mod cache_config;
 pub mod cache_metrics;
 pub mod contracts;
 pub mod cors;
+pub mod debug_switches;
 pub mod domain;
 pub mod download;
 pub mod events;

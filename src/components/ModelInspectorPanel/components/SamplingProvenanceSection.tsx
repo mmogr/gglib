@@ -8,8 +8,10 @@ import { MetadataSection } from './MetadataSection';
 import {
   PARAM_LABELS,
   caveats,
+  describePublished,
   describeSource,
   formatParamValue,
+  publishedByParam,
   resolvedValue,
 } from '../../../utils/samplingProvenance';
 
@@ -95,20 +97,45 @@ export const SamplingProvenanceSection: FC<SamplingProvenanceSectionProps> = ({
     );
   }
 
-  const ctx = { profile: explanation.profile, isReasoning: explanation.isReasoning };
+  const ctx = {
+    profile: explanation.profile,
+    isReasoning: explanation.isReasoning,
+    defaultsOrigin: explanation.defaultsOrigin,
+  };
+  const published = publishedByParam(explanation.published);
 
   return (
     <>
       <MetadataSection title="Sampling" className={isLoading ? 'opacity-60' : undefined}>
         {selector}
-        {explanation.sources.map((entry) => (
-          <InfoRow key={entry.param} label={PARAM_LABELS[entry.param] ?? entry.param}>
-            <span className="tabular-nums">
-              {formatParamValue(entry.param, resolvedValue(explanation.resolved, entry.param))}
-            </span>
-            <span className="text-text-muted"> {describeSource(entry, ctx)}</span>
-          </InfoRow>
-        ))}
+        {explanation.sources.map((entry) => {
+          const author = published.get(entry.param);
+          return (
+            <InfoRow key={entry.param} label={PARAM_LABELS[entry.param] ?? entry.param}>
+              <span className="tabular-nums">
+                {formatParamValue(entry.param, resolvedValue(explanation.resolved, entry.param))}
+              </span>
+              <span className="text-text-muted"> {describeSource(entry, ctx)}</span>
+              {/*
+                Only rendered for a model that published something, which is
+                almost none of them. A note on every row would train the reader
+                to ignore all of them — and `overridden` is the one that has to
+                survive that.
+              */}
+              {author && (
+                <div
+                  className={
+                    author.state === 'overridden'
+                      ? 'text-xs text-warning'
+                      : 'text-xs text-text-muted'
+                  }
+                >
+                  {describePublished(author)}
+                </div>
+              )}
+            </InfoRow>
+          );
+        })}
       </MetadataSection>
 
       <div className="mt-md flex flex-col gap-xs text-xs text-text-muted">

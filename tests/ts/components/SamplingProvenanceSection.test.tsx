@@ -6,8 +6,10 @@ import '@testing-library/jest-dom';
 import { SamplingProvenanceSection } from '../../../src/components/ModelInspectorPanel/components/SamplingProvenanceSection';
 import {
   caveats,
+  describePublished,
   describeSource,
   formatParamValue,
+  publishedByParam,
 } from '../../../src/utils/samplingProvenance';
 import type {
   InferenceProfile,
@@ -197,5 +199,83 @@ describe('caveats', () => {
   it('reports the client-sampling posture from settings', () => {
     expect(caveats(false)[1]).toMatch(/ignored, except max_tokens/);
     expect(caveats(true)[1]).toMatch(/trusted/);
+  });
+});
+
+describe('describePublished', () => {
+  it('names both numbers when gglib displaces the published value', () => {
+    expect(
+      describePublished({
+        param: 'temperature',
+        key: 'general.sampling.temp',
+        state: 'overridden',
+        published: 0.33,
+        sending: 1.0,
+      }),
+    ).toBe('general.sampling.temp = 0.33; gglib is sending 1');
+  });
+
+  // The row above reads as unset, which is indistinguishable from a gap. The
+  // missing number is the model author's, not nobody's — ADR 0004's follow-up.
+  it('says a deferred value is the model’s rather than absent', () => {
+    expect(
+      describePublished({
+        param: 'topP',
+        key: 'general.sampling.top_p',
+        state: 'deferred',
+        published: 0.71,
+      }),
+    ).toMatch(/general\.sampling\.top_p = 0\.71; gglib defers to it/);
+  });
+
+  it('distinguishes restating a value from deferring to it', () => {
+    expect(
+      describePublished({
+        param: 'minP',
+        key: 'general.sampling.min_p',
+        state: 'restated',
+        published: 0.05,
+      }),
+    ).toMatch(/gglib sends the same value/);
+  });
+
+  it('renders an unreadable value without claiming an override', () => {
+    const text = describePublished({
+      param: 'temperature',
+      key: 'general.sampling.temp',
+      state: 'unreadable',
+    });
+    expect(text).toMatch(/cannot read/);
+    expect(text).not.toMatch(/sending/);
+  });
+
+  // gglib's own numbers are f32 and arrive widened; rendering them verbatim
+  // makes an ordinary override look like a defect.
+  it('trims f32-through-JSON noise out of both numbers', () => {
+    expect(
+      describePublished({
+        param: 'temperature',
+        key: 'general.sampling.temp',
+        state: 'overridden',
+        published: 0.7,
+        sending: 0.949999988079071,
+      }),
+    ).toBe('general.sampling.temp = 0.7; gglib is sending 0.95');
+  });
+});
+
+describe('publishedByParam', () => {
+  // A backend that predates the field sends nothing, and that must read as
+  // "this model published nothing" rather than as an error.
+  it('treats an absent list as nothing published', () => {
+    expect(publishedByParam(undefined).size).toBe(0);
+  });
+
+  it('indexes entries by the param they join to', () => {
+    const index = publishedByParam([
+      { param: 'temperature', key: 'general.sampling.temp', state: 'deferred', published: 0.33 },
+    ]);
+    expect(index.get('temperature')?.key).toBe('general.sampling.temp');
+    expect(index.get('topP')).toBeUndefined();
   });
 });

@@ -114,6 +114,7 @@ mod tests {
 
     fn resident(weights_bytes: u64, cache_ram_health: CacheRamHealth) -> Resident {
         Resident {
+            model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
             model_id: 1,
             model_name: "m".to_string(),
             context_size: 4096,

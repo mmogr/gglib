@@ -112,6 +112,72 @@ Everything between the OpenAI request and llama-server is the product:
   co-resident and never swap at all — see
   [admission](crates/gglib-runtime/src/process/admission/README.md).
 
+## Does that actually help? Measured
+
+The claim above is that getting the sampling boundary right is worth something.
+Here is that claim as a number, on one model.
+
+`gglib benchmark agentic` runs a BFCL-style agentic suite twice against the
+*same loaded model*: once with the pipeline bypassed — what a client pointed
+straight at llama-server gets — and once through GGLib. Same weights, same
+machine, same tasks, same scoring. The only difference is which request reached
+llama-server.
+
+**Qwen3.5-4B (Q8_0) @ 131072 ctx, 5 seeds per task, 45 runs per arm.** Two
+independent runs, on the same seeds:
+
+| axis | raw llama-server | through GGLib | delta |
+|------|-----------------:|--------------:|------:|
+| tool-call accuracy | 0.922 | **0.967** | +0.044 |
+| task completion | 0.867 | **0.933** | +0.067 |
+| loop avoidance | 0.286 | **0.333** | +0.048 |
+| **composite** | **0.698** | **0.748** | **+0.050** |
+
+Every axis moves the same way, in both runs. But the size of that movement is
+**not yet resolved**, and the eval says so itself — which is the more useful
+thing to know about it.
+
+```bash
+gglib benchmark agentic --model Qwen3.5-4B --seeds 12345,67890,11111,22222,33333
+```
+
+### What the eval says it cannot show
+
+A benchmark that only reports its own wins is marketing. This one runs two extra
+arms whose entire job is to catch it overclaiming, and on this model they caught
+it:
+
+- **A positive control** — the pipeline with sampling deliberately broken — that
+  has to score far below the real arm. It did: **a 0.526 gap**. Without it, "the
+  pipeline made no difference" and "this harness cannot detect a difference" are
+  the same output. (The first version of this control *failed*: temperature 2.0
+  alone scored **above** both real arms, because llama.cpp runs the truncation
+  samplers before temperature, so a `top_k: 20` recipe absorbed it. It only
+  works with truncation disabled outright.)
+- **An A/A arm** — the raw arm re-run on a *different* seed set, nothing else
+  changed. Whatever gap it opens is the eval's own drift. Here it opened
+  **0.054** — meaning two runs of the identical raw configuration differ by more
+  than the pipeline appeared to gain. At **0.9×** the drift, the +0.050 is
+  **inside the noise floor**, and this eval declines to call it a result.
+
+The first of the two runs measured **+0.082** on the same seeds. The second
+measured +0.050 — and roughly half of *that* traces to a transport flake that
+cost the raw arm three runs it would otherwise have scored (excluding them, the
+delta is +0.027). A single number from a single run of this suite is worth very
+little, which is exactly what the A/A arm exists to make visible.
+
+**One finding did replicate.** `multi_turn_search_then_read` failed on **all ten**
+raw seeds across both runs and passed **four of ten** through the pipeline. That
+is a categorical difference rather than a shift in a rate, and it is the claim
+this eval currently supports.
+
+The honest summary: **directionally positive on every axis in two independent
+runs, with one replicated categorical win, on an apparatus proven able to detect
+a large change — and a magnitude that five seeds cannot yet separate from
+drift.** Reproduce it on your own model rather than trusting the delta; that is
+what the command is for, and the A/A arm will tell you the same thing about your
+numbers that it told us about ours.
+
 ## Dashboard
 
 The proxy reports what it is doing: active connections, per-slot context
@@ -202,6 +268,15 @@ directory. `gglib config fast-downloads status` says what is there;
   — the measurement behind that deferral: native schema conformance per model,
   why it does not generalise, and the discovery that GGLib's dialect parser is
   bypassed entirely
+- [ADR 0003 — Defer sampler defaults to llama.cpp](docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md)
+  — six of the seven values GGLib force-wrote into every request were measured
+  to be llama.cpp's own defaults, and the launch flags that set them affect no
+  request that goes through the pipeline
+- [ADR 0004 — Observe the sampling boundary](docs/adr/0004-observe-the-sampling-boundary.md)
+  — reading back what llama-server says it sampled with, what that can and
+  cannot catch, why an observation organ has to be able to fail, and the A/B
+  measurement behind the table above — including the positive control that
+  failed on its first attempt and what that cost to notice
 - [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
   against the advertised schema, and re-issuing with `tool_choice: "required"`
   when they do not conform

@@ -415,5 +415,13 @@ pub(crate) async fn health_check() -> Json<Value> {
         "service": "gglib-daemon",
         "status": "ok",
         "version": env!("CARGO_PKG_VERSION"),
+        // Which `GGLIB_DISABLE_*` switches this daemon actually has in effect.
+        //
+        // Reported because the daemon is the process that reads them, and a
+        // CLI invocation setting one gets no say — see
+        // `gglib_core::debug_switches`. Without this the CLI has no way to
+        // tell a switch it set from a switch that took effect, and a
+        // debugging run silently measures the wrong thing.
+        "debug_switches": gglib_core::debug_switches::active(),
     }))
 }

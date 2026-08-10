@@ -42,6 +42,7 @@ use gglib_core::ports::ModelRuntimePort;
 
 use crate::connections::{ActiveConnectionSnapshot, ActiveConnectionsRegistry};
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
+use crate::sampling_audit::{SamplingAuditSnapshot, SamplingAuditStore};
 use crate::slots::{SlotSnapshot, SlotsPollResult};
 use crate::slots_poller::SlotsCache;
 use crate::upstream_health::{UpstreamHealth, UpstreamHealthSnapshot};
@@ -344,6 +345,15 @@ pub struct DashboardSnapshot {
     /// resolving a model, so a cached copy would be wrong precisely when it
     /// mattered — while traffic was backing up.
     pub admission: AdmissionSnapshot,
+    /// Whether the sampling gglib resolved is the sampling llama-server
+    /// applied — and, first, whether anyone is in a position to know.
+    ///
+    /// The Tier C organ ADR 0001 says makes the other tiers honest, and which
+    /// sampling did not have. Consumers must render
+    /// [`AuditState::Blind`](crate::sampling_audit::AuditState::Blind)
+    /// differently from `Comparing { divergences: 0 }`: a silent instrument
+    /// and a healthy one produce the same number and mean opposite things.
+    pub sampling_audit: SamplingAuditSnapshot,
 }
 
 impl DashboardSnapshot {
@@ -362,6 +372,7 @@ impl DashboardSnapshot {
         agent_metrics: &CacheMetricsStore,
         launch: &LaunchNarrationCache,
         runtime: Option<&dyn ModelRuntimePort>,
+        sampling_audit: &SamplingAuditStore,
     ) -> Self {
         let (slots_available, slots_vec, slots_status) = match slots.get() {
             SlotsPollResult::Available(snapshots) => (true, snapshots, None),
@@ -395,6 +406,7 @@ impl DashboardSnapshot {
             admission: runtime
                 .map(ModelRuntimePort::admission_snapshot)
                 .unwrap_or_default(),
+            sampling_audit: sampling_audit.snapshot(),
         }
     }
 }
@@ -435,6 +447,10 @@ pub struct DashboardState {
     /// Held here rather than reached through `AppState` because the publisher
     /// task runs on its own schedule with no request in hand to borrow from.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// Tier C sampling readback: what gglib resolved, what llama-server
+    /// reported, and whether the organ can see at all. Written by both the
+    /// request path and the `/slots` poller — see [`crate::sampling_audit`].
+    pub sampling_audit: Arc<SamplingAuditStore>,
 }
 
 impl DashboardState {
@@ -451,6 +467,7 @@ impl DashboardState {
         cache_metrics: Arc<CacheMetricsStore>,
         agent_metrics: Arc<CacheMetricsStore>,
         runtime: Arc<dyn ModelRuntimePort>,
+        sampling_audit: Arc<SamplingAuditStore>,
     ) -> Self {
         Self {
             connections,
@@ -463,6 +480,7 @@ impl DashboardState {
             agent_metrics,
             launch: Arc::new(LaunchNarrationCache::new()),
             runtime,
+            sampling_audit,
         }
     }
 
@@ -480,6 +498,7 @@ impl DashboardState {
             &self.agent_metrics,
             &self.launch,
             Some(self.runtime.as_ref()),
+            &self.sampling_audit,
         )
     }
 }
@@ -533,6 +552,7 @@ mod tests {
             Arc::new(CacheMetricsStore::new()),
             Arc::new(CacheMetricsStore::new()),
             Arc::new(gglib_core::ports::NoopModelRuntime),
+            Arc::new(SamplingAuditStore::new()),
         ))
     }
 
@@ -553,6 +573,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
 
         assert!(snapshot.active_connections.is_empty());
@@ -594,6 +615,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
 
         assert_eq!(snapshot.active_connections.len(), 1);
@@ -620,6 +642,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
 
         assert!(snapshot.slots_available);
@@ -653,6 +676,7 @@ mod tests {
                 &CacheMetricsStore::new(),
                 &LaunchNarrationCache::new(),
                 None,
+                &SamplingAuditStore::new(),
             );
 
             serde_json::to_string(&snapshot).expect("DashboardSnapshot must always serialize");
@@ -808,6 +832,97 @@ mod tests {
         assert_eq!(cache.get(), Some(second));
     }
 
+    /// The distinction the whole Tier C liveness contract rests on, asserted
+    /// at the wire boundary rather than only in the type: a blind organ and a
+    /// clean one must not serialize to the same thing, or every consumer will
+    /// render them the same and the "unknown means nobody knows" discipline
+    /// dies at the JSON layer.
+    #[test]
+    fn a_blind_sampling_audit_serializes_differently_from_a_clean_one() {
+        let blind = SamplingAuditStore::new();
+        blind.mark_blind("llama-server was launched with --no-slots");
+
+        let clean = SamplingAuditStore::new();
+        clean.record_poll(&crate::sampling_audit::PollOutcome {
+            comparisons: 40,
+            divergences: 0,
+            skipped_ambiguous: 0,
+            found: Vec::new(),
+        });
+
+        let render = |store: &SamplingAuditStore| {
+            serde_json::to_string(&store.snapshot()).expect("snapshot serializes")
+        };
+        let blind_json = render(&blind);
+        let clean_json = render(&clean);
+
+        assert_ne!(blind_json, clean_json);
+        assert!(blind_json.contains("\"state\":\"blind\""), "{blind_json}");
+        assert!(
+            blind_json.contains("--no-slots"),
+            "blindness must carry its reason: {blind_json}"
+        );
+        assert!(
+            clean_json.contains("\"state\":\"comparing\""),
+            "{clean_json}"
+        );
+        assert!(clean_json.contains("\"divergences\":0"), "{clean_json}");
+    }
+
+    /// The baseline half's version of the rule above. A `/props` read that was
+    /// attempted and failed must not serialize the same as one the poller has
+    /// not reached yet — otherwise the panel says "not read yet" about a read
+    /// that happened, and the cause never reaches anyone.
+    #[test]
+    fn an_unreadable_baseline_serializes_differently_from_an_unread_one() {
+        let unread = SamplingAuditStore::new();
+
+        let failed = SamplingAuditStore::new();
+        failed.set_baseline(crate::props::BaselineState::Unreadable {
+            reason: "connection refused".to_string(),
+        });
+
+        let render = |store: &SamplingAuditStore| {
+            serde_json::to_string(&store.snapshot()).expect("snapshot serializes")
+        };
+        let unread_json = render(&unread);
+        let failed_json = render(&failed);
+
+        assert_ne!(unread_json, failed_json);
+        assert!(
+            unread_json.contains("\"state\":\"not_yet_read\""),
+            "{unread_json}"
+        );
+        assert!(
+            failed_json.contains("\"state\":\"unreadable\""),
+            "{failed_json}"
+        );
+        assert!(
+            failed_json.contains("connection refused"),
+            "an unreadable baseline must carry its cause: {failed_json}"
+        );
+    }
+
+    /// The store the poller writes must be the store the snapshot reads —
+    /// two `Arc`s of the same thing, not two stores.
+    #[test]
+    fn the_snapshot_reads_the_same_audit_store_the_poller_writes() {
+        let state = empty_state();
+        assert_eq!(
+            state.snapshot().sampling_audit.state,
+            crate::sampling_audit::AuditState::NotYetObserved
+        );
+
+        state.sampling_audit.mark_blind("upstream unreachable");
+
+        match state.snapshot().sampling_audit.state {
+            crate::sampling_audit::AuditState::Blind { reason } => {
+                assert_eq!(reason, "upstream unreachable");
+            }
+            other => panic!("expected Blind, got {other:?}"),
+        }
+    }
+
     /// Tier 1 parity: what the banner prints must also be reachable over
     /// `GET /v1/proxy/status`, which is this snapshot.
     #[test]
@@ -831,6 +946,7 @@ mod tests {
                 &CacheMetricsStore::new(),
                 launch,
                 None,
+                &SamplingAuditStore::new(),
             )
         };
 
@@ -864,6 +980,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
         assert_eq!(before.cache, None);
 
@@ -882,6 +999,7 @@ mod tests {
             &CacheMetricsStore::new(),
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
         let status = after.cache.expect("cache status present after set");
         assert!(status.needs_attention);
@@ -918,6 +1036,7 @@ mod tests {
                 &CacheMetricsStore::new(),
                 &LaunchNarrationCache::new(),
                 None,
+                &SamplingAuditStore::new(),
             )
             .cache
             .expect("cache status present")
@@ -969,6 +1088,7 @@ mod tests {
             &agent,
             &LaunchNarrationCache::new(),
             None,
+            &SamplingAuditStore::new(),
         );
 
         assert_eq!(snap.agent_usage.reporting_requests, 1);

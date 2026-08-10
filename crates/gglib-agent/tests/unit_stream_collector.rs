@@ -208,14 +208,78 @@ async fn malformed_json_arguments_emit_error_and_fail() {
     );
 }
 
+/// An index at or beyond the limit is dropped, not fatal.
+///
+/// **This assertion was inverted.** It used to require an `Err`, and that is
+/// what the behaviour was — but it meant a model that ran away emitting tool
+/// calls destroyed its own turn: "internal agent error", zero tokens, zero
+/// iterations, after minutes of real work. Measured on Qwen3.5-4B it fired on
+/// 2 of 2 agentic eval runs and scored the affected task 0, misattributing a
+/// model behaviour to gglib.
+///
+/// The Vec bound is still enforced — that is all the guard was ever for — but
+/// the turn survives, and `max_parallel_tools` in the agent loop applies the
+/// policy it already has for an oversized batch.
 #[tokio::test]
-async fn oversized_tool_call_index_returns_error() {
-    // An index >= MAX_TOOL_CALL_INDEX must be rejected immediately to
-    // prevent unbounded Vec growth from a malformed or adversarial stream.
+async fn oversized_tool_call_index_is_dropped_without_losing_the_turn() {
     let (tx, _rx) = mpsc::channel(16);
     let stream = make_stream(vec![
         LlmStreamEvent::ToolCallDelta {
-            index: MAX_TOOL_CALL_INDEX, // at or beyond the hard limit → rejected
+            index: 0,
+            id: Some("keep".into()),
+            name: Some("do_thing".into()),
+            arguments: Some("{}".into()),
+        },
+        LlmStreamEvent::ToolCallDelta {
+            index: MAX_TOOL_CALL_INDEX, // at the hard limit → dropped
+            id: Some("drop".into()),
+            name: Some("runaway".into()),
+            arguments: Some("{}".into()),
+        },
+        LlmStreamEvent::Done {
+            finish_reason: "tool_calls".into(),
+        },
+    ]);
+
+    let r = collect_stream(stream, &tx)
+        .await
+        .expect("a runaway index must not destroy the turn");
+
+    assert_eq!(r.tool_calls_truncated, 1, "the drop is counted, not silent");
+    assert_eq!(r.tool_calls.len(), 1, "the in-range call survives");
+    assert_eq!(r.tool_calls[0].name, "do_thing");
+    assert_eq!(r.finish_reason, "tool_calls");
+}
+
+/// The Vec bound the guard exists for still holds: a wild index allocates
+/// nothing.
+#[tokio::test]
+async fn a_wild_tool_call_index_drives_no_allocation() {
+    let (tx, _rx) = mpsc::channel(16);
+    let stream = make_stream(vec![
+        LlmStreamEvent::ToolCallDelta {
+            index: 100_000_000,
+            id: Some("absurd".into()),
+            name: Some("nope".into()),
+            arguments: Some("{}".into()),
+        },
+        LlmStreamEvent::Done {
+            finish_reason: "tool_calls".into(),
+        },
+    ]);
+
+    let r = collect_stream(stream, &tx).await.expect("must not error");
+    assert!(r.tool_calls.is_empty());
+    assert_eq!(r.tool_calls_truncated, 1);
+}
+
+/// The ordinary case must not report truncation.
+#[tokio::test]
+async fn a_normal_stream_reports_no_truncation() {
+    let (tx, _rx) = mpsc::channel(16);
+    let stream = make_stream(vec![
+        LlmStreamEvent::ToolCallDelta {
+            index: 0,
             id: Some("c0".into()),
             name: Some("do_thing".into()),
             arguments: Some("{}".into()),
@@ -225,5 +289,6 @@ async fn oversized_tool_call_index_returns_error() {
         },
     ]);
 
-    assert!(collect_stream(stream, &tx).await.is_err());
+    let r = collect_stream(stream, &tx).await.expect("must not error");
+    assert_eq!(r.tool_calls_truncated, 0);
 }

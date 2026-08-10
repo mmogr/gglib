@@ -231,6 +231,17 @@ export interface TuneTaskResult {
   /** Time to the model's first tool call; `null` when it never called one. */
   time_to_first_tool_call_ms?: number | null;
   detail?: string | null;
+  /**
+   * Why this run is **not a measurement of the model**, when it is not one.
+   *
+   * `null` on every run that reached the model, including every way of doing
+   * badly — a wrong call, a detected loop, an exhausted budget all score
+   * honestly. A non-null reason means the request never produced a response to
+   * score, so this row's `passed: false` and `tool_match_score: 0` are the
+   * absence of a measurement rather than a bad one, and must not be rendered
+   * as a failure the model is responsible for.
+   */
+  unmeasured?: string | null;
 }
 
 /**
@@ -275,8 +286,15 @@ export type BenchmarkEvent =
 
 // ─── Agentic A/B Eval (raw vs gglib) ─────────────────────────────────────────
 
-/** Which arm of the A/B eval a task ran under. */
-export type EvalArm = 'raw' | 'gglib';
+/**
+ * Which arm of the A/B eval a task ran under.
+ *
+ * Two of the four measure the eval rather than the pipeline: `raw_replicate`
+ * re-runs `raw` on a disjoint seed set (an A/A test, whose gap is the eval's
+ * own drift), and `control` runs the pipeline with sampling deliberately broken
+ * and must score far below `gglib`.
+ */
+export type EvalArm = 'raw' | 'gglib' | 'raw_replicate' | 'control';
 
 /** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
 export interface ArmScores {
@@ -298,6 +316,22 @@ export interface ArmScores {
   total_wall_ms: number;
   /** Mean time to first tool call, over the tasks that made one. */
   mean_time_to_first_tool_call_ms?: number | null;
+  /**
+   * How many seeds every task was repeated under — the sample size behind every
+   * mean above. Arms do not all share it: the control repeats fewer.
+   */
+  seeds?: number;
+  /** Total task runs behind these scores: `tasks × seeds`. */
+  runs?: number;
+  /**
+   * How many of those runs never reached the model, and so scored zero for it.
+   *
+   * Equal to `runs` is impossible in a delivered report — the eval aborts
+   * rather than emit an arm with scores but no measurements. Between 1 and
+   * `runs` means every mean on this arm is diluted by empty runs, and should be
+   * read as a floor rather than a measurement.
+   */
+  unmeasured_runs?: number;
 }
 
 /**
@@ -319,12 +353,19 @@ export interface ArmDelta {
   completion_token_ratio?: number | null;
 }
 
-/** One task's outcome under both arms. */
+/**
+ * One task's outcome under both arms.
+ *
+ * Each side carries **one entry per seed**, in seed order. A task that passes
+ * 3/3 under one arm and 1/3 under the other is a different finding from 3/3
+ * versus 0/3, and both collapse to "passed / failed" once the per-seed detail
+ * is gone.
+ */
 export interface AgenticTaskComparison {
   task_id: string;
   category: TaskCategory;
-  raw: TuneTaskResult;
-  gglib: TuneTaskResult;
+  raw: TuneTaskResult[];
+  gglib: TuneTaskResult[];
 }
 
 /** The complete raw-vs-gglib report. Mirrors `AgenticEvalReport`. */
@@ -337,6 +378,22 @@ export interface AgenticEvalReport {
   gglib: ArmScores;
   delta: ArmDelta;
   tasks: AgenticTaskComparison[];
+  /** The seeds every task ran under. Empty on a legacy or unseeded run. */
+  seeds?: number[];
+  /**
+   * The positive control's scores, when it ran. What matters is not its value
+   * but its distance below `gglib`; a control that failed to move invalidates
+   * every delta in the report.
+   */
+  control?: ArmScores | null;
+  /**
+   * The A/A arm's scores — the raw pipeline again, on different seeds. Its
+   * distance from `raw` is the eval's own drift, and the floor `delta` has to
+   * clear before it describes a magnitude rather than a direction.
+   */
+  raw_replicate?: ArmScores | null;
+  /** The seeds the A/A arm used. Empty when it did not run. */
+  replicate_seeds?: number[];
 }
 
 // ─── API Response Shapes ─────────────────────────────────────────────────────

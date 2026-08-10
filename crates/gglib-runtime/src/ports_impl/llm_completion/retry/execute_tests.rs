@@ -8,7 +8,7 @@
 //! which would fire the send timeout spuriously.
 
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::Result;
 use futures_util::StreamExt;
@@ -206,6 +206,18 @@ async fn a_bare_500_is_terminal() {
     assert_eq!(server.request_count(), 1);
 }
 
+/// The wired path from header to sleep, not the arithmetic — that is proven
+/// exactly, and without a clock, by `retry::policy_tests`.
+///
+/// # Why this reads the observer rather than the clock
+///
+/// It used to assert that the whole `send` finished inside a second, which is
+/// a wall-clock measurement of two HTTP round trips plus a 5ms backoff. Under
+/// parallel test load that took 1.1–1.25s on this machine and failed, having
+/// detected nothing about clamping — the backoff was never the reason it went
+/// over. The observer is handed the delay the loop is about to sleep for, so
+/// asserting on that measures the value under test directly and cannot be
+/// perturbed by a busy machine.
 #[tokio::test]
 async fn an_absurd_retry_after_is_clamped() {
     // A full day, which must not park the request for a full day.
@@ -219,17 +231,27 @@ async fn an_absurd_retry_after_is_clamped() {
         ok_stream(),
     ])
     .await;
+    let recorder = Recorder::default();
+    let policy = fast_policy(4);
 
-    let started = Instant::now();
-    send(&server, &fast_policy(4))
+    send_to(&server, &policy, Some(&recorder.as_observer()))
         .await
         .expect("should recover");
 
     assert_eq!(server.request_count(), 2);
+    let retries = recorder.retries();
+    assert_eq!(
+        retries.len(),
+        1,
+        "one backoff, and its delay is the subject"
+    );
+    // A server hint is a floor clamped to `max_backoff`, plus a jitter spread
+    // drawn from `initial_backoff` — so their sum is the whole ceiling.
+    let ceiling = policy.max_backoff + policy.initial_backoff;
     assert!(
-        started.elapsed() < Duration::from_secs(1),
-        "clamped to max_backoff, not honoured literally: waited {:?}",
-        started.elapsed()
+        retries[0].1 <= ceiling,
+        "clamped to max_backoff, not honoured literally: about to sleep {:?}",
+        retries[0].1
     );
 }
 

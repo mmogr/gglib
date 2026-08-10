@@ -24,6 +24,7 @@ import { Modal } from './ui/Modal';
 import { ProxyAdmissionPanel } from './ProxyAdmissionPanel';
 import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
+import { ProxySamplingPanel } from './ProxySamplingPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection } from './proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
 
@@ -80,6 +81,18 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
             Launch Decisions
           </h3>
           <ProxyLaunchPanel launch={snapshot?.launch} />
+        </section>
+
+        {/*
+          Directly after the launch decisions, because it is the check on
+          them: those rows say what gglib decided, and this one says whether
+          llama-server agrees it received it.
+        */}
+        <section>
+          <h3 className="text-xs font-semibold text-text mb-sm">
+            Sampling Readback
+          </h3>
+          <ProxySamplingPanel audit={snapshot?.sampling_audit} />
         </section>
 
         <section>

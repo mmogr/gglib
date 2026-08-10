@@ -50,8 +50,19 @@ use crate::util::emit_error_event;
 /// Setting `max_parallel_tools` to a value smaller than `MAX_TOOL_CALL_INDEX`
 /// does **not** prevent a model from emitting more tool-call slots in the
 /// stream — it only limits how many are executed concurrently.  The agent
-/// loop rejects oversized batches before execution via
-/// [`AgentError::ParallelToolLimitExceeded`].
+/// loop recovers from an oversized batch by feeding the model a synthetic
+/// tool error asking it to retry with a smaller one.
+///
+/// # Reaching it truncates; it does not fail the turn
+///
+/// Deltas at or beyond this index are dropped and counted in
+/// [`CollectedResponse::tool_calls_truncated`]. That is a deliberate change
+/// from the original behaviour, which aborted the whole stream: a model that
+/// ran away emitting tool calls produced "internal agent error", zero tokens
+/// and zero iterations after minutes of real work, with the failure
+/// misattributed to gglib rather than to the model. The allocation this guard
+/// exists to bound is a 64-element Vec; destroying the turn to avoid it was
+/// the more expensive outcome by a wide margin.
 pub const MAX_TOOL_CALL_INDEX: usize = 64;
 
 // =============================================================================
@@ -76,6 +87,14 @@ pub struct CollectedResponse {
     pub tool_calls: Vec<ToolCall>,
     /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
     pub finish_reason: String,
+    /// Tool-call deltas dropped because their `index` reached
+    /// [`MAX_TOOL_CALL_INDEX`].
+    ///
+    /// Non-zero means the model ran away emitting tool calls. The response is
+    /// still well-formed — the first [`MAX_TOOL_CALL_INDEX`] slots are intact
+    /// — so the caller can apply its own policy rather than losing the turn.
+    /// See [`collect_stream`]'s notes on why this is a count and not an error.
+    pub tool_calls_truncated: usize,
     /// Completion-token count from the stream's trailing
     /// [`LlmStreamEvent::Usage`] event.
     ///
@@ -127,11 +146,13 @@ struct PartialToolCall {
 /// # Errors
 ///
 /// - Infrastructure errors (an `Err` item in the stream) are returned immediately.
-/// - A tool-call index ≥ [`MAX_TOOL_CALL_INDEX`] is rejected immediately.
-///   This guard bounds the `partials` Vec that grows during streaming; without
-///   it a malformed stream could allocate unbounded memory before `Done` arrives.
-///   Tool-call *concurrency* is a separate concern — the caller (agent loop)
-///   enforces [`AgentConfig::max_parallel_tools`] after this function returns.
+/// - A tool-call index ≥ [`MAX_TOOL_CALL_INDEX`] is **dropped, not fatal** —
+///   see [`CollectedResponse::tool_calls_truncated`]. The guard still bounds
+///   the `partials` Vec, which is all it was ever for; it no longer destroys
+///   the turn to do it. Tool-call *concurrency* remains a separate concern —
+///   the caller (agent loop) enforces [`AgentConfig::max_parallel_tools`]
+///   after this function returns, and already recovers from an oversized
+///   batch by telling the model to retry with a smaller one.
 /// - Malformed tool-call arguments (not valid JSON) cause `collect_stream` to
 ///   emit an [`AgentEvent::Error`] on `tx` and return `Err`. This ensures the
 ///   SSE client always sees the failure reason before the stream closes.
@@ -143,6 +164,9 @@ pub async fn collect_stream(
     let mut reasoning_buf = String::new();
     // Indexed by the tool-call `index` from the stream deltas.
     let mut partials: Vec<PartialToolCall> = Vec::new();
+    // Deltas dropped for exceeding MAX_TOOL_CALL_INDEX. Counted rather than
+    // fatal — see `upsert_tool_call_delta`.
+    let mut tool_calls_truncated: usize = 0;
     // Tracks whether at least one event was received before the stream ended.
     // Used to distinguish a hard connectivity failure (zero events) from a
     // mid-response truncation (some events, no Done frame).
@@ -189,7 +213,11 @@ pub async fn collect_stream(
                 id,
                 name,
                 arguments,
-            } => upsert_tool_call_delta(&mut partials, index, id, name, arguments)?,
+            } => {
+                if upsert_tool_call_delta(&mut partials, index, id, name, arguments) {
+                    tool_calls_truncated += 1;
+                }
+            }
 
             LlmStreamEvent::Done { finish_reason } => {
                 let tool_calls = assemble_tool_calls(std::mem::take(&mut partials), tx).await?;
@@ -226,6 +254,7 @@ pub async fn collect_stream(
             reasoning_content: reasoning_buf,
             tool_calls,
             finish_reason,
+            tool_calls_truncated,
             completion_tokens,
         });
     }
@@ -249,15 +278,29 @@ pub async fn collect_stream(
 /// not drive a huge allocation), grows the vec on demand, and logs when a
 /// delta overwrites an already-seen `id`/`name` — a should-never-happen the
 /// old inline code also surfaced.
+///
+/// # Returns `true` when the delta was dropped
+///
+/// It used to `bail!`, which lost the whole turn: `collect_stream` returned
+/// `Err`, the agent loop reported "internal agent error", and the caller saw
+/// zero tokens and zero iterations after two minutes of real work. Measured on
+/// Qwen3.5-4B, that fired on 2 of 2 agentic eval runs and scored the affected
+/// task 0 — a guard doing more damage than the unbounded allocation it exists
+/// to prevent, and misreporting a model behaviour as a gglib fault.
+///
+/// A runaway tool-call stream already has correct handling one layer up:
+/// `agent_loop` compares `tool_calls.len()` against `max_parallel_tools` and
+/// recovers by feeding the model a synthetic tool error asking it to retry
+/// with a smaller batch. Bailing here preempted that with a worse outcome.
 fn upsert_tool_call_delta(
     partials: &mut Vec<PartialToolCall>,
     index: usize,
     id: Option<String>,
     name: Option<String>,
     arguments: Option<String>,
-) -> Result<()> {
+) -> bool {
     if index >= MAX_TOOL_CALL_INDEX {
-        anyhow::bail!("tool-call index {index} exceeds hard limit ({MAX_TOOL_CALL_INDEX})");
+        return true;
     }
     if partials.len() <= index {
         partials.resize_with(index + 1, PartialToolCall::default);
@@ -288,7 +331,7 @@ fn upsert_tool_call_delta(
     if let Some(args) = arguments {
         p.arguments.push_str(&args);
     }
-    Ok(())
+    false
 }
 
 /// Surface a non-fatal `NormalizationError` from the dialect parser.

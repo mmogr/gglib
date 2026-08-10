@@ -40,6 +40,7 @@ use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
 use crate::profiles::{ModelRoute, configured_names, resolve_route, variant_entries};
+use crate::sampling_audit::SamplingAuditStore;
 use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
@@ -236,11 +237,21 @@ pub async fn serve(
     // isolated Tokio task (see `slots_poller` module docs for the
     // backoff/lifecycle design) and is joined below after `axum::serve`
     // returns, so it never outlives the server or gets left detached.
+    //
+    // It also drives the Tier C sampling readback, which needs both stores
+    // built before the task starts: the connections registry supplies the
+    // intents in flight, and the audit store collects what the comparison
+    // finds. Both are handed to `DashboardState` below as well, so the
+    // dashboard reads exactly what the poller writes.
     let slots_cache = Arc::new(SlotsCache::new());
+    let connections = Arc::new(ActiveConnectionsRegistry::new());
+    let sampling_audit = Arc::new(SamplingAuditStore::new());
     let slots_poller = spawn_slots_poller(
         Arc::clone(&runtime_port),
         client.clone(),
         Arc::clone(&slots_cache),
+        Arc::clone(&connections),
+        Arc::clone(&sampling_audit),
         cancel.clone(),
     );
 
@@ -269,7 +280,7 @@ pub async fn serve(
     });
 
     let dashboard = Arc::new(DashboardState::new(
-        Arc::new(ActiveConnectionsRegistry::new()),
+        connections,
         slots_cache,
         Arc::new(ContextMetricsStore::new()),
         Arc::clone(&upstream_health),
@@ -277,6 +288,7 @@ pub async fn serve(
         Arc::new(CacheMetricsStore::new()),
         agent_metrics,
         Arc::clone(&runtime_port),
+        sampling_audit,
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
@@ -997,6 +1009,7 @@ async fn chat_completions(
         calibration: state.calibration.clone(),
         calibration_session_id: sanitized_session_id.as_deref(),
         cache_metrics: state.dashboard.cache_metrics.clone(),
+        sampling_audit: state.dashboard.sampling_audit.clone(),
     };
 
     // Forward the request, optionally wrapped in cache lifecycle. `Some(cfg)`
@@ -1135,6 +1148,7 @@ async fn chat_completions(
                 calibration: state.calibration.clone(),
                 calibration_session_id: sanitized_session_id.as_deref(),
                 cache_metrics: state.dashboard.cache_metrics.clone(),
+                sampling_audit: state.dashboard.sampling_audit.clone(),
             };
 
             match retry_req.send(retry_permit, retry_cfg, retry_session).await {

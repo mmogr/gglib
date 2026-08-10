@@ -50,7 +50,9 @@ __pycache__/
 .pytest_cache/
 
 # Node.js
-node_modules/
+# No trailing slash: `node_modules/` matches a directory but not a *symlink*
+# of that name, which is how one got committed in #727.
+node_modules
 package-lock.json
 yarn.lock
 .pnpm-debug.log

@@ -43,6 +43,30 @@
 //! that hangs up mid-stream stops blocking the next model swap immediately,
 //! rather than pinning the GPU until something notices.
 //!
+//! ## And the sampling intent
+//!
+//! [`ConnectionGuard::record_sampling`] attaches the
+//! [`SamplingDecision`](gglib_core::request_pipeline::SamplingDecision) the
+//! request pipeline resolved for this request, for the same reason and by the
+//! same argument as the lease: identical lifetime, guard already travels it.
+//!
+//! What makes this the *right* home rather than merely a convenient one is
+//! that the lifetime is not just similar, it is the one the reader needs.
+//! [`crate::sampling_audit`] compares gglib's intent against the `params`
+//! llama-server reports for a slot, and llama.cpp populates `params` **only
+//! while a slot is processing**. So the set of intents that could possibly
+//! explain an observation is exactly the set of requests in flight — which is
+//! exactly what this registry holds, maintained by a `Drop` impl rather than
+//! by anything that has to remember.
+//!
+//! A ring of *recent* decisions — the obvious alternative — would keep
+//! finished requests in the comparison set, and a finished request whose
+//! parameters differed would force the audit to abstain (see
+//! [`crate::sampling_audit::compare_poll`]) while nothing was actually
+//! ambiguous. Model-change invalidation falls out for free too:
+//! [`Self::in_flight_sampling`] filters by model name, so a swap needs no
+//! explicit clearing step.
+//!
 //! ## Concurrency design
 //!
 //! Uses `std::sync::Mutex` — not `tokio::sync::Mutex` — following the
@@ -56,6 +80,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gglib_core::ports::AdmissionLease;
+use gglib_core::request_pipeline::SamplingDecision;
 use uuid::Uuid;
 
 // =============================================================================
@@ -116,6 +141,14 @@ struct ActiveConnection {
     prompt_total: Option<u32>,
     prompt_cached: Option<u32>,
     prompt_time_ms: Option<u64>,
+    /// What the request pipeline resolved for this request, once it has.
+    ///
+    /// `None` between registration and the pipeline running — a window in
+    /// which the request cannot yet be occupying an upstream slot, so its
+    /// absence from [`ActiveConnectionsRegistry::in_flight_sampling`] costs
+    /// the audit nothing. Not part of the dashboard snapshot: this is read by
+    /// the `/slots` poller, not rendered.
+    sampling: Option<SamplingDecision>,
 }
 
 impl ActiveConnection {
@@ -187,6 +220,7 @@ impl ActiveConnectionsRegistry {
             prompt_total: None,
             prompt_cached: None,
             prompt_time_ms: None,
+            sampling: None,
         };
 
         {
@@ -226,6 +260,40 @@ impl ActiveConnectionsRegistry {
         if let Some(conn) = guard.get_mut(&id) {
             conn.phase = ConnectionPhase::Generating;
         }
+    }
+
+    /// Attach the sampling the request pipeline resolved for `id`.
+    ///
+    /// A no-op if `id` is absent — a request whose client hung up during
+    /// shaping has nothing left to audit.
+    pub fn set_sampling(&self, id: Uuid, decision: SamplingDecision) {
+        let mut guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(conn) = guard.get_mut(&id) {
+            conn.sampling = Some(decision);
+        }
+    }
+
+    /// Every sampling intent currently in flight against `model_name`.
+    ///
+    /// The candidate set for [`crate::sampling_audit::compare_poll`]: one
+    /// entry per request that has been resolved and not yet finished. See the
+    /// module docs for why in-flight — rather than recent — is the set the
+    /// audit needs.
+    ///
+    /// Deliberately *not* filtered by [`ConnectionPhase`]. It is tempting to
+    /// drop `Queued` entries on the grounds that a queued request holds no
+    /// slot, but phase only advances on the streaming path's progress frames,
+    /// so a non-streaming request in flight stays `Queued` for its whole life.
+    /// Filtering would hide exactly the intent an observation might belong to,
+    /// turning a correct abstention into a confident misattribution.
+    #[must_use]
+    pub fn in_flight_sampling(&self, model_name: &str) -> Vec<SamplingDecision> {
+        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .values()
+            .filter(|c| c.model_name == model_name)
+            .filter_map(|c| c.sampling.clone())
+            .collect()
     }
 
     /// Snapshot every currently active connection.
@@ -331,6 +399,12 @@ impl ConnectionGuard {
     /// Mark this connection as generating (post-prefill).
     pub fn mark_generating(&self) {
         self.registry.mark_generating(self.id);
+    }
+
+    /// Attach what the request pipeline resolved for this request, so the
+    /// `/slots` readback has an intent to compare its observation against.
+    pub fn record_sampling(&self, decision: SamplingDecision) {
+        self.registry.set_sampling(self.id, decision);
     }
 
     /// `true` if any *other* in-flight connection is actively occupying the
@@ -518,6 +592,119 @@ mod tests {
             0,
             "all connections must be cleaned up after their guards drop"
         );
+    }
+
+    // ── Sampling intent ───────────────────────────────────────────────────
+
+    fn decision(temperature: f32) -> SamplingDecision {
+        use gglib_core::domain::{FieldSources, ParamSource::Floor};
+        SamplingDecision {
+            resolved: gglib_core::domain::InferenceConfig {
+                temperature: Some(temperature),
+                ..Default::default()
+            },
+            sources: FieldSources {
+                temperature: Floor,
+                top_p: Floor,
+                top_k: Floor,
+                max_tokens: Floor,
+                repeat_penalty: Floor,
+                presence_penalty: Floor,
+                min_p: Floor,
+                dry_multiplier: Floor,
+                dry_base: Floor,
+                dry_allowed_length: Floor,
+                dry_penalty_last_n: Floor,
+            },
+            layer_names: ["cli", "client", "profile", "model", "global", "auto"],
+            floor: gglib_core::request_pipeline::FloorClass::Default,
+            agentic_turn: false,
+            agentic_ceiling_applied: None,
+            client_fields_rejected: Vec::new(),
+            client_fields_discarded: Vec::new(),
+            applied: true,
+        }
+    }
+
+    #[test]
+    fn a_recorded_intent_is_visible_while_the_request_is_in_flight() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let guard = registry.register("m", true, None);
+
+        assert!(
+            registry.in_flight_sampling("m").is_empty(),
+            "nothing to report before the pipeline has run"
+        );
+
+        guard.record_sampling(decision(0.7));
+
+        let intents = registry.in_flight_sampling("m");
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].resolved.temperature, Some(0.7));
+    }
+
+    /// The property that makes this the right home for the intent: a request
+    /// that has finished cannot occupy a slot, so it must not be in the set
+    /// the audit compares against. A ring of recent decisions would keep it
+    /// there and force a spurious abstention.
+    #[test]
+    fn a_finished_request_leaves_no_intent_behind() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let guard = registry.register("m", true, None);
+        guard.record_sampling(decision(0.7));
+
+        drop(guard);
+
+        assert!(registry.in_flight_sampling("m").is_empty());
+    }
+
+    /// Model-change invalidation without an invalidation step: intents are
+    /// asked for by model, so a swap simply stops matching.
+    #[test]
+    fn intents_are_scoped_to_their_own_model() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let a = registry.register("model-a", true, None);
+        let b = registry.register("model-b", true, None);
+        a.record_sampling(decision(0.7));
+        b.record_sampling(decision(0.2));
+
+        assert_eq!(registry.in_flight_sampling("model-a").len(), 1);
+        assert_eq!(
+            registry.in_flight_sampling("model-a")[0]
+                .resolved
+                .temperature,
+            Some(0.7)
+        );
+        assert_eq!(registry.in_flight_sampling("model-b").len(), 1);
+        assert!(registry.in_flight_sampling("model-c").is_empty());
+    }
+
+    /// Concurrent turns each contribute their own intent — the input the
+    /// audit's ambiguity check is built to reason about.
+    #[test]
+    fn concurrent_requests_each_contribute_one_intent() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let guards: Vec<_> = (0u8..4)
+            .map(|i| {
+                let g = registry.register("m", true, None);
+                g.record_sampling(decision(0.1 * f32::from(i)));
+                g
+            })
+            .collect();
+
+        assert_eq!(registry.in_flight_sampling("m").len(), 4);
+        drop(guards);
+        assert!(registry.in_flight_sampling("m").is_empty());
+    }
+
+    /// A client that hangs up mid-shaping unregisters before the pipeline
+    /// reports; recording against the vanished id must not panic or resurrect
+    /// the entry.
+    #[test]
+    fn recording_against_a_departed_connection_is_a_noop() {
+        let registry = ActiveConnectionsRegistry::new();
+        registry.set_sampling(Uuid::new_v4(), decision(0.7));
+        assert!(registry.is_empty());
     }
 
     #[test]

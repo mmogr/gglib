@@ -43,6 +43,16 @@ export interface InferenceConfig {
   /** How far back DRY scans, in tokens; 0 disables. Unset defers to
    *  llama.cpp's default (64). */
   dryPenaltyLastN?: number;
+  /**
+   * RNG seed. Unset means llama.cpp draws a fresh one per request.
+   *
+   * Request-scoped, like `maxTokens` and unlike everything else here: it is
+   * not a sampling policy, and a seed stored per model would pin every
+   * response that model produces to the same text. No settings, profile or
+   * per-model surface offers it — the benchmark harness is the only caller
+   * that sets one.
+   */
+  seed?: number;
 }
 
 /**
@@ -138,6 +148,69 @@ export interface SamplingExplanation {
   isReasoning: boolean;
   /** Whether client-supplied sampling is trusted — a rung the table cannot show. */
   trustClientSampling: boolean;
+  /**
+   * What the model's own GGUF publishes, for the fields it publishes at all.
+   *
+   * Empty on almost every model, and absent entirely from a backend that
+   * predates the field — so treat `undefined` as "nothing published", never as
+   * an error.
+   */
+  published?: PublishedDefault[];
+  /**
+   * Where the model's stored defaults came from.
+   *
+   * `published` and `autoDetected` share a ladder rung — both are unreviewed,
+   * so both rank below global settings — which means `ParamProvenance.layer`
+   * alone cannot name its own source. Without this, a recipe fetched from the
+   * model author renders as gglib's reasoning-tag guess.
+   */
+  defaultsOrigin?: DefaultsOriginName | null;
+}
+
+/**
+ * Where a model's stored `inferenceDefaults` came from.
+ *
+ * - `user` — set by a person. Outranks global settings.
+ * - `autoDetected` — gglib's `reasoning`-tag guess. Ranks below.
+ * - `published` — the author's `generation_config.json`, read at import. Ranks
+ *   exactly where `autoDetected` does; what differs is the evidence.
+ */
+export type DefaultsOriginName = 'user' | 'autoDetected' | 'published';
+
+/**
+ * What gglib does with one field's published recommendation.
+ *
+ * Mirrors the backend `PublishedStateDto`. There is no `notPublished` arm: a
+ * field with no author recommendation is simply absent from the list.
+ *
+ * - `deferred` — gglib names nothing, so llama.cpp applies the model's number.
+ * - `restated` — gglib sends the same number the model published.
+ * - `overridden` — gglib sends a different number. The only one that warns.
+ * - `unreadable` — the published value could not be parsed, so gglib cannot say
+ *   what it displaced. Renders as unknown, never as an override.
+ */
+export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadable';
+
+/**
+ * One field's published value and what gglib does with it — the `published`
+ * entries of `GET /api/models/:id/explain`.
+ *
+ * Since llama.cpp PR #17120 a `general.sampling.*` key becomes the server's
+ * default for every field gglib does not name, so a `kind: 'unset'` provenance
+ * means *the model's own number applies* on a model that published one, and
+ * *the build's default applies* on one that did not. Those render identically
+ * without this.
+ */
+export interface PublishedDefault {
+  /** Joins to {@link ParamProvenance.param}. */
+  param: SamplingParamKey;
+  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
+  key: string;
+  state: PublishedState;
+  /** What the model author published. Absent only when `state` is `unreadable`. */
+  published?: number;
+  /** What gglib sends instead. Present only when `state` is `overridden`. */
+  sending?: number;
 }
 
 // ============================================================================

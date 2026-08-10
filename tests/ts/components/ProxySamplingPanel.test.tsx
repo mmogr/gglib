@@ -1,0 +1,449 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import ProxySamplingPanel, { formatValue } from '../../../src/components/ProxySamplingPanel';
+import type { SamplingAuditSnapshot } from '../../../src/services/transport/types/dashboard';
+
+function audit(overrides: Partial<SamplingAuditSnapshot> = {}): SamplingAuditSnapshot {
+  return {
+    state: { state: 'not_yet_observed' },
+    skipped_ambiguous: 0,
+    client_fields_rejected: 0,
+    client_fields_discarded: 0,
+    recent_divergences: [],
+    baseline: { state: 'not_yet_read' },
+    ...overrides,
+  };
+}
+
+describe('ProxySamplingPanel', () => {
+  // The rule the whole Tier C contract rests on. A blind organ and a healthy
+  // one both report zero divergences and mean opposite things; the backend
+  // keeps them apart as distinct states, and collapsing them here would throw
+  // that away at the last step.
+  it('renders a blind readback as a warning with its cause, never as health', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({
+          state: {
+            state: 'blind',
+            reason: 'llama-server was launched with --no-slots, so nothing can be read back.',
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/readback is blind/i)).toBeInTheDocument();
+    expect(screen.getByText(/--no-slots/)).toBeInTheDocument();
+    expect(screen.queryByText('Requests observed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Diverged')).not.toBeInTheDocument();
+  });
+
+  it('renders a clean readback with its counts, distinctly from blind', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({ state: { state: 'comparing', comparisons: 412, divergences: 0 } })}
+      />,
+    );
+
+    expect(screen.getByText('Requests observed')).toBeInTheDocument();
+    expect(screen.getByText('412')).toBeInTheDocument();
+    expect(screen.getByText('Diverged')).toBeInTheDocument();
+    expect(screen.queryByText(/readback is blind/i)).not.toBeInTheDocument();
+  });
+
+  it('says nothing has been caught yet rather than reporting a zero', () => {
+    render(<ProxySamplingPanel audit={audit()} />);
+    expect(screen.getByText(/no request caught mid-generation yet/i)).toBeInTheDocument();
+    expect(screen.queryByText('Diverged')).not.toBeInTheDocument();
+  });
+
+  it('lists a divergence with what was sent, what was seen, and where it came from', () => {
+    render(
+      <ProxySamplingPanel
+        audit={audit({
+          state: { state: 'comparing', comparisons: 10, divergences: 1 },
+          recent_divergences: [
+            { field: 'temperature', sent: 0.7, observed: 1.5, provenance: 'profile' },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('temperature')).toBeInTheDocument();
+    expect(screen.getByText(/sent 0\.7 · server reports 1\.5/)).toBeInTheDocument();
+    expect(screen.getByText('(profile)')).toBeInTheDocument();
+  });
+
+  // Abstention is something a *sighted* organ does, so it must not read as a
+  // failure — but it must be visible, because a high count means the traffic
+  // cannot be attributed and no comparison is happening.
+  it('surfaces unattributable polls only when there are some', () => {
+    const { rerender } = render(
+      <ProxySamplingPanel
+        audit={audit({ state: { state: 'comparing', comparisons: 5, divergences: 0 } })}
+      />,
+    );
+    expect(screen.queryByText('Unattributable')).not.toBeInTheDocument();
+
+    rerender(
+      <ProxySamplingPanel
+        audit={audit({
+          state: { state: 'comparing', comparisons: 5, divergences: 0 },
+          skipped_ambiguous: 31,
+        })}
+      />,
+    );
+    expect(screen.getByText('Unattributable')).toBeInTheDocument();
+    expect(screen.getByText('31')).toBeInTheDocument();
+  });
+
+  describe('baseline check', () => {
+    // A field this build's /props does not report is unknown, never
+    // agreement — the same discipline as `RuntimeCapabilities::unknown`.
+    it('renders an inconclusive baseline as unknown, not as a match', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'blind', model_supplied: 0, indeterminate: 1 },
+                fields: [
+                  {
+                    field: 'temperature',
+                    verdict: {
+                      verdict: 'indeterminate',
+                      reason: 'this build\u2019s /props does not report temperature',
+                    },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/could not be checked/i)).toBeInTheDocument();
+      expect(screen.getByText(/does not report temperature/i)).toBeInTheDocument();
+      expect(screen.queryByText(/match the values/i)).not.toBeInTheDocument();
+    });
+
+    // ADR 0003's reverse deletion criterion firing: a pin bump moved a default
+    // gglib defers to.
+    it('raises drift as a danger with both numbers', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'complete' },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/defaults have moved/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/top_p: expected 0\.95, this build reports 0\.9/),
+      ).toBeInTheDocument();
+    });
+
+    it('reports a clean conclusive baseline plainly', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'complete' },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/All 2 sampler defaults match/i)).toBeInTheDocument();
+    });
+
+    // **The defect.** `conclusive` was "any field reached a verdict", so two
+    // of seven checked rendered as an all-clear over all seven — the panel's
+    // own blind-as-health rule, applied to the report instead of to a field.
+    it('never reports an all-clear when only some fields could be checked', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 2, model_supplied: 0, indeterminate: 1 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  { field: 'min_p', verdict: { verdict: 'matches' } },
+                  {
+                    field: 'temperature',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/All \d+ sampler defaults match/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/Checked 2 of 3 sampler defaults/i)).toBeInTheDocument();
+      expect(screen.getByText(/not reported by this build/i)).toBeInTheDocument();
+    });
+
+    // A model shipping general.sampling.* is llama.cpp working as intended and
+    // gglib deferring one layer further than ADR 0003 was written for. It must
+    // read as an explanation, never as drift.
+    it('names the model as the source of a default it supplied', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 1, model_supplied: 1, indeterminate: 0 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'matches' } },
+                  {
+                    field: 'temperature',
+                    verdict: {
+                      verdict: 'model_supplied',
+                      key: 'general.sampling.temp',
+                      value: 0.33,
+                    },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/defaults have moved/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/All \d+ sampler defaults match/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/general\.sampling\.temp/)).toBeInTheDocument();
+      expect(screen.getByText(/0\.33/)).toBeInTheDocument();
+    });
+
+    // Coverage is checked after drift, so a partial reading that found a moved
+    // default still raises the alarm rather than being softened into "some
+    // fields could not be checked".
+    it('still raises drift when coverage is only partial', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'partial', checked: 1, model_supplied: 0, indeterminate: 1 },
+                fields: [
+                  { field: 'top_p', verdict: { verdict: 'differs', expected: 0.95, observed: 0.9 } },
+                  {
+                    field: 'min_p',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/defaults have moved/i)).toBeInTheDocument();
+    });
+
+    // Several distinct causes exist now; showing only the first hid whichever
+    // did not happen to sort first.
+    it('lists every distinct reason a field could not be checked', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'read',
+              report: {
+                coverage: { coverage: 'blind', model_supplied: 0, indeterminate: 2 },
+                fields: [
+                  {
+                    field: 'top_p',
+                    verdict: { verdict: 'indeterminate', reason: 'not reported by this build' },
+                  },
+                  {
+                    field: 'min_p',
+                    verdict: { verdict: 'indeterminate', reason: 'something else entirely' },
+                  },
+                ],
+              },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/not reported by this build/i)).toBeInTheDocument();
+      expect(screen.getByText(/something else entirely/i)).toBeInTheDocument();
+    });
+
+    // The baseline half's version of the rule the whole panel obeys. A read
+    // that was attempted and failed is not a read that has not happened, and
+    // "not read yet" is a claim about the poller rather than about the server.
+    it('renders an unreadable baseline as a warning carrying its cause', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            baseline: {
+              state: 'unreadable',
+              reason: '/props is unreadable: connection refused.',
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/could not be read/i)).toBeInTheDocument();
+      expect(screen.getByText(/connection refused/i)).toBeInTheDocument();
+      expect(screen.queryByText(/not read yet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/match the values/i)).not.toBeInTheDocument();
+    });
+
+    it('says so plainly when no read has been attempted yet', () => {
+      render(<ProxySamplingPanel audit={audit({ baseline: { state: 'not_yet_read' } })} />);
+
+      expect(screen.getByText(/not read yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/could not be read/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // Discarding client values is the default configuration working, not a
+  // fault — but it is the answer to "why is my temperature ignored", so it has
+  // to be visible and it has to say why.
+  it('explains discarded client values rather than presenting them as errors', () => {
+    render(<ProxySamplingPanel audit={audit({ client_fields_discarded: 88 })} />);
+    expect(screen.getByText(/88 \(trust_client_sampling is off\)/)).toBeInTheDocument();
+  });
+
+  it('degrades to a plain note on a proxy that does not report the readback', () => {
+    render(<ProxySamplingPanel audit={null} />);
+    expect(screen.getByText(/does not report the sampling readback/i)).toBeInTheDocument();
+  });
+
+  // `0.05f32` widened to f64 is 0.05000000074505806. Printing that verbatim
+  // would make every correctly-transmitted value look like a defect.
+  it('trims f32-through-JSON noise out of displayed values', () => {
+    expect(formatValue(0.05000000074505806)).toBe('0.05');
+    expect(formatValue(0.949999988079071)).toBe('0.95');
+    expect(formatValue(1.5)).toBe('1.5');
+    expect(formatValue(40)).toBe('40');
+  });
+
+  describe('published-vs-sent', () => {
+    // The headline case, and the one the baseline rows above actively obscure:
+    // `/props` reports this same field as `model_supplied`, which is true and
+    // is about the *build's* value being unobservable. It says nothing about
+    // gglib then overriding the model's number in the request body.
+    it('warns when gglib is sending something other than what the model published', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 12,
+              fields: [
+                {
+                  field: 'temperature',
+                  key: 'general.sampling.temp',
+                  state: 'overridden',
+                  published: 0.33,
+                  sending: 1.0,
+                },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/gglib is overriding/i)).toBeInTheDocument();
+      expect(screen.getByText(/model publishes 0\.33/)).toBeInTheDocument();
+      expect(screen.getByText(/gglib is sending 1/)).toBeInTheDocument();
+    });
+
+    // The panel's own rule, one level down. An empty field list means either
+    // "this model publishes nothing" or "nothing has been resolved yet", and
+    // rendering those the same way would report an all-clear for a comparison
+    // that never ran.
+    it('distinguishes nothing-compared-yet from nothing-published', () => {
+      const { unmount } = render(
+        <ProxySamplingPanel audit={audit({ published: { intents: 0, fields: [] } })} />,
+      );
+      expect(screen.getByText(/no request resolved yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/publishes no sampler defaults/i)).not.toBeInTheDocument();
+      unmount();
+
+      render(<ProxySamplingPanel audit={audit({ published: { intents: 9, fields: [] } })} />);
+      expect(screen.getByText(/publishes no sampler defaults/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no request resolved yet/i)).not.toBeInTheDocument();
+    });
+
+    // Deferral is what ADR 0003's decision looks like when it works. It must
+    // not carry the override warning.
+    it('reports deferral without warning', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 4,
+              fields: [
+                {
+                  field: 'topP',
+                  key: 'general.sampling.top_p',
+                  state: 'deferred',
+                  published: 0.71,
+                },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/gglib defers to it/i)).toBeInTheDocument();
+      expect(screen.queryByText(/gglib is overriding/i)).not.toBeInTheDocument();
+    });
+
+    // gglib cannot tell what it displaced here, so this must read as unknown
+    // rather than picking a side — ADR 0004 decision 3, applied per field.
+    it('renders an unreadable published value as unknown, not as an override', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({
+            published: {
+              intents: 3,
+              fields: [
+                { field: 'temperature', key: 'general.sampling.temp', state: 'unreadable' },
+              ],
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText(/cannot read/i)).toBeInTheDocument();
+      expect(screen.queryByText(/gglib is overriding/i)).not.toBeInTheDocument();
+    });
+
+    it('renders nothing at all on a proxy that predates the field', () => {
+      render(<ProxySamplingPanel audit={audit({ published: null })} />);
+      expect(screen.queryByText(/no request resolved yet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/publishes no sampler defaults/i)).not.toBeInTheDocument();
+    });
+  });
+});

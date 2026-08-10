@@ -4,8 +4,10 @@ pub mod agent;
 pub mod benchmark;
 pub mod cache_budget;
 pub mod capabilities;
+pub mod capability_tags;
 pub mod chat;
 pub mod dialect;
+pub mod generation_config;
 pub mod gguf;
 pub mod inference;
 pub mod inference_profile;
@@ -15,6 +17,7 @@ pub mod launch_narration;
 pub mod mcp;
 mod model;
 pub mod model_naming;
+pub mod model_sampling;
 pub mod query;
 pub mod recommendation;
 pub mod residency;
@@ -41,7 +44,11 @@ pub use benchmark::{
 };
 
 // Re-export inference types at the domain level for convenience
-pub use inference::{DefaultsOrigin, InferenceConfig, ModelSamplingContext};
+pub use capability_tags::is_reasoning;
+pub use generation_config::{
+    PublishedGenerationConfig, generation_config_candidates, parse_generation_config,
+};
+pub use inference::{DefaultsOrigin, FieldIssue, InferenceConfig, ModelSamplingContext};
 pub use inference_profile::{
     InferenceProfile, MAX_PROFILE_NAME_LEN, ProfileNameError, RESERVED_PROFILE_NAMES,
     builtin_templates, validate_name,
@@ -63,6 +70,9 @@ pub use kv_estimate::{
 
 // Re-export KV memory-shape detection at the domain level for convenience
 pub use kv_memory::kv_memory_is_partial;
+pub use model_sampling::{
+    MODEL_SAMPLING_KEYS, ModelSamplingDefault, ModelSamplingDefaults, SamplingOverride,
+};
 
 // Re-export launch narration types at the domain level for convenience
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};

@@ -87,8 +87,24 @@ pub enum PipelinePass {
     Repair,
 }
 
+use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
 use super::{ModelContext, SamplingLayers, constrain, messages, sampling, tools, truncation};
+
+/// What the pipeline did, for the caller that has to report or verify it.
+///
+/// Both halves were previously unavailable in different ways: truncation was
+/// returned bare, and sampling was not returned at all — it went into a
+/// `debug!` and nowhere else. Bundling them keeps one return value as stages
+/// gain things worth saying.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PipelineReport {
+    /// Stage 3. Zeroed when `budget_chars` was `None` — the request was
+    /// shaped but never measured.
+    pub truncation: TruncationReport,
+    /// Stages 4–5. See [`SamplingDecision`].
+    pub sampling: SamplingDecision,
+}
 
 /// Apply every request-shaping transform, in order, in place.
 ///
@@ -115,16 +131,16 @@ pub fn apply(
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
     pass: PipelinePass,
-) -> Result<TruncationReport, TruncationError> {
+) -> Result<PipelineReport, TruncationError> {
     messages::shape_messages(body, ctx);
     tools::strip_unsupported_tools(body, ctx);
 
-    let report = match budget_chars {
+    let truncation = match budget_chars {
         Some(limit) => truncation::truncate_history(body, limit)?,
         None => TruncationReport::default(),
     };
 
-    sampling::resolve_sampling(body, ctx, layers);
+    let sampling = sampling::resolve_sampling(body, ctx, layers);
 
     // Stage 6 stands down on a repair pass. See [`PipelinePass::Repair`] —
     // running it there would rewrite `tool_choice` to `"none"` and silently
@@ -132,7 +148,10 @@ pub fn apply(
     if pass == PipelinePass::Initial {
         constrain::constrain_tool_calls(body, ctx);
     }
-    Ok(report)
+    Ok(PipelineReport {
+        truncation,
+        sampling,
+    })
 }
 
 #[cfg(test)]
@@ -200,8 +219,8 @@ mod tests {
         assert_eq!(body["messages"].as_array().unwrap().len(), 2);
         assert_eq!(body["messages"][1]["tool_call_id"], "call_1");
         // 3: measured, nothing to trim.
-        assert_eq!(report.messages_truncated, 0);
-        assert!(report.payload_chars_before > 0);
+        assert_eq!(report.truncation.messages_truncated, 0);
+        assert!(report.truncation.payload_chars_before > 0);
         // 4: the model's stored default resolved in.
         assert!((body["temperature"].as_f64().unwrap() - 0.33).abs() < 1e-6);
         // 5: pinned over the client's explicit `false`.
@@ -259,8 +278,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(report.messages_truncated, 1);
-        assert!(report.payload_chars_after <= 20_000);
+        assert_eq!(report.truncation.messages_truncated, 1);
+        assert!(report.truncation.payload_chars_after <= 20_000);
     }
 
     /// No budget means no measurement — not a zero budget that rejects
@@ -277,7 +296,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(report, TruncationReport::default());
+        assert_eq!(report.truncation, TruncationReport::default());
         assert_eq!(
             body["messages"][0]["content"].as_str().unwrap().len(),
             50_000

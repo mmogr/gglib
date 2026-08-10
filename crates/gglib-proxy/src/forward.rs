@@ -76,13 +76,15 @@ use gglib_core::LlmStreamEvent;
 use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ModelContext, PipelinePass, SamplingLayers, TruncationError, TruncationReport,
+    self, ModelContext, PipelinePass, SamplingDecision, SamplingLayers, TruncationError,
+    TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
+use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -278,6 +280,26 @@ fn context_length_exceeded_response() -> Response {
         .into_response()
 }
 
+/// What [`shape_request_body`] did, for the caller that reports it.
+#[derive(Debug)]
+struct ShapedRequest {
+    /// The body to forward — shaped, or the original when shaping could not
+    /// be applied.
+    body: Bytes,
+    /// Zeroed when nothing was measured.
+    truncation: TruncationReport,
+    /// Whether the pipeline originated a decode-time tool-call grammar.
+    grammar_enforced: bool,
+    /// What the sampling stage resolved, when it ran at all.
+    ///
+    /// `None` on a body that was never JSON: the pipeline did not execute, so
+    /// there is no decision — which is a different fact from a decision that
+    /// executed and did not reach the wire. That second case is a decision
+    /// with `applied: false`, and [`crate::sampling_audit`] treats the two
+    /// identically only because both mean "nothing to compare".
+    sampling: Option<SamplingDecision>,
+}
+
 /// Run the shared request-shaping pipeline over a body held as `Bytes`.
 ///
 /// The pipeline operates on a `&mut serde_json::Value` — the seam that
@@ -300,9 +322,14 @@ fn shape_request_body(
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
     pass: PipelinePass,
-) -> Result<(Bytes, TruncationReport, bool), TruncationError> {
+) -> Result<ShapedRequest, TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
-        return Ok((body, TruncationReport::default(), false));
+        return Ok(ShapedRequest {
+            body,
+            truncation: TruncationReport::default(),
+            grammar_enforced: false,
+            sampling: None,
+        });
     };
 
     // The constrain stage never engages over a client-sent grammar, so
@@ -312,10 +339,26 @@ fn shape_request_body(
     let grammar_enforced = !grammar_before && value.get("grammar").is_some();
 
     match serde_json::to_vec(&value) {
-        Ok(v) => Ok((Bytes::from(v), report, grammar_enforced)),
+        Ok(v) => Ok(ShapedRequest {
+            body: Bytes::from(v),
+            truncation: report.truncation,
+            grammar_enforced,
+            sampling: Some(report.sampling),
+        }),
         Err(e) => {
             warn!(error = %e, "failed to re-serialize request body after shaping; forwarding original");
-            Ok((body, TruncationReport::default(), false))
+            // The shaped body is being discarded, so the values the sampling
+            // stage wrote into it never reach upstream. Recording the decision
+            // as applied here would hand the readback an intent that was never
+            // sent, and every field of it would read as a divergence.
+            let mut sampling = report.sampling;
+            sampling.applied = false;
+            Ok(ShapedRequest {
+                body,
+                truncation: TruncationReport::default(),
+                grammar_enforced: false,
+                sampling: Some(sampling),
+            })
         }
     }
 }
@@ -396,6 +439,10 @@ pub(crate) struct ForwardRequest<'a> {
     /// where the settings snapshot already lives rather than read again here,
     /// so one request cannot see two different answers.
     pub repair_enabled: bool,
+    /// Tier C sink for what the sampling stage resolved. See
+    /// [`crate::sampling_audit`] — this half records the intent; the `/slots`
+    /// poller supplies the observation to compare it against.
+    pub sampling_audit: Arc<SamplingAuditStore>,
 }
 
 impl ForwardRequest<'_> {
@@ -451,6 +498,7 @@ pub(crate) async fn forward_chat_completion(
         cache_metrics,
         pass,
         repair_enabled,
+        sampling_audit,
     } = req;
 
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
@@ -481,34 +529,49 @@ pub(crate) async fn forward_chat_completion(
     );
     let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
 
-    let (body, report, grammar_enforced) =
-        match shape_request_body(body, &context, &sampling, budget_chars, pass) {
-            Ok(shaped) => shaped,
-            Err(e) => {
-                // Hard abort: the conversation cannot be trimmed to fit. Record a
-                // clamped snapshot — the zeroed char counts are how the dashboard
-                // tells a clamped request from a measured one — then reject with
-                // the wire contract clients already handle.
-                debug!(error = %e, "rejecting request that exceeds the context budget");
-                metrics.record(ContextSnapshot {
-                    model_name: model_name.to_owned(),
-                    payload_chars_before: 0,
-                    payload_chars_after: 0,
-                    messages_truncated: 0,
-                    was_clamped: true,
-                    grammar_enforced: false,
-                    dialect_residue: false,
-                    tool_repaired: false,
-                    loop_guard_tripped: false,
-                    seq: 0,
-                    recorded_at_secs: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs(),
-                });
-                return Ok(context_length_exceeded_response());
-            }
-        };
+    let shaped = match shape_request_body(body, &context, &sampling, budget_chars, pass) {
+        Ok(shaped) => shaped,
+        Err(e) => {
+            // Hard abort: the conversation cannot be trimmed to fit. Record a
+            // clamped snapshot — the zeroed char counts are how the dashboard
+            // tells a clamped request from a measured one — then reject with
+            // the wire contract clients already handle.
+            debug!(error = %e, "rejecting request that exceeds the context budget");
+            metrics.record(ContextSnapshot {
+                model_name: model_name.to_owned(),
+                payload_chars_before: 0,
+                payload_chars_after: 0,
+                messages_truncated: 0,
+                was_clamped: true,
+                grammar_enforced: false,
+                dialect_residue: false,
+                tool_repaired: false,
+                loop_guard_tripped: false,
+                seq: 0,
+                recorded_at_secs: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            });
+            return Ok(context_length_exceeded_response());
+        }
+    };
+    let ShapedRequest {
+        body,
+        truncation: report,
+        grammar_enforced,
+        sampling: decision,
+    } = shaped;
+
+    // Hand the readback this request's intent, and count what the client's own
+    // sampling cost it. Both are Tier C — see `sampling_audit`. The intent
+    // rides the connection guard because that is the object whose lifetime is
+    // already exactly "while this request is in flight", which is also exactly
+    // when a slot can report `params` for it.
+    if let Some(decision) = decision {
+        sampling_audit.record_intent(&decision);
+        connection.record_sampling(decision);
+    }
 
     // Deliberate noise control: history truncation is routine enough that
     // logging every no-op would drown the interesting case.
@@ -1349,7 +1412,12 @@ mod tests {
     #[test]
     fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
         let body = Bytes::from(r#"{"model":"m","messages":[],"totally_made_up":{"a":1}}"#);
-        let (out, report, grammar_enforced) = shape_request_body(
+        let ShapedRequest {
+            body: out,
+            truncation: report,
+            grammar_enforced,
+            ..
+        } = shape_request_body(
             body,
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
@@ -1383,7 +1451,11 @@ mod tests {
         let body = Bytes::from(
             r#"{"model":"m","messages":[],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"required"}"#,
         );
-        let (out, _, grammar_enforced) = shape_request_body(
+        let ShapedRequest {
+            body: out,
+            grammar_enforced,
+            ..
+        } = shape_request_body(
             body,
             &ctx,
             &SamplingLayers::default(),
@@ -1401,7 +1473,11 @@ mod tests {
     #[test]
     fn shaping_leaves_non_json_bodies_alone() {
         let body = Bytes::from_static(b"not json at all");
-        let (out, report, _) = shape_request_body(
+        let ShapedRequest {
+            body: out,
+            truncation: report,
+            ..
+        } = shape_request_body(
             body.clone(),
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
@@ -1416,7 +1492,11 @@ mod tests {
 
     #[test]
     fn shaping_truncates_when_the_budget_binds() {
-        let (out, report, _) = shape_request_body(
+        let ShapedRequest {
+            body: out,
+            truncation: report,
+            ..
+        } = shape_request_body(
             oversized_body(),
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
