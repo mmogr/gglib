@@ -321,6 +321,16 @@ pub struct ArmScores {
     /// Total task runs behind these scores — `tasks × seeds`.
     #[serde(default)]
     pub runs: usize,
+    /// How many of those runs never reached the model, and therefore
+    /// contributed a zero that measures nothing.
+    ///
+    /// See [`TuneTaskResult::unmeasured`]. An arm where this equals
+    /// [`Self::runs`] is not a low score — it is an empty column, and the eval
+    /// refuses to report one rather than rendering it as an arm that did
+    /// badly. Anything between `1` and `runs` contaminates every mean above by
+    /// an amount this number is the only record of.
+    #[serde(default)]
+    pub unmeasured_runs: usize,
 }
 
 const fn one() -> usize {
@@ -596,6 +606,29 @@ impl EffectVerdict {
     }
 }
 
+impl ArmScores {
+    /// Whether **no** run in this arm reached the model.
+    ///
+    /// The state that must never render as a score. An arm in it has a
+    /// composite, a tool accuracy and a task completion, all arithmetically
+    /// correct and all meaningless — computed over runs that produced no
+    /// response to score.
+    #[must_use]
+    pub const fn is_empty_column(&self) -> bool {
+        self.runs > 0 && self.unmeasured_runs >= self.runs
+    }
+
+    /// Whether *some* but not all of this arm's runs reached the model.
+    ///
+    /// Distinct from [`Self::is_empty_column`] because it wants a different
+    /// action: the arm has real observations mixed with empty ones, so its
+    /// means are contaminated by a knowable amount rather than vacant.
+    #[must_use]
+    pub const fn is_partly_unmeasured(&self) -> bool {
+        self.unmeasured_runs > 0 && self.unmeasured_runs < self.runs
+    }
+}
+
 impl AgenticEvalReport {
     /// What the positive control demonstrated, or `None` when it did not run.
     ///
@@ -717,6 +750,7 @@ mod tests {
             mean_time_to_first_tool_call_ms: Some(100.0),
             seeds: 3,
             runs: 12,
+            unmeasured_runs: 0,
         }
     }
 
@@ -733,6 +767,7 @@ mod tests {
             completion_tokens: Some(100),
             time_to_first_tool_call_ms: Some(5),
             detail: None,
+            unmeasured: None,
         }
     }
 
@@ -955,6 +990,82 @@ mod tests {
     #[test]
     fn no_control_arm_claims_nothing_either_way() {
         assert_eq!(report_with(None, 0.90).control_moved(), None);
+    }
+
+    // =========================================================================
+    // Runs that measured nothing
+    // =========================================================================
+
+    /// **The state that must never render as a score.** Every run failed
+    /// before reaching the model, so the composite is arithmetic over 45 zeros
+    /// and describes nothing.
+    #[test]
+    fn an_arm_where_no_run_reached_the_model_is_an_empty_column() {
+        let arm = ArmScores {
+            runs: 45,
+            unmeasured_runs: 45,
+            ..scores(0.244, None, 0.222)
+        };
+
+        assert!(arm.is_empty_column());
+        assert!(
+            !arm.is_partly_unmeasured(),
+            "wholly empty is its own state, not a severe partial"
+        );
+    }
+
+    /// A partial is a different state wanting a different action: the arm has
+    /// real observations, diluted by a knowable number of empty ones.
+    #[test]
+    fn an_arm_with_some_failures_is_partly_unmeasured() {
+        let arm = ArmScores {
+            runs: 45,
+            unmeasured_runs: 7,
+            ..scores(0.5, None, 0.5)
+        };
+
+        assert!(arm.is_partly_unmeasured());
+        assert!(!arm.is_empty_column());
+    }
+
+    /// The ordinary case must trip neither check, or the warning becomes noise
+    /// and stops being read.
+    #[test]
+    fn a_fully_measured_arm_is_neither() {
+        let arm = ArmScores {
+            runs: 45,
+            unmeasured_runs: 0,
+            ..scores(0.9, None, 0.9)
+        };
+
+        assert!(!arm.is_empty_column());
+        assert!(!arm.is_partly_unmeasured());
+    }
+
+    /// An arm that ran nothing at all has no runs to be empty *of*, and must
+    /// not be reported as a failure of the upstream.
+    #[test]
+    fn an_arm_with_no_runs_is_not_an_empty_column() {
+        let arm = ArmScores {
+            runs: 0,
+            unmeasured_runs: 0,
+            ..scores(0.0, None, 0.0)
+        };
+
+        assert!(!arm.is_empty_column());
+    }
+
+    /// A stored report from before the field existed must read as "every run
+    /// was measured", which is what it meant.
+    #[test]
+    fn a_legacy_arm_reads_as_fully_measured() {
+        let json = r#"{
+            "tool_accuracy": 0.5, "task_completion": 0.5, "composite": 0.5, "runs": 9
+        }"#;
+        let arm: ArmScores = serde_json::from_str(json).expect("deserializes");
+
+        assert_eq!(arm.unmeasured_runs, 0);
+        assert!(!arm.is_empty_column());
     }
 
     // =========================================================================

@@ -512,11 +512,57 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         );
     }
 
+    render_unmeasured_block(report);
     render_noise_block(report);
     render_control_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
     eprintln!();
+}
+
+/// Runs that never reached the model, and so scored zero for it.
+///
+/// An arm where *every* run failed aborts the eval and never reaches this
+/// renderer. What lands here is the partial case, which is worse to read
+/// silently: the arm has real observations, so its numbers look ordinary while
+/// being dragged toward zero by runs that measured nothing.
+fn render_unmeasured_block(report: &AgenticEvalReport) {
+    let arms = [
+        ("raw", Some(&report.raw)),
+        ("gglib", Some(&report.gglib)),
+        ("A/A", report.raw_replicate.as_ref()),
+        ("control", report.control.as_ref()),
+    ];
+    let affected: Vec<(&str, &ArmScores)> = arms
+        .into_iter()
+        .filter_map(|(name, scores)| scores.map(|s| (name, s)))
+        .filter(|(_, s)| s.is_partly_unmeasured())
+        .collect();
+    if affected.is_empty() {
+        return;
+    }
+
+    eprintln!();
+    eprintln!(
+        "  {DANGER}some runs never reached the model and scored zero for it:{RESET}",
+        DANGER = style::DANGER,
+        RESET = style::RESET,
+    );
+    for (name, scores) in affected {
+        eprintln!(
+            "  {DANGER}  {name}: {n}/{runs} runs unmeasured{RESET}",
+            n = scores.unmeasured_runs,
+            runs = scores.runs,
+            DANGER = style::DANGER,
+            RESET = style::RESET,
+        );
+    }
+    eprintln!(
+        "  {DANGER}Every mean above is diluted by them. Read those arms as a floor, not a \
+         measurement.{RESET}",
+        DANGER = style::DANGER,
+        RESET = style::RESET,
+    );
 }
 
 /// What the A/A arm says about the size of the delta just rendered.

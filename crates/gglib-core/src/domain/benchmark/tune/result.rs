@@ -111,6 +111,39 @@ pub struct TuneTaskResult {
     /// surfaced in the leaderboard drill-down.
     #[serde(default)]
     pub detail: Option<String>,
+    /// Why this run is **not a measurement of the model**, when it is not one.
+    ///
+    /// `None` on every run that actually reached the model, including every
+    /// way of doing badly: a wrong tool call, a detected loop, a stagnated
+    /// answer and an exhausted iteration budget are all real observations and
+    /// score honestly as failures.
+    ///
+    /// `Some(reason)` is the different thing — the request never produced a
+    /// response to score, because the upstream was unreachable, the stream
+    /// broke, or the loop could not start. Such a run still carries
+    /// `passed: false` and `tool_match_score: 0.0`, and **those zeros mean
+    /// nothing**: they are the absence of a measurement wearing the costume of
+    /// a bad one.
+    ///
+    /// Measured, which is why this field exists. A run whose llama-server had
+    /// died scored a composite of `0.222` across 45 failed requests and
+    /// rendered as an ordinary, believable arm — a −0.562 delta that read as a
+    /// catastrophic regression rather than as an empty column. An arm that
+    /// cannot tell "the model did badly" from "there was no model" is
+    /// reporting a number it never took.
+    #[serde(default)]
+    pub unmeasured: Option<String>,
+}
+
+impl TuneTaskResult {
+    /// Whether this run produced a real observation of the model.
+    ///
+    /// Read this rather than `passed`, wherever the question is "is this
+    /// number worth anything" rather than "did the model succeed".
+    #[must_use]
+    pub const fn is_measured(&self) -> bool {
+        self.unmeasured.is_none()
+    }
 }
 
 /// Result of evaluating one candidate's sampling settings against the full

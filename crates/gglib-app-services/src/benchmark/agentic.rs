@@ -180,6 +180,20 @@ pub async fn run_agentic_eval(
             }
             per_task.push(per_seed);
         }
+
+        // Checked here rather than at the end, so a dead upstream costs one
+        // arm instead of the whole run — and so the report is never assembled
+        // out of an arm that has scores but no measurements.
+        if let Some(error) = empty_column_error(arm, &per_task) {
+            deps.bench_repo.fail_run(run_id, &error).await.ok();
+            // The lease is released for the same reason the cancel path
+            // releases it: whatever state the server is in, the next run should
+            // start from a fresh launch rather than inherit this one.
+            deps.runtime.stop_current().await.ok();
+            let _ = tx.send(BenchmarkEvent::RunFailed { error }).await;
+            return Ok(());
+        }
+
         arm_results.push((arm, per_task));
     }
 
@@ -260,6 +274,10 @@ pub async fn run_agentic_eval(
     {
         warn_effect(verdict);
     }
+    // A wholly empty arm aborted above. A partly empty one is reported: the
+    // report is worth keeping, and the amount by which it is contaminated is
+    // knowable only from here.
+    warn_partial_arms(&report);
 
     if let Err(e) = deps
         .bench_repo
@@ -278,6 +296,44 @@ pub async fn run_agentic_eval(
         })
         .await;
     Ok(())
+}
+
+/// Why an arm is an empty column rather than a low score, or `None` when at
+/// least one of its runs reached the model.
+///
+/// # The failure this exists to stop
+///
+/// Measured: llama-server died partway through a run, and the two arms that
+/// followed it recorded 45 instant failures each. Those scored a composite of
+/// `0.222` — arithmetically correct over 45 zeros, and completely empty — which
+/// rendered as an ordinary arm and produced a `-0.562` delta reading as a
+/// catastrophic regression. Nothing in the report distinguished it from a real
+/// one.
+///
+/// So the eval refuses to build a report out of it. This is the same rule
+/// [ADR 0004] applies to its instruments, one level up: a comparison in which
+/// nothing could have been observed, reporting a number, is worse than no
+/// report at all — because the number is believable.
+///
+/// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+fn empty_column_error(arm: EvalArm, per_task: &[Vec<TuneTaskResult>]) -> Option<String> {
+    let runs: Vec<&TuneTaskResult> = per_task.iter().flatten().collect();
+    if runs.is_empty() || runs.iter().any(|r| r.is_measured()) {
+        return None;
+    }
+    // The first reason, quoted verbatim. 45 copies of one transport error is
+    // the common case, and the operator needs the text of it to act.
+    let first = runs
+        .iter()
+        .find_map(|r| r.unmeasured.as_deref())
+        .unwrap_or("no reason recorded");
+    Some(format!(
+        "agentic eval aborted: all {n} runs in the '{arm}' arm failed before reaching the model, \
+         so this arm has no measurements — only zeros that would render as a score. First \
+         failure: {first}. Check that llama-server is still up (the eval holds one admission \
+         lease across every arm, so a crash mid-run empties every arm after it).",
+        n = runs.len(),
+    ))
 }
 
 /// One arm and the seeds it repeats every task under.
@@ -497,6 +553,33 @@ fn warn_effect(verdict: EffectVerdict) {
     );
 }
 
+/// Name any arm whose means are diluted by runs that never reached the model.
+///
+/// Not fatal, unlike a wholly empty arm — the surviving runs are real
+/// observations and the report is worth keeping. But every mean in it is
+/// dragged toward zero by runs that measured nothing, and the count is the only
+/// record of by how much.
+fn warn_partial_arms(report: &AgenticEvalReport) {
+    let arms = [(EvalArm::Raw, &report.raw), (EvalArm::Gglib, &report.gglib)];
+    let replicate = report
+        .raw_replicate
+        .as_ref()
+        .map(|s| (EvalArm::RawReplicate, s));
+    let control = report.control.as_ref().map(|s| (EvalArm::Control, s));
+
+    for (arm, scores) in arms.into_iter().chain(replicate).chain(control) {
+        if scores.is_partly_unmeasured() {
+            warn!(
+                "agentic eval: {n} of the '{arm}' arm's {runs} runs never reached the model, and \
+                 scored zero for it. Every mean reported for this arm is diluted by them — treat \
+                 its numbers as a floor, not a measurement.",
+                n = scores.unmeasured_runs,
+                runs = scores.runs,
+            );
+        }
+    }
+}
+
 /// Flatten per-task, per-seed results into one list.
 ///
 /// Every mean below is taken over the flat list rather than over per-task
@@ -519,6 +602,7 @@ fn arm_scores(
     ArmScores {
         seeds,
         runs: tasks * seeds,
+        unmeasured_runs: results.iter().filter(|r| !r.is_measured()).count(),
         tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
         loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
         loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),
@@ -702,6 +786,72 @@ mod tests {
             "and it is removed, not cloned"
         );
         assert!(take_arm(&mut results, EvalArm::Raw).is_some());
+    }
+
+    fn run(passed: bool, unmeasured: Option<&str>) -> TuneTaskResult {
+        TuneTaskResult {
+            task_id: "t".to_owned(),
+            category: TaskCategory::SingleCall,
+            passed,
+            tool_match_score: if passed { 1.0 } else { 0.0 },
+            loop_detected: false,
+            stagnation_detected: false,
+            iterations: 1,
+            latency_ms: 10,
+            completion_tokens: None,
+            time_to_first_tool_call_ms: None,
+            detail: None,
+            unmeasured: unmeasured.map(ToOwned::to_owned),
+        }
+    }
+
+    /// **The failure this whole check exists for.** 45 runs against a dead
+    /// upstream produce a composite that is arithmetically correct and
+    /// completely empty, and it must abort rather than be reported.
+    #[test]
+    fn an_arm_where_nothing_reached_the_model_aborts_the_run() {
+        let dead = vec![
+            vec![run(false, Some("LLM stream error: connection refused"))],
+            vec![run(false, Some("LLM stream error: connection refused"))],
+        ];
+
+        let error = empty_column_error(EvalArm::Gglib, &dead).expect("aborts");
+        assert!(error.contains("gglib"), "names the arm: {error}");
+        assert!(error.contains("all 2 runs"), "names the count: {error}");
+        assert!(
+            error.contains("connection refused"),
+            "quotes the upstream's own reason, which is what the operator acts on: {error}"
+        );
+    }
+
+    /// One surviving measurement is enough to make the arm a real, if bad,
+    /// observation — the eval must not throw away a run over a transient blip.
+    #[test]
+    fn a_single_measured_run_keeps_the_arm() {
+        let mostly_dead = vec![
+            vec![run(false, Some("LLM stream error"))],
+            vec![run(false, None)],
+        ];
+
+        assert!(empty_column_error(EvalArm::Raw, &mostly_dead).is_none());
+    }
+
+    /// **The distinction the check turns on.** An arm that failed every task
+    /// while talking to the model perfectly well is a real result — a score of
+    /// zero is the honest report of a model that got everything wrong.
+    #[test]
+    fn an_arm_that_merely_failed_everything_is_not_empty() {
+        let all_wrong = vec![vec![run(false, None)], vec![run(false, None)]];
+
+        assert!(empty_column_error(EvalArm::Gglib, &all_wrong).is_none());
+    }
+
+    /// An arm with no runs planned has nothing to be empty of, and must not be
+    /// reported as an upstream failure.
+    #[test]
+    fn an_arm_with_no_runs_does_not_abort() {
+        assert!(empty_column_error(EvalArm::Control, &[]).is_none());
+        assert!(empty_column_error(EvalArm::Control, &[vec![]]).is_none());
     }
 
     /// A demanded call sends `tool_choice: "required"`; an irrelevance task

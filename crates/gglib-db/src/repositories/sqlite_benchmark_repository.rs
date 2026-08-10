@@ -692,6 +692,7 @@ mod tests {
             mean_time_to_first_tool_call_ms: Some(2_100.0),
             seeds: 3,
             runs: 9,
+            unmeasured_runs: 0,
         }
     }
 

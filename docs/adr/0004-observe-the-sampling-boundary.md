@@ -712,6 +712,34 @@ from one degree of freedom. It is enough to stop a delta *inside* its own noise
 being reported as a finding. It is not a significance test, and the honest way
 to strengthen it is more pairs rather than a larger threshold.
 
+### An arm that could not tell "the model did badly" from "there was no model"
+
+Found by running the A/A arm for the first time. llama-server died partway
+through a smoke run, and the two arms that followed it recorded 45 instant
+failures each. They scored a composite of **0.222** — arithmetically correct
+over 45 zeros, and completely empty — which rendered as an ordinary arm and
+produced a **−0.562** delta reading as a catastrophic regression. Nothing in
+the report distinguished it from a real one.
+
+This is the same failure as the control that could not degrade and the floor
+that could not fire, one level up: a comparison in which nothing could be
+observed, reporting a number, is worse than no report at all, *because the
+number is believable*. A score of zero is the honest report of a model that got
+everything wrong, and the absence of a measurement wears exactly that costume.
+
+Fixed by making the distinction structural rather than inferred.
+`TuneTaskResult::unmeasured` carries the reason a run produced no observation,
+and it turns on which `AgentError` ended the run: a detected loop, a stagnated
+answer, an over-wide parallel batch and an exhausted iteration budget are all
+things the model *did*, and score honestly as failures. `Internal` is the odd
+one out — the loop reporting it could not reach the upstream at all — and an arm
+where every run ends that way now aborts the eval instead of being scored.
+
+The A/A arm caught it before the check existed, which is worth recording on its
+own: it refused to call the −0.562 a finding, because the drift it measured on
+the same broken upstream was 0.562 too. A calibration arm's value is not only in
+the deltas it qualifies but in the ones it declines to.
+
 ### The cost finding
 
 The fixed control took **161 of the run's 174 wall-clock minutes** and generated

@@ -231,6 +231,17 @@ export interface TuneTaskResult {
   /** Time to the model's first tool call; `null` when it never called one. */
   time_to_first_tool_call_ms?: number | null;
   detail?: string | null;
+  /**
+   * Why this run is **not a measurement of the model**, when it is not one.
+   *
+   * `null` on every run that reached the model, including every way of doing
+   * badly — a wrong call, a detected loop, an exhausted budget all score
+   * honestly. A non-null reason means the request never produced a response to
+   * score, so this row's `passed: false` and `tool_match_score: 0` are the
+   * absence of a measurement rather than a bad one, and must not be rendered
+   * as a failure the model is responsible for.
+   */
+  unmeasured?: string | null;
 }
 
 /**
@@ -312,6 +323,15 @@ export interface ArmScores {
   seeds?: number;
   /** Total task runs behind these scores: `tasks × seeds`. */
   runs?: number;
+  /**
+   * How many of those runs never reached the model, and so scored zero for it.
+   *
+   * Equal to `runs` is impossible in a delivered report — the eval aborts
+   * rather than emit an arm with scores but no measurements. Between 1 and
+   * `runs` means every mean on this arm is diluted by empty runs, and should be
+   * read as a floor rather than a measurement.
+   */
+  unmeasured_runs?: number;
 }
 
 /**

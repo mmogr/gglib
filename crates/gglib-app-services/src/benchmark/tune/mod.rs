@@ -549,16 +549,32 @@ where
     // returns `Err` and its tokens would otherwise vanish — and those are the
     // runs whose cost matters most.
     let completion_tokens = usage.total_completion_tokens();
-    let (loop_detected, stagnation_detected, error_detail) = match &run_result {
-        Ok(Ok(_)) => (false, false, None),
-        Ok(Err(gglib_core::ports::AgentError::LoopDetected { .. })) => (true, false, None),
-        Ok(Err(gglib_core::ports::AgentError::StagnationDetected { .. })) => (false, true, None),
-        Ok(Err(e)) => (false, false, Some(e.to_string())),
-        Err(join_err) => (
-            false,
-            false,
-            Some(format!("agent task panicked: {join_err}")),
-        ),
+
+    // `unmeasured` separates "the model did badly" from "there was no model".
+    //
+    // Every guard and budget below is a real observation: a loop, a stagnated
+    // answer, an over-wide parallel batch and an exhausted iteration budget are
+    // all things the model *did*, and they score honestly as failures.
+    // `Internal` is the odd one out — it is the loop reporting that it could
+    // not talk to the upstream at all, or could not start — and a run that
+    // never reached the model has no score to give, only a zero that looks
+    // exactly like a bad one.
+    let (loop_detected, stagnation_detected, error_detail, unmeasured) = match &run_result {
+        Ok(Ok(_)) => (false, false, None, None),
+        Ok(Err(gglib_core::ports::AgentError::LoopDetected { .. })) => (true, false, None, None),
+        Ok(Err(gglib_core::ports::AgentError::StagnationDetected { .. })) => {
+            (false, true, None, None)
+        }
+        Ok(Err(e @ gglib_core::ports::AgentError::Internal(_))) => {
+            (false, false, Some(e.to_string()), Some(e.to_string()))
+        }
+        Ok(Err(e)) => (false, false, Some(e.to_string()), None),
+        // A panicked task produced nothing either, and its zeros are just as
+        // empty as an unreachable upstream's.
+        Err(join_err) => {
+            let msg = format!("agent task panicked: {join_err}");
+            (false, false, Some(msg.clone()), Some(msg))
+        }
     };
 
     let detail = match (scoring.detail, error_detail) {
@@ -580,6 +596,7 @@ where
         completion_tokens,
         time_to_first_tool_call_ms,
         detail,
+        unmeasured,
     }
 }
 
@@ -748,6 +765,7 @@ mod tests {
             completion_tokens: None,
             time_to_first_tool_call_ms: None,
             detail: None,
+            unmeasured: None,
         }
     }
 
