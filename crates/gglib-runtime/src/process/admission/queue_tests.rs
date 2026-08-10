@@ -654,7 +654,13 @@ async fn a_waiter_never_expires_while_a_launch_is_in_flight() {
     // The first requester on a cold daemon drives the launch...
     let (driver, decision) = request(&q, "qwen-coder");
     assert!(
-        matches!(decision, AdmissionDecision::Launch { slot: PRIMARY_SLOT, evict: None }),
+        matches!(
+            decision,
+            AdmissionDecision::Launch {
+                slot: PRIMARY_SLOT,
+                evict: None
+            }
+        ),
         "cold daemon: first request must launch, got {decision:?}"
     );
 
@@ -748,6 +754,30 @@ async fn a_request_expires_once_its_deadline_passes() {
     tokio::time::advance(ADMISSION_DEADLINE + std::time::Duration::from_secs(1)).await;
 
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
+}
+
+/// A ticket `poll` has granted is *forgotten*, and a forgotten ticket is
+/// invisible to the scheduler: it can never be the oldest waiter, so it can
+/// never win a launch — even with an empty slot there for the taking. The
+/// residency layer must therefore re-enqueue before going round again after a
+/// failed serve; this test pins the invisibility that makes that mandatory.
+#[tokio::test]
+async fn a_granted_ticket_is_forgotten_and_cannot_win_again() {
+    let q = queue();
+    let lease = make_resident(&q, "qwen-coder", 1);
+    drop(lease);
+
+    let (ticket, decision) = request(&q, "qwen-coder");
+    assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
+
+    // The serve fell through — the resident failed its health check and was
+    // recycled. Balance the Serve's in-flight increment, then evict.
+    drop(q.claim(PRIMARY_SLOT));
+    q.evict(PRIMARY_SLOT);
+
+    // The slot is empty and this request still wants the model, but the
+    // granted ticket cannot reach the front of any queue again.
+    assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
 }
 
 /// An expired or abandoned request must stop holding the front of the queue,
