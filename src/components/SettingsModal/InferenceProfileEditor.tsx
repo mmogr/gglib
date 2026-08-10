@@ -34,6 +34,10 @@ const PARAMS: ParamSpec[] = [
   { key: "repeatPenalty", label: "Repeat penalty", hint: "typically 1.0 – 1.3", step: "0.05" },
   { key: "presencePenalty", label: "Presence penalty", hint: "0.0 – 2.0", step: "0.1" },
   { key: "minP", label: "Min-P", hint: "0.0 – 1.0", step: "0.01" },
+  { key: "dryMultiplier", label: "DRY multiplier", hint: "0 disables; typically 0.8", step: "0.1" },
+  { key: "dryBase", label: "DRY base", hint: "at least 1.0; typically 1.75", step: "0.05" },
+  { key: "dryAllowedLength", label: "DRY allowed length", hint: "0 or more", step: "1" },
+  { key: "dryPenaltyLastN", label: "DRY penalty last N", hint: "-1 = whole context", step: "1" },
 ];
 
 /**
