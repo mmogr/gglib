@@ -79,3 +79,14 @@ export const MAX_TOOL_ITERATIONS: NumericSettingSpec = {
   min: '1',
   max: '50',
 };
+
+/**
+ * Maximum consecutive no-progress agent steps. No `validate_settings` entry
+ * on the Rust side — the ceiling here mirrors
+ * `MAX_STAGNATION_STEPS_CEILING` in `domain/agent/config.rs`.
+ */
+export const MAX_STAGNATION_STEPS: NumericSettingSpec = {
+  default: '5',
+  min: '1',
+  max: '100',
+};

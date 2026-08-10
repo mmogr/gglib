@@ -8,6 +8,8 @@ import type { ModelsDirectoryInfo } from '../../../types';
 import { SettingField } from './SettingField';
 
 interface PathSettingsProps {
+  downloadPathInput: string;
+  setDownloadPathInput: (value: string) => void;
   pathInput: string;
   setPathInput: (value: string) => void;
   info: ModelsDirectoryInfo | null;
@@ -20,6 +22,8 @@ interface PathSettingsProps {
  * Models directory field plus its live "exists" / "writable" status pills.
  */
 export const PathSettings: FC<PathSettingsProps> = ({
+  downloadPathInput,
+  setDownloadPathInput,
   pathInput,
   setPathInput,
   info,
@@ -27,9 +31,10 @@ export const PathSettings: FC<PathSettingsProps> = ({
   onReset,
   saving,
 }) => (
+  <>
   <SettingField
     id="models-dir-input"
-    label="Default Download Path"
+    label="Models Directory"
     description={sourceDescription}
     action={
       info?.defaultPath && (
@@ -60,6 +65,10 @@ export const PathSettings: FC<PathSettingsProps> = ({
             >
               {!info.exists && <Icon icon={AlertTriangle} size={12} />}
               {info.exists ? 'Directory exists' : 'Directory will be created'}
+              {/* Writability is stated in every state, not just the happy one:
+                  a path that does not exist yet is exactly where a user most
+                  wants confirmation that it can be written before committing. */}
+              {info.writable && ' · writable'}
             </span>
             {!info.writable && (
               <span className="inline-flex items-center gap-xs text-xs text-danger">
@@ -72,4 +81,21 @@ export const PathSettings: FC<PathSettingsProps> = ({
       </div>
     )}
   </SettingField>
+
+  <SettingField
+    id="download-path-input"
+    label="Default Download Path"
+    defaultHint="models directory"
+    description="Staging area for downloads before they join the library. Distinct from the models directory above, which is where the library itself lives. Leave empty to download straight into it."
+  >
+    <Input
+      id="download-path-input"
+      value={downloadPathInput}
+      onChange={(event) => setDownloadPathInput(event.target.value)}
+      placeholder="models directory"
+      disabled={saving}
+      spellCheck={false}
+    />
+  </SettingField>
+  </>
 );

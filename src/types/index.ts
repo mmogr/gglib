@@ -392,6 +392,20 @@ export interface AppSettings {
   closeToTray?: boolean | null;
   /** Whether the desktop app registers itself to launch on login. */
   startAtLogin?: boolean | null;
+  /**
+   * Maximum consecutive no-progress agent steps before the loop stops.
+   * Shared by the built-in agent loop and the proxy's turn-level guard.
+   */
+  maxStagnationSteps?: number | null;
+  /** Literal IP the daemon binds. Unset = the compiled-in 127.0.0.1. */
+  bindHost?: string | null;
+  /** Whether the daemon binds beyond loopback. Unset/false = localhost-only. */
+  shareLan?: boolean | null;
+  /**
+   * Whether a structured-output turn gets its temperature capped when no
+   * human chose one. Unset/true = active; anything set by a person stands.
+   */
+  agenticSampling?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -428,6 +442,14 @@ export interface UpdateSettingsRequest {
   closeToTray?: boolean | null | undefined;
   /** See `AppSettings.startAtLogin`. */
   startAtLogin?: boolean | null | undefined;
+  /** See `AppSettings.maxStagnationSteps`. */
+  maxStagnationSteps?: number | null | undefined;
+  /** See `AppSettings.bindHost`. */
+  bindHost?: string | null | undefined;
+  /** See `AppSettings.shareLan`. */
+  shareLan?: boolean | null | undefined;
+  /** See `AppSettings.agenticSampling`. */
+  agenticSampling?: boolean | null | undefined;
 }
 
 // ============================================================================
