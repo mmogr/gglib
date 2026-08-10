@@ -123,19 +123,19 @@ straight at llama-server gets — and once through GGLib. Same weights, same
 machine, same tasks, same scoring. The only difference is which request reached
 llama-server.
 
-**Qwen3.5-4B (Q8_0) @ 131072 ctx, 5 seeds per task, 45 runs per arm:**
+**Qwen3.5-4B (Q8_0) @ 131072 ctx, 5 seeds per task, 45 runs per arm.** Two
+independent runs, on the same seeds:
 
 | axis | raw llama-server | through GGLib | delta |
 |------|-----------------:|--------------:|------:|
-| tool-call accuracy | 0.867 | **0.944** | +0.078 |
-| task completion | 0.822 | **0.911** | +0.089 |
-| loop avoidance | 0.250 | **0.333** | +0.083 |
-| **composite** | **0.651** | **0.733** | **+0.082** |
+| tool-call accuracy | 0.922 | **0.967** | +0.044 |
+| task completion | 0.867 | **0.933** | +0.067 |
+| loop avoidance | 0.286 | **0.333** | +0.048 |
+| **composite** | **0.698** | **0.748** | **+0.050** |
 
-Task failures fell from 17.8% to 8.9% — the same weights getting roughly half as
-many agentic tasks wrong, for no extra VRAM, no extra tokens, and no change to
-the model. One task the raw arm failed on *all five* seeds
-(`multi_turn_search_then_read`) passed twice through the pipeline.
+Every axis moves the same way, in both runs. But the size of that movement is
+**not yet resolved**, and the eval says so itself — which is the more useful
+thing to know about it.
 
 ```bash
 gglib benchmark agentic --model Qwen3.5-4B --seeds 12345,67890,11111,22222,33333
@@ -143,32 +143,40 @@ gglib benchmark agentic --model Qwen3.5-4B --seeds 12345,67890,11111,22222,33333
 
 ### What the eval says it cannot show
 
-A benchmark that only reports its own wins is marketing. This one runs two
-arms whose entire job is to catch it overclaiming:
+A benchmark that only reports its own wins is marketing. This one runs two extra
+arms whose entire job is to catch it overclaiming, and on this model they caught
+it:
 
 - **A positive control** — the pipeline with sampling deliberately broken — that
-  has to score far below the real arm. It did: 0.237, a **0.496 gap**. Without
-  it, "the pipeline made no difference" and "this harness cannot detect a
-  difference" are the same output. (The first version of this control *failed*:
-  temperature 2.0 alone scored **above** both real arms, because llama.cpp runs
-  the truncation samplers before temperature, so a `top_k: 20` recipe absorbed
-  it. It only works with truncation disabled outright.)
-- **An A/A arm** — the raw arm re-run on a different seed set, nothing else
-  changed. Whatever gap it opens is the eval's own drift, and that is the floor
-  the +0.082 has to clear before it describes a magnitude rather than a
-  direction.
+  has to score far below the real arm. It did: **a 0.526 gap**. Without it, "the
+  pipeline made no difference" and "this harness cannot detect a difference" are
+  the same output. (The first version of this control *failed*: temperature 2.0
+  alone scored **above** both real arms, because llama.cpp runs the truncation
+  samplers before temperature, so a `top_k: 20` recipe absorbed it. It only
+  works with truncation disabled outright.)
+- **An A/A arm** — the raw arm re-run on a *different* seed set, nothing else
+  changed. Whatever gap it opens is the eval's own drift. Here it opened
+  **0.054** — meaning two runs of the identical raw configuration differ by more
+  than the pipeline appeared to gain. At **0.9×** the drift, the +0.050 is
+  **inside the noise floor**, and this eval declines to call it a result.
 
-**Read the table with these caveats.** The control validates sensitivity at a
-0.496 gap, not at the 0.082 being measured — it shows the apparatus responds to
-a large change, not that it resolves this one. The +0.082 is +4 task-seed passes
-out of 45, and the raw arm flipped on 3 of its own tasks between seeds, so the
-effect sits close to the within-arm variance. The A/A arm was added *after* this
-run, so it has no drift figure of its own to quote here. And this is one
-quantization of one 4B model on one machine.
+The first of the two runs measured **+0.082** on the same seeds. The second
+measured +0.050 — and roughly half of *that* traces to a transport flake that
+cost the raw arm three runs it would otherwise have scored (excluding them, the
+delta is +0.027). A single number from a single run of this suite is worth very
+little, which is exactly what the A/A arm exists to make visible.
 
-The honest summary: **every axis moved the same direction, with one categorical
-win, on a run whose apparatus was proven able to move.** Reproduce it on your
-own model before believing the magnitude — that is what the command is for.
+**One finding did replicate.** `multi_turn_search_then_read` failed on **all ten**
+raw seeds across both runs and passed **four of ten** through the pipeline. That
+is a categorical difference rather than a shift in a rate, and it is the claim
+this eval currently supports.
+
+The honest summary: **directionally positive on every axis in two independent
+runs, with one replicated categorical win, on an apparatus proven able to detect
+a large change — and a magnitude that five seeds cannot yet separate from
+drift.** Reproduce it on your own model rather than trusting the delta; that is
+what the command is for, and the A/A arm will tell you the same thing about your
+numbers that it told us about ours.
 
 ## Dashboard
 

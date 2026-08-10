@@ -466,10 +466,19 @@ their reasons live only in a merged PR body.
   recipe for `reasoning`-tagged models; a model author's published
   recommendation is better evidence than gglib's guess, and ADR 0003's own
   argument — do not restate what upstream already decides — applies to it.
-- Re-run the agentic eval now that the A/A arm exists, so the second addendum's
-  +0.082 can be quoted against a measured drift instead of against the raw arm's
-  own instability. Until then that figure is a direction with a plausible
-  magnitude, and the addendum says so.
+- ~~Re-run the agentic eval now that the A/A arm exists, so the second
+  addendum's +0.082 can be quoted against a measured drift.~~ Done, and the
+  figure did not survive: +0.050 against a drift of 0.054. See the addendum.
+- Retry transport failures *inside the eval*. 7.6% of the second run's requests
+  never reached the model — a stale keep-alive connection, dropped between turns
+  of the same task, which `retry/execute.rs` deliberately treats as terminal.
+  That policy is right for production (a refused connection should not be
+  masked) and wrong for a benchmark, where it silently deletes runs and does so
+  asymmetrically between arms. The eval now *counts* them; it should stop
+  incurring them.
+- More than one A/A pair. One pair estimates the drift from a single degree of
+  freedom, which is enough to veto an effect inside it and not enough to
+  bound one that clears it.
 
 ## Addendum — request-level task overlays, and why there are none
 
@@ -703,9 +712,33 @@ compares the headline delta against it. The seeds have to differ: replaying the
 same ones would measure whether a fixed seed replays, which is not what limits
 the comparison — *which* five seeds were drawn is.
 
-That arm postdates the run above, so **this ADR quotes no drift figure**. The
-+0.082 is recorded here as a direction with a plausible magnitude, not as a
-resolved magnitude, and the next run of this eval is the one that can say which.
+That arm postdated the run above. **It has since been run, and the answer is
+that the magnitude does not survive.**
+
+A second five-seed run on the identical seeds measured raw `0.698`, gglib
+`0.748` — a delta of **+0.050**, against an A/A drift of **0.054**. At `0.9×`
+the drift, the effect is *inside* the eval's own noise floor. The +0.082 from
+the first run did not replicate; the two runs of the same raw arm differ by
+more than either run's measured effect.
+
+Two things sharpen that rather than excuse it. About 7.6% of the second run's
+requests failed at the transport layer before reaching the model, and they fell
+asymmetrically — the raw arm lost three runs it would otherwise have scored, the
+gglib arm two that had already passed. Excluding every unmeasured run, the delta
+is **+0.027**, smaller still. And the control moved 0.526 on that same run, so
+none of this is the apparatus failing to see.
+
+What survives is the categorical finding, and it survives cleanly:
+`multi_turn_search_then_read` failed on **all ten** raw seeds across both runs
+and passed **four of ten** through the pipeline. A task the raw arm never once
+completes is a different kind of claim from a composite that moved, and it is
+the only one of the two this ADR can currently support.
+
+Recorded at length because the temptation runs the other way. The first run's
++0.082 was the number this arc was built to find, it moved every axis in the
+hoped-for direction, and there was a validated control standing behind it. None
+of that made it a magnitude — and the arm that said so was added by the same
+people who wanted the number to hold.
 
 One caution carried forward from the design: a single A/A pair estimates drift
 from one degree of freedom. It is enough to stop a delta *inside* its own noise
