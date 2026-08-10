@@ -14,9 +14,15 @@ interface ReadoutProps {
   size?: ReadoutSize;
   /** Slot for a Sparkline (or other trend mark) rendered under the value. */
   trend?: React.ReactNode;
-  align?: 'start' | 'end';
+  align?: 'start' | 'center' | 'end';
   className?: string;
 }
+
+const alignClasses = {
+  start: '',
+  center: 'items-center text-center',
+  end: 'items-end text-right',
+} as const;
 
 const intentClasses: Record<ReadoutIntent, string> = {
   neutral: 'text-text',
@@ -48,7 +54,7 @@ export const Readout: React.FC<ReadoutProps> = ({
   align = 'start',
   className,
 }) => (
-  <div className={cn('flex min-w-0 flex-col', align === 'end' && 'items-end text-right', className)}>
+  <div className={cn('flex min-w-0 flex-col', alignClasses[align], className)}>
     <span className="text-xs text-text-muted">{label}</span>
     <span
       className={cn(

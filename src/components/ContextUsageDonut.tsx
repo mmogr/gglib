@@ -38,7 +38,9 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
   const dashOffset = circumference * (1 - fraction);
   const pct = Math.round(fraction * 100);
 
-  const strokeClass = pct >= 90 ? 'stroke-danger' : pct >= 70 ? 'stroke-warning' : 'stroke-success';
+  // Base ring wears the accent: green is reserved for running/online status,
+  // not for "usage is fine" — only the 70/90 thresholds speak in semantics.
+  const strokeClass = pct >= 90 ? 'stroke-danger' : pct >= 70 ? 'stroke-warning' : 'stroke-primary';
 
   return (
     <div

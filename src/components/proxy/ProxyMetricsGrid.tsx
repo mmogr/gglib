@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from 'react';
 import { ConnectionRow } from './ConnectionRow';
+import { RequestThroughput } from './RequestThroughput';
 import { SlotCard } from './SlotCard';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 
@@ -21,6 +22,7 @@ export const ActiveConnectionsSection: FC<SectionProps> = ({ snapshot }) => {
   return (
     <section>
       <Heading>Active Connections{snapshot ? ` (${connections.length})` : ''}</Heading>
+      <RequestThroughput snapshot={snapshot} />
       {connections.length > 0 ? (
         <div className="flex flex-col gap-sm">
           {connections.map((connection) => (
@@ -49,7 +51,13 @@ export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot, compact = fa
       {hasSlots ? (
         <div className="flex flex-wrap gap-md">
           {snapshot?.slots.map((slot) => (
-            <SlotCard key={slot.id} slot={slot} size={compact ? 56 : 80} />
+            <SlotCard
+              key={slot.id}
+              slot={slot}
+              size={compact ? 56 : 80}
+              tick={snapshot}
+              resetKey={snapshot?.launch?.model_name}
+            />
           ))}
         </div>
       ) : (
