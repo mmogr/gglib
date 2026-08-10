@@ -158,6 +158,15 @@ pub enum ProfileCommand {
         /// DRY lookback window in tokens; 0 disables (llama.cpp default 64)
         #[arg(long)]
         dry_penalty_last_n: Option<i32>,
+        /// Dynamic-temperature half-range; 0.0 disables (llama.cpp default 0.0)
+        #[arg(long)]
+        dynatemp_range: Option<f32>,
+        /// Dynamic-temperature exponent; inert without a range (llama.cpp default 1.0)
+        #[arg(long)]
+        dynatemp_exponent: Option<f32>,
+        /// Top-n-sigma logit truncation; -1.0 disables (llama.cpp default -1.0)
+        #[arg(long)]
+        top_n_sigma: Option<f32>,
         /// Clear a parameter so it falls back to the model's own default.
         /// Repeatable, e.g. `--unset top-k --unset min-p`.
         #[arg(long, value_name = "PARAM")]

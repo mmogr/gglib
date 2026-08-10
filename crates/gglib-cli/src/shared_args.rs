@@ -53,6 +53,19 @@ pub struct SamplingArgs {
     /// (llama.cpp default 64)
     #[arg(long = "dry-penalty-last-n")]
     pub dry_penalty_last_n: Option<i32>,
+    /// Dynamic-temperature half-range: entropy-scales the effective
+    /// temperature within [temp-range, temp+range]; 0.0 = disabled
+    /// (llama.cpp default 0.0)
+    #[arg(long = "dynatemp-range")]
+    pub dynatemp_range: Option<f32>,
+    /// Dynamic-temperature exponent; inert unless --dynatemp-range is set
+    /// (llama.cpp default 1.0)
+    #[arg(long = "dynatemp-exponent")]
+    pub dynatemp_exponent: Option<f32>,
+    /// Top-n-sigma: keep tokens within n sigma of the max pre-softmax logit;
+    /// -1.0 = disabled (llama.cpp default -1.0)
+    #[arg(long = "top-n-sigma")]
+    pub top_n_sigma: Option<f32>,
 }
 
 /// Context-size and memory-lock flags common to all inference commands.
@@ -111,11 +124,9 @@ impl SamplingArgs {
             dry_base: self.dry_base,
             dry_allowed_length: self.dry_allowed_length,
             dry_penalty_last_n: self.dry_penalty_last_n,
-            // Entropy-adaptive flags arrive with the operator-surface change;
-            // until then the CLI layer names no opinion on them.
-            dynatemp_range: None,
-            dynatemp_exponent: None,
-            top_n_sigma: None,
+            dynatemp_range: self.dynatemp_range,
+            dynatemp_exponent: self.dynatemp_exponent,
+            top_n_sigma: self.top_n_sigma,
             // No `--seed` flag: these args populate stored configuration and
             // long-lived operator overrides, where a pinned seed would make
             // every request return the same text. A seed is set per request by

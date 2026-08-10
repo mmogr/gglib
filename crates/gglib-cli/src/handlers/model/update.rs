@@ -36,6 +36,9 @@ pub struct UpdateArgs {
     pub dry_base: Option<f32>,
     pub dry_allowed_length: Option<i32>,
     pub dry_penalty_last_n: Option<i32>,
+    pub dynatemp_range: Option<f32>,
+    pub dynatemp_exponent: Option<f32>,
+    pub top_n_sigma: Option<f32>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -206,7 +209,10 @@ pub fn create_updated_model(
             || args.dry_multiplier.is_some()
             || args.dry_base.is_some()
             || args.dry_allowed_length.is_some()
-            || args.dry_penalty_last_n.is_some();
+            || args.dry_penalty_last_n.is_some()
+            || args.dynatemp_range.is_some()
+            || args.dynatemp_exponent.is_some()
+            || args.top_n_sigma.is_some();
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -245,6 +251,15 @@ pub fn create_updated_model(
             }
             if let Some(dry_penalty_last_n) = args.dry_penalty_last_n {
                 inference_config.dry_penalty_last_n = Some(dry_penalty_last_n);
+            }
+            if let Some(dynatemp_range) = args.dynatemp_range {
+                inference_config.dynatemp_range = Some(dynatemp_range);
+            }
+            if let Some(dynatemp_exponent) = args.dynatemp_exponent {
+                inference_config.dynatemp_exponent = Some(dynatemp_exponent);
+            }
+            if let Some(top_n_sigma) = args.top_n_sigma {
+                inference_config.top_n_sigma = Some(top_n_sigma);
             }
 
             // A deliberate flag from the user, so this is a user-set value
@@ -316,6 +331,9 @@ fn show_inference_defaults_changes(
                 || old.dry_base != new.dry_base
                 || old.dry_allowed_length != new.dry_allowed_length
                 || old.dry_penalty_last_n != new.dry_penalty_last_n
+                || old.dynatemp_range != new.dynatemp_range
+                || old.dynatemp_exponent != new.dynatemp_exponent
+                || old.top_n_sigma != new.top_n_sigma
         }
     };
 
@@ -363,6 +381,15 @@ fn show_inference_defaults_changes(
             }
             if let Some(dpn) = new.dry_penalty_last_n {
                 println!("      DRY penalty last N: {}", dpn);
+            }
+            if let Some(dr) = new.dynatemp_range {
+                println!("      Dynatemp range: {}", dr);
+            }
+            if let Some(de) = new.dynatemp_exponent {
+                println!("      Dynatemp exponent: {}", de);
+            }
+            if let Some(ts) = new.top_n_sigma {
+                println!("      Top-n-sigma: {}", ts);
             }
         }
         (Some(old), Some(new)) => {
@@ -441,6 +468,27 @@ fn show_inference_defaults_changes(
                     "    DRY penalty last N: {} → {}",
                     format_option_i32(&old.dry_penalty_last_n),
                     format_option_i32(&new.dry_penalty_last_n)
+                );
+            }
+            if old.dynatemp_range != new.dynatemp_range {
+                println!(
+                    "    Dynatemp range: {} → {}",
+                    format_option_f32(&old.dynatemp_range),
+                    format_option_f32(&new.dynatemp_range)
+                );
+            }
+            if old.dynatemp_exponent != new.dynatemp_exponent {
+                println!(
+                    "    Dynatemp exponent: {} → {}",
+                    format_option_f32(&old.dynatemp_exponent),
+                    format_option_f32(&new.dynatemp_exponent)
+                );
+            }
+            if old.top_n_sigma != new.top_n_sigma {
+                println!(
+                    "    Top-n-sigma: {} → {}",
+                    format_option_f32(&old.top_n_sigma),
+                    format_option_f32(&new.top_n_sigma)
                 );
             }
         }
@@ -624,6 +672,9 @@ mod tests {
             dry_base: None,
             dry_allowed_length: None,
             dry_penalty_last_n: None,
+            dynatemp_range: None,
+            dynatemp_exponent: None,
+            top_n_sigma: None,
             clear_inference_defaults: false,
         };
 

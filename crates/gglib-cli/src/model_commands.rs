@@ -84,6 +84,12 @@ impl From<CliSortOrder> for SortOrder {
 /// Covers the full lifecycle of GGUF models: adding, listing, removing,
 /// updating metadata, downloading from HuggingFace, verifying integrity,
 /// and repairing corrupt files.
+// `Update` carries one optional flag per inference parameter and dwarfs the
+// other variants. That is fine here: exactly one value of this enum ever
+// exists, parsed once at startup and consumed immediately, so the size
+// asymmetry boxing would fix costs nothing to keep and boxing would cost
+// every field access a level of indirection in the handler.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 pub enum ModelCommand {
     /// Add a GGUF model to the database
@@ -189,6 +195,15 @@ pub enum ModelCommand {
         /// Set the DRY lookback window in tokens; 0 disables (default 64)
         #[arg(long = "dry-penalty-last-n")]
         dry_penalty_last_n: Option<i32>,
+        /// Set the dynamic-temperature half-range; 0.0 disables (llama.cpp default 0.0)
+        #[arg(long = "dynatemp-range")]
+        dynatemp_range: Option<f32>,
+        /// Set the dynamic-temperature exponent; inert without a range (llama.cpp default 1.0)
+        #[arg(long = "dynatemp-exponent")]
+        dynatemp_exponent: Option<f32>,
+        /// Set top-n-sigma logit truncation; -1.0 disables (llama.cpp default -1.0)
+        #[arg(long = "top-n-sigma")]
+        top_n_sigma: Option<f32>,
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,

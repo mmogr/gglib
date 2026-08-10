@@ -37,6 +37,9 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
             dry_base,
             dry_allowed_length,
             dry_penalty_last_n,
+            dynatemp_range,
+            dynatemp_exponent,
+            top_n_sigma,
             unset,
             list_in_models,
             no_list_in_models,
@@ -55,11 +58,9 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
                     dry_base,
                     dry_allowed_length,
                     dry_penalty_last_n,
-                    // Entropy-adaptive flags arrive with the operator-surface
-                    // change; until then the profile layer names no opinion.
-                    dynatemp_range: None,
-                    dynatemp_exponent: None,
-                    top_n_sigma: None,
+                    dynatemp_range,
+                    dynatemp_exponent,
+                    top_n_sigma,
                     // Profiles are stored and reused across every request that
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.
@@ -305,6 +306,15 @@ fn merge_set(target: &mut InferenceConfig, edits: &InferenceConfig) {
     if edits.dry_penalty_last_n.is_some() {
         target.dry_penalty_last_n = edits.dry_penalty_last_n;
     }
+    if edits.dynatemp_range.is_some() {
+        target.dynatemp_range = edits.dynatemp_range;
+    }
+    if edits.dynatemp_exponent.is_some() {
+        target.dynatemp_exponent = edits.dynatemp_exponent;
+    }
+    if edits.top_n_sigma.is_some() {
+        target.top_n_sigma = edits.top_n_sigma;
+    }
 }
 
 /// Clear one parameter by its CLI flag name.
@@ -322,10 +332,14 @@ fn clear_param(config: &mut InferenceConfig, param: &str) -> Result<()> {
         "dry-base" => config.dry_base = None,
         "dry-allowed-length" => config.dry_allowed_length = None,
         "dry-penalty-last-n" => config.dry_penalty_last_n = None,
+        "dynatemp-range" => config.dynatemp_range = None,
+        "dynatemp-exponent" => config.dynatemp_exponent = None,
+        "top-n-sigma" => config.top_n_sigma = None,
         other => bail!(
             "unknown parameter '{other}'; expected one of: temperature, top-p, \
              top-k, max-tokens, repeat-penalty, presence-penalty, min-p, \
-             dry-multiplier, dry-base, dry-allowed-length, dry-penalty-last-n"
+             dynatemp-range, dynatemp-exponent, top-n-sigma, dry-multiplier, \
+             dry-base, dry-allowed-length, dry-penalty-last-n"
         ),
     }
     Ok(())
@@ -354,6 +368,15 @@ fn summarize(config: &InferenceConfig) -> String {
     }
     if let Some(v) = config.min_p {
         parts.push(format!("min-p={v}"));
+    }
+    if let Some(v) = config.dynatemp_range {
+        parts.push(format!("dynatemp-range={v}"));
+    }
+    if let Some(v) = config.dynatemp_exponent {
+        parts.push(format!("dynatemp-exponent={v}"));
+    }
+    if let Some(v) = config.top_n_sigma {
+        parts.push(format!("top-n-sigma={v}"));
     }
     if let Some(v) = config.dry_multiplier {
         parts.push(format!("dry-multiplier={v}"));

@@ -193,6 +193,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         {renderSlider('repeatPenalty')}
         {renderSlider('presencePenalty')}
         {renderSlider('minP')}
+        {renderSlider('dynatempRange')}
+        {renderSlider('dynatempExponent')}
+        {renderSlider('topNSigma')}
         {renderSlider('dryMultiplier')}
         {renderSlider('dryBase')}
         {renderNumberInput('dryAllowedLength')}
