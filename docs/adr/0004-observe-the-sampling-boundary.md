@@ -638,6 +638,48 @@ and scoring them `0`, on a different task in each arm, which made two identical
 arms look like they diverged. A control that proves the apparatus can move,
 again, is not optional here.
 
+### Postscript — it reopened, and the ceiling lost (2026-08-10)
+
+The experiment above ran, against the section's own cautions, as tune runs
+#12–#32: Qwen3.5-4B Q8_0 on the pinned build, the full agentic suite through
+the real `AgentLoop`, twenty paired runs of flat `0.6` (the shipped reasoning
+ceiling) against flat `1.0` (the model's own recipe, uncapped).
+
+- **Composite, paired per run:** `1.0` won 11, lost 4, tied 5. Mean +0.067,
+  Wilcoxon signed-rank one-sided p = 0.0099, bootstrap 95% CI [+0.017, +0.116].
+  The mean difference clears the noise cautions above by pairing rather than
+  by size: identical-arm spread is real, and per-run pairing is what removes
+  it from the comparison.
+- **Tool-call formatting** — the cost the ceiling existed to prevent — never
+  appeared: single/parallel-call tasks passed 100% at `1.0` (65/65) versus
+  98.6% (69/70) under the ceiling, temperatures 0.6–2.0 all included. The
+  mechanism is the sampler chain order this ADR documents: truncation cuts the
+  unscaled distribution and temperature applies last, so `top_k 20` holds
+  structured tokens stable at any heat.
+- **Loop-guard triggers ran the other way from the ceiling's premise:**
+  29/126 tasks under `0.6` against 22/117 at `1.0` (and 10/117 at `2.0`).
+  The cap was manufacturing the mild version of exactly the failure §1 of the
+  addendum predicted for near-greedy overlays.
+- **Controls.** A first control arm (`temperature 2.0` alone) failed to
+  degrade — and the failure was instructive rather than disqualifying: with
+  the recipe's `top_k 20` still in the chain, `2.0` merely flattens twenty
+  survivors, and it *scored best of all arms* (mean 0.804). The genuine
+  broken-sampling control (`temperature 2.0, top_k 0, top_p 1.0`, the A/B
+  instrument's own recipe) was then run separately, twice: composite 0.222 in
+  both runs against 0.657–0.724 for the live arms, tool-call formatting 0/10.
+  The apparatus moves; the first control's failure was the chain order, not
+  instrument blindness — and it is itself the strongest evidence in the whole
+  run that temperature is benign *under truncation* and catastrophic without
+  it.
+
+Decision: the reasoning-class ceiling is removed —
+`agentic_temperature_ceiling` now returns `None` for `reasoning`-tagged models
+and the resolved recipe stands on agentic turns. The non-reasoning `0.3` cap
+is explicitly *not* touched: no non-reasoning model was measured, and this
+postscript is not a licence to generalise past its data. What would reopen
+*this* decision is the same thing that reopened the last one: a measured run,
+on the models it claims to describe.
+
 ## Addendum — the A/B instrument, and the first thing it measured
 
 The section *"Measuring the boundary is not measuring the policy"* ends by

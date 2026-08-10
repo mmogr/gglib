@@ -468,8 +468,9 @@ confused, but it is not the default.
 ## The agentic-turn temperature ceiling
 
 A request carrying a non-empty `tools` array may emit structured output, so its
-temperature is **capped** — at `0.6` on a `reasoning`-tagged model and `0.3`
-otherwise.
+temperature is **capped** — at `0.3`, and only on models *not* tagged
+`reasoning`. Reasoning models have no ceiling; that is a measured decision, not
+an omission, and the measurement is below.
 
 ### It is a ceiling, and it only overrules a guess
 
@@ -486,16 +487,36 @@ auto-detected recipe is an unreviewed guess written at import time — it alread
 ranks below global settings for that reason, and a task-aware cap overruling it
 is consistent with that.
 
-### Why reasoning models are capped so much higher
+### Why reasoning models have no ceiling
 
 A reasoning model does not decode its tool call in isolation. The `<think>`
 block and the call are one completion under one sampler configuration, so a cap
-imposed for structured output lands on the reasoning phase too. Qwen3 specifies
-~0.6 for thinking mode and warns against greedy decoding; DeepSeek-R1 specifies
-0.5–0.7 for the same reason. Below that range these models degrade into endless
-repetition — which the proxy's own loop guard would then reject as a 400. A
-near-greedy cap on a thinking model manufactures the failure that guard exists
-to catch.
+imposed for structured output lands on the reasoning phase too. This section
+used to justify a `0.6` cap — inside the Qwen3 / DeepSeek-R1 recommended band —
+as the least-bad compromise. [ADR 0004]'s addendum named the evidence that
+would change it, and on 2026-08-10 that experiment ran (tune runs #12–#32:
+Qwen3.5-4B Q8_0, 20 paired runs of the full agentic suite per arm, plus a
+broken-sampling positive control):
+
+- The uncapped recipe temperature (`1.0`) beat the `0.6` cap on the paired
+  composite: 11W–4L–5T, mean +0.067, Wilcoxon one-sided p = 0.0099, bootstrap
+  95% CI [+0.017, +0.116].
+- The failure the cap existed to prevent never happened: tool-call formatting
+  tasks passed **100%** at `1.0` against 98.6% under the cap. The sampler
+  chain explains why — llama.cpp truncates (`top_k`, `top_p`, `min_p`) on the
+  *unscaled* distribution and applies temperature last, so a tight `top_k 20`
+  keeps structured tokens stable regardless of heat.
+- The failure the cap was *risking* did happen, under the cap: loop/stagnation
+  triggers were more frequent at `0.6` (29/126) than at `1.0` (22/117) —
+  cooling a thinking model manufactures the repetition its vendors warn about,
+  which the proxy's own loop guard then rejects as a 400.
+
+So the reasoning-class cap is gone: a reasoning model's resolved temperature
+stands on agentic turns. The non-reasoning `0.3` cap is untouched — no
+non-reasoning model has been measured, and it keeps its old rationale until it
+gets the same treatment.
+
+[ADR 0004]: adr/0004-observe-the-sampling-boundary.md
 
 ### DRY is not touched
 

@@ -339,13 +339,19 @@ pub fn resolve_sampling(
     // already ranks below global settings for that reason; a task-aware
     // ceiling outranking it is consistent with that. Anything a person
     // actually set — cli, client, profile, per-model, global — stands.
-    let ceiling = InferenceConfig::agentic_temperature_ceiling(model_is_reasoning);
+    //
+    // Reasoning models have no ceiling at all — that is a measured decision,
+    // not an omission; see `agentic_temperature_ceiling` for the experiment
+    // that removed it (tune runs #12–#32) and ADR 0004's postscript.
     let auto_detected_rung = ordered.len() - 1;
     let temperature_is_unchosen = !sources.temperature.is_deliberate_choice(auto_detected_rung);
-    let ceiling_applied = agentic_turn
-        && temperature_is_unchosen
-        && resolved.temperature.is_some_and(|t| t > ceiling);
-    if ceiling_applied {
+    let applied_ceiling = InferenceConfig::agentic_temperature_ceiling(model_is_reasoning)
+        .filter(|&ceiling| {
+            agentic_turn
+                && temperature_is_unchosen
+                && resolved.temperature.is_some_and(|t| t > ceiling)
+        });
+    if let Some(ceiling) = applied_ceiling {
         resolved.temperature = Some(ceiling);
     }
 
@@ -376,7 +382,7 @@ pub fn resolve_sampling(
             // temperature *would* have come from. The ceiling does not replace
             // that rung, it caps what it supplied.
             agentic_turn,
-            agentic_ceiling = ceiling_applied.then_some(ceiling),
+            agentic_ceiling = applied_ceiling,
             "sampling resolved"
         );
     }
@@ -392,7 +398,7 @@ pub fn resolve_sampling(
             FloorClass::Default
         },
         agentic_turn,
-        agentic_ceiling_applied: ceiling_applied.then_some(ceiling),
+        agentic_ceiling_applied: applied_ceiling,
         client_fields_rejected: issues.clone(),
         client_fields_discarded: discarded.clone(),
         applied,
@@ -627,6 +633,9 @@ mod tests {
     /// that supplied the value — the cap does not replace that rung, it caps
     /// what the rung supplied. Reporting `floor` here would make the log say
     /// nobody chose a temperature on a model whose recipe did.
+    ///
+    /// A non-reasoning model, because that is the only class that still has a
+    /// ceiling — see `a_reasoning_models_recipe_stands_uncapped`.
     #[test]
     fn the_ceiling_caps_the_value_without_rewriting_its_provenance() {
         let mut body = json!({
@@ -634,7 +643,6 @@ mod tests {
             "tools": [{ "type": "function", "function": { "name": "f" } }],
         });
         let ctx = ModelContext {
-            tags: vec!["reasoning".into()],
             inference_defaults: Some(InferenceConfig {
                 temperature: Some(1.0),
                 ..Default::default()
@@ -652,14 +660,14 @@ mod tests {
         );
 
         assert!(decision.agentic_turn);
-        assert_eq!(decision.agentic_ceiling_applied, Some(0.6));
-        assert_eq!(decision.resolved.temperature, Some(0.6), "capped");
+        assert_eq!(decision.agentic_ceiling_applied, Some(0.3));
+        assert_eq!(decision.resolved.temperature, Some(0.3), "capped");
         assert_eq!(
             decision.sources.temperature,
             ParamSource::Layer(LADDER_RUNGS - 1),
             "provenance still names the auto-detected rung that supplied 1.0"
         );
-        assert_eq!(decision.floor, FloorClass::Reasoning);
+        assert_eq!(decision.floor, FloorClass::Default);
     }
 
     /// The trust gate's discard is the largest silent drop gglib performs, and
@@ -1090,24 +1098,34 @@ mod tests {
         }
     }
 
-    /// The case the ceiling exists for, and the one the floor it replaced
-    /// could never reach: a `reasoning` model's auto-written recipe names
-    /// `temperature: 1.0`, and any layer outranks a floor.
+    /// The measured decision this file used to assert the opposite of: a
+    /// `reasoning` model's recipe temperature stands on agentic turns.
+    ///
+    /// The `0.6` cap this replaces was compared against the uncapped recipe
+    /// on 2026-08-10 (tune runs #12–#32, 20 paired runs): uncapped won the
+    /// composite (Wilcoxon one-sided p = 0.0099), tool-call formatting never
+    /// degraded (100% vs 98.6%), and the cap *raised* loop-guard triggers —
+    /// the exact failure it risked manufacturing. See
+    /// `agentic_temperature_ceiling` and ADR 0004's postscript.
     #[test]
-    fn the_ceiling_caps_an_auto_detected_recipe() {
+    fn a_reasoning_models_recipe_stands_uncapped_on_agentic_turns() {
         let mut body = tools_body();
         let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
-        resolve_sampling(&mut body, &ctx, &agentic_layers());
+        let decision = resolve_sampling(&mut body, &ctx, &agentic_layers());
 
-        assert_param(&body, "temperature", 0.6);
+        assert!(decision.agentic_turn, "still an agentic turn");
+        assert_eq!(decision.agentic_ceiling_applied, None, "no cap fired");
+        assert_param(&body, "temperature", 1.0);
+        // The recipe travels whole: the penalty tuned for 1.0 stays with it.
+        assert_param(&body, "presence_penalty", 1.5);
     }
 
-    /// Reasoning models are capped far higher than everything else. Below
-    /// ~0.6 they degrade into endless repetition, and the `<think>` block
-    /// shares one sampler configuration with the tool call.
+    /// Only the non-reasoning class still has a ceiling; its `0.3` predates
+    /// the experiment above, is unmeasured, and stands until it earns the
+    /// same treatment.
     #[test]
-    fn the_reasoning_ceiling_is_higher_than_the_plain_one() {
-        for (reasoning, expected) in [(true, 0.6), (false, 0.3)] {
+    fn only_non_reasoning_models_are_capped() {
+        for (reasoning, expected) in [(true, 1.0), (false, 0.3)] {
             let mut body = tools_body();
             let ctx = auto_detected_ctx(
                 InferenceConfig {
@@ -1238,21 +1256,29 @@ mod tests {
         assert_param(&body, "temperature", 0.1);
     }
 
-    /// `top_p` is left alone. The floor this replaced forced it to 1.0, which
-    /// contradicted Qwen's own guidance of 0.95 for thinking mode.
+    /// `top_p` is left alone when the cap fires. The floor this replaced
+    /// forced it to 1.0, which contradicted published model guidance.
     #[test]
     fn the_ceiling_does_not_touch_top_p() {
         let mut body = tools_body();
-        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        let ctx = auto_detected_ctx(
+            InferenceConfig {
+                temperature: Some(1.0),
+                top_p: Some(0.95),
+                ..Default::default()
+            },
+            false,
+        );
         resolve_sampling(&mut body, &ctx, &agentic_layers());
 
+        assert_param(&body, "temperature", 0.3);
         assert_param(&body, "top_p", 0.95);
     }
 
     #[test]
     fn a_request_without_tools_is_never_capped() {
         let mut body = json!({});
-        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        let ctx = auto_detected_ctx(temp(1.0), false);
         resolve_sampling(&mut body, &ctx, &agentic_layers());
 
         assert_param(&body, "temperature", 1.0);
@@ -1263,7 +1289,7 @@ mod tests {
     #[test]
     fn a_dangling_tool_choice_without_tools_is_not_an_agentic_turn() {
         let mut body = json!({"tool_choice": "required"});
-        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        let ctx = auto_detected_ctx(temp(1.0), false);
         resolve_sampling(&mut body, &ctx, &agentic_layers());
 
         assert_param(&body, "temperature", 1.0);
@@ -1272,7 +1298,7 @@ mod tests {
     #[test]
     fn the_ceiling_does_nothing_when_the_caller_has_not_enabled_it() {
         let mut body = tools_body();
-        let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+        let ctx = auto_detected_ctx(temp(1.0), false);
         resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
 
         assert_param(&body, "temperature", 1.0);

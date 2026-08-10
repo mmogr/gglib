@@ -1120,27 +1120,44 @@ impl InferenceConfig {
         }
     }
 
-    /// The highest temperature an agentic turn should decode at.
+    /// The highest temperature an agentic turn should decode at, when the
+    /// model's class has one.
     ///
-    /// A turn that carries tools may emit structured output, where creativity
-    /// is only ever a defect. This is the ceiling that caps it — applied by
+    /// A turn that carries tools may emit structured output. This is the
+    /// ceiling that caps its temperature — applied by
     /// [`crate::request_pipeline::sampling`] *after* resolution, and only over
     /// a value nobody deliberately chose. It never raises a temperature.
     ///
-    /// # Why reasoning models get a much higher ceiling
+    /// # Reasoning models have no ceiling — measured, not argued
     ///
     /// A `reasoning` model does not decode its tool call in isolation: the
     /// `<think>` block and the call are one completion under one sampler
-    /// configuration, so any ceiling imposed for the sake of structured output
-    /// lands on the reasoning phase too. Both vendors warn about exactly this
-    /// — Qwen3 specifies ~0.6 for thinking mode and says not to use greedy
-    /// decoding, and DeepSeek-R1 specifies 0.5–0.7 for the same reason. Below
-    /// that range these models degrade into endless repetition, which the
-    /// proxy's own loop guard would then reject as a 400. Capping a thinking
-    /// model near-greedy manufactures the failure that guard exists to catch.
+    /// configuration, so a cap imposed for the sake of structured output lands
+    /// on the reasoning phase too. This shipped as a `0.6` cap (inside the
+    /// Qwen3 / DeepSeek-R1 recommended band), and [ADR 0004]'s addendum named
+    /// the evidence that would justify changing it. That experiment ran on
+    /// 2026-08-10 (tune runs #12–#32, `Qwen3.5-4B` `Q8_0`, 20 paired runs of
+    /// the full agentic suite per arm):
     ///
-    /// `0.3` for everything else is low enough to steady structured output
-    /// without being greedy.
+    /// - Recipe temperature `1.0` uncapped beat the `0.6` cap on the paired
+    ///   composite 11W–4L–5T, mean +0.067, Wilcoxon one-sided p = 0.0099,
+    ///   bootstrap 95% CI [+0.017, +0.116].
+    /// - The cost the cap existed to prevent never materialised: tool-call
+    ///   formatting tasks passed 100% at `1.0` versus 98.6% at `0.6`.
+    /// - The failure the cap was risking did: loop/stagnation triggers were
+    ///   *more* frequent under the cap (29/126 vs 22/117) — cooling a
+    ///   thinking model manufactures the repetition its own vendors warn
+    ///   about, which the proxy's loop guard then rejects.
+    ///
+    /// So a reasoning model's resolved temperature stands on agentic turns,
+    /// which in the shipped default means its auto-detected recipe's `1.0`.
+    ///
+    /// # `0.3` for everything else — unmeasured, unchanged
+    ///
+    /// The non-reasoning cap predates that experiment and no non-reasoning
+    /// model has been measured against it. It keeps its old rationale (steady
+    /// structured output without being greedy) and its old value until it
+    /// earns the same treatment: evidence, not argument.
     ///
     /// # Why a ceiling and not a floor
     ///
@@ -1150,9 +1167,11 @@ impl InferenceConfig {
     /// was inert on precisely the models used for agentic coding. A ceiling
     /// gated on provenance fires there and stays out of the way everywhere a
     /// person actually made a choice.
+    ///
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
     #[must_use]
-    pub const fn agentic_temperature_ceiling(is_reasoning: bool) -> f32 {
-        if is_reasoning { 0.6 } else { 0.3 }
+    pub const fn agentic_temperature_ceiling(is_reasoning: bool) -> Option<f32> {
+        if is_reasoning { None } else { Some(0.3) }
     }
 
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.

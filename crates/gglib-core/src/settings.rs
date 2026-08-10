@@ -177,7 +177,10 @@ pub struct Settings {
     ///
     /// `None`/`Some(true)` → active (the default): a turn that may emit
     /// structured output has its temperature capped, but only over a value
-    /// nobody deliberately chose — an auto-detected recipe or the floor.
+    /// nobody deliberately chose — an auto-detected recipe or the floor —
+    /// and only on a model class that still has a ceiling. Since the
+    /// 2026-08-10 measurement (see `agentic_temperature_ceiling`) reasoning
+    /// models have none, so on them this setting currently gates nothing.
     /// Anything set by a person stands. `Some(false)` disables the cap.
     ///
     /// Same polarity as [`Self::proxy_loop_detection`], and for the same
