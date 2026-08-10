@@ -37,8 +37,10 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         hf_hub::RepoType::Model,
         "main".to_string(),
     ));
-    let repo_info = repo
-        .info()
+    // Synchronous ureq call — see the note in `check_update`.
+    let repo_info = tokio::task::spawn_blocking(move || repo.info())
+        .await
+        .map_err(|e| anyhow!("Repo info task panicked: {e}"))?
         .map_err(|e| anyhow!("Failed to get repo info: {e}"))?;
     let commit_sha = repo_info.sha.clone();
     gglib_core::telemetry::console_println(&format!("Found repository, commit SHA: {commit_sha}"));
@@ -111,6 +113,11 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
 }
 
 /// Check if a model has an update available.
+///
+/// `has_update` is true when no `current_sha` is recorded: there is no
+/// baseline to compare against, so the caller cannot claim the model is
+/// current. Callers that surface this to a user should distinguish that case
+/// from a genuine new revision.
 pub async fn check_update(
     repo_id: &str,
     current_sha: Option<&str>,
@@ -123,8 +130,13 @@ pub async fn check_update(
         "main".to_string(),
     ));
 
-    let repo_info = repo
-        .info()
+    // `hf_hub`'s API here is the synchronous (ureq) client with no timeout, so
+    // calling it directly would park a tokio worker for the length of the
+    // round-trip. Now that the daemon reaches this path via the upgrade
+    // routes, that has to move off the async workers.
+    let repo_info = tokio::task::spawn_blocking(move || repo.info())
+        .await
+        .map_err(|e| anyhow!("Repo info task panicked: {e}"))?
         .map_err(|e| anyhow!("Failed to get repo info: {e}"))?;
 
     let latest_sha = repo_info.sha;

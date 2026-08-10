@@ -461,6 +461,42 @@ pub struct SetCapabilitiesRequest {
     pub supports_reasoning: Option<bool>,
 }
 
+/// What a retag pass changed. Mirrors `gglib_core::services::RetagDiff`,
+/// with `changed` folded in so the wire needs no method call.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetagResponse {
+    pub changed: bool,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub spec_changed: bool,
+}
+
+/// Whether a newer HuggingFace revision exists for a model.
+///
+/// `currentSha` is `None` when the model was imported without a recorded
+/// revision. The check treats that as "an update exists" (there is no
+/// baseline to compare against), so callers should present a missing
+/// baseline distinctly rather than as a genuine new revision.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpgradeCheck {
+    pub has_update: bool,
+    pub current_sha: Option<String>,
+    pub latest_sha: String,
+}
+
+/// The outcome of applying an upgrade.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpgradeOutcome {
+    /// False when the model was already at the latest revision.
+    pub updated: bool,
+    pub latest_sha: String,
+    /// The new on-disk path, present only when an upgrade ran.
+    pub file_path: Option<String>,
+}
+
 // ============================================================================
 // Settings Types
 // ============================================================================

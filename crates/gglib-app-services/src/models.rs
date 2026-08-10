@@ -13,6 +13,7 @@ use gglib_core::{
 use crate::error::GuiError;
 use crate::sampling_explain::{self, SamplingExplanationDto};
 use crate::types::{
+    RetagResponse, UpgradeCheck, UpgradeOutcome,
     AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
     UpdateModelRequest,
 };
@@ -346,6 +347,143 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Failed to update model capabilities: {e}")))?;
 
         Ok(GuiModel::from_domain(model))
+    }
+
+    /// Re-run capability detection over the model's stored GGUF metadata.
+    ///
+    /// `full = false` only adds missing tags; `full = true` rebuilds the
+    /// system-tag namespace and re-derives the dialect spec. User-curated
+    /// tags outside that namespace survive either way. Returns `changed:
+    /// false` when the pass was a no-op.
+    pub async fn retag(&self, id: i64, full: bool) -> Result<RetagResponse, GuiError> {
+        // Resolve first so a stale id surfaces as NotFound, not Internal.
+        crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let diff = self
+            .deps
+            .core
+            .models()
+            .retag_model(id, self.deps.gguf_parser.as_ref(), full)
+            .await
+            .map_err(|e| GuiError::Internal(format!("Retag failed: {e}")))?;
+
+        Ok(match diff {
+            Some(diff) => RetagResponse {
+                changed: diff.is_changed(),
+                added: diff.added,
+                removed: diff.removed,
+                spec_changed: diff.spec_changed,
+            },
+            None => RetagResponse {
+                changed: false,
+                added: Vec::new(),
+                removed: Vec::new(),
+                spec_changed: false,
+            },
+        })
+    }
+
+    /// Preconditions shared by the upgrade check and the upgrade itself.
+    fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
+        let repo = model.hf_repo_id.clone().ok_or_else(|| {
+            GuiError::ValidationFailed("Model is not from HuggingFace, cannot update".into())
+        })?;
+        let quant = model.quantization.clone().ok_or_else(|| {
+            GuiError::ValidationFailed("Model has no quantization info stored".into())
+        })?;
+        Ok((repo, quant))
+    }
+
+    /// Whether a newer HuggingFace revision exists — the commit-SHA check
+    /// `gglib model upgrade` runs before downloading, distinct from the
+    /// shard-level diff on `/{id}/updates`.
+    ///
+    /// Not the same question as `gglib model check-updates`: with no recorded
+    /// revision this reports `has_update: true` (nothing to compare against)
+    /// where that command declines to answer. Callers should present a
+    /// `current_sha` of `None` as "no baseline recorded", not as a new release.
+    pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let (repo, _quant) = Self::upgrade_source(&model)?;
+        let models_dir = gglib_core::paths::resolve_models_dir(None)
+            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
+            .path;
+
+        let check =
+            gglib_download::cli_exec::check_update(&repo, model.hf_commit_sha.as_deref(), &models_dir)
+                .await
+                .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+
+        Ok(UpgradeCheck {
+            has_update: check.has_update,
+            current_sha: check.current_sha,
+            latest_sha: check.latest_sha,
+        })
+    }
+
+    /// Re-download the model at the latest HuggingFace revision and rewrite
+    /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
+    ///
+    /// Checks first and returns `updated: false` without downloading when the
+    /// model is already current. The HF token comes from the process
+    /// environment, matching the CLI. The call does not return until the
+    /// download finishes; queue integration is future work, as is any
+    /// serialisation between two upgrades of the same model (concurrent
+    /// callers both download and the last one wins the row).
+    pub async fn apply_upgrade(&self, id: i64) -> Result<UpgradeOutcome, GuiError> {
+        let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let (repo, quant) = Self::upgrade_source(&model)?;
+        let models_dir = gglib_core::paths::resolve_models_dir(None)
+            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
+            .path;
+
+        let check =
+            gglib_download::cli_exec::check_update(&repo, model.hf_commit_sha.as_deref(), &models_dir)
+                .await
+                .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+        if !check.has_update {
+            return Ok(UpgradeOutcome {
+                updated: false,
+                latest_sha: check.latest_sha,
+                file_path: None,
+            });
+        }
+
+        // Detached deliberately. The forced re-download deletes the existing
+        // file before writing its replacement, so if this ran inline in an
+        // Axum request future a client disconnect would drop it mid-transfer
+        // and leave the user with no model at all — while the row still
+        // pointed at the deleted path. Spawning means the download and the row
+        // rewrite always finish as a pair; only the reply is lost.
+        let core = self.deps.core.clone();
+        let request = gglib_download::cli_exec::CliUpdateRequest {
+            model_path: model.file_path.clone(),
+            repo_id: repo,
+            quantization: quant,
+            models_dir,
+            token: std::env::var("HF_TOKEN").ok(),
+        };
+
+        tokio::spawn(async move {
+            let result = gglib_download::cli_exec::update_model(request)
+                .await
+                .map_err(|e| GuiError::Internal(format!("Upgrade download failed: {e}")))?;
+
+            model.file_path = result.primary_path.clone();
+            model.hf_commit_sha = Some(result.commit_sha.clone());
+            model.last_update_check = Some(chrono::Utc::now());
+            core.models()
+                .update(&model)
+                .await
+                .map_err(|e| GuiError::Internal(format!("Failed to update model row: {e}")))?;
+
+            Ok(UpgradeOutcome {
+                updated: true,
+                latest_sha: result.commit_sha,
+                file_path: Some(result.primary_path.display().to_string()),
+            })
+        })
+        .await
+        .map_err(|e| GuiError::Internal(format!("Upgrade task panicked: {e}")))?
     }
 }
 

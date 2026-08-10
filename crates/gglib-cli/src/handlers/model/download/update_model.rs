@@ -1,78 +1,119 @@
 //! Update model handler.
 //!
-//! Updates a locally downloaded model to the latest version from HuggingFace.
+//! Upgrades a locally downloaded model to the latest HuggingFace revision.
+//! The check, the download and the row rewrite all live in
+//! [`ModelOps::check_upgrade`]/[`ModelOps::apply_upgrade`], the single shared
+//! implementation consumed by this CLI, the Axum WebUI and the Tauri app.
+//! What stays here is what only a terminal has: the plan, the prompt and the
+//! printed result.
 
-use anyhow::{Result, anyhow};
-use chrono::Utc;
-use gglib_download::cli_exec::{self, CliUpdateRequest};
+use std::sync::Arc;
+
+use anyhow::Result;
+use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
-use gglib_core::paths::resolve_models_dir;
 
 /// Execute the update-model command.
 ///
-/// Updates a model to the latest version from HuggingFace.
-pub async fn execute(ctx: &CliContext, identifier: &str) -> Result<()> {
-    let models_dir = resolve_models_dir(None)?.path;
+/// Upgrades a model to the latest revision from HuggingFace. `force` skips
+/// the confirmation prompt; everything else is identical to the GUI path.
+pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
+    let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    // Get model from database
-    let mut model = resolver::resolve_model_identifier(ctx, identifier).await?;
-
-    let hf_repo = model
-        .hf_repo_id
-        .as_ref()
-        .ok_or_else(|| anyhow!("Model is not from HuggingFace, cannot update"))?
-        .clone();
-
-    let quantization = model
-        .quantization
-        .as_ref()
-        .ok_or_else(|| anyhow!("Model has no quantization info stored"))?
-        .clone();
+    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
+    // no shared `ProcessManager`, and the upgrade path never touches serving
+    // status. Same construction as `model capabilities`.
+    let ops = ModelOps::new(ModelDeps {
+        core: ctx.app.clone(),
+        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
+        gguf_parser: ctx.gguf_parser.clone(),
+    });
 
     println!("Updating model {} (ID: {})...", model.name, model.id);
-    println!("  Repository: {}", hf_repo);
-    println!("  Quantization: {}", quantization);
+    if let Some(repo) = model.hf_repo_id.as_deref() {
+        println!("  Repository: {repo}");
+    }
+    if let Some(quant) = model.quantization.as_deref() {
+        println!("  Quantization: {quant}");
+    }
 
-    // Check if update is available
-    let check_result =
-        cli_exec::check_update(&hf_repo, model.hf_commit_sha.as_deref(), &models_dir).await?;
+    let check = ops.check_upgrade(model.id).await?;
 
-    if !check_result.has_update {
+    if !check.has_update {
         println!(
             "✓ Model is already up to date (SHA: {})",
-            &check_result.latest_sha[..8]
+            short_sha(&check.latest_sha)
         );
         return Ok(());
     }
 
-    if let Some(ref current) = check_result.current_sha {
-        println!("  Current SHA: {}", &current[..8]);
+    match check.current_sha.as_deref() {
+        Some(current) => println!("  Current SHA: {}", short_sha(current)),
+        // No baseline recorded, so `has_update` above could not have said
+        // otherwise. Say that rather than implying a new release exists.
+        None => println!("  Current SHA: none recorded (cannot tell what changed)"),
     }
-    println!("  Latest SHA:  {}", &check_result.latest_sha[..8]);
+    println!("  Latest SHA:  {}", short_sha(&check.latest_sha));
 
-    // Build update request
-    let request = CliUpdateRequest {
-        model_path: model.file_path.clone(),
-        repo_id: hf_repo,
-        quantization,
-        models_dir,
-        token: std::env::var("HF_TOKEN").ok(),
-    };
+    // Confirmation prompt if not forced — this re-downloads the full model
+    // and overwrites the stored file path.
+    if !force {
+        println!();
+        println!("This will:");
+        println!("  • Re-download the model at the latest revision");
+        println!("  • Replace the current file and update the database row");
+        println!();
+        print!("Proceed? (y/N): ");
 
-    // Execute update
-    let result = cli_exec::update_model(request).await?;
+        use std::io::{self, Write};
+        io::stdout().flush()?;
 
-    // Update database record by modifying the model directly
-    model.file_path = result.primary_path.clone();
-    model.hf_commit_sha = Some(result.commit_sha.clone());
-    model.last_update_check = Some(Utc::now());
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
 
-    ctx.app.models().update(&model).await?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("Upgrade cancelled.");
+            return Ok(());
+        }
+    }
 
-    println!("✓ Model updated successfully");
-    println!("  New SHA: {}", &result.commit_sha[..8]);
+    let outcome = ops.apply_upgrade(model.id).await?;
+
+    if outcome.updated {
+        println!("✓ Model updated successfully");
+        println!("  New SHA: {}", short_sha(&outcome.latest_sha));
+    } else {
+        // The revision moved back under us between check and apply.
+        println!(
+            "✓ Model is already up to date (SHA: {})",
+            short_sha(&outcome.latest_sha)
+        );
+    }
 
     Ok(())
+}
+
+/// First 8 characters of a commit SHA, without assuming there are 8.
+/// HuggingFace returns 40, but a truncated or empty value must not panic a
+/// command whose whole job is repairing a model.
+fn short_sha(sha: &str) -> &str {
+    &sha[..sha.len().min(8)]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::short_sha;
+
+    #[test]
+    fn short_sha_truncates_a_full_sha() {
+        assert_eq!(short_sha("0123456789abcdef0123456789abcdef01234567"), "01234567");
+    }
+
+    #[test]
+    fn short_sha_tolerates_shorter_input() {
+        assert_eq!(short_sha("abc"), "abc");
+        assert_eq!(short_sha(""), "");
+    }
 }
