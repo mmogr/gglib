@@ -282,10 +282,11 @@ impl ResidentSet {
                 AdmissionDecision::Expired => {
                     warn!(
                         model = %model_name,
-                        "request outlasted the admission queue deadline — surfacing 503"
+                        "admission queue made no progress for the whole deadline — surfacing 503"
                     );
                     return Err(ModelRuntimeError::AdmissionTimeout(format!(
-                        "waited for '{model_name}' without reaching the front of the queue"
+                        "the queue made no progress while '{model_name}' waited — \
+                         no launch running, no generation finishing"
                     )));
                 }
             }
