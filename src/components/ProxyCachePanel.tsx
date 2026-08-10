@@ -4,10 +4,11 @@
  * Prompt-cache section of the proxy dashboard: any configuration warnings the
  * backend raised, followed by measured reuse totals.
  *
- * Every figure shown is one the upstream actually reported. Nothing is
- * derived — in particular there is no "time saved", because reuse counts are
- * exact while what that reuse saved depends on a prefill that never ran. See
- * `gglib_core::cache_metrics` for the same reasoning on the backend.
+ * Every figure shown is grounded in counts the upstream actually reported:
+ * the hit-rate readouts are ratios of exact reported totals. Speculative
+ * projections stay out — in particular there is no "time saved", because
+ * reuse counts are exact while what that reuse saved depends on a prefill
+ * that never ran. See `gglib_core::cache_metrics` for the same reasoning.
  *
  * Extracted from `ProxyDashboardModal` to keep both files small and to make
  * the formatting logic testable without mounting the modal's dashboard stream
@@ -18,6 +19,7 @@
 
 import type { FC } from 'react';
 import { Banner } from './ui/Banner';
+import { Readout } from './primitives';
 import type { CacheStatus, CacheUsage } from '../services/transport/types/dashboard';
 
 export interface ProxyCachePanelProps {
@@ -35,7 +37,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-md">
       <span className="text-xs text-text-muted">{label}</span>
-      <span className="text-sm text-text tabular-nums">{value}</span>
+      <span className="text-sm text-text font-mono tabular-nums">{value}</span>
     </div>
   );
 }
@@ -50,10 +52,27 @@ function Row({ label, value }: { label: string; value: string }) {
 export const CacheUsageRows: FC<{ usage?: CacheUsage | null }> = ({ usage }) => {
   const hasMeasurements = (usage?.reporting_requests ?? 0) > 0;
 
+  const hitRatePct =
+    usage && hasMeasurements && usage.prompt_tokens > 0
+      ? Math.round((usage.cached_tokens / usage.prompt_tokens) * 100)
+      : null;
+  const lastRatePct =
+    usage && usage.last_cached_tokens != null && usage.last_prompt_tokens
+      ? Math.round((usage.last_cached_tokens / usage.last_prompt_tokens) * 100)
+      : null;
+
   return (
-    <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
+    <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
       {usage && hasMeasurements ? (
         <>
+          {(hitRatePct != null || lastRatePct != null) && (
+            <div className="flex gap-xl pb-sm">
+              {hitRatePct != null && <Readout label="Cache hit rate" value={hitRatePct} unit="%" />}
+              {lastRatePct != null && (
+                <Readout label="Last request reuse" value={lastRatePct} unit="%" />
+              )}
+            </div>
+          )}
           <Row label="Used from cache" value={`${formatCount(usage.cached_tokens)} tokens`} />
           <Row label="Prompt tokens processed" value={`${formatCount(usage.prompt_tokens)} tokens`} />
           <Row label="Requests measured" value={formatCount(usage.reporting_requests)} />
