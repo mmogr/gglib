@@ -9,6 +9,7 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::dto::diagnostics::{AccelerationDto, DiagnosticsDto, FastDownloadsDto, ResolvedPathsDto};
 use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -85,6 +86,48 @@ pub async fn install_llama(
 pub async fn setup_python(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.setup.setup_python_env().await?;
     Ok(Json(()))
+}
+
+/// Remove the fast-download helper environment — downloads revert to native
+/// HTTP, which is a speed change, not a loss of capability.
+pub async fn disable_fast_downloads(
+    State(state): State<AppState>,
+) -> Result<Json<DisableFastDownloadsResponse>, HttpError> {
+    Ok(Json(DisableFastDownloadsResponse {
+        removed: state.setup.remove_python_env()?,
+    }))
+}
+
+/// Whether disabling actually removed anything, so the GUI can say
+/// "disabled" rather than claiming a change that did not happen.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisableFastDownloadsResponse {
+    pub removed: bool,
+}
+
+/// System diagnostics: dependency matrix, resolved paths, detected
+/// acceleration and accelerator state — `gglib config check-deps`, `paths`
+/// and `fast-downloads status` in one response.
+pub async fn diagnostics(State(state): State<AppState>) -> Result<Json<DiagnosticsDto>, HttpError> {
+    let d = state.setup.diagnostics()?;
+
+    Ok(Json(DiagnosticsDto {
+        dependencies: d.dependencies.iter().map(Into::into).collect(),
+        paths: ResolvedPathsDto::from(d.paths),
+        acceleration: AccelerationDto {
+            detected: d.acceleration.detected,
+            detection_error: d.acceleration.detection_error,
+        },
+        fast_downloads: FastDownloadsDto {
+            provisioned: d.fast_downloads.provisioned,
+            env_dir: d.fast_downloads.env_dir,
+            legacy_path: d.fast_downloads.legacy_path,
+            builder: d.fast_downloads.builder,
+            available_builder: d.fast_downloads.available_builder,
+            error: d.fast_downloads.error,
+        },
+    }))
 }
 
 /// SSE progress events for llama installation.

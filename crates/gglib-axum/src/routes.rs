@@ -334,6 +334,14 @@ fn config_routes() -> Router<AppState> {
             "/system/setup-python",
             post(handlers::config::setup::setup_python),
         )
+        .route(
+            "/system/disable-fast-downloads",
+            post(handlers::config::setup::disable_fast_downloads),
+        )
+        .route(
+            "/system/diagnostics",
+            get(handlers::config::setup::diagnostics),
+        )
 }
 
 /// The router core shared by [`create_router`] and [`create_spa_router`]:

@@ -220,6 +220,102 @@ impl SetupOps {
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to setup Python environment: {e}")))
     }
+
+    /// Remove the accelerator's environment; downloads revert to native HTTP.
+    ///
+    /// The mirror of [`Self::setup_python_env`] — `gglib config fast-downloads
+    /// disable`. Downloads keep working either way; this only removes the
+    /// faster path.
+    ///
+    /// Returns whether anything was there to remove, so a caller can tell
+    /// "disabled it" from "already off" rather than guessing.
+    pub fn remove_python_env(&self) -> Result<bool, GuiError> {
+        gglib_download::cli_exec::remove_fast_helper()
+            .map_err(|e| GuiError::Internal(format!("Failed to remove Python environment: {e}")))
+    }
+
+    /// Everything the diagnostics panel shows: dependency matrix, resolved
+    /// paths, detected acceleration, accelerator state.
+    ///
+    /// Assembled in one call because they are read together — this is the
+    /// "why isn't this working" surface, and someone comparing a missing
+    /// dependency against a resolved path should not be watching four
+    /// spinners. Individually cheap: no network, and no subprocess beyond the
+    /// version probes `check_all_dependencies` already runs.
+    pub fn diagnostics(&self) -> Result<Diagnostics, GuiError> {
+        let dependencies = self.deps.system_probe.check_all_dependencies();
+
+        let paths = gglib_core::paths::ResolvedPaths::resolve()
+            .map_err(|e| GuiError::Internal(format!("Failed to resolve paths: {e}")))?;
+
+        // Detection refuses to fall back to CPU so callers can surface install
+        // hints. That refusal is an answer here, not a failed request.
+        let acceleration = match gglib_runtime::llama::detect_optimal_acceleration() {
+            Ok(accel) => AccelerationInfo {
+                detected: Some(accel.display_name().to_string()),
+                detection_error: None,
+            },
+            Err(e) => AccelerationInfo {
+                detected: None,
+                detection_error: Some(e.to_string()),
+            },
+        };
+
+        let fast_downloads = match gglib_download::cli_exec::fast_helper_status() {
+            Ok(status) => FastDownloadsInfo {
+                provisioned: status.provisioned,
+                env_dir: status.env_dir.display().to_string(),
+                legacy_path: status.legacy_path,
+                builder: status.builder,
+                available_builder: status.available_builder.to_string(),
+                error: None,
+            },
+            Err(e) => FastDownloadsInfo {
+                provisioned: false,
+                env_dir: String::new(),
+                legacy_path: false,
+                builder: None,
+                available_builder: String::new(),
+                error: Some(e.to_string()),
+            },
+        };
+
+        Ok(Diagnostics {
+            dependencies,
+            paths,
+            acceleration,
+            fast_downloads,
+        })
+    }
+}
+
+/// What acceleration a build would use, with detection failure carried as data.
+#[derive(Debug, Clone)]
+pub struct AccelerationInfo {
+    pub detected: Option<String>,
+    pub detection_error: Option<String>,
+}
+
+/// The optional `hf_xet` download accelerator's state.
+#[derive(Debug, Clone)]
+pub struct FastDownloadsInfo {
+    pub provisioned: bool,
+    pub env_dir: String,
+    pub legacy_path: bool,
+    pub builder: Option<String>,
+    pub available_builder: String,
+    /// Why the status could not be read, when it could not.
+    pub error: Option<String>,
+}
+
+/// The system diagnostics bundle — `gglib config check-deps`, `paths` and
+/// `fast-downloads status` as one value.
+#[derive(Debug, Clone)]
+pub struct Diagnostics {
+    pub dependencies: Vec<gglib_core::utils::system::Dependency>,
+    pub paths: gglib_core::paths::ResolvedPaths,
+    pub acceleration: AccelerationInfo,
+    pub fast_downloads: FastDownloadsInfo,
 }
 
 #[cfg(test)]
