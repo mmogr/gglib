@@ -73,14 +73,3 @@ export const PROXY_EVENT_NAMES = [
   'proxy:stopped',
   'proxy:crashed',
 ] as const;
-
-/**
- * Type helper to extract event name literals.
- */
-export type DownloadEventName = typeof DOWNLOAD_EVENT_NAMES[number];
-export type ServerEventName = typeof SERVER_EVENT_NAMES[number];
-export type LogEventName = typeof LOG_EVENT_NAMES[number];
-export type McpEventName = typeof MCP_EVENT_NAMES[number];
-export type ModelEventName = typeof MODEL_EVENT_NAMES[number];
-export type VerificationEventName = typeof VERIFICATION_EVENT_NAMES[number];
-export type ProxyEventName = typeof PROXY_EVENT_NAMES[number];

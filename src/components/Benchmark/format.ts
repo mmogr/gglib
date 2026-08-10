@@ -23,15 +23,4 @@ export function formatDate(iso: string): string {
   }
 }
 
-/** Signed two-decimal delta, e.g. "+0.09" / "−0.04" / "0.00". */
-export function formatDelta(value: number | null | undefined): string {
-  if (value == null) return '—';
-  const rounded = value.toFixed(2);
-  return value > 0 ? `+${rounded}` : rounded;
-}
 
-/** Multiplicative factor, e.g. "1.32×". */
-export function formatFactor(value: number | null | undefined): string {
-  if (value == null) return '—';
-  return `${value.toFixed(2)}×`;
-}

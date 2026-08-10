@@ -5,18 +5,15 @@
 
 <!-- module-docs:start -->
 
-Strict discriminated-union TypeScript types for all events emitted by the Rust backend over SSE. Mirrors `gglib_core::domain::agent::AgentEvent` and download progress domain structs, enabling exhaustive `switch` statements and preventing silent contract drift.
+Strict discriminated-union TypeScript types for the agent events emitted by the Rust backend over SSE. Mirrors `gglib_core::domain::agent::AgentEvent`, enabling exhaustive `switch` statements and preventing silent contract drift.
 
-On download progress events, `speed_bps` and `eta_seconds` are **optional** and
-omitted by the backend when unknown, so the corresponding fields are `number | undefined`.
-Absent means the rate estimator has not warmed up; it does not mean zero.
+Download progress types live in `src/services/transport/types/`, not here.
 
 ## Key Files
 
 | File | Role |
 |------|------|
 | `agentEvent.ts` | `AgentEvent` union: text/reasoning deltas, tool lifecycle, loop control, cost monitoring |
-| `download.ts` | `NormalizedDownloadProgress` — unified shape normalizing single-file and multi-shard events |
 | `index.ts` | Barrel export |
 
 ## AgentEvent Union Members
@@ -31,9 +28,5 @@ Absent means the rate estimator has not warmed up; it does not mean zero.
 | `final_answer` | Agent produced final response |
 | `error` | Unrecoverable error in the agent loop |
 | `prompt_progress` | Token count and timing metadata |
-
-## Download Normalisation
-
-`normalizeDownloadProgress()` and `normalizeShardProgress()` collapse the backend's two event shapes (single-file vs multi-shard) into one `NormalizedDownloadProgress` interface, giving the UI a single rendering path.
 
 <!-- module-docs:end -->

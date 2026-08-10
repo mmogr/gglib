@@ -93,13 +93,6 @@ export interface UpdateMessageParams {
   metadata?: ChatMessageMetadata | null;
 }
 
-/**
- * Parameters for updating a conversation.
- */
-export interface UpdateConversationParams {
-  title?: string;
-  systemPrompt?: string | null;
-}
 
 /**
  * Result of deleting a message (cascade deletes subsequent messages).

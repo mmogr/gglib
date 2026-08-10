@@ -32,8 +32,7 @@ main.tsx ──► App.tsx                        tray-main.tsx ──► TrayPa
 | [`BenchmarkPage.tsx`](BenchmarkPage.tsx) | Benchmark workflows: compare, perf, and sampling-parameter tune |
 | [`TrayPanel.tsx`](TrayPanel.tsx) | Proxy tray window — is the endpoint up, and what is it doing (status, endpoint copy bar, connections, slots) |
 
-`ChatPageSkeleton.tsx` and `chatTabs.tsx` are supporting pieces of `ChatPage`,
-not routed pages.
+`chatTabs.tsx` is a supporting piece of `ChatPage`, not a routed page.
 
 ### Model Control Center
 

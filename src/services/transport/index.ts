@@ -47,15 +47,6 @@ export function getTransport(): Transport {
   return _transport;
 }
 
-/**
- * Reset the transport singleton.
- * 
- * Primarily for testing purposes.
- * Allows injection of a mock transport.
- */
-export function _resetTransport(transport?: Transport): void {
-  _transport = transport ?? null;
-}
 
 // Re-export types for convenience
 export type { Transport } from './types';

@@ -336,10 +336,6 @@ export interface ModelDetail extends GgufModel {
   metadata: Record<string, string>;
 }
 
-export interface DownloadConfig {
-  repo_id: string;
-  quantization?: string;
-}
 
 export interface ServeConfig {
   id: number;
@@ -751,18 +747,4 @@ export type ModelSortBy = 'added_at' | 'name' | 'param_count' | 'latest_tg_tps';
  */
 export type SortOrder = 'asc' | 'desc';
 
-/**
- * Query parameters for `GET /api/models`.
- * Maps directly to the backend `ModelListQueryParams` struct.
- */
-export interface ModelListQuery {
-  sort?: ModelSortBy;
-  order?: SortOrder;
-  min_params?: number;
-  max_params?: number;
-  min_speed?: number;
-  max_speed?: number;
-  tags?: string[];
-  quantizations?: string[];
-}
 
