@@ -356,6 +356,9 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
     let min_ps = sweep_dimension(&sweep.min_p);
     let repeat_penalties = sweep_dimension(&sweep.repeat_penalty);
     let dry_multipliers = sweep_dimension(&sweep.dry_multiplier);
+    let dynatemp_ranges = sweep_dimension(&sweep.dynatemp_range);
+    let dynatemp_exponents = sweep_dimension(&sweep.dynatemp_exponent);
+    let top_n_sigmas = sweep_dimension(&sweep.top_n_sigma);
 
     let mut grid = Vec::new();
     for &temperature in &temps {
@@ -364,30 +367,39 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                 for &min_p in &min_ps {
                     for &repeat_penalty in &repeat_penalties {
                         for &dry_multiplier in &dry_multipliers {
-                            grid.push(InferenceConfig {
-                                temperature,
-                                top_p,
-                                top_k,
-                                min_p,
-                                repeat_penalty,
-                                dry_multiplier,
-                                max_tokens: None,
-                                presence_penalty: None,
-                                // The sweep varies sampling policy; a seed is
-                                // not one, and is stamped per run by the
-                                // executor so the same candidate can be
-                                // measured at several.
-                                seed: None,
-                                // Not dimensions: llama.cpp's defaults
-                                // (1.75, 2, 64) are reasonable, and varying
-                                // them too would multiply the grid by 81.
-                                dry_base: None,
-                                dry_allowed_length: None,
-                                dry_penalty_last_n: None,
-                                dynatemp_range: None,
-                                dynatemp_exponent: None,
-                                top_n_sigma: None,
-                            });
+                            for &dynatemp_range in &dynatemp_ranges {
+                                for &dynatemp_exponent in &dynatemp_exponents {
+                                    for &top_n_sigma in &top_n_sigmas {
+                                        grid.push(InferenceConfig {
+                                            temperature,
+                                            top_p,
+                                            top_k,
+                                            min_p,
+                                            repeat_penalty,
+                                            dry_multiplier,
+                                            dynatemp_range,
+                                            dynatemp_exponent,
+                                            top_n_sigma,
+                                            max_tokens: None,
+                                            presence_penalty: None,
+                                            // The sweep varies sampling
+                                            // policy; a seed is not one, and
+                                            // is stamped per run by the
+                                            // executor so the same candidate
+                                            // can be measured at several.
+                                            seed: None,
+                                            // Not dimensions: llama.cpp's
+                                            // defaults (1.75, 2, 64) are
+                                            // reasonable, and varying them
+                                            // too would multiply the grid
+                                            // by 81.
+                                            dry_base: None,
+                                            dry_allowed_length: None,
+                                            dry_penalty_last_n: None,
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -882,7 +894,7 @@ mod tests {
     /// The grid multiplies, so the guard has to be checked against a product
     /// rather than any single dimension's length.
     #[test]
-    fn six_dimensions_multiply() {
+    fn dimensions_multiply() {
         let sweep = SweepSpec {
             temperature: vec![0.2, 0.8],
             top_p: vec![0.9, 0.95],
@@ -890,8 +902,39 @@ mod tests {
             min_p: vec![0.0, 0.05],
             repeat_penalty: vec![1.0, 1.1],
             dry_multiplier: vec![0.0, 0.8],
+            ..Default::default()
         };
         assert_eq!(build_candidate_grid(&sweep).len(), 64);
+    }
+
+    /// The entropy-adaptive dimensions multiply like the original six, and an
+    /// off-vs-on sweep pairs a disabled sentinel with a live value in one
+    /// grid — the shape the flat-vs-dynatemp comparison runs.
+    #[test]
+    fn entropy_adaptive_dimensions_multiply() {
+        let sweep = SweepSpec {
+            temperature: vec![0.6, 1.0],
+            dynatemp_range: vec![0.0, 0.4],
+            top_n_sigma: vec![-1.0, 1.0],
+            ..Default::default()
+        };
+        let grid = build_candidate_grid(&sweep);
+        assert_eq!(grid.len(), 8);
+        assert!(grid.iter().any(|c| c.dynatemp_range == Some(0.4)
+            && c.top_n_sigma == Some(-1.0)
+            && c.temperature == Some(1.0)));
+        // Unswept entropy fields stay unset, not zeroed.
+        let unswept = SweepSpec {
+            temperature: vec![0.5],
+            ..Default::default()
+        };
+        assert!(
+            build_candidate_grid(&unswept)
+                .iter()
+                .all(|c| c.dynatemp_range.is_none()
+                    && c.dynatemp_exponent.is_none()
+                    && c.top_n_sigma.is_none())
+        );
     }
 
     /// `MAX_CANDIDATES` is a runaway guard, so it must sit above any sweep
@@ -912,6 +955,7 @@ mod tests {
             min_p: vec![0.0, 0.02, 0.05, 0.1],
             repeat_penalty: vec![1.0, 1.05, 1.1, 1.2],
             dry_multiplier: vec![0.0, 0.4, 0.8, 1.2],
+            ..Default::default()
         };
         assert!(build_candidate_grid(&runaway).len() > MAX_CANDIDATES);
     }

@@ -42,6 +42,9 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   const [minP, setMinP] = useState('');
   const [repeatPenalty, setRepeatPenalty] = useState('');
   const [dryMultiplier, setDryMultiplier] = useState('');
+  const [dynatempRange, setDynatempRange] = useState('');
+  const [dynatempExponent, setDynatempExponent] = useState('');
+  const [topNSigma, setTopNSigma] = useState('');
 
   const [suiteMode, setSuiteMode] = useState<'default' | 'custom'>('default');
   const [customTasks, setCustomTasks] = useState<TuneTask[] | null>(null);
@@ -95,6 +98,9 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         min_p: parseNumberList(minP),
         repeat_penalty: parseNumberList(repeatPenalty),
         dry_multiplier: parseNumberList(dryMultiplier),
+        dynatemp_range: parseNumberList(dynatempRange),
+        dynatemp_exponent: parseNumberList(dynatempExponent),
+        top_n_sigma: parseNumberList(topNSigma),
       },
       seed_from_gguf: seedFromGguf,
       seed_from_family_presets: seedFromFamilyPresets,
@@ -173,6 +179,24 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
             dry_multiplier
           </label>
           <Input value={dryMultiplier} onChange={e => setDryMultiplier(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.4,0.8" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dynatemp_range
+          </label>
+          <Input value={dynatempRange} onChange={e => setDynatempRange(e.target.value)} disabled={disabled} size="sm" placeholder="0,0.4" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            dynatemp_exponent
+          </label>
+          <Input value={dynatempExponent} onChange={e => setDynatempExponent(e.target.value)} disabled={disabled} size="sm" placeholder="1.0" />
+        </div>
+        <div className="flex flex-col gap-xs">
+          <label className="text-xs font-semibold text-text">
+            top_n_sigma
+          </label>
+          <Input value={topNSigma} onChange={e => setTopNSigma(e.target.value)} disabled={disabled} size="sm" placeholder="-1,1" />
         </div>
       </div>
 

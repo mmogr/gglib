@@ -937,9 +937,13 @@ fn parse_sweep_args(args: &[String]) -> Result<SweepSpec> {
             "min_p" => sweep.min_p = parse_f32_list(values)?,
             "repeat_penalty" => sweep.repeat_penalty = parse_f32_list(values)?,
             "dry_multiplier" => sweep.dry_multiplier = parse_f32_list(values)?,
+            "dynatemp_range" => sweep.dynatemp_range = parse_f32_list(values)?,
+            "dynatemp_exponent" => sweep.dynatemp_exponent = parse_f32_list(values)?,
+            "top_n_sigma" => sweep.top_n_sigma = parse_f32_list(values)?,
             other => anyhow::bail!(
                 "unknown --sweep dimension '{other}': expected one of \
-                 temperature, top_p, top_k, min_p, repeat_penalty, dry_multiplier"
+                 temperature, top_p, top_k, min_p, repeat_penalty, \
+                 dry_multiplier, dynatemp_range, dynatemp_exponent, top_n_sigma"
             ),
         }
     }

@@ -78,6 +78,21 @@ pub struct SweepSpec {
     /// shipped values are already reasonable.
     #[serde(default)]
     pub dry_multiplier: Vec<f32>,
+    /// Candidate dynatemp half-range values. `0.0` disables dynamic
+    /// temperature, so `0.0,0.4` measures "off" against one strength — the
+    /// direct comparison of a flat temperature against an entropy-adaptive
+    /// band around the same base.
+    #[serde(default)]
+    pub dynatemp_range: Vec<f32>,
+    /// Candidate dynatemp exponent values. Only meaningful in a grid that
+    /// also sweeps (or fixes) a non-zero `dynatemp_range`; llama.cpp's
+    /// default is 1.0.
+    #[serde(default)]
+    pub dynatemp_exponent: Vec<f32>,
+    /// Candidate top-n-sigma values. `-1.0` disables the truncation, so
+    /// `-1.0,1.0` measures "off" against the paper's lower bound in one run.
+    #[serde(default)]
+    pub top_n_sigma: Vec<f32>,
 }
 
 impl SweepSpec {

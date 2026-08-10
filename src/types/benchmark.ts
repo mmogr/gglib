@@ -185,6 +185,12 @@ export interface SweepSpec {
   repeat_penalty: number[];
   /** DRY multiplier; `0.0` disables DRY, so it is a meaningful candidate. */
   dry_multiplier: number[];
+  /** Dynatemp half-range; `0.0` disables, so off-vs-on sweeps in one run. */
+  dynatemp_range: number[];
+  /** Dynatemp exponent; meaningful only beside a non-zero range. */
+  dynatemp_exponent: number[];
+  /** Top-n-sigma; `-1.0` disables, so off-vs-on sweeps in one run. */
+  top_n_sigma: number[];
 }
 
 /** Weights combining per-candidate metrics into a composite score. */
