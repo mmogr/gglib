@@ -511,6 +511,11 @@ pub struct AppSettings {
     /// Whether a tool call failing schema validation is re-issued with
     /// `tool_choice: "required"`. Absent means on.
     pub tool_call_repair: Option<bool>,
+    /// Whether structured-output turns get their temperature capped when no
+    /// human chose one. Absent means on (see `gglib_core::Settings`). Was
+    /// write-only until the GUI grew a toggle — a toggle that saves but
+    /// cannot read back silently resets on every reopen.
+    pub agentic_sampling: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -539,6 +544,7 @@ impl From<gglib_core::Settings> for AppSettings {
             trust_client_sampling: settings.trust_client_sampling,
             proxy_loop_detection: settings.proxy_loop_detection,
             tool_call_repair: settings.tool_call_repair,
+            agentic_sampling: settings.agentic_sampling,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
