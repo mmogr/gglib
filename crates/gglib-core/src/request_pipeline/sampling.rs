@@ -345,8 +345,8 @@ pub fn resolve_sampling(
     // that removed it (tune runs #12–#32) and ADR 0004's postscript.
     let auto_detected_rung = ordered.len() - 1;
     let temperature_is_unchosen = !sources.temperature.is_deliberate_choice(auto_detected_rung);
-    let applied_ceiling = InferenceConfig::agentic_temperature_ceiling(model_is_reasoning)
-        .filter(|&ceiling| {
+    let applied_ceiling =
+        InferenceConfig::agentic_temperature_ceiling(model_is_reasoning).filter(|&ceiling| {
             agentic_turn
                 && temperature_is_unchosen
                 && resolved.temperature.is_some_and(|t| t > ceiling)
