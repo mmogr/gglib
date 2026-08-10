@@ -1,38 +1,42 @@
 /* Console Log Panel - ANSI colors (can't be expressed in Tailwind).
-   Scrollbars use the global thin style from styles/tailwind.css. */
+   Scrollbars use the global thin style from styles/tailwind.css.
+   Hues keep their ANSI meaning (red is red — mapping ANSI colors onto semantic
+   tokens would misrepresent what the server emitted); values are literal hex,
+   brightness-tuned for the graphite terminal background. Default fg/dim use
+   text tokens so plain log text follows the palette. */
 
 .console-log-line {
   padding: 1px 0;
-  color: #d4d4d4;
+  color: var(--color-text-secondary);
 }
 
 /* ANSI color classes from Anser */
-.console-log-line .ansi-black-fg { color: #000000; }
-.console-log-line .ansi-red-fg { color: #cd3131; }
-.console-log-line .ansi-green-fg { color: #0dbc79; }
-.console-log-line .ansi-yellow-fg { color: #e5e510; }
-.console-log-line .ansi-blue-fg { color: #2472c8; }
-.console-log-line .ansi-magenta-fg { color: #bc3fbc; }
-.console-log-line .ansi-cyan-fg { color: #11a8cd; }
-.console-log-line .ansi-white-fg { color: #e5e5e5; }
+.console-log-line .ansi-black-fg { color: #3d3d42; }
+.console-log-line .ansi-red-fg { color: #e06c60; }
+.console-log-line .ansi-green-fg { color: #57c98a; }
+.console-log-line .ansi-yellow-fg { color: #dcc95e; }
+.console-log-line .ansi-blue-fg { color: #6fa8e0; }
+.console-log-line .ansi-magenta-fg { color: #c586c0; }
+.console-log-line .ansi-cyan-fg { color: #56b6c2; }
+.console-log-line .ansi-white-fg { color: var(--color-text); }
 
-.console-log-line .ansi-bright-black-fg { color: #666666; }
-.console-log-line .ansi-bright-red-fg { color: #f14c4c; }
-.console-log-line .ansi-bright-green-fg { color: #23d18b; }
-.console-log-line .ansi-bright-yellow-fg { color: #f5f543; }
-.console-log-line .ansi-bright-blue-fg { color: #3b8eea; }
-.console-log-line .ansi-bright-magenta-fg { color: #d670d6; }
-.console-log-line .ansi-bright-cyan-fg { color: #29b8db; }
+.console-log-line .ansi-bright-black-fg { color: var(--color-text-muted); }
+.console-log-line .ansi-bright-red-fg { color: #f28b80; }
+.console-log-line .ansi-bright-green-fg { color: #6fe0a5; }
+.console-log-line .ansi-bright-yellow-fg { color: #f2e284; }
+.console-log-line .ansi-bright-blue-fg { color: #8fc0f2; }
+.console-log-line .ansi-bright-magenta-fg { color: #dda3d8; }
+.console-log-line .ansi-bright-cyan-fg { color: #7cd6e2; }
 .console-log-line .ansi-bright-white-fg { color: #ffffff; }
 
-.console-log-line .ansi-black-bg { background-color: #000000; }
-.console-log-line .ansi-red-bg { background-color: #cd3131; }
-.console-log-line .ansi-green-bg { background-color: #0dbc79; }
-.console-log-line .ansi-yellow-bg { background-color: #e5e510; }
-.console-log-line .ansi-blue-bg { background-color: #2472c8; }
-.console-log-line .ansi-magenta-bg { background-color: #bc3fbc; }
-.console-log-line .ansi-cyan-bg { background-color: #11a8cd; }
-.console-log-line .ansi-white-bg { background-color: #e5e5e5; }
+.console-log-line .ansi-black-bg { background-color: #3d3d42; }
+.console-log-line .ansi-red-bg { background-color: #e06c60; }
+.console-log-line .ansi-green-bg { background-color: #57c98a; }
+.console-log-line .ansi-yellow-bg { background-color: #dcc95e; }
+.console-log-line .ansi-blue-bg { background-color: #6fa8e0; }
+.console-log-line .ansi-magenta-bg { background-color: #c586c0; }
+.console-log-line .ansi-cyan-bg { background-color: #56b6c2; }
+.console-log-line .ansi-white-bg { background-color: var(--color-text); }
 
 .console-log-line .ansi-bold { font-weight: bold; }
 .console-log-line .ansi-dim { opacity: 0.7; }
