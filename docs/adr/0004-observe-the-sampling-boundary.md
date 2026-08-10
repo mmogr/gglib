@@ -373,6 +373,10 @@ Recorded because ADR 0003 made the same distinction about redundancy and it is
 equally tempting here: a boundary you can see across is not a policy you have
 evidence for. Those need an A/B instrument that does not exist yet.
 
+*That instrument now exists and has been run.* It does not change the paragraph
+above — the organ still says nothing about policy — but the second addendum
+records what the separate instrument measured, and what it does not settle.
+
 One policy question *was* settled while this ADR was being written, by running
 the code rather than by this organ. It is recorded in the addendum below,
 because the decision it reached is a prohibition and prohibitions decay when
@@ -462,6 +466,10 @@ their reasons live only in a merged PR body.
   recipe for `reasoning`-tagged models; a model author's published
   recommendation is better evidence than gglib's guess, and ADR 0003's own
   argument — do not restate what upstream already decides — applies to it.
+- Re-run the agentic eval now that the A/A arm exists, so the second addendum's
+  +0.082 can be quoted against a measured drift instead of against the raw arm's
+  own instability. Until then that figure is a direction with a plausible
+  magnitude, and the addendum says so.
 
 ## Addendum — request-level task overlays, and why there are none
 
@@ -621,5 +629,115 @@ and scoring them `0`, on a different task in each arm, which made two identical
 arms look like they diverged. A control that proves the apparatus can move,
 again, is not optional here.
 
+## Addendum — the A/B instrument, and the first thing it measured
+
+The section *"Measuring the boundary is not measuring the policy"* ends by
+saying the policy questions need an A/B instrument that does not exist. It was
+built, and run. This records what it returned, and — at greater length, because
+this is the part that decays — what that return does not license.
+
+### What was run
+
+`gglib benchmark agentic`, on Qwen3.5-4B Q8_0 at 131072 ctx: nine BFCL-style
+tasks, three arms, five seeds each, 45 runs per arm and 135 in total. The arms
+differ only in which request reached the same loaded llama-server — `raw`
+bypasses the pipeline entirely, `gglib` carries it, and the third is the
+control below.
+
+| axis | raw | gglib | delta |
+|------|----:|------:|------:|
+| tool accuracy | 0.867 | 0.944 | +0.078 |
+| task completion | 0.822 | 0.911 | +0.089 |
+| loop avoidance (eligible) | 0.250 (12) | 0.333 (15) | +0.083 |
+| composite | 0.651 | 0.733 | **+0.082** |
+
+Every axis moved the same way. The largest single contributor is not a coin
+landing twice: `multi_turn_search_then_read` failed on **all five** raw seeds
+and passed on two gglib seeds, which is a categorical difference rather than a
+shift in a rate.
+
+### The control failed first, for a reason this ADR had already recorded
+
+The first control forced `temperature: 2.0` and nothing else. It scored **above
+both real arms** — a result that reads as absurd until it is read against
+[ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md) finding 5, which
+measured that llama.cpp applies the truncation samplers *before* temperature.
+With a `reasoning` recipe's `top_k: 20` still in force, temperature 2.0 was
+flattening a distribution over twenty surviving tokens. The number looked
+extreme; the change was not.
+
+The fix was to disable `top_k`, `top_p` and `min_p` outright. The control then
+scored 0.237 against the pipeline's 0.733 — a **0.496** gap, with
+`loop_eligible: 0`, meaning not one of 45 runs reached a second tool-call batch.
+
+Two things follow, and the second is the one worth keeping.
+
+1. The apparatus can detect a sampling change, so a null result elsewhere in
+   the report would have been evidence rather than silence.
+2. **A control is a piece of code and can be wrong in the same way a feature
+   can.** A control that fails to degrade reports the same "no difference" as a
+   harness that cannot see, and this one was wrong for a reason already written
+   down in a sibling ADR. It was caught only because
+   [`ControlVerdict`][control-verdict] distinguishes *moved the wrong way* from
+   *barely moved* — the earlier boolean rendered a 0.090 wrong-direction swing
+   as "changed by only −0.090", which reads as *barely moved* about a control
+   that moved a great deal, in the wrong direction. That is decision 3's rule
+   (a state that licenses a different action must render differently) applied
+   to a verdict rather than to a field.
+
+### What the +0.082 does not establish
+
+The control validates sensitivity **at 0.496, not at 0.082**. It shows the
+apparatus responds to a large change. It says nothing about whether the
+apparatus can resolve this one, and treating it as though it did is the most
+available misreading of the whole report.
+
+The measured effect is **+4 task-seed passes out of 45**. Within the same run,
+the raw arm disagreed with *itself* across seeds on three tasks. An effect of 4
+against a within-arm instability of ~3 is not separable by inspection.
+
+So a second calibration arm was added afterwards: `raw_replicate`, the raw arm
+re-run on a **disjoint** seed set with nothing else changed — an A/A test. The
+gap it opens is the eval's own drift, and [`EffectVerdict`][effect-verdict]
+compares the headline delta against it. The seeds have to differ: replaying the
+same ones would measure whether a fixed seed replays, which is not what limits
+the comparison — *which* five seeds were drawn is.
+
+That arm postdates the run above, so **this ADR quotes no drift figure**. The
++0.082 is recorded here as a direction with a plausible magnitude, not as a
+resolved magnitude, and the next run of this eval is the one that can say which.
+
+One caution carried forward from the design: a single A/A pair estimates drift
+from one degree of freedom. It is enough to stop a delta *inside* its own noise
+being reported as a finding. It is not a significance test, and the honest way
+to strengthen it is more pairs rather than a larger threshold.
+
+### The cost finding
+
+The fixed control took **161 of the run's 174 wall-clock minutes** and generated
+254,688 completion tokens against the pipeline's 47,116 — roughly 15× the arm it
+validates, because broken sampling makes the model ramble until a guard stops
+it. The seed count was never what made the eval expensive; the control was.
+
+It has since been cut to one seed by default. It can afford the imprecision:
+the two real arms are compared against *each other* and need every seed, while
+the control only has to clear a threshold an order of magnitude below the gap it
+opens. Both surfaces now print its sample size beside its composite, because a
+one-seed number sitting in a column of five-seed numbers otherwise reads as one
+of them.
+
+### What this changes about the ban above
+
+Nothing. The first addendum bans request-level task overlays and ships a live
+temperature ceiling instead; this measurement was taken *with* that ceiling in
+force and does not bear on the comparison the ban is about. The reopening
+criterion in *"What would reopen this"* still stands, with one of its two
+cautions now satisfied: a control that proves the apparatus can move exists, and
+works. The other — that a difference smaller than the raw arms' own spread is
+not a result — is exactly what the A/A arm was added to adjudicate, and it is
+the criterion this run cannot yet meet on its own.
+
+[control-verdict]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/benchmark/agentic.rs
+[effect-verdict]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/benchmark/agentic.rs
 [`agentic_temperature_ceiling`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/inference.rs
 [`props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs

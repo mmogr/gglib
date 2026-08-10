@@ -112,6 +112,64 @@ Everything between the OpenAI request and llama-server is the product:
   co-resident and never swap at all — see
   [admission](crates/gglib-runtime/src/process/admission/README.md).
 
+## Does that actually help? Measured
+
+The claim above is that getting the sampling boundary right is worth something.
+Here is that claim as a number, on one model.
+
+`gglib benchmark agentic` runs a BFCL-style agentic suite twice against the
+*same loaded model*: once with the pipeline bypassed — what a client pointed
+straight at llama-server gets — and once through GGLib. Same weights, same
+machine, same tasks, same scoring. The only difference is which request reached
+llama-server.
+
+**Qwen3.5-4B (Q8_0) @ 131072 ctx, 5 seeds per task, 45 runs per arm:**
+
+| axis | raw llama-server | through GGLib | delta |
+|------|-----------------:|--------------:|------:|
+| tool-call accuracy | 0.867 | **0.944** | +0.078 |
+| task completion | 0.822 | **0.911** | +0.089 |
+| loop avoidance | 0.250 | **0.333** | +0.083 |
+| **composite** | **0.651** | **0.733** | **+0.082** |
+
+Task failures fell from 17.8% to 8.9% — the same weights getting roughly half as
+many agentic tasks wrong, for no extra VRAM, no extra tokens, and no change to
+the model. One task the raw arm failed on *all five* seeds
+(`multi_turn_search_then_read`) passed twice through the pipeline.
+
+```bash
+gglib benchmark agentic --model Qwen3.5-4B --seeds 12345,67890,11111,22222,33333
+```
+
+### What the eval says it cannot show
+
+A benchmark that only reports its own wins is marketing. This one runs two
+arms whose entire job is to catch it overclaiming:
+
+- **A positive control** — the pipeline with sampling deliberately broken — that
+  has to score far below the real arm. It did: 0.237, a **0.496 gap**. Without
+  it, "the pipeline made no difference" and "this harness cannot detect a
+  difference" are the same output. (The first version of this control *failed*:
+  temperature 2.0 alone scored **above** both real arms, because llama.cpp runs
+  the truncation samplers before temperature, so a `top_k: 20` recipe absorbed
+  it. It only works with truncation disabled outright.)
+- **An A/A arm** — the raw arm re-run on a different seed set, nothing else
+  changed. Whatever gap it opens is the eval's own drift, and that is the floor
+  the +0.082 has to clear before it describes a magnitude rather than a
+  direction.
+
+**Read the table with these caveats.** The control validates sensitivity at a
+0.496 gap, not at the 0.082 being measured — it shows the apparatus responds to
+a large change, not that it resolves this one. The +0.082 is +4 task-seed passes
+out of 45, and the raw arm flipped on 3 of its own tasks between seeds, so the
+effect sits close to the within-arm variance. The A/A arm was added *after* this
+run, so it has no drift figure of its own to quote here. And this is one
+quantization of one 4B model on one machine.
+
+The honest summary: **every axis moved the same direction, with one categorical
+win, on a run whose apparatus was proven able to move.** Reproduce it on your
+own model before believing the magnitude — that is what the command is for.
+
 ## Dashboard
 
 The proxy reports what it is doing: active connections, per-slot context
@@ -208,7 +266,9 @@ directory. `gglib config fast-downloads status` says what is there;
   request that goes through the pipeline
 - [ADR 0004 — Observe the sampling boundary](docs/adr/0004-observe-the-sampling-boundary.md)
   — reading back what llama-server says it sampled with, what that can and
-  cannot catch, and why an observation organ has to be able to fail
+  cannot catch, why an observation organ has to be able to fail, and the A/B
+  measurement behind the table above — including the positive control that
+  failed on its first attempt and what that cost to notice
 - [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
   against the advertised schema, and re-issuing with `tool_choice: "required"`
   when they do not conform
