@@ -4,8 +4,16 @@
  */
 
 import { get, post } from './client';
-import { getApiBaseUrl, getAuthHeaders } from './client';
-import type { SetupStatus, LlamaInstallProgress, VulkanStatus } from '../../../types/setup';
+import { parseFrame, streamSse } from './sse';
+import type {
+  SetupStatus,
+  LlamaInstallProgress,
+  VulkanStatus,
+  LlamaStatus,
+  LlamaUpdateCheck,
+  LlamaUninstallOutcome,
+  BuildEvent,
+} from '../../../types/setup';
 
 /**
  * Get the current system setup status.
@@ -36,70 +44,19 @@ export function streamLlamaInstall(
   onComplete: () => void,
   onError: (error: string) => void,
 ): () => void {
-  const controller = new AbortController();
-  const baseUrl = getApiBaseUrl();
-  const headers = getAuthHeaders();
-
-  // Use fetch directly for SSE streaming (POST request)
-  fetch(`${baseUrl}/api/config/system/install-llama`, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      Accept: 'text/event-stream',
+  return streamSse('/api/config/system/install-llama', {
+    onFrame: (frame) => {
+      if (frame.event === 'progress') {
+        const progress = parseFrame<LlamaInstallProgress>(frame);
+        if (progress) onProgress(progress);
+      } else if (frame.event === 'complete') {
+        onComplete();
+      } else if (frame.event === 'error') {
+        onError(parseFrame<{ message?: string }>(frame)?.message ?? 'Unknown error');
+      }
     },
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      if (!response.body) {
-        throw new Error('No response body for SSE stream');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        let currentEventType = '';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEventType = line.slice(7).trim();
-          } else if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            try {
-              if (currentEventType === 'progress') {
-                const progress: LlamaInstallProgress = JSON.parse(data);
-                onProgress(progress);
-              } else if (currentEventType === 'complete') {
-                onComplete();
-              } else if (currentEventType === 'error') {
-                const errorData = JSON.parse(data);
-                onError(errorData.message || 'Unknown error');
-              }
-            } catch {
-              // Ignore parse errors for partial data
-            }
-            currentEventType = '';
-          }
-        }
-      }
-    })
-    .catch((err) => {
-      if (err.name !== 'AbortError') {
-        onError(err.message || 'Installation failed');
-      }
-    });
-
-  return () => controller.abort();
+    onError,
+  });
 }
 
 /**
@@ -107,4 +64,52 @@ export function streamLlamaInstall(
  */
 export async function setupPython(): Promise<void> {
   return post<void>('/api/config/system/setup-python');
+}
+
+/**
+ * What llama.cpp install is present — version, health, acceleration, and what
+ * the binary reports about itself. Local and cheap; safe on mount.
+ */
+export async function getLlamaStatus(): Promise<LlamaStatus> {
+  return get<LlamaStatus>('/api/config/system/llama-status');
+}
+
+/**
+ * How far behind upstream the llama.cpp checkout is.
+ *
+ * POST because it runs `git fetch` — seconds of network, not a page-load
+ * request. Only meaningful for a source install; a prebuilt one has no
+ * repository to compare (`repoPresent: false`).
+ */
+export async function checkLlamaUpdates(): Promise<LlamaUpdateCheck> {
+  return post<LlamaUpdateCheck>('/api/config/system/llama-check-updates');
+}
+
+/** Remove llama.cpp: source checkout, binaries and build config. */
+export async function uninstallLlama(): Promise<LlamaUninstallOutcome> {
+  return post<LlamaUninstallOutcome>('/api/config/system/uninstall-llama');
+}
+
+/**
+ * Pull upstream and rebuild llama.cpp, streaming build progress.
+ *
+ * Same event vocabulary as building from source. Aborting stops the stream,
+ * not the build — the compile continues on the daemon.
+ */
+export function streamLlamaUpdate(
+  onEvent: (event: BuildEvent) => void,
+  onError: (error: string) => void,
+  /** Called when the stream closes cleanly, whether or not it reported a result. */
+  onClose?: () => void,
+): () => void {
+  return streamSse('/api/config/system/update-llama', {
+    onFrame: (frame) => {
+      // Every payload carries its own `type`, so the SSE event name is
+      // redundant here and the parsed object is the single source of truth.
+      const event = parseFrame<BuildEvent>(frame);
+      if (event) onEvent(event);
+    },
+    onClose,
+    onError,
+  });
 }
