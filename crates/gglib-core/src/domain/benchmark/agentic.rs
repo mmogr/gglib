@@ -1042,7 +1042,10 @@ mod tests {
         let verdict = report.effect_verdict().expect("the A/A arm ran");
 
         assert_eq!(verdict.ratio(), None);
-        assert!(verdict.exceeds_noise(), "a real effect over no measured drift");
+        assert!(
+            verdict.exceeds_noise(),
+            "a real effect over no measured drift"
+        );
     }
 
     /// Both terms zero is the vacuous case: no effect, no drift, and nothing

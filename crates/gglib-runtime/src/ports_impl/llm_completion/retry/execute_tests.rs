@@ -240,7 +240,11 @@ async fn an_absurd_retry_after_is_clamped() {
 
     assert_eq!(server.request_count(), 2);
     let retries = recorder.retries();
-    assert_eq!(retries.len(), 1, "one backoff, and its delay is the subject");
+    assert_eq!(
+        retries.len(),
+        1,
+        "one backoff, and its delay is the subject"
+    );
     // A server hint is a floor clamped to `max_backoff`, plus a jitter spread
     // drawn from `initial_backoff` — so their sum is the whole ceiling.
     let ceiling = policy.max_backoff + policy.initial_backoff;

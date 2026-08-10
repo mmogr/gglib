@@ -15,8 +15,7 @@ use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
     CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, EFFECT_NOISE_RATIO,
-    ModelCompareResult,
-    ModelPerfResult, PerfConfig,
+    ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -360,13 +359,14 @@ async fn cmd_agentic(
         );
     } else {
         eprintln!(
-            "  Seeds : {} ({} runs per task, scores are their mean)",
-            seeds
+            "  Seeds : {list} ({n} {runs} per task, scores are their mean)",
+            list = seeds
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(", "),
-            seeds.len()
+            n = seeds.len(),
+            runs = plural(seeds.len(), "run"),
         );
     }
     // Stated up front rather than discovered in the report: the control's
@@ -537,16 +537,29 @@ fn render_noise_block(report: &AgenticEvalReport) {
         );
         return;
     };
-    let replicate = report.raw_replicate.as_ref().map_or(f64::NAN, |r| r.composite);
+    let replicate = report
+        .raw_replicate
+        .as_ref()
+        .map_or(f64::NAN, |r| r.composite);
     let ratio = verdict
         .ratio()
         .map_or_else(|| "—".to_owned(), |r| format!("{r:.1}×"));
 
+    // An unseeded run has no seed list to name, and "re-run on 0 disjoint
+    // seeds" would describe an arm that did in fact run.
+    let how = if report.replicate_seeds.is_empty() {
+        "re-run unseeded".to_owned()
+    } else {
+        format!(
+            "re-run on {n} disjoint {seeds}",
+            n = report.replicate_seeds.len(),
+            seeds = plural(report.replicate_seeds.len(), "seed"),
+        )
+    };
+
     eprintln!();
     eprintln!(
-        "  {MUTED}A/A: the raw arm re-run on {n} disjoint seeds scored {replicate:.3} against its \
-         own {raw:.3}{RESET}",
-        n = report.replicate_seeds.len(),
+        "  {MUTED}A/A: the raw arm {how} scored {replicate:.3} against its own {raw:.3}{RESET}",
         raw = report.raw.composite,
         MUTED = style::MUTED,
         RESET = style::RESET,
@@ -770,6 +783,17 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
         gglib = fmt_tps(&report.gglib),
         blank = "—",
     );
+}
+
+/// `"seed"` or `"seeds"`. A one-seed run is the common case for the control
+/// arm, and "1 disjoint seeds" reads like a formatting fault in output whose
+/// whole job is to be believed.
+fn plural(count: usize, word: &str) -> String {
+    if count == 1 {
+        word.to_owned()
+    } else {
+        format!("{word}s")
+    }
 }
 
 /// Green when gglib came out ahead on a ratio row, red when it came out behind.
