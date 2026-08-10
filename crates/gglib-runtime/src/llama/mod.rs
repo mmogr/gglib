@@ -18,6 +18,7 @@ pub mod progress;
 pub mod prompt;
 pub mod runtime_probe;
 mod server_availability;
+mod status;
 #[cfg(feature = "cli")]
 mod uninstall;
 #[cfg(feature = "cli")]
@@ -61,15 +62,19 @@ pub use detect::{
 pub use download::check_llama_installed;
 #[cfg(feature = "cli")]
 pub use ensure::ensure_llama_initialized;
+pub use status::{LlamaBuildInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};
 
 // Installation (CLI only)
 #[cfg(feature = "cli")]
 pub use install::run_llama_source_build;
 #[cfg(feature = "cli")]
-pub use uninstall::handle_uninstall;
+pub use uninstall::{UninstallOutcome, handle_uninstall, uninstall_llama};
 #[cfg(feature = "cli")]
-pub use update::{handle_check_updates, handle_update};
+pub use update::{
+    LlamaUpdateCheck, handle_check_updates, handle_update, llama_update_check, run_llama_update,
+    update_acceleration,
+};
 
 // Args resolution
 pub use args::{

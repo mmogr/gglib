@@ -15,7 +15,9 @@ use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build, vulkan_status,
+    Acceleration, BuildEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome,
+    detect_optimal_acceleration, llama_status, llama_update_check, run_llama_source_build,
+    run_llama_update, uninstall_llama, update_acceleration, vulkan_status,
 };
 
 /// Get the full system setup status for the first-run wizard.
@@ -169,6 +171,148 @@ pub async fn build_llama_from_source(
         if let Err(e) =
             run_llama_source_build(acceleration, llama_dir, server_path, tx.clone()).await
         {
+            let _ = tx
+                .send(BuildEvent::Failed {
+                    message: e.to_string(),
+                })
+                .await;
+        }
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+            .text("ping"),
+    )
+}
+
+/// What llama.cpp install is present, if any — the GUI face of
+/// `gglib config llama status`.
+///
+/// Local and cheap (no network), unlike [`check_llama_updates`].
+pub async fn llama_status_handler() -> Result<Json<LlamaStatus>, HttpError> {
+    // Probing spawns `llama-server --version` on a cold cache — blocking work
+    // that does not belong on an async worker.
+    tokio::task::spawn_blocking(llama_status)
+        .await
+        .map_err(|e| HttpError::Internal(format!("Status task panicked: {e}")))?
+        .map(Json)
+        .map_err(|e| HttpError::Internal(e.to_string()))
+}
+
+/// How far behind upstream the llama.cpp checkout is — the GUI face of
+/// `gglib config llama check-updates`.
+///
+/// POST rather than GET because it runs `git fetch`: it mutates the local
+/// checkout's remote refs and takes network time, so it belongs behind an
+/// explicit action rather than something a page can issue on load.
+pub async fn check_llama_updates() -> Result<Json<LlamaUpdateCheck>, HttpError> {
+    llama_update_check()
+        .await
+        .map(Json)
+        .map_err(|e| HttpError::Internal(e.to_string()))
+}
+
+/// Remove the llama.cpp installation — the GUI face of
+/// `gglib config llama uninstall --force`.
+///
+/// The confirmation is the GUI's to run; by the time this is called the
+/// decision is made.
+pub async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpError> {
+    if UPDATE_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(HttpError::Conflict(
+            "A llama.cpp build is running — uninstalling now would delete the checkout out \
+             from under it. Wait for it to finish."
+                .into(),
+        ));
+    }
+
+    uninstall_llama()
+        .await
+        .map(Json)
+        .map_err(|e| HttpError::Internal(e.to_string()))
+}
+
+/// Pull upstream and rebuild llama.cpp, streaming the same [`BuildEvent`]s as
+/// [`build_llama_from_source`] — the GUI face of `gglib config llama update`.
+///
+/// Rebuilds with the acceleration the current build recorded, so an update
+/// cannot silently change backend. Preflight failures are reported as a
+/// `failed` event rather than an HTTP status: by the time they are known the
+/// response has already committed to being a stream.
+/// One llama.cpp build at a time, process-wide.
+///
+/// Two concurrent builds share a source checkout and a binary destination, so
+/// the second corrupts the first. The GUI disables its own button, which does
+/// nothing about a second browser tab or a second client.
+static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub async fn update_llama(
+) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
+
+    // Claim the slot before spawning; release it when the task ends whatever
+    // way it ends.
+    let claimed = UPDATE_IN_FLIGHT
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_ok();
+
+    if !claimed {
+        let _ = tx
+            .try_send(BuildEvent::Failed {
+                message: "A llama.cpp build is already running.".to_string(),
+            });
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
+        return Sse::new(stream).keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(std::time::Duration::from_secs(30))
+                .text("ping"),
+        );
+    }
+
+    tokio::spawn(async move {
+        struct Guard;
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                UPDATE_IN_FLIGHT.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let _guard = Guard;
+
+        async fn preflight() -> anyhow::Result<(Acceleration, std::path::PathBuf, std::path::PathBuf)>
+        {
+            let llama_dir = llama_cpp_dir().map_err(|e| anyhow::anyhow!("{e}"))?;
+            let server_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
+            if !llama_dir.exists() {
+                anyhow::bail!(
+                    "llama.cpp source checkout not found. A prebuilt install has no repository \
+                     to update — reinstall from source first."
+                );
+            }
+            Ok((update_acceleration()?, llama_dir, server_path))
+        }
+
+        let (acceleration, llama_dir, server_path) = match preflight().await {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = tx
+                    .send(BuildEvent::Failed {
+                        message: e.to_string(),
+                    })
+                    .await;
+                return;
+            }
+        };
+
+        if let Err(e) = run_llama_update(acceleration, llama_dir, server_path, tx.clone()).await {
             let _ = tx
                 .send(BuildEvent::Failed {
                     message: e.to_string(),
