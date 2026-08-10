@@ -70,14 +70,14 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
           panel can tell the user which.
         */}
         <section>
-          <h3 className="text-xs font-semibold text-text mb-sm">
+          <h3 className="m-0 text-sm font-semibold text-text mb-sm">
             VRAM Residency
           </h3>
           <ProxyAdmissionPanel admission={snapshot?.admission} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold text-text mb-sm">
+          <h3 className="m-0 text-sm font-semibold text-text mb-sm">
             Launch Decisions
           </h3>
           <ProxyLaunchPanel launch={snapshot?.launch} />
@@ -89,19 +89,19 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
           llama-server agrees it received it.
         */}
         <section>
-          <h3 className="text-xs font-semibold text-text mb-sm">
+          <h3 className="m-0 text-sm font-semibold text-text mb-sm">
             Sampling Readback
           </h3>
           <ProxySamplingPanel audit={snapshot?.sampling_audit} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold text-text mb-sm">Prompt Cache</h3>
+          <h3 className="m-0 text-sm font-semibold text-text mb-sm">Prompt Cache</h3>
           <ProxyCachePanel cache={snapshot?.cache} />
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold text-text mb-sm">
+          <h3 className="m-0 text-sm font-semibold text-text mb-sm">
             Agent Cache (GUI Chat)
           </h3>
           {/*

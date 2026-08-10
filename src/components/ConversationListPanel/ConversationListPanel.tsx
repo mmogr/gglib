@@ -8,6 +8,8 @@ import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import { EmptyState } from '../primitives';
+import { ConversationListSkeleton } from './ConversationListSkeleton';
 import type { ConversationSummary } from '../../services/transport';
 
 interface ConversationListPanelProps {
@@ -117,11 +119,17 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {loading ? (
-          <div className="flex items-center justify-center p-xl text-text-muted text-center">Loading conversations…</div>
+          <ConversationListSkeleton />
         ) : filteredConversations.length === 0 ? (
-          <div className="flex items-center justify-center p-xl text-text-muted text-center">
-            {searchQuery ? 'No matching conversations' : 'No conversations yet'}
-          </div>
+          <EmptyState
+            className="p-xl"
+            title={searchQuery ? 'No matching conversations' : 'No conversations yet'}
+            description={
+              searchQuery
+                ? 'Try a different search term.'
+                : 'Send a message to start your first conversation.'
+            }
+          />
         ) : (
           <div role="listbox" aria-label="Conversations" className="flex flex-col">
             {filteredConversations.map((conversation) => (

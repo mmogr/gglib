@@ -6,6 +6,7 @@ import { Button } from "./ui/Button";
 import { Banner } from './ui/Banner';
 import { Icon } from "./ui/Icon";
 import { Input } from "./ui/Input";
+import { Label } from "./primitives";
 import { getTransport } from '../services/transport';
 
 interface AddModelProps {
@@ -54,12 +55,12 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
   };
 
   return (
-    <div className="bg-surface rounded-lg p-xl max-w-[800px] shadow-md border border-border">
-      <h2>Add New Model</h2>
+    <div className="bg-surface rounded-md p-xl max-w-[800px]">
+      <h2 className="text-lg font-semibold text-text mb-lg">Add local model</h2>
 
       <form onSubmit={handleSubmit} className="add-model-form">
         <div className="mb-lg">
-          <label htmlFor="filePath">Model File Path:</label>
+          <Label size="xs" muted htmlFor="filePath" className="mb-xs">Model file path</Label>
           <div className="flex flex-col items-stretch gap-sm md:flex-row md:flex-wrap">
             <Input
               type="text"
@@ -71,6 +72,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
             />
             <Button
               type="button"
+              variant="secondary"
               onClick={handleBrowse}
               leftIcon={<Icon icon={FolderOpen} size={14} />}
               className="w-full md:w-auto"

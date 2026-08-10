@@ -67,7 +67,7 @@ const RangeSlider: FC<RangeSliderProps> = ({
       {label && (
         <div className="flex justify-between items-center mb-sm">
           <span className="text-sm font-medium text-text">{label}</span>
-          <span className="text-xs font-semibold text-primary bg-surface-elevated py-[2px] px-[6px] rounded-sm">
+          <span className="text-xs font-semibold text-primary bg-surface-elevated py-[2px] px-[6px] rounded-sm font-mono tabular-nums">
             {formatValue(minValue)} — {formatValue(maxValue)}
           </span>
         </div>
@@ -115,8 +115,8 @@ const RangeSlider: FC<RangeSliderProps> = ({
 
       {/* Min/Max labels */}
       <div className="flex justify-between mt-xs">
-        <span className="text-xs text-text-muted">{formatValue(min)}</span>
-        <span className="text-xs text-text-muted">{formatValue(max)}</span>
+        <span className="text-xs text-text-muted font-mono tabular-nums">{formatValue(min)}</span>
+        <span className="text-xs text-text-muted font-mono tabular-nums">{formatValue(max)}</span>
       </div>
     </div>
   );

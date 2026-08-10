@@ -21,7 +21,7 @@ import { cn } from '../../../utils/cn';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
-  'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated';
+  'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-primary';
 
 /**
  * Message bubble for assistant responses.
@@ -72,7 +72,7 @@ export const AssistantMessageBubble: React.FC = () => {
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-surface phone:mr-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={Bot} size={18} />
@@ -103,8 +103,10 @@ export const AssistantMessageBubble: React.FC = () => {
         )}
       </div>
       <ToolExecutionProgress />
-      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <ActionBarPrimitive.Copy />
+      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+        <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
+          <Icon icon={Copy} size={14} />
+        </ActionBarPrimitive.Copy>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
@@ -142,7 +144,7 @@ export const UserMessageBubble: React.FC = () => {
       <div className="leading-[1.6]">
         <MarkdownMessageContent />
       </div>
-      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
           <Icon icon={Copy} size={14} />
         </ActionBarPrimitive.Copy>

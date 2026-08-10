@@ -1,4 +1,5 @@
 import { FC } from "react";
+import { ModelCardSkeleton } from './ModelCardSkeleton';
 import { AlertTriangle, ArrowDown, ArrowUp, Search } from "lucide-react";
 import { HfModelSummary, HfSortField } from "../../types";
 import { ModelCard } from "./components/ModelCard";
@@ -62,7 +63,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   return (
     <Stack gap="base" className="h-full overflow-hidden">
       {/* Search Section */}
-      <Stack gap="sm" className="p-4 bg-surface border-b border-border">
+      <Stack gap="sm" className="p-4 bg-surface border-b border-border-light">
         <Row gap="sm" align="end">
           <Stack gap="xs" className="flex-1">
             <Label size="xs" muted>Search models</Label>
@@ -151,10 +152,11 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
         {/* Loading State */}
         {loading && (
-          <div className="flex flex-col items-center justify-center p-12 text-center text-text-muted">
-            <div className="w-8 h-8 border-3 border-border border-t-primary-light rounded-full animate-spin mb-4"></div>
-            <span>Searching HuggingFace...</span>
-          </div>
+          <Stack gap="sm" aria-label="Loading models">
+            {Array.from({ length: 6 }, (_, i) => (
+              <ModelCardSkeleton key={i} />
+            ))}
+          </Stack>
         )}
 
         {/* Empty State */}

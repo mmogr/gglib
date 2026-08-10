@@ -24,8 +24,10 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ArrowLeft, BarChart2, Play, Square, Target, Zap } from 'lucide-react';
+import { ArrowLeft, BarChart2, Play, Square, Zap } from 'lucide-react';
 import { Checkbox } from '../components/ui/Checkbox';
+import { Tabs } from '../components/ui/Tabs';
+import { EmptyState, Readout } from '../components/primitives';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
@@ -329,23 +331,17 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
 
   const renderPerfResult = (r: ModelPerfResult) => (
     <div className="flex gap-lg flex-wrap text-sm">
-      <div className="flex flex-col items-center gap-xs bg-surface rounded-md p-md min-w-[90px]">
-        <span className="text-xs text-text-muted">TG Speed</span>
-        <span className="text-xl font-bold text-primary">{r.tg_tps.toFixed(1)}</span>
-        <span className="text-xs text-text-muted">t/s</span>
+      <div className="bg-surface rounded-md p-md min-w-[90px]">
+        <Readout label="TG speed" value={r.tg_tps.toFixed(1)} unit="t/s" size="lg" align="center" />
       </div>
-      <div className="flex flex-col items-center gap-xs bg-surface rounded-md p-md min-w-[90px]">
-        <span className="text-xs text-text-muted">PP Speed</span>
-        <span className="text-xl font-bold text-success">{r.pp_tps.toFixed(1)}</span>
-        <span className="text-xs text-text-muted">t/s</span>
+      <div className="bg-surface rounded-md p-md min-w-[90px]">
+        <Readout label="PP speed" value={r.pp_tps.toFixed(1)} unit="t/s" size="lg" align="center" />
       </div>
-      <div className="flex flex-col items-center gap-xs bg-surface rounded-md p-md min-w-[90px]">
-        <span className="text-xs text-text-muted">Backend</span>
-        <span className="text-sm font-medium text-text">{r.backend ?? '—'}</span>
+      <div className="bg-surface rounded-md p-md min-w-[90px]">
+        <Readout label="Backend" value={r.backend ?? '—'} size="sm" align="center" />
       </div>
-      <div className="flex flex-col items-center gap-xs bg-surface rounded-md p-md min-w-[90px]">
-        <span className="text-xs text-text-muted">Reps</span>
-        <span className="text-sm font-medium text-text">{r.repetitions}</span>
+      <div className="bg-surface rounded-md p-md min-w-[90px]">
+        <Readout label="Reps" value={r.repetitions} size="sm" align="center" />
       </div>
     </div>
   );
@@ -354,7 +350,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
     const statusColor = {
       pending: 'text-text-muted',
       running: 'text-primary',
-      complete: 'text-success',
+      complete: 'text-text-muted',
       failed: 'text-danger',
     }[m.status];
 
@@ -366,7 +362,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
     }[m.status];
 
     return (
-      <div key={m.modelId} className="border border-border rounded-lg p-base flex flex-col gap-sm">
+      <div key={m.modelId} className="bg-surface rounded-md p-base flex flex-col gap-sm">
         <div className="flex items-center gap-sm">
           <span className="font-medium text-text truncate flex-1">{m.modelName}</span>
           <span className={cn('text-xs font-medium', statusColor)}>{statusLabel}</span>
@@ -374,7 +370,7 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
 
         {/* Live streaming text (compare mode) */}
         {m.status === 'running' && m.liveText && mode === 'compare' && (
-          <div className="bg-surface rounded-md p-base text-sm text-text whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
+          <div className="bg-surface-elevated rounded-md p-base text-sm text-text whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">
             {m.liveText}
             <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
           </div>
@@ -407,30 +403,18 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
         </Button>
         <Icon icon={BarChart2} size={18} className="text-primary" />
         <h1 className="text-base font-semibold text-text m-0 flex-1">Benchmark Dashboard</h1>
-        <div className="flex gap-xs">
-          <Button
-            variant={mode === 'perf' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setMode('perf')}
-          >
-            Perf
-          </Button>
-          <Button
-            variant={mode === 'compare' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setMode('compare')}
-          >
-            Compare
-          </Button>
-          <Button
-            variant={mode === 'tune' ? 'primary' : 'secondary'}
-            size="sm"
-            leftIcon={<Icon icon={Target} size={14} />}
-            onClick={() => setMode('tune')}
-          >
-            Tune
-          </Button>
-        </div>
+        <Tabs<RunMode>
+          aria-label="Benchmark mode"
+          size="sm"
+          divider={false}
+          activeId={mode}
+          onChange={setMode}
+          tabs={[
+            { id: 'perf', label: 'Perf' },
+            { id: 'compare', label: 'Compare' },
+            { id: 'tune', label: 'Tune' },
+          ]}
+        />
       </header>
 
       {/* Body */}
@@ -582,17 +566,19 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
           {/* Live results area */}
           <div className="flex-1 overflow-y-auto p-base flex flex-col gap-base">
             {runState.models.length === 0 && runState.status === 'idle' && (
-              <div className="flex flex-col items-center justify-center h-full text-text-muted gap-sm">
-                <Icon icon={Zap} size={32} className="opacity-30" />
-                <p className="text-sm">Select models and press Run to start a benchmark.</p>
-              </div>
+              <EmptyState
+                className="h-full"
+                icon={<Icon icon={Zap} size={24} />}
+                title="No benchmark yet"
+                description="Pick one or more models on the left, then press Run to measure prompt-processing and generation speed."
+              />
             )}
             {runState.models.map(renderModelCard)}
           </div>
 
           {/* History section */}
-          <section className="border-t border-border shrink-0">
-            <div className="flex items-center gap-sm px-base py-sm border-b border-border">
+          <section className="border-t border-border-light shrink-0">
+            <div className="flex items-center gap-sm px-base py-sm border-b border-border-light">
               <h2 className="text-sm font-semibold text-text m-0 flex-1">Recent Runs</h2>
               <Button
                 variant="ghost"
@@ -620,27 +606,26 @@ const BenchmarkPage: FC<BenchmarkPageProps> = ({ models, initialModelIds, onClos
                   <tbody>
                     {history.map(run => (
                       <tr key={run.id} className="border-b border-border-light hover:bg-surface-elevated transition-colors">
-                        <td className="px-base py-xs text-text-secondary">{run.id}</td>
+                        <td className="px-base py-xs text-text-secondary font-mono tabular-nums">{run.id}</td>
+                        <td className="px-base py-xs text-text-secondary">{run.run_type}</td>
                         <td className="px-base py-xs">
-                          <span className={cn(
-                            'py-xs px-sm rounded-sm font-medium',
-                            run.run_type === 'perf' ? 'bg-primary-subtle text-primary' : 'bg-warning-subtle text-warning',
-                          )}>
-                            {run.run_type}
+                          <span className="inline-flex items-center gap-xs">
+                            {run.status === 'running' && (
+                              <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                            )}
+                            <span
+                              className={cn(
+                                'text-text-muted',
+                                run.status === 'failed' && 'text-danger',
+                                run.status === 'running' && 'text-text',
+                              )}
+                            >
+                              {run.status}
+                            </span>
                           </span>
                         </td>
-                        <td className="px-base py-xs">
-                          <span className={cn(
-                            'py-xs px-sm rounded-sm font-medium',
-                            run.status === 'complete' && 'text-success bg-success-subtle',
-                            run.status === 'running' && 'text-primary bg-primary-subtle',
-                            run.status === 'failed' && 'text-danger bg-danger-subtle',
-                          )}>
-                            {run.status}
-                          </span>
-                        </td>
-                        <td className="px-base py-xs text-text-secondary">{run.model_ids.length}</td>
-                        <td className="px-base py-xs text-text-muted">{formatDate(run.created_at)}</td>
+                        <td className="px-base py-xs text-text-secondary font-mono tabular-nums">{run.model_ids.length}</td>
+                        <td className="px-base py-xs text-text-muted font-mono tabular-nums">{formatDate(run.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>

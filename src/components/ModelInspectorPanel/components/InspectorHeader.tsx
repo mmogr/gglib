@@ -33,13 +33,13 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
       {isEditMode ? (
         <Input
           type="text"
-          className="w-full m-0 text-xl font-semibold"
+          className="w-full m-0 text-lg font-semibold"
           value={editedName}
           onChange={(e) => onEditedNameChange(e.target.value)}
           placeholder="Model name"
         />
       ) : (
-        <h2 className="m-0 text-xl font-semibold truncate">{modelName}</h2>
+        <h2 className="m-0 text-lg font-semibold truncate">{modelName}</h2>
       )}
 
       {!isEditMode && (

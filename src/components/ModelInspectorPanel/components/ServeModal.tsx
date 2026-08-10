@@ -1,8 +1,9 @@
 import { FC, useState } from 'react';
 import { Checkbox } from '../../ui/Checkbox';
-import { Loader2, Play, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
+import { Banner } from '../../ui/Banner';
 import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
@@ -93,22 +94,15 @@ export const ServeModal: FC<ServeModalProps> = ({
           <Button
             variant="primary"
             onClick={onStart}
-            disabled={isServing}
+            isLoading={isServing}
             leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
           >
-            {isServing ? (
-              <>
-                <Loader2 className="spinner" />
-                Loading model...
-              </>
-            ) : (
-              'Start Server'
-            )}
+            {isServing ? 'Loading model…' : 'Start Server'}
           </Button>
         </>
       }
     >
-        <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
+        <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md">
           <strong>{model.name}</strong>
           <span className="text-text-secondary text-sm">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
         </div>
@@ -121,7 +115,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <Input
             id="context-input"
             type="number"
-            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10"
+            className="font-mono tabular-nums"
             placeholder={
               settings?.defaultContextSize
                 ? `Default: ${settings.defaultContextSize.toLocaleString()}`
@@ -149,7 +143,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           <Input
             id="port-input"
             type="number"
-            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-primary/10"
+            className="font-mono tabular-nums"
             placeholder={
               settings?.llamaBasePort
                 ? `Auto (from ${settings.llamaBasePort})`
@@ -167,25 +161,22 @@ export const ServeModal: FC<ServeModalProps> = ({
         </div>
 
         {hasAgentTag && (
-          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-primary-subtle text-text text-sm mb-md" role="status">
-            <div className="font-semibold">Agent tag detected</div>
-            <p>
-              Jinja templates {jinjaOverride === false 
-                ? 'would normally be auto-enabled for agent-tagged models, but you have disabled them for this launch.' 
-                : 'will be enabled automatically for agent-tagged models to support structured prompts.'}
-            </p>
-            {jinjaOverride !== null && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onJinjaReset}
-                disabled={isServing}
-              >
-                Reset to auto-detect
-              </Button>
-            )}
-          </div>
+          <Banner
+            variant="info"
+            title="Agent tag detected"
+            className="mb-md"
+            action={
+              jinjaOverride !== null && (
+                <Button type="button" variant="ghost" size="sm" onClick={onJinjaReset} disabled={isServing}>
+                  Reset to auto-detect
+                </Button>
+              )
+            }
+          >
+            Jinja templates {jinjaOverride === false
+              ? 'would normally be auto-enabled for agent-tagged models, but you have disabled them for this launch.'
+              : 'will be enabled automatically for agent-tagged models to support structured prompts.'}
+          </Banner>
         )}
 
         <div className="mb-lg">
@@ -210,25 +201,28 @@ export const ServeModal: FC<ServeModalProps> = ({
 
         {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
         {hasMtpTag && (
-          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-primary-subtle text-text text-sm mb-md" role="status">
-            <div className="font-semibold">MTP speculative decoding detected</div>
-            <p>
-              {mtpNMaxOverride === 0
-                ? 'Speculative decoding would normally be auto-enabled for this model, but you have disabled it for this launch.'
-                : 'This model contains embedded MTP draft heads. Speculative decoding will be enabled automatically (n-max=2, p-min=0.75).'}
-            </p>
-            {mtpNMaxOverride !== null && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => { onMtpNMaxChange(null); onMtpPMinChange(null); }}
-                disabled={isServing}
-              >
-                Reset to auto-detect
-              </Button>
-            )}
-          </div>
+          <Banner
+            variant="info"
+            title="MTP speculative decoding detected"
+            className="mb-md"
+            action={
+              mtpNMaxOverride !== null && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { onMtpNMaxChange(null); onMtpPMinChange(null); }}
+                  disabled={isServing}
+                >
+                  Reset to auto-detect
+                </Button>
+              )
+            }
+          >
+            {mtpNMaxOverride === 0
+              ? 'Speculative decoding would normally be auto-enabled for this model, but you have disabled it for this launch.'
+              : 'This model contains embedded MTP draft heads. Speculative decoding will be enabled automatically (n-max=2, p-min=0.75).'}
+          </Banner>
         )}
 
         <div className="mb-lg">
@@ -271,7 +265,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                 <Input
                   id="mtp-n-max"
                   type="number"
-                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base"
+                  className="font-mono tabular-nums"
                   placeholder={isAutoMtp ? 'Auto (2)' : '2'}
                   value={mtpNMaxOverride !== null && mtpNMaxOverride > 0 ? String(mtpNMaxOverride) : ''}
                   onChange={(e) => {
@@ -295,7 +289,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                 <Input
                   id="mtp-p-min"
                   type="number"
-                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base"
+                  className="font-mono tabular-nums"
                   placeholder={isAutoMtp ? 'Auto (0.75)' : '0.75'}
                   value={mtpPMinOverride !== null ? String(mtpPMinOverride) : ''}
                   onChange={(e) => {

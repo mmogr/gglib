@@ -148,7 +148,7 @@ export const InferenceProfiles: FC = () => {
           {profiles.map((profile) => (
             <div
               key={profile.name}
-              className="p-md border border-border rounded-base flex items-start justify-between gap-md"
+              className="p-md bg-surface rounded-md flex items-start justify-between gap-md"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-sm">

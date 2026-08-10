@@ -2,6 +2,7 @@ import { FC } from 'react';
 import { Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
+import { Chip } from '../../ui/Chip';
 import { Input } from '../../ui/Input';
 import { ToolsPopover } from '../../ToolsPopover';
 import { ToolSupportIndicator } from '../../ToolSupportIndicator';
@@ -92,9 +93,13 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
           <Icon icon={Sparkles} size={14} />
         )}
       </Button>
-      <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary/10 text-primary animate-research-pulse')}>
+      <Chip
+        size="md"
+        variant={isThreadRunning ? 'primary' : 'neutral'}
+        className={cn('shrink-0', isThreadRunning && 'animate-research-pulse')}
+      >
         {isThreadRunning ? 'Responding…' : 'Idle'}
-      </span>
+      </Chip>
       <ToolSupportIndicator
         supports={supportsToolCalls ?? null}
         hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}

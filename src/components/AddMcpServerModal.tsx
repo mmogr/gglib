@@ -7,6 +7,7 @@ import type { McpServerType } from "../services/transport/types/mcp";
 import { Modal } from "./ui/Modal";
 import { Banner } from './ui/Banner';
 import { Checkbox } from './ui/Checkbox';
+import { Select } from './ui/Select';
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
@@ -256,17 +257,16 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               <label className="text-sm font-semibold text-text" htmlFor="mcp-lifecycle">
                 Lifecycle
               </label>
-              <select
+              <Select
                 id="mcp-lifecycle"
                 value={lifecycle}
                 onChange={(e) => setLifecycle(e.target.value as 'eager' | 'lazy' | 'manual')}
                 disabled={saving}
-                className="rounded-base border border-input-border bg-input px-sm py-xs text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 <option value="lazy">Lazy — start on first tool use</option>
                 <option value="eager">Eager — start when app launches</option>
                 <option value="manual">Manual — never auto-spawn</option>
-              </select>
+              </Select>
               <Checkbox
                 checked={enabled}
                 onChange={(e) => setEnabled(e.target.checked)}

@@ -121,7 +121,7 @@ export const TrayPanel: FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-background text-text overflow-hidden tabular-nums">
-      <header className="flex items-center justify-between px-base py-md border-b border-border shrink-0">
+      <header className="flex items-center justify-between px-base py-md border-b border-border-light shrink-0">
         <span className="text-sm font-semibold">gglib</span>
         <ProxyStatusPill running={proxy.running} />
       </header>
@@ -155,7 +155,7 @@ export const TrayPanel: FC = () => {
         )}
       </div>
 
-      <footer className="px-base py-md border-t border-border shrink-0 flex flex-col gap-sm">
+      <footer className="px-base py-md border-t border-border-light shrink-0 flex flex-col gap-sm">
         <ProxyToggleButton
           running={proxy.running}
           pending={pending}

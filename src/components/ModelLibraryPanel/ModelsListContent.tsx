@@ -5,6 +5,7 @@ import { formatParamCount } from '../../utils/format';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../primitives/EmptyState';
+import { ModelListSkeleton } from './ModelListSkeleton';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
 
@@ -31,7 +32,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
   };
 
   if (loading && models.length === 0) {
-    return <div className="flex items-center justify-center p-3xl text-text-muted">Loading models...</div>;
+    return <ModelListSkeleton />;
   }
 
   if (models.length === 0) {
@@ -81,7 +82,10 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
               <div className="font-medium text-sm flex items-center gap-sm w-full break-words">
                 {model.name}
                 {isRunning && (
-                  <Chip variant="success" size="sm">Running</Chip>
+                  <span className="inline-flex items-center gap-xs text-xs text-text-muted shrink-0">
+                    <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-success" />
+                    Running
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-md text-xs text-text-muted flex-wrap">
@@ -95,7 +99,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                   <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
                 {tps != null && (
-                  <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="tabular-nums">
+                  <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="font-mono tabular-nums">
                     {tps.toFixed(0)} t/s
                   </Chip>
                 )}

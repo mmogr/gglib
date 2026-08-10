@@ -15,6 +15,8 @@ export interface ChipProps {
   selected?: boolean;
   /** When present the chip renders as a real button with hover/focus affordances. */
   onClick?: () => void;
+  /** Only meaningful with onClick — disables the toggle button. */
+  disabled?: boolean;
   /** Renders a small remove control inside the chip (e.g. tag chips). */
   onRemove?: () => void;
   /** Accessible name for the remove control. Defaults to "Remove". */
@@ -50,6 +52,7 @@ export function Chip({
   leftIcon,
   selected = false,
   onClick,
+  disabled = false,
   onRemove,
   removeLabel = "Remove",
   className,
@@ -88,10 +91,11 @@ export function Chip({
         type="button"
         onClick={onClick}
         title={title}
+        disabled={disabled}
         aria-pressed={selected}
         className={cn(
           shared,
-          "cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          "cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed",
           !selected && "hover:bg-surface-hover hover:text-text",
         )}
       >
