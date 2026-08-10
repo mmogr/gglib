@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import 'highlight.js/styles/github-dark.css';
 import {
   ThreadPrimitive,
   useThreadRuntime,

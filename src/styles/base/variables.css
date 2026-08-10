@@ -69,6 +69,16 @@
   --color-offline: #8a8983;
   --color-error: #e05252;
 
+  /* Terminal (console log surface, one step below canvas) */
+  --color-terminal: #0a0a0c;
+
+  /* Syntax highlighting (consumed by base/hljs.css) */
+  --code-keyword: #85a9d6;
+  --code-string: #85c29d;
+  --code-number: #d9a35f;
+  --code-comment: var(--color-text-muted);
+  --code-function: #d9c886;
+
   /* ==================
      Spacing Scale
      ================== */
