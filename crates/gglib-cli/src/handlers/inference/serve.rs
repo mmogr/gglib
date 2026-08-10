@@ -15,12 +15,12 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
 use crate::presentation::style;
 use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
-use gglib_core::ports::PinnedSpec;
-use gglib_core::server_config::{ServerConfigOptions, parse_ctx_size_flag, resolve_context_size};
-use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized, resolve_mtp_args};
-use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
+use gglib_app_services::launch_options::{ProxyGlobals, plan_pinned_launch};
+use gglib_app_services::types::StartServerRequest;
+use gglib_core::server_config::parse_ctx_size_flag;
+use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized};
 
-use super::shared::{log_inference_info, log_mlock_info, resolve_inference_config};
+use super::shared::{log_inference_info, log_mlock_info};
 
 /// Execute the serve command.
 ///
@@ -55,50 +55,37 @@ pub async fn execute(
     // length is what makes `--ctx-size max` work.
     let ctx_arg = parse_ctx_size_flag(context.ctx_size.as_deref())?;
 
-    let inference_config =
-        resolve_inference_config(ctx, sampling.into_inference_config(), &model).await?;
-
-    let mtp_args = resolve_mtp_args(mtp.mtp_draft_n_max, mtp.mtp_draft_p_min, &model.tags);
-
-    // Everything the CLI knows, expressed as the three tiers. The cascade and
-    // the translation into llama-server flags both happen downstream, so this
-    // handler never assembles a command line of its own.
-    let unified = UnifiedServerConfig {
-        explicit: ServerConfigOptions {
-            context_size: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
-            model_server_ctx: model
-                .server_defaults
-                .as_ref()
-                .and_then(|s| s.context_length),
-            // `false` is the flag's absence, not a request to disable mlock —
-            // leaving it None lets a future global default apply.
-            mlock: context.mlock.then_some(true),
+    // The cascade itself is shared with the GUI's pinned start
+    // (`gglib_app_services::launch_options`), so the two surfaces cannot
+    // drift; this handler only maps flags into the shared request shape and
+    // prints the banners from the resolved plan.
+    let plan = plan_pinned_launch(
+        &model,
+        &settings,
+        &StartServerRequest {
+            context_length: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
+            port: None,
             jinja: options.jinja.then_some(true),
-            inference_params: Some(inference_config.clone()),
-            mtp_draft_n_max: mtp_args.enabled.then_some(mtp_args.draft_n_max),
-            mtp_draft_p_min: mtp_args.enabled.then_some(mtp_args.draft_p_min),
-            ..Default::default()
+            reasoning_format: None,
+            mtp_draft_n_max: mtp.mtp_draft_n_max,
+            mtp_draft_p_min: mtp.mtp_draft_p_min,
+            inference_params: Some(sampling.into_inference_config()),
+            mlock: context.mlock,
         },
-        // The cache master switch and directory are tier 3: `resolved_options`
-        // applies `cache_enabled` over `slot_save_path`, which is how
-        // `--cache` reaches llama-server on the pinned model's launch options
-        // at all. The remaining model-independent cache flags travel in the
-        // daemon start body (`--cache-disk-gb` becomes its disk budget).
-        globals: GlobalDefaults {
-            host: options.host.clone(),
-            proxy_port: options.port,
-            llama_base_port: options.llama_port,
-            default_ctx: settings.default_context_size,
+        ProxyGlobals {
+            host: Some(options.host.clone()),
+            default_ctx: None,
+            proxy_port: Some(options.port),
+            llama_base_port: Some(options.llama_port),
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),
             api_key: access.api_key.clone(),
             allowed_hosts: access.allowed_hosts.clone(),
-            ..Default::default()
         },
-    };
-
-    let launch_overrides = unified.resolved_options();
-    let effective_ctx = resolve_context_size(&launch_overrides);
+    );
+    let inference_config = plan.inference.clone();
+    let mtp_args = plan.mtp.clone();
+    let effective_ctx = plan.effective_ctx;
 
     style::print_info_banner("Info", "\u{2139}\u{fe0f}");
     eprintln!("  Using model: {} (ID: {})", model.name, model.id);
@@ -125,7 +112,7 @@ pub async fn execute(
         );
     }
 
-    let proxy_config = unified.to_proxy_config();
+    let proxy_config = plan.unified.to_proxy_config();
 
     super::proxy::warn_construction_time_flags(&cache, options.llama_port);
 
@@ -143,10 +130,7 @@ pub async fn execute(
             // Sampling rides the pinned model's launch options rather than a
             // proxy-wide override, so it lands on the llama-server command
             // line exactly as every other launch surface applies it.
-            pinned: Some(PinnedSpec {
-                name: model.name.clone(),
-                launch_overrides,
-            }),
+            pinned: Some(plan.pinned),
             cache_disk_gb: cache.cache_disk_gb,
             inference_override: None,
             api_key: proxy_config.api_key,

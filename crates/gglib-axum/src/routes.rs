@@ -101,6 +101,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))
+        .route("/proxy/start-pinned", post(handlers::proxy::start_pinned))
         .route("/proxy/stop", post(handlers::proxy::stop))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))

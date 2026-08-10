@@ -97,6 +97,29 @@ impl ProxyOps {
         }
     }
 
+    /// Resolve a pinned-launch plan for a model — the same cascade
+    /// `gglib serve` runs, shared via [`crate::launch_options`].
+    ///
+    /// Fails with `NotFound` when the model id is stale, which is the
+    /// GUI's stale-list race rather than an internal error.
+    pub async fn plan_pinned(
+        &self,
+        model_id: i64,
+        request: &crate::types::StartServerRequest,
+        globals: crate::launch_options::ProxyGlobals,
+    ) -> Result<crate::launch_options::PinnedLaunch, GuiError> {
+        let model = crate::helpers::resolve_model(self.core.models(), model_id).await?;
+        let settings = self
+            .core
+            .settings()
+            .get()
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        Ok(crate::launch_options::plan_pinned_launch(
+            &model, &settings, request, globals,
+        ))
+    }
+
     /// Start the proxy server, optionally pinned to a single model.
     ///
     /// Delegates to the supervisor using the shared `ModelRuntimePort`

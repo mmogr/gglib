@@ -1054,3 +1054,90 @@ async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
         "POST /api/proxy/start with empty body should not return 400 when falling back to hard-coded default"
     );
 }
+
+/// The pinned-start route must run the serve cascade server-side: a full-shape
+/// body with a stale model id proves the route is wired, both nested bodies
+/// deserialize (camelCase options + snake_case proxy), and resolution fails as
+/// a 404 — the GUI's stale-list race — rather than a serde 400/422.
+#[tokio::test]
+async fn proxy_start_pinned_resolves_the_model_or_404s() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let request_body = serde_json::json!({
+        "model_id": 999_999,
+        "options": {
+            "contextLength": 4096,
+            "jinja": true,
+            "mtpDraftNMax": 2,
+            "mtpDraftPMin": 0.75,
+            "inferenceParams": { "temperature": 0.4, "minP": 0.05, "presencePenalty": 1.1 },
+            "mlock": true
+        },
+        "proxy": {
+            "port": 0,
+            "cache": true,
+            "cache_disk_gb": 5,
+            "api_key": "test-key",
+            "allowed_hosts": ["example.test"]
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .method("POST")
+                .uri("/api/proxy/start-pinned")
+                .header("content-type", "application/json")
+                .body(Body::from(request_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "a stale model id must 404 after deserialization succeeded"
+    );
+}
+
+/// A minimal pinned-start body must also deserialize — every field except
+/// `model_id` is optional, mirroring `Partial<ProxyConfig>` on the GUI side.
+#[tokio::test]
+async fn proxy_start_pinned_accepts_a_minimal_body() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .method("POST")
+                .uri("/api/proxy/start-pinned")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"model_id": 999999}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

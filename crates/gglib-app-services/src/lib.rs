@@ -18,6 +18,7 @@ mod error;
 mod helpers;
 
 pub mod benchmark;
+pub mod launch_options;
 mod downloads;
 mod mcp;
 mod models;

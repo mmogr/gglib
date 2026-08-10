@@ -141,6 +141,60 @@ fn to_runtime_config(cfg: &StartProxyConfig, settings: &AppSettings) -> RuntimeP
     }
 }
 
+/// Request body for `POST /api/proxy/start-pinned`.
+///
+/// The GUI names a model and its overrides; the daemon runs the same
+/// cascade as `gglib serve` (`gglib_app_services::launch_options`) so the
+/// two surfaces cannot drift. `options` uses the camelCase wire form of the
+/// bare `/api/servers/start` body; `proxy` the snake_case form of
+/// `/api/proxy/start`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct StartPinnedBody {
+    pub model_id: i64,
+    #[serde(default)]
+    pub options: gglib_app_services::types::StartServerRequest,
+    #[serde(default)]
+    pub proxy: StartProxyConfig,
+}
+
+/// Start the proxy pinned to one model, resolving the launch cascade
+/// server-side — the GUI counterpart of `gglib serve`.
+pub async fn start_pinned(
+    State(state): State<AppState>,
+    Json(body): Json<StartPinnedBody>,
+) -> Result<Json<ProxyStatus>, HttpError> {
+    let globals = gglib_app_services::launch_options::ProxyGlobals {
+        host: body.proxy.host.clone(),
+        proxy_port: body.proxy.port,
+        llama_base_port: body.proxy.llama_base_port,
+        default_ctx: body.proxy.default_context,
+        cache_enabled: body.proxy.cache.unwrap_or(false),
+        slot_dir: body.proxy.slot_dir.clone(),
+        api_key: body.proxy.api_key.clone(),
+        allowed_hosts: body.proxy.allowed_hosts.clone(),
+    };
+
+    let plan = state
+        .proxy
+        .plan_pinned(body.model_id, &body.options, globals)
+        .await?;
+
+    // Delegate to the ordinary start path with the planned pin. Slot dir and
+    // default context ride the cascade exactly as the CLI sends them: the
+    // master switch has been applied and the context fully resolved.
+    let proxy_config = plan.unified.to_proxy_config();
+    let cfg = StartProxyConfig {
+        pinned: Some(plan.pinned),
+        slot_dir: proxy_config.slot_dir,
+        default_context: Some(proxy_config.default_context),
+        // Sampling rides the pinned model's launch options, exactly as the
+        // CLI sends it — never a proxy-wide override.
+        inference_override: None,
+        ..body.proxy
+    };
+    start(State(state), Json(Some(cfg))).await
+}
+
 /// Get current proxy status.
 pub async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
     Json(fetch_status(&state).await)
