@@ -241,7 +241,13 @@ export async function readData<T>(response: Response): Promise<T> {
       return undefined as T;
     }
 
-    if (!body.success && body.error) {
+    // Legacy `{success, error}` envelope. `success` must actually be present:
+    // non-2xx responses already returned above, so any `error` key reaching
+    // here belongs to a normal result DTO. Testing `body.error` alone made
+    // every DTO with an `error` field unreturnable — a 200 carrying
+    // `{ok: false, error: "..."}` was thrown as a transport failure instead of
+    // being handed to the caller that models failure as data.
+    if (typeof body === 'object' && 'success' in body && !body.success && body.error) {
       throw new TransportError('INTERNAL', body.error);
     }
 
