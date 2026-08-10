@@ -12,6 +12,7 @@ import { Banner } from '../ui/Banner';
 import { Stack } from '../primitives';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { useSystemSettings } from './useSystemSettings';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import type { LlamaStatus } from '../../types/setup';
 
 /** One label/value row. Values are mono so paths and hashes line up. */
@@ -246,6 +247,8 @@ export const SystemSettings: FC = () => {
           Uninstall llama.cpp
         </Button>
       </section>
+
+      <DiagnosticsPanel />
     </Stack>
   );
 };
