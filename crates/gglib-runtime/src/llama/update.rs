@@ -119,10 +119,11 @@ fn fetch_and_count(llama_dir: &std::path::Path) -> Result<(u32, Vec<String>)> {
         .output()
         .context("Failed to check for updates")?;
 
-    let commits_behind = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse::<u32>()
-        .unwrap_or(0);
+    let commits_behind = parse_commits_behind(
+        output.status.success(),
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+    )?;
 
     if commits_behind == 0 {
         return Ok((0, Vec::new()));
@@ -130,7 +131,13 @@ fn fetch_and_count(llama_dir: &std::path::Path) -> Result<(u32, Vec<String>)> {
 
     let output = cmd("git")
         .args([
-            "-C", dir_str, "log", "--oneline", "-n", "5", "HEAD..origin/master",
+            "-C",
+            dir_str,
+            "log",
+            "--oneline",
+            "-n",
+            "5",
+            "HEAD..origin/master",
         ])
         .output()
         .context("Failed to get commit log")?;
@@ -142,6 +149,29 @@ fn fetch_and_count(llama_dir: &std::path::Path) -> Result<(u32, Vec<String>)> {
         .collect();
 
     Ok((commits_behind, recent))
+}
+
+/// Turn `git rev-list --count`'s result into a commit count.
+///
+/// A non-zero exit means the comparison never happened — no `origin/master`,
+/// a shallow clone, a corrupt checkout — and it must not be reported as zero.
+/// [`LlamaUpdateCheck`] treats `commits_behind: 0` alongside `comparable:
+/// true` as "up to date", the very distinction `not_comparable` exists to
+/// preserve, so swallowing a failure here renders a broken repository as a
+/// healthy one. An unparseable count on a *successful* exit is equally a
+/// broken assumption rather than a zero.
+fn parse_commits_behind(success: bool, stdout: &str, stderr: &str) -> Result<u32> {
+    if !success {
+        let detail = stderr.trim();
+        if detail.is_empty() {
+            bail!("Could not compare against origin/master");
+        }
+        bail!("Could not compare against origin/master: {detail}");
+    }
+
+    let raw = stdout.trim();
+    raw.parse::<u32>()
+        .with_context(|| format!("Unexpected `git rev-list --count` output: {raw:?}"))
 }
 
 /// Check for llama.cpp updates — a printer over [`llama_update_check`].
@@ -330,12 +360,7 @@ pub async fn handle_update() -> Result<()> {
 
     println!();
     let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
-    let update = tokio::spawn(run_llama_update(
-        acceleration,
-        llama_dir,
-        binary_path,
-        tx,
-    ));
+    let update = tokio::spawn(run_llama_update(acceleration, llama_dir, binary_path, tx));
 
     // Previously this channel's receiver was dropped on the floor, so the
     // build ran silently. Print what it reports.
@@ -379,6 +404,38 @@ mod tests {
         assert!(!prebuilt.comparable);
         assert_eq!(prebuilt.commits_behind, 0);
         assert!(prebuilt.current_version.is_none());
+    }
+
+    /// The counterpart hazard to the one above, on the live path: a failed
+    /// comparison used to parse as `unwrap_or(0)`, which the caller reports
+    /// with `comparable: true` — i.e. "up to date" — for a repository it
+    /// could not read at all.
+    #[test]
+    fn failed_comparison_is_an_error_not_zero() {
+        let err = parse_commits_behind(false, "", "fatal: bad revision 'origin/master'")
+            .expect_err("a non-zero git exit must not report zero commits behind");
+        assert!(
+            err.to_string().contains("bad revision"),
+            "the git failure should reach the caller: {err}"
+        );
+    }
+
+    #[test]
+    fn failed_comparison_without_stderr_still_errors() {
+        assert!(parse_commits_behind(false, "", "   ").is_err());
+    }
+
+    /// A clean exit with output git never produces means the assumption
+    /// behind the parse is wrong; that is not a zero either.
+    #[test]
+    fn unparseable_count_is_an_error() {
+        assert!(parse_commits_behind(true, "not-a-number", "").is_err());
+    }
+
+    #[test]
+    fn counts_parse_with_surrounding_whitespace() {
+        assert_eq!(parse_commits_behind(true, "0\n", "").unwrap(), 0);
+        assert_eq!(parse_commits_behind(true, "  42\n", "").unwrap(), 42);
     }
 
     #[test]

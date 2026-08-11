@@ -247,11 +247,9 @@ pub async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpErr
 /// Two concurrent builds share a source checkout and a binary destination, so
 /// the second corrupts the first. The GUI disables its own button, which does
 /// nothing about a second browser tab or a second client.
-static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-pub async fn update_llama(
-) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
+pub async fn update_llama() -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
 
     // Claim the slot before spawning; release it when the task ends whatever
@@ -266,10 +264,9 @@ pub async fn update_llama(
         .is_ok();
 
     if !claimed {
-        let _ = tx
-            .try_send(BuildEvent::Failed {
-                message: "A llama.cpp build is already running.".to_string(),
-            });
+        let _ = tx.try_send(BuildEvent::Failed {
+            message: "A llama.cpp build is already running.".to_string(),
+        });
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
         return Sse::new(stream).keep_alive(
             axum::response::sse::KeepAlive::new()
@@ -287,8 +284,8 @@ pub async fn update_llama(
         }
         let _guard = Guard;
 
-        async fn preflight() -> anyhow::Result<(Acceleration, std::path::PathBuf, std::path::PathBuf)>
-        {
+        async fn preflight()
+        -> anyhow::Result<(Acceleration, std::path::PathBuf, std::path::PathBuf)> {
             let llama_dir = llama_cpp_dir().map_err(|e| anyhow::anyhow!("{e}"))?;
             let server_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
             if !llama_dir.exists() {
