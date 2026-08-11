@@ -133,6 +133,12 @@ pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
                 Some(DefaultsOrigin::Published) => {
                     " (published by the model author — ranks below global settings)"
                 }
+                // Also below global — an automated apply is not a person —
+                // but the strongest evidence of the three, and the agentic
+                // ceiling defers to it.
+                Some(DefaultsOrigin::Measured) => {
+                    " (measured by a tune sweep — ranks below global settings)"
+                }
                 Some(DefaultsOrigin::User) => " (user-set)",
                 None => "",
             };

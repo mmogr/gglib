@@ -73,10 +73,14 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
         case 'global':
           return 'global settings';
         case 'modelAutoDetected':
-          // One rung, two possible sources — see `SourceContext.defaultsOrigin`.
-          return ctx.defaultsOrigin === 'published'
-            ? 'per-model defaults (published by the model author)'
-            : 'per-model defaults (auto-detected: reasoning tag)';
+          // One rung, three possible sources — see `SourceContext.defaultsOrigin`.
+          if (ctx.defaultsOrigin === 'published') {
+            return 'per-model defaults (published by the model author)';
+          }
+          if (ctx.defaultsOrigin === 'measured') {
+            return 'per-model defaults (measured by a tune sweep)';
+          }
+          return 'per-model defaults (auto-detected: reasoning tag)';
         default:
           return 'unknown layer';
       }

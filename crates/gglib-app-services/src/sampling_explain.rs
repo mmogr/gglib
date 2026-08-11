@@ -83,6 +83,10 @@ pub enum DefaultsOriginDto {
     /// Read from the model author's `generation_config.json` at import.
     /// Ranks below global settings, exactly where `AutoDetected` does.
     Published,
+    /// A tune sweep's winner, measured on this installation. Ranks below
+    /// global settings like the other two — and unlike them, the agentic
+    /// ceiling never caps it.
+    Measured,
 }
 
 impl From<DefaultsOrigin> for DefaultsOriginDto {
@@ -91,6 +95,7 @@ impl From<DefaultsOrigin> for DefaultsOriginDto {
             DefaultsOrigin::User => Self::User,
             DefaultsOrigin::AutoDetected => Self::AutoDetected,
             DefaultsOrigin::Published => Self::Published,
+            DefaultsOrigin::Measured => Self::Measured,
         }
     }
 }
