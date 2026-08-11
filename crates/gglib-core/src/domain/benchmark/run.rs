@@ -49,6 +49,12 @@ pub struct BenchmarkRun {
     /// Serialised run configuration (`CompareConfig`, `PerfConfig`, or
     /// `TuneConfig` JSON).
     pub config_json: Option<String>,
+    /// The apply record written when this tune run's winner became a model's
+    /// Measured defaults (JSON-serialized `tune::apply::ApplyRecord`).
+    /// `None` on every run that was never applied — which is every run of
+    /// every other type, and most tune runs.
+    #[serde(default)]
+    pub applied_json: Option<String>,
     /// Error message if the run failed.
     pub error: Option<String>,
     /// UTC timestamp when the run was created.

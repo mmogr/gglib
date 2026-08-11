@@ -25,6 +25,7 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
+pub mod apply_run;
 pub mod executor;
 pub mod pruning;
 pub mod scoring;
@@ -197,7 +198,14 @@ pub async fn run_tune(
             return Ok(());
         }
 
-        let is_survivor = survivors.contains(&idx);
+        // The incumbent pair always runs the full suite: pruning either twin
+        // would leave the run uncalibrated, and a pre-screen composite is
+        // not comparable with the full-suite scores the gate reads.
+        let is_survivor = survivors.contains(&idx)
+            || matches!(
+                source,
+                CandidateSource::Incumbent | CandidateSource::IncumbentCalibration
+            );
         let mut task_results = std::mem::take(&mut prescreen_results[idx]);
 
         if is_survivor {
@@ -342,6 +350,18 @@ fn build_candidates(
             candidates.push((preset, CandidateSource::FamilyPreset { family }));
         }
     }
+
+    // The incumbent pair, always: an all-None overlay resolves through the
+    // normal chain and is therefore exactly what the model does today, and
+    // the gap between the identical twins is the run's own drift — the
+    // number the apply gate divides every margin by. Two extra candidates
+    // is the price of a run that can calibrate itself; a run without them
+    // is Uncalibrated and nothing may be applied from it.
+    candidates.push((InferenceConfig::default(), CandidateSource::Incumbent));
+    candidates.push((
+        InferenceConfig::default(),
+        CandidateSource::IncumbentCalibration,
+    ));
 
     candidates
 }

@@ -116,6 +116,7 @@ fn row_to_benchmark_run(row: &sqlx::sqlite::SqliteRow) -> Result<BenchmarkRun, R
         prompt_text: row.try_get("prompt_text").ok().flatten(),
         system_prompt: row.try_get("system_prompt").ok().flatten(),
         config_json: row.try_get("config_json").ok().flatten(),
+        applied_json: row.try_get("applied_json").ok().flatten(),
         error: row.try_get("error").ok().flatten(),
         created_at: parse_datetime(created_at_str).unwrap_or_else(Utc::now),
         completed_at: parse_datetime(completed_at_str),
@@ -605,6 +606,38 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         rows.iter().map(row_to_tune_result).collect()
+    }
+
+    async fn get_tune_results(
+        &self,
+        run_id: i64,
+    ) -> Result<Vec<TuneCandidateResult>, RepositoryError> {
+        let rows = sqlx::query(
+            "SELECT config_json, source_json, composite_score, pruned, tg_tps, task_results_json
+             FROM benchmark_tune_results
+             WHERE run_id = ?
+             ORDER BY id ASC",
+        )
+        .bind(run_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        rows.iter().map(row_to_tune_result).collect()
+    }
+
+    async fn mark_run_applied(
+        &self,
+        run_id: i64,
+        applied_json: &str,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE benchmark_runs SET applied_json = ? WHERE id = ?")
+            .bind(applied_json)
+            .bind(run_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        Ok(())
     }
 
     async fn save_agentic_result(
