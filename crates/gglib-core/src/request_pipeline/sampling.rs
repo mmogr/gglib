@@ -348,6 +348,21 @@ pub fn resolve_sampling(
         layers.trust_client_sampling,
     ));
 
+    // The gate's own drops leave the body too. Force-insert only overwrites
+    // keys the resolution actually emits, and since ADR 0003 six modelled
+    // fields resolve to nothing by design — so a gated key the ladder then
+    // stays silent on would ride the body to llama-server exactly like an
+    // unmodelled one. Found live, not by review: an untrusted client's
+    // frequency_penalty: 0.9 reached /slots intact, because no layer names
+    // that field and nothing overwrote it. Before the deferral this could
+    // not happen — the floor emitted every modelled key — which is why the
+    // gate never needed this until now.
+    if let Some(obj) = body.as_object_mut() {
+        for key in &discarded {
+            obj.remove(key.as_str());
+        }
+    }
+
     // The `reasoning` tag selects the floor beneath every layer here — a
     // model that degrades into repetitive loops under greedy decoding still
     // gets a real anti-repetition guard when nothing above the floor sets
@@ -1108,6 +1123,33 @@ mod tests {
                 decision.client_fields_discarded
             );
         }
+    }
+
+    /// The regression the live check caught. A gated *modelled* key whose
+    /// field then resolves to nothing — the normal state of every deferred
+    /// parameter since ADR 0003 — used to survive in the body, because
+    /// force-insert only overwrites keys the resolution emits. Measured on a
+    /// live server: an untrusted `frequency_penalty: 0.9` reached `/slots`
+    /// intact. The gate's drops must leave the body, not just the layer.
+    #[test]
+    fn a_gated_key_the_ladder_stays_silent_on_leaves_the_body() {
+        let mut body = json!({
+            "frequency_penalty": 0.9,
+            "top_p": 0.3,
+            "dry_base": 3.5,
+            "seed": 42,
+            "max_tokens": 128,
+        });
+        // Nothing above the floor names any of these, and the neutral floor
+        // asserts none of them — resolution emits no key for them at all.
+        resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+        let obj = body.as_object().unwrap();
+        for gone in ["frequency_penalty", "top_p", "dry_base", "seed"] {
+            assert!(!obj.contains_key(gone), "{gone} survived in {body}");
+        }
+        // The one client field the gate honours survives untouched.
+        assert_param(&body, "max_tokens", 128.0);
     }
 
     /// Trusted means trusted: a client the operator vouched for keeps its
