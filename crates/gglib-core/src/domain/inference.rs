@@ -312,6 +312,25 @@ pub enum DefaultsOrigin {
     /// this is not a value anybody in this installation decided, so the
     /// agentic-turn ceiling may still cap it and global settings still win.
     Published,
+    /// Written by a tune sweep: the winner of a measured comparison on this
+    /// model, this quant, this hardware — not a person's choice, and not a
+    /// guess either.
+    ///
+    /// Ranks **exactly where [`Self::AutoDetected`] does** — below global
+    /// settings. The principle that puts it there is the ladder's oldest one:
+    /// nothing a person chose may be outranked by anything a person did not,
+    /// and an automated apply is not a person. Like [`Self::Published`], it
+    /// never coexists with the other below-global origins: applying a winner
+    /// overwrites `inference_defaults`, so "above the guesses" holds by
+    /// replacement rather than by rank.
+    ///
+    /// Unlike both of them, the **agentic-turn ceiling never caps it**. The
+    /// sweep resolves its candidates against this model's real context
+    /// (#748) precisely so the winner transfers to production; a ceiling
+    /// capping the stored winner would un-measure it on exactly the turns it
+    /// was measured for. The ceiling exists to bound values nobody examined —
+    /// a measured temperature is the most examined value in the system.
+    Measured,
 }
 
 impl std::fmt::Display for DefaultsOrigin {
@@ -320,6 +339,7 @@ impl std::fmt::Display for DefaultsOrigin {
             Self::User => write!(f, "user"),
             Self::AutoDetected => write!(f, "auto_detected"),
             Self::Published => write!(f, "published"),
+            Self::Measured => write!(f, "measured"),
         }
     }
 }
@@ -332,8 +352,9 @@ impl std::str::FromStr for DefaultsOrigin {
             "user" => Ok(Self::User),
             "auto_detected" => Ok(Self::AutoDetected),
             "published" => Ok(Self::Published),
+            "measured" => Ok(Self::Measured),
             other => Err(format!(
-                "unknown defaults origin '{other}'; expected user, auto_detected or published"
+                "unknown defaults origin '{other}'; expected user, auto_detected, published or measured"
             )),
         }
     }
@@ -1428,7 +1449,9 @@ impl InferenceConfig {
         // `Published` would silently have ranked a fetched recipe *above*
         // global settings — the one thing an unreviewed origin must never do.
         let (user_model, auto_model) = match model_ctx.defaults_origin {
-            Some(DefaultsOrigin::AutoDetected | DefaultsOrigin::Published) => (None, model),
+            Some(
+                DefaultsOrigin::AutoDetected | DefaultsOrigin::Published | DefaultsOrigin::Measured,
+            ) => (None, model),
             Some(DefaultsOrigin::User) | None => (model, None),
         };
         Self::resolve_layers_with_sources(
