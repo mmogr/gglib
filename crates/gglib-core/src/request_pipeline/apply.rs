@@ -155,6 +155,44 @@ pub fn apply(
 }
 
 #[cfg(test)]
+mod live_shape_probe {
+    use super::*;
+    use crate::domain::{DefaultsOrigin, InferenceConfig};
+
+    /// The exact body and context shape of the live hardware check that
+    /// found the gated-key passthrough, end to end through `apply` rather
+    /// than through `resolve_sampling` alone.
+    #[test]
+    fn the_live_bodys_frequency_penalty_is_stripped() {
+        let mut body = serde_json::json!({
+            "model": "Qwen3.5-4B",
+            "messages": [{"role": "user", "content": "Say hello briefly."}],
+            "max_tokens": 20,
+            "frequency_penalty": 0.9,
+            "top_p": 0.3
+        });
+        let ctx = ModelContext {
+            tags: vec!["agent".into(), "reasoning".into(), "mtp".into()],
+            inference_defaults: Some(InferenceConfig::reasoning_profile()),
+            defaults_origin: Some(DefaultsOrigin::AutoDetected),
+            ..ModelContext::passthrough()
+        };
+        let layers = SamplingLayers::default();
+        let report = apply(&mut body, &ctx, &layers, None, PipelinePass::Initial)
+            .expect("pipeline applies");
+        assert!(report.sampling.applied);
+
+        let obj = body.as_object().unwrap();
+        assert!(
+            !obj.contains_key("frequency_penalty"),
+            "frequency_penalty survived: {body}"
+        );
+        let top_p = obj["top_p"].as_f64().expect("recipe top_p present");
+        assert!((top_p - 0.95).abs() < 1e-6, "client top_p survived: {body}");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::{InferenceConfig, ModelCapabilities};
