@@ -284,7 +284,9 @@ pub enum ModelCommand {
         /// List available quantizations for the model
         #[arg(long)]
         list_quants: bool,
-        /// Skip adding to database after download (models are registered by default)
+        /// Not currently honoured: the daemon owns the download and registers
+        /// the model when it completes. Downloads still run; use
+        /// `gglib model remove <id>` afterwards to drop the row and keep the file.
         #[arg(long)]
         skip_db: bool,
         /// HuggingFace token for private models (for `--list-quants` only).

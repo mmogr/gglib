@@ -181,6 +181,41 @@ pub async fn filter_options(
     Ok(Json(state.models.get_filter_options().await?))
 }
 
+/// Request body for `POST /api/models/{id}/retag`.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RetagBody {
+    #[serde(default)]
+    pub full: bool,
+}
+
+/// Re-run capability detection over a model's stored metadata —
+/// `gglib model retag` for one model.
+pub async fn retag(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(body): Json<RetagBody>,
+) -> Result<Json<gglib_app_services::types::RetagResponse>, HttpError> {
+    Ok(Json(state.models.retag(id, body.full).await?))
+}
+
+/// Commit-SHA update check — `gglib model check-updates` for one model,
+/// distinct from the shard-level diff on `/{id}/updates`.
+pub async fn check_upgrade(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<gglib_app_services::types::UpgradeCheck>, HttpError> {
+    Ok(Json(state.models.check_upgrade(id).await?))
+}
+
+/// Re-download at the latest HuggingFace revision and rewrite the row —
+/// `gglib model upgrade`. Blocking for the download's duration, like the CLI.
+pub async fn apply_upgrade(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<gglib_app_services::types::UpgradeOutcome>, HttpError> {
+    Ok(Json(state.models.apply_upgrade(id).await?))
+}
+
 pub async fn set_capabilities(
     State(state): State<AppState>,
     Path(id): Path<i64>,

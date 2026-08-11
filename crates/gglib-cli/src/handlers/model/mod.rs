@@ -130,10 +130,23 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             model_id,
             quantization,
             list_quants,
-            skip_db: _skip_db,
+            skip_db,
             token,
             force,
         } => {
+            // Registration happens daemon-side as a queue lifecycle phase, so
+            // honouring this flag needs a protocol change. Say so rather than
+            // registering silently — but do not refuse the download: the flag
+            // was already a no-op, and failing here would break invocations
+            // that used to work. `--list-quants` never touched the database,
+            // so it is not worth a warning at all.
+            if skip_db && !list_quants {
+                eprintln!(
+                    "warning: --skip-db is not currently honoured — downloads register through \
+                     the daemon queue. The download will proceed and the model will be \
+                     registered; `gglib model remove <id>` drops the row and keeps the file."
+                );
+            }
             let args = download::DownloadArgs {
                 model_id: &model_id,
                 quantization: quantization.as_deref(),
@@ -146,11 +159,8 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
         ModelCommand::CheckUpdates { identifier, all } => {
             download::check_updates(ctx, identifier.as_deref(), all).await?;
         }
-        ModelCommand::Upgrade {
-            identifier,
-            force: _force,
-        } => {
-            download::update_model(ctx, &identifier).await?;
+        ModelCommand::Upgrade { identifier, force } => {
+            download::update_model(ctx, &identifier, force).await?;
         }
         ModelCommand::Search {
             query,

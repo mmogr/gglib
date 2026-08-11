@@ -1,10 +1,12 @@
-import { FC, useCallback, useEffect } from 'react';
+import { FC, useCallback, useEffect, useState } from 'react';
+import { retagModel } from '../../services/transport/api/models/local';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import { useSettings } from '../../hooks/useSettings';
 import { useToastContext } from '../../contexts/ToastContext';
+import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { HfModelPreview } from '../HfModelPreview';
 import {
   useEditMode,
@@ -18,6 +20,7 @@ import {
   ModelMetadataGrid,
   ModelEditForm,
   InspectorTags,
+  InspectorCapabilities,
   ServeModal,
   DeleteModal,
   InspectorHeader,
@@ -75,6 +78,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 }) => {
   const { settings } = useSettings();
   const { showToast } = useToastContext();
+  const { confirm } = useConfirmContext();
 
   // Install / verify / update modal state
   const modals = useInspectorModals();
@@ -103,6 +107,55 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const hasMtpTag = detail.tags.some(tag => tag.toLowerCase() === 'mtp');
 
   // Server actions hook
+  const [retagging, setRetagging] = useState(false);
+  const handleRetag = useCallback(
+    async (full: boolean) => {
+      if (model?.id == null) return;
+
+      // Rebuild drops detected tags the GGUF no longer yields, hand-added ones
+      // included — and those tags decide launch flags and response parsing.
+      if (full) {
+        const confirmed = await confirm({
+          title: 'Rebuild detected tags?',
+          description:
+            'Re-derives the capability tags and dialect spec from the GGUF. Detected tags it no ' +
+            'longer finds are dropped, including any you added by hand — a manual "reasoning" tag ' +
+            'forcing a reasoning format would be lost. Tags outside that set are untouched.',
+          confirmLabel: 'Rebuild',
+          variant: 'danger',
+        });
+        if (!confirmed) return;
+      }
+
+      setRetagging(true);
+      try {
+        const diff = await retagModel(model.id, full);
+        if (!diff.changed) {
+          showToast('Tags already up to date', 'success');
+        } else {
+          const parts = [
+            diff.added.length > 0 ? `added ${diff.added.length}` : null,
+            diff.removed.length > 0 ? `removed ${diff.removed.length}` : null,
+            diff.specChanged ? 'dialect spec re-derived' : null,
+          ].filter(Boolean);
+          // Counts, not full lists: the chips reload right below, and a
+          // removal is the half worth pausing on, so it gets longer on screen.
+          showToast(
+            `Retagged: ${parts.join(', ')}`,
+            'success',
+            diff.removed.length > 0 ? 8000 : undefined,
+          );
+        }
+        await detail.reload();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err), 'error');
+      } finally {
+        setRetagging(false);
+      }
+    },
+    [model?.id, detail, showToast, confirm],
+  );
+
   const serverActions = useServerActions({
     model,
     settings,
@@ -227,7 +280,18 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             onNewTagInputChange={detail.setNewTagInput}
             onAddTag={detail.addTag}
             onRemoveTag={detail.removeTag}
+            onRetag={handleRetag}
+            retagging={retagging}
           />
+
+          {!editMode.isEditMode && model?.id != null && (
+            <InspectorCapabilities
+              modelId={model.id}
+              capabilities={detail.modelDetail?.capabilities}
+              onChanged={() => void detail.reload()}
+              onError={(message: string) => showToast(message, 'error')}
+            />
+          )}
         </div>
       </div>
 

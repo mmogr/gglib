@@ -20,6 +20,10 @@ import type {
   HfSortField,
   ModelFilterOptions,
   RangeValues,
+  RetagResponse,
+  SetCapabilitiesRequest,
+  UpgradeCheck,
+  UpgradeOutcome,
 } from '../../../types';
 
 // Re-export existing types that clients already use
@@ -39,6 +43,10 @@ export type {
   HfSortField,
   ModelFilterOptions,
   RangeValues,
+  RetagResponse,
+  SetCapabilitiesRequest,
+  UpgradeCheck,
+  UpgradeOutcome,
 };
 
 /**
@@ -62,17 +70,6 @@ export interface UpdateModelParams {
 }
 
 /**
- * Parameters for searching local models.
- */
-export interface SearchModelsParams {
-  query?: string;
-  tags?: string[];
-  quantizations?: string[];
-  minParams?: number;
-  maxParams?: number;
-}
-
-/**
  * Models transport operations.
  */
 export interface ModelsTransport {
@@ -89,7 +86,14 @@ export interface ModelsTransport {
   updateModel(params: UpdateModelParams): Promise<GgufModel>;
 
   // Filtering
-  searchModels(params: SearchModelsParams): Promise<GgufModel[]>;
+  /** Re-run capability detection (`gglib model retag`). */
+  retagModel(modelId: number, full?: boolean): Promise<RetagResponse>;
+  /** Set or clear capability flags. Returns the updated model. */
+  setModelCapabilities(modelId: number, request: SetCapabilitiesRequest): Promise<GgufModel>;
+  /** Commit-SHA update check for one model. */
+  checkModelUpgrade(modelId: number): Promise<UpgradeCheck>;
+  /** Re-download at the latest HuggingFace revision. Blocking. */
+  upgradeModel(modelId: number): Promise<UpgradeOutcome>;
   getModelFilterOptions(): Promise<ModelFilterOptions>;
 
   // HuggingFace browsing

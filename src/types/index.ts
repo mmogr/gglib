@@ -66,6 +66,46 @@ export interface InferenceConfig {
   seed?: number;
 }
 
+/** Capability bitflags, mirroring `gglib_core::domain::ModelCapabilities` (a bare u32 on the wire). */
+export const CAPABILITY_FLAGS = {
+  supportsSystemRole: 0b0001,
+  requiresStrictTurns: 0b0010,
+  supportsToolCalls: 0b0100,
+  supportsReasoning: 0b1000,
+} as const;
+
+export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
+
+/** `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged. */
+export interface SetCapabilitiesRequest {
+  supportsSystemRole?: boolean;
+  requiresStrictTurns?: boolean;
+  supportsToolCalls?: boolean;
+  supportsReasoning?: boolean;
+}
+
+/** What a retag pass changed (`POST /api/models/{id}/retag`). */
+export interface RetagResponse {
+  changed: boolean;
+  added: string[];
+  removed: string[];
+  specChanged: boolean;
+}
+
+/** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
+export interface UpgradeCheck {
+  hasUpdate: boolean;
+  currentSha?: string | null;
+  latestSha: string;
+}
+
+/** Outcome of `POST /api/models/{id}/upgrade`. */
+export interface UpgradeOutcome {
+  updated: boolean;
+  latestSha: string;
+  filePath?: string | null;
+}
+
 /**
  * A named sampling profile, selectable per request as `<model>:<profile>`.
  *
@@ -245,6 +285,8 @@ export interface ServerConfig {
 // ============================================================================
 
 export interface GgufModel {
+  /** Capability bitfield — see CAPABILITY_FLAGS. Absent/0 = unknown, pass-through. */
+  capabilities?: number;
   id?: number;
   name: string;
   filePath: string;

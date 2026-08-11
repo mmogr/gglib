@@ -1141,3 +1141,73 @@ async fn proxy_start_pinned_accepts_a_minimal_body() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// The retag route is wired and accepts its body; an unknown id 404s after
+/// deserialization (the GUI's stale-list race, not a serde 400).
+#[tokio::test]
+async fn model_retag_is_wired_and_404s_on_unknown_id() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .method("POST")
+                .uri("/api/models/999999/retag")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"full": true}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+/// Same contract for the upgrade pair.
+#[tokio::test]
+async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let check = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/models/999999/upgrade-check")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(check.status(), StatusCode::NOT_FOUND);
+
+    let apply = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .method("POST")
+                .uri("/api/models/999999/upgrade")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(apply.status(), StatusCode::NOT_FOUND);
+}

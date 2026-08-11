@@ -3,7 +3,7 @@
  * Handles local model CRUD operations, search, filtering, and system info.
  */
 
-import { get, post, put, del } from '../client';
+import { del, get, patch, post, put } from '../client';
 import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
 import type {
@@ -11,10 +11,13 @@ import type {
   ModelDetail,
   AddModelParams,
   UpdateModelParams,
-  SearchModelsParams,
   ModelFilterOptions,
   SystemMemoryInfo,
   ModelsDirectoryInfo,
+  RetagResponse,
+  SetCapabilitiesRequest,
+  UpgradeCheck,
+  UpgradeOutcome,
 } from '../../types/models';
 import type { SamplingExplanation } from '../../../../types';
 
@@ -111,32 +114,34 @@ export async function updateModel(params: UpdateModelParams): Promise<GgufModel>
 }
 
 /**
- * Search local models with filters.
+ * Re-run capability detection over a model's stored metadata
+ * (`gglib model retag`). `full` rebuilds the system-tag namespace.
  */
-export async function searchModels(params: SearchModelsParams): Promise<GgufModel[]> {
-  const queryParams = new URLSearchParams();
-  
-  if (params.query) {
-    queryParams.set('query', params.query);
-  }
-  if (params.tags?.length) {
-    queryParams.set('tags', params.tags.join(','));
-  }
-  if (params.quantizations?.length) {
-    queryParams.set('quantizations', params.quantizations.join(','));
-  }
-  if (params.minParams !== undefined) {
-    queryParams.set('min_params', String(params.minParams));
-  }
-  if (params.maxParams !== undefined) {
-    queryParams.set('max_params', String(params.maxParams));
-  }
-  
-  const queryString = queryParams.toString();
-  const path = queryString ? `/api/models/search?${queryString}` : '/api/models/search';
-  
-  return get<GgufModel[]>(path);
+export async function retagModel(modelId: number, full = false): Promise<RetagResponse> {
+  return post<RetagResponse>(`/api/models/${modelId}/retag`, { full });
 }
+
+/** Set or clear a model's capability flags. Returns the updated model. */
+export async function setModelCapabilities(
+  modelId: number,
+  request: SetCapabilitiesRequest,
+): Promise<GgufModel> {
+  return patch<GgufModel>(`/api/models/${modelId}/capabilities`, request);
+}
+
+/** Commit-SHA update check (`gglib model check-updates` for one model). */
+export async function checkModelUpgrade(modelId: number): Promise<UpgradeCheck> {
+  return get<UpgradeCheck>(`/api/models/${modelId}/upgrade-check`);
+}
+
+/**
+ * Re-download at the latest HuggingFace revision (`gglib model upgrade`).
+ * Blocking for the download's duration — callers show a busy state.
+ */
+export async function upgradeModel(modelId: number): Promise<UpgradeOutcome> {
+  return post<UpgradeOutcome>(`/api/models/${modelId}/upgrade`, null);
+}
+
 
 /**
  * Get available filter options (tags, quantizations, parameter ranges).
