@@ -34,6 +34,10 @@ The full set of configurable parameters:
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | *(deferred)* | llama.cpp default 1.0 |
 | `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | *(deferred)*, or **1.0** on a `reasoning`-tagged model | llama.cpp default 0.0; see below |
 | `min_p` | `--min-p` | 0.0 – 1.0 | *(deferred)*, or **0.0** on a `reasoning`-tagged model | llama.cpp default 0.05; see below |
+| `frequency_penalty` | `--frequency-penalty` | -2.0 – 2.0 | *(none)* | llama.cpp default 0.0; scales with how often a token already appeared |
+| `dynatemp_range` | `--dynatemp-range` | ≥ 0.0 | *(none)* | llama.cpp default 0.0, i.e. dynatemp off |
+| `dynatemp_exponent` | `--dynatemp-exponent` | > 0.0 | *(none)* | llama.cpp default 1.0; inert without a range |
+| `top_n_sigma` | `--top-n-sigma` | ≥ -1.0 | *(none)* | llama.cpp default -1.0, i.e. off |
 | `dry_multiplier` | `--dry-multiplier` | 0.0 – 5.0 | *(deferred)* | llama.cpp default 0.0, i.e. DRY off |
 | `dry_base` | `--dry-base` | > 1.0 | *(none)* | llama.cpp default 1.75 |
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
@@ -316,11 +320,25 @@ changes when the pinned build moves.
 ## Client sampling authority
 
 By default, an external client's own sampling parameters (`temperature`, `top_p`,
-`top_k`, `presence_penalty`, `repeat_penalty`, `min_p`) are **not honoured** — they
-are read off the incoming request and then dropped, so the request resolves exactly
-as if the client had sent none of them. `max_tokens` is the one exception: it is a
-budget, not a taste, and ignoring it would silently truncate the client's own turns,
-so it is always forwarded regardless of this setting.
+`top_k`, `presence_penalty`, `frequency_penalty`, `repeat_penalty`, `min_p`, and
+the DRY and entropy-adaptive fields) are **not honoured** — they are read off the
+incoming request and then dropped, so the request resolves exactly as if the client
+had sent none of them. `max_tokens` is the one exception: it is a budget, not a
+taste, and ignoring it would silently truncate the client's own turns, so it is
+always forwarded regardless of this setting.
+
+Sampler keys gglib does not model at all (`mirostat` and its parameters,
+`typical_p`, `xtc_probability`/`xtc_threshold`, `dry_sequence_breakers`,
+`repeat_last_n`, `min_keep`, and the `samplers` chain-order array) are **stripped
+from the untrusted body** rather than gated: they have no place in the hierarchy
+to be dropped from, and before the strip they rode the body straight to
+llama-server — an untrusted client could replace the entire configured sampling
+chain with `mirostat: 2` and nothing in the stack would notice. Functional keys
+(`stop`, `grammar`, `json_schema`, `response_format`, `logit_bias`, `n_probs`)
+are never stripped: they say what the request *is*, not how it should sample.
+Everything dropped — gated and stripped alike — is recorded on the request's
+sampling decision, so a client repeatedly trying to steer sampling is visible
+to the operator rather than silently overruled.
 
 This is the default because many OpenAI-compatible clients send fixed sampling
 values with no user-facing control behind them. VS Code Copilot's LLM Gateway, for
