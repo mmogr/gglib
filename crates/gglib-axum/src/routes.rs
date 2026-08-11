@@ -97,7 +97,10 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::mcp::resolve_path),
         )
         .route("/mcp/servers/{id}/tools", get(handlers::mcp::list_tools))
-        .route("/mcp/servers/{id}/test", post(handlers::mcp::test_connection))
+        .route(
+            "/mcp/servers/{id}/test",
+            post(handlers::mcp::test_connection),
+        )
         .route("/mcp/tools/call", post(handlers::mcp::call_tool))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
