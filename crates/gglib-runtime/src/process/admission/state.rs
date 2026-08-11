@@ -51,25 +51,43 @@ pub const DRAIN_QUANTUM: Duration = Duration::from_secs(20);
 /// spawn.
 pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(150);
 
-/// How long a request may sit in the queue before giving up with a 503.
+/// How long a request may wait **with no queue progress** before giving up
+/// with a 503.
 ///
-/// The hard cap on waiting, and the only bound that holds unconditionally.
+/// A *stall* deadline, not a wall clock. It used to run from enqueue
+/// regardless of what the queue was doing, which made two very different
+/// situations expire identically: a genuinely wedged queue, and a first
+/// request on a cold daemon waiting out a model load that was proceeding
+/// normally — the second being a real failure observed three times in one
+/// day of benchmarking (a retry immediately succeeded each time, because the
+/// load the timeout had abandoned was in fact landing).
+///
+/// So the clock now measures time since the queue last did anything on
+/// anyone's behalf, and two things hold it back:
+///
+/// - **A launch in flight pauses every waiter's clock.** A loading slot is
+///   the opposite of a stall, and it is bounded on its own: [`LAUNCH_TIMEOUT`]
+///   abandons an overrunning launch and frees the slot, at which point the
+///   clock runs again. Waiting out a load can therefore extend a wait by at
+///   most one launch budget at a time, never indefinitely.
+/// - **Progress resets the clock.** A lease released (a generation finished),
+///   a launch landing or failing, a slot evicted — each proves the queue is
+///   moving, so a waiter behind it is queued, not stuck.
+///
+/// What still expires is exactly what this deadline always existed for.
 /// [`DRAIN_QUANTUM`] bounds how long a *turn* lasts, but a turn cannot end
 /// while the outgoing model still has requests in flight — no swap may preempt
-/// a live generation. What that leaves uncovered is one request that runs for a
-/// very long time: a single generation is indivisible, so the rival behind it
-/// has no bound but this one.
+/// a live generation. A single generation is indivisible, so the rival behind
+/// it has no bound but this one: an in-flight count that stays pinned with no
+/// release for this long is a hog or a wedge, and the waiter behind it gets
+/// its 503.
 ///
 /// It used to cover a great deal more. A model under *overlapping* load could
 /// hold its slot indefinitely, because nothing capped how many requests were in
 /// flight at once and a client that always kept one outstanding meant the count
 /// never reached zero. `SERVER_PARALLEL` and `owes_slot_to_rival` close that
-/// off, so
-/// reaching this deadline is now the exception it was meant to be rather than
-/// the ordinary outcome of two clients sharing an endpoint.
-///
-/// Comfortably above [`LAUNCH_TIMEOUT`], so a request waiting on its own launch
-/// can never expire before that launch has had its full budget.
+/// off, so reaching this deadline is now the exception it was meant to be
+/// rather than the ordinary outcome of two clients sharing an endpoint.
 pub const ADMISSION_DEADLINE: Duration = Duration::from_secs(180);
 
 /// A model loaded in VRAM, and everything the fast path needs to know about it.
@@ -179,6 +197,17 @@ struct Waiter {
     /// When it started waiting, reported on the dashboard as the queue depth's
     /// age so a user can see a backlog forming.
     enqueued_at: Instant,
+    /// When this waiter last saw the queue do anything — the reference point
+    /// [`ADMISSION_DEADLINE`] measures from. Reset on every progress event and
+    /// held back while a launch is in flight; `enqueued_at` stays untouched so
+    /// the dashboard keeps reporting the true wait.
+    stalled_since: Instant,
+    /// The [`QueueState::progress_epoch`] this waiter has already accounted
+    /// for. A counter rather than re-deriving from state, because progress is
+    /// a *transition* — a release followed by an immediate re-acquire leaves
+    /// the state looking identical, and the waiter behind it would otherwise
+    /// never learn the queue had moved.
+    seen_epoch: u64,
 }
 
 /// A registered place in the queue.
@@ -245,6 +274,11 @@ pub(super) struct QueueState {
     /// The most recent second-slot verdict, kept so the dashboard can explain
     /// an idle secondary rather than just showing it empty.
     pub(super) secondary_slot: SecondarySlotStatus,
+    /// Bumped on every event that proves the queue is moving: a launch
+    /// starting, landing or failing, a lease released, a slot evicted.
+    /// Waiters compare against it to tell a queue that is working through
+    /// its backlog from one that has stalled — see [`ADMISSION_DEADLINE`].
+    progress_epoch: u64,
 }
 
 impl Default for QueueState {
@@ -256,6 +290,7 @@ impl Default for QueueState {
             turn: None,
             stats: Stats::default(),
             secondary_slot: SecondarySlotStatus::default(),
+            progress_epoch: 0,
         }
     }
 }
@@ -272,6 +307,8 @@ impl QueueState {
             .push_back(Waiter {
                 seq,
                 enqueued_at: now,
+                stalled_since: now,
+                seen_epoch: self.progress_epoch,
             });
         Ticket {
             model: model.to_owned(),
@@ -372,13 +409,56 @@ impl QueueState {
             model: ticket.model.clone(),
             started_at: now,
         });
+        // A launch starting is progress for everyone behind it.
+        self.record_progress();
 
         AdmissionDecision::Launch { slot, evict }
     }
 
-    /// Whether this request has outlasted [`ADMISSION_DEADLINE`].
-    fn is_expired(&self, ticket: &Ticket, now: Instant) -> bool {
-        now.duration_since(ticket.created_at) >= ADMISSION_DEADLINE
+    /// Whether this request has outlasted [`ADMISSION_DEADLINE`] — measured
+    /// against queue *progress*, not against arrival.
+    ///
+    /// `&mut self` because deciding this is also bookkeeping: a waiter that
+    /// observes progress records having seen it, and a waiter behind an
+    /// in-flight launch has its stall clock held at `now`.
+    fn is_expired(&mut self, ticket: &Ticket, now: Instant) -> bool {
+        // A launch in flight is the opposite of a stall: it is bounded by
+        // LAUNCH_TIMEOUT, and both of its outcomes change the queue. This is
+        // the cold-start case that motivated stall semantics — the first
+        // request on a fresh daemon must wait out the model load, not time
+        // out in the queue while the load it needs is landing.
+        let loading = self.is_loading();
+        let epoch = self.progress_epoch;
+        let Some(waiter) = self.waiter_mut(ticket) else {
+            // Not in the queue — the ticket was already granted or forgotten,
+            // so nothing should be asking. Answer with the old absolute rule
+            // rather than guessing.
+            return now.duration_since(ticket.created_at) >= ADMISSION_DEADLINE;
+        };
+        if loading {
+            waiter.stalled_since = now;
+            return false;
+        }
+        if waiter.seen_epoch != epoch {
+            waiter.seen_epoch = epoch;
+            waiter.stalled_since = now;
+            return false;
+        }
+        now.duration_since(waiter.stalled_since) >= ADMISSION_DEADLINE
+    }
+
+    /// The queue-side record behind `ticket`, if it is still waiting.
+    fn waiter_mut(&mut self, ticket: &Ticket) -> Option<&mut Waiter> {
+        self.waiting
+            .get_mut(&ticket.model)?
+            .iter_mut()
+            .find(|w| w.seq == ticket.seq)
+    }
+
+    /// Record an event that proves the queue is moving. Every waiter's next
+    /// poll resets its stall clock against this.
+    fn record_progress(&mut self) {
+        self.progress_epoch = self.progress_epoch.wrapping_add(1);
     }
 
     /// The answer for a request that cannot proceed: give up if it has waited
@@ -541,6 +621,7 @@ impl QueueState {
     /// Record that a launch completed and `resident` now occupies `slot`.
     pub(super) fn install(&mut self, slot: usize, resident: Resident) {
         self.slots[slot] = SlotState::Resident(Box::new(resident));
+        self.record_progress();
     }
 
     /// Record that a launch into `slot` failed, freeing it for another attempt.
@@ -548,6 +629,7 @@ impl QueueState {
         if matches!(self.slots[slot], SlotState::Loading { .. }) {
             self.slots[slot] = SlotState::Empty;
         }
+        self.record_progress();
     }
 
     /// Release one in-flight reference to `slot`.
@@ -555,6 +637,10 @@ impl QueueState {
         if let Some(SlotState::Resident(r)) = self.slots.get_mut(slot) {
             r.inflight = r.inflight.saturating_sub(1);
         }
+        // A generation finished. The waiter this matters to may lose the
+        // freed capacity to a racing re-acquire before its next poll, so the
+        // epoch — not the resulting state — is what tells it the queue moved.
+        self.record_progress();
     }
 
     /// Increment the in-flight count for `slot`, when a caller has re-acquired
@@ -573,6 +659,7 @@ impl QueueState {
     /// the user's decision rather than the scheduler's.
     pub(super) fn evict(&mut self, slot: usize) -> Option<Resident> {
         let previous = std::mem::replace(&mut self.slots[slot], SlotState::Empty);
+        self.record_progress();
         match previous {
             SlotState::Resident(r) => Some(*r),
             SlotState::Empty | SlotState::Loading { .. } => None,

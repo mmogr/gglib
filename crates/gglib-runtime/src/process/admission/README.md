@@ -68,6 +68,13 @@ time — it is indivisible, so the rival behind it waits. [`ADMISSION_DEADLINE`]
 is the backstop there: the request gives up and gets a 503 with `Retry-After`,
 and the caller controls its own backoff from there.
 
+The deadline measures **stall, not age**. A waiter's clock is paused while any
+launch is in flight (a load is bounded work, not a wedge — the first request on
+a cold daemon used to 503 against its own model load here) and resets whenever
+the queue provably moves: a lease released, a launch landing or failing, a slot
+evicted. Only a queue that does *nothing* for the whole deadline expires a
+waiter, which is exactly the hog-or-wedge case the backstop exists for.
+
 This is why admission returns a lease rather than just a target — see
 [`AdmissionLease`](gglib_core::ports::AdmissionLease).
 

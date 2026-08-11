@@ -246,7 +246,7 @@ impl ResidentSet {
     ) -> Result<Admission, ModelRuntimeError> {
         let model_name = request.spec.name.clone();
         let resolved_ctx = request.context.0;
-        let queued = QueuedTicket {
+        let mut queued = QueuedTicket {
             queue: Arc::clone(&self.queue),
             ticket: self.queue.enqueue(&model_name),
         };
@@ -268,7 +268,15 @@ impl ResidentSet {
                         return Ok(admission);
                     }
                     // The resident turned out to be unusable and has been
-                    // evicted; go round again and launch a fresh one.
+                    // evicted; go round again and launch a fresh one — with a
+                    // *fresh ticket*. `poll` forgot this one the moment it
+                    // granted the serve, and a forgotten ticket is invisible
+                    // to the scheduler: it can never be the oldest waiter, so
+                    // it can never win a launch, and its only remaining exit
+                    // was waiting out the deadline for a 503. A busy server
+                    // failing its health check put real requests on exactly
+                    // that path.
+                    queued.ticket = self.queue.enqueue(&model_name);
                 }
                 AdmissionDecision::Launch { slot, evict } => {
                     return self.launch(core, &request, slot, evict).await;
@@ -282,10 +290,11 @@ impl ResidentSet {
                 AdmissionDecision::Expired => {
                     warn!(
                         model = %model_name,
-                        "request outlasted the admission queue deadline — surfacing 503"
+                        "admission queue made no progress for the whole deadline — surfacing 503"
                     );
                     return Err(ModelRuntimeError::AdmissionTimeout(format!(
-                        "waited for '{model_name}' without reaching the front of the queue"
+                        "the queue made no progress while '{model_name}' waited — \
+                         no launch running, no generation finishing"
                     )));
                 }
             }

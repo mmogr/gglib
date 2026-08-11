@@ -642,6 +642,106 @@ async fn a_third_model_evicts_the_secondary_not_the_primary() {
 
 // ── giving up ─────────────────────────────────────────────────────────────
 
+/// The cold-start papercut (observed three times in one benchmarking day): a
+/// request that arrives while a model launch is in flight must wait the load
+/// out, not expire in the queue. The load is bounded by [`LAUNCH_TIMEOUT`],
+/// so pausing the stall clock here cannot extend a wait indefinitely.
+#[tokio::test]
+async fn a_waiter_never_expires_while_a_launch_is_in_flight() {
+    tokio::time::pause();
+    let q = queue();
+
+    // The first requester on a cold daemon drives the launch...
+    let (driver, decision) = request(&q, "qwen-coder");
+    assert!(
+        matches!(
+            decision,
+            AdmissionDecision::Launch {
+                slot: PRIMARY_SLOT,
+                evict: None
+            }
+        ),
+        "cold daemon: first request must launch, got {decision:?}"
+    );
+
+    // ...and both a same-model waiter and a rival queue behind the load.
+    let (waiter, d) = request(&q, "qwen-coder");
+    assert_eq!(d, AdmissionDecision::Wait);
+    let (rival, d) = request(&q, "nomic-embed");
+    assert_eq!(d, AdmissionDecision::Wait);
+
+    // The load takes far longer than the deadline. Neither waiter may expire
+    // while it is in flight.
+    tokio::time::advance(ADMISSION_DEADLINE * 2).await;
+    assert_eq!(
+        q.poll(&waiter, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "a waiter for the loading model must sit out the load"
+    );
+    assert_eq!(
+        q.poll(&rival, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "a launch in flight is progress, not a stall — the rival's clock is paused"
+    );
+
+    // The load lands. The turn aged past its quantum while it ran, so the
+    // fairness rules now owe the slot to the rival — the waiter keeps
+    // waiting, which is the point: *waiting*, not expired.
+    drop(driver);
+    let lease = q.install(PRIMARY_SLOT, resident(1, "qwen-coder"));
+    drop(lease);
+    assert_eq!(q.poll(&waiter, NEVER_FITS), AdmissionDecision::Wait);
+
+    // Once the rival hangs up, the waiter the old deadline would have 503'd
+    // is served from the resident its launch produced.
+    q.abandon(&rival);
+    assert_eq!(
+        q.poll(&waiter, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "survived the load and got served"
+    );
+}
+
+/// Progress resets the stall clock; only a true stall expires. A waiter that
+/// keeps losing freed capacity to a racing re-acquire is behind a *moving*
+/// queue and must not be expired on the old absolute clock — but once the
+/// queue stops moving entirely, the deadline still fires.
+#[tokio::test]
+async fn progress_resets_the_stall_clock_and_a_true_stall_still_expires() {
+    tokio::time::pause();
+    let q = queue();
+    let lease = make_resident(&q, "qwen-coder", 1);
+
+    let (capped, d) = request(&q, "qwen-coder");
+    assert_eq!(d, AdmissionDecision::Wait, "slot at capacity");
+
+    // Nearly the whole deadline passes with nothing happening...
+    tokio::time::advance(ADMISSION_DEADLINE - std::time::Duration::from_secs(1)).await;
+    assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Wait);
+
+    // ...then a generation finishes, and a pipelined rival immediately takes
+    // the freed capacity back before this waiter's next poll. The state looks
+    // identical; the epoch is what proves the queue moved.
+    drop(lease);
+    let release = q.lease(PRIMARY_SLOT).expect("slot is resident");
+    assert_eq!(
+        q.poll(&capped, NEVER_FITS),
+        AdmissionDecision::Wait,
+        "progress observed: the stall clock resets instead of expiring"
+    );
+
+    // Under the old absolute deadline this poll sat at nearly 2x the budget
+    // and would have expired. Under stall semantics the clock restarted at
+    // the release, so the waiter is still merely waiting...
+    tokio::time::advance(ADMISSION_DEADLINE - std::time::Duration::from_secs(1)).await;
+    assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Wait);
+
+    // ...until a full deadline passes with no progress at all.
+    tokio::time::advance(std::time::Duration::from_secs(2)).await;
+    assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Expired);
+    drop(release);
+}
+
 /// A request that never reaches the front gives up with a deadline rather than
 /// holding a connection open forever.
 #[tokio::test]
@@ -654,6 +754,30 @@ async fn a_request_expires_once_its_deadline_passes() {
     tokio::time::advance(ADMISSION_DEADLINE + std::time::Duration::from_secs(1)).await;
 
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
+}
+
+/// A ticket `poll` has granted is *forgotten*, and a forgotten ticket is
+/// invisible to the scheduler: it can never be the oldest waiter, so it can
+/// never win a launch — even with an empty slot there for the taking. The
+/// residency layer must therefore re-enqueue before going round again after a
+/// failed serve; this test pins the invisibility that makes that mandatory.
+#[tokio::test]
+async fn a_granted_ticket_is_forgotten_and_cannot_win_again() {
+    let q = queue();
+    let lease = make_resident(&q, "qwen-coder", 1);
+    drop(lease);
+
+    let (ticket, decision) = request(&q, "qwen-coder");
+    assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
+
+    // The serve fell through — the resident failed its health check and was
+    // recycled. Balance the Serve's in-flight increment, then evict.
+    drop(q.claim(PRIMARY_SLOT));
+    q.evict(PRIMARY_SLOT);
+
+    // The slot is empty and this request still wants the model, but the
+    // granted ticket cannot reach the front of any queue again.
+    assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
 }
 
 /// An expired or abandoned request must stop holding the front of the queue,
