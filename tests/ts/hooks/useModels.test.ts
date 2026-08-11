@@ -26,28 +26,27 @@ vi.mock('../../../src/services/platform', () => ({
   setSelectedModel: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { setSelectedModel } from '../../../src/services/platform';
 
 const mockModels: GgufModel[] = [
   {
     id: 1,
     name: 'llama-7b',
-    file_path: '/models/llama-7b.gguf',
-    param_count_b: 7.0,
+    filePath: '/models/llama-7b.gguf',
+    paramCountB: 7.0,
     architecture: 'llama',
     quantization: 'Q4_K_M',
-    context_length: 4096,
-    added_at: '2024-01-01T00:00:00Z',
+    contextLength: 4096,
+    addedAt: '2024-01-01T00:00:00Z',
   },
   {
     id: 2,
     name: 'mistral-7b',
-    file_path: '/models/mistral-7b.gguf',
-    param_count_b: 7.0,
+    filePath: '/models/mistral-7b.gguf',
+    paramCountB: 7.0,
     architecture: 'mistral',
     quantization: 'Q5_K_S',
-    context_length: 8192,
-    added_at: '2024-01-02T00:00:00Z',
+    contextLength: 8192,
+    addedAt: '2024-01-02T00:00:00Z',
   },
 ];
 

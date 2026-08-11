@@ -1,0 +1,18 @@
+{
+  // The Vitest suite. Vitest transpiles without type checking, so nothing here
+  // was ever verified: one test imported a type from src/download/api/types,
+  // a directory that does not exist, and still passed because the import was
+  // type-only and therefore erased.
+  //
+  // `src` is included alongside `tests/ts` because the tests import from it and
+  // a composite project must list every file it sees. That means src is checked
+  // twice (once here, once by tsconfig.app.json), which costs a few seconds and
+  // keeps the app project free of the vitest globals declared below — src should
+  // not be able to reference `describe` or `expect`.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+    "tsBuildInfoFile": "node_modules/.tmp/tsconfig.test.tsbuildinfo"
+  },
+  "include": ["tests/ts", "src"]
+}

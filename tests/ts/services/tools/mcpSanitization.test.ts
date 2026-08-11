@@ -15,6 +15,19 @@ import { registerMcpTools } from '../../../../src/services/tools/mcpIntegration'
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
 import type { McpTool } from '../../../../src/services/transport';
 import type { ToolCall } from '../../../../src/services/tools/types';
+import type { McpServerId } from '../../../../src/services/transport';
+
+// ── McpServerId in tests ──────────────────────────────────────────────────────
+// McpServerId is `number` in production (src/services/transport/types/ids.ts),
+// but this suite registers servers under string ids on purpose: the ids embed
+// straight into the namespaced tool name (`mcp_${serverId}_${tool}`), and ids
+// like 'my.server' are what exercise the sanitizer's normalisation of dots and
+// spaces. Vitest erased the mismatch — these files were never type-checked —
+// so the cast is made explicit here rather than silently spread across ~30
+// call sites. If the defensive server-id sanitization is genuinely unreachable
+// now that ids are numeric, this helper is where that conversation starts.
+const srv = (id: string) => id as unknown as McpServerId;
+
 
 // =============================================================================
 // Module mocks (same pattern as mcpIntegration.test.ts)
@@ -91,7 +104,7 @@ describe('MCP tool name sanitization round-trip', () => {
     // Tool 'get-weather.v2' from server 'test' sanitizes to 'mcp_test_get-weather_v2'
     callMcpTool.mockResolvedValueOnce({ success: true, data: 'sunny' });
 
-    registerMcpTools('test', [makeTool('get-weather.v2')]);
+    registerMcpTools(srv('test'), [makeTool('get-weather.v2')]);
 
     const toolCall = makeToolCall('mcp_test_get-weather_v2', { city: 'London' });
     await getToolRegistry().executeRawCall(toolCall);
@@ -108,7 +121,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('passes arguments through unmodified', async () => {
     callMcpTool.mockResolvedValueOnce({ success: true, data: null });
 
-    registerMcpTools('srv', [makeTool('echo')]);
+    registerMcpTools(srv('srv'), [makeTool('echo')]);
     const args = { message: 'hello', count: 3, flag: true };
 
     await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_echo', args));
@@ -121,7 +134,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('returns a success result with data from the MCP server', async () => {
     callMcpTool.mockResolvedValueOnce({ success: true, data: { temp: 20, unit: 'C' } });
 
-    registerMcpTools('weather', [makeTool('get-temp')]);
+    registerMcpTools(srv('weather'), [makeTool('get-temp')]);
     const result = await getToolRegistry().executeRawCall(
       makeToolCall('mcp_weather_get-temp', { city: 'Paris' }),
     );
@@ -132,7 +145,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('returns an error result when the MCP server responds with failure', async () => {
     callMcpTool.mockResolvedValueOnce({ success: false, error: 'city not found' });
 
-    registerMcpTools('weather', [makeTool('get-temp')]);
+    registerMcpTools(srv('weather'), [makeTool('get-temp')]);
     const result = await getToolRegistry().executeRawCall(
       makeToolCall('mcp_weather_get-temp', { city: 'Atlantis' }),
     );
@@ -143,7 +156,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('falls back to a generic error message when MCP responds with success:false but no error string', async () => {
     callMcpTool.mockResolvedValueOnce({ success: false });
 
-    registerMcpTools('srv', [makeTool('flaky')]);
+    registerMcpTools(srv('srv'), [makeTool('flaky')]);
     const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_flaky'));
 
     expect(result).toMatchObject({ success: false });
@@ -155,7 +168,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('returns an error result when callMcpTool rejects (does not throw)', async () => {
     callMcpTool.mockRejectedValueOnce(new Error('network failure'));
 
-    registerMcpTools('srv', [makeTool('risky-op')]);
+    registerMcpTools(srv('srv'), [makeTool('risky-op')]);
     const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_risky-op'));
 
     expect(result).toMatchObject({
@@ -167,7 +180,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('handles non-Error rejections gracefully', async () => {
     callMcpTool.mockRejectedValueOnce('something broke');
 
-    registerMcpTools('srv', [makeTool('tool_a')]);
+    registerMcpTools(srv('srv'), [makeTool('tool_a')]);
     const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_tool_a'));
 
     expect(result).toMatchObject({ success: false });
@@ -177,7 +190,7 @@ describe('MCP tool name sanitization round-trip', () => {
   // ── Argument JSON parsing ──────────────────────────────────────────────────
 
   it('returns a parse-error result when the LLM sends invalid arguments JSON', async () => {
-    registerMcpTools('srv', [makeTool('my_tool')]);
+    registerMcpTools(srv('srv'), [makeTool('my_tool')]);
 
     const badCall: ToolCall = {
       id: 'call-bad',
@@ -213,7 +226,7 @@ describe('MCP tool name sanitization round-trip', () => {
       .mockResolvedValueOnce({ success: true, data: 'weather-result' })
       .mockResolvedValueOnce({ success: true, data: 'files-result' });
 
-    registerMcpTools('multi', [
+    registerMcpTools(srv('multi'), [
       makeTool('get-weather.v2'),
       makeTool('list files'),
     ]);
@@ -232,8 +245,8 @@ describe('MCP tool name sanitization round-trip', () => {
       .mockResolvedValueOnce({ success: true, data: 'from-alpha' })
       .mockResolvedValueOnce({ success: true, data: 'from-beta' });
 
-    registerMcpTools('alpha', [makeTool('ping')]);
-    registerMcpTools('beta',  [makeTool('ping')]);
+    registerMcpTools(srv('alpha'), [makeTool('ping')]);
+    registerMcpTools(srv('beta'),  [makeTool('ping')]);
 
     await getToolRegistry().executeRawCall(makeToolCall('mcp_alpha_ping', {}, 'c1'));
     await getToolRegistry().executeRawCall(makeToolCall('mcp_beta_ping',  {}, 'c2'));
@@ -246,7 +259,7 @@ describe('MCP tool name sanitization round-trip', () => {
 
   it('does not register either tool when two names collide, so calling the sanitized key returns an error', async () => {
     // 'get!data' and 'get?data' both sanitize to 'mcp_s_get_data' — both are skipped
-    registerMcpTools('s', [makeTool('get!data'), makeTool('get?data')]);
+    registerMcpTools(srv('s'), [makeTool('get!data'), makeTool('get?data')]);
 
     const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_s_get_data'));
 
@@ -262,7 +275,7 @@ describe('MCP tool name sanitization round-trip', () => {
   it('works correctly when the tool name needs no sanitization at all', async () => {
     callMcpTool.mockResolvedValueOnce({ success: true, data: 42 });
 
-    registerMcpTools('srv', [makeTool('get_current_time')]);
+    registerMcpTools(srv('srv'), [makeTool('get_current_time')]);
     const result = await getToolRegistry().executeRawCall(
       makeToolCall('mcp_srv_get_current_time'),
     );

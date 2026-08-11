@@ -78,11 +78,13 @@ export default [
           jsx: true,
         },
       },
+      // No node globals: this block covers src/, which is browser-only.
+      // `process` and `__dirname` were declared readonly here without a single
+      // use anywhere in src/ — the build tooling that needs them lives in
+      // vite.config.ts, which this block has never matched.
       globals: {
         ...globals.browser,
         ...globals.es2021,
-        process: 'readonly',
-        __dirname: 'readonly',
       },
     },
     plugins: {

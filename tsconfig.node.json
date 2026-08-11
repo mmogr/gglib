@@ -1,10 +1,14 @@
 {
+  // The build tooling itself. This was previously a stub that only `tsc -b`
+  // would have read — and nothing ran `tsc -b` — so vite.config.ts went
+  // unchecked and accumulated five errors, including a Tailwind option that
+  // does not exist and was being silently discarded at build time.
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "types": ["node"],
+    "tsBuildInfoFile": "node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
+  // eslint.config.js is deliberately absent: without allowJs, tsc would list it
+  // and silently skip it, which reads as coverage that does not exist.
   "include": ["vite.config.ts"]
 }

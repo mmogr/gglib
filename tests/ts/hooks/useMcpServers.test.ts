@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useMcpServers } from '../../../src/hooks/useMcpServers';
-import type { McpServerInfo, McpTool } from '../../../src/services/transport';
+import type { McpServerInfo } from '../../../src/services/transport';
 
 const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
@@ -37,9 +37,8 @@ const {
   removeMcpServer,
   startMcpServer,
   stopMcpServer,
-  callMcpTool,
 } = transport;
-import { syncAllMcpTools, syncBuiltinTools } from '../../../src/services/tools';
+import { syncAllMcpTools } from '../../../src/services/tools';
 
 // ==========================================================================
 // Test Fixtures
@@ -56,6 +55,7 @@ const mockServerInfo: McpServerInfo = {
     },
     enabled: true,
     lifecycle: 'lazy' as const,
+    is_valid: true,
     env: [],
     created_at: '2024-01-01T00:00:00Z',
   },
@@ -63,32 +63,7 @@ const mockServerInfo: McpServerInfo = {
   tools: [],
 };
 
-const mockRunningServer: McpServerInfo = {
-  server: {
-    id: 2,
-    name: 'Running Server',
-    server_type: 'stdio',
-    config: {
-      command: 'npx',
-      args: ['-y', 'running-server'],
-    },
-    enabled: true,
-    lifecycle: 'lazy' as const,
-    env: [],
-    created_at: '2024-01-01T00:00:00Z',
-  },
-  status: 'running',
-  tools: [
-    { name: 'tool1', description: 'First tool' },
-    { name: 'tool2', description: 'Second tool' },
-  ],
-};
 
-const mockTools: (McpTool & { server_id: number })[] = [
-  { name: 'search', description: 'Search web', server_id: 1 },
-  { name: 'fetch', description: 'Fetch URL', server_id: 1 },
-  { name: 'read_file', description: 'Read file', server_id: 2 },
-];
 
 describe('useMcpServers', () => {
   beforeEach(() => {
@@ -185,6 +160,7 @@ describe('useMcpServers', () => {
         config: { command: 'test' },
         enabled: true,
         lifecycle: 'lazy' as const,
+        is_valid: true,
         env: [],
       };
       const savedServer = { ...newServer, id: 2, created_at: '2024-01-01T00:00:00Z' };
@@ -387,13 +363,13 @@ describe('useMcpServers', () => {
       // First call throws
       await expect(
         act(async () => {
-          await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
+          await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
         })
       ).rejects.toThrow('First error');
 
       // Second call succeeds
       await act(async () => {
-        const server = await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
+        const server = await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
         expect(server.id).toBe(2);
       });
     });

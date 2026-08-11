@@ -12,7 +12,7 @@ import { getTransport } from '../services/transport';
 
 export type ShowToastFn = (message: string, type?: "success" | "error" | "info" | "warning") => void;
 
-interface SettingsContextValue {
+export interface SettingsContextValue {
   settings: AppSettings | null;
   loading: boolean;
   saving: boolean;
