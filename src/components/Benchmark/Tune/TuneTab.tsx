@@ -28,6 +28,8 @@ import { getTransport } from '../../../services/transport';
 
 interface TuneTabProps {
   models: GgufModel[];
+  /** Called when a run finishes, so the page can refresh the shared history. */
+  onRunComplete?: () => void;
 }
 
 interface TuneRunState {
@@ -48,7 +50,7 @@ const INITIAL_STATE: TuneRunState = {
   results: [],
 };
 
-export const TuneTab: FC<TuneTabProps> = ({ models }) => {
+export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
   const [runState, setRunState] = useState<TuneRunState>(INITIAL_STATE);
   const [applyingIndex, setApplyingIndex] = useState<number | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models }) => {
 
         case 'run_complete':
           setRunState(prev => ({ ...prev, status: 'complete' }));
+          onRunComplete?.();
           break;
 
         case 'run_failed':
@@ -125,7 +128,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models }) => {
           break;
       }
     },
-    [scheduleFlush],
+    [scheduleFlush, onRunComplete],
   );
 
   const handleApply = useCallback(async (result: TuneCandidateResult, modelId: number) => {

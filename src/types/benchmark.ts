@@ -302,6 +302,30 @@ export type BenchmarkEvent =
  */
 export type EvalArm = 'raw' | 'gglib' | 'raw_replicate' | 'control';
 
+/**
+ * Request body for `POST /api/benchmark/agentic`. Mirrors
+ * `gglib_core::domain::benchmark::agentic::AgenticEvalConfig`; every field
+ * except `model_id` and `task_suite` is serde-defaulted server-side.
+ */
+export interface AgenticEvalConfig {
+  model_id: number;
+  task_suite: TaskSuite;
+  /** Server default: { tool_accuracy: 0.4, loop_avoidance: 0.3, task_completion: 0.2, speed: 0.1 }. */
+  weights?: ScoreWeights;
+  ctx_size?: number | null;
+  /**
+   * Server default: [12345, 67890, 11111]. An EMPTY array is meaningful —
+   * one unseeded run per task, which carries full decode variance.
+   */
+  seeds?: number[];
+  /** Server default true — run the sampling-broken positive control arm. */
+  include_control?: boolean;
+  /** Server default true — re-run the raw arm on disjoint seeds (the A/A drift floor). */
+  replicate_raw?: boolean;
+  /** Server default 1; clamped into 1..=seeds.len() server-side. */
+  control_seeds?: number;
+}
+
 /** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
 export interface ArmScores {
   tool_accuracy: number;
