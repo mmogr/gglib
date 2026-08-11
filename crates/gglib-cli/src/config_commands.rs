@@ -140,6 +140,10 @@ pub enum ProfileCommand {
         /// Min-p sampling threshold (0.0–1.0)
         #[arg(long)]
         min_p: Option<f32>,
+        /// Frequency penalty (−2.0–2.0); scales with how often a token
+        /// already appeared, 0.0 disables (llama.cpp default 0.0)
+        #[arg(long)]
+        frequency_penalty: Option<f32>,
         /// DRY repetition penalty strength (0.0 disables)
         #[arg(long)]
         dry_multiplier: Option<f32>,

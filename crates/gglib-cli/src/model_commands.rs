@@ -183,6 +183,10 @@ pub enum ModelCommand {
         /// Set default min-p sampling threshold for this model (0.0 = disabled)
         #[arg(long = "min-p")]
         min_p: Option<f32>,
+        /// Set default frequency penalty for this model (0.0 = disabled,
+        /// negative encourages reuse; llama.cpp default 0.0)
+        #[arg(long = "frequency-penalty")]
+        frequency_penalty: Option<f32>,
         /// Set default DRY repetition penalty strength (0.0 = disabled)
         #[arg(long = "dry-multiplier")]
         dry_multiplier: Option<f32>,

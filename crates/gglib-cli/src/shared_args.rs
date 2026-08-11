@@ -37,6 +37,10 @@ pub struct SamplingArgs {
     /// Min-P sampling threshold — 0.0 = disabled (overrides model/global defaults)
     #[arg(long = "min-p")]
     pub min_p: Option<f32>,
+    /// Frequency penalty — scales with how often a token already appeared;
+    /// 0.0 = disabled, negative encourages reuse (llama.cpp default 0.0)
+    #[arg(long = "frequency-penalty")]
+    pub frequency_penalty: Option<f32>,
     /// DRY repetition penalty strength — 0.0 = disabled, 0.8 = a common
     /// starting point (overrides model/global defaults)
     #[arg(long = "dry-multiplier")]
@@ -127,7 +131,7 @@ impl SamplingArgs {
             dynatemp_range: self.dynatemp_range,
             dynatemp_exponent: self.dynatemp_exponent,
             top_n_sigma: self.top_n_sigma,
-            frequency_penalty: None,
+            frequency_penalty: self.frequency_penalty,
             // No `--seed` flag: these args populate stored configuration and
             // long-lived operator overrides, where a pinned seed would make
             // every request return the same text. A seed is set per request by

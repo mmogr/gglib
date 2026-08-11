@@ -39,6 +39,7 @@ pub struct UpdateArgs {
     pub dynatemp_range: Option<f32>,
     pub dynatemp_exponent: Option<f32>,
     pub top_n_sigma: Option<f32>,
+    pub frequency_penalty: Option<f32>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -212,7 +213,8 @@ pub fn create_updated_model(
             || args.dry_penalty_last_n.is_some()
             || args.dynatemp_range.is_some()
             || args.dynatemp_exponent.is_some()
-            || args.top_n_sigma.is_some();
+            || args.top_n_sigma.is_some()
+            || args.frequency_penalty.is_some();
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -260,6 +262,9 @@ pub fn create_updated_model(
             }
             if let Some(top_n_sigma) = args.top_n_sigma {
                 inference_config.top_n_sigma = Some(top_n_sigma);
+            }
+            if let Some(frequency_penalty) = args.frequency_penalty {
+                inference_config.frequency_penalty = Some(frequency_penalty);
             }
 
             // A deliberate flag from the user, so this is a user-set value
@@ -334,6 +339,7 @@ fn show_inference_defaults_changes(
                 || old.dynatemp_range != new.dynatemp_range
                 || old.dynatemp_exponent != new.dynatemp_exponent
                 || old.top_n_sigma != new.top_n_sigma
+                || old.frequency_penalty != new.frequency_penalty
         }
     };
 
@@ -390,6 +396,9 @@ fn show_inference_defaults_changes(
             }
             if let Some(ts) = new.top_n_sigma {
                 println!("      Top-n-sigma: {}", ts);
+            }
+            if let Some(fp) = new.frequency_penalty {
+                println!("      Frequency penalty: {}", fp);
             }
         }
         (Some(old), Some(new)) => {
@@ -489,6 +498,13 @@ fn show_inference_defaults_changes(
                     "    Top-n-sigma: {} → {}",
                     format_option_f32(&old.top_n_sigma),
                     format_option_f32(&new.top_n_sigma)
+                );
+            }
+            if old.frequency_penalty != new.frequency_penalty {
+                println!(
+                    "    Frequency penalty: {} → {}",
+                    format_option_f32(&old.frequency_penalty),
+                    format_option_f32(&new.frequency_penalty)
                 );
             }
         }
@@ -675,6 +691,7 @@ mod tests {
             dynatemp_range: None,
             dynatemp_exponent: None,
             top_n_sigma: None,
+            frequency_penalty: None,
             clear_inference_defaults: false,
         };
 
