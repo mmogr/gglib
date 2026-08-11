@@ -1,0 +1,107 @@
+/* highlight.js theme driven by design tokens (replaces the stock github-dark
+   import). Code blocks are L2 surfaces per the contract; syntax colors come
+   from the --code-* token group in variables.css so they move with the palette. */
+
+pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em;
+}
+
+code.hljs {
+  padding: 3px 5px;
+}
+
+.hljs {
+  color: var(--color-text);
+  background: var(--color-surface-elevated);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-selector-attr,
+.hljs-doctag,
+.hljs-template-tag,
+.hljs-type,
+.hljs-attr,
+.hljs-variable.language_ {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-selector-pseudo {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-built_in,
+.hljs-symbol,
+.hljs-meta,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-operator {
+  color: var(--code-number);
+}
+
+/* Interpolation bodies nest inside string spans — reset them to base text */
+.hljs-subst {
+  color: var(--color-text);
+}
+
+/* Prose-ish scopes: quiet, and italic only where italics read as prose. A
+   diff deletion is not a comment, so it is excluded here — see below. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+/* Literal spans markdown hands back verbatim — quiet but upright. */
+.hljs-code,
+.hljs-formula {
+  color: var(--code-comment);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.hljs-bullet,
+.hljs-name {
+  color: var(--code-function);
+}
+
+/* Markdown headings carry weight, not just colour. */
+.hljs-section {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Diff bands. Colour alone is the weakest possible signal for the one case
+   where getting the direction wrong changes what the reader believes, so
+   added and removed lines get a wash behind them as well as a hue. */
+.hljs-addition {
+  color: var(--color-success);
+  background: var(--color-success-subtle);
+  display: inline-block;
+  width: 100%;
+}
+
+.hljs-deletion {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+  display: inline-block;
+  width: 100%;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: var(--font-weight-semibold);
+}

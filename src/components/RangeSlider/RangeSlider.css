@@ -5,8 +5,8 @@
   appearance: none;
   width: 16px;
   height: 16px;
-  background: var(--color-primary, #4a9eff);
-  border: 2px solid var(--color-surface, #2a2a2a);
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
   border-radius: 50%;
   cursor: pointer;
   pointer-events: auto;
@@ -28,8 +28,8 @@
 .range-slider-thumb::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: var(--color-primary, #4a9eff);
-  border: 2px solid var(--color-surface, #2a2a2a);
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
   border-radius: 50%;
   cursor: pointer;
   pointer-events: auto;
@@ -52,11 +52,11 @@
 
 /* Disabled state */
 .range-slider-thumb:disabled::-webkit-slider-thumb {
-  background: var(--color-border, #3a3a3a);
+  background: var(--color-border);
   cursor: not-allowed;
 }
 
 .range-slider-thumb:disabled::-moz-range-thumb {
-  background: var(--color-border, #3a3a3a);
+  background: var(--color-border);
   cursor: not-allowed;
 }
