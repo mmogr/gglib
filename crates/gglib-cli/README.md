@@ -62,7 +62,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                                                                     │
 │  ┌───────────────────────────────────────────────────────────────────────────────┐  │
 │  │                          *_commands.rs modules                                │  │
-│  │   llama_commands │ config_commands │ assistant_ui_commands │ ...             │  │
+│  │   llama_commands │ config_commands │ model_commands │ ...                   │  │
 │  └───────────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -74,7 +74,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
-| [`assistant_ui_commands.rs`](src/assistant_ui_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-coverage.json) |
 | [`benchmark_commands.rs`](src/benchmark_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-benchmark_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-benchmark_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-benchmark_commands-coverage.json) |
 | [`bootstrap.rs`](src/bootstrap.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-coverage.json) |
 | [`commands.rs`](src/commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-coverage.json) |
@@ -95,7 +94,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
-- **`assistant_ui_commands.rs`** — Interactive assistant UI command definitions
 - **`bootstrap.rs`** — Dependency injection and service wiring
 - **`commands.rs`** — Command dispatch and routing
 - **`config_commands.rs`** — Configuration management commands

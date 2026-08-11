@@ -171,7 +171,7 @@ jobs:
           
           # gglib-runtime modules
           RT_TEST="$(find artifacts -name 'rust-test-gglib-runtime.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in llama proxy process system assistant_ui ports_impl; do
+          for MODULE in llama proxy process system ports_impl; do
             extract_module_tests "$RT_TEST" "$MODULE" "gglib-runtime-$MODULE"
           done
           
@@ -514,7 +514,7 @@ jobs:
           
           # gglib-runtime modules
           RT_LCOV="$(find artifacts -name 'gglib-runtime-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in llama proxy process system assistant_ui ports_impl; do
+          for MODULE in llama proxy process system ports_impl; do
             extract_module_cov "$RT_LCOV" "src/$MODULE/" "gglib-runtime-$MODULE"
           done
           
@@ -849,7 +849,7 @@ jobs:
           # =============================================================================
           # Per-module badges for gglib-runtime
           # =============================================================================
-          for MODULE in llama proxy process system assistant_ui; do
+          for MODULE in llama proxy process system; do
             if [ -d "crates/gglib-runtime/src/$MODULE" ]; then
               SCC_DATA=$(scc "crates/gglib-runtime/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
               LOC=$(echo "$SCC_DATA" | jq '.Code // 0')

@@ -5,7 +5,6 @@
 // because neither crate inherits the workspace clippy lints yet.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
-pub mod assistant_ui;
 mod command;
 pub mod compose;
 mod health;

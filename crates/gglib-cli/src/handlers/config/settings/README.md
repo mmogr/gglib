@@ -8,8 +8,8 @@
 Settings, default-model, and models-directory handlers.
 
 These three sub-handlers were the original `config` dispatch targets.
-They now live inside the `config/` directory alongside llama, assistant-ui,
-check-deps, and paths.
+They now live inside the `config/` directory alongside llama, check-deps,
+and paths.
 
 All display/formatting logic is in the sibling [`settings_display`] module.
 

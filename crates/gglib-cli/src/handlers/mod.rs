@@ -5,7 +5,7 @@
 //! This module contains the command execution logic for CLI commands.
 //!
 //! Handlers are organized into domain-scoped subdirectories:
-//! - [`config`]    — settings, llama management, assistant-ui, paths, dep checks
+//! - [`config`]    — settings, llama management, paths, dep checks
 //! - [`inference`] — serve, chat, question (shared resolve & logging)
 //! - [`model`]     — add, list, remove, update, download, verify, search, browse
 //!

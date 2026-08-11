@@ -1,12 +1,11 @@
 //! Configuration, tooling, and system management subcommands.
 //!
 //! This module defines commands for managing application settings,
-//! models directory, llama.cpp toolchain, assistant-ui, system
+//! models directory, llama.cpp toolchain, system
 //! dependency checks, and resolved path inspection.
 
 use clap::Subcommand;
 
-use crate::assistant_ui_commands::AssistantUiCommand;
 use crate::llama_commands::LlamaCommand;
 
 /// Configuration and system management commands.
@@ -39,11 +38,6 @@ pub enum ConfigCommand {
     Llama {
         #[command(subcommand)]
         command: LlamaCommand,
-    },
-    /// Manage assistant-ui installation and updates
-    AssistantUi {
-        #[command(subcommand)]
-        command: AssistantUiCommand,
     },
     /// Check system dependencies required for gglib
     CheckDeps {
