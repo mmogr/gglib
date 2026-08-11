@@ -46,6 +46,7 @@ pub async fn probe(client: &reqwest::Client) -> DaemonProbe {
     match response.json::<serde_json::Value>().await {
         Ok(body) if body.get("service").and_then(|s| s.as_str()) == Some("gglib-daemon") => {
             warn_on_switch_mismatch(&body);
+            warn_on_build_mismatch(&body);
             DaemonProbe::Running
         }
         _ => DaemonProbe::ForeignServer,
@@ -78,6 +79,29 @@ fn warn_on_switch_mismatch(health: &serde_json::Value) {
     if let Some(message) = gglib_core::debug_switches::describe_mismatch(&here, &daemon) {
         eprintln!("  warning: {message}");
     }
+}
+
+/// Say so when the running daemon was built from different code than this
+/// CLI.
+///
+/// `CARGO_PKG_VERSION` cannot catch this: measured live, a CLI carrying new
+/// daemon routes used a same-version installed daemon and got an opaque 405.
+/// Printed rather than fatal, like the switch mismatch above — minor skew is
+/// routine in a dev tree — but it names the one action that resolves real
+/// skew, because "405 Method Not Allowed" never will. A daemon predating the
+/// fingerprint reports none, which is itself a mismatch worth naming.
+fn warn_on_build_mismatch(body: &serde_json::Value) {
+    let mine = gglib_core::debug_switches::build_fingerprint();
+    let theirs = body.get("fingerprint").and_then(|f| f.as_str());
+    if theirs == Some(mine) {
+        return;
+    }
+    eprintln!(
+        "  note: the running daemon is a different build ({}) than this CLI ({mine}) — \
+         if a command fails oddly, `gglib daemon stop` and re-run to respawn it from \
+         this binary",
+        theirs.unwrap_or("no fingerprint: an older build"),
+    );
 }
 
 /// A connected daemon: the shared HTTP client plus the base URL.
