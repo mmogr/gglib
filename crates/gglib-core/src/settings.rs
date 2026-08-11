@@ -193,6 +193,27 @@ pub struct Settings {
     #[serde(alias = "tool_call_floor")]
     pub agentic_sampling: Option<bool>,
 
+    // ── Idle-time auto-tune ─────────────────────────────────────────
+    /// Whether the daemon tunes untuned models on its own during idle GPU
+    /// time.
+    ///
+    /// **Opt-in — `None` means off**, the opposite polarity of the guards
+    /// above, deliberately: those protect the endpoint by default, while
+    /// this one *spends the GPU* on the daemon's initiative, and autonomy
+    /// on hardware is a thing an operator turns on, never a thing that
+    /// happens to them.
+    ///
+    /// When on, the daemon watches the admission queue; after the GPU has
+    /// been fully idle for a sustained window it picks the oldest model
+    /// that has no measured defaults yet — never one whose defaults a
+    /// person set — runs the bounded presets-versus-incumbent tune, and
+    /// applies the winner only through the apply gate
+    /// (`benchmark::tune::apply`). Any request arriving mid-run preempts
+    /// it: the run is cancelled and the GPU handed over. Every applied
+    /// change is recorded on the run row and reversible per model with
+    /// `gglib model update` or the GUI.
+    pub auto_tune: Option<bool>,
+
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
     /// it launches, rather than waiting for the user to switch it on.
@@ -241,6 +262,7 @@ impl Settings {
             #[allow(clippy::cast_possible_truncation)]
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             agentic_sampling: None,
+            auto_tune: None,
             default_model_id: None,
             inference_defaults: None,
             inference_profiles: None,
@@ -338,6 +360,9 @@ impl Settings {
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
         }
+        if let Some(ref v) = other.auto_tune {
+            self.auto_tune = *v;
+        }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;
         }
@@ -379,6 +404,8 @@ pub struct SettingsUpdate {
     pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`].
     pub agentic_sampling: Option<Option<bool>>,
+    /// See [`Settings::auto_tune`].
+    pub auto_tune: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
