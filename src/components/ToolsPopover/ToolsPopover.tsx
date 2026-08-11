@@ -11,6 +11,7 @@ import { getToolRegistry, type ToolDefinition } from '../../services/tools';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
+import { AgentLimitsSection } from './AgentLimitsSection';
 
 /**
  * Get a human-readable name from a tool function name.
@@ -202,6 +203,8 @@ export const ToolsPopover: React.FC = () => {
               </div>
             </>
           )}
+
+          <AgentLimitsSection />
 
           <div className="px-[14px] py-2 border-t border-border bg-surface-elevated">
             <span className="text-2xs text-text-muted italic">

@@ -10,6 +10,8 @@ import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
+import { useNetworkSettings } from './SettingsModal/useNetworkSettings';
+import { useAgentGuardSettings } from './SettingsModal/useAgentGuardSettings';
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
@@ -56,6 +58,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     reset: resetDesktop,
     updates: desktopUpdates,
   } = useDesktopSettings(settings);
+  const network = useNetworkSettings(settings);
+  const agentGuards = useAgentGuardSettings(settings);
+  const [downloadPathInput, setDownloadPathInput] = useState('');
   const [defaultModelInput, setDefaultModelInput] = useState("");
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -84,6 +89,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setServerPortInput(settings.llamaBasePort?.toString() || "");
       setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "");
       setProxyApiKeyInput(settings.proxyApiKey || "");
+      setDownloadPathInput(settings.defaultDownloadPath || "");
       setTitlePromptInput(settings.titleGenerationPrompt || "");
       setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
       setShowFitIndicators(settings.showMemoryFitIndicators !== false);
@@ -130,6 +136,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           inferenceDefaults: inferenceDefaultsInput,
           trustClientSampling,
           proxyLoopDetection,
+          defaultDownloadPath: downloadPathInput.trim() || null,
+          ...network.updates,
+          ...agentGuards.updates,
           ...desktopUpdates,
         };
 
@@ -147,7 +156,14 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.inferenceDefaults !== undefined ||
           updates.trustClientSampling !== undefined ||
           updates.proxyLoopDetection !== undefined ||
-          updates.proxyAutostart !== undefined;
+          updates.defaultDownloadPath !== undefined ||
+          updates.bindHost !== undefined ||
+          updates.shareLan !== undefined ||
+          updates.agenticSampling !== undefined ||
+          updates.maxStagnationSteps !== undefined ||
+          updates.proxyAutostart !== undefined ||
+          updates.closeToTray !== undefined ||
+          updates.startAtLogin !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -173,6 +189,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       trustClientSampling,
       proxyLoopDetection,
       desktopUpdates,
+      downloadPathInput,
+      network.updates,
+      agentGuards.updates,
       info,
       saveDir,
       saveSettings,
@@ -194,6 +213,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setTrustClientSampling(false); // Default is disabled
       setProxyLoopDetection(true); // Default is enabled
       resetDesktop();
+    setDownloadPathInput('');
+    network.reset();
+    agentGuards.reset();
     }
   }, [info, settings, resetDesktop]);
 
@@ -280,6 +302,12 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setTitlePromptInput={setTitlePromptInput}
             inferenceDefaultsInput={inferenceDefaultsInput}
             setInferenceDefaultsInput={setInferenceDefaultsInput}
+            downloadPathInput={downloadPathInput}
+            setDownloadPathInput={setDownloadPathInput}
+            networkSettings={network.values}
+            setNetworkSetting={network.setValue}
+            agentGuardSettings={agentGuards.values}
+            setAgentGuardSetting={agentGuards.setValue}
             desktopSettings={desktopValues}
             setDesktopSetting={setDesktopSetting}
             trustClientSampling={trustClientSampling}

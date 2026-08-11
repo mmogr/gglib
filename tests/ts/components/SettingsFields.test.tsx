@@ -42,13 +42,17 @@ const renderModelDefaults: RenderField = (value, onChange) =>
     />,
   );
 
-const renderAdvancedSettings: RenderField = (value, onChange) =>
+const renderAdvanced = (
+  overrides: Partial<{ maxToolIterationsInput: string; stagnation: string }>,
+  onChange: (value: string) => void,
+  target: 'iterations' | 'stagnation',
+) =>
   render(
     <AdvancedSettings
       isOpen
       onToggle={noop}
-      maxToolIterationsInput={value}
-      setMaxToolIterationsInput={onChange}
+      maxToolIterationsInput={overrides.maxToolIterationsInput ?? ''}
+      setMaxToolIterationsInput={target === 'iterations' ? onChange : noop}
       titlePromptInput=""
       setTitlePromptInput={noop}
       inferenceDefaultsInput={undefined}
@@ -57,9 +61,19 @@ const renderAdvancedSettings: RenderField = (value, onChange) =>
       setTrustClientSampling={noop}
       proxyLoopDetection
       setProxyLoopDetection={noop}
+      agentGuards={{ agenticSampling: true, maxStagnationSteps: overrides.stagnation ?? '' }}
+      setAgentGuardSetting={(key, value) => {
+        if (target === 'stagnation' && key === 'maxStagnationSteps') onChange(value as string);
+      }}
       saving={false}
     />,
   );
+
+const renderAdvancedSettings: RenderField = (value, onChange) =>
+  renderAdvanced({ maxToolIterationsInput: value }, onChange, 'iterations');
+
+const renderStagnationSettings: RenderField = (value, onChange) =>
+  renderAdvanced({ stagnation: value }, onChange, 'stagnation');
 
 /**
  * Every numeric field in the settings modal, with the values a user should
@@ -113,6 +127,13 @@ const FIELDS: {
     min: '1',
     max: '50',
     renderField: renderAdvancedSettings,
+  },
+  {
+    label: 'Max Stagnation Steps',
+    fallback: '5',
+    min: '1',
+    max: '100',
+    renderField: renderStagnationSettings,
   },
 ];
 

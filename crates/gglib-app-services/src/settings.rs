@@ -281,6 +281,7 @@ mod tests {
             trust_client_sampling: None,
             proxy_loop_detection: None,
             tool_call_repair: None,
+            agentic_sampling: Some(false),
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
@@ -294,6 +295,9 @@ mod tests {
         // to `f64` in JSON, so an exact float compare tests the widening, not
         // the contract.
         assert!(entry["config"]["temperature"].is_number());
+        // Wire visibility is the point of adding agentic_sampling to the
+        // response DTO — a toggle that saves but cannot read back resets.
+        assert_eq!(json["agenticSampling"], false);
 
         // And the update request accepts the same shape back.
         let request: UpdateSettingsRequest = serde_json::from_value(serde_json::json!({

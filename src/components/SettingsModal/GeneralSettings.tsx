@@ -11,11 +11,15 @@ import {
   SetupWizardRow,
 } from "./fields";
 import type { DesktopSettingsValues } from "./useDesktopSettings";
+import type { NetworkSettingsValues } from "./useNetworkSettings";
+import type { AgentGuardSettingsValues } from "./useAgentGuardSettings";
 
 interface GeneralSettingsProps {
   // Directory state
   pathInput: string;
   setPathInput: (value: string) => void;
+  downloadPathInput: string;
+  setDownloadPathInput: (value: string) => void;
   info: ModelsDirectoryInfo | null;
   sourceDescription: string | null;
 
@@ -32,6 +36,20 @@ interface GeneralSettingsProps {
   setProxyApiKeyInput: (value: string) => void;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
+
+  // Network binding
+  networkSettings: NetworkSettingsValues;
+  setNetworkSetting: <K extends keyof NetworkSettingsValues>(
+    key: K,
+    value: NetworkSettingsValues[K],
+  ) => void;
+
+  // Agent guards
+  agentGuardSettings: AgentGuardSettingsValues;
+  setAgentGuardSetting: <K extends keyof AgentGuardSettingsValues>(
+    key: K,
+    value: AgentGuardSettingsValues[K],
+  ) => void;
 
   // Always-on proxy (desktop app)
   desktopSettings: DesktopSettingsValues;
@@ -98,6 +116,12 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   loadingModels,
   isAdvancedOpen,
   setIsAdvancedOpen,
+  downloadPathInput,
+  setDownloadPathInput,
+  networkSettings,
+  setNetworkSetting,
+  agentGuardSettings,
+  setAgentGuardSetting,
   maxToolIterationsInput,
   setMaxToolIterationsInput,
   titlePromptInput,
@@ -127,6 +151,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   return (
     <form id="settings-general-form" className="flex flex-col gap-xl" onSubmit={onSubmit}>
       <PathSettings
+        downloadPathInput={downloadPathInput}
+        setDownloadPathInput={setDownloadPathInput}
         pathInput={pathInput}
         setPathInput={setPathInput}
         info={info}
@@ -158,6 +184,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       <SecuritySettings
         proxyApiKeyInput={proxyApiKeyInput}
         setProxyApiKeyInput={setProxyApiKeyInput}
+        network={networkSettings}
+        setNetworkSetting={setNetworkSetting}
         saving={saving}
       />
 
@@ -186,6 +214,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         setTrustClientSampling={setTrustClientSampling}
         proxyLoopDetection={proxyLoopDetection}
         setProxyLoopDetection={setProxyLoopDetection}
+        agentGuards={agentGuardSettings}
+        setAgentGuardSetting={setAgentGuardSetting}
         saving={saving}
       />
 

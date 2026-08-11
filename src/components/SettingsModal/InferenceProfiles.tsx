@@ -28,6 +28,10 @@ function summarize(config: InferenceConfig): string {
     repeatPenalty: "repeat-penalty",
     presencePenalty: "presence-penalty",
     minP: "min-p",
+    dryMultiplier: "dry-multiplier",
+    dryBase: "dry-base",
+    dryAllowedLength: "dry-allowed-length",
+    dryPenaltyLastN: "dry-penalty-last-n",
   };
   const parts = Object.entries(labels)
     .filter(([key]) => {
@@ -37,6 +41,35 @@ function summarize(config: InferenceConfig): string {
     .map(([key, label]) => `${label}=${config[key as keyof InferenceConfig]}`);
   return parts.length ? parts.join("  ") : "no parameters set";
 }
+
+/**
+ * The CLI's starter templates (`gglib config profile install-templates`),
+ * transcribed from `gglib_core::domain::inference_profile::builtin_templates`.
+ * Templates, not behaviour: installing them only seeds the user's own list.
+ * Sparse on purpose — a template that filled every field would silently
+ * override per-model tuning. Drift is guarded by a contract test that reads
+ * the Rust source.
+ */
+export const STARTER_PROFILES: InferenceProfile[] = [
+  {
+    name: 'coding',
+    description: 'Low-variance sampling for code generation and tool use.',
+    config: { temperature: 0.2, topP: 0.9 },
+    listInModels: false,
+  },
+  {
+    name: 'chat',
+    description: 'Balanced sampling for conversational use.',
+    config: { temperature: 0.7, topP: 0.95 },
+    listInModels: true,
+  },
+  {
+    name: 'creative',
+    description: 'Wider sampling for brainstorming and prose.',
+    config: { temperature: 1.1, topP: 0.98 },
+    listInModels: false,
+  },
+];
 
 export const InferenceProfiles: FC = () => {
   const [profiles, setProfiles] = useState<InferenceProfile[]>([]);
@@ -99,6 +132,22 @@ export const InferenceProfiles: FC = () => {
       void persist(profiles.filter((p) => p.name !== name));
     },
     [profiles, persist],
+  );
+
+  /**
+   * Seed the CLI's starter templates, skip-existing — the same merge
+   * `gglib config profile install-templates` performs (without --force).
+   */
+  const handleInstallTemplates = useCallback(() => {
+    const missing = STARTER_PROFILES.filter(
+      (t) => !profiles.some((p) => p.name === t.name),
+    );
+    if (missing.length === 0) return;
+    void persist([...profiles, ...missing]);
+  }, [profiles, persist]);
+
+  const templatesMissing = STARTER_PROFILES.some(
+    (t) => !profiles.some((p) => p.name === t.name),
   );
 
   if (loading) {
@@ -189,10 +238,22 @@ export const InferenceProfiles: FC = () => {
         </Stack>
       )}
 
-      <div>
+      <div className="flex items-center gap-sm">
         <Button disabled={saving} onClick={() => setEditing("")}>
           Add profile
         </Button>
+        {templatesMissing ? (
+          <Button
+            variant="secondary"
+            disabled={saving}
+            title="Seed the coding / chat / creative starter profiles; existing names are kept"
+            onClick={handleInstallTemplates}
+          >
+            Install starter profiles
+          </Button>
+        ) : (
+          <span className="text-xs text-text-muted">Starter profiles installed</span>
+        )}
       </div>
     </Stack>
   );

@@ -5,8 +5,9 @@ import { Button } from '../../ui/Button';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { InferenceConfig } from '../../../types';
+import type { AgentGuardSettingsValues } from '../useAgentGuardSettings';
 import { Label } from '../../primitives';
-import { MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
+import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
 import { NumberSettingField } from './NumberSettingField';
 import { SettingField } from './SettingField';
 import { ToggleField } from './ToggleField';
@@ -25,6 +26,11 @@ interface AdvancedSettingsProps {
   setTrustClientSampling: (value: boolean) => void;
   proxyLoopDetection: boolean;
   setProxyLoopDetection: (value: boolean) => void;
+  agentGuards: AgentGuardSettingsValues;
+  setAgentGuardSetting: <K extends keyof AgentGuardSettingsValues>(
+    key: K,
+    value: AgentGuardSettingsValues[K],
+  ) => void;
   saving: boolean;
 }
 
@@ -45,6 +51,8 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
   setTrustClientSampling,
   proxyLoopDetection,
   setProxyLoopDetection,
+  agentGuards,
+  setAgentGuardSetting,
   saving,
 }) => (
   <>
@@ -136,6 +144,28 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           stuck turn. Turn this off only for a client that legitimately replays identical
           batches.
         </ToggleField>
+
+        <ToggleField
+          id="agentic-sampling-input"
+          label="Agentic sampling cap"
+          checked={agentGuards.agenticSampling}
+          onChange={(value) => setAgentGuardSetting('agenticSampling', value)}
+          disabled={saving}
+        >
+          On by default: a turn that may emit structured output has its temperature
+          capped (0.6 on reasoning-tagged models, 0.3 otherwise) — but only over a
+          value nobody deliberately chose. Anything set by a person stands.
+        </ToggleField>
+
+        <NumberSettingField
+          id="max-stagnation-steps-input"
+          label="Max Stagnation Steps"
+          spec={MAX_STAGNATION_STEPS}
+          value={agentGuards.maxStagnationSteps}
+          onChange={(value) => setAgentGuardSetting('maxStagnationSteps', value)}
+          description="Consecutive no-progress steps before an agent loop stops. Shared by the built-in agent loop and the proxy's turn-level guard, so the two paths cannot drift."
+          disabled={saving}
+        />
       </div>
     )}
   </>
