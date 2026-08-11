@@ -78,7 +78,11 @@ pub fn plan_pinned_launch(
             model_ctx,
         );
 
-    let mtp = resolve_mtp_args(request.mtp_draft_n_max, request.mtp_draft_p_min, &model.tags);
+    let mtp = resolve_mtp_args(
+        request.mtp_draft_n_max,
+        request.mtp_draft_p_min,
+        &model.tags,
+    );
 
     let mut tier3 = GlobalDefaults {
         default_ctx: globals.default_ctx.or(settings.default_context_size),
@@ -177,7 +181,6 @@ mod tests {
         let mut m = model();
         m.server_defaults = Some(gglib_core::domain::ServerConfig {
             context_length: Some(16_384),
-            ..Default::default()
         });
         let settings = Settings {
             default_context_size: Some(8192),
@@ -232,7 +235,12 @@ mod tests {
             },
             ProxyGlobals::default(),
         );
-        let params = plan.pinned.launch_overrides.inference_params.as_ref().unwrap();
+        let params = plan
+            .pinned
+            .launch_overrides
+            .inference_params
+            .as_ref()
+            .unwrap();
         assert_eq!(params.temperature, Some(0.4));
     }
 

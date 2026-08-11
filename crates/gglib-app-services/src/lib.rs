@@ -18,8 +18,8 @@ mod error;
 mod helpers;
 
 pub mod benchmark;
-pub mod launch_options;
 mod downloads;
+pub mod launch_options;
 mod mcp;
 mod models;
 mod proxy;
