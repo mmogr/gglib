@@ -1,5 +1,8 @@
 [workspace]
-resolver = "2"
+# Edition-2024 packages default to resolver 3, but a virtual manifest has no
+# edition to infer from and must state it. Resolver 3 adds MSRV-aware version
+# selection; rust-toolchain.toml pins 1.97.1, well past the 1.84 it needs.
+resolver = "3"
 members = [
     "crates/gglib-core",
     "crates/gglib-db",
@@ -33,8 +36,18 @@ authors = ["mmogr"]
 # Workspace-wide dependencies: ONLY truly universal crates
 # Adapter-specific deps (sqlx, clap, tauri, axum) are defined locally per crate
 [workspace.dependencies]
-# Async runtime
-tokio = { version = "1.0", features = ["full"] }
+# Async runtime.
+#
+# Deliberately NO features here. Features declared in [workspace.dependencies]
+# are additive and unconditional — every inheriting crate gets them — so listing
+# any would defeat the per-crate sets below. Each crate declares exactly what it
+# uses via `tokio = { workspace = true, features = [...] }`.
+#
+# Note this does not shorten a full workspace build: Cargo unifies features
+# across the graph, and gglib-download/gglib-runtime between them already need
+# most of `full`. The win is honest manifests and cheap single-crate builds
+# (`cargo check -p gglib-sse` no longer compiles process, net and signal).
+tokio = { version = "1.0" }
 tokio-test = "0.4"
 
 # Futures / async streams
@@ -142,6 +155,16 @@ codegen-units = 16
 [profile.dev]
 opt-level = 0
 
+# Optimize dependencies even in debug builds. Our own code stays at opt-level 0
+# so incremental rebuilds remain fast, but third-party crates compile once and
+# stay optimized — which matters a lot here, where debug builds hash multi-GB
+# GGUF files through sha2 and stream downloads through reqwest/rustls.
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.test]
 opt-level = 0
+
+[profile.test.package."*"]
+opt-level = 3
 

@@ -220,9 +220,10 @@ python3 ./scripts/sync_versions.py
 
 **Syncs to**:
 - `package.json` (npm/frontend)
-- `src-tauri/tauri.conf.json` (Tauri app metadata)
 
 Cargo crates use `version.workspace = true` so they inherit automatically.
+`src-tauri/tauri.conf.json` declares no `version` key: Tauri falls back to the
+`Cargo.toml` version when it is absent, so the app metadata inherits too.
 
 ---
 

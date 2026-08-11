@@ -20,7 +20,7 @@ path = "src/lib.rs"
 # without inverting the hexagonal layering rules enforced by
 # scripts/check_boundaries.sh.
 axum = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = { workspace = true }
 serde = { workspace = true }

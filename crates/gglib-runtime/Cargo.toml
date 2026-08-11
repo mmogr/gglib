@@ -19,7 +19,7 @@ gglib-mcp = { path = "../gglib-mcp" }
 gglib-proxy = { path = "../gglib-proxy" }
 
 # Runtime dependencies
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

@@ -23,9 +23,10 @@ CARGO_ENV := $(shell if [ -f "$$HOME/.cargo/env" ]; then echo ". $$HOME/.cargo/e
 CARGO_BIN := $(shell if [ -x "$$HOME/.cargo/bin/cargo" ]; then echo "$$HOME/.cargo/bin/cargo"; else echo cargo; fi)
 CARGO := $(CARGO_ENV) $(CARGO_BIN)
 
-# Cargo Optimization Flags
-export CARGO_PROFILE_RELEASE_LTO := thin
-export CARGO_PROFILE_RELEASE_CODEGEN_UNITS := 16
+# Release optimization flags live in [profile.release] in Cargo.toml, not here.
+# They used to be exported as CARGO_PROFILE_RELEASE_LTO/_CODEGEN_UNITS with the
+# same values the manifest already had; because the env vars take precedence,
+# any future edit to Cargo.toml would have been silently ignored under `make`.
 
 # Bootstrap dependency check - runs WITHOUT requiring Rust compilation
 check-deps-bootstrap:

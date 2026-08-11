@@ -15,7 +15,7 @@ workspace = true
 gglib-core.workspace = true
 
 # Async runtime
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 async-trait.workspace = true
 
 # Serialization
@@ -34,4 +34,6 @@ urlencoding = "2.1"
 
 [dev-dependencies]
 mockall.workspace = true
+# #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
+tokio = { workspace = true, features = ["macros", "rt"] }
 tokio-test.workspace = true
