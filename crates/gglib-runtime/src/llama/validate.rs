@@ -1,8 +1,6 @@
 //! Binary validation and status checking for llama-server.
 
-use super::config::BuildConfig;
 use anyhow::{Context, Result, bail};
-use gglib_core::paths::{llama_config_path, llama_server_path};
 use gglib_core::utils::process::cmd;
 use std::path::Path;
 
@@ -50,12 +48,14 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Handle the status command
+/// Handle the status command.
+///
+/// A printer over [`super::llama_status`] — the same value the GUI's System
+/// tab renders, so the two surfaces cannot report different installs.
 pub async fn handle_status() -> Result<()> {
-    let binary_path = llama_server_path().map_err(|e| anyhow::anyhow!("{}", e))?;
-    let config_path = llama_config_path().map_err(|e| anyhow::anyhow!("{}", e))?;
+    let status = super::llama_status()?;
 
-    if !binary_path.exists() {
+    if !status.installed {
         println!("Status: Not installed");
         println!();
         println!("Run 'gglib config llama install' to install llama.cpp");
@@ -63,53 +63,54 @@ pub async fn handle_status() -> Result<()> {
     }
 
     println!("Status: Installed");
-    println!("Binary: {}", binary_path.display());
+    println!("Binary: {}", status.binary_path);
 
-    // Validate binary
-    match validate_llama_binary(&binary_path) {
-        Ok(_) => println!("Health: ✓ Functional"),
-        Err(e) => {
+    match &status.health_error {
+        None => println!("Health: ✓ Functional"),
+        Some(e) => {
             println!("Health: ✗ Error - {}", e);
             return Ok(());
         }
     }
 
-    // Load and display config
-    if config_path.exists() {
-        match BuildConfig::load(&config_path) {
-            Ok(config) => {
-                println!();
-                println!("Build Information:");
-                println!("  Version: {}", config.version);
-                println!("  Commit: {}", config.commit_sha);
-                println!(
+    match (&status.build, &status.build_error) {
+        (Some(build), _) => {
+            println!();
+            println!("Build Information:");
+            println!("  Version: {}", build.version);
+            println!("  Commit: {}", build.commit_sha);
+            // The DTO carries RFC 3339 for the wire; this command has always
+            // printed a human timestamp, so format it back at the print site.
+            match chrono::DateTime::parse_from_rfc3339(&build.build_date) {
+                Ok(dt) => println!(
                     "  Built: {}",
-                    config.build_date.format("%Y-%m-%d %H:%M:%S UTC")
-                );
-                println!("  Acceleration: {}", config.acceleration);
-                println!("  CMake flags: {}", config.cmake_flags.join(" "));
+                    dt.with_timezone(&chrono::Utc)
+                        .format("%Y-%m-%d %H:%M:%S UTC")
+                ),
+                Err(_) => println!("  Built: {}", build.build_date),
             }
-            Err(e) => {
-                println!();
-                println!("Warning: Could not load build config: {}", e);
-            }
+            println!("  Acceleration: {}", build.acceleration);
+            println!("  CMake flags: {}", build.cmake_flags.join(" "));
         }
-    } else {
-        println!();
-        println!("Warning: Build configuration not found");
+        (None, Some(e)) => {
+            println!();
+            println!("Warning: Could not load build config: {}", e);
+        }
+        (None, None) => {
+            println!();
+            println!("Warning: Build configuration not found");
+        }
     }
 
-    // What the binary is, and what it does natively. Read through the probe
-    // rather than a local `--version` call so this surface and the launch
-    // banner cannot report different runtimes for the same binary.
-    let caps = super::runtime_probe::probe(&binary_path);
-    println!();
-    println!("Binary version: {}", caps.version_line);
-    match caps.build {
-        Some(build) => println!("  Build: b{build}"),
-        None => println!("  Build: unidentified — gglib will apply every compensation"),
+    if let Some(caps) = &status.runtime {
+        println!();
+        println!("Binary version: {}", caps.version_line);
+        match caps.build {
+            Some(build) => println!("  Build: b{build}"),
+            None => println!("  Build: unidentified — gglib will apply every compensation"),
+        }
+        println!("  Native capabilities: {}", caps.flags);
     }
-    println!("  Native capabilities: {:?}", caps.flags);
 
     Ok(())
 }

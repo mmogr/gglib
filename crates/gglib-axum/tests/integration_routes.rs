@@ -1211,3 +1211,70 @@ async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
         .unwrap();
     assert_eq!(apply.status(), StatusCode::NOT_FOUND);
 }
+
+/// The System settings tab loads this on mount, so a missing registration
+/// would surface as an empty panel rather than a loud failure.
+#[tokio::test]
+async fn llama_status_route_returns_json() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/config/system/llama-status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Reports whatever is installed on this machine, but the shape is fixed.
+    assert!(json["installed"].is_boolean());
+    assert!(json["binaryPath"].is_string());
+}
+
+/// `git fetch` is a mutation of local refs and takes network time, so this
+/// route is POST. A GET must not quietly work.
+#[tokio::test]
+async fn llama_check_updates_route_rejects_get() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+
+    let app = create_router(
+        std::sync::Arc::new(ctx),
+        &CorsConfig::AllowAll,
+        test_access(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .header("Host", "127.0.0.1:9887")
+                .uri("/api/config/system/llama-check-updates")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}

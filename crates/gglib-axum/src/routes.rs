@@ -314,6 +314,23 @@ fn config_routes() -> Router<AppState> {
             post(handlers::config::setup::build_llama_from_source),
         )
         .route(
+            "/system/llama-status",
+            get(handlers::config::setup::llama_status_handler),
+        )
+        // POST, not GET: this runs `git fetch`.
+        .route(
+            "/system/llama-check-updates",
+            post(handlers::config::setup::check_llama_updates),
+        )
+        .route(
+            "/system/update-llama",
+            post(handlers::config::setup::update_llama),
+        )
+        .route(
+            "/system/uninstall-llama",
+            post(handlers::config::setup::uninstall_llama_handler),
+        )
+        .route(
             "/system/setup-python",
             post(handlers::config::setup::setup_python),
         )

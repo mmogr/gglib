@@ -11,6 +11,7 @@ export interface GpuInfo {
   cudaVersion?: string | null;
   vulkanHeadersInstalled: boolean;
   vulkanGlslcInstalled: boolean;
+  vulkanSpirvHeadersInstalled: boolean;
 }
 
 /** Models directory status. */
@@ -67,3 +68,82 @@ export interface VulkanStatus {
   readyForBuild: boolean;
   missing: MissingPackage[];
 }
+
+/** What gglib recorded when it built the binary. Absent for a prebuilt install. */
+export interface LlamaBuildInfo {
+  version: string;
+  commitSha: string;
+  /** RFC 3339. */
+  buildDate: string;
+  acceleration: string;
+  cmakeFlags: string[];
+}
+
+/** Native capabilities the binary reports for itself when probed. */
+export interface LlamaRuntimeCapabilities {
+  /** llama.cpp build number, absent when the binary could not be identified. */
+  build?: number | null;
+  commit?: string | null;
+  versionLine: string;
+  /** Capability flags, pre-rendered for display — do not parse. */
+  flags: string;
+}
+
+/**
+ * The installed llama.cpp, as reported by `gglib config llama status`.
+ *
+ * `build` and `runtime` are two different notions of version and can legitimately
+ * disagree: the first is what gglib recorded at build time, the second is what
+ * the binary says about itself. A hand-installed or prebuilt binary has no
+ * `build` at all.
+ */
+export interface LlamaStatus {
+  installed: boolean;
+  binaryPath: string;
+  configPath: string;
+  healthy: boolean;
+  healthError?: string | null;
+  build?: LlamaBuildInfo | null;
+  buildError?: string | null;
+  runtime?: LlamaRuntimeCapabilities | null;
+}
+
+/** How far behind upstream the llama.cpp source checkout is. */
+export interface LlamaUpdateCheck {
+  installed: boolean;
+  /** False for a prebuilt install: there is no repository to compare. */
+  repoPresent: boolean;
+  /**
+   * Whether a comparison actually ran. When false, `commitsBehind` is 0
+   * because nothing was compared — never present that as "up to date".
+   */
+  comparable: boolean;
+  currentVersion?: string | null;
+  currentAcceleration?: string | null;
+  buildDate?: string | null;
+  commitsBehind: number;
+  recentCommits: string[];
+}
+
+/** What an uninstall removed. */
+export interface LlamaUninstallOutcome {
+  wasInstalled: boolean;
+  removedPaths: string[];
+}
+
+/** Build pipeline phases, in order. */
+export type BuildPhase =
+  | 'dependency_check'
+  | 'clone_or_update_repo'
+  | 'configure'
+  | 'compile'
+  | 'install_binaries';
+
+/** Streaming build events, shared by install-from-source and update. */
+export type BuildEvent =
+  | { type: 'phase_started'; phase: BuildPhase }
+  | { type: 'log'; message: string }
+  | { type: 'progress'; current: number; total: number }
+  | { type: 'phase_completed'; phase: BuildPhase }
+  | { type: 'completed'; version: string; acceleration: string }
+  | { type: 'failed'; message: string };

@@ -9,6 +9,7 @@ import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { InferenceProfiles } from "./SettingsModal/InferenceProfiles";
+import { SystemSettings } from "./SettingsModal/SystemSettings";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { useNetworkSettings } from './SettingsModal/useNetworkSettings';
 import { useAgentGuardSettings } from './SettingsModal/useAgentGuardSettings';
@@ -17,12 +18,13 @@ import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
 import type { McpServerInfo } from '../services/transport';
 
-type SettingsTab = "general" | "profiles" | "mcp";
+type SettingsTab = "general" | "profiles" | "mcp" | "system";
 
 const SETTINGS_TABS: TabItem<SettingsTab>[] = [
   { id: "general", label: "General" },
   { id: "profiles", label: "Inference Profiles" },
   { id: "mcp", label: "MCP Servers" },
+  { id: "system", label: "System" },
 ];
 
 interface SettingsModalProps {
@@ -325,6 +327,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         {/* Inference Profiles Tab */}
         {activeTab === "profiles" && <InferenceProfiles />}
+
+        {activeTab === "system" && <SystemSettings />}
 
         {/* MCP Servers Tab */}
         {activeTab === "mcp" && (
