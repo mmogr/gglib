@@ -84,19 +84,3 @@ function logUnknownEventType(type: string, payload: unknown): void {
   });
 }
 
-/**
- * Normalize wire format field names to TypeScript conventions.
- * 
- * Currently a pass-through since we're using snake_case in both Rust and TS
- * to avoid mapping complexity. If we decide to use camelCase in TS, this is
- * where we'd do the conversion.
- * 
- * @param event - Decoded event with wire format field names
- * @returns Event with normalized field names
- */
-export function normalizeEventFieldNames(event: DownloadEvent): DownloadEvent {
-  // For now, keep wire format (snake_case) in TS for simplicity
-  // If we want camelCase, we'd map fields here:
-  // e.g., speed_bps → speedBps, eta_seconds → etaSeconds
-  return event;
-}

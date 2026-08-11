@@ -43,10 +43,4 @@ export function useProxyState(): ProxyState {
   return store.useStore();
 }
 
-/** Non-React accessor for the current proxy state. */
-export function getProxyState(): ProxyState {
-  return store.getState();
-}
 
-/** Subscribe to proxy state changes. Returns unsubscribe function. */
-export const subscribeProxy = store.subscribe;

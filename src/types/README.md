@@ -16,7 +16,7 @@ TypeScript type definitions shared across the gglib GUI.
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │                             Domain Types                                    │    │
-│  │  GgufModel, ServerInfo, DownloadConfig, ServeConfig, etc.                   │    │
+│  │  GgufModel, ServerInfo, ServeConfig, etc.                                   │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
@@ -46,7 +46,6 @@ TypeScript type definitions shared across the gglib GUI.
 |------|-------------|
 | `GgufModel` | Model metadata (name, path, params, quantization, tags) |
 | `ServerInfo` | Running server state (model, port, status) |
-| `DownloadConfig` | Download request parameters |
 | `ServeConfig` | Server launch configuration |
 
 ### Configuration Types

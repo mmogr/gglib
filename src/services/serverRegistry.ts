@@ -180,13 +180,6 @@ export function ingestServerEvent(evt: ServerEvent): void {
   }
 }
 
-/**
- * Clear all server state. Used for testing and cleanup.
- */
-export function clearAllServerState(): void {
-  state.clear();
-  notifyListeners();
-}
 
 // ============================================================================
 // Predicates

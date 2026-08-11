@@ -107,10 +107,3 @@ export function useToolSupportCache(modelId: string | null): UseToolSupportResul
   return result;
 }
 
-/**
- * Clear the tool support cache.
- * Useful for testing or when user wants to refresh data.
- */
-export function clearToolSupportCache(): void {
-  toolSupportCache.clear();
-}
