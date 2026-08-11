@@ -10,6 +10,7 @@ import { IconButton } from '../ui/IconButton';
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState, Label } from "../primitives";
+import { RecommendedModel } from '../ModelLibraryPanel/RecommendedModel';
 
 interface HuggingFaceBrowserProps {
   /** Callback when a model is selected (clicked) for preview */
@@ -64,6 +65,9 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     <Stack gap="base" className="h-full overflow-hidden">
       {/* Search Section */}
       <Stack gap="sm" className="p-4 bg-surface border-b border-border-light">
+        {/* Seeds the box rather than downloading: browsing results is still
+            the user's decision, and the suggestion is advice, not an action. */}
+        <RecommendedModel onUseRepo={setSearchQuery} />
         <Row gap="sm" align="end">
           <Stack gap="xs" className="flex-1">
             <Label size="xs" muted>Search models</Label>

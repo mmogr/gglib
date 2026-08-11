@@ -13,6 +13,7 @@ import type {
   McpTool,
   McpToolResult,
   ResolutionStatus,
+  McpTestResult,
 } from '../types/mcp';
 
 /**
@@ -133,4 +134,16 @@ export async function callMcpTool(
  */
 export async function resolveMcpServerPath(id: McpServerId): Promise<ResolutionStatus> {
   return post<ResolutionStatus>(`/api/mcp/servers/${id}/resolve`, {});
+}
+
+/**
+ * Test a server's stored configuration — `gglib mcp test`.
+ *
+ * Starts a throwaway instance, lists its tools, stops it. Unlike starting the
+ * server for real, this answers "is this config right?" without leaving a
+ * process running, and it is the only way to find out short of a chat that
+ * silently has no tools.
+ */
+export async function testMcpServer(id: McpServerId): Promise<McpTestResult> {
+  return post<McpTestResult>(`/api/mcp/servers/${id}/test`, {});
 }

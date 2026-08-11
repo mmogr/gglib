@@ -16,7 +16,7 @@ import { cn } from "../utils/cn";
 import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
 import { getTransport } from '../services/transport';
-import type { McpServerInfo } from '../services/transport';
+import type { McpServerInfo, McpTestResult } from '../services/transport';
 import { isServerRunning, hasServerError, getServerErrorMessage } from '../utils/mcp';
 
 const statusRow = "inline-flex items-center gap-xs text-xs text-text-muted";
@@ -44,6 +44,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  // Scoped to one server: a test result belongs beside the config it tested,
+  // not in a panel-wide banner.
+  const [testResult, setTestResult] = useState<{ id: number; result: McpTestResult } | null>(null);
+  // Panel-wide, not per-row: two overlapping tests would each start a
+  // throwaway instance, and the failure surfaces against whichever row the
+  // user clicked second.
+  const [testing, setTesting] = useState(false);
 
   const { confirm } = useConfirmContext();
   const { showToast } = useToastContext();
@@ -134,6 +141,39 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       }
     },
     [showToast]
+  );
+
+  /**
+   * `gglib mcp test` — start a throwaway instance, list what it offers, stop
+   * it. The question this answers ("is this config right?") has no other
+   * answer short of a chat that silently has no tools, and unlike Start it
+   * leaves nothing running.
+   */
+  const handleTest = useCallback(
+    async (info: McpServerInfo) => {
+      const id = info.server.id;
+
+      setActionError(null);
+      setTestResult(null);
+      setActionLoading(id);
+      setTesting(true);
+      try {
+        const result = await getTransport().testMcpServer(id);
+        setTestResult({ id, result });
+        if (result.ok) {
+          showToast(
+            `${info.server.name}: connected, ${result.tools.length} tool(s)`,
+            'success',
+          );
+        }
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : 'Test failed');
+      } finally {
+        setActionLoading(null);
+        setTesting(false);
+      }
+    },
+    [showToast],
   );
 
   const getStatusBadge = (info: McpServerInfo) => {
@@ -290,6 +330,32 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       {getServerErrorMessage(info)}
                     </div>
                   )}
+                  {testResult?.id === id && (
+                    testResult.result.ok ? (
+                      <div className="mt-xs">
+                        <div className="text-xs text-success">
+                          Connected — {testResult.result.tools.length} tool(s) offered
+                        </div>
+                        {testResult.result.tools.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-xs mt-xs">
+                            {testResult.result.tools.map((tool) => (
+                              <span
+                                key={tool.name}
+                                className="inline-flex px-sm py-0.5 bg-surface-elevated text-text-secondary text-xs rounded-sm font-mono"
+                                title={tool.description ?? undefined}
+                              >
+                                {tool.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-danger mt-xs p-xs bg-danger-subtle rounded-sm">
+                        Connection failed — {testResult.result.error}
+                      </div>
+                    )
+                  )}
                 </Stack>
                 <div className="flex gap-xs shrink-0">
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
@@ -304,6 +370,16 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       Auto-fix
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleTest(info)}
+                    disabled={isLoading || testing}
+                    title="Start a throwaway instance, list its tools, then stop it"
+                  >
+                    {isLoading ? "..." : "Test"}
+                  </Button>
                   {isRunning ? (
                     <Button
                       type="button"

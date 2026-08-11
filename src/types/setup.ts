@@ -196,3 +196,22 @@ export interface Diagnostics {
   acceleration: AccelerationInfo;
   fastDownloads: FastDownloadsInfo;
 }
+
+/**
+ * A hardware-sized model suggestion — the shortlist `gglib up` picks from.
+ *
+ * The route returns `null` when nothing fits, which is a real answer: a
+ * machine too small for the smallest candidate should be told so.
+ */
+export interface ModelRecommendation {
+  repo: string;
+  quantization: string;
+  /** Why this model, in the user's terms. */
+  rationale: string;
+  /** Weights plus KV cache at the candidate's context. */
+  requiredBytes: number;
+  budgetBytes: number;
+  budgetSource: 'vram' | 'unifiedMemory' | 'systemRam';
+  headroomBytes: number;
+  context: number;
+}

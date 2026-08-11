@@ -67,4 +67,12 @@ export interface ProxyTransport {
 
   /** Stop the proxy server. */
   stopProxy(): Promise<void>;
+
+  /**
+   * Shut the daemon down — `gglib daemon stop`.
+   *
+   * Stops every running inference server with it, and the app loses its
+   * backend until the daemon is started again. Confirm before calling.
+   */
+  shutdownDaemon(): Promise<void>;
 }

@@ -9,7 +9,7 @@ use gglib_mcp::{
 use crate::error::GuiError;
 use crate::types::{
     CreateMcpServerRequest, McpEnvEntryDto, McpServerConfigDto, McpServerDto, McpServerInfo,
-    McpServerStatusDto, McpToolCallRequest, McpToolCallResponse, McpToolInfo,
+    McpServerStatusDto, McpTestResult, McpToolCallRequest, McpToolCallResponse, McpToolInfo,
     UpdateMcpServerRequest,
 };
 
@@ -247,6 +247,56 @@ impl McpOps {
             .await
             .map_err(|e| GuiError::Internal(e.to_string()))?;
         Ok(tools.iter().map(Self::tool_to_info).collect())
+    }
+
+    /// Test a configured server end to end — `gglib mcp test`.
+    ///
+    /// Starts a throwaway instance of the stored configuration, lists what it
+    /// offers, then stops it. Distinct from [`Self::list_tools`], which needs
+    /// the server already running and so says nothing about whether it *can*
+    /// start. This is the answer to "is this config right?", and without it
+    /// the only way to find out is a chat that silently has no tools.
+    pub async fn test_connection(&self, id: i64) -> Result<McpTestResult, GuiError> {
+        // Resolve the executable first, exactly as the start path does. Without
+        // this a freshly-added stdio server — whose resolved_path_cache is
+        // still empty — fails the test with "executable path must be absolute"
+        // while Start on the same row succeeds, which reads as the test being
+        // broken rather than the config being fine.
+        let _ = self.mcp.ensure_resolved(id).await;
+
+        let server = self
+            .mcp
+            .get_server(id)
+            .await
+            .map_err(|_| GuiError::NotFound {
+                entity: "MCP server",
+                id: id.to_string(),
+            })?;
+
+        let candidate = NewMcpServer {
+            name: server.name.clone(),
+            server_type: server.server_type,
+            config: server.config.clone(),
+            enabled: server.enabled,
+            lifecycle: server.lifecycle,
+            env: server.env.clone(),
+        };
+
+        // A failed connection is the expected outcome of a misconfiguration,
+        // not a fault — report it as a result the UI can render beside the
+        // config rather than an error that replaces the panel.
+        match self.mcp.test_connection(candidate).await {
+            Ok(tools) => Ok(McpTestResult {
+                ok: true,
+                error: None,
+                tools: tools.iter().map(Self::tool_to_info).collect(),
+            }),
+            Err(e) => Ok(McpTestResult {
+                ok: false,
+                error: Some(e.to_string()),
+                tools: Vec::new(),
+            }),
+        }
     }
 
     /// Call a tool on a running MCP server.

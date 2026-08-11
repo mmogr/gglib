@@ -35,3 +35,15 @@ export async function startPinnedProxy(request: StartPinnedRequest): Promise<Pro
 export async function stopProxy(): Promise<void> {
   await post<void>('/api/proxy/stop', null);
 }
+
+/**
+ * Shut the daemon down — the GUI face of `gglib daemon stop`.
+ *
+ * The daemon owns every running inference server, so this stops those too and
+ * leaves the app without a backend until it is started again. The request may
+ * not get a clean response: the server is shutting down as it replies, so a
+ * transport error here often means it worked.
+ */
+export async function shutdownDaemon(): Promise<void> {
+  return post<void>('/api/daemon/shutdown');
+}

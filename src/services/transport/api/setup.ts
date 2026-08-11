@@ -14,6 +14,7 @@ import type {
   LlamaUninstallOutcome,
   BuildEvent,
   Diagnostics,
+  ModelRecommendation,
 } from '../../../types/setup';
 
 /**
@@ -132,4 +133,13 @@ export async function enableFastDownloads(): Promise<void> {
 /** Remove it. Downloads revert to native HTTP — slower, not broken. */
 export async function disableFastDownloads(): Promise<{ removed: boolean }> {
   return post<{ removed: boolean }>('/api/config/system/disable-fast-downloads');
+}
+
+/**
+ * A model sized to this machine, from the same shortlist `gglib up` uses.
+ *
+ * Resolves to `null` when nothing fits — that is the answer, not a failure.
+ */
+export async function getRecommendedModel(): Promise<ModelRecommendation | null> {
+  return get<ModelRecommendation | null>('/api/config/system/recommend-model');
 }

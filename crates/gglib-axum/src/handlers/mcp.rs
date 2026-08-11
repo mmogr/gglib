@@ -7,8 +7,8 @@ use serde::Deserialize;
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    CreateMcpServerRequest, McpServerInfo, McpToolCallRequest, McpToolCallResponse, McpToolInfo,
-    UpdateMcpServerRequest,
+    CreateMcpServerRequest, McpServerInfo, McpTestResult, McpToolCallRequest, McpToolCallResponse,
+    McpToolInfo, UpdateMcpServerRequest,
 };
 
 /// List all MCP servers.
@@ -61,6 +61,19 @@ pub async fn list_tools(
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<McpToolInfo>>, HttpError> {
     Ok(Json(state.mcp_ops.list_tools(id).await?))
+}
+
+/// Test a server's stored configuration end to end — `gglib mcp test`.
+///
+/// Starts a throwaway instance, lists its tools, stops it. A failed
+/// connection returns 200 with `ok: false` and the reason: a bad command is
+/// the ordinary case this exists to diagnose, and the caller wants to render
+/// it beside the config rather than handle an error.
+pub async fn test_connection(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<McpTestResult>, HttpError> {
+    Ok(Json(state.mcp_ops.test_connection(id).await?))
 }
 
 /// Request body for calling an MCP tool (includes server ID).

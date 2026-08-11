@@ -174,4 +174,21 @@ export interface McpTransport {
 
   /** Resolve MCP server executable path (for diagnostics/auto-fix). */
   resolveMcpServerPath(id: McpServerId): Promise<ResolutionStatus>;
+
+  /** Start a throwaway instance to check the config, then stop it. */
+  testMcpServer(id: McpServerId): Promise<McpTestResult>;
+}
+
+/**
+ * The outcome of testing a server's configuration.
+ *
+ * A failed connection is a result, not an error: a wrong command is the
+ * ordinary case this diagnoses, so `ok: false` carries the reason.
+ */
+export interface McpTestResult {
+  ok: boolean;
+  /** Why it failed. Absent when `ok`. */
+  error?: string | null;
+  /** What the server offered. Empty unless `ok`. */
+  tools: McpTool[];
 }
