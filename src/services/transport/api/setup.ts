@@ -13,6 +13,7 @@ import type {
   LlamaUpdateCheck,
   LlamaUninstallOutcome,
   BuildEvent,
+  Diagnostics,
 } from '../../../types/setup';
 
 /**
@@ -112,4 +113,23 @@ export function streamLlamaUpdate(
     onClose,
     onError,
   });
+}
+
+/**
+ * Dependency matrix, resolved paths, detected acceleration and accelerator
+ * state — `gglib config check-deps`, `paths` and `fast-downloads status` in
+ * one request, because the panel reads them together.
+ */
+export async function getDiagnostics(): Promise<Diagnostics> {
+  return get<Diagnostics>('/api/config/system/diagnostics');
+}
+
+/** Provision the hf_xet download accelerator. */
+export async function enableFastDownloads(): Promise<void> {
+  return post<void>('/api/config/system/setup-python');
+}
+
+/** Remove it. Downloads revert to native HTTP — slower, not broken. */
+export async function disableFastDownloads(): Promise<{ removed: boolean }> {
+  return post<{ removed: boolean }>('/api/config/system/disable-fast-downloads');
 }

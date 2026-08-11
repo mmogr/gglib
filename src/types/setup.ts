@@ -147,3 +147,52 @@ export type BuildEvent =
   | { type: 'phase_completed'; phase: BuildPhase }
   | { type: 'completed'; version: string; acceleration: string }
   | { type: 'failed'; message: string };
+
+/** One system dependency's state, from `gglib config check-deps`. */
+export interface DependencyInfo {
+  name: string;
+  status: 'present' | 'missing' | 'optional';
+  /** Present only when `status` is `'present'`. */
+  version?: string | null;
+  description: string;
+  required: boolean;
+  installHint?: string | null;
+}
+
+/** Where everything resolves to — `gglib config paths`. */
+export interface ResolvedPaths {
+  dataRoot: string;
+  resourceRoot: string;
+  databasePath: string;
+  llamaServerPath: string;
+  modelsDir: string;
+  /** How the models directory was chosen. */
+  modelsSource: 'explicit' | 'envVar' | 'default';
+}
+
+/**
+ * What acceleration a build would use. Detection refuses to fall back to CPU,
+ * so a failure here is an answer with install hints, not a broken request.
+ */
+export interface AccelerationInfo {
+  detected?: string | null;
+  detectionError?: string | null;
+}
+
+/** The optional hf_xet download accelerator. Downloads work without it. */
+export interface FastDownloadsInfo {
+  provisioned: boolean;
+  envDir: string;
+  legacyPath: boolean;
+  builder?: string | null;
+  availableBuilder: string;
+  error?: string | null;
+}
+
+/** The full diagnostics bundle behind the System tab. */
+export interface Diagnostics {
+  dependencies: DependencyInfo[];
+  paths: ResolvedPaths;
+  acceleration: AccelerationInfo;
+  fastDownloads: FastDownloadsInfo;
+}
