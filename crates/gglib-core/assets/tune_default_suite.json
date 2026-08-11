@@ -384,5 +384,615 @@
         }
       ]
     }
+  },
+  {
+    "id": "single_call_typed_args",
+    "category": "single_call",
+    "user_prompt": "Show me the last forty-two lines of the file at logs/proxy.log, and make the search case sensitive.",
+    "tools": [
+      {
+        "name": "read_log_lines",
+        "description": "Read the last N lines of a log file, optionally case-sensitively.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "case_sensitive": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "count",
+            "case_sensitive"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "read_log_lines",
+          "required_args": {
+            "path": "logs/proxy.log",
+            "count": 42,
+            "case_sensitive": true
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "single_call_nested_options",
+    "category": "single_call",
+    "user_prompt": "List the src directory recursively, but only two levels deep.",
+    "tools": [
+      {
+        "name": "list_directory",
+        "description": "List a directory. The options object controls traversal: recursive (boolean) and max_depth (integer).",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "recursive": {
+                  "type": "boolean"
+                },
+                "max_depth": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "recursive",
+                "max_depth"
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "options"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "list_directory",
+          "required_args": {
+            "path": "src",
+            "options": {
+              "recursive": true,
+              "max_depth": 2
+            }
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "single_call_verbatim_payload",
+    "category": "single_call",
+    "user_prompt": "Create a file named notes/snippet.txt containing exactly this line, byte for byte:\ntemplate = \"</parameter>\" marks the end of {arg} blocks\nDo not rewrite, escape, or annotate it.",
+    "tools": [
+      {
+        "name": "write_file",
+        "description": "Write content to a file, replacing whatever is there.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "write_file",
+          "required_args": {
+            "path": "notes/snippet.txt",
+            "content": "template = \"</parameter>\" marks the end of {arg} blocks"
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "single_call_pick_the_right_tool",
+    "category": "single_call",
+    "user_prompt": "Where does the user guide explain retry budgets? Search the documentation for it.",
+    "tools": [
+      {
+        "name": "search_code",
+        "description": "Search source code files for a query.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "search_docs",
+        "description": "Search the documentation for a query.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "search_docs",
+          "required_args": {},
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "single_call_derived_value",
+    "category": "single_call",
+    "user_prompt": "Set a timer for two and a half hours.",
+    "tools": [
+      {
+        "name": "set_timer",
+        "description": "Set a countdown timer. Duration is in minutes.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "minutes": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "minutes"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "set_timer",
+          "required_args": {
+            "minutes": 150
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "parallel_call_paired_forecasts",
+    "category": "parallel_call",
+    "user_prompt": "Get the forecast for Oslo on Friday, Lisbon on Saturday, and Kyoto on Sunday.",
+    "tools": [
+      {
+        "name": "get_forecast",
+        "description": "Get the weather forecast for a city on a given day.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            },
+            "day": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "city",
+            "day"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "get_forecast",
+          "required_args": {
+            "city": "Oslo",
+            "day": "Friday"
+          },
+          "ordered": false
+        },
+        {
+          "name": "get_forecast",
+          "required_args": {
+            "city": "Lisbon",
+            "day": "Saturday"
+          },
+          "ordered": false
+        },
+        {
+          "name": "get_forecast",
+          "required_args": {
+            "city": "Kyoto",
+            "day": "Sunday"
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "parallel_call_mixed_tools",
+    "category": "parallel_call",
+    "user_prompt": "I'm heading out: check the current weather in Oslo and read me the file TODO.md.",
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "Get the current weather for a location.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "location"
+          ]
+        }
+      },
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "get_weather",
+          "required_args": {
+            "location": "Oslo"
+          },
+          "ordered": false
+        },
+        {
+          "name": "read_file",
+          "required_args": {
+            "path": "TODO.md"
+          },
+          "ordered": false
+        }
+      ]
+    }
+  },
+  {
+    "id": "multi_turn_create_then_append",
+    "category": "multi_turn",
+    "user_prompt": "Create an empty file at notes/todo.md, and once that succeeds, append the line 'ship the eval gates' to it.",
+    "tools": [
+      {
+        "name": "create_file",
+        "description": "Create an empty file at a path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "append_file",
+        "description": "Append a line of text to an existing file.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "line"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "create_file",
+          "required_args": {
+            "path": "notes/todo.md"
+          },
+          "ordered": true
+        },
+        {
+          "name": "append_file",
+          "required_args": {
+            "path": "notes/todo.md",
+            "line": "ship the eval gates"
+          },
+          "ordered": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "multi_turn_check_then_delete",
+    "category": "multi_turn",
+    "user_prompt": "Check whether build/cache.tmp exists, and if the check comes back fine, delete that file.",
+    "tools": [
+      {
+        "name": "file_exists",
+        "description": "Check whether a file exists at a path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "delete_file",
+        "description": "Delete a file at a path. Irreversible.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "file_exists",
+          "required_args": {
+            "path": "build/cache.tmp"
+          },
+          "ordered": true
+        },
+        {
+          "name": "delete_file",
+          "required_args": {
+            "path": "build/cache.tmp"
+          },
+          "ordered": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "irrelevance_tempting_filename",
+    "category": "irrelevance",
+    "user_prompt": "What does the '.rs' in a file name like main.rs stand for, and which language uses it?",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read the full contents of a file by path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "search_files",
+        "description": "Search the workspace for files matching a query.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "no_tool_call"
+    }
+  },
+  {
+    "id": "irrelevance_tool_scope_mismatch",
+    "category": "irrelevance",
+    "user_prompt": "What was Apple's stock price in March 1990?",
+    "tools": [
+      {
+        "name": "get_stock_price",
+        "description": "Get the current, real-time stock price for a ticker symbol. No historical data.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "no_tool_call"
+    }
+  },
+  {
+    "id": "long_context_planted_values",
+    "category": "long_context",
+    "history": [
+      {
+        "role": "user",
+        "content": "Let's plan the staging deploy for the metrics collector. I want to get every detail agreed before we touch anything."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood — tell me the constraints and I will keep track of what we decide."
+      },
+      {
+        "role": "user",
+        "content": "First decision: the service listens on port 8443. Not 8080 like the old collector — security wants TLS termination on the service itself this time."
+      },
+      {
+        "role": "assistant",
+        "content": "Noted: port 8443, TLS terminated at the service rather than at the ingress. What host will it run on?"
+      },
+      {
+        "role": "user",
+        "content": "Before that — a digression. The old collector kept falling over because its queue was unbounded. The new one caps the queue at 10k entries and sheds load above that. That is config, not deploy, so it is not your concern today."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, queue sizing is out of scope for the deploy. Back to the host, then."
+      },
+      {
+        "role": "user",
+        "content": "The host is metrics-02.staging.internal. metrics-01 is still running the old collector until the cutover, so do not touch it."
+      },
+      {
+        "role": "assistant",
+        "content": "Noted: metrics-02.staging.internal, and metrics-01 stays untouched. Anything else before we register it?"
+      },
+      {
+        "role": "user",
+        "content": "Two more things. The health check path is /healthz — the default /health collides with an existing route. And name the service metrics-collector-v2 in the registry; plain metrics-collector is the old one."
+      },
+      {
+        "role": "assistant",
+        "content": "All recorded: name metrics-collector-v2, host metrics-02.staging.internal, port 8443, health check at /healthz. Say the word when you want it registered."
+      },
+      {
+        "role": "user",
+        "content": "One last digression: remind me Monday to write the runbook for the cutover. Not now — just do not let me forget it."
+      },
+      {
+        "role": "assistant",
+        "content": "I will bring the runbook up when we next talk. Ready to register when you are."
+      }
+    ],
+    "user_prompt": "Go ahead — register the service with everything we agreed.",
+    "tools": [
+      {
+        "name": "register_service",
+        "description": "Register a service in the staging registry.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "health_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "host",
+            "port",
+            "health_path"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "register_service",
+          "required_args": {
+            "name": "metrics-collector-v2",
+            "host": "metrics-02.staging.internal",
+            "port": 8443,
+            "health_path": "/healthz"
+          },
+          "ordered": false
+        }
+      ]
+    }
   }
 ]
