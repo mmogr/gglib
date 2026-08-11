@@ -127,6 +127,7 @@ impl SamplingArgs {
             dynatemp_range: self.dynatemp_range,
             dynatemp_exponent: self.dynatemp_exponent,
             top_n_sigma: self.top_n_sigma,
+            frequency_penalty: None,
             // No `--seed` flag: these args populate stored configuration and
             // long-lived operator overrides, where a pinned seed would make
             // every request return the same text. A seed is set per request by

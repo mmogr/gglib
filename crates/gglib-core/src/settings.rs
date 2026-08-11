@@ -571,6 +571,16 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
     }
 
+    // Validate frequency_penalty (-2.0 - 2.0, the OpenAI-spec range llama.cpp
+    // honours; negative values encourage reuse and are valid upstream)
+    if let Some(fp) = config.frequency_penalty
+        && !(-2.0..=2.0).contains(&fp)
+    {
+        return Err(format!(
+            "Frequency penalty must be between -2.0 and 2.0, got {fp}"
+        ));
+    }
+
     // Validate dynatemp_range (non-negative; 0.0 disables dynamic temperature)
     if let Some(dr) = config.dynatemp_range
         && dr < 0.0
@@ -722,6 +732,7 @@ mod tests {
             dynatemp_range: Some(0.5),
             dynatemp_exponent: Some(1.0),
             top_n_sigma: Some(1.0),
+            frequency_penalty: Some(0.4),
             seed: None,
         };
         assert!(validate_inference_config(&config).is_ok());

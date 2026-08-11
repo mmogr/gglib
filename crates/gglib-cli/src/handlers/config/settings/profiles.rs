@@ -61,6 +61,7 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
                     dynatemp_range,
                     dynatemp_exponent,
                     top_n_sigma,
+                    frequency_penalty: None,
                     // Profiles are stored and reused across every request that
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.

@@ -125,7 +125,9 @@ function acceptedRange(fnSource: string, field: string): Range {
   const blockEnd = rest.indexOf('\n    }');
   const guard = rest.slice(0, blockEnd === -1 ? undefined : blockEnd);
 
-  const inclusive = guard.match(/!\(([0-9_.]+)\.\.=([0-9_.]+)\)\.contains/);
+  // Either bound may be negative: `frequency_penalty` accepts the OpenAI-spec
+  // -2.0..=2.0, where negative values encourage reuse.
+  const inclusive = guard.match(/!\((-?[0-9_.]+)\.\.=(-?[0-9_.]+)\)\.contains/);
   if (inclusive) return { min: num(inclusive[1]), max: num(inclusive[2]) };
 
   // `x < N` rejects everything below N. N may be negative: `dry_penalty_last_n`
@@ -227,6 +229,7 @@ const RUST_PARAM: Record<SamplingParamKey, string> = {
   repeatPenalty: 'repeat_penalty',
   presencePenalty: 'presence_penalty',
   minP: 'min_p',
+  frequencyPenalty: 'frequency_penalty',
   dynatempRange: 'dynatemp_range',
   dynatempExponent: 'dynatemp_exponent',
   topNSigma: 'top_n_sigma',

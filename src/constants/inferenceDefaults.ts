@@ -97,6 +97,15 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
   minP: { default: null, min: 0, max: 1, step: 0.01 },
 
   /**
+   * Rust: unset at the floor; llama.cpp's own default is 0.0 (disabled).
+   * Modelled after ADR 0003 so the untrusted-client gate governs it — a
+   * standard OpenAI field that previously passed through ungoverned.
+   * Validated `-2.0..=2.0`, the OpenAI-spec range; negative values encourage
+   * reuse and are valid upstream.
+   */
+  frequencyPenalty: { default: null, min: -2, max: 2, step: 0.05 },
+
+  /**
    * Rust: unset at the floor, deferred to llama.cpp's own 0.0 (disabled) —
    * introduced after ADR 0003, so it was never floored at all. Validation
    * requires non-negative; the `max` here is a UI guard rail (useful ranges

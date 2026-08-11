@@ -618,6 +618,7 @@ mod tests {
                 dry_base: Floor,
                 dry_allowed_length: Floor,
                 dry_penalty_last_n: Floor,
+                frequency_penalty: Floor,
             },
             layer_names: ["cli", "client", "profile", "model", "global", "auto"],
             floor: gglib_core::request_pipeline::FloorClass::Default,

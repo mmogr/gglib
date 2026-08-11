@@ -365,6 +365,7 @@ pub fn resolve_sampling(
             presence_penalty = ?resolved.presence_penalty,
             repeat_penalty = ?resolved.repeat_penalty,
             min_p = ?resolved.min_p,
+            frequency_penalty = ?resolved.frequency_penalty,
             dynatemp_range = ?resolved.dynatemp_range,
             dynatemp_exponent = ?resolved.dynatemp_exponent,
             top_n_sigma = ?resolved.top_n_sigma,

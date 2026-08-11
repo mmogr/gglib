@@ -382,6 +382,11 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                                             top_n_sigma,
                                             max_tokens: None,
                                             presence_penalty: None,
+                                            // Not a dimension yet: sweeping
+                                            // presence_penalty's twin waits
+                                            // for the same per-model evidence
+                                            // any new axis does.
+                                            frequency_penalty: None,
                                             // The sweep varies sampling
                                             // policy; a seed is not one, and
                                             // is stamped per run by the
@@ -463,6 +468,7 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
                 dynatemp_range: None,
                 dynatemp_exponent: None,
                 top_n_sigma: None,
+                frequency_penalty: None,
             },
         ));
     }

@@ -920,6 +920,7 @@ mod tests {
             dry_base: source,
             dry_allowed_length: source,
             dry_penalty_last_n: source,
+            frequency_penalty: source,
         }
     }
 
