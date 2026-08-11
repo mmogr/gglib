@@ -9,7 +9,9 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::dto::diagnostics::{AccelerationDto, DiagnosticsDto, FastDownloadsDto, ResolvedPathsDto};
+use crate::dto::diagnostics::{
+    AccelerationDto, DiagnosticsDto, FastDownloadsDto, ResolvedPathsDto,
+};
 use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
