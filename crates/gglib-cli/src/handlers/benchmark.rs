@@ -651,12 +651,18 @@ fn render_noise_block(report: &AgenticEvalReport) {
             RESET = style::RESET,
         );
     }
-    // Printed on success as well as failure. A ratio computed from a single
-    // pair is the kind of number that gets quoted as though it were a p-value,
-    // and the caveat has to travel with it.
+    // Printed on success as well as failure. A ratio computed from a
+    // handful of gaps is the kind of number that gets quoted as though it
+    // were a p-value, and the caveat has to travel with it — sized to the
+    // run: the single-pair wording on a three-gap estimate misstates the
+    // degrees of freedom in the caveat about degrees of freedom (caught on
+    // the first live multi-pair run).
+    let df = match verdict.pairs() {
+        0 | 1 => "one A/A pair estimates that drift from a single degree of freedom".to_owned(),
+        pairs => format!("{pairs} pairwise gaps back that drift estimate"),
+    };
     eprintln!(
-        "  {MUTED}one A/A pair estimates that drift from a single degree of freedom — this is a \
-         sanity ratio, not a significance test{RESET}",
+        "  {MUTED}{df} — this is a sanity ratio, not a significance test{RESET}",
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
