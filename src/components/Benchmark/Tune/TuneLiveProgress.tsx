@@ -58,7 +58,7 @@ export const TuneLiveProgress: FC<TuneLiveProgressProps> = ({
         />
       </div>
 
-      <div className="flex flex-col gap-xs max-h-[220px] overflow-y-auto border border-border rounded-md p-sm">
+      <div className="flex flex-col gap-xs max-h-[220px] overflow-y-auto bg-surface rounded-md p-sm">
         {taskLog.length === 0 && prunedLog.length === 0 && (
           <p className="text-xs text-text-muted">Waiting for events…</p>
         )}

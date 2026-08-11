@@ -35,17 +35,10 @@ export const EndpointCopyBar: FC<EndpointCopyBarProps> = ({ host, port, onCopied
 
   return (
     <div className="flex gap-sm items-center">
-      <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm border border-border font-mono truncate">
+      <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm font-mono truncate">
         {url}
       </code>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={copy}
-        className="bg-primary border-none rounded-base p-sm cursor-pointer text-base text-text-inverse transition-all hover:bg-primary-hover hover:scale-105"
-        title="Copy URL"
-        iconOnly
-      >
+      <Button variant="ghost" size="sm" onClick={copy} title="Copy URL" iconOnly>
         <Icon icon={ClipboardCopy} size={14} />
       </Button>
     </div>

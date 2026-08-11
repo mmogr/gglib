@@ -17,7 +17,7 @@ export const ServerInfoSection: FC<ServerInfoProps> = ({ serverPort, uptime, con
     <Stack gap="xs">
       <div className="flex justify-between items-center gap-sm py-xs">
         <span className="text-sm text-text-muted">Port</span>
-        <span className="text-sm text-text flex items-center gap-xs [&_code]:bg-background [&_code]:py-[2px] [&_code]:px-[6px] [&_code]:rounded-xs [&_code]:font-mono [&_code]:text-xs">
+        <span className="text-sm text-text flex items-center gap-xs [&_code]:bg-surface-elevated [&_code]:py-[2px] [&_code]:px-[6px] [&_code]:rounded-sm [&_code]:font-mono [&_code]:text-xs">
           <code>{serverPort}</code>
           <Button
             iconOnly
@@ -60,10 +60,10 @@ export const ApiEndpointsSection: FC = () => (
       {ENDPOINTS.map(({ route, description }) => (
         <div
           key={route}
-          className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text"
+          className="flex flex-col gap-[2px] py-xs px-sm bg-surface-elevated rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text"
         >
           <code>{route}</code>
-          <span className="text-2xs text-text-muted">{description}</span>
+          <span className="text-xs text-text-muted">{description}</span>
         </div>
       ))}
     </Stack>

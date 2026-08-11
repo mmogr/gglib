@@ -26,7 +26,7 @@ export const InfoRow: FC<InfoRowProps> = ({ label, children, mono, className, la
     <dd
       className={cn(
         'text-text text-sm m-0 min-w-0 break-words',
-        mono && 'font-mono text-xs break-all',
+        mono && 'font-mono tabular-nums text-xs break-all',
         className,
       )}
     >

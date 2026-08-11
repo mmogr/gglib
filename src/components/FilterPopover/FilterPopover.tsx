@@ -179,14 +179,14 @@ const FilterPopover: FC<FilterPopoverProps> = ({
   const currentSpeedMax = filters.speedRange?.[1] ?? filterOptions?.speed_range?.max ?? 200;
 
   return (
-    <div className="absolute top-full right-0 mt-xs bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[280px] max-w-[320px] z-popover overflow-hidden" ref={popoverRef}>
-      <div className="flex items-center justify-between py-sm px-md border-b border-border bg-surface-elevated">
+    <div className="absolute top-full right-0 mt-xs bg-surface-elevated rounded-lg shadow-lg min-w-[280px] max-w-[320px] z-popover overflow-hidden" ref={popoverRef}>
+      <div className="flex items-center justify-between py-sm px-md border-b border-border-light bg-surface-elevated">
         <span className="text-sm font-semibold text-text">Sort & Filter</span>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
-            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-text-inverse"
+            className="text-primary"
             onClick={onClearFilters}
             title="Clear all filters (sort preference is kept)"
           >

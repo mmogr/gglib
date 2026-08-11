@@ -23,7 +23,7 @@ interface ConnectionRowProps {
  * inventing a denominator.
  */
 export const ConnectionRow: FC<ConnectionRowProps> = ({ connection }) => (
-  <div className="p-md rounded-base border border-border bg-surface-elevated">
+  <div className="p-md rounded-base bg-surface-elevated">
     <div className="flex items-center justify-between mb-sm">
       <span className="text-sm font-semibold text-text truncate">{connection.model_name}</span>
       <span className="text-xs text-text-muted">{phaseLabels[connection.phase]}</span>

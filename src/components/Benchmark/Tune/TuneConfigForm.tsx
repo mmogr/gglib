@@ -9,10 +9,12 @@
  * @module components/Benchmark/Tune/TuneConfigForm
  */
 
-import { FC, useState } from 'react';
+import { FC, useRef, useState } from 'react';
 import { Checkbox } from '../../ui/Checkbox';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
+import { Select } from '../../ui/Select';
+import { Chip } from '../../ui/Chip';
 import type { GgufModel } from '../../../types';
 import type { TuneConfig, TuneTask } from '../../../types/benchmark';
 
@@ -49,6 +51,8 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   const [suiteMode, setSuiteMode] = useState<'default' | 'custom'>('default');
   const [customTasks, setCustomTasks] = useState<TuneTask[] | null>(null);
   const [customSuiteError, setCustomSuiteError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [seedFromGguf, setSeedFromGguf] = useState(true);
   const [seedFromFamilyPresets, setSeedFromFamilyPresets] = useState(true);
@@ -122,8 +126,8 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         <label className="text-xs font-semibold text-text">
           Model
         </label>
-        <select
-          className="w-full bg-surface border border-border rounded-md px-sm py-xs text-sm text-text"
+        <Select
+          size="sm"
           value={modelId}
           disabled={disabled}
           onChange={e => setModelId(e.target.value ? Number(e.target.value) : '')}
@@ -134,7 +138,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
               {m.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="flex flex-col gap-xs">
@@ -205,34 +209,38 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
           Task Suite
         </label>
         <div className="flex gap-sm">
-          <Button
-            variant={suiteMode === 'default' ? 'primary' : 'secondary'}
-            size="sm"
-            fullWidth
-            disabled={disabled}
-            onClick={() => setSuiteMode('default')}
-          >
+          <Chip selected={suiteMode === 'default'} disabled={disabled} onClick={() => setSuiteMode('default')}>
             Default
-          </Button>
-          <Button
-            variant={suiteMode === 'custom' ? 'primary' : 'secondary'}
-            size="sm"
-            fullWidth
-            disabled={disabled}
-            onClick={() => setSuiteMode('custom')}
-          >
+          </Chip>
+          <Chip selected={suiteMode === 'custom'} disabled={disabled} onClick={() => setSuiteMode('custom')}>
             Custom
-          </Button>
+          </Chip>
         </div>
         {suiteMode === 'custom' && (
           <div className="flex flex-col gap-xs">
             <input
+              ref={fileInputRef}
               type="file"
+              tabIndex={-1}
+              aria-hidden="true"
               accept=".json,application/json"
               disabled={disabled}
-              onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
-              className="text-xs text-text-secondary"
+              onChange={e => {
+                const file = e.target.files?.[0] ?? null;
+                setFileName(file?.name ?? null);
+                handleFileChange(file);
+              }}
+              className="sr-only"
             />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={disabled}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Choose task file…
+            </Button>
+            {fileName && <span className="text-xs text-text-muted">{fileName}</span>}
             {customTasks && (
               <p className="text-xs text-success">{customTasks.length} task(s) loaded</p>
             )}

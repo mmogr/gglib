@@ -4,6 +4,7 @@ import AddModel from '../AddModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
 import { Icon } from '../ui/Icon';
+import { Banner } from '../ui/Banner';
 import { Tabs, type TabItem } from '../ui/Tabs';
 
 export type AddDownloadSubTab = 'add' | 'browse';
@@ -51,10 +52,9 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
   return (
     <div className="flex flex-col h-full min-h-0">
       {downloadSystemError && (
-        <div className="px-2.5 py-2 border border-border rounded-md mb-2.5">
-          <strong>Downloads unavailable.</strong>
-          <div className="mt-1 whitespace-pre-wrap">{downloadSystemError}</div>
-        </div>
+        <Banner variant="danger" title="Downloads unavailable" className="mb-md">
+          <span className="whitespace-pre-wrap">{downloadSystemError}</span>
+        </Banner>
       )}
       {/* px-base matches the gutter on the search row and list rows. Without
           it this control bled to the panel's left edge and clipped its icon. */}

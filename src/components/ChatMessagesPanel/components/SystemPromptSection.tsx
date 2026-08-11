@@ -83,7 +83,7 @@ export const SystemPromptSection: FC<SystemPromptSectionProps> = ({ conversation
   };
 
   return (
-    <section className="border border-border rounded-base p-md bg-background flex flex-col gap-sm shrink-0">
+    <section className="rounded-md p-md bg-surface-elevated flex flex-col gap-sm shrink-0">
       <div className="flex justify-between gap-md items-start">
         <div>
           <p className="text-xs font-medium text-text-muted m-0 mb-xs">System prompt</p>
@@ -113,7 +113,7 @@ export const SystemPromptSection: FC<SystemPromptSectionProps> = ({ conversation
         <>
           <Textarea
             ref={textareaRef}
-            className="w-full p-sm border border-border rounded-sm bg-surface text-text text-sm font-[inherit] resize-y min-h-[80px] focus:outline-none focus:border-primary"
+            className="min-h-[80px] resize-y"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={DEFAULT_SYSTEM_PROMPT}

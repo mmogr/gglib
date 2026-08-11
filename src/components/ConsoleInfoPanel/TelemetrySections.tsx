@@ -57,7 +57,7 @@ export const ContextUsageSection: FC<TelemetryProps> = ({ metrics, runKey, conte
             }
           />
           {(metrics?.kvCacheTokens != null || metrics?.nTokensMax != null) && (
-            <span className="text-xs text-text-muted">
+            <span className="text-xs text-text-muted font-mono tabular-nums">
               {(metrics.kvCacheTokens ?? metrics.nTokensMax ?? 0).toLocaleString()} tokens
             </span>
           )}

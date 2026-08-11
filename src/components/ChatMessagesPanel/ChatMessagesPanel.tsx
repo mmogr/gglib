@@ -201,7 +201,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         />
 
         {/* Messages area */}
-        <div className="flex-1 min-h-0 flex flex-col border border-border rounded-base bg-background overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col rounded-md bg-background overflow-hidden">
           {messageLoading ? (
             <div className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
           ) : (

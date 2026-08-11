@@ -59,7 +59,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   }, [onStopServer]);
 
   return (
-    <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative tabular-nums flex-1 md:h-full md:min-h-0 md:border-b-0 md:border-r">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden relative tabular-nums flex-1 md:h-full md:min-h-0">
       <div className="p-md border-b border-border-light shrink-0">
         <div className="mb-md">
           <Tabs<ChatPageTabId>
@@ -78,8 +78,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-        <div className="flex flex-col gap-lg">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-lg p-md">
           <ServerInfoSection serverPort={serverPort} uptime={uptime} contextLength={contextLength} />
           <ContextUsageSection metrics={metrics} runKey={runKey} contextLength={contextLength} />
           <StatisticsSection metrics={metrics} runKey={runKey} />
@@ -96,7 +95,6 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
               {isStopping ? 'Stopping...' : 'Stop Server'}
             </Button>
           </section>
-        </div>
       </div>
     </div>
   );

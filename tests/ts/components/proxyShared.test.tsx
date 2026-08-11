@@ -52,13 +52,15 @@ describe('ProxyStatusPill', () => {
 
   /**
    * A stopped proxy is idle, not broken. Danger red is reserved for real
-   * failures, so the stopped pill must not carry it.
+   * failures, so the stopped indicator must not carry it — its dot wears the
+   * neutral offline colour and the text stays quiet.
    */
   it('styles a stopped proxy as idle rather than as an error', () => {
     render(<ProxyStatusPill running={false} />);
-    const pill = screen.getByText('Stopped');
-    expect(pill.className).toContain('text-offline');
-    expect(pill.className).not.toContain('danger');
+    const indicator = screen.getByText('Stopped');
+    expect(indicator.querySelector('.bg-offline')).not.toBeNull();
+    expect(indicator.className).not.toContain('danger');
+    expect(indicator.innerHTML).not.toContain('danger');
   });
 });
 

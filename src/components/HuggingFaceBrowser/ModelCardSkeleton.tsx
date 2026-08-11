@@ -8,7 +8,7 @@ import { Skeleton, Stack, Row } from '../primitives';
  */
 export const ModelCardSkeleton: React.FC = () => (
   <div
-    className="bg-surface-elevated border border-border rounded-xl overflow-hidden"
+    className="bg-surface-elevated rounded-md overflow-hidden"
     aria-hidden="true"
   >
     <div className="px-4 py-[0.9rem]">

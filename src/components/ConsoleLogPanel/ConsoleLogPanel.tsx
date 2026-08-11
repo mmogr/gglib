@@ -4,6 +4,7 @@ import { ClipboardCopy, Pause, Play, Trash2, Monitor } from 'lucide-react';
 import { useServerLogs, ServerLogEntry } from '../../hooks/useServerLogs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { EmptyState } from '../primitives';
 import './ConsoleLogPanel.css';
 
 interface ConsoleLogPanelProps {
@@ -75,16 +76,16 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
     <div className="flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       <div className="p-md border-b border-border-light shrink-0">
         <div className="flex items-center justify-between gap-md">
-          <h3 className="m-0 text-base font-semibold text-text">Server Output</h3>
+          <h3 className="m-0 text-lg font-semibold text-text">Server Output</h3>
           <div className="flex gap-xs">
             <Button
-              variant={isAutoScroll ? 'primary' : 'secondary'}
+              variant="secondary"
               size="sm"
               onClick={handleToggleAutoScroll}
-              title={isAutoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
+              title={isAutoScroll ? 'Following new output' : 'Auto-scroll paused'}
               leftIcon={<Icon icon={isAutoScroll ? Play : Pause} size={14} />}
             >
-              {isAutoScroll ? 'Auto' : 'Paused'}
+              {isAutoScroll ? 'Following' : 'Paused'}
             </Button>
             <Button
               variant="secondary"
@@ -108,21 +109,21 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
         </div>
       </div>
 
-      <div 
+      <div
         ref={scrollContainerRef}
-        className="console-log-content flex-1 overflow-y-auto overflow-x-auto bg-terminal rounded-sm font-mono text-xs leading-[1.5] p-sm"
+        tabIndex={0}
+        role="log"
+        aria-label="Server output"
+        className="console-log-content flex-1 overflow-y-auto overflow-x-auto bg-terminal font-mono text-xs leading-[1.5] p-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         onScroll={handleScroll}
       >
         {logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-text-muted text-center gap-sm">
-            <span className="opacity-50" aria-hidden>
-              <Icon icon={Monitor} size={28} />
-            </span>
-            <p className="m-0">Waiting for server output...</p>
-            <p className="m-0 text-xs opacity-70">
-              Logs will appear here as the server processes requests
-            </p>
-          </div>
+          <EmptyState
+            className="h-full font-sans"
+            icon={<Icon icon={Monitor} size={24} />}
+            title="Waiting for server output"
+            description="Logs appear here once the server starts handling requests"
+          />
         ) : (
           <div className="whitespace-pre-wrap break-all">
             {logs.map((entry, index) => (

@@ -42,19 +42,19 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
   return (
     <section className="mb-xl">
       <MetadataSection title="Model Information">
-        <InfoRow label="Size">
+        <InfoRow label="Size" className="font-mono tabular-nums">
           {formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}
         </InfoRow>
 
         {model.architecture && <InfoRow label="Architecture">{model.architecture}</InfoRow>}
 
         {model.quantization && (
-          <InfoRow label="Quantization" className="font-semibold">
+          <InfoRow label="Quantization" className="font-mono tabular-nums">
             {model.quantization}
           </InfoRow>
         )}
 
-        <InfoRow label="Context Length">{formatContextLength(model)}</InfoRow>
+        <InfoRow label="Context Length" className="font-mono tabular-nums">{formatContextLength(model)}</InfoRow>
 
         <InfoRow label="Path" mono>
           <span className="inline-flex items-start gap-sm">

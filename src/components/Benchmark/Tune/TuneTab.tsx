@@ -16,6 +16,7 @@
 
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Target } from 'lucide-react';
+import { EmptyState } from '../../primitives';
 import { Icon } from '../../ui/Icon';
 import type { GgufModel } from '../../../types';
 import type { BenchmarkEvent, TuneCandidateResult, TuneConfig } from '../../../types/benchmark';
@@ -191,12 +192,12 @@ export const TuneTab: FC<TuneTabProps> = ({ models }) => {
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-base flex flex-col gap-base">
           {runState.status === 'idle' ? (
-            <div className="flex flex-col items-center justify-center h-full text-text-muted gap-sm">
-              <Icon icon={Target} size={32} className="opacity-30" />
-              <p className="text-sm">
-                Configure a sweep and press Run Tune to find the best sampling settings.
-              </p>
-            </div>
+            <EmptyState
+              className="h-full"
+              icon={<Icon icon={Target} size={24} />}
+              title="No tune run yet"
+              description="Configure a sweep and press Run Tune to score sampling candidates against the task suite."
+            />
           ) : (
             <>
               <TuneLiveProgress
@@ -208,7 +209,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models }) => {
               {applyMessage && (
                 <div className="text-xs text-text bg-surface rounded-md p-sm">{applyMessage}</div>
               )}
-              <div className="border border-border rounded-md overflow-x-auto">
+              <div className="bg-surface rounded-md overflow-x-auto">
                 <TuneLeaderboard
                   results={runState.results}
                   applyingIndex={applyingIndex}

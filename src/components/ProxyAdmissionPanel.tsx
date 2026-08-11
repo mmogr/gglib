@@ -82,14 +82,14 @@ const SLOT_ICON: Record<SecondarySlotState, LucideIcon> = {
 
 /** One resident model and what it is doing. */
 const ResidentSlot: FC<{ slot: ResidentSlotSnapshot }> = ({ slot }) => (
-  <div className="flex items-baseline justify-between gap-md p-md rounded-base border border-border bg-surface-elevated">
+  <div className="flex items-baseline justify-between gap-md p-md rounded-base bg-surface-elevated">
     <div className="flex items-baseline gap-sm min-w-0">
       <span className="text-sm text-text truncate">{slot.model_name}</span>
       <span className="text-xs text-text-muted shrink-0">
         {slot.is_primary ? 'primary' : 'secondary'}
       </span>
     </div>
-    <span className="text-xs text-text-muted tabular-nums shrink-0">
+    <span className="text-xs text-text-muted font-mono tabular-nums shrink-0">
       {slot.inflight > 0 ? `${formatCount(slot.inflight)} in flight · ` : 'idle · '}
       {formatResidency(slot.resident_for_secs)}
     </span>
@@ -100,7 +100,7 @@ const ResidentSlot: FC<{ slot: ResidentSlotSnapshot }> = ({ slot }) => (
 const QueuedModel: FC<{ queued: QueuedModelSnapshot }> = ({ queued }) => (
   <div className="flex items-baseline justify-between gap-md">
     <span className="text-xs text-text-muted truncate">{queued.model_name}</span>
-    <span className="text-sm text-text tabular-nums shrink-0">
+    <span className="text-sm text-text font-mono tabular-nums shrink-0">
       {formatCount(queued.waiting)} waiting · oldest {formatWait(queued.oldest_wait_ms)}
     </span>
   </div>
@@ -126,7 +126,7 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
         <p className="text-sm text-text-muted">No model is loaded yet.</p>
       )}
 
-      <div className="flex items-start gap-sm p-md rounded-base border border-border bg-surface-elevated">
+      <div className="flex items-start gap-sm p-md rounded-base bg-surface-elevated">
         <Icon
           icon={SLOT_ICON[secondary.state]}
           className={`shrink-0 mt-[2px] ${secondarySlotTone(secondary.state)}`}
@@ -136,7 +136,7 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
       </div>
 
       {queued.length > 0 && (
-        <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
           {queued.map((entry) => (
             <QueuedModel key={entry.model_name} queued={entry} />
           ))}
@@ -150,11 +150,11 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
       */}
       <div className="flex items-baseline justify-between gap-md">
         <span className="text-xs text-text-muted">Requests admitted</span>
-        <span className="text-sm text-text tabular-nums">{formatCount(totalQueued)}</span>
+        <span className="text-sm text-text font-mono tabular-nums">{formatCount(totalQueued)}</span>
       </div>
       <div className="flex items-baseline justify-between gap-md">
         <span className="text-xs text-text-muted">Model swaps</span>
-        <span className="text-sm text-text tabular-nums">{formatCount(totalSwaps)}</span>
+        <span className="text-sm text-text font-mono tabular-nums">{formatCount(totalSwaps)}</span>
       </div>
     </div>
   );

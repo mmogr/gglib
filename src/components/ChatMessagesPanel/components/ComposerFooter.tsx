@@ -18,13 +18,13 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   isThreadRunning,
   onStopGeneration,
 }) => (
-  <div className="border-t border-border p-md shrink-0">
+  <div className="border-t border-border-light p-md shrink-0">
     {isThreadRunning && (
       <div className="text-sm text-primary mb-sm animate-research-pulse">Assistant is thinking…</div>
     )}
     <ComposerPrimitive.Root className="flex gap-sm items-end">
       <ComposerPrimitive.Input
-        className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex-1 py-sm px-md border border-border rounded-base bg-background-input text-text text-sm placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/10 hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed"
         placeholder={
           isServerConnected
             ? 'Type your message. Shift + Enter for newline'

@@ -51,7 +51,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-md">
       <span className="text-xs text-text-muted">{label}</span>
-      <span className="text-sm text-text tabular-nums">{value}</span>
+      <span className="text-sm text-text font-mono tabular-nums">{value}</span>
     </div>
   );
 }
@@ -318,7 +318,7 @@ const DivergenceRows: FC<{ divergences: SamplingDivergence[] }> = ({ divergences
     return null;
   }
   return (
-    <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
+    <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
       {divergences.map((d, i) => (
         <div key={`${d.field}-${i}`} className="flex items-baseline gap-md">
           <span className="text-xs text-text-muted w-32 shrink-0">{d.field}</span>

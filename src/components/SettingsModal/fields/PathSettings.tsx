@@ -1,4 +1,6 @@
 import { FC } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { Icon } from '../../ui/Icon';
 import { cn } from '../../../utils/cn';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
@@ -45,25 +47,28 @@ export const PathSettings: FC<PathSettingsProps> = ({
       disabled={saving}
     />
     {info && (
-      <div className="flex gap-sm flex-wrap" role="status" aria-live="polite">
-        <span
-          className={cn(
-            'inline-flex items-center h-6 px-2 rounded-base text-xs font-medium',
-            info.exists ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning',
-          )}
-          aria-label={info.exists ? 'Directory exists' : 'Directory will be created (warning)'}
-        >
-          {info.exists ? 'Directory exists' : 'Directory will be created'}
-        </span>
-        <span
-          className={cn(
-            'inline-flex items-center h-6 px-2 rounded-base text-xs font-medium',
-            info.writable ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger',
-          )}
-          aria-label={info.writable ? 'Writable' : 'Not writable (error)'}
-        >
-          {info.writable ? 'Writable' : 'Not writable'}
-        </span>
+      <div className="flex gap-sm flex-wrap items-center" role="status" aria-live="polite">
+        {info.exists && info.writable ? (
+          <span className="text-xs text-text-muted">Directory exists · writable</span>
+        ) : (
+          <>
+            <span
+              className={cn(
+                'inline-flex items-center gap-xs text-xs',
+                info.exists ? 'text-text-muted' : 'text-warning',
+              )}
+            >
+              {!info.exists && <Icon icon={AlertTriangle} size={12} />}
+              {info.exists ? 'Directory exists' : 'Directory will be created'}
+            </span>
+            {!info.writable && (
+              <span className="inline-flex items-center gap-xs text-xs text-danger">
+                <Icon icon={AlertTriangle} size={12} />
+                Not writable
+              </span>
+            )}
+          </>
+        )}
       </div>
     )}
   </SettingField>

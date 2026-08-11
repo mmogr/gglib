@@ -122,9 +122,9 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   };
 
   return (
-    <div className={cn('mb-[0.75rem] border border-border rounded-md bg-surface overflow-hidden', isStreaming && 'border-primary-border')}>
+    <div className={'mb-md rounded-md bg-surface-elevated overflow-hidden'}>
       <div
-        className="flex items-center gap-[0.5rem] py-[0.625rem] px-[0.875rem] cursor-pointer select-none transition-colors duration-150 hover:bg-background-hover focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]"
+        className="flex items-center gap-sm py-sm px-md cursor-pointer select-none transition-colors duration-150 hover:bg-background-hover focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-[-2px]"
         role="button"
         tabIndex={0}
         onClick={handleToggle}
@@ -137,12 +137,12 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           className={cn('text-text-muted transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}
         />
         <Icon icon={Brain} size={14} className="text-text-muted shrink-0" />
-        <span className="text-sm font-medium text-text-muted">{getLabel()}</span>
+        <span className="text-sm font-medium text-text-muted font-mono tabular-nums">{getLabel()}</span>
         {isStreaming && <span className="w-[12px] h-[12px] border-2 border-text-muted border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>
       
       <div className={cn('max-h-0 overflow-hidden transition-[max-height] duration-[0.25s] ease-out', isExpanded && 'max-h-[500px] overflow-y-auto')}>
-        <div className="px-[0.875rem] pb-[0.75rem] border-t border-border">
+        <div className="px-md pb-md">
           <div className="text-sm leading-[1.5] text-text-muted [&_p]:my-[0.5rem] [&_p:first-child]:mt-[0.75rem] [&_p:last-child]:mb-0 [&_ul]:my-[0.5rem] [&_ul]:pl-[1.25rem] [&_ol]:my-[0.5rem] [&_ol]:pl-[1.25rem] [&_li]:my-[0.25rem]">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}

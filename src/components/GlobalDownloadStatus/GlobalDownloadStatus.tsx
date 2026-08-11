@@ -7,7 +7,7 @@ import { formatBytes, formatDuration, formatRate } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import { Stack } from '../primitives';
+import { Readout, Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
 
@@ -76,13 +76,13 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     const remaining = Math.max(0, uniqueTotal - shownCount);
 
     return (
-      <div className="bg-background border-b border-border rounded-none p-base mb-0">
+      <div className="bg-background border-b border-border-light rounded-none p-base mb-0">
         <div className="flex flex-col gap-sm">
           <div className="flex items-center gap-sm">
-            <span className="text-xl" aria-hidden>
+            <span className="text-success" aria-hidden>
               <Icon icon={CheckCircle2} size={16} />
             </span>
-            <span className="text-base font-semibold text-success">
+            <span className="text-sm font-semibold text-text">
               {uniqueTotal === 1 ? 'Download Complete' : `${uniqueTotal} Downloads Complete`}
             </span>
           </div>
@@ -90,7 +90,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             {displayItems.length > 0 ? (
               <>
                 {displayItems.map((item, idx) => (
-                  <div key={idx} className="text-sm text-text py-xs border-b border-border last:border-b-0">
+                  <div key={idx} className="text-sm text-text py-xs">
                     <span className="text-sm" aria-hidden>
                       <Icon icon={Box} size={14} />
                     </span>
@@ -98,13 +98,13 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                   </div>
                 ))}
                 {remaining > 0 && (
-                  <div className="text-sm text-text py-xs border-b border-border last:border-b-0">
+                  <div className="text-sm text-text py-xs">
                     …and {remaining} more
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-sm text-text py-xs border-b border-border last:border-b-0">
+              <div className="text-sm text-text py-xs">
                 <span className="text-sm" aria-hidden>
                   <Icon icon={Box} size={14} />
                 </span>
@@ -148,7 +148,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   })();
 
   return (
-    <div className="bg-background border-b border-border rounded-none p-base mb-0">
+    <div className="bg-background border-b border-border-light rounded-none p-base mb-0">
       <div className="flex flex-col gap-sm">
         <div className="flex items-center justify-between gap-md">
           <div className="flex items-center gap-sm">
@@ -197,14 +197,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           <div className="flex-1 h-2 bg-surface-elevated rounded-sm overflow-hidden">
             <div
               className={cn(
-                'h-full bg-linear-to-r from-primary to-info rounded-sm transition-[width] duration-200 ease-linear',
+                'h-full bg-primary rounded-sm transition-[width] duration-200 ease-linear',
                 percentage === undefined && 'w-[30%] animate-indeterminate'
               )}
               style={percentage !== undefined ? { width: `${percentage}%` } : {}}
             />
           </div>
-          <span className="text-sm font-semibold text-text min-w-[48px] text-right">
-            {percentage !== undefined ? `${percentage.toFixed(1)}%` : '...'}
+          <span className="text-sm font-mono font-medium tabular-nums text-text min-w-[48px] text-right">
+            {percentage !== undefined ? `${percentage.toFixed(1)}%` : '…'}
           </span>
         </div>
 
@@ -213,25 +213,25 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           estimator warms up. Conditionally rendering them made the row reflow
           a second or two into every download.
         */}
-        <div className="flex gap-md flex-wrap">
-          {progress?.downloaded !== undefined && progress?.total !== undefined && (
-            <span className="text-xs text-text-secondary">
-              {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
-            </span>
-          )}
-          <span className="text-xs text-text-secondary tabular-nums">
-            {formatRate(progress?.speedBps)}
-          </span>
-          <span className="text-xs text-text-secondary tabular-nums">
-            ETA: {formatDuration(progress?.etaSeconds)}
-          </span>
+        <div className="flex gap-lg flex-wrap">
+          <Readout
+            size="sm"
+            label="Downloaded"
+            value={
+              progress?.downloaded !== undefined && progress?.total !== undefined
+                ? `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`
+                : '—'
+            }
+          />
+          <Readout size="sm" label="Speed" value={formatRate(progress?.speedBps)} />
+          <Readout size="sm" label="ETA" value={formatDuration(progress?.etaSeconds)} />
         </div>
 
         {isSharded && shard && (
           <div className="bg-surface-elevated rounded-base p-sm mt-xs">
             <div className="flex items-center justify-between mb-xs">
-              <span className="text-xs font-medium text-warning">
-                Shard {shard.index + 1}/{shard.total}
+              <span className="text-xs text-text-muted">
+                Shard <span className="font-mono tabular-nums">{shard.index + 1}/{shard.total}</span>
               </span>
               {shard.filename && (
                 <span className="text-xs text-text-secondary font-mono" title={shard.filename}>
@@ -241,7 +241,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             </div>
             <div className="h-1 bg-surface-hover rounded-sm overflow-hidden">
               <div
-                className="h-full bg-warning rounded-sm transition-[width] duration-200 ease-linear"
+                className="h-full bg-primary rounded-sm transition-[width] duration-200 ease-linear"
                 style={{
                   width:
                     shard.totalBytes && shard.totalBytes > 0

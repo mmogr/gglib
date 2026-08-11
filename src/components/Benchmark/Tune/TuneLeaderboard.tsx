@@ -9,6 +9,7 @@
 
 import { FC } from 'react';
 import { Button } from '../../ui/Button';
+import { Chip } from '../../ui/Chip';
 import { cn } from '../../../utils/cn';
 import type { TuneCandidateResult } from '../../../types/benchmark';
 
@@ -78,35 +79,31 @@ export const TuneLeaderboard: FC<TuneLeaderboardProps> = ({
             key={i}
             className="border-b border-border-light hover:bg-surface-elevated transition-colors"
           >
-            <td className="px-base py-xs text-text-secondary">{i + 1}</td>
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">{i + 1}</td>
             <td className="px-base py-xs text-text-secondary">{sourceLabel(result.source)}</td>
-            <td className="px-base py-xs text-text-secondary">
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">
               {result.config.temperature?.toFixed(2) ?? '—'}
             </td>
-            <td className="px-base py-xs text-text-secondary">
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">
               {result.config.dryMultiplier?.toFixed(2) ?? '—'}
             </td>
-            <td className="px-base py-xs text-text-secondary">
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">
               {result.config.topP?.toFixed(2) ?? '—'}
             </td>
-            <td className="px-base py-xs font-semibold text-text">
+            <td className="px-base py-xs font-semibold text-text font-mono tabular-nums">
               {result.composite_score.toFixed(3)}
             </td>
-            <td className="px-base py-xs text-text-secondary">
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">
               {(averageToolMatch(result) * 100).toFixed(0)}%
             </td>
-            <td className="px-base py-xs text-text-secondary">
+            <td className="px-base py-xs text-text-secondary font-mono tabular-nums">
               {(loopFreeRate(result) * 100).toFixed(0)}%
             </td>
             <td className="px-base py-xs">
               {result.pruned ? (
-                <span className="py-xs px-sm rounded-sm font-medium bg-warning-subtle text-warning">
-                  pruned
-                </span>
+                <Chip size="sm" variant="warning">pruned</Chip>
               ) : (
-                <span className="py-xs px-sm rounded-sm font-medium bg-success-subtle text-success">
-                  survived
-                </span>
+                <span className="text-text-muted">survived</span>
               )}
             </td>
             <td className={cn('px-base py-xs')}>

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Banner } from '../ui/Banner';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
 import { formatBytes } from '../../utils/format';
@@ -184,11 +185,11 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
 
 const WizardShell: FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="fixed inset-0 bg-background z-50 flex items-center justify-center">
-    <div className="w-full max-w-[42rem] max-h-[90vh] bg-surface rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
+    <div className="w-full max-w-[42rem] max-h-[90vh] bg-surface-elevated rounded-lg shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-8 pt-6 pb-4 border-b border-border">
+      <div className="px-8 pt-6 pb-4 border-b border-border-light">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
+          <div className="h-8 w-8 rounded-lg bg-primary-subtle flex items-center justify-center">
             <Icon icon={Sparkles} size={18} className="text-primary" />
           </div>
           <div>
@@ -407,10 +408,7 @@ const LlamaInstallStep: FC<{
             llama.cpp is already installed and ready to use.
           </p>
         </div>
-        <div className="bg-success/10 border border-success/30 rounded-lg p-4 flex items-center gap-3">
-          <Icon icon={CheckCircle2} size={20} className="text-success shrink-0" />
-          <span className="text-sm text-text">llama.cpp binaries are installed</span>
-        </div>
+        <Banner variant="success">llama.cpp binaries are installed</Banner>
         <StepNavigation onBack={onBack} onNext={onNext} />
       </div>
     );
@@ -435,15 +433,9 @@ const LlamaInstallStep: FC<{
 
       {/* Install error */}
       {installError && (
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Icon icon={AlertCircle} size={18} className="text-danger shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-danger mb-1">Installation failed</p>
-              <p className="text-xs text-text-secondary break-all">{installError}</p>
-            </div>
-          </div>
-        </div>
+        <Banner variant="danger" title="Installation failed">
+          <span className="break-all">{installError}</span>
+        </Banner>
       )}
 
       {/* Progress bar */}
@@ -455,8 +447,8 @@ const LlamaInstallStep: FC<{
               style={{ width: progress.total > 0 ? `${(progress.downloaded / progress.total) * 100}%` : '0%' }}
             />
           </div>
-          <div className="flex justify-between text-xs text-text-secondary">
-            <span>{progress.total > 0 ? `${((progress.downloaded / progress.total) * 100).toFixed(1)}%` : 'Starting...'}</span>
+          <div className="flex justify-between text-xs text-text-secondary font-mono tabular-nums">
+            <span>{progress.total > 0 ? `${((progress.downloaded / progress.total) * 100).toFixed(1)}%` : 'Starting…'}</span>
             {progress.total > 0 && (
               <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
             )}
@@ -543,10 +535,7 @@ const PythonSetupStep: FC<{
             optimized transfer for maximum speed.
           </p>
         </div>
-        <div className="bg-success/10 border border-success/30 rounded-lg p-4 flex items-center gap-3">
-          <Icon icon={CheckCircle2} size={20} className="text-success shrink-0" />
-          <span className="text-sm text-text">Download accelerator is ready</span>
-        </div>
+        <Banner variant="success">Download accelerator is ready</Banner>
         <StepNavigation onBack={onBack} onNext={onNext} />
       </div>
     );
@@ -565,39 +554,32 @@ const PythonSetupStep: FC<{
       </div>
 
       {!status.pythonAvailable && (
-        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 flex items-start gap-3">
-          <Icon icon={AlertCircle} size={18} className="text-warning shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-warning mb-1">Python not found</p>
-            <p className="text-xs text-text-secondary">
-              The accelerator needs Python 3.9 or newer. Skip this step and downloads
-              will run directly, which needs nothing installed. To use it later,
-              install Python and either re-run this wizard from Settings or run{' '}
-              <code>gglib config fast-downloads enable</code>.
-            </p>
-          </div>
-        </div>
+        <Banner variant="warning" title="Python not found">
+          The accelerator needs Python 3.9 or newer. Skip this step and downloads
+          will run directly, which needs nothing installed. To use it later,
+          install Python and either re-run this wizard from Settings or run{' '}
+          <code>gglib config fast-downloads enable</code>.
+        </Banner>
       )}
 
       {/* Setup error with retry */}
       {setupError && (
-        <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Icon icon={AlertCircle} size={18} className="text-danger shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-danger mb-1">Setup failed</p>
-              <p className="text-xs text-text-secondary break-all mb-3">{setupError}</p>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSetup}
-                leftIcon={<Icon icon={RefreshCw} size={14} />}
-              >
-                Retry
-              </Button>
-            </div>
-          </div>
-        </div>
+        <Banner
+          variant="danger"
+          title="Setup failed"
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSetup}
+              leftIcon={<Icon icon={RefreshCw} size={14} />}
+            >
+              Retry
+            </Button>
+          }
+        >
+          <span className="break-all">{setupError}</span>
+        </Banner>
       )}
 
       {/* Loading */}
@@ -643,7 +625,7 @@ const PythonSetupStep: FC<{
 const CompleteStep: FC<{ status: SetupStatus; onFinish: () => void }> = ({ status, onFinish }) => (
   <div className="flex flex-col gap-6">
     <div className="text-center py-4">
-      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success/20 mb-4">
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success-subtle mb-4">
         <Icon icon={CheckCircle2} size={32} className="text-success" />
       </div>
       <h2 className="text-xl font-semibold text-text mb-2">You&apos;re all set!</h2>
@@ -680,10 +662,10 @@ const InfoCard: FC<{
   value: string;
   variant: 'success' | 'neutral';
 }> = ({ icon: CardIcon, label, value, variant }) => (
-  <div className="bg-background-secondary rounded-lg p-3 border border-border flex items-center gap-3">
+  <div className="bg-background-secondary rounded-md p-3 flex items-center gap-3">
     <div className={cn(
       'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
-      variant === 'success' ? 'bg-success/20' : 'bg-background-tertiary',
+      variant === 'success' ? 'bg-success-subtle' : 'bg-background-tertiary',
     )}>
       <Icon icon={CardIcon} size={16} className={variant === 'success' ? 'text-success' : 'text-text-secondary'} />
     </div>
@@ -695,11 +677,8 @@ const InfoCard: FC<{
 );
 
 const StatusBadge: FC<{ ok: boolean; label: string }> = ({ ok, label }) => (
-  <span className={cn(
-    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-    ok ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning',
-  )}>
-    <span className={cn('w-1.5 h-1.5 rounded-full', ok ? 'bg-success' : 'bg-warning')} />
+  <span className="inline-flex items-center gap-xs text-xs text-text-muted">
+    <span aria-hidden className={cn('w-1.5 h-1.5 rounded-full', ok ? 'bg-success' : 'bg-warning')} />
     {label}
   </span>
 );

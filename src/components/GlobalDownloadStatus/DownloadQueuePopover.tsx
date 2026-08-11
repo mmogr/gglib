@@ -4,6 +4,7 @@ import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
+import { Chip } from '../ui/Chip';
 import { IconButton } from '../ui/IconButton';
 import { getTransport } from '../../services/transport';
 
@@ -153,10 +154,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   return (
     <div
-      className="absolute top-full left-0 mt-xs bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden"
+      className="absolute top-full left-0 mt-xs bg-surface-elevated rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden"
       ref={popoverRef}
     >
-      <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
+      <div className="flex items-center justify-between px-md py-sm border-b border-border-light bg-surface-elevated">
         <span className="text-sm font-semibold text-text-primary">Download Queue</span>
         <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-sm">{groupedItems.length} {groupedItems.length === 1 ? 'item' : 'items'}</span>
       </div>
@@ -164,7 +165,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         {groupedItems.map((item, index) => (
           <div
             key={item.group_id || item.id}
-            className="flex items-center gap-sm px-md py-sm border-b border-border last:border-b-0 hover:bg-surface-hover transition-colors duration-150"
+            className="flex items-center gap-sm px-md py-sm hover:bg-surface-hover transition-colors duration-150"
           >
             {/* Reorder buttons */}
             <div className="flex flex-col gap-[2px] shrink-0">
@@ -197,9 +198,9 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
               </div>
               <div className="flex items-center gap-xs flex-wrap">
                 {item.shard_count > 1 && (
-                  <span className="text-xs bg-primary-subtle text-primary-light px-[6px] py-[1px] rounded-sm font-medium">
+                  <Chip variant="primary" size="sm" className="font-mono tabular-nums">
                     {item.shard_count} parts
-                  </span>
+                  </Chip>
                 )}
               </div>
             </div>

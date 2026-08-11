@@ -11,8 +11,9 @@ interface SectionProps {
   compact?: boolean;
 }
 
-const Heading: FC<{ children: ReactNode }> = ({ children }) => (
-  <h3 className="text-xs font-semibold text-text mb-sm">{children}</h3>
+/** Section heading on the contract's type ladder — shared so proxy surfaces can't drift. */
+export const SectionHeading: FC<{ children: ReactNode }> = ({ children }) => (
+  <h3 className="m-0 text-sm font-semibold text-text mb-sm">{children}</h3>
 );
 
 /** In-flight requests, with a count once a snapshot has arrived. */
@@ -21,7 +22,7 @@ export const ActiveConnectionsSection: FC<SectionProps> = ({ snapshot }) => {
 
   return (
     <section>
-      <Heading>Active Connections{snapshot ? ` (${connections.length})` : ''}</Heading>
+      <SectionHeading>Active Connections{snapshot ? ` (${connections.length})` : ''}</SectionHeading>
       <RequestThroughput snapshot={snapshot} />
       {connections.length > 0 ? (
         <div className="flex flex-col gap-sm">
@@ -47,7 +48,7 @@ export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot, compact = fa
 
   return (
     <section>
-      <Heading>Inference Slots</Heading>
+      <SectionHeading>Inference Slots</SectionHeading>
       {hasSlots ? (
         <div className="flex flex-wrap gap-md">
           {snapshot?.slots.map((slot) => (

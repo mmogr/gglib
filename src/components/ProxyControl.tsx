@@ -33,6 +33,8 @@ interface ProxyControlProps {
   statusDotActiveClassName?: string;
   /** Whether KV cache persistence is enabled on the running proxy. */
   cacheEnabled?: boolean;
+  /** Icon-only trigger for narrow headers; the label moves to title/aria-label. */
+  compact?: boolean;
 }
 
 const ProxyControl: FC<ProxyControlProps> = ({
@@ -41,6 +43,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   statusDotClassName,
   statusDotActiveClassName,
   cacheEnabled = false,
+  compact = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const proxyState = useProxyState();
@@ -57,7 +60,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [clearMessage, setClearMessage] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
 
@@ -113,18 +115,20 @@ const ProxyControl: FC<ProxyControlProps> = ({
         className={buttonClasses}
         onClick={() => setIsOpen(!isOpen)}
         type="button"
+        title={compact ? 'Proxy' : undefined}
+        aria-label={compact ? 'Proxy' : undefined}
       >
         <span aria-hidden>
           <Icon icon={Repeat2} size={16} />
         </span>
-        <span>Proxy</span>
+        {!compact && <span>Proxy</span>}
         {proxyState.running && <span className={dotClasses}></span>}
       </Button>
 
       {isOpen && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-background-overlay rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">
-          <div className="flex justify-between items-center mb-base pb-md border-b border-border">
-            <h3 className="m-0 text-lg text-text">OpenAI Proxy</h3>
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-[min(350px,calc(100vw-32px))] max-h-[calc(100vh-100px)] overflow-y-auto bg-surface-elevated rounded-lg shadow-xl p-base z-dropdown text-text phone:absolute phone:top-[calc(100%+var(--spacing-sm))] phone:right-0 phone:left-auto phone:translate-x-0 phone:translate-y-0 phone:min-w-[350px] phone:max-h-none phone:overflow-visible">
+          <div className="flex justify-between items-center mb-base pb-md border-b border-border-light">
+            <h3 className="m-0 text-lg font-semibold text-text">OpenAI Proxy</h3>
             <ProxyStatusPill running={proxyState.running} />
           </div>
 
@@ -132,7 +136,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
             <>
               <div className="mb-base">
                 <Stack gap="xs" className="mb-sm">
-                  <Label size="xs" muted>URL:</Label>
+                  <Label size="xs" muted>Endpoint URL</Label>
                   <EndpointCopyBar host={config.host} port={activePort} onCopied={handleCopied} />
                 </Stack>
               </div>
@@ -146,29 +150,22 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 View Dashboard
               </Button>
 
-              {clearMessage && (
-                <div className="text-xs mb-md p-sm rounded-base bg-muted/50 text-foreground">
-                  {clearMessage}
-                </div>
-              )}
               <Button
                 variant="secondary"
                 className="w-full p-sm mb-md rounded-base text-sm font-medium"
                 onClick={async () => {
                   setClearing(true);
-                  setClearMessage(null);
                   try {
                     const result = await clearProxyCache(
                       config.host,
                       activePort,
                       settings?.proxyApiKey
                     );
-                    setClearMessage(result.message || 'Cache cleared');
-                  } catch (err: any) {
-                    setClearMessage(`Failed: ${err.message}`);
+                    showToast(result.message || 'Cache cleared', 'success');
+                  } catch (err) {
+                    showToast(`Failed to clear cache: ${formatError(err)}`, 'error');
                   } finally {
                     setClearing(false);
-                    setTimeout(() => setClearMessage(null), 5000);
                   }
                 }}
                 disabled={clearing || !cacheEnabled}
@@ -189,7 +186,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               {showSettings && (
                 <div className="mb-md">
                   <div className="mb-md">
-                    <label className="block text-xs font-semibold text-text mb-xs">Host:</label>
+                    <Label size="xs" muted className="mb-xs">Host</Label>
                     <Input
                       type="text"
                       value={config.host}
@@ -197,7 +194,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div className="mb-md">
-                    <label className="block text-xs font-semibold text-text mb-xs">Proxy Port:</label>
+                    <Label size="xs" muted className="mb-xs">Proxy port</Label>
                     <Input
                       type="number"
                       value={config.port}
@@ -205,7 +202,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-text mb-xs">Default Context:</label>
+                    <Label size="xs" muted className="mb-xs">Default context</Label>
                     <Input
                       type="number"
                       value={config.default_context ?? ''}
@@ -223,12 +220,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
               )}
 
               <Button
-                variant="ghost"
-                className="w-full p-sm bg-transparent border border-border rounded-base cursor-pointer text-sm text-text-secondary mb-md transition-all hover:bg-surface-hover"
+                variant="outline"
+                className="w-full mb-md"
                 onClick={() => setShowSettings(!showSettings)}
                 leftIcon={<Icon icon={showSettings ? ChevronUp : ChevronDown} size={14} />}
               >
-                {showSettings ? 'Hide' : 'Show'} Settings
+                Connection options
               </Button>
 
               <ProxyToggleButton
@@ -238,7 +235,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 onStop={handleStop}
               />
 
-              <div className="mt-md pt-md border-t border-border">
+              <div className="mt-md pt-md border-t border-border-light">
                 <small className="text-text-muted text-xs leading-normal">
                   Configure OpenWebUI or other OpenAI-compatible clients to use this proxy.
                   Models will auto-swap based on requests.

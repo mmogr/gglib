@@ -55,11 +55,11 @@ export const ProxyLaunchPanel: FC<ProxyLaunchPanelProps> = ({ launch }) => {
     <div className="flex flex-col gap-sm">
       <p className="text-sm font-semibold text-text">{headline(launch)}</p>
 
-      <div className="flex flex-col gap-xs p-md rounded-base border border-border bg-surface-elevated">
+      <div className="flex flex-col gap-xs p-md rounded-base bg-surface-elevated">
         {launch.decisions.map((decision) => (
           <div key={decision.label} className="flex items-baseline gap-md">
             <span className="text-xs text-text-muted w-16 shrink-0">{decision.label}</span>
-            <span className="text-sm text-text">{decision.value}</span>
+            <span className="text-sm text-text font-mono tabular-nums">{decision.value}</span>
             {/*
               The provenance is why this panel exists rather than a config
               dump, but it is the secondary read — dimmed so the eye takes the

@@ -112,7 +112,7 @@ export const SamplingProvenanceSection: FC<SamplingProvenanceSectionProps> = ({
           const author = published.get(entry.param);
           return (
             <InfoRow key={entry.param} label={PARAM_LABELS[entry.param] ?? entry.param}>
-              <span className="tabular-nums">
+              <span className="font-mono tabular-nums">
                 {formatParamValue(entry.param, resolvedValue(explanation.resolved, entry.param))}
               </span>
               <span className="text-text-muted"> {describeSource(entry, ctx)}</span>

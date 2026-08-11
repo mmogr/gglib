@@ -11,7 +11,7 @@ import { useMcpServers } from "../hooks/useMcpServers";
 import { Icon } from "./ui/Icon";
 import { Banner } from './ui/Banner';
 import { Button } from "./ui/Button";
-import { Stack } from './primitives';
+import { EmptyState, Stack } from './primitives';
 import { cn } from "../utils/cn";
 import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
@@ -19,7 +19,8 @@ import { getTransport } from '../services/transport';
 import type { McpServerInfo } from '../services/transport';
 import { isServerRunning, hasServerError, getServerErrorMessage } from '../utils/mcp';
 
-const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
+const statusRow = "inline-flex items-center gap-xs text-xs text-text-muted";
+const statusDot = "w-1.5 h-1.5 rounded-full";
 
 
 interface McpServersPanelProps {
@@ -137,15 +138,31 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const getStatusBadge = (info: McpServerInfo) => {
     if (isServerRunning(info)) {
-      return <span className={cn(statusBadge, "bg-success-subtle text-success")}>Running</span>;
+      return (
+        <span className={statusRow}>
+          <span aria-hidden className={cn(statusDot, 'bg-success')} />Running
+        </span>
+      );
     }
     if (hasServerError(info)) {
-      return <span className={cn(statusBadge, "bg-danger-subtle text-danger")}>Error</span>;
+      return (
+        <span className={cn(statusRow, 'text-danger')}>
+          <span aria-hidden className={cn(statusDot, 'bg-danger')} />Error
+        </span>
+      );
     }
     if (info.status === "starting") {
-      return <span className={cn(statusBadge, "bg-warning-subtle text-warning")}>Starting...</span>;
+      return (
+        <span className={statusRow}>
+          <span aria-hidden className={cn(statusDot, 'bg-warning')} />Starting…
+        </span>
+      );
     }
-    return <span className={cn(statusBadge, "bg-background-tertiary text-text-secondary")}>Stopped</span>;
+    return (
+      <span className={statusRow}>
+        <span aria-hidden className={cn(statusDot, 'bg-text-muted')} />Stopped
+      </span>
+    );
   };
 
   if (loading) {
@@ -202,22 +219,18 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       )}
 
       {servers.length === 0 ? (
-        <div className="text-center p-xl text-text-secondary">
-          <p className="m-0 mb-sm">No MCP servers configured.</p>
-          <p className="text-sm mb-md">
-            MCP servers provide tools that can be called by the LLM during chat.
-            Add servers for web search, file access, and more.
-          </p>
-          {onAddServer && (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={onAddServer}
-            >
-              Add Your First Server
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          className="p-xl"
+          title="No MCP servers configured"
+          description="MCP servers provide tools that can be called by the LLM during chat. Add servers for web search, file access, and more."
+          action={
+            onAddServer && (
+              <Button type="button" variant="primary" onClick={onAddServer}>
+                Add Your First Server
+              </Button>
+            )
+          }
+        />
       ) : (
         <div className="flex flex-col gap-md">
           {servers.map((info) => {
@@ -226,7 +239,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
             const isRunning = isServerRunning(info);
 
             return (
-              <div key={id} className="flex justify-between items-start gap-md p-md bg-background-secondary border border-border rounded-base">
+              <div key={id} className="flex justify-between items-start gap-md p-md bg-background-secondary rounded-md">
                 <Stack gap="xs" className="flex-1 min-w-0">
                   <div className="flex items-center gap-sm">
                     <span className="font-semibold text-text">{info.server.name}</span>
@@ -304,7 +317,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                   ) : (
                     <Button
                       type="button"
-                      variant="primary"
+                      variant="secondary"
                       size="sm"
                       onClick={() => handleStart(info)}
                       disabled={isLoading || !info.server.enabled}
