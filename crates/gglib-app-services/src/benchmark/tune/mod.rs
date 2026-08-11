@@ -14,7 +14,7 @@ use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneC
 use gglib_core::domain::benchmark::tune::result::{
     CandidateSource, TuneCandidateResult, TuneTaskResult,
 };
-use gglib_core::domain::benchmark::tune::task::{TaskCategory, TaskSuite, TuneTask};
+use gglib_core::domain::benchmark::tune::task::{TaskCategory, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::domain::{InferenceConfig, Model};
 use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort, UsageSink};
@@ -844,6 +844,7 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::benchmark::tune::task::TaskSuite;
 
     // ── Task seeding (the calibration instrument's integrity) ───────────────
 
