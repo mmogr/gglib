@@ -131,14 +131,24 @@ jobs:
         run: |
           VERSION="${{ steps.validate.outputs.version }}"
           
-          # Check that key files were updated
-          for file in package.json src-tauri/tauri.conf.json; do
+          # Check that key files were updated. src-tauri/tauri.conf.json is not
+          # in this list: it no longer carries a "version" key, because Tauri
+          # falls back to the Cargo.toml version when the key is absent.
+          for file in package.json; do
             if ! grep -q "\"version\": \"$VERSION\"" "$file"; then
               echo "::error::$file was not updated correctly"
               exit 1
             fi
             echo "✓ Verified $file"
           done
+
+          # Guard the fallback: a re-added "version" key would silently pin the
+          # app metadata and reintroduce the drift this removal eliminated.
+          if grep -q '"version"' src-tauri/tauri.conf.json; then
+            echo "::error::src-tauri/tauri.conf.json must not declare a version; Tauri inherits it from Cargo.toml"
+            exit 1
+          fi
+          echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
 
       - name: Create Pull Request
         id: create-pr
@@ -162,8 +172,8 @@ jobs:
             - ✓ `package.json`
             - ✓ `src-tauri/Cargo.toml`
             - ✓ `src-tauri/Cargo.lock`
-            - ✓ `src-tauri/tauri.conf.json`
             - ✓ All workspace crates (via inheritance)
+            - ✓ `src-tauri/tauri.conf.json` (via Tauri's Cargo.toml fallback)
             
             ### Next Steps
             Once this PR is merged, the [Release workflow](.github/workflows/release.yml) will automatically:

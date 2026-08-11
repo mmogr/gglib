@@ -5,7 +5,10 @@ Sync version from workspace Cargo.toml to package files that don't use workspace
 The workspace Cargo.toml [workspace.package] version is the source of truth.
 Workspace crates (including src-tauri) use `version.workspace = true`, so this script only syncs to:
 - package.json (npm/frontend)
-- src-tauri/tauri.conf.json (Tauri app metadata)
+
+src-tauri/tauri.conf.json is deliberately NOT in that list: it no longer carries
+a "version" key. Tauri falls back to the version in Cargo.toml when the key is
+absent, so the app metadata tracks the workspace automatically.
 
 All Cargo.toml files are checked but skipped if they use workspace inheritance.
 """
@@ -77,7 +80,10 @@ def update_json(path, version):
         data['version'] = version
         
     with open(path, 'w') as f:
-        json.dump(data, f, indent=2)
+        # ensure_ascii=False: the default escapes non-ASCII, so every run
+        # rewrote the em dash in package.json's "//overrides" note to a
+        # literal backslash-u escape, producing a spurious diff each bump.
+        json.dump(data, f, indent=2, ensure_ascii=False)
         f.write('\n')
     print(f"  ✓ {path}")
 
@@ -99,11 +105,11 @@ def main():
     for toml in sorted(crate_tomls):
         update_cargo_toml(toml, version)
     
-    # Sync JSON files (these don't support workspace inheritance)
+    # Sync JSON files (these don't support workspace inheritance).
+    # tauri.conf.json is absent on purpose — see the module docstring.
     print("\nJSON files:")
     update_json('package.json', version)
-    update_json('src-tauri/tauri.conf.json', version)
-    
+
     print(f"\n✓ All files synced to version {version}")
     
     print("Done!")

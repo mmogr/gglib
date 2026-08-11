@@ -22,7 +22,7 @@ gglib-sse = { workspace = true }
 
 # HTTP server
 axum = { workspace = true }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { workspace = true, features = ["fs", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 # CORS middleware — the Tauri GUI's webview runs on the `tauri://localhost`
 # (and `http://tauri.localhost` on Windows) origin, which browsers treat as

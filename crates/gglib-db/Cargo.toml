@@ -15,7 +15,7 @@ test-utils = []
 gglib-core = { path = "../gglib-core" }
 
 # Universal dependencies
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -31,6 +31,8 @@ libsqlite3-sys = { version = "0.30", features = ["bundled", "unlock_notify"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
+tokio = { workspace = true, features = ["macros", "rt"] }
 tokio-test = { workspace = true }
 
 [lints.rust]

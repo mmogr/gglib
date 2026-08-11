@@ -14,7 +14,7 @@ gglib-core = { workspace = true }
 gglib-db = { workspace = true }
 gglib-hf = { workspace = true }
 gglib-gguf = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 chrono = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

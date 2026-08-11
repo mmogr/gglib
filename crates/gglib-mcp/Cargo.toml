@@ -11,7 +11,7 @@ publish = false
 gglib-core = { path = "../gglib-core" }
 
 # Async runtime
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "sync", "time"] }
 
 # Async trait
 async-trait = { workspace = true }

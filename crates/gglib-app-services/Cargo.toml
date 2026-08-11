@@ -40,7 +40,7 @@ tracing = { workspace = true }
 dirs = { workspace = true }
 
 # Async
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 async-trait = "0.1"
 tokio-util = "0.7"
