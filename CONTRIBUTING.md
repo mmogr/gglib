@@ -566,7 +566,7 @@ Run `make setup` for a one-command first-time setup on macOS. On Linux, review `
 
 ### Node Version Management
 
-The repo pins Node 22 via `.nvmrc` and `.tool-versions`. Any of the following version managers will auto-activate the right version when you `cd` into the repo:
+The repo pins Node 24 via `.nvmrc` — the single source, and what CI reads. Any of the following version managers will auto-activate the right version when you `cd` into the repo:
 
 **Recommended — [mise](https://mise.jdx.dev)** (polyglot: manages Node, Ruby, Python, and more in one tool; works on Linux and macOS)
 ```sh

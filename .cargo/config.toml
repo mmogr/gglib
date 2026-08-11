@@ -1,6 +1,0 @@
-# Workspace-level Cargo configuration.
-#
-# Since Rust 1.73, rustflags here are MERGED with the RUSTFLAGS environment
-# variable rather than overriding it, so CI can still set RUSTFLAGS without
-# losing these flags.
-
