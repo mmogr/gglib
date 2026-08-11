@@ -153,12 +153,14 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         ctx_size: Option<u64>,
 
-        /// After the run completes, write the highest-scoring candidate's
-        /// sampling settings to this model's `inference_defaults` — the
-        /// same effect as `gglib model update <id> --temperature ...`,
-        /// applied automatically
-        #[arg(long)]
-        apply_best: bool,
+        /// After the run completes, apply the winner as this model's
+        /// *measured* defaults — through the gate: the winner must clear the
+        /// incumbent pair's mean by twice the run's own drift, with the
+        /// per-task pairs agreeing. A refusal prints its evidence and
+        /// changes nothing. (`--apply-best` is the old name for the ungated
+        /// version of this and is kept as an alias.)
+        #[arg(long = "apply", alias = "apply-best")]
+        apply: bool,
     },
 
     /// Measure what the gglib pipeline buys: run the agentic task suite

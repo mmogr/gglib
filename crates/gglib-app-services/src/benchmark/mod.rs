@@ -18,7 +18,7 @@ mod compare;
 pub mod guard;
 pub mod mapper;
 mod perf;
-mod tune;
+pub mod tune;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Dependency bundle

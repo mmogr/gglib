@@ -22,7 +22,7 @@ use std::convert::Infallible;
 use std::time::Duration;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_core::Stream;
 use futures_util::StreamExt as _;
@@ -31,6 +31,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 
 use gglib_app_services::benchmark::guard::BenchmarkTaskGuard;
+use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
 use gglib_core::domain::benchmark::BenchmarkEvent;
 use gglib_core::domain::benchmark::tune::config::TuneConfig;
 
@@ -97,4 +98,24 @@ pub async fn tune_sse(
             .interval(Duration::from_secs(15))
             .text("ping"),
     ))
+}
+
+/// `POST /api/benchmark/tune/{run_id}/apply` — judge a completed tune run
+/// against the apply gate and, when the verdict licenses it, store the
+/// winner as the model's `Measured` defaults.
+///
+/// The response is always `200` with an
+/// [`ApplyOutcome`]: a refusal is a first-class verdict naming its evidence,
+/// not an error. Errors are reserved for a run that does not exist, is not a
+/// tune run, or storage failing.
+pub async fn tune_apply(
+    State(state): State<AppState>,
+    Path(run_id): Path<i64>,
+) -> Result<Json<ApplyOutcome>, HttpError> {
+    state
+        .benchmark
+        .apply_tune_run(run_id)
+        .await
+        .map(Json)
+        .map_err(|e| HttpError::Internal(e.to_string()))
 }

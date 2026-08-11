@@ -10,7 +10,6 @@ use anyhow::{Context as _, Result, anyhow};
 
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
-use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
@@ -67,7 +66,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             weight_task_completion,
             weight_speed,
             ctx_size,
-            apply_best,
+            apply,
         } => {
             cmd_tune(
                 ctx,
@@ -82,7 +81,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
                 weight_task_completion,
                 weight_speed,
                 ctx_size,
-                apply_best,
+                apply,
             )
             .await
         }
@@ -246,7 +245,7 @@ async fn cmd_tune(
     weight_task_completion: Option<f32>,
     weight_speed: Option<f32>,
     ctx_size: Option<u64>,
-    apply_best: bool,
+    apply: bool,
 ) -> Result<()> {
     let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
         .await?
@@ -281,31 +280,109 @@ async fn cmd_tune(
     eprintln!("  Suite : {task_suite}");
     style::print_banner_close();
 
-    let mut best: Option<TuneCandidateResult> = None;
+    let mut completed_run: Option<i64> = None;
     run_on_daemon("/api/benchmark/tune", &config, |event| {
-        if let BenchmarkEvent::TuneCandidateComplete { result } = event
-            && !result.pruned
-            && best
-                .as_ref()
-                .is_none_or(|b| result.composite_score > b.composite_score)
-        {
-            best = Some(result.clone());
+        if let BenchmarkEvent::RunComplete { run_id } = event {
+            completed_run = Some(*run_id);
         }
         render_event(event);
     })
     .await?;
 
-    if apply_best {
-        match best {
-            Some(winner) => apply_best_config(ctx, model_id, &winner).await?,
+    if apply {
+        match completed_run {
+            Some(run_id) => apply_gated(run_id).await?,
             None => eprintln!(
-                "{}note:{} no surviving candidate to apply (run may have been aborted)",
+                "{}note:{} the run did not complete, so there is nothing to judge",
                 style::WARNING,
                 style::RESET
             ),
         }
     }
 
+    Ok(())
+}
+
+/// Ask the daemon to judge the run against the apply gate and render the
+/// verdict — a refusal is an outcome with evidence, not an error.
+async fn apply_gated(run_id: i64) -> Result<()> {
+    use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
+    use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
+
+    let handle = daemon_client::ensure_daemon().await?;
+    let url = format!(
+        "{}/api/benchmark/tune/{run_id}/apply",
+        daemon_client::base_url()
+    );
+    let outcome: ApplyOutcome = handle
+        .client
+        .post(&url)
+        .send()
+        .await
+        .context("apply request failed")?
+        .error_for_status()
+        .context("apply request rejected")?
+        .json()
+        .await
+        .context("apply response unreadable")?;
+
+    match outcome.verdict {
+        ApplyVerdict::Apply {
+            winner_composite,
+            incumbent_mean,
+            margin,
+            drift,
+            paired,
+        } => {
+            println!(
+                "{SUCCESS}\u{2713} applied as measured defaults{RESET}: winner \
+                 {winner_composite:.3} over incumbent {incumbent_mean:.3}, margin \
+                 {margin:+.3} against drift {drift:.3}",
+                SUCCESS = style::SUCCESS,
+                RESET = style::RESET,
+            );
+            if let Some(p) = paired {
+                println!(
+                    "  paired: {}W-{}L-{}T over {} tasks",
+                    p.wins, p.losses, p.ties, p.pairs
+                );
+            }
+        }
+        ApplyVerdict::IncumbentStands { incumbent_mean } => println!(
+            "{}incumbent stands{} at {incumbent_mean:.3}: no candidate beat the model's \
+             current defaults. The run answered its question, and the answer is \
+             'change nothing'.",
+            style::WARNING,
+            style::RESET,
+        ),
+        ApplyVerdict::WithinDrift { margin, drift } => println!(
+            "{}not applied{}: the winner's {margin:+.3} margin is inside the run's own \
+             {drift:.3} drift. Unresolved, not absent; more tasks or a re-run resolves \
+             it, a smaller threshold never does.",
+            style::WARNING,
+            style::RESET,
+        ),
+        ApplyVerdict::PairedDisagrees { wins, losses } => println!(
+            "{}not applied{}: the winner's mean rests on a minority of tasks \
+             ({wins}W-{losses}L against the incumbent), the lucky-outlier shape, \
+             refused by the pairs.",
+            style::WARNING,
+            style::RESET,
+        ),
+        ApplyVerdict::Uncalibrated => println!(
+            "{}not applied{}: this run has no incumbent calibration pair, so nothing \
+             measures its drift. Re-run the tune; every new run carries the pair.",
+            style::WARNING,
+            style::RESET,
+        ),
+        ApplyVerdict::Contaminated { unmeasured_runs } => println!(
+            "{}not applied{}: {unmeasured_runs} task run(s) never reached the model, so \
+             the compared scores are contaminated. A zero from a dead upstream is not a \
+             low score.",
+            style::WARNING,
+            style::RESET,
+        ),
+    }
     Ok(())
 }
 
@@ -1046,33 +1123,6 @@ fn load_task_suite(spec: &str) -> Result<TaskSuite> {
     let tasks: Vec<TuneTask> = serde_json::from_str(&content)
         .with_context(|| format!("failed to parse '{spec}' as a JSON array of task definitions"))?;
     Ok(TaskSuite::Custom { tasks })
-}
-
-/// Write the winning candidate's sampling settings to the model's
-/// `inference_defaults`, mirroring `gglib model update <id> --temperature ...`.
-async fn apply_best_config(
-    ctx: &CliContext,
-    model_id: i64,
-    winner: &TuneCandidateResult,
-) -> Result<()> {
-    let mut model = ctx
-        .model_repo
-        .get_by_id(model_id)
-        .await
-        .with_context(|| format!("failed to load model {model_id} to apply tune result"))?;
-    model.inference_defaults = Some(winner.config.clone());
-    ctx.model_repo
-        .update(&model)
-        .await
-        .context("failed to save tuned inference defaults")?;
-
-    println!(
-        "{SUCCESS}\u{2713} Applied best config (score {:.3}) to model {model_id}'s inference_defaults{RESET}",
-        winner.composite_score,
-        SUCCESS = style::SUCCESS,
-        RESET = style::RESET
-    );
-    Ok(())
 }
 
 // ─── benchmark list ───────────────────────────────────────────────────────────

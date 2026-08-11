@@ -142,6 +142,12 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/benchmark/tune",
             post(handlers::benchmark::tune::tune_sse).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
+        // Benchmark — gated apply of a completed tune run's winner. Plain
+        // JSON, not SSE: the gate judges stored results, no model runs.
+        .route(
+            "/benchmark/tune/{run_id}/apply",
+            post(handlers::benchmark::tune::tune_apply),
+        )
         // Benchmark — raw-vs-gglib A/B agentic eval SSE stream. Same body
         // limit as tune: a custom task_suite can embed long_context tasks.
         .route(
