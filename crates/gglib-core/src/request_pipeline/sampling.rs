@@ -137,6 +137,10 @@ pub struct SamplingDecision {
     pub client_fields_rejected: Vec<FieldIssue>,
     /// Client fields dropped by the trust gate rather than by a parse
     /// failure — empty whenever `trust_client_sampling` is on.
+    ///
+    /// Carries both kinds of drop: modelled fields the gate binned, and
+    /// [`UNMODELLED_SAMPLER_KEYS`] stripped from the body itself, which have
+    /// no layer to be binned from.
     pub client_fields_discarded: Vec<String>,
     /// Whether the resolved values actually reached `body`.
     ///
@@ -199,6 +203,11 @@ fn agentic_sampling_disabled_via_env() -> bool {
 /// server's own configuration, and every field it left unset still
 /// gap-fills from below exactly as if it had never sent that key.
 ///
+/// The gate covers modelled fields; sampler keys the ladder has no field
+/// for ([`UNMODELLED_SAMPLER_KEYS`]) are stripped from the untrusted body
+/// itself, because a key with no layer has nothing to be discarded from and
+/// would otherwise ride the body to llama-server ungoverned.
+///
 /// A body that is not a JSON object is left alone.
 /// Read the client's own sampling parameters and apply the trust gate.
 ///
@@ -256,12 +265,88 @@ fn read_client_layer(
     (gated, issues, discarded)
 }
 
+/// Sampler-taste keys llama-server reads that [`InferenceConfig`] does not
+/// model, stripped from an untrusted body by
+/// [`strip_unmodelled_sampler_keys`].
+///
+/// The trust gate discards the client's sampling *layer*, but the resolved
+/// patch is only ever **inserted** into the body — nothing removed the keys
+/// the ladder has no field for. So every key here was a way for an untrusted
+/// client to steer sampling past the gate: gglib's own values arrived intact,
+/// the readback saw no divergence (`/slots.params` echoes what was parsed,
+/// not what the chain did — ADR 0003 finding 7), and the applied chain was
+/// something nobody configured. `mirostat` alone replaces the entire
+/// truncation stack.
+///
+/// Scope: **taste, not function**. Budgets (`max_tokens`), stops, constraint
+/// machinery (`grammar`, `json_schema`, `response_format`) and observation
+/// (`n_probs`, `logprobs`) stay client-authoritative — they say what the
+/// request *is*, not how it should sample. `logit_bias` stays too, a
+/// deliberate edge: it is per-token surgery with legitimate functional uses
+/// (banning a token), and a dedicated decision should move it, not a sweep.
+///
+/// A modelled key must never appear here — the gate already governs those,
+/// and stripping one would delete the client's value *before* the trusted
+/// path could read it. `no_modelled_key_is_listed_as_unmodelled` pins this,
+/// so modelling a new parameter (as `frequency_penalty` just was) forces its
+/// removal from this list.
+const UNMODELLED_SAMPLER_KEYS: &[&str] = &[
+    "typical_p",
+    "xtc_probability",
+    "xtc_threshold",
+    "mirostat",
+    "mirostat_tau",
+    "mirostat_eta",
+    "dry_sequence_breakers",
+    "repeat_last_n",
+    "samplers",
+    "min_keep",
+];
+
+/// Remove [`UNMODELLED_SAMPLER_KEYS`] from an untrusted body, returning what
+/// was removed so it joins the discard record.
+///
+/// A no-op when the client is trusted — trusted means trusted, unmodelled
+/// keys included — and on a body that is not a JSON object, which the rest of
+/// the pipeline also leaves alone.
+fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) -> Vec<String> {
+    if trust_client_sampling {
+        return Vec::new();
+    }
+    let Some(obj) = body.as_object_mut() else {
+        return Vec::new();
+    };
+    let mut stripped = Vec::new();
+    for key in UNMODELLED_SAMPLER_KEYS {
+        if obj.remove(*key).is_some() {
+            stripped.push((*key).to_owned());
+        }
+    }
+    if !stripped.is_empty() {
+        debug!(
+            stripped = %stripped.join(", "),
+            "client sampling: untrusted, stripping unmodelled sampler keys"
+        );
+    }
+    stripped
+}
+
 pub fn resolve_sampling(
     body: &mut Value,
     ctx: &ModelContext,
     layers: &SamplingLayers,
 ) -> SamplingDecision {
-    let (client_layer, issues, discarded) = read_client_layer(body, layers.trust_client_sampling);
+    let (client_layer, issues, mut discarded) =
+        read_client_layer(body, layers.trust_client_sampling);
+
+    // Keys the ladder cannot govern get no layer to lose in — they would ride
+    // the body straight to llama-server, past the gate that just ran. Strip
+    // them here, before the fold, so the discard record carries the whole of
+    // what an untrusted client asked for and did not get.
+    discarded.extend(strip_unmodelled_sampler_keys(
+        body,
+        layers.trust_client_sampling,
+    ));
 
     // The `reasoning` tag selects the floor beneath every layer here — a
     // model that degrades into repetitive loops under greedy decoding still
@@ -983,6 +1068,122 @@ mod tests {
 
         assert_param(&body, "temperature", 0.4); // client's 0.9 dropped
         assert_param(&body, "max_tokens", 999.0); // client's budget still honoured
+    }
+
+    // ── Unmodelled sampler keys (the strip beside the gate) ─────────────────
+
+    /// The gate discards the client's *layer*, but the resolved patch is only
+    /// inserted — so before the strip existed, a sampler key the ladder has
+    /// no field for rode the body straight to llama-server, past every rule
+    /// above. `mirostat` alone replaces the whole truncation stack.
+    #[test]
+    fn untrusted_unmodelled_sampler_keys_are_stripped_and_recorded() {
+        let mut body = json!({
+            "temperature": 0.9,
+            "mirostat": 2,
+            "typical_p": 0.5,
+            "xtc_probability": 0.3,
+        });
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(Some(temp(0.4))),
+            &SamplingLayers::default(),
+        );
+
+        assert_param(&body, "temperature", 0.4); // the gate, as before
+        let obj = body.as_object().unwrap();
+        assert!(!obj.contains_key("mirostat"), "{body}");
+        assert!(!obj.contains_key("typical_p"), "{body}");
+        assert!(!obj.contains_key("xtc_probability"), "{body}");
+
+        // Both kinds of drop land in one record: the modelled field the gate
+        // binned and the unmodelled keys the strip removed.
+        for dropped in ["temperature", "mirostat", "typical_p", "xtc_probability"] {
+            assert!(
+                decision
+                    .client_fields_discarded
+                    .iter()
+                    .any(|k| k == dropped),
+                "{dropped} missing from {:?}",
+                decision.client_fields_discarded
+            );
+        }
+    }
+
+    /// Trusted means trusted: a client the operator vouched for keeps its
+    /// unmodelled keys exactly as it keeps its modelled ones.
+    #[test]
+    fn a_trusted_clients_unmodelled_sampler_keys_survive() {
+        let mut body = json!({"mirostat": 2, "mirostat_tau": 4.0});
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                trust_client_sampling: true,
+                ..Default::default()
+            },
+        );
+
+        let obj = body.as_object().unwrap();
+        assert_eq!(obj.get("mirostat"), Some(&json!(2)), "{body}");
+        assert_eq!(obj.get("mirostat_tau"), Some(&json!(4.0)), "{body}");
+        assert!(decision.client_fields_discarded.is_empty());
+    }
+
+    /// The strip is scoped to taste, not function: budgets, stops, constraint
+    /// machinery and observation fields say what the request *is* and stay
+    /// client-authoritative even untrusted. `logit_bias` is the deliberate
+    /// edge — per-token surgery with functional uses, kept until a dedicated
+    /// decision says otherwise.
+    #[test]
+    fn the_strip_leaves_functional_keys_alone() {
+        let mut body = json!({
+            "stop": ["\n\n"],
+            "logit_bias": {"1234": -100},
+            "response_format": {"type": "json_object"},
+            "n_probs": 5,
+        });
+        resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+        let obj = body.as_object().unwrap();
+        for key in ["stop", "logit_bias", "response_format", "n_probs"] {
+            assert!(obj.contains_key(key), "{key} was stripped from {body}");
+        }
+    }
+
+    /// A modelled key must never be in the strip list: the gate already
+    /// governs those, and stripping one would delete the client's value
+    /// before the *trusted* path could read it. This is what forces the list
+    /// to shrink when a parameter gets modelled, the way `frequency_penalty`
+    /// just was.
+    #[test]
+    fn no_modelled_key_is_listed_as_unmodelled() {
+        // A full literal on purpose: a new field fails this construction and
+        // forces its author to decide whether the strip list must shrink.
+        let every_field = InferenceConfig {
+            temperature: Some(0.7),
+            top_p: Some(0.95),
+            top_k: Some(40),
+            max_tokens: Some(512),
+            repeat_penalty: Some(1.0),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
+            min_p: Some(0.05),
+            dynatemp_range: Some(0.5),
+            dynatemp_exponent: Some(1.0),
+            top_n_sigma: Some(1.0),
+            dry_multiplier: Some(0.8),
+            dry_base: Some(1.75),
+            dry_allowed_length: Some(2),
+            dry_penalty_last_n: Some(64),
+            seed: Some(100),
+        };
+        for key in every_field.to_openai_json_patch().keys() {
+            assert!(
+                !UNMODELLED_SAMPLER_KEYS.contains(&key.as_str()),
+                "{key} is modelled and must not be stripped"
+            );
+        }
     }
 
     // ── Model defaults provenance (Model.defaults_origin) ───────────────────
