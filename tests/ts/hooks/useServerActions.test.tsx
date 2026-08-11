@@ -46,6 +46,7 @@ function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfi
     jinjaOverride: null,
     hasAgentTag: false,
     hasMtpTag: false,
+    pinProxy: false,
     mtpNMaxOverride: null,
     mtpPMinOverride: null,
     inferenceParams: undefined,

@@ -18,8 +18,8 @@ describe('Header', () => {
   const mockOnRefreshServers = vi.fn();
 
   const mockServers: ServerInfo[] = [
-    { model_id: 1, model_name: 'Test Model 1', port: MOCK_PROXY_PORT, status: 'running' },
-    { model_id: 2, model_name: 'Test Model 2', port: MOCK_PROXY_PORT + 1, status: 'running' },
+    { modelId: 1, modelName: 'Test Model 1', port: MOCK_PROXY_PORT, status: 'running' },
+    { modelId: 2, modelName: 'Test Model 2', port: MOCK_PROXY_PORT + 1, status: 'running' },
   ];
 
   const defaultProps = {

@@ -172,7 +172,7 @@ describe('useMessageDeletion', () => {
 
     // The assistant keeps its tool call, with the result merged in.
     const assistant = reloaded[1];
-    const parts = assistant.content as Array<Record<string, unknown>>;
+    const parts = assistant.content as unknown as Array<Record<string, unknown>>;
     const toolPart = parts.find((p) => p.type === 'tool-call');
     expect(toolPart).toMatchObject({
       toolCallId: 'call-1',

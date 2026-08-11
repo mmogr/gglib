@@ -25,11 +25,11 @@ const { getSettings, updateSettings } = transport;
 const fetchSettings = getSettings;
 
 const mockSettings: AppSettings = {
-  default_download_path: '/models',
-  default_context_size: 4096,
-  proxy_port: MOCK_PROXY_PORT,
-  llama_base_port: MOCK_BASE_PORT,
-  max_download_queue_size: 10,
+  defaultDownloadPath: '/models',
+  defaultContextSize: 4096,
+  proxyPort: MOCK_PROXY_PORT,
+  llamaBasePort: MOCK_BASE_PORT,
+  maxDownloadQueueSize: 10,
 };
 
 // Wrapper to provide SettingsProvider for hook tests
@@ -76,7 +76,7 @@ describe('useSettings', () => {
   it('saves settings and updates state', async () => {
     const updatedSettings: AppSettings = {
       ...mockSettings,
-      default_context_size: 8192,
+      defaultContextSize: 8192,
     };
     vi.mocked(updateSettings).mockResolvedValue(updatedSettings);
 
@@ -90,10 +90,10 @@ describe('useSettings', () => {
 
     let returnedSettings: AppSettings | undefined;
     await act(async () => {
-      returnedSettings = await result.current.save({ default_context_size: 8192 });
+      returnedSettings = await result.current.save({ defaultContextSize: 8192 });
     });
 
-    expect(updateSettings).toHaveBeenCalledWith({ default_context_size: 8192 });
+    expect(updateSettings).toHaveBeenCalledWith({ defaultContextSize: 8192 });
     expect(result.current.settings).toEqual(updatedSettings);
     expect(returnedSettings).toEqual(updatedSettings);
     expect(result.current.saving).toBe(false);
@@ -111,12 +111,12 @@ describe('useSettings', () => {
     });
 
     await act(async () => {
-      await result.current.save({ proxy_port: 9090 });
+      await result.current.save({ proxyPort: 9090 });
     });
 
     // After save completes, saving should be false
     expect(result.current.saving).toBe(false);
-    expect(updateSettings).toHaveBeenCalledWith({ proxy_port: 9090 });
+    expect(updateSettings).toHaveBeenCalledWith({ proxyPort: 9090 });
   });
 
   it('handles error when saving settings fails', async () => {
@@ -133,7 +133,7 @@ describe('useSettings', () => {
     let thrownError: unknown = null;
     await act(async () => {
       try {
-        await result.current.save({ default_context_size: -1 });
+        await result.current.save({ defaultContextSize: -1 });
       } catch (e) {
         thrownError = e;
       }
@@ -154,7 +154,7 @@ describe('useSettings', () => {
     expect(fetchSettings).toHaveBeenCalledTimes(1);
 
     // Update mock to return different data
-    const newSettings: AppSettings = { ...mockSettings, proxy_port: 9999 };
+    const newSettings: AppSettings = { ...mockSettings, proxyPort: 9999 };
     vi.mocked(fetchSettings).mockResolvedValue(newSettings);
 
     await act(async () => {
@@ -167,11 +167,11 @@ describe('useSettings', () => {
 
   it('handles null values in settings', async () => {
     const nullSettings: AppSettings = {
-      default_download_path: null,
-      default_context_size: null,
-      proxy_port: null,
-      llama_base_port: null,
-      max_download_queue_size: null,
+      defaultDownloadPath: null,
+      defaultContextSize: null,
+      proxyPort: null,
+      llamaBasePort: null,
+      maxDownloadQueueSize: null,
     };
     vi.mocked(fetchSettings).mockResolvedValue(nullSettings);
 
@@ -218,7 +218,7 @@ describe('useSettings', () => {
     
     await act(async () => {
       try {
-        await result.current.save({ proxy_port: 1 });
+        await result.current.save({ proxyPort: 1 });
       } catch {
         // Expected to throw
       }
@@ -230,7 +230,7 @@ describe('useSettings', () => {
     vi.mocked(updateSettings).mockResolvedValue(mockSettings);
 
     await act(async () => {
-      await result.current.save({ proxy_port: MOCK_PROXY_PORT });
+      await result.current.save({ proxyPort: MOCK_PROXY_PORT });
     });
 
     expect(result.current.error).toBeNull();

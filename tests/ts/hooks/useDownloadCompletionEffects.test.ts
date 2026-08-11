@@ -7,10 +7,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import React from 'react';
 import { useDownloadCompletionEffects } from '../../../src/hooks/useDownloadCompletionEffects';
-import { ToastProvider } from '../../../src/contexts/ToastContext';
-import type { DownloadCompletionInfo } from '../../../src/download/api/types';
+import type { DownloadCompletionInfo } from '../../../src/services/transport/types/downloads';
 
 // Mock toast context
 const mockShowToast = vi.fn();

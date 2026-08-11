@@ -18,6 +18,7 @@ const serverInfo = (status: McpServerInfo['status']): McpServerInfo => ({
     config: {},
     enabled: true,
     lifecycle: 'lazy' as const,
+    is_valid: true,
     env: [],
     created_at: '2024-01-01',
   },

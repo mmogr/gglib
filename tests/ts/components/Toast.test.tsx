@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import React from 'react';
 import { ToastProvider, useToastContext } from '../../../src/contexts/ToastContext';
 import { ToastContainer } from '../../../src/components/Toast';
 
@@ -17,8 +16,6 @@ function renderToastSystem() {
     showToast = useToastContext().showToast;
     return null;
   };
-
-  const { toasts: _toasts, ...rest } = { toasts: [] as ReturnType<typeof useToastContext>['toasts'] };
 
   const Wrapper = () => {
     const ctx = useToastContext();
