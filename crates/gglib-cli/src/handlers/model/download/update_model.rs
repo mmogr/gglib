@@ -108,7 +108,10 @@ mod tests {
 
     #[test]
     fn short_sha_truncates_a_full_sha() {
-        assert_eq!(short_sha("0123456789abcdef0123456789abcdef01234567"), "01234567");
+        assert_eq!(
+            short_sha("0123456789abcdef0123456789abcdef01234567"),
+            "01234567"
+        );
     }
 
     #[test]

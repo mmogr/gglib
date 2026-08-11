@@ -13,9 +13,8 @@ use gglib_core::{
 use crate::error::GuiError;
 use crate::sampling_explain::{self, SamplingExplanationDto};
 use crate::types::{
-    RetagResponse, UpgradeCheck, UpgradeOutcome,
-    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
-    UpdateModelRequest,
+    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, RetagResponse,
+    SetCapabilitiesRequest, UpdateModelRequest, UpgradeCheck, UpgradeOutcome,
 };
 
 /// Dependencies for model operations.
@@ -408,10 +407,13 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
             .path;
 
-        let check =
-            gglib_download::cli_exec::check_update(&repo, model.hf_commit_sha.as_deref(), &models_dir)
-                .await
-                .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+        let check = gglib_download::cli_exec::check_update(
+            &repo,
+            model.hf_commit_sha.as_deref(),
+            &models_dir,
+        )
+        .await
+        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
 
         Ok(UpgradeCheck {
             has_update: check.has_update,
@@ -436,10 +438,13 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
             .path;
 
-        let check =
-            gglib_download::cli_exec::check_update(&repo, model.hf_commit_sha.as_deref(), &models_dir)
-                .await
-                .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+        let check = gglib_download::cli_exec::check_update(
+            &repo,
+            model.hf_commit_sha.as_deref(),
+            &models_dir,
+        )
+        .await
+        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
         if !check.has_update {
             return Ok(UpgradeOutcome {
                 updated: false,

@@ -182,10 +182,7 @@ fn model_routes() -> Router<AppState> {
             "/{id}/capabilities",
             axum::routing::patch(handlers::model::models::set_capabilities),
         )
-        .route(
-            "/{id}/retag",
-            post(handlers::model::models::retag),
-        )
+        .route("/{id}/retag", post(handlers::model::models::retag))
         .route(
             "/{id}/upgrade-check",
             get(handlers::model::models::check_upgrade),
