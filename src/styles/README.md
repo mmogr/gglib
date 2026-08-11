@@ -32,7 +32,7 @@ Tokens follow a **semantic layering** approach:
 
 ```css
 /* Foundation tokens (primitives) */
---color-primary: #6c8cff;
+--color-primary: #f08c26;
 --spacing-base: 1rem;
 
 /* Semantic aliases (purpose-based) */
@@ -445,7 +445,7 @@ has an accessible name.
   destructive actions elsewhere are `dangerGhost` (muted at rest, red on hover).
 - Green means running/online only, expressed as a **dot + neutral text** —
   never a filled pill.
-- Blue is selection, focus, links, and the single primary CTA.
+- Amber (`primary`) is selection, focus, links, and the single primary CTA.
 
 ### Type hierarchy
 

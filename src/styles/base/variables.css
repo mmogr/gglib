@@ -8,55 +8,55 @@
      ================== */
 
   /* Primary Colors */
-  --color-primary: #6c8cff;
-  --color-primary-hover: #5878ec;
-  --color-primary-light: #93aaff;
-  --color-primary-dark: #3d55b8;
-  --color-primary-subtle: rgba(108, 140, 255, 0.12);
-  --color-primary-border: rgba(108, 140, 255, 0.3);
+  --color-primary: #f08c26;
+  --color-primary-hover: #de7d1b;
+  --color-primary-light: #f7a950;
+  --color-primary-dark: #b5641a;
+  --color-primary-subtle: rgba(240, 140, 38, 0.12);
+  --color-primary-border: rgba(240, 140, 38, 0.35);
 
   /* Semantic Colors */
-  --color-success: #3fc48f;
-  --color-success-hover: #2fa878;
-  --color-success-subtle: rgba(63, 196, 143, 0.12);
-  --color-success-border: rgba(63, 196, 143, 0.3);
-  --color-warning: #d9a23c;
-  --color-warning-hover: #c08b2b;
-  --color-warning-subtle: rgba(217, 162, 60, 0.12);
-  --color-warning-border: rgba(217, 162, 60, 0.3);
-  --color-danger: #e0655a;
-  --color-danger-hover: #c94f44;
-  --color-danger-subtle: rgba(224, 101, 90, 0.12);
-  --color-danger-border: rgba(224, 101, 90, 0.3);
-  --color-info: #6c8cff;
+  --color-success: #45bd85;
+  --color-success-hover: #38a873;
+  --color-success-subtle: rgba(69, 189, 133, 0.12);
+  --color-success-border: rgba(69, 189, 133, 0.3);
+  --color-warning: #e8d666;
+  --color-warning-hover: #d4c14f;
+  --color-warning-subtle: rgba(232, 214, 102, 0.12);
+  --color-warning-border: rgba(232, 214, 102, 0.3);
+  --color-danger: #e05252;
+  --color-danger-hover: #c94343;
+  --color-danger-subtle: rgba(224, 82, 82, 0.12);
+  --color-danger-border: rgba(224, 82, 82, 0.3);
+  --color-info: #7fa6cc;
 
-  /* Neutral Colors - Dark Theme (cool slate-tinted ramp) */
-  --color-background: #0c0e12;
-  --color-background-elevated: #12151a;
-  --color-background-overlay: #161a21;
-  --color-background-hover: #1b202a;
-  --color-background-active: #222836;
-  --color-background-input: #0f1218;
+  /* Neutral Colors - Dark Theme (graphite ramp, near-achromatic) */
+  --color-background: #0e0e10;
+  --color-background-elevated: #131316;
+  --color-background-overlay: #17171a;
+  --color-background-hover: #1d1d21;
+  --color-background-active: #26262b;
+  --color-background-input: #101013;
 
   /* Surface Colors */
-  --color-surface: #161a21;
-  --color-surface-elevated: #1d222c;
-  --color-surface-hover: #242b37;
+  --color-surface: #17171a;
+  --color-surface-elevated: #202024;
+  --color-surface-hover: #28282d;
   /* Alias: fixes broken bg-surface-raised references in components */
   --color-surface-raised: var(--color-surface-elevated);
 
   /* Border Colors (white-alpha hairlines so they read on every surface level) */
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-light: rgba(255, 255, 255, 0.05);
-  --color-border-hover: rgba(255, 255, 255, 0.14);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-light: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.16);
   --color-border-focus: var(--color-primary);
 
   /* Text Colors */
-  --color-text: #e7eaf0;
-  --color-text-secondary: #a9b1bf;
-  --color-text-muted: #7e8795;
-  --color-text-disabled: #58606d;
-  --color-text-inverse: #0c0e12;
+  --color-text: #edece8;
+  --color-text-secondary: #a9a8a2;
+  --color-text-muted: #8a8983;
+  --color-text-disabled: #5b5a55;
+  --color-text-inverse: #0e0e10;
 
   /* Semantic Aliases - for component consistency */
   --color-background-secondary: var(--color-background-elevated);
@@ -65,9 +65,9 @@
   --color-accent: var(--color-primary-light);
 
   /* Status Colors */
-  --color-online: #3fc48f;
-  --color-offline: #7e8795;
-  --color-error: #e0655a;
+  --color-online: #45bd85;
+  --color-offline: #8a8983;
+  --color-error: #e05252;
 
   /* ==================
      Spacing Scale
@@ -86,9 +86,9 @@
      Typography Scale
      ================== */
 
-  --font-family-base: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  --font-family-base: 'IBM Plex Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code',
+  --font-family-mono: 'IBM Plex Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code',
     'Fira Mono', 'Roboto Mono', monospace;
 
   /* Font Sizes (desktop-density scale: 14px base UI type) */
@@ -130,10 +130,10 @@
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-2xl: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --shadow-2xl: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
 
   /* ==================
      Transitions
