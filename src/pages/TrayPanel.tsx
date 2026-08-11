@@ -58,6 +58,25 @@ export const TrayPanel: FC = () => {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pinnedModel, setPinnedModel] = useState<string | null>(null);
+
+  // The pin only travels on the status response, not the registry events.
+  useEffect(() => {
+    if (!proxy.running) {
+      setPinnedModel(null);
+      return;
+    }
+    let cancelled = false;
+    void getTransport()
+      .getProxyStatus()
+      .then((s) => {
+        if (!cancelled) setPinnedModel(s.pinned_model ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [proxy.running]);
 
   // The panel is its own window, so it needs its own subscription — the main
   // window's may not exist yet, or at all.
@@ -138,6 +157,11 @@ export const TrayPanel: FC = () => {
               <span className="text-xs text-text-muted h-4">
                 {copied ? 'Copied to clipboard' : connected ? 'Live' : 'Connecting…'}
               </span>
+              {pinnedModel && (
+                <span className="text-xs text-text-muted">
+                  Pinned to <span className="font-mono text-text-secondary">{pinnedModel}</span>
+                </span>
+              )}
             </div>
 
             <ProxyMetricsGrid snapshot={snapshot} compact />

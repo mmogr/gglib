@@ -4,7 +4,7 @@
  */
 
 import { get, post } from './client';
-import type { ProxyConfig, ProxyStatus } from '../types/proxy';
+import type { ProxyConfig, ProxyStatus, StartPinnedRequest } from '../types/proxy';
 
 /**
  * Get current proxy server status.
@@ -18,6 +18,15 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
  */
 export async function startProxy(config?: Partial<ProxyConfig>): Promise<ProxyStatus> {
   return post<ProxyStatus>('/api/proxy/start', config);
+}
+
+/**
+ * Start the proxy pinned to one model. The daemon resolves the launch
+ * cascade (sampling, MTP, context, cache) server-side, exactly as
+ * `gglib serve` does.
+ */
+export async function startPinnedProxy(request: StartPinnedRequest): Promise<ProxyStatus> {
+  return post<ProxyStatus>('/api/proxy/start-pinned', request);
 }
 
 /**

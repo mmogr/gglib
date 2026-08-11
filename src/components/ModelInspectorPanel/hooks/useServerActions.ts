@@ -4,6 +4,7 @@ import type { GgufModel, ServeConfig, ServerInfo, AppSettings, InferenceConfig }
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
 import { getTransport } from '../../../services/transport';
+import { toStartServerRequest } from '../../../services/transport/mappers';
 import { formatError } from '../../../utils/errors';
 
 export interface ServerActionsConfig {
@@ -24,6 +25,8 @@ export interface ServerActionsConfig {
   mtpNMaxOverride: number | null;
   mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
+  /** Serve as a pinned proxy instead of a bare model start. */
+  pinProxy: boolean;
   editedServerDefaults: import('../../../types').ServerConfig | null | undefined;
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
@@ -83,6 +86,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     closeServeModal,
     closeDeleteModal,
     resetEditState,
+    pinProxy,
   } = config;
 
   const activeServer = model?.id ? servers.find(s => s.modelId === model.id) : undefined;
@@ -138,6 +142,38 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         minP: inferenceParams?.minP,
       };
 
+      if (pinProxy) {
+        // The GUI's `gglib serve`: the daemon plans the pin server-side.
+        // Send only what the user explicitly typed — pre-resolving context
+        // client-side would bypass the cascade's model-defaults rung and
+        // freeze the settings default as an explicit override.
+        const customCtx = customContext.trim() ? parseInt(customContext.trim(), 10) : NaN;
+        try {
+          const status = await getTransport().startPinnedProxy({
+            model_id: model.id,
+            options: {
+              ...toStartServerRequest(serveConfig),
+              contextLength: Number.isFinite(customCtx) && customCtx > 0 ? customCtx : undefined,
+            },
+          });
+          closeServeModal();
+          showToast(
+            `Proxy pinned to ${model.name}${status.port ? ` on port ${status.port}` : ''}`,
+            'success',
+          );
+          onStartServer();
+        } catch (err) {
+          const raw = err instanceof Error ? err.message : String(err);
+          showToast(
+            raw.includes('already running')
+              ? 'The proxy is already running — stop it from the Proxy menu, then pin.'
+              : `Could not pin the proxy: ${raw}`,
+            'error',
+          );
+        }
+        return;
+      }
+
       const result = await getTransport().serveModel(serveConfig);
       closeServeModal();
       onStartServer();
@@ -172,7 +208,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
+  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

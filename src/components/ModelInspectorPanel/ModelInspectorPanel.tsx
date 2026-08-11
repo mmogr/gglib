@@ -120,6 +120,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     mtpNMaxOverride: serveModal.mtpNMaxOverride,
     mtpPMinOverride: serveModal.mtpPMinOverride,
     inferenceParams: serveModal.inferenceParams,
+    pinProxy: serveModal.pinProxy,
     onStopServer,
     onRemoveModel,
     onUpdateModel,
@@ -255,6 +256,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           mtpNMaxOverride={serveModal.mtpNMaxOverride}
           mtpPMinOverride={serveModal.mtpPMinOverride}
           inferenceParams={serveModal.inferenceParams}
+          pinProxy={serveModal.pinProxy}
+          onPinProxyChange={serveModal.setPinProxy}
           onContextChange={serveModal.setCustomContext}
           onPortChange={serveModal.setCustomPort}
           onJinjaChange={serveModal.setJinjaOverride}

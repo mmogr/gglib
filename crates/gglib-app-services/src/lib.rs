@@ -19,6 +19,7 @@ mod helpers;
 
 pub mod benchmark;
 mod downloads;
+pub mod launch_options;
 mod mcp;
 mod models;
 mod proxy;

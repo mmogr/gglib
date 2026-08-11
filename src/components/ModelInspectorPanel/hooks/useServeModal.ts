@@ -12,6 +12,8 @@ export interface ServeModalState {
   mtpPMinOverride: number | null;
   isServing: boolean;
   inferenceParams: InferenceConfig | undefined;
+  /** Serve as a pinned proxy (`gglib serve`) instead of a bare model start. */
+  pinProxy: boolean;
   setShowServeModal: (show: boolean) => void;
   setCustomContext: (context: string) => void;
   setCustomPort: (port: string) => void;
@@ -20,6 +22,7 @@ export interface ServeModalState {
   setMtpPMinOverride: (override: number | null) => void;
   setIsServing: (serving: boolean) => void;
   setInferenceParams: (params: InferenceConfig | undefined) => void;
+  setPinProxy: (pin: boolean) => void;
   openServeModal: () => void;
   closeServeModal: () => void;
   resetServeModal: () => void;
@@ -37,6 +40,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
   const [mtpPMinOverride, setMtpPMinOverride] = useState<number | null>(null);
   const [isServing, setIsServing] = useState(false);
   const [inferenceParams, setInferenceParams] = useState<InferenceConfig | undefined>(undefined);
+  const [pinProxy, setPinProxy] = useState(false);
 
   // Reset overrides and inference params when model changes
   useEffect(() => {
@@ -44,6 +48,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     setMtpNMaxOverride(null);
     setMtpPMinOverride(null);
     setInferenceParams(undefined);
+    setPinProxy(false);
   }, [modelId]);
 
   const openServeModal = useCallback(() => {
@@ -67,6 +72,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     setMtpPMinOverride(null);
     setIsServing(false);
     setInferenceParams(undefined);
+    setPinProxy(false);
   }, []);
 
   return {
@@ -78,6 +84,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     mtpPMinOverride,
     isServing,
     inferenceParams,
+    pinProxy,
     setShowServeModal,
     setCustomContext,
     setCustomPort,
@@ -86,6 +93,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     setMtpPMinOverride,
     setIsServing,
     setInferenceParams,
+    setPinProxy,
     openServeModal,
     closeServeModal,
     resetServeModal,

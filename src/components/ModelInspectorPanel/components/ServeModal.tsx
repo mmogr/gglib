@@ -26,6 +26,8 @@ interface ServeModalProps {
   /** null = use default 0.75 */
   mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
+  /** Serve as a pinned proxy (`gglib serve`) instead of a bare model start. */
+  pinProxy: boolean;
   // Handlers
   onContextChange: (value: string) => void;
   onPortChange: (value: string) => void;
@@ -34,6 +36,7 @@ interface ServeModalProps {
   onMtpNMaxChange: (value: number | null) => void;
   onMtpPMinChange: (value: number | null) => void;
   onInferenceParamsChange: (params: InferenceConfig) => void;
+  onPinProxyChange: (pin: boolean) => void;
   onClose: () => void;
   onStart: () => void;
 }
@@ -53,6 +56,8 @@ export const ServeModal: FC<ServeModalProps> = ({
   mtpNMaxOverride,
   mtpPMinOverride,
   inferenceParams,
+  pinProxy,
+  onPinProxyChange,
   onContextChange,
   onPortChange,
   onJinjaChange,
@@ -97,7 +102,13 @@ export const ServeModal: FC<ServeModalProps> = ({
             isLoading={isServing}
             leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
           >
-            {isServing ? 'Loading model…' : 'Start Server'}
+            {isServing
+              ? pinProxy
+                ? 'Starting pinned proxy…'
+                : 'Loading model…'
+              : pinProxy
+                ? 'Start Pinned Proxy'
+                : 'Start Server'}
           </Button>
         </>
       }
@@ -178,6 +189,17 @@ export const ServeModal: FC<ServeModalProps> = ({
               : 'will be enabled automatically for agent-tagged models to support structured prompts.'}
           </Banner>
         )}
+
+        <div className="mb-lg">
+          <Checkbox
+            id="pin-proxy-toggle"
+            checked={pinProxy}
+            onChange={(e) => onPinProxyChange(e.target.checked)}
+            disabled={isServing}
+            label="Pin the proxy to this model"
+            description="The OpenAI endpoint serves only this model and refuses requests naming any other — the GUI equivalent of gglib serve, for clients that cannot switch models."
+          />
+        </div>
 
         <div className="mb-lg">
           <div className="flex items-center justify-between gap-sm">
