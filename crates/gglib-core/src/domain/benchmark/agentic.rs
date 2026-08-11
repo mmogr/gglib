@@ -908,6 +908,39 @@ impl PairedEffect {
                 }
             }
         }
+        Self::from_deltas(&deltas, unmeasured_pairs)
+    }
+
+    /// The paired comparison between two runs of the same task list, paired
+    /// by `task_id` — the first argument's score minus the second's, so
+    /// `wins` counts pairs the *first* run took.
+    ///
+    /// Built for the tune apply gate (winner versus incumbent), where the
+    /// two sides are candidates rather than eval arms. A task present in one
+    /// run and absent from the other is skipped, not counted: an unpaired
+    /// task has nothing to compare.
+    #[must_use]
+    pub fn from_paired_runs(a: &[TuneTaskResult], b: &[TuneTaskResult]) -> Option<Self> {
+        let b_by_id: std::collections::HashMap<&str, &TuneTaskResult> =
+            b.iter().map(|r| (r.task_id.as_str(), r)).collect();
+        let mut deltas = Vec::new();
+        let mut unmeasured_pairs = 0_usize;
+        for left in a {
+            let Some(right) = b_by_id.get(left.task_id.as_str()) else {
+                continue;
+            };
+            if left.is_measured() && right.is_measured() {
+                deltas.push(left.tool_match_score - right.tool_match_score);
+            } else {
+                unmeasured_pairs += 1;
+            }
+        }
+        Self::from_deltas(&deltas, unmeasured_pairs)
+    }
+
+    /// Aggregate a delta list into the paired record. `None` on no deltas —
+    /// a paired analysis of nothing is not a zero effect.
+    fn from_deltas(deltas: &[f64], unmeasured_pairs: usize) -> Option<Self> {
         if deltas.is_empty() {
             return None;
         }
@@ -925,7 +958,7 @@ impl PairedEffect {
             losses,
             ties,
             mean_delta,
-            p_value: wilcoxon_one_sided(&deltas),
+            p_value: wilcoxon_one_sided(deltas),
         })
     }
 }
