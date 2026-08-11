@@ -53,7 +53,9 @@ __pycache__/
 # No trailing slash: `node_modules/` matches a directory but not a *symlink*
 # of that name, which is how one got committed in #727.
 node_modules
-package-lock.json
+# package-lock.json is tracked: it is what makes `npm ci` reproducible, and it
+# is the only thing that pins the minimatch@3 / brace-expansion resolution
+# documented in package.json's "//overrides" note.
 yarn.lock
 .pnpm-debug.log
 npm-debug.log*

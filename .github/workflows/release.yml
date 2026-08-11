@@ -173,11 +173,12 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
+          cache: 'npm'
 
       - name: Build Web UI
         if: steps.webui-cache.outputs.cache-hit != 'true'
         run: |
-          npm install
+          npm ci
           npm run build
 
       - name: Build documentation
@@ -341,11 +342,12 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
+          cache: 'npm'
 
       - name: Build Web UI
         if: steps.webui-cache.outputs.cache-hit != 'true'
         run: |
-          npm install
+          npm ci
           npm run build
 
       - name: Build binary
@@ -439,20 +441,17 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
+          cache: 'npm'
 
-      - name: Install frontend dependencies (Unix)
-        if: matrix.os != 'windows-2022'
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install
-
-      - name: Install frontend dependencies (Windows)
-        if: matrix.os == 'windows-2022'
-        run: |
-          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
-          if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
-          npm install
-        shell: pwsh
+      # Previously two OS-specific steps that deleted node_modules and
+      # package-lock.json before `npm install`, to dodge the old npm bug where a
+      # lockfile omitted other platforms' native binaries. The committed lockfile
+      # records every variant of @rolldown/binding, @tailwindcss/oxide,
+      # lightningcss and @tauri-apps/cli for linux/darwin/win32, so `npm ci`
+      # resolves the correct one per runner — and the release build now uses the
+      # same pinned dependency set as every other job.
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
