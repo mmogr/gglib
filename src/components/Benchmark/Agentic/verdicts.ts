@@ -27,8 +27,8 @@ export type ControlVerdict =
   | { kind: 'wrong_direction'; gap: number };
 
 export type EffectVerdict =
-  | { kind: 'exceeds_noise'; effect: number; noise: number }
-  | { kind: 'within_noise'; effect: number; noise: number };
+  | { kind: 'exceeds_noise'; effect: number; noise: number; pairs: number }
+  | { kind: 'within_noise'; effect: number; noise: number; pairs: number };
 
 /** What the positive control demonstrated, or `null` when it did not run. */
 export function controlVerdict(report: AgenticEvalReport): ControlVerdict | null {
@@ -40,11 +40,37 @@ export function controlVerdict(report: AgenticEvalReport): ControlVerdict | null
   return { kind: 'wrong_direction', gap: -gap };
 }
 
-/** The eval's own drift: how far two identical raw arms landed apart. `null` when the A/A arm did not run. */
+/**
+ * The eval's own drift: the mean pairwise composite gap over every run of the
+ * identical raw configuration — the primary plus each A/A pair. With one pair
+ * this is the old single gap; `null` when no A/A arm ran.
+ */
 export function noiseFloor(report: AgenticEvalReport): number | null {
-  const replicate = report.raw_replicate;
-  if (replicate == null) return null;
-  return Math.abs(report.raw.composite - replicate.composite);
+  const gaps = driftGaps(report);
+  if (gaps.length === 0) return null;
+  return gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+}
+
+/** How many pairwise gaps stand behind the noise floor. */
+export function noisePairs(report: AgenticEvalReport): number {
+  return driftGaps(report).length;
+}
+
+function driftGaps(report: AgenticEvalReport): number[] {
+  const composites = [report.raw.composite];
+  const replicates = report.raw_replicates ?? [];
+  if (replicates.length > 0) {
+    composites.push(...replicates.map((r) => r.composite));
+  } else if (report.raw_replicate != null) {
+    composites.push(report.raw_replicate.composite);
+  }
+  const gaps: number[] = [];
+  for (let i = 0; i < composites.length; i += 1) {
+    for (let j = i + 1; j < composites.length; j += 1) {
+      gaps.push(Math.abs(composites[i] - composites[j]));
+    }
+  }
+  return gaps;
 }
 
 /**
@@ -55,11 +81,12 @@ export function noiseFloor(report: AgenticEvalReport): number | null {
 export function effectVerdict(report: AgenticEvalReport): EffectVerdict | null {
   const noise = noiseFloor(report);
   if (noise == null) return null;
+  const pairs = noisePairs(report);
   const effect = report.delta.composite;
   if (Math.abs(effect) > 0 && Math.abs(effect) >= EFFECT_NOISE_RATIO * noise) {
-    return { kind: 'exceeds_noise', effect, noise };
+    return { kind: 'exceeds_noise', effect, noise, pairs };
   }
-  return { kind: 'within_noise', effect, noise };
+  return { kind: 'within_noise', effect, noise, pairs };
 }
 
 /** Per-arm pass counts for one task, in (raw, gglib) order. */

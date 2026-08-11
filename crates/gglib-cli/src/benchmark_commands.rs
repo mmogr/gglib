@@ -203,6 +203,14 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         no_replicate: bool,
 
+        /// How many A/A pairs to run. One pair estimates the eval's drift
+        /// from a single degree of freedom; each extra pair re-runs the raw
+        /// arm on another derived seed set, and the drift becomes a mean over
+        /// every pairwise gap — the honest strengthening, per the effect
+        /// verdict's own docs
+        #[arg(long, default_value_t = 1, value_name = "N")]
+        replicate_pairs: usize,
+
         /// How many of `--seeds` the positive control repeats. One is enough:
         /// broken sampling makes the model ramble, so the control is by far
         /// the most expensive arm, and it only has to clear a detection
