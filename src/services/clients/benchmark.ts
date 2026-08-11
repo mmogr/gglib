@@ -14,6 +14,7 @@ import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
 import type {
   AgenticEvalConfig,
   AgenticEvalReport,
+  ApplyOutcome,
   BenchmarkEvent,
   BenchmarkRun,
   CompareConfig,
@@ -271,4 +272,24 @@ export async function startAgenticRun(
   }
 
   await consumeSseStream(response, onEvent);
+}
+
+/**
+ * POST /api/benchmark/tune/{runId}/apply — judge a completed tune run
+ * against the apply gate; only an `apply` verdict has written the model.
+ * Refusals come back as verdicts, never as HTTP errors.
+ */
+export async function applyTuneRun(runId: number): Promise<ApplyOutcome> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(`${baseUrl}/api/benchmark/tune/${runId}/apply`, {
+    method: 'POST',
+    headers: headers as Record<string, string>,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `apply failed: ${response.status}`,
+    );
+  }
+  return (await response.json()) as ApplyOutcome;
 }
