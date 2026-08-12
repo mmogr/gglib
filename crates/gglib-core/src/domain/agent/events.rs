@@ -225,8 +225,16 @@ pub enum LlmStreamEvent {
     /// Every conforming stream must end with exactly one `Done` item.
     Done {
         /// The OpenAI-compatible finish reason (e.g. `"stop"`, `"tool_calls"`,
-        /// `"length"`).
-        finish_reason: String,
+        /// `"length"`), or `None` when the upstream never reported one.
+        ///
+        /// `None` is load-bearing and must not be collapsed to `"stop"`. A
+        /// stream that ends without a finish reason ended *abnormally* — the
+        /// process died, the connection broke, the sentinel arrived with no
+        /// terminating chunk. Reporting that as a clean stop relabels a
+        /// truncation as a complete answer, which is exactly the fact any
+        /// truncation counter needs to see. `null` is the spec-legal way to
+        /// say "not known"; inventing a value is not.
+        finish_reason: Option<String>,
     },
 
     /// An upstream error reported inline, mid-stream.

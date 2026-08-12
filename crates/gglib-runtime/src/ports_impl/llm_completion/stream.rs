@@ -158,7 +158,7 @@ mod tests {
                 },
                 usage(1_000, Some(900)),
                 LlmStreamEvent::Done {
-                    finish_reason: "stop".to_owned(),
+                    finish_reason: Some("stop".to_owned()),
                 },
             ]),
             sink.clone(),
@@ -188,7 +188,7 @@ mod tests {
         let sink = Arc::new(FakeSink::default());
         drain(tap_usage(
             events(vec![LlmStreamEvent::Done {
-                finish_reason: "stop".to_owned(),
+                finish_reason: Some("stop".to_owned()),
             }]),
             sink.clone(),
         ))

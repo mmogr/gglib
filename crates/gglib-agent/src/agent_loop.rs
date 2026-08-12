@@ -393,7 +393,10 @@ impl AgentLoopPort for AgentLoop {
                 content_len = response.content.len(),
                 reasoning_len = response.reasoning_content.len(),
                 tool_call_count = response.tool_calls.len(),
-                finish_reason = %response.finish_reason,
+                finish_reason = response
+                    .finish_reason
+                    .as_deref()
+                    .unwrap_or("<none reported>"),
                 "LLM response received"
             );
 

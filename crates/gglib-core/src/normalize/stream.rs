@@ -203,11 +203,15 @@ impl NormalizingStream {
                 // the required `"tool_calls"`.  Clients such as Zed check
                 // finish_reason to decide whether to dispatch tool results;
                 // a wrong value causes the conversation to hang.
-                let finish_reason = if finish_reason == "stop" && self.next_index > 0 {
-                    "tool_calls".to_owned()
-                } else {
-                    finish_reason
-                };
+                // Only an explicitly reported "stop" is corrected. An absent
+                // reason stays absent: the upstream never claimed the turn
+                // ended, so there is no wrong claim here to repair.
+                let finish_reason =
+                    if finish_reason.as_deref() == Some("stop") && self.next_index > 0 {
+                        Some("tool_calls".to_owned())
+                    } else {
+                        finish_reason
+                    };
                 self.queued
                     .push_back(LlmStreamEvent::Done { finish_reason });
                 // Deliberately *not* `self.terminated = true` here — see the
@@ -324,7 +328,7 @@ mod tests {
                 content: "hello".into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events.clone(), false));
@@ -344,7 +348,7 @@ mod tests {
                 cached_tokens: None,
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events.clone(), false));
@@ -362,7 +366,7 @@ mod tests {
                 content: "hello".into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
             LlmStreamEvent::Usage {
                 prompt_tokens: 10,
@@ -384,7 +388,7 @@ mod tests {
         // or resurrect already-finalised parser state; simply dropped.
         let events = vec![
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
             LlmStreamEvent::TextDelta {
                 content: "should be dropped".into(),
@@ -401,7 +405,7 @@ mod tests {
             out,
             vec![
                 LlmStreamEvent::Done {
-                    finish_reason: "stop".into(),
+                    finish_reason: Some("stop".into()),
                 },
                 LlmStreamEvent::Usage {
                     prompt_tokens: 1,
@@ -422,7 +426,7 @@ mod tests {
                     .into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
+                finish_reason: Some("tool_calls".into()),
             },
         ];
         let out = drain(wrap(events, true));
@@ -456,7 +460,7 @@ mod tests {
                 content: r#"think <tool_call>{"name":"foo","arguments":{}}</tool_call> end"#.into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
+                finish_reason: Some("tool_calls".into()),
             },
         ];
         let out = drain(wrap(events, true));
@@ -482,7 +486,7 @@ mod tests {
                 content: r#"<tool_call>{"name":"foo","arguments":{}}</tool_call>"#.into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events, true));
@@ -505,7 +509,7 @@ mod tests {
                 content: r#"<tool_call>{"name":"foo""#.into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events, true));
@@ -546,14 +550,14 @@ mod tests {
                 arguments: Some(r#"{"path":"/tmp/x"}"#.into()),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(), // wrong — model bug
+                finish_reason: Some("stop".into()), // wrong — model bug
             },
         ];
         let out = drain(wrap(events, false));
         assert_eq!(out.len(), 2);
         match &out[1] {
             LlmStreamEvent::Done { finish_reason } => {
-                assert_eq!(finish_reason, "tool_calls");
+                assert_eq!(finish_reason.as_deref(), Some("tool_calls"));
             }
             other => panic!("expected Done, got {other:?}"),
         }
@@ -568,13 +572,13 @@ mod tests {
                 content: "hello".into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events, false));
         match &out[1] {
             LlmStreamEvent::Done { finish_reason } => {
-                assert_eq!(finish_reason, "stop");
+                assert_eq!(finish_reason.as_deref(), Some("stop"));
             }
             other => panic!("expected Done, got {other:?}"),
         }
@@ -592,7 +596,7 @@ mod tests {
                 content: "actual answer".into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events, false));
@@ -623,7 +627,7 @@ mod tests {
                 content: "<think>spurious</think>real text".into(),
             },
             LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
+                finish_reason: Some("stop".into()),
             },
         ];
         let out = drain(wrap(events, false));

@@ -85,8 +85,14 @@ pub struct CollectedResponse {
     pub reasoning_content: String,
     /// Tool calls requested by the model (empty when the model answered directly).
     pub tool_calls: Vec<ToolCall>,
-    /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
-    pub finish_reason: String,
+    /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event,
+    /// or `None` when the upstream never reported one.
+    ///
+    /// Kept optional rather than defaulted so a stream that ended abnormally
+    /// stays distinguishable from one that stopped cleanly — a `"length"`
+    /// truncation and a died-mid-generation turn are different facts, and
+    /// collapsing the unknown case into `"stop"` erases both.
+    pub finish_reason: Option<String>,
     /// Tool-call deltas dropped because their `index` reached
     /// [`MAX_TOOL_CALL_INDEX`].
     ///
@@ -173,7 +179,7 @@ pub async fn collect_stream(
     let mut got_any_event = false;
     // Set at `Done`; the loop keeps draining afterwards because the OpenAI
     // usage chunk legitimately trails `Done` (before the byte stream closes).
-    let mut finished: Option<(String, Vec<ToolCall>)> = None;
+    let mut finished: Option<(Option<String>, Vec<ToolCall>)> = None;
     let mut completion_tokens: Option<u32> = None;
 
     while let Some(event) = stream.next().await {

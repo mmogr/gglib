@@ -104,7 +104,7 @@ impl MockLlmResponse {
             });
         }
         events.push(LlmStreamEvent::Done {
-            finish_reason: self.finish_reason,
+            finish_reason: Some(self.finish_reason),
         });
         events
     }
