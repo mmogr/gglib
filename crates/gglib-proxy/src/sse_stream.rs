@@ -209,6 +209,16 @@ pub fn spawn_and_return(
                     // has finished, by which time the snapshot already exists.
                     context_metrics.flag_tool_repair(snapshot_seq, outcome.repair_succeeded);
                 }
+                if outcome.upstream_errored {
+                    warn!(
+                        model = %model_name_owned,
+                        "turn died on an upstream mid-stream failure"
+                    );
+                    // Back-patched like the repair flag: the fact is only
+                    // known once the stream has ended, by which time the
+                    // snapshot already exists.
+                    context_metrics.flag_stream_error(snapshot_seq);
+                }
                 // Feed the terminal outcome to the watchdog. The precedence
                 // between "produced output", "died upstream" and "the client
                 // left" lives in `health_verdict`, so this stays one line and

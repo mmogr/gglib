@@ -220,6 +220,27 @@ impl ContextMetricsStore {
         }
     }
 
+    /// Count one upstream mid-stream failure against `seq`'s model.
+    ///
+    /// Unlike its two siblings above this keeps no fleet-wide total, because
+    /// one already exists: `UpstreamHealth` counts every upstream death for
+    /// the dashboard. What is missing there, and supplied here, is *which
+    /// model* died — a fleet counter cannot tell a single sick model from a
+    /// sick server.
+    ///
+    /// The ring row is consulted only for its model name, so an event whose
+    /// snapshot was already evicted is lost to the per-model ledger. That is
+    /// the same bounded, bias-free undercount [`Self::flag_tool_repair`]
+    /// accepts, on exactly the busiest traffic.
+    pub fn flag_stream_error(&self, seq: u64) {
+        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter().find(|s| s.seq == seq)
+            && let Some(ledger) = &self.ledger
+        {
+            ledger.record_stream_error(&snapshot.model_name);
+        }
+    }
+
     /// Total tool-call repairs attempted, eviction-safe.
     pub fn tool_repairs_attempted(&self) -> u64 {
         self.tool_repairs_attempted.load(Ordering::Relaxed)

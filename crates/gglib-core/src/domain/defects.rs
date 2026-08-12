@@ -34,6 +34,21 @@ pub struct ModelDefectCounts {
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.
     pub repairs_succeeded: u64,
+    /// Streaming turns that died on an *upstream* mid-stream failure — an
+    /// error event the model server emitted mid-generation, or the byte
+    /// stream itself breaking.
+    ///
+    /// The catastrophic sibling of the repair signal. Both of the counters
+    /// above require a model coherent enough to produce structured output:
+    /// one counts verbatim repetition, the other a tool call that was
+    /// attempted and malformed. A model whose sampling has collapsed
+    /// produces neither — it emits output so far outside the expected shape
+    /// that the model server kills the stream, and the person's turn simply
+    /// fails, invisibly to every other counter here.
+    ///
+    /// Client disconnects are deliberately not in here: hanging up is a
+    /// person's action, not a model defect.
+    pub stream_errors: u64,
 }
 
 /// Process-lifetime per-model defect counters.
@@ -79,6 +94,17 @@ impl ModelDefectLedger {
         });
     }
 
+    /// Count one upstream mid-stream failure for `model`.
+    ///
+    /// Deliberately does *not* bump `requests`, unlike
+    /// [`Self::record_loop_guard_trip`]. The guard fires *instead of* a
+    /// forward, so it has to count its own denominator; a stream error
+    /// happens after the request was forwarded and already counted. Bumping
+    /// here would count the same request twice and deflate every rate.
+    pub fn record_stream_error(&self, model: &str) {
+        self.with(model, |c| c.stream_errors += 1);
+    }
+
     /// The current counts for every model that has any.
     #[must_use]
     pub fn snapshot(&self) -> HashMap<String, ModelDefectCounts> {
@@ -112,6 +138,7 @@ pub const fn delta(current: ModelDefectCounts, baseline: ModelDefectCounts) -> M
         repairs_succeeded: current
             .repairs_succeeded
             .saturating_sub(baseline.repairs_succeeded),
+        stream_errors: current.stream_errors.saturating_sub(baseline.stream_errors),
     }
 }
 
@@ -133,6 +160,20 @@ mod tests {
         assert_eq!(snap["a"].loop_guard_trips, 1);
         assert_eq!(snap["b"].repairs_attempted, 2);
         assert_eq!(snap["b"].repairs_succeeded, 1);
+    }
+
+    /// A stream error marks an already-forwarded request as having died; it
+    /// must not also count a request, or the rate it feeds is deflated by
+    /// its own denominator.
+    #[test]
+    fn a_stream_error_does_not_bump_its_own_denominator() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_request("a");
+        ledger.record_stream_error("a");
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 1, "the turn was counted when forwarded");
+        assert_eq!(snap.stream_errors, 1);
     }
 
     #[test]
