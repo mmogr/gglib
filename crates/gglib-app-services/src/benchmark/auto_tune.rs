@@ -203,7 +203,7 @@ async fn tick(
         baselines.insert(target.name.clone(), current);
         let id = target.id;
         *idle_ticks = 0;
-        return run_one(ops, id, signal.sweep(), shutdown).await;
+        return run_one(ops, id, signal.sweep(), signal.initiator(), shutdown).await;
     }
 
     let Some(target) = select_target(&models, &runs, &resident, Utc::now()) else {
@@ -218,7 +218,7 @@ async fn tick(
         "auto-tune: GPU idle past the threshold — starting a gated tune"
     );
     *idle_ticks = 0;
-    run_one(ops, target, SweepSpec::default(), shutdown).await
+    run_one(ops, target, SweepSpec::default(), "idle", shutdown).await
 }
 
 /// The counts accumulated since the scheduler's last acted-on baseline.
@@ -240,6 +240,7 @@ async fn run_one(
     ops: &BenchmarkOps,
     model_id: i64,
     sweep: SweepSpec,
+    initiator: &str,
     shutdown: &CancellationToken,
 ) -> anyhow::Result<()> {
     let config = TuneConfig {
@@ -257,6 +258,7 @@ async fn run_one(
         // full-suite candidate can win the gate.
         prune_fraction: 0.0,
         ctx_size: None,
+        initiator: Some(initiator.to_owned()),
     };
 
     let cancel = CancellationToken::new();
@@ -348,6 +350,15 @@ pub enum SignalKind {
 }
 
 impl SignalKind {
+    /// The initiator slug this signal stamps on its runs, for the
+    /// activity surfaces.
+    #[must_use]
+    pub const fn initiator(self) -> &'static str {
+        match self {
+            Self::LoopGuard => "signal:loop-guard",
+        }
+    }
+
     /// The sweep this signal prescribes. One dimension, off included, so
     /// the run compares disabled against two strengths and the gate can
     /// still say "change nothing".

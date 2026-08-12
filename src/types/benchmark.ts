@@ -33,6 +33,12 @@ export interface BenchmarkRun {
   prompt_text?: string | null;
   system_prompt?: string | null;
   config_json?: string | null;
+  /**
+   * The gate's outcome record for a tune run (JSON ApplyRecord: verdict +
+   * applied config + displaced defaults). Refusals leave records too; null
+   * on runs never judged and on non-tune runs.
+   */
+  applied_json?: string | null;
   error?: string | null;
   created_at: string;       // ISO 8601 UTC
   completed_at?: string | null;
