@@ -70,6 +70,18 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Initialize settings table
     init_settings_table(&pool).await?;
 
+    // The idle-time auto-tune scheduler was removed; reclaim its settings row.
+    //
+    // `Settings` is `#[serde(default)]` and nothing validates the key set, so
+    // a stale row is silently dropped at load and would never break anything —
+    // but `save()` iterates only the serialised struct, so it would also never
+    // be swept. House style reclaims dropped *tables*; an orphan key would
+    // otherwise sit in every existing database forever, reading like a setting
+    // that still does something.
+    sqlx::query("DELETE FROM settings_kv WHERE key = 'auto_tune'")
+        .execute(&pool)
+        .await?;
+
     Ok(pool)
 }
 

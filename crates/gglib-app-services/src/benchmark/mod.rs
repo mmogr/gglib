@@ -14,7 +14,6 @@ use gglib_core::ports::{
 };
 
 mod agentic;
-pub mod auto_tune;
 mod compare;
 pub mod guard;
 pub mod mapper;
@@ -56,10 +55,6 @@ pub struct BenchmarkDeps {
     /// `inference_defaults` at the start of each compare run — mirrors the
     /// same per-request settings read the proxy performs.
     pub settings_repo: Arc<dyn SettingsRepository>,
-    /// Per-model defect counters, shared with the proxy supervisor that
-    /// writes them. The auto-tune scheduler windows these to decide whether
-    /// a model has earned a signal-driven sweep.
-    pub defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
 }
 
 impl BenchmarkDeps {

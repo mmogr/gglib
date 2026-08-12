@@ -13,15 +13,12 @@ import type { AppSettings, UpdateSettingsRequest } from '../../types';
 export interface AgentGuardSettingsValues {
   /** Inverse polarity on the wire: unset means enabled. */
   agenticSampling: boolean;
-  autoTune: boolean;
   /** Raw input string; blank = server default. */
   maxStagnationSteps: string;
 }
 
 const DEFAULTS: AgentGuardSettingsValues = {
   agenticSampling: true,
-  // Opt-in, unlike its siblings: this one spends the GPU.
-  autoTune: false,
   maxStagnationSteps: '',
 };
 
@@ -33,7 +30,7 @@ export interface UseAgentGuardSettingsResult {
     key: K,
     value: AgentGuardSettingsValues[K],
   ) => void;
-  updates: Pick<UpdateSettingsRequest, 'agenticSampling' | 'autoTune' | 'maxStagnationSteps'>;
+  updates: Pick<UpdateSettingsRequest, 'agenticSampling' | 'maxStagnationSteps'>;
 }
 
 /** Track the agent-guard fields, seeded from persisted settings. */
@@ -45,9 +42,6 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
       setValues({
         // Unset means enabled, like proxyLoopDetection.
         agenticSampling: settings.agenticSampling !== false,
-        // Inverse polarity of the line above: autoTune is opt-in, so only an
-        // explicit true switches it on.
-        autoTune: settings.autoTune === true,
         maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
       });
     }
@@ -70,7 +64,6 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
     reset,
     updates: {
       agenticSampling: values.agenticSampling,
-      autoTune: values.autoTune,
       maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,
     },
   };

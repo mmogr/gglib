@@ -199,9 +199,9 @@ pub async fn serve(
     // the proxied figure.
     agent_metrics: Arc<CacheMetricsStore>,
     // Per-model defect counters, supervisor-owned for the same reason as
-    // `agent_metrics`: the auto-tune scheduler windows them across proxy
-    // restarts. Fed by the context-metrics store, which sees every signal
-    // with the model name attached.
+    // `agent_metrics`: they outlive any single proxy run. Fed by the
+    // context-metrics store, which sees every signal with the model name
+    // attached.
     defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
     // Who may reach this endpoint: the CORS policy, the optional bearer token,
     // and the Host allowlist. Carries the `CorsConfig` it replaced rather than

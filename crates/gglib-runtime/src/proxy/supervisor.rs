@@ -237,10 +237,9 @@ pub struct ProxySupervisor {
     /// the embedded axum server (GUI chat, via [`Self::agent_metrics`]) reach —
     /// so a single population survives proxy restarts within one process.
     agent_metrics: Arc<CacheMetricsStore>,
-    /// Per-model defect counters (loop-guard trips, repairs), owned here for
-    /// the same reason `agent_metrics` is: they must outlive any single
-    /// proxy run, because their reader — the auto-tune scheduler — windows
-    /// them across restarts.
+    /// Per-model defect counters, owned here for the same reason
+    /// `agent_metrics` is: they must outlive any single proxy run, so a
+    /// diagnosis spanning several restarts is still one population.
     defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
 }
 
@@ -273,8 +272,10 @@ impl ProxySupervisor {
         Arc::clone(&self.agent_metrics)
     }
 
-    /// The per-model defect ledger — the Tier C signals the auto-tune
-    /// scheduler steers by.
+    /// The per-model defect ledger — the Tier C signals, kept as diagnosis.
+    ///
+    /// Nothing acts on these automatically since ADR 0006; they record what
+    /// actually fails, per model, for a person to read.
     #[must_use]
     pub fn defects(&self) -> Arc<gglib_core::domain::defects::ModelDefectLedger> {
         Arc::clone(&self.defects)

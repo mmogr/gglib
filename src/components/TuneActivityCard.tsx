@@ -1,22 +1,25 @@
 /**
- * Recent auto-tune activity — the loop's decisions, made visible.
+ * Recent tune activity — what the gate decided, made visible.
  *
  * Refusals render beside applies deliberately: "gglib checked and chose not
- * to change anything" is the sentence that builds trust in autonomy, and a
- * feed showing only applies would look like a system that always meddles.
+ * to change anything" is the sentence that builds trust, and a feed showing
+ * only applies would look like a system that always meddles.
  *
- * Sourced from the benchmark run rows, which already carry everything: the
- * initiator slug the scheduler stamps into the stored `TuneConfig`, and the
- * gate's `ApplyRecord` (written for refusals too). Runs without an initiator
- * are the operator's own and stay out of this feed — they live in the
- * benchmark tab's history where they always did.
+ * Sourced from the benchmark run rows, which carry the gate's `ApplyRecord`
+ * (written for refusals too).
+ *
+ * This used to filter on an `initiator` slug that the idle-time scheduler
+ * stamped into the stored `TuneConfig`, showing only runs the scheduler
+ * started. With the scheduler gone nothing stamps one, so that filter would
+ * have emptied the card permanently. It is inverted: every tune run appears,
+ * which is now every tune run there is.
  */
 
 import { FC, useEffect, useState } from 'react';
 import type { ApplyVerdict, BenchmarkRun } from '../types/benchmark';
 import { listBenchmarkRuns } from '../services/clients/benchmark';
 
-/** How many recent runs to scan for auto-initiated ones. */
+/** How many recent runs to scan. */
 const SCAN_LIMIT = 50;
 
 /** The feed's own cap: enough to show a pattern, not a log file. */
@@ -25,21 +28,12 @@ const SHOW_LIMIT = 8;
 interface ActivityEntry {
   runId: number;
   startedAt: string;
-  initiator: string;
   verdict: ApplyVerdict | null;
   status: BenchmarkRun['status'];
 }
 
 function parseEntry(run: BenchmarkRun): ActivityEntry | null {
   if (run.run_type !== 'tune' || !run.config_json) return null;
-  let initiator: string | null = null;
-  try {
-    const config = JSON.parse(run.config_json) as { initiator?: string | null };
-    initiator = config.initiator ?? null;
-  } catch {
-    return null;
-  }
-  if (initiator == null) return null;
 
   let verdict: ApplyVerdict | null = null;
   if (run.applied_json) {
@@ -52,7 +46,6 @@ function parseEntry(run: BenchmarkRun): ActivityEntry | null {
   return {
     runId: run.id,
     startedAt: run.created_at,
-    initiator,
     verdict,
     status: run.status,
   };
@@ -101,13 +94,7 @@ function describeVerdict(verdict: ApplyVerdict | null, status: BenchmarkRun['sta
   }
 }
 
-function initiatorLabel(slug: string): string {
-  if (slug === 'idle') return 'idle tune';
-  if (slug.startsWith('signal:')) return `signal (${slug.slice('signal:'.length)})`;
-  return slug;
-}
-
-export const AutoTuneActivityCard: FC = () => {
+export const TuneActivityCard: FC = () => {
   const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
 
   useEffect(() => {
@@ -136,8 +123,8 @@ export const AutoTuneActivityCard: FC = () => {
   if (entries.length === 0) {
     return (
       <p className="text-xs text-text-muted m-0 leading-relaxed">
-        Nothing yet. When idle-time auto-tune runs, its decisions land here —
-        applies and refusals alike, each with the numbers that decided it.
+        Nothing yet. Run a tune and its decision lands here — applies and
+        refusals alike, each with the numbers that decided it.
       </p>
     );
   }
@@ -154,9 +141,6 @@ export const AutoTuneActivityCard: FC = () => {
             <span className="text-text-muted shrink-0">
               {entry.startedAt.slice(0, 16).replace('T', ' ')}
             </span>
-            <span className="text-text-secondary shrink-0">
-              {initiatorLabel(entry.initiator)}
-            </span>
             <span className={applied ? 'text-success' : 'text-text'}>{text}</span>
             <span className="text-text-muted ml-auto shrink-0">run #{entry.runId}</span>
           </div>
@@ -166,4 +150,4 @@ export const AutoTuneActivityCard: FC = () => {
   );
 };
 
-export default AutoTuneActivityCard;
+export default TuneActivityCard;

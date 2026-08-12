@@ -55,20 +55,6 @@ pub enum ConfigCommand {
     },
     /// Show resolved paths for all gglib directories
     Paths,
-    /// Inspect or enable the idle-time auto-tune scheduler
-    AutoTune {
-        #[command(subcommand)]
-        command: Option<AutoTuneCommand>,
-    },
-}
-
-/// Idle-time auto-tune command variants.
-#[derive(Subcommand)]
-pub enum AutoTuneCommand {
-    /// Show whether idle-time auto-tune is enabled (default)
-    Status,
-    /// Offer to enable it, interactively. Skips silently without a terminal
-    Prompt,
 }
 
 /// Fast-download accelerator command variants.
@@ -271,14 +257,6 @@ pub enum SettingsCommand {
         /// auto-detected recipe or the floor). Anything you set stands.
         #[arg(long)]
         agentic_sampling: Option<bool>,
-        /// Let the daemon tune untuned models on its own during idle GPU
-        /// time. Off by default — autonomy on hardware is opt-in. When on,
-        /// a sustained-idle GPU triggers a bounded presets-versus-incumbent
-        /// tune of the oldest model without measured defaults (never one a
-        /// person configured); the winner applies only through the gate,
-        /// and any arriving request preempts the run
-        #[arg(long)]
-        auto_tune: Option<bool>,
         /// Start the OpenAI-compatible proxy as soon as the desktop app
         /// launches, instead of waiting for it to be switched on. Combined
         /// with --start-at-login and --close-to-tray this keeps the endpoint

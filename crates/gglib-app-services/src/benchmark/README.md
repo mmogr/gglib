@@ -17,9 +17,6 @@ benchmark/
   perf.rs    — llama-bench process spawning + VRAM drain logic
   mapper.rs  — raw serde_json::Value → domain type transforms
   guard.rs   — BenchmarkTaskGuard (DropCancels pattern for HTTP layer)
-  auto_tune.rs — the idle-time scheduler: opt-in, warm-model-respecting,
-               preemptible gated tuning of untuned models (see its module
-               docs for the full rule set)
 ```
 
 # VRAM Contention Prevention
