@@ -217,6 +217,11 @@ enforce: ## Run the architecture enforcement checks
 	@./scripts/check-frontend-ipc.sh
 	@./scripts/check_transport_branching.sh
 	@./scripts/check_param_source_exhaustive.sh
+	@# The repo's "small files" constraint was enforced only over src/ (TS and
+	@# CSS); Rust was never checked, and 175 files are already over the same
+	@# budget. A ratchet rather than a threshold, so the rule can bite today
+	@# instead of after a refactor nobody has scheduled.
+	@./scripts/check_rust_complexity.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
