@@ -1,17 +1,19 @@
 //! Per-model defect counters — the Tier C signals the closed loop steers by.
 //!
-//! The proxy records defect *events* (a loop-guard trip, a tool-call repair)
-//! as they happen; the auto-tune scheduler reads *rates* over the traffic
-//! since its last look and decides whether a model has earned a targeted
-//! sweep. Writers never interpret and the reader never guesses: a trip is a
-//! fact about one request, a rate is a claim about a model, and the split
-//! keeps both honest.
+//! The proxy records defect *events* (a loop-guard trip, a tool-call repair,
+//! a turn that died mid-stream) as they happen; a reader turns those into
+//! *rates* over whatever window it cares about. Writers never interpret and
+//! readers never guess: a trip is a fact about one request, a rate is a
+//! claim about a model, and the split keeps both honest.
 //!
 //! Counters are cumulative and process-lifetime (they live on the proxy
 //! supervisor, like the agent cache metrics, so a proxy restart does not
-//! zero them). Windowing is the *reader's* job: the scheduler keeps its own
+//! zero them). Windowing is the *reader's* job: a reader keeps its own
 //! per-model baselines and rates the delta, so two readers can window
 //! differently without fighting over a reset button.
+//!
+//! Since ADR 0006 nothing acts on these automatically. They are diagnosis —
+//! what actually fails, per model, for a person to read and act on.
 //!
 //! Deliberately not persisted: a defect rate is a claim about recent traffic
 //! on this build of everything, and yesterday's rate answering today's

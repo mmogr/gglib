@@ -1,13 +1,21 @@
 # ADR 0005 — The autonomous closed loop, and reactive grammar repair as the permanent mechanism
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-12
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
   [ADR 0004](0004-observe-the-sampling-boundary.md)
 - **Supersedes:** nothing
-- **Superseded by:** nothing
+- **Superseded by:** [ADR 0006](0006-recover-dont-predict.md)
+
+> **Superseded by [ADR 0006](0006-recover-dont-predict.md).** The scheduler
+> described here — the organ that decides when to spend the GPU — has been
+> removed. The tuner kept rediscovering the values models already publish, a
+> 27B tune costs 2–3 hours, and the failures people actually felt were never
+> repaired by it. The gate, the ledger and the measurement suite all survive;
+> the autonomy does not. Read 0006 first: everything below about the scheduler
+> is history.
 
 ## Context
 

@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-pub mod auto_tune;
 pub mod check_deps;
 pub mod fast_downloads;
 pub mod llama;
@@ -30,7 +29,6 @@ pub async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
             check_deps::execute(&probe, setup_fast_downloads).await
         }
         ConfigCommand::FastDownloads { command } => fast_downloads::dispatch(command).await,
-        ConfigCommand::AutoTune { command } => auto_tune::dispatch(ctx, command).await,
         ConfigCommand::Paths => paths::execute(),
     }
 }

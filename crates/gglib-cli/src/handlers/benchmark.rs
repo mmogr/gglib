@@ -275,7 +275,6 @@ async fn cmd_tune(
         ctx_size,
         // A person at a terminal: the activity surfaces show this run as
         // the operator's, not the daemon's.
-        initiator: None,
     };
 
     style::print_info_banner("Benchmark Tune", "\u{1f3af}");
@@ -1144,44 +1143,29 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
     }
 
     println!(
-        "{BOLD}{:>6}  {:<8}  {:<19}  {:<9}  {:<22}  Outcome{RESET}",
+        "{BOLD}{:>6}  {:<8}  {:<19}  {:<9}  Outcome{RESET}",
         "ID",
         "Type",
         "Started",
         "Status",
-        "Initiator",
         BOLD = style::BOLD,
         RESET = style::RESET,
     );
-    println!("{}", "─".repeat(96));
+    println!("{}", "─".repeat(68));
     for run in &runs {
         let run_type = format!("{:?}", run.run_type).to_lowercase();
         let started = run.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
         let status = format!("{:?}", run.status).to_lowercase();
         println!(
-            "{:>6}  {:<8}  {:<19}  {:<9}  {:<22}  {}",
+            "{:>6}  {:<8}  {:<19}  {:<9}  {}",
             run.id,
             run_type,
             started,
             status,
-            run_initiator(run),
             run_outcome(run),
         );
     }
     Ok(())
-}
-
-/// Who started a run — the auto-tune scheduler's slug, or a person.
-///
-/// Read from the stored `TuneConfig`, where the scheduler stamps it; a run
-/// whose config predates the field, carries none, or is not a tune run at
-/// all is a person's.
-fn run_initiator(run: &gglib_core::domain::benchmark::run::BenchmarkRun) -> String {
-    run.config_json
-        .as_deref()
-        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
-        .and_then(|config| config.get("initiator")?.as_str().map(str::to_owned))
-        .map_or_else(|| "operator".to_owned(), |slug| format!("auto ({slug})"))
 }
 
 /// The gate's outcome for a tune run, when one was recorded.

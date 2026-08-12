@@ -369,9 +369,6 @@ setup: check-deps build-gui build-tauri install ## Full setup (check deps + buil
 	@# without a terminal and reports a failed provision as a skipped step —
 	@# but setup must not break over an optional extra, so belt and braces.
 	@./target/release/gglib config fast-downloads prompt || true
-	@# Idle-time auto-tune is opt-in by design; setup is where the question
-	@# is asked, so the feature does not ship dark. Same belt and braces.
-	@./target/release/gglib config auto-tune prompt || true
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
 

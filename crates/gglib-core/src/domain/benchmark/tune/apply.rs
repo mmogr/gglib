@@ -1,7 +1,7 @@
 //! The apply gate: whether a tune run's winner may become a model's
 //! [`Measured`](crate::domain::DefaultsOrigin::Measured) defaults.
 //!
-//! The gate exists because an auto-tuner without one optimises noise: it
+//! The gate exists because a tuner without one optimises noise: it
 //! ratchets whichever candidate a lucky draw favoured into the catalog and
 //! reports improvement while doing it. Every rule here is the codified form
 //! of a failure this repo has already measured — a +0.082 that did not

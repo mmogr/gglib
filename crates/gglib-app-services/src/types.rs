@@ -552,8 +552,6 @@ pub struct AppSettings {
     /// write-only until the GUI grew a toggle — a toggle that saves but
     /// cannot read back silently resets on every reopen.
     pub agentic_sampling: Option<bool>,
-    /// Idle-time auto-tune; opt-in, `None` means off (see `gglib_core::Settings`)
-    pub auto_tune: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -583,7 +581,6 @@ impl From<gglib_core::Settings> for AppSettings {
             proxy_loop_detection: settings.proxy_loop_detection,
             tool_call_repair: settings.tool_call_repair,
             agentic_sampling: settings.agentic_sampling,
-            auto_tune: settings.auto_tune,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
@@ -653,9 +650,6 @@ pub struct UpdateSettingsRequest {
         with = "serde_with::rust::double_option"
     )]
     pub agentic_sampling: Option<Option<bool>>,
-    // Idle-time auto-tune; opt-in (see `gglib_core::Settings`)
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub auto_tune: Option<Option<bool>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_autostart: Option<Option<bool>>,
@@ -688,7 +682,6 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_loop_detection: request.proxy_loop_detection,
             tool_call_repair: request.tool_call_repair,
             agentic_sampling: request.agentic_sampling,
-            auto_tune: request.auto_tune,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,

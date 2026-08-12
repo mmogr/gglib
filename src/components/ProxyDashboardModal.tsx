@@ -23,7 +23,7 @@ import type { FC } from 'react';
 import { Modal } from './ui/Modal';
 import { ProxyAdmissionPanel } from './ProxyAdmissionPanel';
 import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
-import { AutoTuneActivityCard } from './AutoTuneActivityCard';
+import { TuneActivityCard } from './TuneActivityCard';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ProxySamplingPanel } from './ProxySamplingPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection } from './proxy';
@@ -105,7 +105,7 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
           <h3 className="m-0 text-sm font-semibold text-text mb-sm">
             Auto-Tune Activity
           </h3>
-          <AutoTuneActivityCard />
+          <TuneActivityCard />
         </section>
 
         <section>
