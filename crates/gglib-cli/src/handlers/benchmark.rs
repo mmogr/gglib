@@ -324,62 +324,22 @@ async fn apply_gated(run_id: i64) -> Result<()> {
         .await
         .context("apply response unreadable")?;
 
-    match outcome.verdict {
-        ApplyVerdict::Apply {
-            winner_composite,
-            incumbent_mean,
-            margin,
-            drift,
-            paired,
-        } => {
-            println!(
-                "{SUCCESS}\u{2713} applied as measured defaults{RESET}: winner \
-                 {winner_composite:.3} over incumbent {incumbent_mean:.3}, margin \
-                 {margin:+.3} against drift {drift:.3}",
-                SUCCESS = style::SUCCESS,
-                RESET = style::RESET,
-            );
-            if let Some(p) = paired {
-                println!(
-                    "  paired: {}W-{}L-{}T over {} tasks",
-                    p.wins, p.losses, p.ties, p.pairs
-                );
-            }
-        }
-        ApplyVerdict::IncumbentStands { incumbent_mean } => println!(
-            "{}incumbent stands{} at {incumbent_mean:.3}: no candidate beat the model's \
-             current defaults. The run answered its question, and the answer is \
-             'change nothing'.",
-            style::WARNING,
-            style::RESET,
-        ),
-        ApplyVerdict::WithinDrift { margin, drift } => println!(
-            "{}not applied{}: the winner's {margin:+.3} margin is inside the run's own \
-             {drift:.3} drift. Unresolved, not absent; more tasks or a re-run resolves \
-             it, a smaller threshold never does.",
-            style::WARNING,
-            style::RESET,
-        ),
-        ApplyVerdict::PairedDisagrees { wins, losses } => println!(
-            "{}not applied{}: the winner's mean rests on a minority of tasks \
-             ({wins}W-{losses}L against the incumbent), the lucky-outlier shape, \
-             refused by the pairs.",
-            style::WARNING,
-            style::RESET,
-        ),
-        ApplyVerdict::Uncalibrated => println!(
-            "{}not applied{}: this run has no incumbent calibration pair, so nothing \
-             measures its drift. Re-run the tune; every new run carries the pair.",
-            style::WARNING,
-            style::RESET,
-        ),
-        ApplyVerdict::Contaminated { unmeasured_runs } => println!(
-            "{}not applied{}: {unmeasured_runs} task run(s) never reached the model, so \
-             the compared scores are contaminated. A zero from a dead upstream is not a \
-             low score.",
-            style::WARNING,
-            style::RESET,
-        ),
+    let applied = outcome.verdict.applies();
+    let colour = if applied {
+        style::SUCCESS
+    } else {
+        style::WARNING
+    };
+    println!("{colour}{}{RESET}", outcome.verdict, RESET = style::RESET,);
+    println!("  {}", outcome.verdict.rationale());
+    if let ApplyVerdict::Apply {
+        paired: Some(p), ..
+    } = &outcome.verdict
+    {
+        println!(
+            "  paired: {}W-{}L-{}T over {} tasks",
+            p.wins, p.losses, p.ties, p.pairs
+        );
     }
     Ok(())
 }
@@ -1169,34 +1129,15 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
 /// Refusals leave records too, so this reads as the activity line it is:
 /// what the gate decided, with its headline number.
 fn run_outcome(run: &gglib_core::domain::benchmark::run::BenchmarkRun) -> String {
-    use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
-
     let Some(record) = run.applied_json.as_deref().and_then(|json| {
         serde_json::from_str::<gglib_core::domain::benchmark::tune::apply::ApplyRecord>(json).ok()
     }) else {
         return "—".to_owned();
     };
-    match record.verdict {
-        ApplyVerdict::Apply { margin, drift, .. } => {
-            format!(
-                "{}applied{} (margin {margin:+.3} vs drift {drift:.3})",
-                style::SUCCESS,
-                style::RESET
-            )
-        }
-        ApplyVerdict::IncumbentStands { incumbent_mean } => {
-            format!("refused: incumbent stands at {incumbent_mean:.3}")
-        }
-        ApplyVerdict::WithinDrift { margin, drift } => {
-            format!("refused: margin {margin:+.3} within drift {drift:.3}")
-        }
-        ApplyVerdict::PairedDisagrees { wins, losses } => {
-            format!("refused: pairs disagree ({wins}W-{losses}L)")
-        }
-        ApplyVerdict::Uncalibrated => "refused: uncalibrated run".to_owned(),
-        ApplyVerdict::Contaminated { unmeasured_runs } => {
-            format!("refused: {unmeasured_runs} unmeasured run(s)")
-        }
+    if record.verdict.applies() {
+        format!("{}{}{}", style::SUCCESS, record.verdict, style::RESET)
+    } else {
+        record.verdict.to_string()
     }
 }
 

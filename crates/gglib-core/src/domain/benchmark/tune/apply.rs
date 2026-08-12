@@ -90,6 +90,81 @@ impl ApplyVerdict {
     pub const fn applies(&self) -> bool {
         matches!(self, Self::Apply { .. })
     }
+
+    /// Why the gate decided this, in one sentence.
+    ///
+    /// Split from [`Display`] because the two surfaces want different
+    /// amounts: a table column wants the numbers, a detail view wants the
+    /// numbers *and* the reasoning. Keeping them apart lets both read from
+    /// one source instead of each restating the gate's rules in its own
+    /// words — which is how three renderers came to disagree about what a
+    /// refusal meant.
+    ///
+    /// Every sentence here says what would resolve the refusal, because a
+    /// gate that only says "no" teaches nobody anything.
+    #[must_use]
+    pub const fn rationale(&self) -> &'static str {
+        match self {
+            Self::Apply { .. } => "The margin cleared the run's own drift and the pairs agreed.",
+            Self::IncumbentStands { .. } => {
+                "No candidate beat the model's current defaults. The run answered its \
+                 question, and the answer is 'change nothing'."
+            }
+            Self::WithinDrift { .. } => {
+                "The winner's margin is inside the run's own drift. Unresolved, not \
+                 absent; more tasks or a re-run resolves it, a smaller threshold never \
+                 does."
+            }
+            Self::PairedDisagrees { .. } => {
+                "The winner's mean rests on a minority of tasks — the lucky-outlier \
+                 shape, refused by the pairs."
+            }
+            Self::Uncalibrated => {
+                "This run has no incumbent calibration pair, so nothing measures its \
+                 drift. Re-run the tune; every new run carries the pair."
+            }
+            Self::Contaminated { .. } => {
+                "Some task runs never reached the model, so the compared scores are \
+                 contaminated. A zero from a dead upstream is not a low score."
+            }
+        }
+    }
+}
+
+/// The verdict's headline: what happened, with the numbers that decided it.
+///
+/// Deliberately unstyled and single-line so every surface can wrap it in its
+/// own presentation. Pair with [`ApplyVerdict::rationale`] where there is
+/// room to explain.
+impl std::fmt::Display for ApplyVerdict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Apply {
+                winner_composite,
+                incumbent_mean,
+                margin,
+                drift,
+                ..
+            } => write!(
+                f,
+                "applied: winner {winner_composite:.3} over incumbent \
+                 {incumbent_mean:.3}, margin {margin:+.3} against drift {drift:.3}"
+            ),
+            Self::IncumbentStands { incumbent_mean } => {
+                write!(f, "refused: incumbent stands at {incumbent_mean:.3}")
+            }
+            Self::WithinDrift { margin, drift } => {
+                write!(f, "refused: margin {margin:+.3} within drift {drift:.3}")
+            }
+            Self::PairedDisagrees { wins, losses } => {
+                write!(f, "refused: pairs disagree ({wins}W-{losses}L)")
+            }
+            Self::Uncalibrated => write!(f, "refused: uncalibrated run"),
+            Self::Contaminated { unmeasured_runs } => {
+                write!(f, "refused: {unmeasured_runs} unmeasured run(s)")
+            }
+        }
+    }
 }
 
 /// Evaluate a completed tune run's candidates against the apply gate.
