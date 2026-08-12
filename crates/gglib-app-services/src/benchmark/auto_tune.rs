@@ -24,9 +24,9 @@
 //!   excluded outright — the same principle that ranks `Measured` below
 //!   global settings — and measured models are excluded from the idle
 //!   queue because re-checks belong to the signal triggers: a production
-//!   defect rate past its threshold (a loop-trip rate → a DRY sweep, a
-//!   tool-call repair rate → a temperature sweep) is the one thing that
-//!   reopens a measured recipe, not a timer.
+//!   defect rate past its threshold (a loop-trip rate → a DRY sweep; a
+//!   tool-call repair rate or a mid-stream failure rate → a temperature
+//!   sweep) is the one thing that reopens a measured recipe, not a timer.
 //! - **Any real request preempts.** While a run is in flight the scheduler
 //!   watches the admission queue; the moment anything is waiting, the run
 //!   is cancelled and the GPU handed over. The next attempt starts from a
@@ -133,6 +133,19 @@ const LOOP_TRIP_RATE_THRESHOLD: f64 = 0.05;
 /// window that crosses this threshold understates the true rate, so the
 /// signal fires late, never spuriously.
 const REPAIR_RATE_THRESHOLD: f64 = 0.05;
+
+/// The upstream mid-stream failure rate that earns a model a signal-driven
+/// temperature sweep.
+///
+/// A stream error is the failure a person actually feels: the model server
+/// killed the turn mid-generation (its native tool-call grammar rejecting
+/// the model's own output, a crash, a severed stream) and the client's
+/// request simply failed. It is also the counter that sees "dead" where
+/// the loop and repair counters only see "sick" — a model too broken to
+/// even attempt a tool call raises neither of those, but it raises this.
+/// Same sample floor and threshold as its siblings; under real breakdown
+/// the rate approaches 100%, so 5% fires almost immediately.
+const STREAM_ERROR_RATE_THRESHOLD: f64 = 0.05;
 
 /// How many recent runs the target selector scans for the interval rule.
 /// Generous against the interval: even a daemon tuning one model per idle
@@ -432,6 +445,7 @@ fn decay_counts(counts: ModelDefectCounts, factor: f64) -> ModelDefectCounts {
         loop_guard_trips: scale(counts.loop_guard_trips),
         repairs_attempted: scale(counts.repairs_attempted),
         repairs_succeeded: scale(counts.repairs_succeeded),
+        stream_errors: scale(counts.stream_errors),
     }
 }
 
@@ -619,6 +633,11 @@ pub enum SignalKind {
     /// [`REPAIR_RATE_THRESHOLD`] for why the measured rate understates
     /// the true one.
     RepairRate,
+    /// This model's turns keep dying on upstream mid-stream failures —
+    /// output so far outside the expected shape that the model server
+    /// kills the stream rather than finish it. The catastrophic sibling
+    /// of [`Self::RepairRate`], treated with the same dimension.
+    StreamError,
 }
 
 impl SignalKind {
@@ -629,6 +648,7 @@ impl SignalKind {
         match self {
             Self::LoopGuard => "signal:loop-guard",
             Self::RepairRate => "signal:repair-rate",
+            Self::StreamError => "signal:stream-error",
         }
     }
 
@@ -658,6 +678,13 @@ impl SignalKind {
                 temperature: vec![0.2, 0.5, 0.8],
                 ..SweepSpec::default()
             },
+            // The same diagnosis family as RepairRate — output too hot to
+            // hold its required shape — one step further along, so the
+            // same treatment applies.
+            Self::StreamError => SweepSpec {
+                temperature: vec![0.2, 0.5, 0.8],
+                ..SweepSpec::default()
+            },
         }
     }
 }
@@ -667,6 +694,7 @@ impl std::fmt::Display for SignalKind {
         match self {
             Self::LoopGuard => write!(f, "loop-guard trip rate"),
             Self::RepairRate => write!(f, "tool-call repair rate"),
+            Self::StreamError => write!(f, "mid-stream failure rate"),
         }
     }
 }
@@ -674,26 +702,35 @@ impl std::fmt::Display for SignalKind {
 /// The strongest signal one model's window raises, with its severity —
 /// the rate as a multiple of its threshold, so signals with different
 /// thresholds compare on how far past alarm they are rather than on raw
-/// percentages. A dead heat prefers the loop guard: verbatim repetition
-/// is the sharper failure, and the ordering must not depend on iteration
-/// accidents (`max_by` keeps the *last* maximum, so push order cannot be
-/// the tie-break). The caller has already enforced [`MIN_SIGNAL_SAMPLE`],
-/// so the denominator is never zero.
+/// percentages. A dead heat resolves by the array's order — loop guard,
+/// then stream errors, then repairs: the sharper failure first, and never
+/// by iteration accident (`max_by` keeps the *last* maximum, so the fold
+/// below keeps the first instead). The caller has already enforced
+/// [`MIN_SIGNAL_SAMPLE`], so the denominator is never zero.
 fn worst_signal(window: &ModelDefectCounts) -> Option<(SignalKind, f64)> {
     #[allow(clippy::cast_precision_loss)]
-    let requests = window.requests as f64;
-    #[allow(clippy::cast_precision_loss)]
-    let loop_severity = (window.loop_guard_trips as f64 / requests) / LOOP_TRIP_RATE_THRESHOLD;
-    #[allow(clippy::cast_precision_loss)]
-    let repair_severity = (window.repairs_attempted as f64 / requests) / REPAIR_RATE_THRESHOLD;
-    if loop_severity < 1.0 && repair_severity < 1.0 {
-        return None;
-    }
-    if loop_severity >= repair_severity {
-        Some((SignalKind::LoopGuard, loop_severity))
-    } else {
-        Some((SignalKind::RepairRate, repair_severity))
-    }
+    let rate = |count: u64, threshold: f64| (count as f64 / window.requests as f64) / threshold;
+    let severities = [
+        (
+            SignalKind::LoopGuard,
+            rate(window.loop_guard_trips, LOOP_TRIP_RATE_THRESHOLD),
+        ),
+        (
+            SignalKind::StreamError,
+            rate(window.stream_errors, STREAM_ERROR_RATE_THRESHOLD),
+        ),
+        (
+            SignalKind::RepairRate,
+            rate(window.repairs_attempted, REPAIR_RATE_THRESHOLD),
+        ),
+    ];
+    severities
+        .into_iter()
+        .filter(|&(_, severity)| severity >= 1.0)
+        .fold(None, |best, candidate| match best {
+            Some((_, best_severity)) if best_severity >= candidate.1 => best,
+            _ => Some(candidate),
+        })
 }
 
 /// The model whose production defect rate has earned a targeted sweep, with
@@ -972,6 +1009,41 @@ mod tests {
         );
     }
 
+    /// The catastrophic counter: turns dying mid-stream earn the same
+    /// temperature treatment as malformed calls — and a measured model is
+    /// eligible, because production failure is exactly the re-check case.
+    #[test]
+    fn a_dying_stream_earns_a_temperature_sweep() {
+        let models = vec![model(1, Some(DefaultsOrigin::Measured), 10)];
+        let dying = ModelDefectCounts {
+            requests: 100,
+            stream_errors: 40, // severity 8.0 — a model that is simply broken
+            ..ModelDefectCounts::default()
+        };
+        let windows = windows_for(&[("m1", dying)]);
+        let (target, signal) = select_signal_target(&models, &windows, &[]).expect("signal fires");
+        assert_eq!(target.id, 1);
+        assert_eq!(signal, SignalKind::StreamError);
+        assert_eq!(signal.initiator(), "signal:stream-error");
+        assert_eq!(signal.sweep().temperature, vec![0.2, 0.5, 0.8]);
+    }
+
+    /// Between the two temperature-treated kinds, a dead heat prefers the
+    /// stream error: a turn that died outranks a turn that was repaired.
+    #[test]
+    fn a_dead_heat_prefers_death_over_repair() {
+        let both = ModelDefectCounts {
+            requests: 100,
+            repairs_attempted: 5, // severity 1.0
+            stream_errors: 5,     // severity 1.0
+            ..ModelDefectCounts::default()
+        };
+        assert_eq!(
+            worst_signal(&both).map(|(s, _)| s),
+            Some(SignalKind::StreamError)
+        );
+    }
+
     /// A rate over a handful of requests is a coin flip wearing a
     /// percentage: below the sample floor nothing fires, however loud.
     #[test]
@@ -1111,6 +1183,7 @@ mod tests {
             loop_guard_trips: 10,
             repairs_attempted: 8,
             repairs_succeeded: 4,
+            stream_errors: 6,
         }
     }
 
@@ -1145,6 +1218,7 @@ mod tests {
                 loop_guard_trips: 5,
                 repairs_attempted: 4,
                 repairs_succeeded: 2,
+                stream_errors: 3,
             }
         );
     }

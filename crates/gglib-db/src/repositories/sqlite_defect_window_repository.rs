@@ -40,7 +40,7 @@ impl DefectWindowRepositoryPort for SqliteDefectWindowRepository {
     async fn load_all(&self) -> Result<Vec<PersistedDefectWindow>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT model_name, requests, loop_guard_trips, repairs_attempted, \
-             repairs_succeeded, updated_at, llama_build FROM defect_windows",
+             repairs_succeeded, stream_errors, updated_at, llama_build FROM defect_windows",
         )
         .fetch_all(&self.pool)
         .await
@@ -55,6 +55,7 @@ impl DefectWindowRepositoryPort for SqliteDefectWindowRepository {
                     loop_guard_trips: count_from_row(row, "loop_guard_trips"),
                     repairs_attempted: count_from_row(row, "repairs_attempted"),
                     repairs_succeeded: count_from_row(row, "repairs_succeeded"),
+                    stream_errors: count_from_row(row, "stream_errors"),
                 },
                 updated_at: parse_datetime(row.get("updated_at")).unwrap_or_else(Utc::now),
                 llama_build: row.get("llama_build"),
@@ -73,13 +74,14 @@ impl DefectWindowRepositoryPort for SqliteDefectWindowRepository {
             sqlx::query(
                 "INSERT INTO defect_windows \
                  (model_name, requests, loop_guard_trips, repairs_attempted, \
-                  repairs_succeeded, updated_at, llama_build) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?) \
+                  repairs_succeeded, stream_errors, updated_at, llama_build) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
                  ON CONFLICT(model_name) DO UPDATE SET \
                  requests = excluded.requests, \
                  loop_guard_trips = excluded.loop_guard_trips, \
                  repairs_attempted = excluded.repairs_attempted, \
                  repairs_succeeded = excluded.repairs_succeeded, \
+                 stream_errors = excluded.stream_errors, \
                  updated_at = excluded.updated_at, \
                  llama_build = excluded.llama_build",
             )
@@ -88,6 +90,7 @@ impl DefectWindowRepositoryPort for SqliteDefectWindowRepository {
             .bind(count_to_db(row.counts.loop_guard_trips))
             .bind(count_to_db(row.counts.repairs_attempted))
             .bind(count_to_db(row.counts.repairs_succeeded))
+            .bind(count_to_db(row.counts.stream_errors))
             .bind(row.updated_at.format("%Y-%m-%d %H:%M:%S").to_string())
             .bind(&row.llama_build)
             .execute(&mut *tx)
@@ -135,6 +138,7 @@ mod tests {
                 loop_guard_trips: 2,
                 repairs_attempted: 5,
                 repairs_succeeded: 3,
+                stream_errors: 4,
             },
             updated_at: Utc.with_ymd_and_hms(2026, 8, 12, 10, 0, 0).unwrap(),
             llama_build: "b10327".to_owned(),
@@ -157,6 +161,7 @@ mod tests {
         assert_eq!(rows[0].counts.loop_guard_trips, 2);
         assert_eq!(rows[0].counts.repairs_attempted, 5);
         assert_eq!(rows[0].counts.repairs_succeeded, 3);
+        assert_eq!(rows[0].counts.stream_errors, 4);
         assert_eq!(
             rows[0].updated_at,
             Utc.with_ymd_and_hms(2026, 8, 12, 10, 0, 0).unwrap()

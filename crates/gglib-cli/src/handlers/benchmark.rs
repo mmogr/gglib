@@ -1144,9 +1144,9 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
     }
 
     // Initiator width fits the longest slug the scheduler stamps:
-    // `auto (signal:repair-rate)` at 25 characters.
+    // `auto (signal:stream-error)` at 26 characters.
     println!(
-        "{BOLD}{:>6}  {:<8}  {:<19}  {:<9}  {:<25}  Outcome{RESET}",
+        "{BOLD}{:>6}  {:<8}  {:<19}  {:<9}  {:<26}  Outcome{RESET}",
         "ID",
         "Type",
         "Started",
@@ -1155,13 +1155,13 @@ async fn cmd_list(ctx: &CliContext, limit: i64) -> Result<()> {
         BOLD = style::BOLD,
         RESET = style::RESET,
     );
-    println!("{}", "─".repeat(99));
+    println!("{}", "─".repeat(100));
     for run in &runs {
         let run_type = format!("{:?}", run.run_type).to_lowercase();
         let started = run.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
         let status = format!("{:?}", run.status).to_lowercase();
         println!(
-            "{:>6}  {:<8}  {:<19}  {:<9}  {:<25}  {}",
+            "{:>6}  {:<8}  {:<19}  {:<9}  {:<26}  {}",
             run.id,
             run_type,
             started,

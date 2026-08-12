@@ -144,6 +144,12 @@ pub(crate) struct StreamOutcome {
     /// normalization, if any (see `gglib_core::normalize::residue`). The
     /// spawning task back-patches the request's metrics snapshot with it.
     pub dialect_residue: Option<String>,
+    /// The turn died on an *upstream* failure: the model server emitted an
+    /// error event mid-generation, or the byte stream itself broke. The
+    /// client's turn simply fails — the failure a person actually feels —
+    /// and the spawning task feeds it to the per-model defect ledger.
+    /// Client disconnects never set this; hanging up is not a model defect.
+    pub upstream_errored: bool,
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -955,9 +961,20 @@ pub(crate) async fn stream_response_to_channel(
                     // Withheld, not dropped — flushed or discarded at `Done`.
                     None
                 }
-                LlmStreamEvent::ToolCallDelta { .. } | LlmStreamEvent::UpstreamError { .. } => {
+                LlmStreamEvent::ToolCallDelta { .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::UpstreamError { .. } => {
+                    connection.mark_generating();
+                    outcome.saw_visible_output = true;
+                    // The model server reported the failure itself — e.g. its
+                    // native tool-call grammar rejecting the model's own
+                    // output mid-generation. Forwarded to the client as
+                    // before, and flagged so the defect ledger hears about
+                    // the turn that died.
+                    outcome.upstream_errored = true;
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Done { finish_reason } => {
@@ -1004,6 +1021,10 @@ pub(crate) async fn stream_response_to_channel(
             Err(e) => {
                 error!("proxy stream error: {e}");
                 outcome.saw_visible_output = true;
+                // The upstream byte stream broke mid-generation (a crashed
+                // llama-server, a severed connection) — the same
+                // turn-died-upstream fact as an explicit error event.
+                outcome.upstream_errored = true;
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),

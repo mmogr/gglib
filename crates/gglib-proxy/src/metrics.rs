@@ -220,6 +220,21 @@ impl ContextMetricsStore {
         }
     }
 
+    /// Count one upstream mid-stream failure against `seq`'s model.
+    ///
+    /// The ring row is only consulted for its model name; like
+    /// [`Self::flag_tool_repair`], an event whose snapshot was already
+    /// evicted is lost to the per-model ledger — the same bounded,
+    /// bias-free undercount on exactly the busiest traffic.
+    pub fn flag_stream_error(&self, seq: u64) {
+        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter().find(|s| s.seq == seq)
+            && let Some(ledger) = &self.ledger
+        {
+            ledger.record_stream_error(&snapshot.model_name);
+        }
+    }
+
     /// Total tool-call repairs attempted, eviction-safe.
     pub fn tool_repairs_attempted(&self) -> u64 {
         self.tool_repairs_attempted.load(Ordering::Relaxed)

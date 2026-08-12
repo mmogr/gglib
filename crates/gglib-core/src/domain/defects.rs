@@ -42,6 +42,12 @@ pub struct ModelDefectCounts {
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.
     pub repairs_succeeded: u64,
+    /// Streaming turns that died on an *upstream* mid-stream failure — an
+    /// error event the model server emitted mid-generation, or the byte
+    /// stream itself breaking. The client's turn simply fails; nothing
+    /// else counts it. Client disconnects are not in here: hanging up is
+    /// a person's action, not a model defect.
+    pub stream_errors: u64,
 }
 
 /// One persisted unacted window — the counts the scheduler had not yet
@@ -104,6 +110,7 @@ impl ModelDefectLedger {
             c.loop_guard_trips = c.loop_guard_trips.saturating_add(counts.loop_guard_trips);
             c.repairs_attempted = c.repairs_attempted.saturating_add(counts.repairs_attempted);
             c.repairs_succeeded = c.repairs_succeeded.saturating_add(counts.repairs_succeeded);
+            c.stream_errors = c.stream_errors.saturating_add(counts.stream_errors);
         });
     }
 
@@ -115,6 +122,15 @@ impl ModelDefectLedger {
                 c.repairs_succeeded += 1;
             }
         });
+    }
+
+    /// Count one upstream mid-stream failure for `model`.
+    ///
+    /// Does *not* bump `requests`: unlike a loop-guard trip, a stream
+    /// error happens after the request was forwarded and counted — this
+    /// marks an already-counted request as having died mid-generation.
+    pub fn record_stream_error(&self, model: &str) {
+        self.with(model, |c| c.stream_errors += 1);
     }
 
     /// The current counts for every model that has any.
@@ -150,6 +166,7 @@ pub const fn delta(current: ModelDefectCounts, baseline: ModelDefectCounts) -> M
         repairs_succeeded: current
             .repairs_succeeded
             .saturating_sub(baseline.repairs_succeeded),
+        stream_errors: current.stream_errors.saturating_sub(baseline.stream_errors),
     }
 }
 
@@ -185,6 +202,7 @@ mod tests {
                 loop_guard_trips: 3,
                 repairs_attempted: 2,
                 repairs_succeeded: 1,
+                stream_errors: 5,
             },
         );
         ledger.record_request("a");
@@ -192,6 +210,7 @@ mod tests {
         let snap = ledger.snapshot()["a"];
         assert_eq!(snap.requests, 41);
         assert_eq!(snap.loop_guard_trips, 3);
+        assert_eq!(snap.stream_errors, 5);
         assert_eq!(snap.repairs_attempted, 2);
         assert_eq!(snap.repairs_succeeded, 1);
         // An empty baseline (a fresh scheduler) windows the whole seed.
@@ -216,6 +235,21 @@ mod tests {
             },
         );
         assert_eq!(ledger.snapshot()["a"].requests, u64::MAX);
+    }
+
+    /// A stream error marks an already-counted request as having died —
+    /// it must never inflate the denominator it will be rated against.
+    #[test]
+    fn a_stream_error_never_bumps_its_own_denominator() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_request("a");
+        ledger.record_stream_error("a");
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 1);
+        assert_eq!(snap.stream_errors, 1);
+        let window = delta(snap, ModelDefectCounts::default());
+        assert_eq!(window.stream_errors, 1);
     }
 
     #[test]

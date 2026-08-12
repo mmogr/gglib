@@ -542,12 +542,25 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             loop_guard_trips  INTEGER NOT NULL DEFAULT 0,
             repairs_attempted INTEGER NOT NULL DEFAULT 0,
             repairs_succeeded INTEGER NOT NULL DEFAULT 0,
+            stream_errors     INTEGER NOT NULL DEFAULT 0,
             updated_at        TEXT    NOT NULL,
             llama_build       TEXT    NOT NULL
         )",
     )
     .execute(pool)
     .await?;
+
+    // Migration: add stream_errors to defect_windows — the upstream
+    // mid-stream failure counter, the third signal's evidence. Runs after
+    // the CREATE (the applied_json lesson: an ALTER before its table
+    // exists is silently swallowed on a fresh database). Existing rows
+    // backfill to 0: absence of evidence, honestly recorded.
+    let _ = sqlx::query(
+        r#"ALTER TABLE defect_windows ADD COLUMN stream_errors INTEGER NOT NULL DEFAULT 0"#,
+    )
+    .execute(pool)
+    .await;
+    // Ignore error if column already exists
 
     Ok(())
 }

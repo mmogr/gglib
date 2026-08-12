@@ -66,12 +66,14 @@ not charge; **a person's work is never the target**; any waiting request
 preempts the run outright; and one attempt per model per seven days,
 because a refusal is an answer and answers do not expire in an afternoon.
 Signal-driven runs (a loop-trip rate ≥ 5% → a DRY sweep; a tool-call
-repair rate ≥ 5% → a temperature sweep, each over ≥ 50 windowed requests
-— the repair signal added 2026-08-12, consuming the counter this ADR
-noted was already flowing) bypass exactly two rules — the untuned-only
-filter and the interval, both because a production defect is *new
-evidence* — and honour the rest. When one model raises both, severity
-(the rate as a multiple of its threshold) picks the sweep.
+repair rate or an upstream mid-stream failure rate ≥ 5% → a temperature
+sweep, each over ≥ 50 windowed requests — the repair and stream-error
+signals added 2026-08-12; the latter counts the turns that die outright,
+which the other two counters cannot see, a blind spot mapped by
+deliberately sabotaging a model's recipe) bypass exactly two rules — the
+untuned-only filter and the interval, both because a production defect
+is *new evidence* — and honour the rest. When one model raises several,
+severity (the rate as a multiple of its threshold) picks the sweep.
 
 **The `Measured` defaults origin** is where an applied winner lives: below
 global settings, like `AutoDetected` and `Published`, on the ladder's
