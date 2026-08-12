@@ -211,7 +211,11 @@ pub struct ApplyRecord {
     /// The verdict that licensed the write, with its numbers.
     pub verdict: ApplyVerdict,
     /// The applied sampling overlay, exactly as stored on the model.
-    pub applied_config: crate::domain::InferenceConfig,
+    /// `None` on a refusal record — the verdict says why nothing was
+    /// written. (Optional since refusals began leaving records; an apply
+    /// written before that always carries `Some`.)
+    #[serde(default)]
+    pub applied_config: Option<crate::domain::InferenceConfig>,
     /// The defaults the apply displaced, exactly as they were stored.
     ///
     /// What makes an apply reversible without archaeology: a signal-driven

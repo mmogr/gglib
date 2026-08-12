@@ -63,6 +63,18 @@ pub async fn apply_tune_run(deps: &BenchmarkDeps, run_id: i64) -> Result<ApplyOu
 
     let verdict = evaluate_apply(&candidates);
     if !verdict.applies() {
+        // A refusal is half the story the activity surfaces tell — "the
+        // gate checked and declined" is the trust-building sentence — so
+        // it leaves a record exactly like an apply, minus the config.
+        let record = ApplyRecord {
+            verdict: verdict.clone(),
+            applied_config: None,
+            prior_defaults: None,
+            prior_origin: None,
+        };
+        if let Ok(json) = serde_json::to_string(&record) {
+            deps.bench_repo.mark_run_applied(run_id, &json).await.ok();
+        }
         return Ok(ApplyOutcome {
             verdict,
             model_id,
@@ -92,7 +104,7 @@ pub async fn apply_tune_run(deps: &BenchmarkDeps, run_id: i64) -> Result<ApplyOu
     // model's origin alone.
     let record = ApplyRecord {
         verdict: verdict.clone(),
-        applied_config: winner.config.clone(),
+        applied_config: Some(winner.config.clone()),
         prior_defaults: Some(prior_defaults),
         prior_origin: Some(prior_origin),
     };

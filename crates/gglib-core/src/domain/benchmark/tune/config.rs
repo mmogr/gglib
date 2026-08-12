@@ -38,6 +38,14 @@ pub struct TuneConfig {
     /// Override the llama-server context window size for this run.
     #[serde(default)]
     pub ctx_size: Option<u64>,
+    /// Who started this run. `None` is a person (CLI flag, GUI button —
+    /// every path a human drives); the auto-tune scheduler writes
+    /// `"idle"` or `"signal:<kind>"`. Stored with the run's config, so the
+    /// activity surfaces can distinguish the daemon's own work from the
+    /// operator's without a schema change — and so the distinction rides
+    /// every existing wire that already carries the config.
+    #[serde(default)]
+    pub initiator: Option<String>,
 }
 
 impl TuneConfig {
