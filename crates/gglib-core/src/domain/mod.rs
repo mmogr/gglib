@@ -6,6 +6,7 @@ pub mod cache_budget;
 pub mod capabilities;
 pub mod capability_tags;
 pub mod chat;
+pub mod defects;
 pub mod dialect;
 pub mod generation_config;
 pub mod gguf;

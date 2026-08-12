@@ -60,6 +60,7 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationTok
             None,  // slot_dir
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            Arc::new(gglib_core::domain::defects::ModelDefectLedger::new()),
             &access,
         )
         .await

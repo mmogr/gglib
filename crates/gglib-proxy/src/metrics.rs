@@ -109,6 +109,14 @@ pub struct ContextMetricsStore {
     /// what this model gets wrong, which is a different problem from an
     /// unconstrained `auto` path.
     tool_repairs_succeeded: AtomicU64,
+    /// The process-lifetime per-model defect ledger, when one was injected.
+    ///
+    /// Every signal the ledger wants already passes through this store with
+    /// the model name attached — `record` sees each request and the loop
+    /// guard's trips, `flag_tool_repair` sees each repair — so forwarding
+    /// from here reaches all of them with zero call-site changes. `None` in
+    /// tests and in any embedding that has no scheduler to read it.
+    ledger: Option<std::sync::Arc<gglib_core::domain::defects::ModelDefectLedger>>,
 }
 
 impl ContextMetricsStore {
@@ -121,7 +129,18 @@ impl ContextMetricsStore {
             dialect_residue_total: AtomicU64::new(0),
             tool_repairs_attempted: AtomicU64::new(0),
             tool_repairs_succeeded: AtomicU64::new(0),
+            ledger: None,
         }
+    }
+
+    /// Attach the process-lifetime defect ledger; see the field docs.
+    #[must_use]
+    pub fn with_ledger(
+        mut self,
+        ledger: std::sync::Arc<gglib_core::domain::defects::ModelDefectLedger>,
+    ) -> Self {
+        self.ledger = Some(ledger);
+        self
     }
 
     /// Record a new snapshot.
@@ -140,6 +159,14 @@ impl ContextMetricsStore {
     pub fn record(&self, mut snapshot: ContextSnapshot) -> u64 {
         let seq = self.total_requests.fetch_add(1, Ordering::Relaxed);
         snapshot.seq = seq;
+
+        if let Some(ledger) = &self.ledger {
+            if snapshot.loop_guard_tripped {
+                ledger.record_loop_guard_trip(&snapshot.model_name);
+            } else {
+                ledger.record_request(&snapshot.model_name);
+            }
+        }
 
         let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
         guard.push_back(snapshot);
@@ -183,6 +210,13 @@ impl ContextMetricsStore {
         let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.tool_repaired = succeeded;
+            // The ring row still knows its model; a repair whose snapshot
+            // was already evicted keeps the fleet counter above but is lost
+            // to the per-model ledger — a bounded, bias-free undercount on
+            // exactly the busiest traffic, noted in the ledger's docs.
+            if let Some(ledger) = &self.ledger {
+                ledger.record_repair(&snapshot.model_name, succeeded);
+            }
         }
     }
 
