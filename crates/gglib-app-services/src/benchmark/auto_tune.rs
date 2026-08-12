@@ -92,9 +92,16 @@ fn env_override<T: std::str::FromStr + Copy>(key: &str, default: T) -> T {
 /// How often the preemption watcher checks the queue while a run is live.
 const PREEMPT_POLL: Duration = Duration::from_secs(2);
 
-/// The least time between tune attempts on one model, however they ended.
+/// The least time between *answered* tune attempts on one model.
 /// A refusal is an answer; the next question should wait for new evidence
-/// (a different build, new tasks) or the signal triggers.
+/// (a different build, new tasks) or the signal triggers. An aborted or
+/// crashed run is **not** an answer — a preempted idle tune, a daemon
+/// stopped mid-run, a launch failure — and must not park the model for a
+/// week (the first live idle tune was aborted by a daemon stop and parked
+/// its model seven days for zero information). Only completed runs
+/// consume the interval; the accepted trade is that a deterministically
+/// crashing tune retries each idle window, bounded by the idle threshold
+/// and visible in the activity feed.
 const RETUNE_INTERVAL: chrono::Duration = chrono::Duration::days(7);
 
 /// The fewest windowed requests before a defect rate means anything.
@@ -748,9 +755,17 @@ fn select_target(
     resident_ids: &[i64],
     now: DateTime<Utc>,
 ) -> Option<i64> {
+    // Only an answered question consumes the interval: completed runs
+    // (their verdict stands for a week) and runs still in flight (their
+    // answer is coming). A failed row — preempted, aborted by a daemon
+    // stop, crashed — produced no answer and holds no claim.
     let recently_tuned = |id: i64| {
         runs.iter().any(|r| {
             r.run_type == BenchmarkRunType::Tune
+                && matches!(
+                    r.status,
+                    BenchmarkRunStatus::Complete | BenchmarkRunStatus::Running
+                )
                 && r.model_ids.contains(&id)
                 && now.signed_duration_since(r.created_at) < RETUNE_INTERVAL
         })
@@ -1056,6 +1071,32 @@ mod tests {
 
         let stale = vec![tune_run(1, 8)];
         assert_eq!(select_target(&models, &stale, &[], Utc::now()), Some(1));
+    }
+
+    /// An aborted run answered nothing and holds no claim: the model stays
+    /// eligible. (The first live idle tune was aborted by a daemon stop and
+    /// wrongly parked its model for a week — this is that bug's headstone.)
+    #[test]
+    fn an_aborted_run_does_not_park_the_model() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 30)];
+        let aborted = vec![BenchmarkRun {
+            status: BenchmarkRunStatus::Failed,
+            ..tune_run(1, 0)
+        }];
+        assert_eq!(select_target(&models, &aborted, &[], Utc::now()), Some(1));
+    }
+
+    /// A run still in flight is a question being answered — it parks the
+    /// model exactly like a completed one, so two surfaces cannot race the
+    /// same question.
+    #[test]
+    fn a_running_tune_parks_the_model() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 30)];
+        let running = vec![BenchmarkRun {
+            status: BenchmarkRunStatus::Running,
+            ..tune_run(1, 0)
+        }];
+        assert_eq!(select_target(&models, &running, &[], Utc::now()), None);
     }
 
     // ── Persistence: decay, restore plans, flush rows ────────────────────
