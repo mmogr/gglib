@@ -3,7 +3,9 @@
 //! Design:
 //! - A single layered subscriber (console + daily rotating file) is installed once via [`OnceLock`].
 //! - Calls to [`init_tracing`] are idempotent — subsequent calls return `Ok(())`.
-//! - Log directory: `./logs/` in debug builds, `data_root()/logs` in release.
+//! - Log directory: `data_root()/logs` in every build — which honours
+//!   `GGLIB_DATA_DIR`, so an isolated data dir isolates its logs too.
+//!   `./logs/` only as a last resort when no data root resolves.
 //! - Filter: `RUST_LOG` env var wins; otherwise `"debug"` if verbose, else `"warn"`.
 //! - Console output goes through [`console_println`], which defaults to stderr
 //!   but can be redirected via [`set_console_hook`] — see the "Console hook"
@@ -14,7 +16,6 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
-#[allow(unused_imports)] // only used in release builds via cfg(not(debug_assertions))
 use crate::paths::data_root;
 
 static GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::new();
@@ -92,12 +93,17 @@ impl Drop for ConsoleWriter {
 }
 
 fn resolve_log_dir() -> PathBuf {
-    #[cfg(debug_assertions)]
-    let dir = PathBuf::from("./logs");
-
-    #[cfg(not(debug_assertions))]
+    // The data root decides in every build. Debug builds used to hardcode
+    // `./logs` — CWD-relative, blind to `GGLIB_DATA_DIR` — so a test daemon
+    // pointed at an isolated data dir still interleaved its lines into the
+    // real installation's log file. `data_root()` already prefers
+    // `GGLIB_DATA_DIR`, then the local repo in debug builds, so the debug
+    // default is unchanged when run from the repo — it just stops being an
+    // accident of the working directory. (The old release fallback joined
+    // "logs" onto "./logs" and produced `./logs/logs`; the fallback root is
+    // now the working directory itself.)
     let dir = data_root()
-        .unwrap_or_else(|_| PathBuf::from("./logs"))
+        .unwrap_or_else(|_| PathBuf::from("."))
         .join("logs");
 
     std::fs::create_dir_all(&dir).ok();
