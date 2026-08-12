@@ -1142,7 +1142,10 @@ async fn chat_completions(
             };
 
             let retry_req = ForwardRequest {
-                repair_enabled: settings.tool_call_repair != Some(false),
+                // `retry_settings`, not `settings` — the sibling sampling
+                // layers above already read the fresh snapshot this block
+                // deliberately took, and this one was still on the stale one.
+                repair_enabled: retry_settings.tool_call_repair != Some(false),
                 client: &state.client,
                 upstream_url: &retry_url,
                 headers: &headers,

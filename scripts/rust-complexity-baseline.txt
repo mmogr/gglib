@@ -139,7 +139,7 @@ crates/gglib-proxy/src/profiles.rs 495
 crates/gglib-proxy/src/props.rs 995
 crates/gglib-proxy/src/repair.rs 672
 crates/gglib-proxy/src/sampling_audit.rs 1487
-crates/gglib-proxy/src/server.rs 1319
+crates/gglib-proxy/src/server.rs 1322
 crates/gglib-proxy/src/slots_poller.rs 795
 crates/gglib-proxy/src/slots.rs 1250
 crates/gglib-proxy/src/sse_stream.rs 371

@@ -1,6 +1,10 @@
 # Tool-call repair
 
-**Status:** implemented. Streaming and non-streaming both route through the hold-back.
+**Status:** implemented, **streaming only**. The hold-back and the re-issue
+live on the SSE path; the non-streaming branch has no repair at all.
+`RepairContext` is constructed in exactly one place (`sse_stream.rs`), so a
+non-streaming request carries none and a malformed tool call on that path
+reaches the client unaltered.
 **Decided by:** [ADR 0002](adr/0002-defer-tool-call-constraint-to-llama-cpp.md), findings 4–5.
 
 ## What this solves

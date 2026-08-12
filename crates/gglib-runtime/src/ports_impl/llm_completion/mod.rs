@@ -189,7 +189,7 @@ impl LlmCompletionAdapter {
     }
 
     /// Override the send-phase timeout (connect through first response
-    /// headers).  The default is [`DEFAULT_SEND_TIMEOUT_SECS`] (120 s).
+    /// headers).  The default is [`DEFAULT_SEND_TIMEOUT_SECS`].
     #[must_use]
     pub fn with_send_timeout(mut self, secs: u64) -> Self {
         self.send_timeout_secs = secs;
