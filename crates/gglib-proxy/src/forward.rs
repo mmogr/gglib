@@ -1013,6 +1013,14 @@ pub(crate) async fn stream_response_to_channel(
                     // report itself as producing output.
                     outcome.saw_visible_output = true;
                     outcome.upstream_errored = true;
+                    // This event is terminal — the decoder marks the turn done,
+                    // so the `Done` arm below never runs and the hold-back's
+                    // contents would go out with it. Release them first, ahead
+                    // of an error frame a client may read as the end of the turn.
+                    if !emit_held_frames(&tx, &mut held_tool_frames).await {
+                        client_connected = false;
+                        outcome.client_aborted = true;
+                    }
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Done { finish_reason } => {
@@ -1025,7 +1033,7 @@ pub(crate) async fn stream_response_to_channel(
                     // frames wins, never before — a client that sees
                     // `finish_reason` first considers the turn over.
                     if !held_tool_frames.is_empty() {
-                        let flush = resolve_held_tool_calls(
+                        let mut flush = resolve_held_tool_calls(
                             repair.as_ref(),
                             &tool_calls,
                             std::mem::take(&mut held_tool_frames),
@@ -1033,12 +1041,9 @@ pub(crate) async fn stream_response_to_channel(
                             &mut outcome,
                         )
                         .await;
-                        for frame in flush {
-                            if tx.send(Ok(frame)).await.is_err() {
-                                client_connected = false;
-                                outcome.client_aborted = true;
-                                break;
-                            }
+                        if !emit_held_frames(&tx, &mut flush).await {
+                            client_connected = false;
+                            outcome.client_aborted = true;
                         }
                     }
                     encoder.encode(&ev).map(Bytes::from)
@@ -1064,6 +1069,14 @@ pub(crate) async fn stream_response_to_channel(
                 // llama-server, a severed connection) — the same
                 // turn-died-upstream fact as an explicit error event.
                 outcome.upstream_errored = true;
+                // The inner stream returns without a terminating `Done`, so the
+                // flush in that arm never happens. Whatever the hold-back
+                // captured is real model output a non-repairing turn would have
+                // shown; emit it ahead of the error frame rather than lose it.
+                if !emit_held_frames(&tx, &mut held_tool_frames).await {
+                    client_connected = false;
+                    outcome.client_aborted = true;
+                }
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),
@@ -1086,6 +1099,23 @@ pub(crate) async fn stream_response_to_channel(
             client_connected = false;
             outcome.client_aborted = true;
             break;
+        }
+    }
+
+    // Backstop for any exit that never reached `Done` — a stream that simply
+    // stopped, or a terminal condition whose own arm did not flush. The
+    // hold-back exists so a repair can *replace* a tool call; it must never
+    // delete one, so anything still held goes out verbatim. Withholding is
+    // engaged whenever `repair.is_some()`, including when repair is disabled,
+    // so without this a turn that repair would have left alone loses content.
+    if client_connected && !held_tool_frames.is_empty() {
+        warn!(
+            frames = held_tool_frames.len(),
+            "proxy: stream ended without a terminating Done; releasing held tool-call frames"
+        );
+        if !emit_held_frames(&tx, &mut held_tool_frames).await {
+            client_connected = false;
+            outcome.client_aborted = true;
         }
     }
 
@@ -1128,6 +1158,24 @@ pub(crate) async fn stream_response_to_channel(
 
     outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
     outcome
+}
+
+/// Send withheld tool-call frames to the client verbatim, in order.
+///
+/// Empties `held`, so a later flush cannot emit the same frames twice —
+/// Copilot executes tool calls, and a duplicate is a duplicated side effect.
+///
+/// Returns `false` if the client went away mid-flush.
+async fn emit_held_frames(
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    held: &mut Vec<Bytes>,
+) -> bool {
+    for frame in std::mem::take(held) {
+        if tx.send(Ok(frame)).await.is_err() {
+            return false;
+        }
+    }
+    true
 }
 
 /// Decide what to send in place of the withheld tool-call frames.
@@ -1861,6 +1909,106 @@ mod tests {
         assert!(
             wire.trim_end().ends_with("data: [DONE]"),
             "[DONE] must be the final frame: {wire}"
+        );
+    }
+
+    /// A mock that emits one complete, schema-conformant tool call and then
+    /// dies mid-stream with an inline error frame — llama.cpp's own tool-call
+    /// grammar rejecting the model's output, which is terminal and yields no
+    /// `Done`.
+    async fn spawn_dying_tool_call_mock() -> (u16, tokio::task::JoinHandle<()>) {
+        use axum::routing::post;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let port = listener.local_addr().unwrap().port();
+
+        let app = axum::Router::new().route(
+            "/v1/chat/completions",
+            post(|| async {
+                let sse = concat!(
+                    "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_held\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]},\"finish_reason\":null}]}\n\n",
+                    "data: {\"error\":{\"message\":\"upstream died mid-generation\"}}\n\n",
+                );
+                axum::response::Response::builder()
+                    .header("content-type", "text/event-stream")
+                    .body(axum::body::Body::from(sse))
+                    .unwrap()
+            }),
+        );
+
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (port, handle)
+    }
+
+    /// The hold-back may delay a tool call or replace it, but it must never
+    /// delete one.
+    ///
+    /// An inline error frame is terminal: the decoder marks the turn done, so
+    /// the `Done` arm — the only place that used to flush — never runs. Every
+    /// frame the hold-back was sitting on went out with it, and because
+    /// withholding engages whenever `repair.is_some()` (even with repair
+    /// *disabled*), a turn that repair would have left completely alone lost
+    /// content it would otherwise have shown.
+    #[tokio::test]
+    async fn a_stream_that_dies_mid_turn_still_releases_its_held_tool_call() {
+        let (port, server) = spawn_dying_tool_call_mock().await;
+        let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+        let client = Client::new();
+        let body = repair_request_body();
+
+        let resp = client
+            .post(&url)
+            .body(body.clone())
+            .send()
+            .await
+            .expect("mock upstream reachable");
+
+        let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
+        let connection = registry.register("m", true, None);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+
+        let outcome = stream_response_to_channel(
+            resp,
+            "m".to_owned(),
+            None,
+            tx,
+            &connection,
+            Some(RepairContext {
+                req_builder: client.post(&url),
+                request_body: body,
+                enabled: true,
+            }),
+        )
+        .await;
+
+        let mut wire = String::new();
+        while let Ok(Some(Ok(chunk))) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await
+        {
+            wire.push_str(&String::from_utf8_lossy(&chunk));
+        }
+        server.abort();
+
+        assert!(
+            outcome.upstream_errored,
+            "an inline error frame is an upstream death"
+        );
+        let call_at = wire
+            .find("call_held")
+            .unwrap_or_else(|| panic!("the held tool call must reach the client: {wire}"));
+
+        // Ordering is the other half of the fix: a client that sees the error
+        // frame first may consider the turn over and never read the call.
+        let error_at = wire
+            .find("upstream died mid-generation")
+            .expect("the error frame still reaches the client");
+        assert!(
+            call_at < error_at,
+            "the held call must precede the error frame: {wire}"
         );
     }
 
