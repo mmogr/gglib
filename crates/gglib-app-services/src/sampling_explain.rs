@@ -223,6 +223,7 @@ fn wire_key(field: &'static str) -> &'static str {
         "presence_penalty" => "presencePenalty",
         "repeat_penalty" => "repeatPenalty",
         "min_p" => "minP",
+        "frequency_penalty" => "frequencyPenalty",
         "dynatemp_range" => "dynatempRange",
         "dynatemp_exponent" => "dynatempExponent",
         "top_n_sigma" => "topNSigma",
@@ -519,6 +520,7 @@ mod tests {
             dynatemp_range: Some(0.5),
             dynatemp_exponent: Some(1.0),
             top_n_sigma: Some(1.0),
+            frequency_penalty: Some(0.4),
             seed: Some(100),
         };
         let keys = serde_json::to_value(&populated).unwrap();
@@ -567,7 +569,7 @@ mod tests {
         );
         // maxTokens is last in the canonical order, after the DRY block.
         assert_eq!(
-            value["sources"][13],
+            value["sources"][14],
             json!({ "param": "maxTokens", "kind": "unset" })
         );
 
@@ -603,6 +605,7 @@ mod tests {
                 "presencePenalty",
                 "repeatPenalty",
                 "minP",
+                "frequencyPenalty",
                 "dynatempRange",
                 "dynatempExponent",
                 "topNSigma",

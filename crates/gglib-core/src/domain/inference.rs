@@ -125,6 +125,30 @@ pub struct InferenceConfig {
     /// - > 2.0: Avoid; may degrade coherence
     pub presence_penalty: Option<f32>,
 
+    /// Frequency penalty (-2.0 - 2.0), `presence_penalty`'s twin.
+    ///
+    /// Penalizes tokens in proportion to how *often* they have already
+    /// appeared, where `presence_penalty` is a flat once-seen offset. An
+    /// OpenAI-standard field that llama.cpp supports; until it was modelled
+    /// here it passed through the proxy ungoverned, so an untrusted client
+    /// could steer sampling with it while every modelled twin was gated
+    /// (ADR 0003's `frequency_penalty` follow-up).
+    /// - 0.0: No penalty (llama.cpp's default)
+    /// - Negative values *encourage* reuse; valid upstream, rarely wanted
+    ///
+    /// Unset defers to llama.cpp's own default (0.0, disabled).
+    ///
+    /// Deliberately **not** part of the temperature-coupled trio, although
+    /// the trio's rationale (a flat logit offset competing with temperature's
+    /// sharpening) applies to it literally. The cost that evicted DRY from
+    /// the coupled set (#746) applies literally too: coupling would make a
+    /// layer naming only a `frequency_penalty` lose it to any lower layer
+    /// naming a `temperature` — the default state of every `reasoning`-tagged
+    /// model — and no shipped profile pairs a frequency penalty with a
+    /// temperature, so coupling would protect nothing in exchange. The trio
+    /// stays a closed set; joining it needs sweep data, not symmetry.
+    pub frequency_penalty: Option<f32>,
+
     /// Minimum-probability sampling threshold (0.0 - 1.0).
     ///
     /// Removes tokens whose probability is below `min_p × P(top token)`.
@@ -675,6 +699,9 @@ impl InferenceConfig {
         if self.presence_penalty.is_none() {
             self.presence_penalty = other.presence_penalty;
         }
+        if self.frequency_penalty.is_none() {
+            self.frequency_penalty = other.frequency_penalty;
+        }
         if self.min_p.is_none() {
             self.min_p = other.min_p;
         }
@@ -846,6 +873,7 @@ impl InferenceConfig {
         let dynatemp_range = first(&|c| c.dynatemp_range.is_some());
         let dynatemp_exponent = first(&|c| c.dynatemp_exponent.is_some());
         let top_n_sigma = first(&|c| c.top_n_sigma.is_some());
+        let frequency_penalty = first(&|c| c.frequency_penalty.is_some());
         let dry_multiplier = first(&|c| c.dry_multiplier.is_some());
         let dry_base = first(&|c| c.dry_base.is_some());
         let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
@@ -861,6 +889,8 @@ impl InferenceConfig {
         result.dynatemp_exponent =
             dynatemp_exponent.and_then(|i| layers[i].and_then(|c| c.dynatemp_exponent));
         result.top_n_sigma = top_n_sigma.and_then(|i| layers[i].and_then(|c| c.top_n_sigma));
+        result.frequency_penalty =
+            frequency_penalty.and_then(|i| layers[i].and_then(|c| c.frequency_penalty));
         result.dry_multiplier =
             dry_multiplier.and_then(|i| layers[i].and_then(|c| c.dry_multiplier));
         result.dry_base = dry_base.and_then(|i| layers[i].and_then(|c| c.dry_base));
@@ -915,6 +945,7 @@ impl InferenceConfig {
             dynatemp_range: source(dynatemp_range, floor.dynatemp_range.is_some(), false),
             dynatemp_exponent: source(dynatemp_exponent, floor.dynatemp_exponent.is_some(), false),
             top_n_sigma: source(top_n_sigma, floor.top_n_sigma.is_some(), false),
+            frequency_penalty: source(frequency_penalty, floor.frequency_penalty.is_some(), false),
             dry_multiplier: source(dry_multiplier, floor.dry_multiplier.is_some(), false),
             dry_base: source(dry_base, floor.dry_base.is_some(), false),
             dry_allowed_length: source(
@@ -1047,6 +1078,11 @@ impl InferenceConfig {
             repeat_penalty: None,
             presence_penalty: None,
             min_p: None,
+            // Never floored: modelled after ADR 0003, under its rule. llama.cpp
+            // defaults it to 0.0 (off) and no measurement says otherwise; it is
+            // governed here so the untrusted-client gate covers it, not so a
+            // floor can assert it.
+            frequency_penalty: None,
             // Never floored: introduced after ADR 0003, under its rule — the
             // floor asserts only measured divergences from upstream, and no
             // measurement says llama.cpp's own defaults (range 0.0 / exponent
@@ -1212,8 +1248,8 @@ impl InferenceConfig {
             // written before DRY existed deserialize these as `None`, so any
             // value here would make every one of them compare unequal and
             // silently reclassify as user-set, moving them up a resolution
-            // rung. The same holds for every field added since — dynatemp and
-            // top-n-sigma included.
+            // rung. The same holds for every field added since — dynatemp,
+            // top-n-sigma and frequency_penalty included.
             dry_multiplier: None,
             dry_base: None,
             dry_allowed_length: None,
@@ -1221,6 +1257,7 @@ impl InferenceConfig {
             dynatemp_range: None,
             dynatemp_exponent: None,
             top_n_sigma: None,
+            frequency_penalty: None,
         }
     }
 
@@ -1462,6 +1499,7 @@ impl InferenceConfig {
             max_tokens: read_max_tokens(obj, &mut issues),
             repeat_penalty: read_f32(obj, "repeat_penalty", &mut issues),
             presence_penalty: read_f32(obj, "presence_penalty", &mut issues),
+            frequency_penalty: read_f32(obj, "frequency_penalty", &mut issues),
             min_p: read_f32(obj, "min_p", &mut issues),
             dynatemp_range: read_f32(obj, "dynatemp_range", &mut issues),
             dynatemp_exponent: read_f32(obj, "dynatemp_exponent", &mut issues),
@@ -1850,6 +1888,7 @@ mod tests {
             dynatemp_range: Some(0.5),
             dynatemp_exponent: None,
             top_n_sigma: Some(1.5),
+            frequency_penalty: Some(0.4),
             seed: Some(100),
         };
 
@@ -2499,6 +2538,7 @@ mod tests {
             dynatemp_range: Some(0.5),
             dynatemp_exponent: Some(1.0),
             top_n_sigma: Some(1.0),
+            frequency_penalty: Some(0.4),
             seed: Some(100),
         };
 

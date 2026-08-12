@@ -40,6 +40,7 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
             dynatemp_range,
             dynatemp_exponent,
             top_n_sigma,
+            frequency_penalty,
             unset,
             list_in_models,
             no_list_in_models,
@@ -61,6 +62,7 @@ pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result
                     dynatemp_range,
                     dynatemp_exponent,
                     top_n_sigma,
+                    frequency_penalty,
                     // Profiles are stored and reused across every request that
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.
@@ -159,17 +161,21 @@ async fn show(ctx: &CliContext, name: &str) -> Result<()> {
         println!("  description      {description}");
     }
     println!("  list-in-models   {}", profile.list_in_models);
-    print_opt("  temperature     ", profile.config.temperature);
-    print_opt("  top-p           ", profile.config.top_p);
-    print_opt("  top-k           ", profile.config.top_k);
-    print_opt("  max-tokens      ", profile.config.max_tokens);
-    print_opt("  repeat-penalty  ", profile.config.repeat_penalty);
-    print_opt("  presence-penalty", profile.config.presence_penalty);
-    print_opt("  min-p           ", profile.config.min_p);
-    print_opt("  dry-multiplier  ", profile.config.dry_multiplier);
-    print_opt("  dry-base        ", profile.config.dry_base);
-    print_opt("  dry-allowed-len ", profile.config.dry_allowed_length);
-    print_opt("  dry-penalty-last", profile.config.dry_penalty_last_n);
+    print_opt("  temperature      ", profile.config.temperature);
+    print_opt("  top-p            ", profile.config.top_p);
+    print_opt("  top-k            ", profile.config.top_k);
+    print_opt("  max-tokens       ", profile.config.max_tokens);
+    print_opt("  repeat-penalty   ", profile.config.repeat_penalty);
+    print_opt("  presence-penalty ", profile.config.presence_penalty);
+    print_opt("  min-p            ", profile.config.min_p);
+    print_opt("  frequency-penalty", profile.config.frequency_penalty);
+    print_opt("  dynatemp-range   ", profile.config.dynatemp_range);
+    print_opt("  dynatemp-exponent", profile.config.dynatemp_exponent);
+    print_opt("  top-n-sigma      ", profile.config.top_n_sigma);
+    print_opt("  dry-multiplier   ", profile.config.dry_multiplier);
+    print_opt("  dry-base         ", profile.config.dry_base);
+    print_opt("  dry-allowed-len  ", profile.config.dry_allowed_length);
+    print_opt("  dry-penalty-last ", profile.config.dry_penalty_last_n);
     println!();
     println!("Select it per request as `<model>:{}`.", profile.name);
     Ok(())
@@ -315,6 +321,9 @@ fn merge_set(target: &mut InferenceConfig, edits: &InferenceConfig) {
     if edits.top_n_sigma.is_some() {
         target.top_n_sigma = edits.top_n_sigma;
     }
+    if edits.frequency_penalty.is_some() {
+        target.frequency_penalty = edits.frequency_penalty;
+    }
 }
 
 /// Clear one parameter by its CLI flag name.
@@ -328,6 +337,7 @@ fn clear_param(config: &mut InferenceConfig, param: &str) -> Result<()> {
         "repeat-penalty" => config.repeat_penalty = None,
         "presence-penalty" => config.presence_penalty = None,
         "min-p" => config.min_p = None,
+        "frequency-penalty" => config.frequency_penalty = None,
         "dry-multiplier" => config.dry_multiplier = None,
         "dry-base" => config.dry_base = None,
         "dry-allowed-length" => config.dry_allowed_length = None,
@@ -338,8 +348,8 @@ fn clear_param(config: &mut InferenceConfig, param: &str) -> Result<()> {
         other => bail!(
             "unknown parameter '{other}'; expected one of: temperature, top-p, \
              top-k, max-tokens, repeat-penalty, presence-penalty, min-p, \
-             dynatemp-range, dynatemp-exponent, top-n-sigma, dry-multiplier, \
-             dry-base, dry-allowed-length, dry-penalty-last-n"
+             frequency-penalty, dynatemp-range, dynatemp-exponent, top-n-sigma, \
+             dry-multiplier, dry-base, dry-allowed-length, dry-penalty-last-n"
         ),
     }
     Ok(())
@@ -368,6 +378,9 @@ fn summarize(config: &InferenceConfig) -> String {
     }
     if let Some(v) = config.min_p {
         parts.push(format!("min-p={v}"));
+    }
+    if let Some(v) = config.frequency_penalty {
+        parts.push(format!("frequency-penalty={v}"));
     }
     if let Some(v) = config.dynatemp_range {
         parts.push(format!("dynatemp-range={v}"));

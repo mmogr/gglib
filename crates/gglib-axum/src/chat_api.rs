@@ -465,10 +465,10 @@ pub async fn proxy_chat(
         repeat_penalty: request.repeat_penalty,
         presence_penalty: request.presence_penalty,
         min_p: request.min_p,
-        // The WebUI chat request offers no DRY or entropy-adaptive controls,
-        // so the request layer names none. The per-model, global and floor
-        // layers below still resolve in normally — this is an absent opinion,
-        // not a disabled feature.
+        // The WebUI chat request offers no DRY, entropy-adaptive or
+        // frequency-penalty controls, so the request layer names none. The
+        // per-model, global and floor layers below still resolve in normally —
+        // this is an absent opinion, not a disabled feature.
         dry_multiplier: None,
         dry_base: None,
         dry_allowed_length: None,
@@ -476,6 +476,7 @@ pub async fn proxy_chat(
         dynatemp_range: None,
         dynatemp_exponent: None,
         top_n_sigma: None,
+        frequency_penalty: None,
         // The WebUI chat is interactive, where a pinned seed would make every
         // regeneration return the identical text. Reproducibility is a
         // benchmark's need, not a chat's.

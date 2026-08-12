@@ -504,9 +504,14 @@ and would be expensive to act on.
   which was already right.
 - Record the sampler chain order in `docs/sampling.md`. Finding 5 is the only
   statement of it anywhere in the tree.
-- `frequency_penalty` is a standard OpenAI field that llama.cpp supports and
+- ~~`frequency_penalty` is a standard OpenAI field that llama.cpp supports and
   `InferenceConfig` does not model, while its twin `presence_penalty` is
   modelled — so one is governed by the hierarchy and the other passes through
-  ungoverned. Decide deliberately rather than by omission.
+  ungoverned. Decide deliberately rather than by omission.~~ Done: modelled,
+  uncoupled for DRY's reason (#746). The audit generalised the finding — any
+  unmodelled sampler key passed through the same way, `mirostat` included —
+  so the untrusted path now also strips the full unmodelled set
+  (`request_pipeline::sampling::UNMODELLED_SAMPLER_KEYS`), with the strip
+  recorded beside the gate's discards.
 - The temperature-coupling rule remains unmeasured, and `min_p`'s membership in
   the coupled trio is argued nowhere. Separate ADR, separate instrument.

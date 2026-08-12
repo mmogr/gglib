@@ -24,6 +24,7 @@ export const PARAM_LABELS: Record<SamplingParamKey, string> = {
   presencePenalty: 'Presence Penalty',
   repeatPenalty: 'Repeat Penalty',
   minP: 'Min P',
+  frequencyPenalty: 'Frequency Penalty',
   dynatempRange: 'Dynatemp Range',
   dynatempExponent: 'Dynatemp Exponent',
   topNSigma: 'Top-N-Sigma',

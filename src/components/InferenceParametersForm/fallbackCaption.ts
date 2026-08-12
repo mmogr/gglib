@@ -58,6 +58,7 @@ const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
   repeatPenalty: 'llama.cpp default: 1.0',
   presencePenalty: 'llama.cpp default: 0.0',
   minP: 'llama.cpp default: 0.05',
+  frequencyPenalty: 'llama.cpp default: 0.0',
   dynatempRange: 'llama.cpp default: 0.0 (dynatemp off)',
   dynatempExponent: 'llama.cpp default: 1.0',
   topNSigma: 'llama.cpp default: -1.0 (off)',

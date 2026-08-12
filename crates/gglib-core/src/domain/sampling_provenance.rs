@@ -199,6 +199,8 @@ pub struct FieldSources {
     pub repeat_penalty: ParamSource,
     /// Where the resolved `min_p` came from.
     pub min_p: ParamSource,
+    /// Where the resolved `frequency_penalty` came from.
+    pub frequency_penalty: ParamSource,
     /// Where the resolved `dynatemp_range` came from.
     pub dynatemp_range: ParamSource,
     /// Where the resolved `dynatemp_exponent` came from.
@@ -232,6 +234,7 @@ impl FieldSources {
             ("presence_penalty", self.presence_penalty),
             ("repeat_penalty", self.repeat_penalty),
             ("min_p", self.min_p),
+            ("frequency_penalty", self.frequency_penalty),
             ("dynatemp_range", self.dynatemp_range),
             ("dynatemp_exponent", self.dynatemp_exponent),
             ("top_n_sigma", self.top_n_sigma),
@@ -285,6 +288,7 @@ mod tests {
             dry_base: ParamSource::Unset,
             dry_allowed_length: ParamSource::Unset,
             dry_penalty_last_n: ParamSource::Unset,
+            frequency_penalty: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
         };
         let fields: Vec<&str> = sources.iter().map(|(name, _)| name).collect();
@@ -297,6 +301,7 @@ mod tests {
                 "presence_penalty",
                 "repeat_penalty",
                 "min_p",
+                "frequency_penalty",
                 "dynatemp_range",
                 "dynatemp_exponent",
                 "top_n_sigma",
@@ -320,6 +325,7 @@ mod tests {
             presence_penalty: ParamSource::FloorCoupled,
             repeat_penalty: ParamSource::Layer(2),
             min_p: ParamSource::Floor,
+            frequency_penalty: ParamSource::Unset,
             dynatemp_range: ParamSource::Unset,
             dynatemp_exponent: ParamSource::Unset,
             top_n_sigma: ParamSource::Unset,
@@ -351,6 +357,7 @@ mod tests {
             presence_penalty: ParamSource::Floor,
             repeat_penalty: ParamSource::Floor,
             min_p: ParamSource::Floor,
+            frequency_penalty: ParamSource::Unset,
             dynatemp_range: ParamSource::Unset,
             dynatemp_exponent: ParamSource::Unset,
             top_n_sigma: ParamSource::Unset,

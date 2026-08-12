@@ -172,6 +172,7 @@ mod tests {
             dynatemp_range: Some(0.5),
             dynatemp_exponent: Some(1.5),
             top_n_sigma: Some(1.0),
+            frequency_penalty: Some(0.25),
             seed: Some(100),
         }
     }

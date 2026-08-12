@@ -31,6 +31,10 @@ export interface InferenceConfig {
   /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
    *  0.0 = disabled (recommended by Qwen3.6). */
   minP?: number;
+  /** Frequency penalty (−2.0 - 2.0), presencePenalty's twin: penalises tokens
+   *  in proportion to how often they already appeared. 0.0 = disabled; unset
+   *  defers to llama.cpp's default (0.0). */
+  frequencyPenalty?: number;
   /** Dynamic-temperature half-range: entropy-scales the effective temperature
    *  within [temp − range, temp + range]. 0.0 = disabled; unset defers to
    *  llama.cpp's default (0.0). */
@@ -161,6 +165,7 @@ export type SamplingParamKey =
   | 'presencePenalty'
   | 'repeatPenalty'
   | 'minP'
+  | 'frequencyPenalty'
   | 'dynatempRange'
   | 'dynatempExponent'
   | 'topNSigma'
