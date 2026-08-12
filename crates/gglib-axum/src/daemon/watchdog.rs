@@ -179,16 +179,27 @@ mod tests {
     use std::net::TcpListener;
 
     /// A scratch server that answers one connection with `response`.
+    ///
+    /// Returns only once the serving thread is scheduled and about to
+    /// `accept`. Without that handshake the helper returned as soon as the
+    /// thread was *spawned*, and the caller could finish connecting, writing
+    /// and waiting out its read timeout before the thread ever ran — which
+    /// made these tests fail under parallel load while passing in isolation.
+    /// The connection itself needs no synchronising: it waits in the
+    /// listener's backlog from the moment the socket is bound.
     fn one_shot_server(response: &'static [u8]) -> SocketAddr {
         let listener = TcpListener::bind("127.0.0.1:0").expect("ephemeral port");
         let addr = listener.local_addr().expect("bound addr");
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
+            let _ = ready_tx.send(());
             if let Ok((mut stream, _)) = listener.accept() {
                 let mut discard = [0u8; 512];
                 let _ = stream.read(&mut discard);
                 let _ = stream.write_all(response);
             }
         });
+        ready_rx.recv().expect("serving thread started");
         addr
     }
 
