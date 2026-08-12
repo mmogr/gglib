@@ -212,6 +212,18 @@ pub struct ApplyRecord {
     pub verdict: ApplyVerdict,
     /// The applied sampling overlay, exactly as stored on the model.
     pub applied_config: crate::domain::InferenceConfig,
+    /// The defaults the apply displaced, exactly as they were stored.
+    ///
+    /// What makes an apply reversible without archaeology: a signal-driven
+    /// sweep that made things worse can be undone from the run row alone.
+    /// `None` on records written before the field existed, and a real
+    /// `Some(None)`-shaped absence is representable — a model that had no
+    /// stored defaults restores to having none.
+    #[serde(default)]
+    pub prior_defaults: Option<Option<crate::domain::InferenceConfig>>,
+    /// The origin the displaced defaults carried.
+    #[serde(default)]
+    pub prior_origin: Option<Option<crate::domain::DefaultsOrigin>>,
 }
 
 #[cfg(test)]

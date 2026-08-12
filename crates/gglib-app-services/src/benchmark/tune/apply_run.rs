@@ -78,6 +78,8 @@ pub async fn apply_tune_run(deps: &BenchmarkDeps, run_id: i64) -> Result<ApplyOu
         .get_by_id(model_id)
         .await
         .with_context(|| format!("model {model_id} not found"))?;
+    let prior_defaults = model.inference_defaults.clone();
+    let prior_origin = model.defaults_origin;
     model.inference_defaults = Some(winner.config.clone());
     model.defaults_origin = Some(DefaultsOrigin::Measured);
     deps.model_repo
@@ -91,6 +93,8 @@ pub async fn apply_tune_run(deps: &BenchmarkDeps, run_id: i64) -> Result<ApplyOu
     let record = ApplyRecord {
         verdict: verdict.clone(),
         applied_config: winner.config.clone(),
+        prior_defaults: Some(prior_defaults),
+        prior_origin: Some(prior_origin),
     };
     if let Ok(json) = serde_json::to_string(&record) {
         deps.bench_repo.mark_run_applied(run_id, &json).await.ok();

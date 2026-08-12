@@ -59,6 +59,7 @@ async fn spawn(
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
             Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+            Arc::new(gglib_core::domain::defects::ModelDefectLedger::new()),
             &gglib_core::ProxyAccessConfig::default(),
         )
         .await

@@ -198,6 +198,11 @@ pub async fn serve(
     // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
     // the proxied figure.
     agent_metrics: Arc<CacheMetricsStore>,
+    // Per-model defect counters, supervisor-owned for the same reason as
+    // `agent_metrics`: the auto-tune scheduler windows them across proxy
+    // restarts. Fed by the context-metrics store, which sees every signal
+    // with the model name attached.
+    defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
     // Who may reach this endpoint: the CORS policy, the optional bearer token,
     // and the Host allowlist. Carries the `CorsConfig` it replaced rather than
     // sitting beside it — `serve` was already at fifteen parameters, and access
@@ -282,7 +287,7 @@ pub async fn serve(
     let dashboard = Arc::new(DashboardState::new(
         connections,
         slots_cache,
-        Arc::new(ContextMetricsStore::new()),
+        Arc::new(ContextMetricsStore::new().with_ledger(defects)),
         Arc::clone(&upstream_health),
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),

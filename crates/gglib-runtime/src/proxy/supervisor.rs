@@ -237,6 +237,11 @@ pub struct ProxySupervisor {
     /// the embedded axum server (GUI chat, via [`Self::agent_metrics`]) reach —
     /// so a single population survives proxy restarts within one process.
     agent_metrics: Arc<CacheMetricsStore>,
+    /// Per-model defect counters (loop-guard trips, repairs), owned here for
+    /// the same reason `agent_metrics` is: they must outlive any single
+    /// proxy run, because their reader — the auto-tune scheduler — windows
+    /// them across restarts.
+    defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
 }
 
 impl Default for ProxySupervisor {
@@ -254,6 +259,7 @@ impl ProxySupervisor {
             handle: Mutex::new(None),
             exit_tx,
             agent_metrics: Arc::new(CacheMetricsStore::new()),
+            defects: Arc::new(gglib_core::domain::defects::ModelDefectLedger::new()),
         }
     }
 
@@ -265,6 +271,13 @@ impl ProxySupervisor {
     #[must_use]
     pub fn agent_metrics(&self) -> Arc<CacheMetricsStore> {
         Arc::clone(&self.agent_metrics)
+    }
+
+    /// The per-model defect ledger — the Tier C signals the auto-tune
+    /// scheduler steers by.
+    #[must_use]
+    pub fn defects(&self) -> Arc<gglib_core::domain::defects::ModelDefectLedger> {
+        Arc::clone(&self.defects)
     }
 
     /// Get a watch receiver for proxy exit notifications.
@@ -356,6 +369,7 @@ impl ProxySupervisor {
         let disk_budget = config.disk_budget;
         let inference_override = config.inference_override;
         let agent_metrics = Arc::clone(&self.agent_metrics);
+        let defects = Arc::clone(&self.defects);
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -380,6 +394,7 @@ impl ProxySupervisor {
                 slot_dir,
                 disk_budget,
                 agent_metrics,
+                defects,
                 &access,
             )
             .await;
