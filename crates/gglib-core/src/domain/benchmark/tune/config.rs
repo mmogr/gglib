@@ -18,10 +18,6 @@ pub struct TuneConfig {
     pub task_suite: TaskSuite,
     /// Sampling-parameter values to sweep (cartesian product forms the grid).
     pub sweep: SweepSpec,
-    /// Seed additional candidates from the model's GGUF metadata
-    /// author-recommended sampling defaults, when present.
-    #[serde(default = "SweepSpec::default_true")]
-    pub seed_from_gguf: bool,
     /// Seed additional candidates from the built-in per-model-family preset
     /// table (e.g. Qwen coding-mode defaults).
     #[serde(default = "SweepSpec::default_true")]

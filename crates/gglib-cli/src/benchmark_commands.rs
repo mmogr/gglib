@@ -106,13 +106,6 @@ pub enum BenchmarkCommand {
         #[arg(long = "task-suite", default_value = "default")]
         task_suite: String,
 
-        /// Seed the candidate grid with the model's GGUF metadata
-        /// author-recommended sampling defaults, when present (no-op
-        /// today — no GGUF metadata convention for this exists yet).
-        /// Pass `--seed-from-gguf false` to disable
-        #[arg(long, action = clap::ArgAction::Set, default_value_t = true)]
-        seed_from_gguf: bool,
-
         /// Seed the candidate grid with built-in per-model-family sampling
         /// presets (e.g. Qwen coding-mode defaults), matched by a
         /// case-insensitive substring of the model's name. Pass

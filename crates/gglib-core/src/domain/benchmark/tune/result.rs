@@ -12,9 +12,6 @@ use super::task::TaskCategory;
 pub enum CandidateSource {
     /// One point in the user-specified [`super::config::SweepSpec`] grid.
     UserGrid,
-    /// Seeded from the model's GGUF metadata author-recommended sampling
-    /// defaults, when present.
-    GgufAuthorDefault,
     /// Seeded from the built-in per-model-family preset table (e.g. Qwen
     /// coding-mode defaults).
     FamilyPreset {
@@ -58,10 +55,7 @@ mod tests {
 
     #[test]
     fn candidate_source_unit_variants_round_trip() {
-        for source in [
-            CandidateSource::UserGrid,
-            CandidateSource::GgufAuthorDefault,
-        ] {
+        for source in [CandidateSource::UserGrid] {
             let json = serde_json::to_string(&source).expect("serializes");
             let _: CandidateSource = serde_json::from_str(&json).expect("deserializes");
         }

@@ -340,12 +340,6 @@ fn build_candidates(
         .map(|c| (c, CandidateSource::UserGrid))
         .collect();
 
-    if config.seed_from_gguf
-        && let Some(gguf_default) = gguf_author_default(model)
-    {
-        candidates.push((gguf_default, CandidateSource::GgufAuthorDefault));
-    }
-
     if config.seed_from_family_presets {
         for (family, preset) in family_presets(model) {
             candidates.push((preset, CandidateSource::FamilyPreset { family }));
@@ -445,24 +439,39 @@ fn sweep_dimension<T: Copy>(values: &[T]) -> Vec<Option<T>> {
     }
 }
 
-/// GGUF author-recommended sampling defaults, when the model's metadata
-/// carries them.
-///
-/// Always returns `None` today — no GGUF metadata convention for
-/// author-recommended sampling defaults exists yet (see
-/// <https://github.com/ggml-org/llama.cpp/discussions/17088>). This is a
-/// forward-compatible extension point: once `gglib-gguf` can parse such
-/// metadata, this function becomes the single place to wire it in.
-fn gguf_author_default(_model: &Model) -> Option<InferenceConfig> {
-    None
-}
-
 /// Built-in per-model-family sampling presets, keyed by a case-insensitive
 /// substring match against the model's name.
 ///
 /// Deliberately small: community consensus (as of this writing) documents
 /// good coding/tool-use defaults for very few families. Extend this table as
 /// more presets are validated, rather than guessing.
+///
+/// # These are task-regime values, and that is why they disagree with the GGUF
+///
+/// Do not "correct" a value here to match what the model's own metadata says.
+/// The two are answering different questions.
+///
+/// Publishers document several regimes per model — Qwen documents three or
+/// four — but `generation_config.json` encodes exactly one, and that is the
+/// one the GGUF converter copies into `general.sampling.*`. For Qwen3.6-27B
+/// the embedded value is **temp 1.0**, which is the thinking/general-chat
+/// regime. The precise-coding and agentic regime is **0.6**, which is what
+/// this table carries and what gglib's traffic actually is.
+///
+/// So a tool that blindly trusts `general.sampling.temp` runs an agent at
+/// 1.67× the author's recommended coding temperature while believing it is
+/// being faithful to the author. This table is the complement to that
+/// channel, not a legacy workaround for it: the machine-readable path
+/// supplies the model's general defaults, and this supplies the regime
+/// gglib is actually operating in.
+///
+/// Two related traps, recorded so they are not rediscovered the hard way:
+/// GGUF has no key at all for `presence_penalty` or `frequency_penalty`, and
+/// the converter silently drops HF's `repetition_penalty` (it looks for
+/// `penalty_repeat`) — so a meaningful part of a publisher's advice is
+/// structurally unrepresentable in the embedded channel. And Qwen's card
+/// explicitly warns against greedy decoding, so a preset here must never
+/// drop to 0.0 in pursuit of determinism.
 fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
     let name = model.name.to_lowercase();
     let mut presets = Vec::new();
