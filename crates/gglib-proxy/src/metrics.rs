@@ -298,6 +298,24 @@ impl ContextMetricsStore {
         }
     }
 
+    /// Per-model defect counts, for the dashboard.
+    ///
+    /// The ledger is written on every request and, until this existed, read by
+    /// nothing: the auto-tune scheduler was its only reader and went with ADR
+    /// 0006. Counters nobody can see are not diagnosis, they are a memory
+    /// leak with good intentions.
+    ///
+    /// Empty when no ledger is wired (the proxy can run without one).
+    #[must_use]
+    pub fn defect_counts(
+        &self,
+    ) -> std::collections::HashMap<String, gglib_core::domain::defects::ModelDefectCounts> {
+        self.ledger
+            .as_ref()
+            .map(|ledger| ledger.snapshot())
+            .unwrap_or_default()
+    }
+
     /// Total tool-call repairs attempted, eviction-safe.
     pub fn tool_repairs_attempted(&self) -> u64 {
         self.tool_repairs_attempted.load(Ordering::Relaxed)
@@ -357,6 +375,38 @@ mod tests {
     }
 
     // ── Basic record + retrieve ───────────────────────────────────────────────
+
+    /// The counters must be *readable*, not merely recorded.
+    ///
+    /// Until this existed the ledger's only reader was the auto-tune
+    /// scheduler, which went with ADR 0006 — leaving every per-model counter
+    /// accumulating into memory that nothing could observe. A day of traffic
+    /// would have produced evidence nobody could look at.
+    #[test]
+    fn per_model_counts_are_readable_after_recording() {
+        let ledger = std::sync::Arc::new(gglib_core::domain::defects::ModelDefectLedger::new());
+        let store = ContextMetricsStore::new().with_ledger(std::sync::Arc::clone(&ledger));
+
+        store.record(make_snapshot("qwen-27b"));
+        let seq = store.recent(1)[0].seq;
+        store.flag_stream_error(seq);
+        store.flag_truncated_generation(seq);
+        store.flag_empty_response(seq, true);
+
+        let counts = store.defect_counts();
+        let qwen = counts.get("qwen-27b").expect("the model appears by name");
+        assert_eq!(qwen.stream_errors, 1);
+        assert_eq!(qwen.truncated_generations, 1);
+        assert_eq!(qwen.empty_responses, 1);
+        assert_eq!(qwen.reasoning_only, 1, "nested inside the empty total");
+    }
+
+    #[test]
+    fn defect_counts_are_empty_without_a_ledger() {
+        let store = ContextMetricsStore::new();
+        store.record(make_snapshot("qwen-27b"));
+        assert!(store.defect_counts().is_empty());
+    }
 
     #[test]
     fn record_single_snapshot_and_retrieve() {
