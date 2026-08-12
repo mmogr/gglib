@@ -261,6 +261,9 @@ fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
                 Some(DefaultsOrigin::Published) => {
                     "per-model defaults (published by the model author)".to_owned()
                 }
+                Some(DefaultsOrigin::Measured) => {
+                    "per-model defaults (measured by a tune sweep)".to_owned()
+                }
                 _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
             },
             None => format!("layer {index}"),

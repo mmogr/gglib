@@ -147,8 +147,11 @@ pub enum SamplingLayer {
     ModelUserSet,
     /// Global settings defaults.
     Global,
-    /// Per-model defaults written automatically from the model's `reasoning`
-    /// tag and never reviewed, so they rank below global settings.
+    /// Per-model defaults no person in this installation chose, so they rank
+    /// below global settings. Three origins share this rung by replacement —
+    /// the `reasoning`-tag guess, the model author's published recipe, and a
+    /// tune sweep's measured winner — and `DefaultsOrigin` says which one is
+    /// actually in it; the surfaces that name the rung read that, not this.
     ModelAutoDetected,
 }
 

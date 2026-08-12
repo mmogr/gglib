@@ -258,6 +258,25 @@ mod defaults_origin_tests {
         assert_eq!(origin, Some(DefaultsOrigin::AutoDetected));
     }
 
+    /// The measured origin round-trips through the same TEXT column with no
+    /// schema change — `Display` writes `"measured"`, `FromStr` reads it, and
+    /// the legacy backfill never manufactures it: a `Measured` row is always
+    /// explicitly written by an apply, so an unlabelled row can only be a
+    /// guess or a person's work.
+    #[test]
+    fn a_measured_origin_round_trips_and_is_never_backfilled() {
+        let origin = resolve_defaults_origin(
+            Some(DefaultsOrigin::Measured.to_string()),
+            Some(&InferenceConfig::reasoning_profile()),
+        );
+        assert_eq!(origin, Some(DefaultsOrigin::Measured));
+
+        // A legacy NULL beside any recipe backfills to a guess or to user —
+        // never to measured.
+        let backfilled = resolve_defaults_origin(None, Some(&InferenceConfig::reasoning_profile()));
+        assert_ne!(backfilled, Some(DefaultsOrigin::Measured));
+    }
+
     #[test]
     fn legacy_row_not_matching_the_reasoning_recipe_backfills_to_user() {
         let custom = InferenceConfig {

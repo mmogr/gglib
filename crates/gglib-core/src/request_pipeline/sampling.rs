@@ -22,7 +22,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
-use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig};
+use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, ParamSource};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -331,6 +331,45 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
     stripped
 }
 
+/// Which rung the model's stored defaults occupy, and the name that rung
+/// carries — both decided by [`DefaultsOrigin`] in one place, so resolution
+/// and its labelling cannot disagree.
+///
+/// Exhaustive on purpose — see the twin in `resolve_with_profile_explained`.
+/// A catch-all here would rank any future unreviewed origin above global
+/// settings, which is precisely backwards.
+///
+/// The name was the static `"model (auto-detected)"`, which lied in the
+/// debug line and the audit's provenance strings whenever the occupant was a
+/// published recipe — and would have credited gglib's guess for a tune
+/// sweep's winner the same way.
+const fn model_rung(
+    ctx: &ModelContext,
+) -> (
+    Option<&InferenceConfig>,
+    Option<&InferenceConfig>,
+    &'static str,
+) {
+    match ctx.defaults_origin {
+        Some(DefaultsOrigin::AutoDetected) => (
+            None,
+            ctx.inference_defaults.as_ref(),
+            "model (auto-detected)",
+        ),
+        Some(DefaultsOrigin::Published) => {
+            (None, ctx.inference_defaults.as_ref(), "model (published)")
+        }
+        Some(DefaultsOrigin::Measured) => {
+            (None, ctx.inference_defaults.as_ref(), "model (measured)")
+        }
+        Some(DefaultsOrigin::User) | None => (
+            ctx.inference_defaults.as_ref(),
+            None,
+            "model (auto-detected)",
+        ),
+    }
+}
+
 pub fn resolve_sampling(
     body: &mut Value,
     ctx: &ModelContext,
@@ -395,15 +434,7 @@ pub fn resolve_sampling(
     // both — so an auto-detected guess can't silently outrank global
     // settings the way a deliberate per-model choice should. See
     // `DefaultsOrigin` and `InferenceConfig::resolve_with_profile`.
-    // Exhaustive on purpose — see the twin in `resolve_with_profile_explained`.
-    // A catch-all here would rank any future unreviewed origin above global
-    // settings, which is precisely backwards.
-    let (user_model, auto_model) = match ctx.defaults_origin {
-        Some(DefaultsOrigin::AutoDetected | DefaultsOrigin::Published) => {
-            (None, ctx.inference_defaults.as_ref())
-        }
-        Some(DefaultsOrigin::User) | None => (ctx.inference_defaults.as_ref(), None),
-    };
+    let (user_model, auto_model, below_global_rung_name) = model_rung(ctx);
 
     // Highest priority first. The single ordering both resolution and
     // provenance reporting read from, so they can never drift apart.
@@ -413,7 +444,7 @@ pub fn resolve_sampling(
         ("profile", layers.profile.as_ref()),
         ("model", user_model),
         ("global", layers.global.as_ref()),
-        ("model (auto-detected)", auto_model),
+        (below_global_rung_name, auto_model),
     ];
     let layer_configs: Vec<Option<&InferenceConfig>> =
         ordered.iter().map(|(_, config)| *config).collect();
@@ -444,7 +475,17 @@ pub fn resolve_sampling(
     // not an omission; see `agentic_temperature_ceiling` for the experiment
     // that removed it (tune runs #12–#32) and ADR 0004's postscript.
     let auto_detected_rung = ordered.len() - 1;
-    let temperature_is_unchosen = !sources.temperature.is_deliberate_choice(auto_detected_rung);
+    // A measured recipe is the one below-global origin the ceiling defers
+    // to. The tune sweep resolved its candidates against this model's real
+    // context (#748) precisely so the winner transfers to production —
+    // capping the stored winner here would un-measure it on exactly the
+    // turns it was measured for. Only the *model rung* is exempted: a
+    // Measured model whose recipe names no temperature still resolves from
+    // the floor, and the floor stays cappable — nobody measured the floor.
+    let measured_model_rung = matches!(ctx.defaults_origin, Some(DefaultsOrigin::Measured))
+        && sources.temperature == ParamSource::Layer(auto_detected_rung);
+    let temperature_is_unchosen =
+        !sources.temperature.is_deliberate_choice(auto_detected_rung) && !measured_model_rung;
     let applied_ceiling =
         InferenceConfig::agentic_temperature_ceiling(model_is_reasoning).filter(|&ceiling| {
             agentic_turn
@@ -1226,6 +1267,96 @@ mod tests {
                 "{key} is modelled and must not be stripped"
             );
         }
+    }
+
+    // ── Measured defaults (DefaultsOrigin::Measured) ────────────────────────
+
+    /// A tune sweep's winner, with the same shape and tags. Only the origin
+    /// differs from [`auto_detected_ctx`] — which is the point: everything a
+    /// measured recipe does differently hangs off that one field.
+    fn measured_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
+        ModelContext {
+            defaults_origin: Some(DefaultsOrigin::Measured),
+            ..auto_detected_ctx(defaults, reasoning)
+        }
+    }
+
+    /// The ladder's oldest principle holds for measurements too: nothing a
+    /// person chose may be outranked by anything a person did not, and an
+    /// automated apply is not a person.
+    #[test]
+    fn a_measured_recipe_ranks_below_global_settings() {
+        let mut body = json!({});
+        resolve_sampling(
+            &mut body,
+            &measured_ctx(temp(0.9), false),
+            &SamplingLayers {
+                global: Some(temp(0.5)),
+                ..Default::default()
+            },
+        );
+        assert_param(&body, "temperature", 0.5);
+    }
+
+    /// The regression guard this variant exists for. The sweep resolved its
+    /// candidates against the model's real context (#748) so the winner
+    /// transfers to production — a ceiling capping the stored winner would
+    /// un-measure it on exactly the turns it was measured for. The
+    /// auto-detected contrast in the same test pins that the exemption is the
+    /// origin, not a loosening of the ceiling.
+    #[test]
+    fn the_agentic_ceiling_never_caps_a_measured_temperature() {
+        let mut body = tools_body();
+        resolve_sampling(
+            &mut body,
+            &measured_ctx(temp(0.9), false),
+            &agentic_layers(),
+        );
+        assert_param(&body, "temperature", 0.9); // measured: stands
+
+        let mut body = tools_body();
+        resolve_sampling(
+            &mut body,
+            &auto_detected_ctx(temp(0.9), false),
+            &agentic_layers(),
+        );
+        assert_param(&body, "temperature", 0.3); // the same value as a guess: capped
+    }
+
+    /// Only the model rung is exempt. A measured recipe that names no
+    /// temperature resolves it from the floor, and nobody measured the floor.
+    #[test]
+    fn a_measured_model_resolving_temperature_from_the_floor_is_still_capped() {
+        let mut body = tools_body();
+        let recipe = InferenceConfig {
+            top_k: Some(20),
+            ..Default::default()
+        };
+        resolve_sampling(&mut body, &measured_ctx(recipe, false), &agentic_layers());
+        assert_param(&body, "temperature", 0.3); // floor 0.7, capped as ever
+    }
+
+    /// The below-global rung names its occupant, so the debug line and the
+    /// audit's provenance strings stop crediting gglib's guess for a
+    /// measurement — or for a model author's published recipe, which the
+    /// static label was already misnaming.
+    #[test]
+    fn the_below_global_rung_is_named_for_its_origin() {
+        let mut body = json!({});
+        let decision = resolve_sampling(
+            &mut body,
+            &measured_ctx(temp(0.9), false),
+            &SamplingLayers::default(),
+        );
+        assert_eq!(decision.layer_names[5], "model (measured)");
+
+        let mut body = json!({});
+        let ctx = ModelContext {
+            defaults_origin: Some(DefaultsOrigin::Published),
+            ..auto_detected_ctx(temp(0.9), false)
+        };
+        let decision = resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+        assert_eq!(decision.layer_names[5], "model (published)");
     }
 
     // ── Model defaults provenance (Model.defaults_origin) ───────────────────

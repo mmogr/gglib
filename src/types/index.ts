@@ -234,7 +234,7 @@ export interface SamplingExplanation {
  * - `published` — the author's `generation_config.json`, read at import. Ranks
  *   exactly where `autoDetected` does; what differs is the evidence.
  */
-export type DefaultsOriginName = 'user' | 'autoDetected' | 'published';
+export type DefaultsOriginName = 'user' | 'autoDetected' | 'published' | 'measured';
 
 /**
  * What gglib does with one field's published recommendation.
