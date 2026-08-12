@@ -317,6 +317,16 @@ pub struct DashboardSnapshot {
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.
     pub upstream_health: UpstreamHealthSnapshot,
+    /// Per-model defect counts, keyed by the model name requests carry.
+    ///
+    /// The fleet totals above answer "is something wrong"; this answers
+    /// "with which model", which is the only form the answer is actionable
+    /// in — a rate is a claim about a model, not about traffic.
+    ///
+    /// Process-lifetime and reset on restart, deliberately (ADR 0006): a
+    /// defect rate is a claim about *recent* traffic on *this* build.
+    pub per_model_defects:
+        std::collections::HashMap<String, gglib_core::domain::defects::ModelDefectCounts>,
     /// How prompt caching is configured for the running model. `None` until
     /// the first request resolves a model, since the RAM budget isn't known
     /// until something is launched.
@@ -395,6 +405,7 @@ impl DashboardSnapshot {
             tool_repairs_attempted: metrics.tool_repairs_attempted(),
             tool_repairs_succeeded: metrics.tool_repairs_succeeded(),
             upstream_health: upstream_health.snapshot(),
+            per_model_defects: metrics.defect_counts(),
             // Stored config plus live reuse totals — see `CacheStatusCache`.
             cache: cache
                 .get()

@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Cumulative defect counts for one model.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 pub struct ModelDefectCounts {
     /// Requests the proxy forwarded (or would have, but for a guard) for
     /// this model — every rate's denominator.
