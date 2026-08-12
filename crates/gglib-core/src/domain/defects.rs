@@ -64,6 +64,38 @@ pub struct ModelDefectCounts {
     /// Client disconnects are deliberately not in here: hanging up is a
     /// person's action, not a model defect.
     pub stream_errors: u64,
+    /// Turns the model server cut off at the token ceiling
+    /// (`finish_reason == "length"`).
+    ///
+    /// Not a model defect in the same sense as the others — a long answer is
+    /// allowed to be long — but a *rising* rate is how a runaway generation
+    /// looks before anything else notices, and it is the cheapest evidence
+    /// that a context budget is mis-sized.
+    pub truncated_generations: u64,
+    /// Turns that produced nothing a client can render.
+    pub empty_responses: u64,
+    /// Of those, the ones that produced reasoning and nothing else.
+    ///
+    /// Counted inside [`Self::empty_responses`] rather than beside it: the
+    /// turn was empty from the client's point of view either way, and the
+    /// distinction is *why*. A model stranding its whole answer in
+    /// `reasoning_content` is a prompt/template problem; one producing
+    /// nothing at all is not.
+    pub reasoning_only: u64,
+    /// Turns where dialect markup survived normalization into client-visible
+    /// output — the drift alarm, per model rather than fleet-wide.
+    pub dialect_residue: u64,
+    /// Turns whose tool call could not be validated at all, so repair never
+    /// had an opinion to act on.
+    ///
+    /// The blind spot this makes visible: a client whose tools all use
+    /// `anyOf` gets zero repair coverage *and*, until now, zero evidence of
+    /// that fact. A high rate here means the repair rate below it is
+    /// measuring a much smaller slice of traffic than it appears to.
+    pub unvalidatable_schemas: u64,
+    /// Turns whose normalization discarded a malformed dialect tool call and
+    /// surfaced the raw body as visible text instead.
+    pub normalization_errors: u64,
 }
 
 /// Process-lifetime per-model defect counters.
@@ -120,6 +152,40 @@ impl ModelDefectLedger {
         self.with(model, |c| c.stream_errors += 1);
     }
 
+    /// Count one generation cut off at the token ceiling for `model`.
+    pub fn record_truncated_generation(&self, model: &str) {
+        self.with(model, |c| c.truncated_generations += 1);
+    }
+
+    /// Count one turn that produced nothing client-renderable for `model`.
+    ///
+    /// `reasoning_only` says whether the model produced reasoning and nothing
+    /// else. It is counted *within* the empty total, not beside it — the turn
+    /// was empty either way, and this records why.
+    pub fn record_empty_response(&self, model: &str, reasoning_only: bool) {
+        self.with(model, |c| {
+            c.empty_responses += 1;
+            if reasoning_only {
+                c.reasoning_only += 1;
+            }
+        });
+    }
+
+    /// Count one turn where dialect markup reached client-visible output.
+    pub fn record_dialect_residue(&self, model: &str) {
+        self.with(model, |c| c.dialect_residue += 1);
+    }
+
+    /// Count one turn whose tool call could not be validated at all.
+    pub fn record_unvalidatable_schema(&self, model: &str) {
+        self.with(model, |c| c.unvalidatable_schemas += 1);
+    }
+
+    /// Count one turn whose normalization discarded a malformed tool call.
+    pub fn record_normalization_error(&self, model: &str) {
+        self.with(model, |c| c.normalization_errors += 1);
+    }
+
     /// The current counts for every model that has any.
     #[must_use]
     pub fn snapshot(&self) -> HashMap<String, ModelDefectCounts> {
@@ -154,6 +220,24 @@ pub const fn delta(current: ModelDefectCounts, baseline: ModelDefectCounts) -> M
             .repairs_succeeded
             .saturating_sub(baseline.repairs_succeeded),
         stream_errors: current.stream_errors.saturating_sub(baseline.stream_errors),
+        truncated_generations: current
+            .truncated_generations
+            .saturating_sub(baseline.truncated_generations),
+        empty_responses: current
+            .empty_responses
+            .saturating_sub(baseline.empty_responses),
+        reasoning_only: current
+            .reasoning_only
+            .saturating_sub(baseline.reasoning_only),
+        dialect_residue: current
+            .dialect_residue
+            .saturating_sub(baseline.dialect_residue),
+        unvalidatable_schemas: current
+            .unvalidatable_schemas
+            .saturating_sub(baseline.unvalidatable_schemas),
+        normalization_errors: current
+            .normalization_errors
+            .saturating_sub(baseline.normalization_errors),
     }
 }
 
@@ -189,6 +273,67 @@ mod tests {
         let snap = ledger.snapshot()["a"];
         assert_eq!(snap.requests, 1, "the turn was counted when forwarded");
         assert_eq!(snap.stream_errors, 1);
+    }
+
+    /// `reasoning_only` is a subset of `empty_responses`, not a sibling. A
+    /// reader wanting "empty but not reasoning-only" subtracts; one wanting
+    /// the empty rate uses the total without having to add two fields.
+    #[test]
+    fn reasoning_only_turns_are_counted_within_the_empty_total() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_empty_response("a", true);
+        ledger.record_empty_response("a", false);
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.empty_responses, 2, "both turns were empty");
+        assert_eq!(snap.reasoning_only, 1, "one of them had reasoning");
+    }
+
+    /// None of the counted-only instruments touch `requests`. They describe
+    /// turns that were already counted when forwarded, so bumping the
+    /// denominator here would deflate every rate computed from it.
+    #[test]
+    fn counted_only_instruments_leave_the_denominator_alone() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_request("a");
+        ledger.record_truncated_generation("a");
+        ledger.record_empty_response("a", false);
+        ledger.record_dialect_residue("a");
+        ledger.record_unvalidatable_schema("a");
+        ledger.record_normalization_error("a");
+        ledger.record_stream_error("a");
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 1, "one request, however many faults it had");
+        assert_eq!(snap.truncated_generations, 1);
+        assert_eq!(snap.dialect_residue, 1);
+        assert_eq!(snap.unvalidatable_schemas, 1);
+        assert_eq!(snap.normalization_errors, 1);
+    }
+
+    /// Every new field must window like the old ones, or a reader silently
+    /// rates a cumulative total against a windowed denominator.
+    #[test]
+    fn every_counter_windows_against_its_baseline() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_truncated_generation("a");
+        ledger.record_empty_response("a", true);
+        ledger.record_dialect_residue("a");
+        let baseline = ledger.snapshot()["a"];
+
+        ledger.record_truncated_generation("a");
+        ledger.record_empty_response("a", true);
+        ledger.record_dialect_residue("a");
+        ledger.record_unvalidatable_schema("a");
+        ledger.record_normalization_error("a");
+
+        let window = delta(ledger.snapshot()["a"], baseline);
+        assert_eq!(window.truncated_generations, 1);
+        assert_eq!(window.empty_responses, 1);
+        assert_eq!(window.reasoning_only, 1);
+        assert_eq!(window.dialect_residue, 1);
+        assert_eq!(window.unvalidatable_schemas, 1);
+        assert_eq!(window.normalization_errors, 1);
     }
 
     #[test]
