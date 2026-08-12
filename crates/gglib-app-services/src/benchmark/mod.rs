@@ -60,6 +60,10 @@ pub struct BenchmarkDeps {
     /// writes them. The auto-tune scheduler windows these to decide whether
     /// a model has earned a signal-driven sweep.
     pub defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
+    /// Persistence for the scheduler's unacted defect windows. Written and
+    /// read only by the auto-tune scheduler — the daemon is the sole
+    /// process that runs it, so there is exactly one writer.
+    pub defect_windows: Arc<dyn gglib_core::ports::DefectWindowRepositoryPort>,
 }
 
 impl BenchmarkDeps {

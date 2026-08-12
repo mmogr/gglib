@@ -224,6 +224,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Assembly lives in gglib-app-services so this adapter and the Tauri one
     // cannot drift; only genuinely Axum-shaped wiring stays here.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
+    let defect_windows = Arc::new(gglib_db::SqliteDefectWindowRepository::new(pool.clone()));
 
     let AppServices {
         models,
@@ -249,6 +250,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         emitter: sse.clone(),
         server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
+        defect_windows: defect_windows as Arc<dyn gglib_core::ports::DefectWindowRepositoryPort>,
         base_port: Some(config.base_port),
         llama_server_path: config.llama_server_path.clone(),
     })

@@ -37,9 +37,9 @@ use std::sync::Arc;
 
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
-    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, Repos, SystemProbePort,
-    ToolSupportDetectorPort,
+    AppEventEmitter, BenchmarkRepositoryPort, DefectWindowRepositoryPort, DownloadManagerPort,
+    GgufParserPort, HfClientPort, ModelCatalogPort, ModelRepository, ModelRuntimePort, Repos,
+    SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
@@ -84,6 +84,8 @@ pub struct ServiceGraphParams {
     pub server_events: Arc<dyn ServerEvents>,
     /// Benchmark run persistence.
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
+    /// Persistence for the auto-tune scheduler's unacted defect windows.
+    pub defect_windows: Arc<dyn DefectWindowRepositoryPort>,
     /// Adapter-supplied base port for llama-server allocation.
     ///
     /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
@@ -145,6 +147,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         server_events,
         tool_detector,
         bench_repo,
+        defect_windows,
         base_port,
         llama_server_path,
     } = params;
@@ -237,6 +240,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         settings_repo: repos.settings.clone(),
         // The same ledger the proxy writes: one Arc, two ends of the loop.
         defects: proxy_supervisor.defects(),
+        defect_windows,
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {
