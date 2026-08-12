@@ -2,6 +2,7 @@
 pub mod agent;
 pub mod benchmark;
 pub mod chat_history;
+pub mod defect_windows;
 pub mod download;
 pub mod download_event_emitter;
 pub mod download_manager;
@@ -40,6 +41,7 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 // Re-export repository traits for convenience
 pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
+pub use defect_windows::DefectWindowRepositoryPort;
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
 pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};

@@ -13,10 +13,18 @@
 //! per-model baselines and rates the delta, so two readers can window
 //! differently without fighting over a reset button.
 //!
-//! Deliberately not persisted: a defect rate is a claim about recent traffic
-//! on this build of everything, and yesterday's rate answering today's
-//! question is exactly the staleness ADR 0001 warns about. The loop reacts
-//! to what is happening, not to what once happened.
+//! A daemon restart no longer zeroes the evidence: the scheduler persists
+//! its *unacted window* per model and re-seeds the ledger at boot via
+//! [`ModelDefectLedger::seed`] — decayed by wall-clock age, and discarded
+//! outright when it was recorded against a different llama.cpp release.
+//! Decay and build scoping are the two answers to the staleness objection
+//! that originally kept this unpersisted (ADR 0001 via ADR 0005):
+//! yesterday's rate must not answer today's question at full weight, and
+//! another build's rate must not answer it at all. Interpretation still
+//! belongs to readers — this module stores and adds counts; nothing here
+//! decays or judges. The accepted residual: a window held by a long-lived
+//! process does not decay in place, because decay covers only the recorded
+//! gap between runs.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -34,6 +42,22 @@ pub struct ModelDefectCounts {
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.
     pub repairs_succeeded: u64,
+}
+
+/// One persisted unacted window — the counts the scheduler had not yet
+/// acted on, stamped with when they were last true and the llama.cpp
+/// release they were observed against. The stamp is what makes restored
+/// evidence honest: age decays it, a foreign build discards it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedDefectWindow {
+    /// The ledger's key — the model name requests carry, not the catalog id.
+    pub model_name: String,
+    /// The unacted counts at `updated_at`.
+    pub counts: ModelDefectCounts,
+    /// When these counts were last written — the base of the decay gap.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// The llama.cpp release the evidence was observed against.
+    pub llama_build: String,
 }
 
 /// Process-lifetime per-model defect counters.
@@ -66,6 +90,20 @@ impl ModelDefectLedger {
         self.with(model, |c| {
             c.requests += 1;
             c.loop_guard_trips += 1;
+        });
+    }
+
+    /// Seed `model`'s counters with restored evidence.
+    ///
+    /// Saturating adds: seeding is additive, so a proxy that has already
+    /// counted live traffic before the scheduler restores is never zeroed —
+    /// and overflow on counters this small is a bug shield, not a case.
+    pub fn seed(&self, model: &str, counts: ModelDefectCounts) {
+        self.with(model, |c| {
+            c.requests = c.requests.saturating_add(counts.requests);
+            c.loop_guard_trips = c.loop_guard_trips.saturating_add(counts.loop_guard_trips);
+            c.repairs_attempted = c.repairs_attempted.saturating_add(counts.repairs_attempted);
+            c.repairs_succeeded = c.repairs_succeeded.saturating_add(counts.repairs_succeeded);
         });
     }
 
@@ -133,6 +171,51 @@ mod tests {
         assert_eq!(snap["a"].loop_guard_trips, 1);
         assert_eq!(snap["b"].repairs_attempted, 2);
         assert_eq!(snap["b"].repairs_succeeded, 1);
+    }
+
+    /// The restore contract: seeded counts read back through the normal
+    /// snapshot/delta path, and an empty baseline makes the seed the window.
+    #[test]
+    fn seeding_restores_counts_the_reader_windows() {
+        let ledger = ModelDefectLedger::new();
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: 40,
+                loop_guard_trips: 3,
+                repairs_attempted: 2,
+                repairs_succeeded: 1,
+            },
+        );
+        ledger.record_request("a");
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 41);
+        assert_eq!(snap.loop_guard_trips, 3);
+        assert_eq!(snap.repairs_attempted, 2);
+        assert_eq!(snap.repairs_succeeded, 1);
+        // An empty baseline (a fresh scheduler) windows the whole seed.
+        assert_eq!(delta(snap, ModelDefectCounts::default()), snap);
+    }
+
+    #[test]
+    fn seeding_saturates_rather_than_wrapping() {
+        let ledger = ModelDefectLedger::new();
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: u64::MAX,
+                ..ModelDefectCounts::default()
+            },
+        );
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: 5,
+                ..ModelDefectCounts::default()
+            },
+        );
+        assert_eq!(ledger.snapshot()["a"].requests, u64::MAX);
     }
 
     #[test]
