@@ -46,6 +46,7 @@ use gglib_core::domain::benchmark::run::{BenchmarkRun, BenchmarkRunStatus};
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::task::TaskSuite;
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
+use gglib_core::domain::defects::{self, ModelDefectCounts};
 use gglib_core::domain::{DefaultsOrigin, Model};
 
 use super::BenchmarkOps;
@@ -87,6 +88,21 @@ const PREEMPT_POLL: Duration = Duration::from_secs(2);
 /// (a different build, new tasks) or PR 6's signal triggers.
 const RETUNE_INTERVAL: chrono::Duration = chrono::Duration::days(7);
 
+/// The fewest windowed requests before a defect rate means anything.
+///
+/// A rate over a handful of requests is a coin flip wearing a percentage;
+/// fifty is enough that a 5% threshold needs three real events, not one
+/// unlucky turn.
+const MIN_SIGNAL_SAMPLE: u64 = 50;
+
+/// The loop-guard trip rate that earns a model a signal-driven DRY sweep.
+///
+/// The ceiling experiment measured healthy traffic tripping at roughly 2%
+/// per task under deliberately hot sampling; a sustained 5% of *production*
+/// requests is qualitatively different traffic, and DRY is the dimension
+/// built for exactly that failure shape.
+const LOOP_TRIP_RATE_THRESHOLD: f64 = 0.05;
+
 /// How many recent runs the target selector scans for the interval rule.
 /// Generous against the interval: even a daemon tuning one model per idle
 /// window cannot produce 200 tune runs in seven days.
@@ -95,12 +111,17 @@ const RUN_SCAN_LIMIT: i64 = 200;
 /// Drive the scheduler until the daemon shuts down.
 pub async fn run_loop(ops: Arc<BenchmarkOps>, shutdown: CancellationToken) {
     let mut idle_ticks: u32 = 0;
+    // Per-model baselines for the defect windows. The scheduler rates the
+    // delta since its own last look, so acting on a signal advances the
+    // baseline and the same events can never fire twice.
+    let mut baselines: std::collections::HashMap<String, ModelDefectCounts> =
+        std::collections::HashMap::new();
     loop {
         tokio::select! {
             () = shutdown.cancelled() => return,
             () = tokio::time::sleep(tick_interval()) => {}
         }
-        match tick(&ops, &mut idle_ticks, &shutdown).await {
+        match tick(&ops, &mut idle_ticks, &mut baselines, &shutdown).await {
             Ok(()) => {}
             Err(e) => {
                 // The loop must survive anything a tick can throw — a failed
@@ -117,6 +138,7 @@ pub async fn run_loop(ops: Arc<BenchmarkOps>, shutdown: CancellationToken) {
 async fn tick(
     ops: &BenchmarkOps,
     idle_ticks: &mut u32,
+    baselines: &mut std::collections::HashMap<String, ModelDefectCounts>,
     shutdown: &CancellationToken,
 ) -> anyhow::Result<()> {
     let deps = &ops.deps;
@@ -162,6 +184,28 @@ async fn tick(
         .iter()
         .map(|s| i64::from(s.model_id))
         .collect();
+
+    // Signals outrank the untuned queue: a model demonstrably failing in
+    // production is a sharper reason to spend the GPU than one that has
+    // simply never been measured.
+    let ledger = deps.defects.snapshot();
+    let windows = windowed(&ledger, baselines);
+    if let Some((target, signal)) = select_signal_target(&models, &windows, &resident) {
+        info!(
+            model_id = target.id,
+            model = %target.name,
+            signal = %signal,
+            "auto-tune: a production defect rate crossed its threshold — starting a targeted sweep"
+        );
+        // Advance the baseline before running, so the events that earned
+        // this sweep can never earn a second one.
+        let current = ledger.get(&target.name).copied().unwrap_or_default();
+        baselines.insert(target.name.clone(), current);
+        let id = target.id;
+        *idle_ticks = 0;
+        return run_one(ops, id, signal.sweep(), shutdown).await;
+    }
+
     let Some(target) = select_target(&models, &runs, &resident, Utc::now()) else {
         debug!("auto-tune: idle, but nothing eligible to tune");
         // Idle stays banked: eligibility can change (a new model lands, the
@@ -174,24 +218,38 @@ async fn tick(
         "auto-tune: GPU idle past the threshold — starting a gated tune"
     );
     *idle_ticks = 0;
-    run_one(ops, target, shutdown).await
+    run_one(ops, target, SweepSpec::default(), shutdown).await
+}
+
+/// The counts accumulated since the scheduler's last acted-on baseline.
+fn windowed(
+    current: &std::collections::HashMap<String, ModelDefectCounts>,
+    baselines: &std::collections::HashMap<String, ModelDefectCounts>,
+) -> std::collections::HashMap<String, ModelDefectCounts> {
+    current
+        .iter()
+        .map(|(name, counts)| {
+            let baseline = baselines.get(name).copied().unwrap_or_default();
+            (name.clone(), defects::delta(*counts, baseline))
+        })
+        .collect()
 }
 
 /// Run one gated tune, preempting on any queue activity.
 async fn run_one(
     ops: &BenchmarkOps,
     model_id: i64,
+    sweep: SweepSpec,
     shutdown: &CancellationToken,
 ) -> anyhow::Result<()> {
     let config = TuneConfig {
         model_id,
         task_suite: TaskSuite::Default,
-        // No swept dimensions: the run asks only whether the known candidate
-        // recipes — GGUF author defaults, family presets — beat the
-        // incumbent, judged by the calibration pair. Bounded, predictable,
-        // and exactly the question an unattended tuner is entitled to ask.
-        // Signal-driven dimension picks are PR 6's job.
-        sweep: SweepSpec::default(),
+        // The untuned path sweeps nothing — it asks only whether the known
+        // candidate recipes beat the incumbent. A signal-driven run sweeps
+        // the one dimension its signal names, and nothing else: the sweep
+        // is the treatment for a diagnosed failure shape, not a search.
+        sweep,
         seed_from_gguf: true,
         seed_from_family_presets: true,
         weights: ScoreWeights::default(),
@@ -278,6 +336,83 @@ fn summarize(verdict: &gglib_core::domain::benchmark::tune::apply::ApplyVerdict)
             format!("not applied: {unmeasured_runs} run(s) never reached the model")
         }
     }
+}
+
+/// A production failure shape the counters can diagnose, and the one
+/// dimension that treats it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalKind {
+    /// The loop/stagnation guard is rejecting this model's traffic —
+    /// verbatim-sequence repetition, which is the failure DRY exists for.
+    LoopGuard,
+}
+
+impl SignalKind {
+    /// The sweep this signal prescribes. One dimension, off included, so
+    /// the run compares disabled against two strengths and the gate can
+    /// still say "change nothing".
+    #[must_use]
+    pub fn sweep(self) -> SweepSpec {
+        match self {
+            Self::LoopGuard => SweepSpec {
+                dry_multiplier: vec![0.0, 0.4, 0.8],
+                ..SweepSpec::default()
+            },
+        }
+    }
+}
+
+impl std::fmt::Display for SignalKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LoopGuard => write!(f, "loop-guard trip rate"),
+        }
+    }
+}
+
+/// The model whose production defect rate has earned a targeted sweep, with
+/// the signal that earned it.
+///
+/// Signals deliberately bypass two of the untuned path's rules and honour
+/// the others. Bypassed: the untuned-only filter (a measured model failing
+/// in production is *exactly* the re-check case) and the retune interval (a
+/// defect rate is new evidence, not the old question re-asked — and the
+/// baseline advance makes one burst of events good for at most one sweep).
+/// Honoured: a person's defaults are still never touched, and the
+/// warm-model rule still applies — though in practice a model with traffic
+/// enough to signal *is* the resident one, and is tuned in place.
+fn select_signal_target<'m>(
+    models: &'m [Model],
+    windows: &std::collections::HashMap<String, ModelDefectCounts>,
+    resident_ids: &[i64],
+) -> Option<(&'m Model, SignalKind)> {
+    let mut candidates: Vec<(&Model, SignalKind, f64)> = Vec::new();
+    for model in models {
+        if matches!(model.defaults_origin, Some(DefaultsOrigin::User)) {
+            continue;
+        }
+        // The warm-model rule, unchanged: never evict, tune in place.
+        if !resident_ids.is_empty() && !resident_ids.contains(&model.id) {
+            continue;
+        }
+        let Some(window) = windows.get(&model.name) else {
+            continue;
+        };
+        if window.requests < MIN_SIGNAL_SAMPLE {
+            continue;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let trip_rate = window.loop_guard_trips as f64 / window.requests as f64;
+        if trip_rate >= LOOP_TRIP_RATE_THRESHOLD {
+            candidates.push((model, SignalKind::LoopGuard, trip_rate));
+        }
+    }
+    // The worst rate first: one sweep per idle window, spent where the
+    // evidence is loudest.
+    candidates
+        .into_iter()
+        .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(model, signal, _)| (model, signal))
 }
 
 /// Choose the model an idle GPU should spend itself on, or `None`.
@@ -374,6 +509,88 @@ mod tests {
             created_at: Utc::now() - chrono::Duration::days(days_ago),
             completed_at: None,
         }
+    }
+
+    fn window(requests: u64, trips: u64) -> ModelDefectCounts {
+        ModelDefectCounts {
+            requests,
+            loop_guard_trips: trips,
+            ..ModelDefectCounts::default()
+        }
+    }
+
+    fn windows_for(
+        entries: &[(&str, ModelDefectCounts)],
+    ) -> std::collections::HashMap<String, ModelDefectCounts> {
+        entries
+            .iter()
+            .map(|(name, counts)| ((*name).to_owned(), *counts))
+            .collect()
+    }
+
+    /// The headline signal: a sustained trip rate over enough traffic earns
+    /// the sweep — and a measured model is eligible, because production
+    /// failure is exactly the re-check case.
+    #[test]
+    fn a_loud_loop_rate_earns_a_measured_model_a_dry_sweep() {
+        let models = vec![model(1, Some(DefaultsOrigin::Measured), 10)];
+        // model() names them m{id}; 100 requests, 8 trips = 8%.
+        let windows = windows_for(&[("m1", window(100, 8))]);
+        let (target, signal) = select_signal_target(&models, &windows, &[]).expect("signal fires");
+        assert_eq!(target.id, 1);
+        assert_eq!(signal, SignalKind::LoopGuard);
+        assert_eq!(signal.sweep().dry_multiplier, vec![0.0, 0.4, 0.8]);
+    }
+
+    /// A rate over a handful of requests is a coin flip wearing a
+    /// percentage: below the sample floor nothing fires, however loud.
+    #[test]
+    fn a_thin_sample_never_signals() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 10)];
+        let windows = windows_for(&[("m1", window(10, 5))]); // 50%!
+        assert!(select_signal_target(&models, &windows, &[]).is_none());
+    }
+
+    /// Below the rate threshold, healthy-ish traffic is left alone.
+    #[test]
+    fn a_quiet_rate_never_signals() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 10)];
+        let windows = windows_for(&[("m1", window(200, 4))]); // 2%
+        assert!(select_signal_target(&models, &windows, &[]).is_none());
+    }
+
+    /// The two rules signals do NOT bypass: a person's defaults, and the
+    /// warm model.
+    #[test]
+    fn signals_honour_the_person_and_the_warm_model() {
+        let user = vec![model(1, Some(DefaultsOrigin::User), 10)];
+        let windows = windows_for(&[("m1", window(100, 20))]);
+        assert!(select_signal_target(&user, &windows, &[]).is_none());
+
+        // Model 1 signals, but model 2 is resident: no eviction, no run.
+        let models = vec![
+            model(1, Some(DefaultsOrigin::AutoDetected), 10),
+            model(2, Some(DefaultsOrigin::Measured), 5),
+        ];
+        assert!(select_signal_target(&models, &windows, &[2]).is_none());
+        // The signalling model resident itself: tuned in place.
+        let hit = select_signal_target(&models, &windows, &[1]);
+        assert_eq!(hit.map(|(m, _)| m.id), Some(1));
+    }
+
+    /// One sweep per window, spent where the evidence is loudest.
+    #[test]
+    fn the_worst_rate_wins_the_window() {
+        let models = vec![
+            model(1, Some(DefaultsOrigin::AutoDetected), 10),
+            model(2, Some(DefaultsOrigin::AutoDetected), 5),
+        ];
+        let windows = windows_for(&[
+            ("m1", window(100, 6)),  // 6%
+            ("m2", window(100, 12)), // 12%
+        ]);
+        let hit = select_signal_target(&models, &windows, &[]);
+        assert_eq!(hit.map(|(m, _)| m.id), Some(2));
     }
 
     #[test]
