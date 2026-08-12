@@ -178,8 +178,8 @@ mod live_shape_probe {
             ..ModelContext::passthrough()
         };
         let layers = SamplingLayers::default();
-        let report = apply(&mut body, &ctx, &layers, None, PipelinePass::Initial)
-            .expect("pipeline applies");
+        let report =
+            apply(&mut body, &ctx, &layers, None, PipelinePass::Initial).expect("pipeline applies");
         assert!(report.sampling.applied);
 
         let obj = body.as_object().unwrap();
