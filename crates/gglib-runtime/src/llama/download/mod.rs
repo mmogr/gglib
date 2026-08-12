@@ -139,6 +139,33 @@ fn resolve_release_selector() -> ReleaseSelector {
     selector_from_override(&std::env::var(LLAMA_RELEASE_ENV).unwrap_or_default())
 }
 
+/// The release scope an observation about llama.cpp behaviour belongs to:
+/// the pin, an override tag verbatim, or the literal `latest` — an operator
+/// floating with upstream gets a scope that is honest about being unstable.
+///
+/// Single-sourced from the same policy the installer uses, so "what gglib
+/// would install" and "what evidence is scoped to" cannot drift. Known
+/// imprecision, accepted: a user pointing gglib at a custom llama-server
+/// binary still gets the pin's scope — conservative in the direction of
+/// discarding evidence on a pin bump rather than trusting it across one.
+#[cfg(feature = "prebuilt")]
+#[must_use]
+pub fn effective_llama_release() -> String {
+    release_scope(resolve_release_selector())
+}
+
+/// The scope string one selector renders to. Split from
+/// [`effective_llama_release`] for the same reason `selector_from_override`
+/// is split from its env read: testable without mutating process
+/// environment.
+#[cfg(feature = "prebuilt")]
+fn release_scope(selector: ReleaseSelector) -> String {
+    match selector {
+        ReleaseSelector::Tag(tag) => tag,
+        ReleaseSelector::Latest => "latest".to_owned(),
+    }
+}
+
 /// GitHub API response for a release
 #[cfg(feature = "prebuilt")]
 #[derive(Debug, Deserialize)]
@@ -1069,6 +1096,20 @@ mod tests {
             selector_from_override(" b10500 "),
             ReleaseSelector::Tag("b10500".to_owned())
         );
+    }
+
+    /// The evidence-scope string mirrors the selector policy exactly: the
+    /// pin when unset, a tag verbatim, the literal `latest` when floating.
+    /// Exercised through the selector (not the env) so it runs in parallel.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn effective_release_reports_the_pin_the_override_or_latest() {
+        assert_eq!(
+            release_scope(selector_from_override("")),
+            PINNED_LLAMA_RELEASE
+        );
+        assert_eq!(release_scope(selector_from_override("b10500")), "b10500");
+        assert_eq!(release_scope(selector_from_override("latest")), "latest");
     }
 
     /// The two selectors must hit different GitHub endpoints — a tag resolved

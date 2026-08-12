@@ -89,4 +89,5 @@ pub use download::{
     LlamaProgressCallback, LlamaProgressCallbackBoxed, PrebuiltAvailability,
     check_prebuilt_availability, download_prebuilt_binaries,
     download_prebuilt_binaries_with_boxed_callback, download_prebuilt_binaries_with_callback,
+    effective_llama_release,
 };
