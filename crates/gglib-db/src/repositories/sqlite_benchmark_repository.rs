@@ -456,7 +456,7 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
     ) -> Result<Vec<BenchmarkRun>, RepositoryError> {
         let rows = sqlx::query(
             "SELECT id, run_type, status, model_ids, prompt_text, system_prompt,
-                    config_json, error, created_at, completed_at
+                    config_json, applied_json, error, created_at, completed_at
              FROM benchmark_runs
              ORDER BY created_at DESC
              LIMIT ? OFFSET ?",
@@ -473,7 +473,7 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
     async fn get_run(&self, run_id: i64) -> Result<Option<BenchmarkRun>, RepositoryError> {
         let row = sqlx::query(
             "SELECT id, run_type, status, model_ids, prompt_text, system_prompt,
-                    config_json, error, created_at, completed_at
+                    config_json, applied_json, error, created_at, completed_at
              FROM benchmark_runs WHERE id = ?",
         )
         .bind(run_id)
@@ -775,6 +775,37 @@ mod tests {
         .await
         .expect("seed model");
         SqliteBenchmarkRepository::new(pool)
+    }
+
+    /// The apply record must survive both read paths. The row mapper reads
+    /// `applied_json` with a forgiving `try_get(..).ok()`, so a SELECT that
+    /// omits the column does not error — it silently reads back `None`, and
+    /// every Outcome surface renders an em-dash. This is the regression
+    /// test that makes that omission loud.
+    #[tokio::test]
+    async fn applied_json_survives_both_read_paths() {
+        let repo = repo().await;
+        let run_id = repo
+            .create_run(BenchmarkRunType::Tune, &[1], None, None, None)
+            .await
+            .expect("create run");
+        repo.mark_run_applied(run_id, r#"{"verdict":{"verdict":"uncalibrated"}}"#)
+            .await
+            .expect("mark applied");
+
+        let listed = repo.list_runs(10, 0).await.expect("list");
+        assert_eq!(
+            listed[0].applied_json.as_deref(),
+            Some(r#"{"verdict":{"verdict":"uncalibrated"}}"#),
+            "list_runs must select applied_json — the activity surfaces read it from here"
+        );
+
+        let fetched = repo.get_run(run_id).await.expect("get").expect("exists");
+        assert_eq!(
+            fetched.applied_json.as_deref(),
+            Some(r#"{"verdict":{"verdict":"uncalibrated"}}"#),
+            "get_run must select applied_json — the revert path reads it from here"
+        );
     }
 
     /// The report is stored whole, so every field a leaderboard reads back —
