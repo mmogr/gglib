@@ -270,6 +270,20 @@ fn finalize_tool_call(
             }
         }
     }
+    // Last resort before giving the turn up: repair the packaging locally.
+    //
+    // A body arriving inside a code fence, trailed by prose, or carrying a
+    // trailing comma is a *right* payload in wrong wrapping. Costs
+    // microseconds and no model call, and returns `None` on anything it
+    // cannot repair honestly — so the turn either improves or is unchanged.
+    if codecs.contains(&BodyCodec::Json)
+        && let Some(repaired) = crate::normalize::coerce::coerce_json_object(trimmed)
+        && let Some(call) = parse_json_body(&repaired, &mut mint_id)
+    {
+        out.tool_calls.push(call);
+        return;
+    }
+
     let error = if codecs.contains(&BodyCodec::FunctionXml) && trimmed.starts_with("<function=") {
         NormalizationError::malformed_function_xml(body.to_owned())
     } else {
@@ -429,6 +443,7 @@ fn partial_suffix_len(buf: &[u8], marker: &[u8]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::normalize::NormalizationErrorKind;
     use serde_json::json;
 
     /// A parser wired with the built-in Qwen spec — the configuration every
@@ -452,6 +467,63 @@ mod tests {
         total.tool_calls.extend(f.tool_calls);
         total.errors.extend(f.errors);
         total
+    }
+
+    /// The rescue, end to end through the parser: a body the JSON codec
+    /// rejects outright still becomes a tool call, with its arguments intact.
+    #[test]
+    fn a_fenced_tool_call_body_is_repaired_instead_of_discarded() {
+        let mut p = qwen();
+        let out = collect(
+            &mut p,
+            &[
+                "<tool_call>\n```json\n",
+                r#"{"name":"read_file","arguments":{"path":"a"}}"#,
+                "\n```\n</tool_call>",
+            ],
+        );
+        assert!(
+            out.errors.is_empty(),
+            "the turn should no longer be given up: {:?}",
+            out.errors
+        );
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].name, "read_file");
+        assert_eq!(out.tool_calls[0].arguments, json!({"path": "a"}));
+    }
+
+    /// Fail-open: a body that cannot be repaired honestly still produces
+    /// exactly the error it always did, so nothing regresses.
+    #[test]
+    fn an_unrepairable_body_still_reports_the_original_error() {
+        let mut p = qwen();
+        let out = collect(&mut p, &["<tool_call>", "not json at all", "</tool_call>"]);
+        assert!(out.tool_calls.is_empty());
+        assert_eq!(out.errors.len(), 1);
+        assert!(matches!(
+            out.errors[0].kind,
+            NormalizationErrorKind::MalformedToolCallJson { .. }
+        ));
+    }
+
+    /// A call truncated mid-string is *not* rescued — closing the quote would
+    /// dispatch a call reading the wrong path. See `normalize::coerce`.
+    #[test]
+    fn a_call_truncated_mid_string_is_not_invented() {
+        let mut p = qwen();
+        let out = collect(
+            &mut p,
+            &[
+                "<tool_call>",
+                r#"{"name":"read_file","arguments":{"path":"/etc/ho"#,
+                "</tool_call>",
+            ],
+        );
+        assert!(
+            out.tool_calls.is_empty(),
+            "a truncated argument must never become a dispatched call"
+        );
+        assert_eq!(out.errors.len(), 1);
     }
 
     #[test]

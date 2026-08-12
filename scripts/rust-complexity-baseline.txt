@@ -70,7 +70,7 @@ crates/gglib-core/src/download/rate.rs 378
 crates/gglib-core/src/download/types.rs 751
 crates/gglib-core/src/events/mod.rs 306
 crates/gglib-core/src/events/server.rs 305
-crates/gglib-core/src/normalize/parsers/delimited.rs 913
+crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 651
 crates/gglib-core/src/ports/model_runtime.rs 817
 crates/gglib-core/src/ports/process_runner.rs 329
