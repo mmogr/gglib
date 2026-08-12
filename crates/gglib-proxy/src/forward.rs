@@ -279,6 +279,33 @@ const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output f
 /// that queue forms in the runtime rather than inside the upstream.
 pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 
+/// How long a repair re-issue may take before it is abandoned.
+///
+/// The proxy's own client is deliberately built with **no** request timeout —
+/// a 36k-token prompt can need minutes of prefill before its first token, and
+/// a global timeout would kill legitimate work. That is right for the client's
+/// own turn and wrong here, because a re-issue happens *while the client is
+/// receiving nothing*: the frames it would have shown are being withheld, the
+/// keepalive that guarded the wait for a slot has already stopped, and the
+/// drain loop has no timer of its own.
+///
+/// So this is the one bound that keeps an unresponsive upstream from turning a
+/// repair into an unbounded silence. Comfortably under
+/// [`FIRST_BYTE_DEADLINE_SECS`], because a re-issue is a *constrained* call —
+/// `tool_choice: "required"` and non-streaming — not a fresh full turn. On
+/// expiry the turn falls open to the original frames, exactly as every other
+/// repair failure path already does.
+const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How often to push an SSE comment while a re-issue is in flight.
+///
+/// Invisible to clients — `parse_sse_frames` and every conforming SSE reader
+/// skip lines that are not `data:` — but enough to stop an idle proxy, load
+/// balancer or editor from concluding the connection died. Without it the
+/// client sees zero bytes for the whole re-issue, since tool-call frames are
+/// withheld from the moment they arrive.
+const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// Force-insert the streaming-only overrides every forwarded chat-completion
 /// request needs, regardless of what the client sent.
 ///
@@ -1050,6 +1077,7 @@ pub(crate) async fn stream_response_to_channel(
                             std::mem::take(&mut held_tool_frames),
                             &encoder,
                             &mut outcome,
+                            &tx,
                         )
                         .await;
                         if !emit_held_frames(&tx, &mut flush).await {
@@ -1171,6 +1199,40 @@ pub(crate) async fn stream_response_to_channel(
     outcome
 }
 
+/// Issue the repair request, pushing SSE comments while it is in flight.
+///
+/// The whole point is that the client is receiving *nothing* during this
+/// window: its tool-call frames are withheld pending the outcome, the
+/// slot-wait keepalive has already stopped, and the drain loop that called us
+/// has no timer. A comment every [`REPAIR_KEEPALIVE_INTERVAL`] keeps the
+/// connection observably alive without showing the client anything.
+///
+/// Returns `None` if the client disconnected mid-flight — there is then no
+/// one left to repair for, and the caller falls open to the original frames.
+async fn send_reissue_keeping_the_wire_warm(
+    builder: reqwest::RequestBuilder,
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) -> Option<reqwest::Result<reqwest::Response>> {
+    let send = builder.timeout(REPAIR_REISSUE_TIMEOUT).send();
+    tokio::pin!(send);
+
+    let mut ticker = tokio::time::interval(REPAIR_KEEPALIVE_INTERVAL);
+    // The first tick resolves immediately; consume it so the first comment is
+    // one interval away rather than instant.
+    ticker.tick().await;
+
+    loop {
+        tokio::select! {
+            result = &mut send => return Some(result),
+            _ = ticker.tick() => {
+                if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
+                    return None;
+                }
+            }
+        }
+    }
+}
+
 /// Send withheld tool-call frames to the client verbatim, in order.
 ///
 /// Empties `held`, so a later flush cannot emit the same frames twice —
@@ -1201,6 +1263,7 @@ async fn resolve_held_tool_calls(
     original_frames: Vec<Bytes>,
     encoder: &SseEncoder,
     outcome: &mut StreamOutcome,
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
 ) -> Vec<Bytes> {
     let Some(ctx) = repair else {
         return original_frames;
@@ -1240,19 +1303,22 @@ async fn resolve_held_tool_calls(
     let Some(builder) = ctx.req_builder.try_clone() else {
         return original_frames;
     };
-    let repaired = match builder.body(body).send().await {
-        Ok(resp) if resp.status().is_success() => resp.bytes().await.ok(),
-        Ok(resp) => {
+    let sent = send_reissue_keeping_the_wire_warm(builder.body(body), tx).await;
+    let repaired = match sent {
+        Some(Ok(resp)) if resp.status().is_success() => resp.bytes().await.ok(),
+        Some(Ok(resp)) => {
             warn!(
                 status = resp.status().as_u16(),
                 "repair re-issue rejected upstream"
             );
             None
         }
-        Err(e) => {
+        Some(Err(e)) => {
             warn!(error = %e, "repair re-issue failed");
             None
         }
+        // The client went away while we were re-issuing on its behalf.
+        None => return original_frames,
     };
     let Some(repaired) = repaired else {
         return original_frames;
@@ -1931,6 +1997,26 @@ mod tests {
         assert!(
             wire.trim_end().ends_with("data: [DONE]"),
             "[DONE] must be the final frame: {wire}"
+        );
+    }
+
+    /// The bound exists so a hung upstream cannot turn a repair into an
+    /// unbounded silence for the client.
+    ///
+    /// Asserted as a relationship rather than a literal: what matters is that
+    /// a re-issue is capped *well inside* the first-byte deadline, since a
+    /// constrained non-streaming call has no business taking as long as a
+    /// fresh full turn, and that the client hears something long before the
+    /// cap is reached.
+    #[test]
+    fn a_reissue_is_bounded_and_kept_warm_well_inside_the_first_byte_deadline() {
+        assert!(
+            REPAIR_REISSUE_TIMEOUT < std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
+            "a constrained re-issue must not be allowed to outlast a full turn's deadline"
+        );
+        assert!(
+            REPAIR_KEEPALIVE_INTERVAL * 2 < REPAIR_REISSUE_TIMEOUT,
+            "the client must hear from us several times before the re-issue gives up"
         );
     }
 
