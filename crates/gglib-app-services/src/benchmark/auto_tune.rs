@@ -22,9 +22,11 @@
 //!   fully cold GPU tunes from the catalog at large.
 //! - **A person's work is never the target.** User-set defaults are
 //!   excluded outright — the same principle that ranks `Measured` below
-//!   global settings — and measured models are excluded because re-checks
-//!   are a deliberately deferred decision (PR 6's signal triggers), not a
-//!   timer's.
+//!   global settings — and measured models are excluded from the idle
+//!   queue because re-checks belong to the signal triggers: a production
+//!   defect rate past its threshold (a loop-trip rate → a DRY sweep, a
+//!   tool-call repair rate → a temperature sweep) is the one thing that
+//!   reopens a measured recipe, not a timer.
 //! - **Any real request preempts.** While a run is in flight the scheduler
 //!   watches the admission queue; the moment anything is waiting, the run
 //!   is cancelled and the GPU handed over. The next attempt starts from a
@@ -85,7 +87,7 @@ const PREEMPT_POLL: Duration = Duration::from_secs(2);
 
 /// The least time between tune attempts on one model, however they ended.
 /// A refusal is an answer; the next question should wait for new evidence
-/// (a different build, new tasks) or PR 6's signal triggers.
+/// (a different build, new tasks) or the signal triggers.
 const RETUNE_INTERVAL: chrono::Duration = chrono::Duration::days(7);
 
 /// The fewest windowed requests before a defect rate means anything.
@@ -102,6 +104,21 @@ const MIN_SIGNAL_SAMPLE: u64 = 50;
 /// requests is qualitatively different traffic, and DRY is the dimension
 /// built for exactly that failure shape.
 const LOOP_TRIP_RATE_THRESHOLD: f64 = 0.05;
+
+/// The tool-call repair attempt rate that earns a model a signal-driven
+/// temperature sweep.
+///
+/// A repair attempt means the model emitted a tool call that failed schema
+/// validation and had to be re-issued with `tool_choice: "required"` — the
+/// defect being diagnosed is the malformed call, not whether the repair
+/// then succeeded. The observed rate *undercounts*: attempts are flagged
+/// on the streaming path only, and the per-model ledger write is skipped
+/// when the request's snapshot has already left the metrics ring buffer
+/// (`ContextMetricsStore::flag_tool_repair`), so busy traffic loses
+/// events while `requests` counts everything. The bias is fail-safe — a
+/// window that crosses this threshold understates the true rate, so the
+/// signal fires late, never spuriously.
+const REPAIR_RATE_THRESHOLD: f64 = 0.05;
 
 /// How many recent runs the target selector scans for the interval rule.
 /// Generous against the interval: even a daemon tuning one model per idle
@@ -347,6 +364,12 @@ pub enum SignalKind {
     /// The loop/stagnation guard is rejecting this model's traffic —
     /// verbatim-sequence repetition, which is the failure DRY exists for.
     LoopGuard,
+    /// The tool-call repair loop keeps re-issuing this model's calls —
+    /// schema non-conformance from an unconstrained `tool_choice: "auto"`
+    /// path, which is the failure shape a colder temperature treats. See
+    /// [`REPAIR_RATE_THRESHOLD`] for why the measured rate understates
+    /// the true one.
+    RepairRate,
 }
 
 impl SignalKind {
@@ -356,17 +379,34 @@ impl SignalKind {
     pub const fn initiator(self) -> &'static str {
         match self {
             Self::LoopGuard => "signal:loop-guard",
+            Self::RepairRate => "signal:repair-rate",
         }
     }
 
-    /// The sweep this signal prescribes. One dimension, off included, so
-    /// the run compares disabled against two strengths and the gate can
-    /// still say "change nothing".
+    /// The sweep this signal prescribes. One dimension only: the sweep is
+    /// the treatment for a diagnosed failure shape, not a search, and the
+    /// incumbent pair on every run keeps "change nothing" on the table —
+    /// DRY includes its own off switch (0.0), temperature's baseline is
+    /// whatever the incumbent resolves today.
+    ///
+    /// A temperature candidate is a whole recipe, not a delta: naming
+    /// `temperature` claims the temperature-coupled set under
+    /// `resolve_layers`, so its companions resolve to llama.cpp's neutral
+    /// defaults rather than the incumbent's — which is exactly how an
+    /// applied temperature-only `Measured` recipe resolves in production.
+    /// What the sweep measures is what an apply would ship. Swept values
+    /// are never ceiling-clamped: candidates enter the eval as the
+    /// trusted top layer, and a stored winner's model rung is
+    /// ceiling-exempt (#748).
     #[must_use]
     pub fn sweep(self) -> SweepSpec {
         match self {
             Self::LoopGuard => SweepSpec {
                 dry_multiplier: vec![0.0, 0.4, 0.8],
+                ..SweepSpec::default()
+            },
+            Self::RepairRate => SweepSpec {
+                temperature: vec![0.2, 0.5, 0.8],
                 ..SweepSpec::default()
             },
         }
@@ -377,7 +417,33 @@ impl std::fmt::Display for SignalKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LoopGuard => write!(f, "loop-guard trip rate"),
+            Self::RepairRate => write!(f, "tool-call repair rate"),
         }
+    }
+}
+
+/// The strongest signal one model's window raises, with its severity —
+/// the rate as a multiple of its threshold, so signals with different
+/// thresholds compare on how far past alarm they are rather than on raw
+/// percentages. A dead heat prefers the loop guard: verbatim repetition
+/// is the sharper failure, and the ordering must not depend on iteration
+/// accidents (`max_by` keeps the *last* maximum, so push order cannot be
+/// the tie-break). The caller has already enforced [`MIN_SIGNAL_SAMPLE`],
+/// so the denominator is never zero.
+fn worst_signal(window: &ModelDefectCounts) -> Option<(SignalKind, f64)> {
+    #[allow(clippy::cast_precision_loss)]
+    let requests = window.requests as f64;
+    #[allow(clippy::cast_precision_loss)]
+    let loop_severity = (window.loop_guard_trips as f64 / requests) / LOOP_TRIP_RATE_THRESHOLD;
+    #[allow(clippy::cast_precision_loss)]
+    let repair_severity = (window.repairs_attempted as f64 / requests) / REPAIR_RATE_THRESHOLD;
+    if loop_severity < 1.0 && repair_severity < 1.0 {
+        return None;
+    }
+    if loop_severity >= repair_severity {
+        Some((SignalKind::LoopGuard, loop_severity))
+    } else {
+        Some((SignalKind::RepairRate, repair_severity))
     }
 }
 
@@ -392,6 +458,11 @@ impl std::fmt::Display for SignalKind {
 /// Honoured: a person's defaults are still never touched, and the
 /// warm-model rule still applies — though in practice a model with traffic
 /// enough to signal *is* the resident one, and is tuned in place.
+///
+/// Each model contributes its own worst signal ([`worst_signal`]), and
+/// models compete on severity — the rate as a multiple of its threshold —
+/// so a 12% repair rate outranks a 6% trip rate not because the
+/// percentage is bigger but because it is further past its alarm.
 fn select_signal_target<'m>(
     models: &'m [Model],
     windows: &std::collections::HashMap<String, ModelDefectCounts>,
@@ -412,14 +483,12 @@ fn select_signal_target<'m>(
         if window.requests < MIN_SIGNAL_SAMPLE {
             continue;
         }
-        #[allow(clippy::cast_precision_loss)]
-        let trip_rate = window.loop_guard_trips as f64 / window.requests as f64;
-        if trip_rate >= LOOP_TRIP_RATE_THRESHOLD {
-            candidates.push((model, SignalKind::LoopGuard, trip_rate));
+        if let Some((signal, severity)) = worst_signal(window) {
+            candidates.push((model, signal, severity));
         }
     }
-    // The worst rate first: one sweep per idle window, spent where the
-    // evidence is loudest.
+    // The worst severity first: one sweep per idle window, spent where the
+    // evidence is furthest past its threshold.
     candidates
         .into_iter()
         .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
@@ -530,6 +599,14 @@ mod tests {
         }
     }
 
+    fn repair_window(requests: u64, attempts: u64) -> ModelDefectCounts {
+        ModelDefectCounts {
+            requests,
+            repairs_attempted: attempts,
+            ..ModelDefectCounts::default()
+        }
+    }
+
     fn windows_for(
         entries: &[(&str, ModelDefectCounts)],
     ) -> std::collections::HashMap<String, ModelDefectCounts> {
@@ -551,6 +628,91 @@ mod tests {
         assert_eq!(target.id, 1);
         assert_eq!(signal, SignalKind::LoopGuard);
         assert_eq!(signal.sweep().dry_multiplier, vec![0.0, 0.4, 0.8]);
+    }
+
+    /// The repair-rate twin of the headline: a sustained repair attempt
+    /// rate over enough traffic earns the temperature sweep — one
+    /// dimension, no DRY riding along.
+    #[test]
+    fn a_loud_repair_rate_earns_a_temperature_sweep() {
+        let models = vec![model(1, Some(DefaultsOrigin::Measured), 10)];
+        let windows = windows_for(&[("m1", repair_window(100, 8))]); // 8%
+        let (target, signal) = select_signal_target(&models, &windows, &[]).expect("signal fires");
+        assert_eq!(target.id, 1);
+        assert_eq!(signal, SignalKind::RepairRate);
+        assert_eq!(signal.initiator(), "signal:repair-rate");
+        assert_eq!(signal.sweep().temperature, vec![0.2, 0.5, 0.8]);
+        assert!(signal.sweep().dry_multiplier.is_empty());
+    }
+
+    /// The sample floor guards the repair rate exactly as it guards the
+    /// trip rate: 50% of ten requests is still a coin flip.
+    #[test]
+    fn a_thin_repair_sample_never_signals() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 10)];
+        let windows = windows_for(&[("m1", repair_window(10, 5))]);
+        assert!(select_signal_target(&models, &windows, &[]).is_none());
+    }
+
+    /// An occasional repair is the mechanism working, not a defect rate
+    /// worth spending the GPU on.
+    #[test]
+    fn a_quiet_repair_rate_never_signals() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 10)];
+        let windows = windows_for(&[("m1", repair_window(200, 4))]); // 2%
+        assert!(select_signal_target(&models, &windows, &[]).is_none());
+    }
+
+    /// Across models and kinds, severity — the rate over its threshold —
+    /// decides: a 12% repair rate (2.4× alarm) outranks a 6% trip rate
+    /// (1.2× alarm).
+    #[test]
+    fn the_louder_signal_wins_across_kinds() {
+        let models = vec![
+            model(1, Some(DefaultsOrigin::AutoDetected), 10),
+            model(2, Some(DefaultsOrigin::AutoDetected), 5),
+        ];
+        let windows = windows_for(&[
+            ("m1", window(100, 6)),         // trip severity 1.2
+            ("m2", repair_window(100, 12)), // repair severity 2.4
+        ]);
+        let hit = select_signal_target(&models, &windows, &[]);
+        assert_eq!(
+            hit.map(|(m, s)| (m.id, s)),
+            Some((2, SignalKind::RepairRate))
+        );
+    }
+
+    /// One model raising both signals gets one sweep, for its worst one:
+    /// the sweep is a treatment, and the sharper diagnosis names it.
+    #[test]
+    fn one_models_worst_defect_names_the_sweep() {
+        let models = vec![model(1, Some(DefaultsOrigin::AutoDetected), 10)];
+        let both = ModelDefectCounts {
+            requests: 100,
+            loop_guard_trips: 6,   // severity 1.2
+            repairs_attempted: 15, // severity 3.0
+            ..ModelDefectCounts::default()
+        };
+        let windows = windows_for(&[("m1", both)]);
+        let hit = select_signal_target(&models, &windows, &[]);
+        assert_eq!(hit.map(|(_, s)| s), Some(SignalKind::RepairRate));
+    }
+
+    /// A dead heat prefers the loop guard — deterministically, not by
+    /// iteration accident.
+    #[test]
+    fn a_dead_heat_prefers_the_loop_guard() {
+        let both = ModelDefectCounts {
+            requests: 100,
+            loop_guard_trips: 5,  // severity 1.0
+            repairs_attempted: 5, // severity 1.0
+            ..ModelDefectCounts::default()
+        };
+        assert_eq!(
+            worst_signal(&both).map(|(s, _)| s),
+            Some(SignalKind::LoopGuard)
+        );
     }
 
     /// A rate over a handful of requests is a coin flip wearing a

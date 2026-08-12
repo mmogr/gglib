@@ -53,10 +53,13 @@ the next real request a cold prefill is a price an idle-time nicety may
 not charge; **a person's work is never the target**; any waiting request
 preempts the run outright; and one attempt per model per seven days,
 because a refusal is an answer and answers do not expire in an afternoon.
-Signal-driven runs (a loop-trip rate ≥ 5% over ≥ 50 windowed requests →
-a DRY sweep) bypass exactly two rules — the untuned-only filter and the
-interval, both because a production defect is *new evidence* — and honour
-the rest.
+Signal-driven runs (a loop-trip rate ≥ 5% → a DRY sweep; a tool-call
+repair rate ≥ 5% → a temperature sweep, each over ≥ 50 windowed requests
+— the repair signal added 2026-08-12, consuming the counter this ADR
+noted was already flowing) bypass exactly two rules — the untuned-only
+filter and the interval, both because a production defect is *new
+evidence* — and honour the rest. When one model raises both, severity
+(the rate as a multiple of its threshold) picks the sweep.
 
 **The `Measured` defaults origin** is where an applied winner lives: below
 global settings, like `AutoDetected` and `Published`, on the ladder's
@@ -128,7 +131,10 @@ of the evidence. The repair loop's economics justify the choice: it costs
 one extra generation on a failed call and nothing on a conformant one
 (ADR 0002 finding 6, verified live), and the #786 ledger already counts
 per-model repair rates — so if this decision is ever reopened, the signal
-the feature would consume is already flowing.
+the feature would consume is already flowing. (2026-08-12: that signal
+now additionally drives the scheduler's repair-rate temperature sweep —
+a sampling treatment for the same failure shape. The grammar decision
+itself stays parked; the reopening criterion below is unchanged.)
 
 **What would reopen it:** upstream guarding those three fields the way
 `grammar` already is guarded, arriving through an ordinary pin bump — at

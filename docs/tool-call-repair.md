@@ -223,6 +223,13 @@ which is precisely the per-model grammar-presence data ADR 0002 lists as a
 follow-up and which nothing can currently query at runtime. The repair counter
 is how that gets measured in production rather than in a `--verbose` log.
 
+Since 2026-08-12 the counter is also *acted on*: a per-model repair attempt
+rate ≥ 5% over ≥ 50 windowed requests raises the auto-tune scheduler's
+repair-rate signal, which (when `auto_tune` is on) runs a gated temperature
+sweep against the model — the sampling treatment for the failure the parked
+grammar feature would have prevented. See ADR 0005 and
+`benchmark::auto_tune`.
+
 ## Testing
 
 - Validator: table-driven over schema/arguments pairs, one case per constraint

@@ -716,7 +716,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `cache` | `object \| null` | Prompt-cache configuration for the running model; `null` until the first request resolves one |
 | `agent_usage` | `object` | Prompt-cache reuse for the in-process agent path (GUI chat), reported separately from `cache.usage` — see below |
 | `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
-| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued with `tool_choice: "required"`, counted whether or not the re-issue worked |
+| `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued with `tool_choice: "required"`, counted whether or not the re-issue worked. The per-model attempt rate is actionable: at ≥ 5% over ≥ 50 windowed requests it raises the auto-tune scheduler's repair-rate signal (a gated temperature sweep, when `auto_tune` is on) |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 
 #### `cache` (`CacheStatus`)
