@@ -160,16 +160,6 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // `gglib_core::domain::DialectSpec`). No backfill: rows without a spec
     // fall back to their `format:*` tag at context-resolution time, and
     // `gglib model retag` re-derives the spec from persisted metadata.
-    // Migration: add applied_json to benchmark_runs — the JSON-serialized
-    // apply record (`tune::apply::ApplyRecord`) written when a tune run's
-    // winner is stored as a model's Measured defaults, so the provenance a
-    // model reports can always be traced back to the gate numbers that
-    // licensed it. NULL on every run that was never applied.
-    let _ = sqlx::query(r#"ALTER TABLE benchmark_runs ADD COLUMN applied_json TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
-
     let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN dialect_spec TEXT"#)
         .execute(pool)
         .await;
@@ -391,6 +381,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             prompt_text  TEXT,
             system_prompt TEXT,
             config_json  TEXT,
+            applied_json TEXT,
             error        TEXT,
             created_at   TEXT    NOT NULL,
             completed_at TEXT
@@ -398,6 +389,22 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration: add applied_json to benchmark_runs — the JSON-serialized
+    // apply record (`tune::apply::ApplyRecord`) written when a tune run's
+    // winner is stored as a model's Measured defaults, so the provenance a
+    // model reports can always be traced back to the gate numbers that
+    // licensed it. NULL on every run that was never applied.
+    //
+    // This ALTER must run *after* the CREATE above: it originally sat in
+    // the models migration block, before benchmark_runs existed on a fresh
+    // database — where "no such table" was silently swallowed and the CREATE
+    // (which then lacked the column) left every fresh install unable to
+    // store an apply record until a second boot re-ran the migration.
+    let _ = sqlx::query(r#"ALTER TABLE benchmark_runs ADD COLUMN applied_json TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
 
     // Per-model compare results: real inference quality + real-world timing.
     // Timing fields are nullable — llama-server may omit the timings object.
