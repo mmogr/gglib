@@ -209,14 +209,11 @@ pub fn spawn_and_return(
                     // has finished, by which time the snapshot already exists.
                     context_metrics.flag_tool_repair(snapshot_seq, outcome.repair_succeeded);
                 }
-                // Feed the terminal outcome to the watchdog: an empty
-                // response is a strike, visible output resets the streak.
-                //
-                // Deliberately `saw_visible_output`, not "produced any frame":
-                // a reasoning-only turn is a failed turn from the client's
-                // point of view, and counting it as success reset this streak
-                // on every retry, so the recycle watchdog never fired.
-                upstream_health.record_stream_outcome(outcome.saw_visible_output);
+                // Feed the terminal outcome to the watchdog. The precedence
+                // between "produced output", "died upstream" and "the client
+                // left" lives in `health_verdict`, so this stays one line and
+                // the rule stays in one place.
+                upstream_health.record_stream_outcome(outcome.health_verdict());
                 // Drift alarm: dialect markup survived normalization into
                 // client-visible output. Log it and back-patch this
                 // request's dashboard snapshot.
