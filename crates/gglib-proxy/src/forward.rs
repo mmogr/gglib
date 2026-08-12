@@ -86,7 +86,7 @@ use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
-use crate::upstream_health::UpstreamHealth;
+use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use gglib_core::cache_metrics::CacheMetricsStore;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
@@ -113,8 +113,13 @@ pub(crate) struct StreamOutcome {
     /// in `reasoning_content` renders as an empty response in every client that
     /// treats reasoning as a collapsed side-channel (notably the VS Code LLM
     /// Gateway), so scoring it as output made a hard failure indistinguishable
-    /// from success — and, via [`crate::upstream_health`], reset the strike
-    /// counter that arms the recycle watchdog. See [`Self::saw_reasoning`].
+    /// from success. See [`Self::saw_reasoning`].
+    ///
+    /// This answers "did the client see anything?", and *only* that — it is
+    /// what decides whether the turn needs a diagnostic notice appended. It is
+    /// deliberately not the upstream-health verdict: an error frame is
+    /// renderable but is the opposite of healthy. [`Self::health_verdict`]
+    /// draws that second distinction.
     pub saw_visible_output: bool,
     /// `true` if at least one `ReasoningDelta` was emitted.
     ///
@@ -144,6 +149,45 @@ pub(crate) struct StreamOutcome {
     /// normalization, if any (see `gglib_core::normalize::residue`). The
     /// spawning task back-patches the request's metrics snapshot with it.
     pub dialect_residue: Option<String>,
+    /// The turn died on an *upstream* failure: the model server emitted an
+    /// error event mid-generation, or the byte stream itself broke. The
+    /// client's turn simply fails — the failure a person actually feels.
+    ///
+    /// Client disconnects never set this; hanging up is not a model defect.
+    pub upstream_errored: bool,
+    /// The client went away mid-turn, so the drain loop stopped forwarding.
+    ///
+    /// Kept because a turn the client abandoned is not evidence about the
+    /// upstream — see [`StreamVerdict::ClientAborted`].
+    pub client_aborted: bool,
+}
+
+impl StreamOutcome {
+    /// Reduce the turn to the one claim it makes about the upstream's health.
+    ///
+    /// The precedence is the whole content of this function, so it is stated
+    /// once here rather than at the call site:
+    ///
+    /// 1. **Died upstream** wins outright. A turn that broke mid-generation
+    ///    indicts the server even if it had already emitted good text.
+    /// 2. **Visible output** beats a client disconnect. If the upstream
+    ///    demonstrably produced, that is positive evidence of health and the
+    ///    client leaving afterwards does not retract it.
+    /// 3. **Client abort** with nothing produced is genuinely unknowable — the
+    ///    model may have been mid-prefill — so it abstains.
+    /// 4. Otherwise the turn produced nothing and nobody left: an empty
+    ///    response, the degradation this watchdog was built for.
+    pub(crate) fn health_verdict(&self) -> StreamVerdict {
+        if self.upstream_errored {
+            StreamVerdict::UpstreamError
+        } else if self.saw_visible_output {
+            StreamVerdict::Healthy
+        } else if self.client_aborted {
+            StreamVerdict::ClientAborted
+        } else {
+            StreamVerdict::Empty
+        }
+    }
 }
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
@@ -955,9 +999,20 @@ pub(crate) async fn stream_response_to_channel(
                     // Withheld, not dropped — flushed or discarded at `Done`.
                     None
                 }
-                LlmStreamEvent::ToolCallDelta { .. } | LlmStreamEvent::UpstreamError { .. } => {
+                LlmStreamEvent::ToolCallDelta { .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
+                    encoder.encode(&ev).map(Bytes::from)
+                }
+                LlmStreamEvent::UpstreamError { .. } => {
+                    connection.mark_generating();
+                    // Renderable, so the turn does not also need the empty-turn
+                    // notice — but the opposite of healthy, so the watchdog
+                    // hears about it separately. Folding these two facts into
+                    // one flag is what let a server dying on every request
+                    // report itself as producing output.
+                    outcome.saw_visible_output = true;
+                    outcome.upstream_errored = true;
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::Done { finish_reason } => {
@@ -981,6 +1036,7 @@ pub(crate) async fn stream_response_to_channel(
                         for frame in flush {
                             if tx.send(Ok(frame)).await.is_err() {
                                 client_connected = false;
+                                outcome.client_aborted = true;
                                 break;
                             }
                         }
@@ -1004,6 +1060,10 @@ pub(crate) async fn stream_response_to_channel(
             Err(e) => {
                 error!("proxy stream error: {e}");
                 outcome.saw_visible_output = true;
+                // The upstream byte stream broke mid-generation (a crashed
+                // llama-server, a severed connection) — the same
+                // turn-died-upstream fact as an explicit error event.
+                outcome.upstream_errored = true;
                 let payload = serde_json::json!({
                     "error": {
                         "message": e.to_string(),
@@ -1020,8 +1080,11 @@ pub(crate) async fn stream_response_to_channel(
         if let Some(bytes) = frame
             && tx.send(Ok(bytes)).await.is_err()
         {
-            // Client disconnected; stop draining the upstream.
+            // Client disconnected; stop draining the upstream. Recorded so the
+            // watchdog can abstain rather than score a person's hang-up as an
+            // upstream defect.
             client_connected = false;
+            outcome.client_aborted = true;
             break;
         }
     }
@@ -1295,6 +1358,71 @@ fn normalize_non_streaming_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A turn that died upstream indicts the server even though its error
+    /// frame was renderable — the conflation that kept the recycle watchdog
+    /// from ever firing against a server failing every request.
+    #[test]
+    fn a_turn_that_died_upstream_is_not_healthy_however_renderable_it_was() {
+        let outcome = StreamOutcome {
+            saw_visible_output: true,
+            upstream_errored: true,
+            ..Default::default()
+        };
+        assert_eq!(outcome.health_verdict(), StreamVerdict::UpstreamError);
+    }
+
+    /// Dying outranks leaving: if both happened, the server is still at fault.
+    #[test]
+    fn dying_upstream_outranks_a_client_that_also_left() {
+        let outcome = StreamOutcome {
+            upstream_errored: true,
+            client_aborted: true,
+            ..Default::default()
+        };
+        assert_eq!(outcome.health_verdict(), StreamVerdict::UpstreamError);
+    }
+
+    /// Positive evidence of production is not retracted by the client leaving
+    /// afterwards — otherwise every cancelled long generation would abstain.
+    #[test]
+    fn output_already_produced_outranks_a_later_client_hangup() {
+        let outcome = StreamOutcome {
+            saw_visible_output: true,
+            client_aborted: true,
+            ..Default::default()
+        };
+        assert_eq!(outcome.health_verdict(), StreamVerdict::Healthy);
+    }
+
+    /// The hang-up case that used to be scored as an empty response.
+    #[test]
+    fn a_client_leaving_before_any_output_abstains() {
+        let outcome = StreamOutcome {
+            client_aborted: true,
+            ..Default::default()
+        };
+        assert_eq!(outcome.health_verdict(), StreamVerdict::ClientAborted);
+    }
+
+    #[test]
+    fn a_turn_nobody_abandoned_that_produced_nothing_is_empty() {
+        assert_eq!(
+            StreamOutcome::default().health_verdict(),
+            StreamVerdict::Empty
+        );
+    }
+
+    /// Reasoning is not renderable output, so a reasoning-only turn stays a
+    /// strike. Guards the distinction `saw_reasoning` was introduced for.
+    #[test]
+    fn a_reasoning_only_turn_is_still_empty() {
+        let outcome = StreamOutcome {
+            saw_reasoning: true,
+            ..Default::default()
+        };
+        assert_eq!(outcome.health_verdict(), StreamVerdict::Empty);
+    }
 
     #[test]
     fn session_aware_budget_falls_back_to_live_ratio_without_a_session_id() {
