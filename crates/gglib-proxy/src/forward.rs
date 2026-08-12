@@ -1025,7 +1025,7 @@ pub(crate) async fn stream_response_to_channel(
                 }
                 LlmStreamEvent::Done { finish_reason } => {
                     connection.mark_generating();
-                    outcome.finish_reason = Some(finish_reason.clone());
+                    outcome.finish_reason = finish_reason.clone();
 
                     // The turn's tool calls are complete exactly here, so this
                     // is the only point at which a repair can be judged. The

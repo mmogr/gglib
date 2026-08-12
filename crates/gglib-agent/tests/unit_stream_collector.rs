@@ -43,13 +43,13 @@ async fn text_delta_forwarded_and_accumulated() {
             content: "world!".into(),
         },
         LlmStreamEvent::Done {
-            finish_reason: "stop".into(),
+            finish_reason: Some("stop".into()),
         },
     ]);
 
     let response = collect_stream(stream, &tx).await.unwrap();
     assert_eq!(response.content, "Hello, world!");
-    assert_eq!(response.finish_reason, "stop");
+    assert_eq!(response.finish_reason.as_deref(), Some("stop"));
     assert!(response.tool_calls.is_empty());
 
     // Both text deltas should have been forwarded to the channel.
@@ -73,7 +73,7 @@ async fn reasoning_delta_forwarded_and_accumulated_separately() {
             content: "Answer.".into(),
         },
         LlmStreamEvent::Done {
-            finish_reason: "stop".into(),
+            finish_reason: Some("stop".into()),
         },
     ]);
 
@@ -109,7 +109,7 @@ async fn tool_call_deltas_assembled_into_tool_calls() {
             arguments: Some("h\": \"/tmp\"}".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 
@@ -138,7 +138,7 @@ async fn multiple_tool_calls_assembled_by_index() {
             arguments: Some("{}".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 
@@ -192,7 +192,7 @@ async fn malformed_json_arguments_emit_error_and_fail() {
             arguments: Some("{ NOT VALID JSON ".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 
@@ -237,7 +237,7 @@ async fn oversized_tool_call_index_is_dropped_without_losing_the_turn() {
             arguments: Some("{}".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 
@@ -248,7 +248,7 @@ async fn oversized_tool_call_index_is_dropped_without_losing_the_turn() {
     assert_eq!(r.tool_calls_truncated, 1, "the drop is counted, not silent");
     assert_eq!(r.tool_calls.len(), 1, "the in-range call survives");
     assert_eq!(r.tool_calls[0].name, "do_thing");
-    assert_eq!(r.finish_reason, "tool_calls");
+    assert_eq!(r.finish_reason.as_deref(), Some("tool_calls"));
 }
 
 /// The Vec bound the guard exists for still holds: a wild index allocates
@@ -264,7 +264,7 @@ async fn a_wild_tool_call_index_drives_no_allocation() {
             arguments: Some("{}".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 
@@ -285,7 +285,7 @@ async fn a_normal_stream_reports_no_truncation() {
             arguments: Some("{}".into()),
         },
         LlmStreamEvent::Done {
-            finish_reason: "tool_calls".into(),
+            finish_reason: Some("tool_calls".into()),
         },
     ]);
 

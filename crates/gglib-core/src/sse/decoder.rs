@@ -72,10 +72,13 @@ impl SseStreamDecoder {
                     if !self.done_sent {
                         debug!(
                             "LLM stream ended with [DONE] but no prior finish_reason \
-                             — emitting fallback Done"
+                             — emitting fallback Done with an unknown reason"
                         );
+                        // Deliberately not "stop": the upstream never said the
+                        // turn finished cleanly, and claiming it did would
+                        // relabel a truncation as a complete answer.
                         events.push(Ok(LlmStreamEvent::Done {
-                            finish_reason: "stop".to_owned(),
+                            finish_reason: None,
                         }));
                     }
                     self.done_sent = true;
@@ -124,9 +127,14 @@ impl SseStreamDecoder {
         if self.done_sent {
             None
         } else {
-            debug!("LLM byte-stream ended without [DONE] sentinel — emitting fallback Done");
+            debug!(
+                "LLM byte-stream ended without [DONE] sentinel — emitting fallback Done \
+                 with an unknown reason"
+            );
+            // A byte stream that simply stopped is the strongest case for not
+            // fabricating: nothing upstream ever claimed the turn was over.
             Some(LlmStreamEvent::Done {
-                finish_reason: "stop".to_owned(),
+                finish_reason: None,
             })
         }
     }
@@ -204,6 +212,53 @@ mod tests {
             dec.finish().is_none(),
             "finish() must return None after a [DONE] sentinel — done_sent must be set"
         );
+    }
+
+    /// The relabelling this fix exists to stop. A `[DONE]` arriving with no
+    /// prior finish chunk means the upstream never said how the turn ended;
+    /// synthesising `"stop"` there reported a truncation as a clean answer,
+    /// and made `finish_reason == "length"` unusable as a truncation signal
+    /// because the abnormal cases were hiding inside `"stop"`.
+    #[test]
+    fn a_synthesised_done_reports_an_unknown_reason_not_stop() {
+        let mut dec = SseStreamDecoder::default();
+        let (events, _) = collect_all(&mut dec, done_frame());
+        let done = events
+            .iter()
+            .find_map(|e| match e {
+                LlmStreamEvent::Done { finish_reason } => Some(finish_reason),
+                _ => None,
+            })
+            .expect("a fallback Done is still emitted");
+        assert_eq!(*done, None, "must not claim the turn stopped cleanly");
+    }
+
+    #[test]
+    fn a_byte_stream_that_just_stops_reports_an_unknown_reason() {
+        let mut dec = SseStreamDecoder::default();
+        let _ = collect_all(&mut dec, &text_delta_frame("partial"));
+        match dec.finish() {
+            Some(LlmStreamEvent::Done { finish_reason }) => {
+                assert_eq!(finish_reason, None);
+            }
+            other => panic!("expected a fallback Done, got {other:?}"),
+        }
+    }
+
+    /// A reason the upstream actually reported is passed through untouched —
+    /// the fix must not lose real information while refusing to invent it.
+    #[test]
+    fn a_reported_finish_reason_survives_intact() {
+        let mut dec = SseStreamDecoder::default();
+        let (events, _) = collect_all(&mut dec, &finish_reason_frame());
+        let done = events
+            .iter()
+            .find_map(|e| match e {
+                LlmStreamEvent::Done { finish_reason } => Some(finish_reason),
+                _ => None,
+            })
+            .expect("Done from the reported finish_reason");
+        assert!(done.is_some(), "a real reason must not be discarded");
     }
 
     #[test]

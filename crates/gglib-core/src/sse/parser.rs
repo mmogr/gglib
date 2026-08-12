@@ -247,7 +247,7 @@ pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         && !finish_reason.is_empty()
     {
         events.push(LlmStreamEvent::Done {
-            finish_reason: finish_reason.to_owned(),
+            finish_reason: Some(finish_reason.to_owned()),
         });
     }
 
@@ -374,7 +374,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
-            LlmStreamEvent::Done { finish_reason } if finish_reason == "stop"
+            LlmStreamEvent::Done { finish_reason } if finish_reason.as_deref() == Some("stop")
         ));
     }
 
@@ -688,7 +688,7 @@ mod tests {
         ));
         assert!(matches!(
             &events[1],
-            LlmStreamEvent::Done { finish_reason } if finish_reason == "tool_calls"
+            LlmStreamEvent::Done { finish_reason } if finish_reason.as_deref() == Some("tool_calls")
         ));
     }
 
@@ -707,7 +707,7 @@ mod tests {
         assert!(matches!(&events[0], LlmStreamEvent::Usage { .. }));
         assert!(matches!(
             &events[1],
-            LlmStreamEvent::Done { finish_reason } if finish_reason == "stop"
+            LlmStreamEvent::Done { finish_reason } if finish_reason.as_deref() == Some("stop")
         ));
     }
 

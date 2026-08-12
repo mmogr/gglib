@@ -327,7 +327,7 @@ mod tests {
     fn done_event_emits_only_finish_chunk_no_sentinel() {
         let out = enc()
             .encode(&LlmStreamEvent::Done {
-                finish_reason: "stop".to_owned(),
+                finish_reason: Some("stop".to_owned()),
             })
             .expect("frame");
         // Exactly one SSE frame -- [DONE] is the caller's responsibility now
