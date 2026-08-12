@@ -528,6 +528,27 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // The auto-tune scheduler's persisted unacted defect windows — the
+    // evidence it has not yet spent on a signal-driven sweep, not the raw
+    // cumulative ledger (spent evidence is subtracted before it lands here,
+    // so a restart can never re-fire it). Keyed by model name because the
+    // ledger is: the name is what requests carry. `updated_at` is the base
+    // of the load-time decay gap; `llama_build` scopes the evidence to the
+    // release it was observed against.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS defect_windows (
+            model_name        TEXT    PRIMARY KEY,
+            requests          INTEGER NOT NULL DEFAULT 0,
+            loop_guard_trips  INTEGER NOT NULL DEFAULT 0,
+            repairs_attempted INTEGER NOT NULL DEFAULT 0,
+            repairs_succeeded INTEGER NOT NULL DEFAULT 0,
+            updated_at        TEXT    NOT NULL,
+            llama_build       TEXT    NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 
