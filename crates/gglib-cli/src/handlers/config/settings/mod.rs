@@ -157,6 +157,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             trust_client_sampling,
             proxy_loop_detection,
             agentic_sampling,
+            auto_tune,
             proxy_autostart,
             close_to_tray,
             start_at_login,
@@ -205,6 +206,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if agentic_sampling.is_some() {
                 changed.insert("agentic-sampling");
             }
+            if auto_tune.is_some() {
+                changed.insert("auto-tune");
+            }
             if proxy_autostart.is_some() {
                 changed.insert("proxy-autostart");
             }
@@ -241,6 +245,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 proxy_loop_detection: proxy_loop_detection.map(Some),
                 tool_call_repair: None,
                 agentic_sampling: agentic_sampling.map(Some),
+                auto_tune: auto_tune.map(Some),
                 proxy_autostart: proxy_autostart.map(Some),
                 close_to_tray: close_to_tray.map(Some),
                 start_at_login: start_at_login.map(Some),
@@ -290,6 +295,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             }
             if let Some(Some(v)) = update.agentic_sampling {
                 prospective.agentic_sampling = Some(v);
+            }
+            if let Some(Some(v)) = update.auto_tune {
+                prospective.auto_tune = Some(v);
             }
             if let Some(Some(v)) = update.proxy_autostart {
                 prospective.proxy_autostart = Some(v);

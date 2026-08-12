@@ -449,6 +449,14 @@ export interface AppSettings {
    * human chose one. Unset/true = active; anything set by a person stands.
    */
   agenticSampling?: boolean | null;
+  /**
+   * Idle-time auto-tune. Opt-in — unset/false = off: the daemon spends the
+   * GPU on its own initiative only when this is deliberately on. When on,
+   * a sustained-idle GPU triggers a bounded tune of the oldest model
+   * without measured defaults, applied only through the gate; any arriving
+   * request preempts the run.
+   */
+  autoTune?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -493,6 +501,8 @@ export interface UpdateSettingsRequest {
   shareLan?: boolean | null | undefined;
   /** See `AppSettings.agenticSampling`. */
   agenticSampling?: boolean | null | undefined;
+  /** See `AppSettings.autoTune`. */
+  autoTune?: boolean | null | undefined;
 }
 
 // ============================================================================

@@ -123,6 +123,19 @@ pub fn describe_mismatch(here: &[&str], daemon: &[String]) -> Option<String> {
     Some(out)
 }
 
+/// The git commit this binary was built from (`-dirty` when the tree was
+/// unclean), or `"unknown"` outside a git checkout.
+///
+/// Exists because `CARGO_PKG_VERSION` cannot tell two dev builds apart:
+/// a CLI carrying new daemon routes once silently used a same-version
+/// installed daemon and got an opaque 405 where "the daemon is a different
+/// build — restart it" was the real story. The daemon reports this from
+/// `/health`; the probe compares it against its own.
+#[must_use]
+pub const fn build_fingerprint() -> &'static str {
+    env!("GGLIB_BUILD_FINGERPRINT")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
