@@ -2,6 +2,7 @@
 pub mod agent;
 pub mod benchmark;
 pub mod chat_history;
+pub mod defect_windows;
 pub mod download;
 pub mod download_event_emitter;
 pub mod download_manager;

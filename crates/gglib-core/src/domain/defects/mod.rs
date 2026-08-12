@@ -1,25 +1,9 @@
-//! Per-model defect counters — the Tier C signals the closed loop steers by.
-//!
-//! The proxy records defect *events* (a loop-guard trip, a tool-call repair)
-//! as they happen; the auto-tune scheduler reads *rates* over the traffic
-//! since its last look and decides whether a model has earned a targeted
-//! sweep. Writers never interpret and the reader never guesses: a trip is a
-//! fact about one request, a rate is a claim about a model, and the split
-//! keeps both honest.
-//!
-//! Counters are cumulative and process-lifetime (they live on the proxy
-//! supervisor, like the agent cache metrics, so a proxy restart does not
-//! zero them). Windowing is the *reader's* job: the scheduler keeps its own
-//! per-model baselines and rates the delta, so two readers can window
-//! differently without fighting over a reset button.
-//!
-//! Deliberately not persisted: a defect rate is a claim about recent traffic
-//! on this build of everything, and yesterday's rate answering today's
-//! question is exactly the staleness ADR 0001 warns about. The loop reacts
-//! to what is happening, not to what once happened.
+#![doc = include_str!("README.md")]
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+
+pub mod decay;
 
 /// Cumulative defect counts for one model.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -49,6 +33,26 @@ pub struct ModelDefectCounts {
     /// Client disconnects are deliberately not in here: hanging up is a
     /// person's action, not a model defect.
     pub stream_errors: u64,
+}
+
+/// One persisted unacted window — the counts not yet acted on, stamped with
+/// when they were last true and the llama.cpp release they were observed
+/// against.
+///
+/// The stamp is what makes restored evidence honest: age decays it, a
+/// foreign build discards it. Without both, a restart would let a rate
+/// measured against different inference code answer a question about this
+/// one, at full confidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedDefectWindow {
+    /// The ledger's key — the model name requests carry, not the catalog id.
+    pub model_name: String,
+    /// The unacted counts at `updated_at`.
+    pub counts: ModelDefectCounts,
+    /// When these counts were last written — the base of the decay gap.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// The llama.cpp release the evidence was observed against.
+    pub llama_build: String,
 }
 
 /// Process-lifetime per-model defect counters.
@@ -81,6 +85,22 @@ impl ModelDefectLedger {
         self.with(model, |c| {
             c.requests += 1;
             c.loop_guard_trips += 1;
+        });
+    }
+
+    /// Seed `model`'s counters with restored evidence.
+    ///
+    /// Saturating adds, and additive rather than assigning: a proxy that has
+    /// already counted live traffic before the restore lands is never zeroed
+    /// by it. Overflow on counters this small is a bug shield, not a case
+    /// anyone expects to hit.
+    pub fn seed(&self, model: &str, counts: ModelDefectCounts) {
+        self.with(model, |c| {
+            c.requests = c.requests.saturating_add(counts.requests);
+            c.loop_guard_trips = c.loop_guard_trips.saturating_add(counts.loop_guard_trips);
+            c.repairs_attempted = c.repairs_attempted.saturating_add(counts.repairs_attempted);
+            c.repairs_succeeded = c.repairs_succeeded.saturating_add(counts.repairs_succeeded);
+            c.stream_errors = c.stream_errors.saturating_add(counts.stream_errors);
         });
     }
 
@@ -160,6 +180,66 @@ mod tests {
         assert_eq!(snap["a"].loop_guard_trips, 1);
         assert_eq!(snap["b"].repairs_attempted, 2);
         assert_eq!(snap["b"].repairs_succeeded, 1);
+    }
+
+    /// The restore contract: seeded counts read back through the ordinary
+    /// snapshot/delta path, so a reader needs no special case for restored
+    /// evidence.
+    #[test]
+    fn seeding_restores_counts_the_reader_windows() {
+        let ledger = ModelDefectLedger::new();
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: 40,
+                loop_guard_trips: 3,
+                repairs_attempted: 2,
+                repairs_succeeded: 1,
+                stream_errors: 4,
+            },
+        );
+        ledger.record_request("a");
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 41, "seed is additive, not assignment");
+        assert_eq!(snap.loop_guard_trips, 3);
+        assert_eq!(snap.stream_errors, 4);
+        // An empty baseline windows the whole seed.
+        assert_eq!(delta(snap, ModelDefectCounts::default()), snap);
+    }
+
+    /// Live traffic counted before a restore lands must not be erased by it.
+    #[test]
+    fn seeding_adds_to_traffic_already_counted() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_request("a");
+        ledger.record_stream_error("a");
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: 10,
+                stream_errors: 2,
+                ..Default::default()
+            },
+        );
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.requests, 11);
+        assert_eq!(snap.stream_errors, 3);
+    }
+
+    #[test]
+    fn seeding_saturates_rather_than_wrapping() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_request("a");
+        ledger.seed(
+            "a",
+            ModelDefectCounts {
+                requests: u64::MAX,
+                ..ModelDefectCounts::default()
+            },
+        );
+        assert_eq!(ledger.snapshot()["a"].requests, u64::MAX);
     }
 
     /// A stream error marks an already-forwarded request as having died; it
