@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub mod coerce;
 pub mod error;
 pub mod history;
 pub mod oneshot;
