@@ -16,15 +16,23 @@
 //! — but "ask upstream to use the one it already has". The repair request is
 //! the original with `tool_choice` forced to `"required"`, which is enough.
 //!
-//! # Why the pass marker exists
+//! # Why the repair body bypasses the request pipeline
 //!
-//! [`PipelinePass::Repair`] suppresses the pipeline's grammar stage. That
-//! stage fires on `tool_choice: "required"` for dialect models and rewrites
-//! `tool_choice` to `"none"`, because llama-server rejects a custom grammar
-//! combined with `tools`. Left to run on a repair it would convert the
-//! re-issue into a request for no tool call at all: a full generation spent,
-//! nothing changed, no error anywhere. Pinned by
-//! [`the_repair_body_survives_the_pipeline_with_required_intact`].
+//! [`repair_body`] mutates the already-resolved body and sends it. It must
+//! never hand that body back to `request_pipeline::apply`.
+//!
+//! The pipeline's grammar stage fires on `tool_choice: "required"` for
+//! dialect models and rewrites `tool_choice` to `"none"`, because
+//! llama-server rejects a custom grammar combined with `tools`. Run on a
+//! repair it would convert the re-issue into a request for no tool call at
+//! all: a full generation spent, nothing changed, no error anywhere.
+//!
+//! A `PipelinePass` marker used to encode this, suppressing the stage on a
+//! repair pass. It was removed because the case never arose — the repair path
+//! does not call `apply`, so every caller passed `Initial` and the other
+//! branch was unreachable. The hazard is real but structural, and is pinned
+//! by [`the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`]
+//! rather than by a flag nobody sets.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
@@ -314,7 +322,7 @@ pub fn choose(request_body: &[u8], original: Bytes, repaired: Bytes) -> (Bytes, 
 mod tests {
     use super::*;
     use gglib_core::domain::{DialectSpec, ModelCapabilities};
-    use gglib_core::request_pipeline::{ModelContext, PipelinePass, SamplingLayers};
+    use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
     use serde_json::json;
 
     fn request(tool_choice: Value) -> Vec<u8> {
@@ -603,13 +611,22 @@ mod tests {
         assert_eq!(chosen, original);
     }
 
-    /// The interaction that would silently disable the whole feature: stage 6
-    /// fires on `tool_choice: "required"` for a dialect model and rewrites it
-    /// to `"none"`. On a repair pass it must stand down, or the re-issue asks
-    /// for no tool call at all — a full generation spent, nothing changed, no
-    /// error anywhere.
+    /// Why a repair body must never be sent back through the request
+    /// pipeline.
+    ///
+    /// Stage 6 fires on `tool_choice: "required"` for a dialect model,
+    /// installs gglib's own grammar and rewrites `tool_choice` to `"none"` —
+    /// llama-server rejects a custom grammar alongside `tools`. Applied to a
+    /// repair that silently converts the re-issue into a request for no tool
+    /// call at all: a full generation spent, nothing changed, no error
+    /// anywhere.
+    ///
+    /// `repair_body` avoids this by construction — it mutates the
+    /// already-resolved body and sends it, never calling `apply`. This test
+    /// demonstrates the damage that bypass prevents, so the reason survives
+    /// as something executable rather than as a comment nobody re-derives.
     #[test]
-    fn the_repair_body_survives_the_pipeline_with_required_intact() {
+    fn the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it() {
         let ctx = ModelContext {
             capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
             catalog_resolved: true,
@@ -625,38 +642,31 @@ mod tests {
             panic!("expected a re-issue");
         };
 
-        let mut initial: Value = serde_json::from_slice(&body).unwrap();
-        let mut repair: Value = serde_json::from_slice(&body).unwrap();
-
-        gglib_core::request_pipeline::apply(
-            &mut initial,
-            &ctx,
-            &SamplingLayers::default(),
-            None,
-            PipelinePass::Initial,
-        )
-        .unwrap();
-        gglib_core::request_pipeline::apply(
-            &mut repair,
-            &ctx,
-            &SamplingLayers::default(),
-            None,
-            PipelinePass::Repair,
-        )
-        .unwrap();
-
+        // What `repair_body` actually produces, and sends as-is.
+        let as_sent: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
-            initial["tool_choice"], "none",
-            "stage 6 rewrites tool_choice on an initial pass — if this ever \
-             stops being true the repair pass no longer needs suppressing"
-        );
-        assert_eq!(
-            repair["tool_choice"], "required",
-            "a repair pass must reach llama-server still demanding a call"
+            as_sent["tool_choice"], "required",
+            "the re-issue must reach llama-server still demanding a call"
         );
         assert!(
-            repair.get("grammar").is_none(),
+            as_sent.get("grammar").is_none(),
             "gglib must not install its own weaker grammar on the repair path"
+        );
+
+        // The same body put through the pipeline — the thing that must not
+        // happen. If this ever stops rewriting `tool_choice`, the bypass is
+        // no longer load-bearing and this test should be revisited.
+        let mut through_pipeline: Value = serde_json::from_slice(&body).unwrap();
+        gglib_core::request_pipeline::apply(
+            &mut through_pipeline,
+            &ctx,
+            &SamplingLayers::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            through_pipeline["tool_choice"], "none",
+            "stage 6 would ask for no tool call at all — hence the bypass"
         );
     }
 }
