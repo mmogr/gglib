@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+pub mod apply;
 pub mod config;
 pub mod result;
 pub mod task;

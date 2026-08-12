@@ -27,6 +27,10 @@ function sourceLabel(source: TuneCandidateResult['source']): string {
       return 'gguf default';
     case 'family_preset':
       return source.family;
+    case 'incumbent':
+      return 'incumbent';
+    case 'incumbent_calibration':
+      return 'incumbent (A/A)';
     default:
       return '—';
   }

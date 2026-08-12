@@ -283,7 +283,7 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
           checked={applyBest}
           disabled={disabled}
           onChange={e => setApplyBest(e.target.checked)}
-          label="Apply best config to model when complete"
+          label="Apply the winner as measured defaults when complete (gated: must beat the incumbent beyond the run's own drift)"
         />
 
       <Button

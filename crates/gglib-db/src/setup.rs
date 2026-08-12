@@ -160,6 +160,16 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // `gglib_core::domain::DialectSpec`). No backfill: rows without a spec
     // fall back to their `format:*` tag at context-resolution time, and
     // `gglib model retag` re-derives the spec from persisted metadata.
+    // Migration: add applied_json to benchmark_runs — the JSON-serialized
+    // apply record (`tune::apply::ApplyRecord`) written when a tune run's
+    // winner is stored as a model's Measured defaults, so the provenance a
+    // model reports can always be traced back to the gate numbers that
+    // licensed it. NULL on every run that was never applied.
+    let _ = sqlx::query(r#"ALTER TABLE benchmark_runs ADD COLUMN applied_json TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
     let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN dialect_spec TEXT"#)
         .execute(pool)
         .await;

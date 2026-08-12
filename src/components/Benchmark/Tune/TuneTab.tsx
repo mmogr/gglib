@@ -19,8 +19,13 @@ import { AlertTriangle, Target } from 'lucide-react';
 import { EmptyState } from '../../primitives';
 import { Icon } from '../../ui/Icon';
 import type { GgufModel } from '../../../types';
-import type { BenchmarkEvent, TuneCandidateResult, TuneConfig } from '../../../types/benchmark';
-import { startTuneRun } from '../../../services/clients/benchmark';
+import type {
+  ApplyVerdict,
+  BenchmarkEvent,
+  TuneCandidateResult,
+  TuneConfig,
+} from '../../../types/benchmark';
+import { applyTuneRun, startTuneRun } from '../../../services/clients/benchmark';
 import { TuneConfigForm } from './TuneConfigForm';
 import { TuneLiveProgress, TuneTaskLogEntry, TunePrunedEntry } from './TuneLiveProgress';
 import { TuneLeaderboard } from './TuneLeaderboard';
@@ -49,6 +54,48 @@ const INITIAL_STATE: TuneRunState = {
   prunedLog: [],
   results: [],
 };
+
+/** One line per verdict, evidence included — refusals must read as refusals. */
+function describeApplyVerdict(verdict: ApplyVerdict): string {
+  switch (verdict.verdict) {
+    case 'apply': {
+      const paired = verdict.paired
+        ? `; paired ${verdict.paired.wins}W-${verdict.paired.losses}L-${verdict.paired.ties}T`
+        : '';
+      return (
+        `Applied as measured defaults: winner ${verdict.winner_composite.toFixed(3)} over ` +
+        `incumbent ${verdict.incumbent_mean.toFixed(3)}, margin ` +
+        `${verdict.margin >= 0 ? '+' : ''}${verdict.margin.toFixed(3)} against drift ` +
+        `${verdict.drift.toFixed(3)}${paired}.`
+      );
+    }
+    case 'incumbent_stands':
+      return (
+        `Incumbent stands at ${verdict.incumbent_mean.toFixed(3)}: no candidate beat the ` +
+        `model's current defaults — the run's answer is "change nothing".`
+      );
+    case 'within_drift':
+      return (
+        `Not applied: the winner's ${verdict.margin >= 0 ? '+' : ''}` +
+        `${verdict.margin.toFixed(3)} margin is inside the run's own ` +
+        `${verdict.drift.toFixed(3)} drift — unresolved, not absent.`
+      );
+    case 'paired_disagrees':
+      return (
+        `Not applied: the winner's mean rests on a minority of tasks ` +
+        `(${verdict.wins}W-${verdict.losses}L against the incumbent) — refused by the pairs.`
+      );
+    case 'uncalibrated':
+      return 'Not applied: this run has no incumbent calibration pair; re-run the tune.';
+    case 'contaminated':
+      return (
+        `Not applied: ${verdict.unmeasured_runs} task run(s) never reached the model, ` +
+        `so the compared scores are contaminated.`
+      );
+    default:
+      return 'Not applied: unrecognised verdict.';
+  }
+}
 
 export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
   const [runState, setRunState] = useState<TuneRunState>(INITIAL_STATE);
@@ -116,6 +163,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
           break;
 
         case 'run_complete':
+          completedRunIdRef.current = event.run_id;
           setRunState(prev => ({ ...prev, status: 'complete' }));
           onRunComplete?.();
           break;
@@ -131,6 +179,14 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
     [scheduleFlush, onRunComplete],
   );
 
+  const completedRunIdRef = useRef<number | null>(null);
+
+  /**
+   * The per-row apply: a person picked this exact candidate, which is a
+   * deliberate choice — it writes as user-set defaults, the same as typing
+   * the values into `gglib model update`. The gate governs the *automatic*
+   * path below, not this one.
+   */
   const handleApply = useCallback(async (result: TuneCandidateResult, modelId: number) => {
     setApplyMessage(null);
     try {
@@ -140,6 +196,22 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
       );
     } catch (err) {
       setApplyMessage(`Failed to apply config: ${(err as Error).message}`);
+    }
+  }, []);
+
+  /**
+   * The automatic apply, through the gate: the daemon judges the stored run
+   * (winner vs the incumbent calibration pair) and only an `apply` verdict
+   * writes the model — as *measured* defaults. Every refusal renders with
+   * its evidence.
+   */
+  const handleGatedApply = useCallback(async (runId: number) => {
+    setApplyMessage(null);
+    try {
+      const outcome = await applyTuneRun(runId);
+      setApplyMessage(describeApplyVerdict(outcome.verdict));
+    } catch (err) {
+      setApplyMessage(`Apply failed: ${(err as Error).message}`);
     }
   }, []);
 
@@ -161,11 +233,9 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
       .then(() => {
         setRunState(prev => {
           if (applyBest && prev.status !== 'failed') {
-            const best = [...prev.results]
-              .filter(r => !r.pruned)
-              .sort((a, b) => b.composite_score - a.composite_score)[0];
-            if (best) {
-              void handleApply(best, config.model_id);
+            const runId = completedRunIdRef.current;
+            if (runId != null) {
+              void handleGatedApply(runId);
             }
           }
           return prev;
@@ -176,7 +246,7 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
           setRunState(prev => ({ ...prev, status: 'failed', error: (err as Error).message }));
         }
       });
-  }, [handleEvent, handleApply]);
+  }, [handleEvent, handleGatedApply]);
 
   const isRunning = runState.status === 'running';
 

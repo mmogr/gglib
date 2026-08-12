@@ -9,6 +9,7 @@ use std::time::Instant;
 use anyhow::{Context as _, Result};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::benchmark::agentic::REPLICATE_SEED_OFFSET;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::result::{
     CandidateSource, TuneCandidateResult, TuneTaskResult,
@@ -25,6 +26,7 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
+pub mod apply_run;
 pub mod executor;
 pub mod pruning;
 pub mod scoring;
@@ -141,7 +143,7 @@ pub async fn run_tune(
     let model_context = model_context_for(&model);
     let mut prescreen_results: Vec<Vec<TuneTaskResult>> = Vec::with_capacity(total);
 
-    for (idx, (candidate_config, _)) in candidates.iter().enumerate() {
+    for (idx, (candidate_config, source)) in candidates.iter().enumerate() {
         if cancel.is_cancelled() {
             deps.bench_repo
                 .fail_run(run_id, "Aborted by user")
@@ -165,7 +167,7 @@ pub async fn run_tune(
                 target,
                 &model,
                 &model_context,
-                candidate_config,
+                &seeded(candidate_config, task, source),
                 task,
             )
             .await;
@@ -197,7 +199,14 @@ pub async fn run_tune(
             return Ok(());
         }
 
-        let is_survivor = survivors.contains(&idx);
+        // The incumbent pair always runs the full suite: pruning either twin
+        // would leave the run uncalibrated, and a pre-screen composite is
+        // not comparable with the full-suite scores the gate reads.
+        let is_survivor = survivors.contains(&idx)
+            || matches!(
+                source,
+                CandidateSource::Incumbent | CandidateSource::IncumbentCalibration
+            );
         let mut task_results = std::mem::take(&mut prescreen_results[idx]);
 
         if is_survivor {
@@ -207,7 +216,7 @@ pub async fn run_tune(
                     target,
                     &model,
                     &model_context,
-                    &candidate_config,
+                    &seeded(&candidate_config, task, &source),
                     task,
                 )
                 .await;
@@ -343,6 +352,18 @@ fn build_candidates(
         }
     }
 
+    // The incumbent pair, always: an all-None overlay resolves through the
+    // normal chain and is therefore exactly what the model does today, and
+    // the gap between the identical twins is the run's own drift — the
+    // number the apply gate divides every margin by. Two extra candidates
+    // is the price of a run that can calibrate itself; a run without them
+    // is Uncalibrated and nothing may be applied from it.
+    candidates.push((InferenceConfig::default(), CandidateSource::Incumbent));
+    candidates.push((
+        InferenceConfig::default(),
+        CandidateSource::IncumbentCalibration,
+    ));
+
     candidates
 }
 
@@ -474,6 +495,57 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
     }
 
     presets
+}
+
+/// The seed a candidate runs `task` under.
+///
+/// # Why tune tasks are seeded at all
+///
+/// Measured on the first live gated apply: unseeded, the incumbent twins
+/// scored *identically*, so the run's drift read 0.000 — and at zero drift
+/// the ratio gate passes any positive margin, leaving the paired check as
+/// the only guard. A calibration instrument that reads zero because nothing
+/// was pinned is the inert-organ trap in one more costume.
+///
+/// # The design, mirrored from the agentic eval
+///
+/// Every candidate runs task `T` under the **same** derived seed — common
+/// random numbers, so candidate-versus-candidate comparisons stay tightly
+/// paired. The calibration twin alone runs offset seeds
+/// ([`REPLICATE_SEED_OFFSET`], the same constant and rationale as the A/A
+/// arm's): its gap from the incumbent then genuinely samples seed-to-seed
+/// variance under the incumbent's own configuration, which is exactly the
+/// noise the apply gate's question is about — would this margin replicate
+/// under different draws?
+///
+/// Derived from the task *id*, not its position, so the seed survives suite
+/// reordering and additions; derived rather than drawn so a surprising score
+/// can be re-run and reproduced instead of chased.
+fn tune_task_seed(task_id: &str, calibration_twin: bool) -> u32 {
+    // djb2 over the id bytes: stable, dependency-free, and well-spread
+    // enough for a decode seed — this is reproducibility, not cryptography.
+    let mut hash: u32 = 5381;
+    for byte in task_id.as_bytes() {
+        hash = hash.wrapping_mul(33) ^ u32::from(*byte);
+    }
+    if calibration_twin {
+        hash = hash.wrapping_add(REPLICATE_SEED_OFFSET);
+    }
+    hash
+}
+
+/// A candidate's config with the per-task seed stamped in.
+fn seeded(
+    candidate: &InferenceConfig,
+    task: &TuneTask,
+    source: &CandidateSource,
+) -> InferenceConfig {
+    let mut config = candidate.clone();
+    config.seed = Some(tune_task_seed(
+        &task.id,
+        matches!(source, CandidateSource::IncumbentCalibration),
+    ));
+    config
 }
 
 /// Run one task against one candidate's sampling settings through the real
@@ -772,6 +844,60 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::benchmark::tune::task::TaskSuite;
+
+    // ── Task seeding (the calibration instrument's integrity) ───────────────
+
+    /// Common random numbers: every non-calibration candidate runs a task
+    /// under the same seed, so candidate comparisons stay paired.
+    #[test]
+    fn every_candidate_runs_a_task_under_the_same_seed() {
+        assert_eq!(
+            tune_task_seed("single_call_weather", false),
+            tune_task_seed("single_call_weather", false),
+        );
+    }
+
+    /// The calibration twin alone runs offset seeds — its gap from the
+    /// incumbent samples seed-to-seed variance, which is what makes the
+    /// drift a reading instead of the 0.000 the first live run measured.
+    #[test]
+    fn the_calibration_twin_runs_different_seeds() {
+        let primary = tune_task_seed("single_call_weather", false);
+        let twin = tune_task_seed("single_call_weather", true);
+        assert_ne!(primary, twin);
+        assert_eq!(twin, primary.wrapping_add(REPLICATE_SEED_OFFSET));
+    }
+
+    /// Seeds derive from the task id, not its position: distinct tasks get
+    /// distinct seeds, and reordering the suite changes nothing.
+    #[test]
+    fn distinct_tasks_get_distinct_seeds() {
+        let suite = TaskSuite::Default.resolve().expect("suite resolves");
+        let mut seeds: Vec<u32> = suite.iter().map(|t| tune_task_seed(&t.id, false)).collect();
+        let total = seeds.len();
+        seeds.sort_unstable();
+        seeds.dedup();
+        assert_eq!(seeds.len(), total, "seed collision in the default suite");
+    }
+
+    /// The stamp lands on the config the task actually runs under, and the
+    /// candidate's own fields survive it.
+    #[test]
+    fn seeded_stamps_the_seed_and_keeps_the_candidate() {
+        let suite = TaskSuite::Default.resolve().expect("suite resolves");
+        let task = &suite[0];
+        let candidate = InferenceConfig {
+            temperature: Some(0.7),
+            ..Default::default()
+        };
+        let stamped = seeded(&candidate, task, &CandidateSource::UserGrid);
+        assert_eq!(stamped.temperature, Some(0.7));
+        assert_eq!(stamped.seed, Some(tune_task_seed(&task.id, false)));
+
+        let twin = seeded(&candidate, task, &CandidateSource::IncumbentCalibration);
+        assert_eq!(twin.seed, Some(tune_task_seed(&task.id, true)));
+    }
 
     /// A loop-eligible result by default (`iterations` at the threshold), so
     /// scoring fixtures exercise the loop axis rather than skipping it.

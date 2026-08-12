@@ -118,6 +118,22 @@ pub trait BenchmarkRepositoryPort: Send + Sync {
         limit: i64,
     ) -> Result<Vec<TuneCandidateResult>, RepositoryError>;
 
+    /// Every candidate of one tune run, in insertion order — the input the
+    /// apply gate (`tune::apply::evaluate_apply`) judges.
+    async fn get_tune_results(
+        &self,
+        run_id: i64,
+    ) -> Result<Vec<TuneCandidateResult>, RepositoryError>;
+
+    /// Record the apply decision taken from this run — a JSON-serialized
+    /// `tune::apply::ApplyRecord`, stored so "measured by a tune sweep" on
+    /// the model can always be traced to the numbers that licensed it.
+    async fn mark_run_applied(
+        &self,
+        run_id: i64,
+        applied_json: &str,
+    ) -> Result<(), RepositoryError>;
+
     /// Persist one raw-vs-gglib A/B report.
     ///
     /// Like tune results, this does not upsert `model_benchmark_summaries`:

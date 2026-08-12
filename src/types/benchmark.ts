@@ -221,7 +221,9 @@ export interface TuneConfig {
 export type CandidateSource =
   | { kind: 'user_grid' }
   | { kind: 'gguf_author_default' }
-  | { kind: 'family_preset'; family: string };
+  | { kind: 'family_preset'; family: string }
+  | { kind: 'incumbent' }
+  | { kind: 'incumbent_calibration' };
 
 /** Result of evaluating one task against one candidate's sampling settings. */
 export interface TuneTaskResult {
@@ -470,6 +472,35 @@ export interface PairedEffect {
    * eight non-tied pairs — read wins against losses instead.
    */
   p_value: number | null;
+}
+
+/**
+ * The apply gate's decision on one completed tune run. Mirrors
+ * `gglib_core::domain::benchmark::tune::apply::ApplyVerdict`
+ * (`#[serde(tag = "verdict", rename_all = "snake_case")]`). Refusals are
+ * first-class outcomes carrying the evidence that was missing or contrary.
+ */
+export type ApplyVerdict =
+  | {
+      verdict: 'apply';
+      winner_composite: number;
+      incumbent_mean: number;
+      margin: number;
+      drift: number;
+      paired?: PairedEffect | null;
+    }
+  | { verdict: 'incumbent_stands'; incumbent_mean: number }
+  | { verdict: 'within_drift'; margin: number; drift: number }
+  | { verdict: 'paired_disagrees'; wins: number; losses: number }
+  | { verdict: 'uncalibrated' }
+  | { verdict: 'contaminated'; unmeasured_runs: number };
+
+/** Response of `POST /api/benchmark/tune/{run_id}/apply`. */
+export interface ApplyOutcome {
+  verdict: ApplyVerdict;
+  model_id: number;
+  /** Whether the model was actually written. */
+  applied: boolean;
 }
 
 // ─── API Response Shapes ─────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ mod compare;
 pub mod guard;
 pub mod mapper;
 mod perf;
-mod tune;
+pub mod tune;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Dependency bundle
@@ -148,5 +148,13 @@ impl BenchmarkOps {
         cancel: CancellationToken,
     ) -> Result<()> {
         agentic::run_agentic_eval(&self.deps, config, tx, cancel).await
+    }
+
+    /// Evaluate a completed tune run against the apply gate and, when the
+    /// verdict licenses it, store the winner as the model's `Measured`
+    /// defaults. Refusals return as verdicts, never as errors — see
+    /// `tune::apply_run`.
+    pub async fn apply_tune_run(&self, run_id: i64) -> Result<tune::apply_run::ApplyOutcome> {
+        tune::apply_run::apply_tune_run(&self.deps, run_id).await
     }
 }

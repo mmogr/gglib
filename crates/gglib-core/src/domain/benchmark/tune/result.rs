@@ -21,6 +21,16 @@ pub enum CandidateSource {
         /// Display name of the matched family/preset (e.g. `"qwen-coding"`).
         family: String,
     },
+    /// The model's current behaviour: an all-`None` overlay, which resolves
+    /// through the normal chain and is therefore exactly what an untouched
+    /// request gets today. Always included, never pruned — a winner that
+    /// never raced the incumbent has not beaten it.
+    Incumbent,
+    /// The incumbent again, identically. The gap between the twins is the
+    /// run's own drift — the in-run calibration the apply gate divides every
+    /// margin by (see `tune::apply`). Excluded from the leaderboard's notion
+    /// of "winner": it is an instrument, not a contender.
+    IncumbentCalibration,
 }
 
 #[cfg(test)]
