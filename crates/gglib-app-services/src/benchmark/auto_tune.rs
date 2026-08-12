@@ -50,13 +50,34 @@ use gglib_core::domain::{DefaultsOrigin, Model};
 
 use super::BenchmarkOps;
 
-/// How often the scheduler wakes to look at the world.
-const TICK: Duration = Duration::from_secs(60);
+/// How often the scheduler wakes to look at the world, in seconds.
+/// `GGLIB_AUTO_TUNE_TICK_SECS` overrides it — an operator knob, and what
+/// makes the end-to-end path testable in seconds rather than tens of
+/// minutes.
+const TICK_SECS: u64 = 60;
 
 /// Consecutive fully-idle ticks required before a run may start — 10 minutes
-/// at [`TICK`]. Long enough that a person pausing between requests is not
-/// mistaken for an empty evening.
+/// at the default tick. Long enough that a person pausing between requests
+/// is not mistaken for an empty evening. `GGLIB_AUTO_TUNE_IDLE_TICKS`
+/// overrides it.
 const IDLE_TICKS_REQUIRED: u32 = 10;
+
+/// The tick interval, after any environment override.
+fn tick_interval() -> Duration {
+    Duration::from_secs(env_override("GGLIB_AUTO_TUNE_TICK_SECS", TICK_SECS))
+}
+
+/// The idle-tick threshold, after any environment override.
+fn idle_ticks_required() -> u32 {
+    env_override("GGLIB_AUTO_TUNE_IDLE_TICKS", IDLE_TICKS_REQUIRED)
+}
+
+fn env_override<T: std::str::FromStr + Copy>(key: &str, default: T) -> T {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 /// How often the preemption watcher checks the queue while a run is live.
 const PREEMPT_POLL: Duration = Duration::from_secs(2);
@@ -77,7 +98,7 @@ pub async fn run_loop(ops: Arc<BenchmarkOps>, shutdown: CancellationToken) {
     loop {
         tokio::select! {
             () = shutdown.cancelled() => return,
-            () = tokio::time::sleep(TICK) => {}
+            () = tokio::time::sleep(tick_interval()) => {}
         }
         match tick(&ops, &mut idle_ticks, &shutdown).await {
             Ok(()) => {}
@@ -109,18 +130,29 @@ async fn tick(
     // A run somebody started — through any surface — owns the GPU story.
     let runs = deps.bench_repo.list_runs(RUN_SCAN_LIMIT, 0).await?;
     if runs.iter().any(|r| r.status == BenchmarkRunStatus::Running) {
+        debug!("auto-tune: a benchmark run is live — standing down");
         *idle_ticks = 0;
         return Ok(());
     }
 
     let snapshot = deps.runtime.admission_snapshot();
     if snapshot.inflight() > 0 || snapshot.waiting() > 0 {
+        debug!(
+            inflight = snapshot.inflight(),
+            waiting = snapshot.waiting(),
+            "auto-tune: the GPU is busy — idle window reset"
+        );
         *idle_ticks = 0;
         return Ok(());
     }
 
     *idle_ticks += 1;
-    if *idle_ticks < IDLE_TICKS_REQUIRED {
+    let required = idle_ticks_required();
+    debug!(
+        idle_ticks = *idle_ticks,
+        required, "auto-tune: idle tick banked"
+    );
+    if *idle_ticks < required {
         return Ok(());
     }
 
@@ -139,7 +171,7 @@ async fn tick(
 
     info!(
         model_id = target,
-        "auto-tune: GPU idle for {IDLE_TICKS_REQUIRED} ticks — starting a gated tune"
+        "auto-tune: GPU idle past the threshold — starting a gated tune"
     );
     *idle_ticks = 0;
     run_one(ops, target, shutdown).await
