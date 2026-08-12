@@ -76,8 +76,7 @@ use gglib_core::LlmStreamEvent;
 use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ModelContext, PipelinePass, SamplingDecision, SamplingLayers, TruncationError,
-    TruncationReport,
+    self, ModelContext, SamplingDecision, SamplingLayers, TruncationError, TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 
@@ -402,7 +401,6 @@ fn shape_request_body(
     ctx: &ModelContext,
     layers: &SamplingLayers,
     budget_chars: Option<usize>,
-    pass: PipelinePass,
 ) -> Result<ShapedRequest, TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return Ok(ShapedRequest {
@@ -416,7 +414,7 @@ fn shape_request_body(
     // The constrain stage never engages over a client-sent grammar, so
     // before-absent + after-present is exactly "the pipeline originated one".
     let grammar_before = value.get("grammar").is_some();
-    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars, pass)?;
+    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars)?;
     let grammar_enforced = !grammar_before && value.get("grammar").is_some();
 
     match serde_json::to_vec(&value) {
@@ -507,12 +505,6 @@ pub(crate) struct ForwardRequest<'a> {
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
-    /// Which trip through the request pipeline this is.
-    ///
-    /// [`PipelinePass::Repair`] on a tool-call repair re-issue, which
-    /// suppresses the grammar stage so llama.cpp's own schema-derived grammar
-    /// is the one that fires. See [`gglib_core::request_pipeline::PipelinePass`].
-    pub pass: PipelinePass,
     /// Whether a tool call failing schema validation is re-issued with
     /// `tool_choice: "required"`.
     ///
@@ -577,7 +569,6 @@ pub(crate) async fn forward_chat_completion(
         calibration,
         calibration_session_id,
         cache_metrics,
-        pass,
         repair_enabled,
         sampling_audit,
     } = req;
@@ -610,7 +601,7 @@ pub(crate) async fn forward_chat_completion(
     );
     let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
 
-    let shaped = match shape_request_body(body, &context, &sampling, budget_chars, pass) {
+    let shaped = match shape_request_body(body, &context, &sampling, budget_chars) {
         Ok(shaped) => shaped,
         Err(e) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -1686,7 +1677,6 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             None,
-            PipelinePass::Initial,
         )
         .expect("no budget, so nothing to reject");
         assert!(!grammar_enforced, "passthrough context never constrains");
@@ -1719,14 +1709,8 @@ mod tests {
             body: out,
             grammar_enforced,
             ..
-        } = shape_request_body(
-            body,
-            &ctx,
-            &SamplingLayers::default(),
-            None,
-            PipelinePass::Initial,
-        )
-        .expect("nothing to reject");
+        } = shape_request_body(body, &ctx, &SamplingLayers::default(), None)
+            .expect("nothing to reject");
 
         assert!(grammar_enforced);
         let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
@@ -1746,7 +1730,6 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(10),
-            PipelinePass::Initial,
         )
         .expect("a body we cannot read is forwarded, not rejected");
 
@@ -1765,7 +1748,6 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(20_000),
-            PipelinePass::Initial,
         )
         .expect("trimming the one oversized tool result is enough");
 
@@ -1781,7 +1763,6 @@ mod tests {
             &ModelContext::passthrough(),
             &SamplingLayers::default(),
             Some(200),
-            PipelinePass::Initial,
         )
         .expect_err("nothing left to trim, still over");
 

@@ -1008,7 +1008,6 @@ async fn chat_completions(
     // cache-branching below — see `ForwardRequest` docs.
     let req = ForwardRequest {
         repair_enabled: settings.tool_call_repair != Some(false),
-        pass: gglib_core::request_pipeline::PipelinePass::Initial,
         client: &state.client,
         upstream_url: &upstream_url,
         headers: &headers,
@@ -1144,7 +1143,6 @@ async fn chat_completions(
 
             let retry_req = ForwardRequest {
                 repair_enabled: settings.tool_call_repair != Some(false),
-                pass: gglib_core::request_pipeline::PipelinePass::Initial,
                 client: &state.client,
                 upstream_url: &retry_url,
                 headers: &headers,
