@@ -141,6 +141,16 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
         None => crate::routes::create_router(Arc::clone(&state), &opts.cors, access),
     };
 
+    // The idle-time auto-tune scheduler — inert until `Settings.auto_tune`
+    // is deliberately on, and stopped by the same token that stops the
+    // daemon. Spawned here because this is the one process that owns
+    // llama-server: a scheduler anywhere else would fight the daemon for
+    // the GPU it is trying to be polite about.
+    tokio::spawn(gglib_app_services::benchmark::auto_tune::run_loop(
+        Arc::clone(&state.benchmark),
+        shutdown_token.clone(),
+    ));
+
     let addr = format!("{}:{}", opts.host, DAEMON_PORT);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

@@ -14,6 +14,7 @@ use gglib_core::ports::{
 };
 
 mod agentic;
+pub mod auto_tune;
 mod compare;
 pub mod guard;
 pub mod mapper;
@@ -38,6 +39,7 @@ pub mod tune;
 ///     .timeout(Duration::from_secs(600))
 ///     .build()?;
 /// ```
+#[derive(Clone)]
 pub struct BenchmarkDeps {
     /// Model catalog for name and file-path lookups.
     pub model_repo: Arc<dyn ModelRepository>,
@@ -156,5 +158,14 @@ impl BenchmarkOps {
     /// `tune::apply_run`.
     pub async fn apply_tune_run(&self, run_id: i64) -> Result<tune::apply_run::ApplyOutcome> {
         tune::apply_run::apply_tune_run(&self.deps, run_id).await
+    }
+
+    /// A second handle for a spawned task. Every dependency is an `Arc` or a
+    /// cheaply-cloneable client, so this is reference-counting, not copying.
+    #[must_use]
+    pub fn clone_for_task(&self) -> Self {
+        Self {
+            deps: self.deps.clone(),
+        }
     }
 }

@@ -157,6 +157,20 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           value nobody deliberately chose. Anything set by a person stands.
         </ToggleField>
 
+        <ToggleField
+          id="auto-tune-input"
+          label="Idle-time auto-tune"
+          checked={agentGuards.autoTune}
+          onChange={(value) => setAgentGuardSetting('autoTune', value)}
+          disabled={saving}
+        >
+          Off by default — this one spends the GPU. When on, a sustained-idle GPU
+          triggers a bounded tune of the oldest model without measured defaults
+          (never one you configured yourself, and never by evicting a warm model);
+          the winner applies only through the drift gate, and any arriving request
+          preempts the run.
+        </ToggleField>
+
         <NumberSettingField
           id="max-stagnation-steps-input"
           label="Max Stagnation Steps"
