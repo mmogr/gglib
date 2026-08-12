@@ -63,6 +63,36 @@ were only tightening it.
 resolves to — asked for by name rather than by knowing that `max_attempts: 1`
 means "off".
 
+# Who uses this, and who deliberately does not
+
+gglib is periodically observed to have "five retry implementations with only
+one using the shared engine". The count is right and the conclusion is not:
+those five are three different shapes, and only one shape is what this module
+models.
+
+**Backoff sequences** — retry *the same operation* after a delay. This module
+is for these.
+
+| Site | Uses this engine | Why |
+|---|---|---|
+| `gglib-runtime` `llm_completion/retry/execute.rs` | **yes** | Many clients can collide on one model's startup; decorrelating them is exactly what full jitter is for. |
+| `gglib-proxy` `slots.rs` | no | A single-writer disk save. Jitter exists to decorrelate competing callers and there are none, so exponential growth would only make the second attempt slower for no benefit. |
+| `gglib-proxy` `sse_stream.rs` | no | Its "retry" is a `select!` arm over a first-byte deadline and client keepalives, and it fires on *deadline expiry with no other active connection* — a queue-position judgement, not a transient error. Different control structure, different trigger. |
+
+**One-shot recovery with different configuration** — not retries at all. These
+re-issue *changed* work exactly once, so a backoff policy has nothing to say
+about them.
+
+- `gglib-proxy` `server.rs`, on `ForwardError::UpstreamDead`: relaunches the
+  model, then issues one attempt against a **fresh admission, lease and
+  settings snapshot**.
+- `gglib-proxy` `forward.rs`, the tool-call repair: one attempt with a
+  **different request body** (`tool_choice: "required"`), bounded by its own
+  timeout because it runs while the client is receiving nothing.
+
+Unifying either of those under a backoff policy would be a category error:
+repeating identical work is the one thing neither of them does.
+
 <!-- module-docs:end -->
 
 <details>
