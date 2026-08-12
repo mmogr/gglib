@@ -94,6 +94,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
             seeds,
             no_control,
             no_replicate,
+            replicate_pairs,
             control_seeds,
             json,
             output,
@@ -106,6 +107,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
                 seeds,
                 !no_control,
                 !no_replicate,
+                replicate_pairs,
                 control_seeds,
                 json,
                 output,
@@ -317,6 +319,7 @@ async fn cmd_agentic(
     seeds: Option<Vec<u32>>,
     include_control: bool,
     replicate_raw: bool,
+    replicate_pairs: usize,
     control_seeds: usize,
     json: bool,
     output: Option<std::path::PathBuf>,
@@ -339,6 +342,7 @@ async fn cmd_agentic(
         seeds: seeds.clone(),
         include_control,
         replicate_raw,
+        replicate_pairs,
         control_seeds,
     };
 
@@ -514,6 +518,7 @@ fn render_agentic_report(report: &AgenticEvalReport) {
 
     render_unmeasured_block(report);
     render_noise_block(report);
+    render_paired_block(report);
     render_control_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
@@ -593,7 +598,12 @@ fn render_noise_block(report: &AgenticEvalReport) {
 
     // An unseeded run has no seed list to name, and "re-run on 0 disjoint
     // seeds" would describe an arm that did in fact run.
-    let how = if report.replicate_seeds.is_empty() {
+    let how = if report.raw_replicates.len() > 1 {
+        format!(
+            "re-run {n} times on disjoint seed sets",
+            n = report.raw_replicates.len(),
+        )
+    } else if report.replicate_seeds.is_empty() {
         "re-run unseeded".to_owned()
     } else {
         format!(
@@ -610,10 +620,14 @@ fn render_noise_block(report: &AgenticEvalReport) {
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
+    let over = match verdict.pairs() {
+        0 | 1 => String::new(),
+        pairs => format!(" (mean over {pairs} pairwise gaps)"),
+    };
     if verdict.exceeds_noise() {
         eprintln!(
             "  {SUCCESS}effect exceeds drift{RESET}: the {effect:+.3} composite delta is {ratio} \
-             the {noise:.3} this eval moves with nothing changed.",
+             the {noise:.3} this eval moves with nothing changed{over}.",
             effect = verdict.effect(),
             noise = verdict.noise(),
             SUCCESS = style::SUCCESS,
@@ -622,8 +636,8 @@ fn render_noise_block(report: &AgenticEvalReport) {
     } else {
         eprintln!(
             "  {WARN}effect is within drift{RESET}: the {effect:+.3} composite delta is {ratio} \
-             the {noise:.3} this eval moves with nothing changed, under the {min:.0}× needed to \
-             call it more than noise.",
+             the {noise:.3} this eval moves with nothing changed{over}, under the {min:.0}× \
+             needed to call it more than noise.",
             effect = verdict.effect(),
             noise = verdict.noise(),
             min = EFFECT_NOISE_RATIO,
@@ -637,15 +651,60 @@ fn render_noise_block(report: &AgenticEvalReport) {
             RESET = style::RESET,
         );
     }
-    // Printed on success as well as failure. A ratio computed from a single
-    // pair is the kind of number that gets quoted as though it were a p-value,
-    // and the caveat has to travel with it.
+    // Printed on success as well as failure. A ratio computed from a
+    // handful of gaps is the kind of number that gets quoted as though it
+    // were a p-value, and the caveat has to travel with it — sized to the
+    // run: the single-pair wording on a three-gap estimate misstates the
+    // degrees of freedom in the caveat about degrees of freedom (caught on
+    // the first live multi-pair run).
+    let df = match verdict.pairs() {
+        0 | 1 => "one A/A pair estimates that drift from a single degree of freedom".to_owned(),
+        pairs => format!("{pairs} pairwise gaps back that drift estimate"),
+    };
     eprintln!(
-        "  {MUTED}one A/A pair estimates that drift from a single degree of freedom — this is a \
-         sanity ratio, not a significance test{RESET}",
+        "  {MUTED}{df} — this is a sanity ratio, not a significance test{RESET}",
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
+}
+
+/// The paired view: the same cells the delta above averages, compared as
+/// matched pairs — which is what removes the eval's identical-arm spread
+/// from the comparison.
+fn render_paired_block(report: &AgenticEvalReport) {
+    let Some(paired) = report.paired_effect() else {
+        return;
+    };
+    eprintln!();
+    let p = paired.p_value.map_or_else(
+        || {
+            format!(
+                "too few non-tied pairs for a p — read {wins}W against {losses}L directly",
+                wins = paired.wins,
+                losses = paired.losses,
+            )
+        },
+        |p| format!("Wilcoxon one-sided p = {p:.4}"),
+    );
+    eprintln!(
+        "  paired: {wins}W–{losses}L–{ties}T over {pairs} (task, seed) {pair_word}, \
+         mean Δ {mean:+.3} on tool-match; {p}",
+        wins = paired.wins,
+        losses = paired.losses,
+        ties = paired.ties,
+        pairs = paired.pairs,
+        pair_word = plural(paired.pairs, "pair"),
+        mean = paired.mean_delta,
+    );
+    if paired.unmeasured_pairs > 0 {
+        eprintln!(
+            "  {WARN}{n} {pairs} dropped: at least one side never reached the model.{RESET}",
+            n = paired.unmeasured_pairs,
+            pairs = plural(paired.unmeasured_pairs, "pair"),
+            WARN = style::WARNING,
+            RESET = style::RESET,
+        );
+    }
 }
 
 /// The positive control's verdict.

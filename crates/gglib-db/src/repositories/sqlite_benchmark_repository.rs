@@ -726,6 +726,9 @@ mod tests {
             }),
             raw_replicate: Some(arm(0.780, None)),
             replicate_seeds: replicate_seeds(&DEFAULT_SEEDS),
+            raw_replicates: vec![arm(0.780, None)],
+            replicate_seed_sets: vec![replicate_seeds(&DEFAULT_SEEDS)],
+            paired: None,
         }
     }
 

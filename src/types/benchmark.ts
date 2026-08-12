@@ -322,6 +322,11 @@ export interface AgenticEvalConfig {
   include_control?: boolean;
   /** Server default true — re-run the raw arm on disjoint seeds (the A/A drift floor). */
   replicate_raw?: boolean;
+  /**
+   * Server default 1. Each extra pair re-runs the raw arm on another derived
+   * seed set, and the drift floor becomes the mean over every pairwise gap.
+   */
+  replicate_pairs?: number;
   /** Server default 1; clamped into 1..=seeds.len() server-side. */
   control_seeds?: number;
 }
@@ -424,6 +429,47 @@ export interface AgenticEvalReport {
   raw_replicate?: ArmScores | null;
   /** The seeds the A/A arm used. Empty when it did not run. */
   replicate_seeds?: number[];
+  /**
+   * Every A/A pair's scores when more than one ran. `raw_replicate` stays
+   * populated with the first pair, so single-pair reports read unchanged;
+   * the drift becomes the mean pairwise gap over all runs of the raw
+   * configuration when this is non-empty.
+   */
+  raw_replicates?: ArmScores[];
+  /** The seed set behind each entry of `raw_replicates`. */
+  replicate_seed_sets?: number[][];
+  /**
+   * The paired per-(task, seed) comparison, computed server-side at report
+   * assembly. Stored rather than re-derived here because it carries a rank
+   * test (Wilcoxon signed-rank) nobody should maintain twice; `null` or
+   * absent on reports written before the field existed.
+   */
+  paired?: PairedEffect | null;
+}
+
+/**
+ * The paired view of raw-versus-gglib: every matched (task, seed) cell
+ * compared directly, which removes the eval's identical-arm spread from the
+ * comparison. Mirrors `gglib_core::domain::benchmark::agentic::PairedEffect`.
+ */
+export interface PairedEffect {
+  /** Matched pairs in which both arms produced a real observation. */
+  pairs: number;
+  /** Pairs dropped because at least one side never reached the model. */
+  unmeasured_pairs: number;
+  /** Pairs the gglib arm scored strictly higher. */
+  wins: number;
+  /** Pairs the raw arm scored strictly higher. */
+  losses: number;
+  /** Pairs with identical scores. */
+  ties: number;
+  /** Mean of gglib − raw over the measured pairs. */
+  mean_delta: number;
+  /**
+   * One-sided Wilcoxon signed-rank p for "gglib scores higher". `null` below
+   * eight non-tied pairs — read wins against losses instead.
+   */
+  p_value: number | null;
 }
 
 // ─── API Response Shapes ─────────────────────────────────────────────────────

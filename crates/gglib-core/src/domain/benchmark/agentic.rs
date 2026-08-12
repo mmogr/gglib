@@ -82,6 +82,19 @@ pub struct AgenticEvalConfig {
     /// its direction.
     #[serde(default = "default_replicate_raw")]
     pub replicate_raw: bool,
+    /// How many A/A pairs to run. See [`EvalArm::RawReplicate`].
+    ///
+    /// `1` is the historical single-pair behaviour and the default. A single
+    /// pair estimates the eval's drift from one degree of freedom — enough to
+    /// stop a delta inside its own noise being called a finding, and not
+    /// enough to say how noisy the eval actually is. Every additional pair
+    /// re-runs the raw arm on another derived, disjoint seed set, and the
+    /// drift estimate becomes the mean pairwise gap over all replicate runs
+    /// plus the primary — which is the "more pairs" the
+    /// [`EFFECT_NOISE_RATIO`] doc has always named as the honest
+    /// strengthening.
+    #[serde(default = "default_replicate_pairs")]
+    pub replicate_pairs: usize,
     /// How many of [`Self::seeds`] the positive control repeats, from the
     /// front. Clamped into `1..=seeds.len()`.
     ///
@@ -126,6 +139,10 @@ const fn default_control_seeds() -> usize {
     1
 }
 
+const fn default_replicate_pairs() -> usize {
+    1
+}
+
 /// Offset added to each primary seed to derive the A/A arm's seeds.
 ///
 /// The 32-bit golden-ratio constant, chosen for nothing but being a fixed,
@@ -151,9 +168,21 @@ pub const REPLICATE_SEED_OFFSET: u32 = 0x9E37_79B9;
 /// recorded in [`AgenticEvalReport::replicate_seeds`] rather than left implicit.
 #[must_use]
 pub fn replicate_seeds(seeds: &[u32]) -> Vec<u32> {
+    replicate_seed_set(seeds, 1)
+}
+
+/// The seed set for A/A pair `pair` (1-based): the primary seeds offset by
+/// `pair` strides of [`REPLICATE_SEED_OFFSET`].
+///
+/// Pair 1 is exactly [`replicate_seeds`], so a multi-pair run's first pair
+/// reproduces the single-pair run's numbers. Strides of a fixed constant
+/// rather than fresh draws for the same reason the offset itself is fixed: a
+/// noise floor that changes every run cannot be compared against anything.
+#[must_use]
+pub fn replicate_seed_set(seeds: &[u32], pair: u32) -> Vec<u32> {
     seeds
         .iter()
-        .map(|seed| seed.wrapping_add(REPLICATE_SEED_OFFSET))
+        .map(|seed| seed.wrapping_add(REPLICATE_SEED_OFFSET.wrapping_mul(pair)))
         .collect()
 }
 
@@ -463,6 +492,25 @@ pub struct AgenticEvalReport {
     /// recomputed from [`replicate_seeds`].
     #[serde(default)]
     pub replicate_seeds: Vec<u32>,
+    /// Every A/A pair's scores, in pair order, when more than one ran.
+    ///
+    /// [`Self::raw_replicate`] stays populated with the first pair so a
+    /// single-pair report — and every report written before this field —
+    /// reads exactly as it always did. A legacy row deserializes this empty,
+    /// and [`Self::noise_floor`] falls back to the single pair.
+    #[serde(default)]
+    pub raw_replicates: Vec<ArmScores>,
+    /// The seed set behind each entry of [`Self::raw_replicates`].
+    #[serde(default)]
+    pub replicate_seed_sets: Vec<Vec<u32>>,
+    /// The paired per-`(task, seed)` comparison, computed at assembly.
+    ///
+    /// Stored rather than derived-only, unlike the verdicts: those re-derive
+    /// from two floats in any language, while this one carries a rank test
+    /// nobody should maintain twice. [`Self::paired_effect`] re-derives it
+    /// from the drill-down for reports written before the field existed.
+    #[serde(default)]
+    pub paired: Option<PairedEffect>,
 }
 
 /// The smallest composite gap the control arm must open for the apparatus to
@@ -552,8 +600,14 @@ pub enum EffectVerdict {
         /// `gglib − raw`, signed: a negative effect that clears the noise floor
         /// is still a finding, just not the hoped-for one.
         effect: f64,
-        /// `|raw − raw_replicate|`, the drift between two identical arms.
+        /// The mean pairwise drift among identical raw runs.
         noise: f64,
+        /// Pairwise gaps behind `noise` — the estimate's degrees of freedom.
+        /// A verdict over one pair and one over six are not the same strength
+        /// of claim, and rendering them identically invites exactly the
+        /// misreading the A/A arm exists to prevent.
+        #[serde(default = "one")]
+        pairs: usize,
     },
     /// The effect is not clearly larger than the drift between two runs of the
     /// same arm. It is not thereby *absent* — it is unresolved at this seed
@@ -561,8 +615,11 @@ pub enum EffectVerdict {
     WithinNoise {
         /// `gglib − raw`, signed.
         effect: f64,
-        /// `|raw − raw_replicate|`, the drift between two identical arms.
+        /// The mean pairwise drift among identical raw runs.
         noise: f64,
+        /// Pairwise gaps behind `noise`.
+        #[serde(default = "one")]
+        pairs: usize,
     },
 }
 
@@ -576,7 +633,7 @@ impl EffectVerdict {
     #[must_use]
     pub fn ratio(&self) -> Option<f64> {
         let (effect, noise) = match *self {
-            Self::ExceedsNoise { effect, noise } | Self::WithinNoise { effect, noise } => {
+            Self::ExceedsNoise { effect, noise, .. } | Self::WithinNoise { effect, noise, .. } => {
                 (effect, noise)
             }
         };
@@ -588,6 +645,14 @@ impl EffectVerdict {
     pub const fn effect(&self) -> f64 {
         match *self {
             Self::ExceedsNoise { effect, .. } | Self::WithinNoise { effect, .. } => effect,
+        }
+    }
+
+    /// How many pairwise drift gaps stand behind [`Self::noise`].
+    #[must_use]
+    pub const fn pairs(&self) -> usize {
+        match *self {
+            Self::ExceedsNoise { pairs, .. } | Self::WithinNoise { pairs, .. } => pairs,
         }
     }
 
@@ -654,14 +719,54 @@ impl AgenticEvalReport {
         self.control_verdict().map(|v| v.demonstrated_sensitivity())
     }
 
-    /// The eval's own drift: how far two identical raw arms landed apart.
+    /// The eval's own drift: the mean pairwise composite gap over every run
+    /// of the identical raw configuration — the primary plus each A/A pair.
     ///
-    /// `None` when the A/A arm did not run, which is distinct from a measured
-    /// zero for the same reason `Blind` is distinct from zero divergences.
+    /// With one A/A pair this is exactly the old single-gap number. With `K`
+    /// pairs it averages the `C(K+1, 2)` pairwise gaps among `K + 1` runs of
+    /// the same arm, which estimates the same quantity from more than one
+    /// degree of freedom. A mean absolute gap, not a standard deviation:
+    /// [`EFFECT_NOISE_RATIO`] was calibrated against a gap, and changing the
+    /// estimator and the threshold at once would make old and new verdicts
+    /// incomparable.
+    ///
+    /// `None` when no A/A arm ran, which is distinct from a measured zero for
+    /// the same reason `Blind` is distinct from zero divergences.
     #[must_use]
     pub fn noise_floor(&self) -> Option<f64> {
-        let replicate = self.raw_replicate.as_ref()?;
-        Some((self.raw.composite - replicate.composite).abs())
+        let gaps = self.drift_gaps();
+        #[allow(clippy::cast_precision_loss)]
+        match gaps.len() {
+            0 => None,
+            n => Some(gaps.iter().sum::<f64>() / n as f64),
+        }
+    }
+
+    /// How many pairwise gaps stand behind [`Self::noise_floor`] — the
+    /// degrees of freedom a reader should weigh the verdict by.
+    #[must_use]
+    pub fn noise_pairs(&self) -> usize {
+        self.drift_gaps().len()
+    }
+
+    /// Pairwise absolute composite gaps among every run of the raw
+    /// configuration. Empty when no A/A arm ran.
+    fn drift_gaps(&self) -> Vec<f64> {
+        let mut composites = vec![self.raw.composite];
+        if self.raw_replicates.is_empty() {
+            if let Some(replicate) = self.raw_replicate.as_ref() {
+                composites.push(replicate.composite);
+            }
+        } else {
+            composites.extend(self.raw_replicates.iter().map(|r| r.composite));
+        }
+        let mut gaps = Vec::new();
+        for (i, a) in composites.iter().enumerate() {
+            for b in &composites[i + 1..] {
+                gaps.push((a - b).abs());
+            }
+        }
+        gaps
     }
 
     /// Whether the measured effect is larger than the eval's own drift.
@@ -676,11 +781,20 @@ impl AgenticEvalReport {
         // A zero effect never "exceeds" anything, however quiet the arm was:
         // with both terms at zero the inequality would hold vacuously and
         // report no difference as a finding.
+        let pairs = self.noise_pairs();
         Some(
             if effect.abs() > 0.0 && effect.abs() >= EFFECT_NOISE_RATIO * noise {
-                EffectVerdict::ExceedsNoise { effect, noise }
+                EffectVerdict::ExceedsNoise {
+                    effect,
+                    noise,
+                    pairs,
+                }
             } else {
-                EffectVerdict::WithinNoise { effect, noise }
+                EffectVerdict::WithinNoise {
+                    effect,
+                    noise,
+                    pairs,
+                }
             },
         )
     }
@@ -692,6 +806,17 @@ impl AgenticEvalReport {
     #[must_use]
     pub fn unstable_tasks(&self) -> Vec<&AgenticTaskComparison> {
         self.tasks.iter().filter(|t| t.is_unstable()).collect()
+    }
+
+    /// The paired per-`(task, seed)` comparison, derived from the drill-down.
+    ///
+    /// Derived rather than stored, like the verdicts above it — which also
+    /// means a legacy report's stored per-seed detail yields it retroactively.
+    /// `None` when no pair has both sides measured.
+    #[must_use]
+    pub fn paired_effect(&self) -> Option<PairedEffect> {
+        self.paired
+            .or_else(|| PairedEffect::from_tasks(&self.tasks))
     }
 
     /// Compute the per-axis delta from the two arms' scores.
@@ -715,6 +840,170 @@ impl AgenticEvalReport {
             ),
         }
     }
+}
+
+/// The paired view of the raw-versus-gglib comparison.
+///
+/// The two real arms run the **same seeds on the same tasks**, so every
+/// `(task, seed)` cell is a matched pair — and pairing is what removes the
+/// eval's identical-arm spread from the comparison. The ceiling experiment
+/// (tune runs #12–#32, ADR 0004's postscript) resolved a +0.067 effect
+/// through noise wider than that *only* because it paired per run; the same
+/// data has been sitting in [`AgenticEvalReport::tasks`] all along, compared
+/// only as arm means.
+///
+/// Pairs are on [`TuneTaskResult::tool_match_score`] — the one graded
+/// per-run quality scalar. Pass/fail flips remain visible per task in
+/// [`AgenticTaskComparison::pass_counts`]; folding them in here would double
+/// count, since the match score is most of what decides `passed`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PairedEffect {
+    /// Matched `(task, seed)` pairs in which both arms produced a real
+    /// observation.
+    pub pairs: usize,
+    /// Pairs both arms ran but at least one side never reached the model —
+    /// dropped from every number here, and reported so the drop is visible.
+    pub unmeasured_pairs: usize,
+    /// Pairs the gglib arm scored strictly higher.
+    pub wins: usize,
+    /// Pairs the raw arm scored strictly higher.
+    pub losses: usize,
+    /// Pairs with identical scores. On a suite where most tasks pass cleanly
+    /// under both arms this is the largest bucket, and that is information:
+    /// the arms mostly agree.
+    pub ties: usize,
+    /// Mean of `gglib − raw` over the measured pairs.
+    pub mean_delta: f64,
+    /// One-sided Wilcoxon signed-rank *p* for "gglib scores higher", by
+    /// normal approximation with tie correction.
+    ///
+    /// `None` below [`WILCOXON_MIN_PAIRS`] non-tied pairs — the approximation
+    /// is not trustworthy there, and rendering a statistic the design cannot
+    /// support is worse than rendering none (the [`EffectVerdict`] rule). At
+    /// small counts, read [`Self::wins`] against [`Self::losses`] instead.
+    pub p_value: Option<f64>,
+}
+
+/// The fewest non-tied pairs the normal-approximation Wilcoxon accepts.
+///
+/// Below this the approximation's error is material and an exact table would
+/// be needed; above it the correction terms keep it honest.
+pub const WILCOXON_MIN_PAIRS: usize = 8;
+
+impl PairedEffect {
+    /// Compute the paired comparison from the per-task drill-down.
+    ///
+    /// `None` when no `(task, seed)` pair has both sides measured — a paired
+    /// analysis of nothing is not a zero effect.
+    #[must_use]
+    pub fn from_tasks(tasks: &[AgenticTaskComparison]) -> Option<Self> {
+        let mut deltas = Vec::new();
+        let mut unmeasured_pairs = 0_usize;
+        for task in tasks {
+            for (raw, gglib) in task.raw.iter().zip(task.gglib.iter()) {
+                if raw.is_measured() && gglib.is_measured() {
+                    deltas.push(gglib.tool_match_score - raw.tool_match_score);
+                } else {
+                    unmeasured_pairs += 1;
+                }
+            }
+        }
+        if deltas.is_empty() {
+            return None;
+        }
+
+        let wins = deltas.iter().filter(|d| **d > 0.0).count();
+        let losses = deltas.iter().filter(|d| **d < 0.0).count();
+        let ties = deltas.len() - wins - losses;
+        #[allow(clippy::cast_precision_loss)]
+        let mean_delta = deltas.iter().sum::<f64>() / deltas.len() as f64;
+
+        Some(Self {
+            pairs: deltas.len(),
+            unmeasured_pairs,
+            wins,
+            losses,
+            ties,
+            mean_delta,
+            p_value: wilcoxon_one_sided(&deltas),
+        })
+    }
+}
+
+/// One-sided Wilcoxon signed-rank *p* for "the deltas are positive".
+///
+/// Textbook construction: zeros dropped, absolute deltas ranked with average
+/// ranks over ties, `W⁻` (the rank sum of the negative deltas) compared
+/// against its null distribution by normal approximation with the tie
+/// correction and a continuity correction. Small `W⁻` — losses carrying
+/// little rank weight — yields small *p*.
+///
+/// `None` when fewer than [`WILCOXON_MIN_PAIRS`] non-zero deltas remain.
+fn wilcoxon_one_sided(deltas: &[f64]) -> Option<f64> {
+    let mut nonzero: Vec<f64> = deltas.iter().copied().filter(|d| *d != 0.0).collect();
+    let n = nonzero.len();
+    if n < WILCOXON_MIN_PAIRS {
+        return None;
+    }
+    nonzero.sort_by(|a, b| a.abs().partial_cmp(&b.abs()).expect("scores are finite"));
+
+    // Average ranks over runs of tied |delta|, accumulating the tie
+    // correction term as each run closes.
+    let mut w_minus = 0.0_f64;
+    let mut tie_correction = 0.0_f64;
+    let mut index = 0;
+    while index < n {
+        let mut end = index + 1;
+        // Bitwise equality is the right tie test here: ranks tie when the
+        // stored |delta| values are literally the same number, and a margin
+        // would invent ties between distinct scores.
+        while end < n && (nonzero[end].abs() - nonzero[index].abs()).abs() == 0.0 {
+            end += 1;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let average_rank = ((index + 1 + end) as f64) / 2.0;
+        let run = end - index;
+        if run > 1 {
+            #[allow(clippy::cast_precision_loss)]
+            let t = run as f64;
+            tie_correction += (t * t).mul_add(t, -t);
+        }
+        for value in &nonzero[index..end] {
+            if *value < 0.0 {
+                w_minus += average_rank;
+            }
+        }
+        index = end;
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean = nf * (nf + 1.0) / 4.0;
+    let variance = nf * (nf + 1.0) * 2.0f64.mul_add(nf, 1.0) / 24.0 - tie_correction / 48.0;
+    if variance <= 0.0 {
+        // Every |delta| identical and tied: the statistic is degenerate, and
+        // the sign test the caller can read from wins/losses is the honest
+        // fallback.
+        return None;
+    }
+    // Continuity correction toward the mean; "gglib higher" means W⁻ is
+    // small, so the one-sided p is the lower tail.
+    let z = (w_minus - mean + 0.5) / variance.sqrt();
+    Some(normal_cdf(z))
+}
+
+/// Standard normal CDF via Abramowitz–Stegun 7.1.26 on `erf`, accurate to
+/// ~1.5e-7 — orders of magnitude finer than any decision read from a *p*.
+fn normal_cdf(z: f64) -> f64 {
+    let x = z / std::f64::consts::SQRT_2;
+    let t = 1.0 / 0.327_591_1f64.mul_add(x.abs(), 1.0);
+    let poly = t
+        * (0.254_829_592
+            + t * (-0.284_496_736
+                + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
+    let erf = 1.0 - poly * (-x * x).exp();
+    let signed = if x < 0.0 { -erf } else { erf };
+    0.5 * (1.0 + signed)
 }
 
 /// `raw ÷ gglib`, or `None` when either side is unmeasured or the denominator
@@ -797,6 +1086,9 @@ mod tests {
             control,
             raw_replicate: None,
             replicate_seeds: vec![],
+            raw_replicates: vec![],
+            replicate_seed_sets: vec![],
+            paired: None,
         }
     }
 
@@ -1304,5 +1596,158 @@ mod tests {
         let config: AgenticEvalConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.model_id, 3);
         assert!(config.ctx_size.is_none());
+    }
+
+    // ── PairedEffect ─────────────────────────────────────────────────────────
+
+    /// A result with a chosen match score, for paired fixtures.
+    fn scored_result(id: &str, score: f64) -> TuneTaskResult {
+        TuneTaskResult {
+            tool_match_score: score,
+            passed: score >= 1.0,
+            ..task_result(id, false)
+        }
+    }
+
+    fn paired_task(id: &str, raw_scores: &[f64], gglib_scores: &[f64]) -> AgenticTaskComparison {
+        AgenticTaskComparison {
+            task_id: id.to_owned(),
+            category: TaskCategory::SingleCall,
+            raw: raw_scores.iter().map(|s| scored_result(id, *s)).collect(),
+            gglib: gglib_scores.iter().map(|s| scored_result(id, *s)).collect(),
+        }
+    }
+
+    #[test]
+    fn paired_effect_counts_wins_losses_ties_and_means_the_deltas() {
+        let tasks = vec![
+            paired_task("a", &[0.5, 1.0], &[1.0, 1.0]), // one win, one tie
+            paired_task("b", &[1.0], &[0.5]),           // one loss
+        ];
+        let paired = PairedEffect::from_tasks(&tasks).expect("pairs exist");
+        assert_eq!(paired.pairs, 3);
+        assert_eq!((paired.wins, paired.losses, paired.ties), (1, 1, 1));
+        assert!((paired.mean_delta - 0.0).abs() < 1e-12, "{paired:?}");
+        assert_eq!(paired.unmeasured_pairs, 0);
+        // Two non-tied pairs is far below the Wilcoxon minimum.
+        assert_eq!(paired.p_value, None);
+    }
+
+    /// A pair either side of which never reached the model is dropped and
+    /// counted, never scored — the same rule `ArmScores::unmeasured_runs`
+    /// applies arm-wide, kept at pair granularity here.
+    #[test]
+    fn paired_effect_drops_unmeasured_pairs_and_says_so() {
+        let mut task = paired_task("a", &[0.5, 0.5], &[1.0, 1.0]);
+        task.raw[1].unmeasured = Some("upstream unreachable".to_owned());
+        let paired = PairedEffect::from_tasks(&[task]).expect("one live pair");
+        assert_eq!(paired.pairs, 1);
+        assert_eq!(paired.unmeasured_pairs, 1);
+        assert_eq!(paired.wins, 1);
+    }
+
+    #[test]
+    fn paired_effect_is_none_when_nothing_was_measured() {
+        assert!(PairedEffect::from_tasks(&[]).is_none());
+        let mut task = paired_task("a", &[0.5], &[1.0]);
+        task.gglib[0].unmeasured = Some("dead".to_owned());
+        assert!(PairedEffect::from_tasks(&[task]).is_none());
+    }
+
+    /// Ten distinct all-positive deltas: W⁻ = 0, and the normal approximation
+    /// with continuity correction gives z = (0 − 27.5 + 0.5)/√96.25 ≈ −2.752,
+    /// p ≈ 0.0030. Pinned inside a band an implementation error of one rank,
+    /// one correction term, or a dropped tail would leave.
+    #[test]
+    fn wilcoxon_all_positive_deltas_is_a_strong_result() {
+        let gglib: Vec<f64> = (1..=10).map(|i| f64::from(i) * 0.05).collect();
+        let raw = vec![0.0; 10];
+        let tasks = vec![paired_task("a", &raw, &gglib)];
+        let p = PairedEffect::from_tasks(&tasks)
+            .unwrap()
+            .p_value
+            .expect("ten non-tied pairs");
+        assert!(p > 0.001 && p < 0.005, "p = {p}");
+    }
+
+    /// Symmetric wins and losses of matching magnitude: W⁻ lands on its null
+    /// mean and the one-sided p sits at chance.
+    #[test]
+    fn wilcoxon_balanced_deltas_read_as_chance() {
+        let raw = vec![0.5; 10];
+        let gglib = vec![0.6, 0.4, 0.7, 0.3, 0.8, 0.2, 0.9, 0.1, 1.0, 0.0];
+        let tasks = vec![paired_task("a", &raw, &gglib)];
+        let p = PairedEffect::from_tasks(&tasks)
+            .unwrap()
+            .p_value
+            .expect("ten non-tied pairs");
+        assert!(p > 0.4 && p < 0.6, "p = {p}");
+    }
+
+    /// Below the minimum the statistic says nothing — ties do not count
+    /// toward the minimum, because zeros are dropped before ranking.
+    #[test]
+    fn wilcoxon_says_nothing_below_the_minimum() {
+        let raw = vec![0.5; 10];
+        let mut gglib = vec![0.5; 10]; // ties everywhere...
+        for (i, value) in gglib.iter_mut().enumerate().take(7) {
+            *value = 0.01f64.mul_add(f64::from(u8::try_from(i).unwrap()), 0.6);
+        }
+        let tasks = vec![paired_task("a", &raw, &gglib)];
+        let paired = PairedEffect::from_tasks(&tasks).unwrap();
+        assert_eq!(paired.pairs, 10);
+        assert_eq!(paired.wins, 7);
+        assert_eq!(paired.p_value, None);
+    }
+
+    // ── Multi-pair A/A drift ────────────────────────────────────────────────
+
+    /// Three runs of the identical configuration give three pairwise gaps,
+    /// and the floor is their mean — more degrees of freedom, same estimator.
+    #[test]
+    fn noise_floor_over_multiple_pairs_averages_all_pairwise_gaps() {
+        let mut report = report_with(None, 0.9);
+        report.raw = scores(0.5, None, 0.7);
+        report.raw_replicates = vec![scores(0.5, None, 0.6), scores(0.5, None, 0.8)];
+        // gaps: |0.7−0.6| = 0.1, |0.7−0.8| = 0.1, |0.6−0.8| = 0.2
+        let floor = report.noise_floor().expect("replicates ran");
+        assert!((floor - 0.4 / 3.0).abs() < 1e-12, "{floor}");
+        assert_eq!(report.noise_pairs(), 3);
+        assert_eq!(report.effect_verdict().expect("has drift").pairs(), 3);
+    }
+
+    /// A report written before the multi-pair field existed — populated
+    /// `raw_replicate`, empty `raw_replicates` — reads exactly as it always
+    /// did: one gap, one pair.
+    #[test]
+    fn a_legacy_single_pair_report_reads_exactly_as_before() {
+        let report = report_with_replicate(0.2, 0.05);
+        assert!((report.noise_floor().unwrap() - 0.05).abs() < 1e-12);
+        assert_eq!(report.noise_pairs(), 1);
+        assert_eq!(report.effect_verdict().unwrap().pairs(), 1);
+    }
+
+    /// Pair 1 must reproduce the single-pair seed set, or a multi-pair run's
+    /// first pair would not be comparable with every run recorded before it.
+    #[test]
+    fn the_first_replicate_seed_set_is_the_legacy_one() {
+        assert_eq!(
+            replicate_seed_set(&DEFAULT_SEEDS, 1),
+            replicate_seeds(&DEFAULT_SEEDS)
+        );
+        let second = replicate_seed_set(&DEFAULT_SEEDS, 2);
+        assert_ne!(second, replicate_seeds(&DEFAULT_SEEDS));
+        assert_ne!(second, DEFAULT_SEEDS.to_vec());
+    }
+
+    /// The report derives it from the drill-down it already stores, so a
+    /// legacy report gains the paired view retroactively.
+    #[test]
+    fn a_report_derives_its_paired_effect_from_tasks() {
+        let mut report = report_with(None, 0.7);
+        assert!(report.paired_effect().is_none(), "no drill-down stored");
+        report.tasks = vec![paired_task("a", &[0.5], &[1.0])];
+        let paired = report.paired_effect().expect("one pair");
+        assert_eq!((paired.pairs, paired.wins), (1, 1));
     }
 }

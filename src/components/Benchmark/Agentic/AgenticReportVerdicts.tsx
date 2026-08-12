@@ -57,7 +57,36 @@ const NoiseBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
       </p>
       <p className="text-xs text-text-muted m-0">
         A sanity ratio, not a significance test — more seeds strengthen it, a bigger factor does not.
+        {verdict.pairs > 1 && ` Drift is the mean of ${verdict.pairs} pairwise gaps.`}
       </p>
+    </div>
+  );
+};
+
+/** The paired per-(task, seed) view, when the report carries one. */
+const PairedBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
+  const paired = report.paired;
+  if (paired == null) return null;
+  const p =
+    paired.p_value == null
+      ? 'too few non-tied pairs for a p — read wins against losses'
+      : `Wilcoxon one-sided p = ${paired.p_value.toFixed(4)}`;
+  return (
+    <div className="flex flex-col gap-xs">
+      <p className="text-sm text-text m-0">
+        Paired
+        <span className="font-mono tabular-nums text-text-secondary">
+          {' '}
+          — {paired.wins}W–{paired.losses}L–{paired.ties}T over {paired.pairs} pairs, mean Δ{' '}
+          {paired.mean_delta >= 0 ? '+' : ''}
+          {paired.mean_delta.toFixed(3)}; {p}
+        </span>
+      </p>
+      {paired.unmeasured_pairs > 0 && (
+        <p className="text-xs text-warning m-0">
+          {paired.unmeasured_pairs} pairs dropped: at least one side never reached the model.
+        </p>
+      )}
     </div>
   );
 };
@@ -149,6 +178,7 @@ export const AgenticReportVerdicts: FC<{ report: AgenticEvalReport }> = ({ repor
     <section className="flex flex-col gap-xs">
       <h3 className="m-0 text-sm font-semibold text-text">Drift (A/A)</h3>
       <NoiseBlock report={report} />
+      <PairedBlock report={report} />
     </section>
     <section className="flex flex-col gap-xs">
       <h3 className="m-0 text-sm font-semibold text-text">Positive control</h3>

@@ -25,7 +25,7 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores,
     CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
-    control_sampling, replicate_seeds,
+    PairedEffect, control_sampling, replicate_seed_set, replicate_seeds,
 };
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
@@ -203,7 +203,13 @@ pub async fn run_agentic_eval(
     // control's scores to the pipeline.
     let raw_results = take_arm(&mut arm_results, EvalArm::Raw);
     let gglib_results = take_arm(&mut arm_results, EvalArm::Gglib);
-    let replicate_results = take_arm(&mut arm_results, EvalArm::RawReplicate);
+    // Every A/A pair, in plan order — take_arm removes the first match, so
+    // draining repeatedly yields them in the order they ran.
+    let mut replicate_runs: Vec<Vec<Vec<TuneTaskResult>>> = Vec::new();
+    while let Some(run) = take_arm(&mut arm_results, EvalArm::RawReplicate) {
+        replicate_runs.push(run);
+    }
+    let replicate_results = replicate_runs.first().cloned();
     let control_results = take_arm(&mut arm_results, EvalArm::Control);
 
     // Each arm is scored against *its own* seed count, not the run's: the
@@ -222,6 +228,10 @@ pub async fn run_agentic_eval(
     let raw = score_arm(&raw_results, EvalArm::Raw).unwrap_or_else(|| empty_scores(&config));
     let gglib = score_arm(&gglib_results, EvalArm::Gglib).unwrap_or_else(|| empty_scores(&config));
     let raw_replicate = score_arm(&replicate_results, EvalArm::RawReplicate);
+    let raw_replicates: Vec<_> = replicate_runs
+        .iter()
+        .filter_map(|run| score_arm(&Some(run.clone()), EvalArm::RawReplicate))
+        .collect();
     let control = score_arm(&control_results, EvalArm::Control);
     let delta = AgenticEvalReport::delta_of(&raw, &gglib);
 
@@ -256,7 +266,17 @@ pub async fn run_agentic_eval(
         } else {
             Vec::new()
         },
+        replicate_seed_sets: (1..=replicate_runs.len())
+            .filter_map(|pair| u32::try_from(pair).ok())
+            .map(|pair| replicate_seed_set(&config.seeds, pair))
+            .collect(),
         raw_replicate,
+        raw_replicates,
+        paired: None,
+    };
+    let report = AgenticEvalReport {
+        paired: PairedEffect::from_tasks(&report.tasks),
+        ..report
     };
 
     // Said out loud, because a control that failed to move invalidates every
@@ -378,20 +398,32 @@ fn plan_arms(config: &AgenticEvalConfig) -> Vec<ArmPlan> {
     ];
 
     if config.replicate_raw {
-        // Unseeded, the A/A arm is simply the same request twice — which still
-        // measures drift, since nothing was pinned in the first place.
-        let seeds = if config.seeds.is_empty() {
-            primary.clone()
-        } else {
-            replicate_seeds(&config.seeds)
-                .into_iter()
-                .map(Some)
-                .collect()
-        };
-        plans.push(ArmPlan {
-            arm: EvalArm::RawReplicate,
-            seeds,
-        });
+        // One plan per requested pair, each on its own derived seed set —
+        // pair 1 is the legacy set, so a multi-pair run's first pair stays
+        // comparable with every single-pair run before it. Clamped at one:
+        // zero pairs with replicate_raw on would be an A/A arm that does not
+        // run while the config says it does.
+        for pair in 1..=u32::try_from(config.replicate_pairs.max(1)).unwrap_or(1) {
+            // Unseeded, the A/A arm is simply the same request again — which
+            // still measures drift, since nothing was pinned in the first
+            // place. Only one such pair is meaningful: with no seeds to
+            // stride, every further pair would be literally the same plan.
+            let seeds = if config.seeds.is_empty() {
+                if pair > 1 {
+                    break;
+                }
+                primary.clone()
+            } else {
+                replicate_seed_set(&config.seeds, pair)
+                    .into_iter()
+                    .map(Some)
+                    .collect()
+            };
+            plans.push(ArmPlan {
+                arm: EvalArm::RawReplicate,
+                seeds,
+            });
+        }
     }
 
     if config.include_control {
