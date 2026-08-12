@@ -103,6 +103,13 @@ pub struct UpstreamHealthSnapshot {
     pub total_client_aborts: u64,
     /// Total proactive recycles triggered since the proxy started.
     pub total_recycles: u64,
+    /// Of those, how many could not actually be carried out because stopping
+    /// the model server failed.
+    ///
+    /// A non-zero value here means the watchdog is firing and being ignored —
+    /// a different problem from a healthy upstream, and one that is otherwise
+    /// invisible because the request that triggered it proceeds regardless.
+    pub total_recycle_failures: u64,
 }
 
 /// Lock-free tracker of consecutive degraded upstream responses.
@@ -121,6 +128,7 @@ pub struct UpstreamHealth {
     total_first_byte_timeouts: AtomicU64,
     total_client_aborts: AtomicU64,
     total_recycles: AtomicU64,
+    total_recycle_failures: AtomicU64,
 }
 
 impl UpstreamHealth {
@@ -194,6 +202,23 @@ impl UpstreamHealth {
         requested
     }
 
+    /// Put back a recycle request that was consumed but could not be carried
+    /// out.
+    ///
+    /// [`Self::take_recycle_request`] clears the flag *and* zeroes the streak,
+    /// on the assumption that the caller is about to act on it. When the stop
+    /// then fails, the upstream is still degraded but the evidence for that has
+    /// just been discarded — so without this the watchdog has to accumulate
+    /// [`STRIKE_THRESHOLD`] fresh strikes before it will try again, against a
+    /// server already known to be sick.
+    ///
+    /// Deliberately does not touch `total_recycles`: that counts recycles
+    /// *triggered*, which this one was. The failure is counted separately.
+    pub fn rearm_recycle(&self) {
+        self.total_recycle_failures.fetch_add(1, Ordering::Relaxed);
+        self.recycle_requested.store(true, Ordering::Relaxed);
+    }
+
     /// Current consecutive-strike count (for observability/tests).
     #[must_use]
     pub fn strikes(&self) -> u32 {
@@ -210,6 +235,7 @@ impl UpstreamHealth {
             total_first_byte_timeouts: self.total_first_byte_timeouts.load(Ordering::Relaxed),
             total_client_aborts: self.total_client_aborts.load(Ordering::Relaxed),
             total_recycles: self.total_recycles.load(Ordering::Relaxed),
+            total_recycle_failures: self.total_recycle_failures.load(Ordering::Relaxed),
         }
     }
 }
@@ -301,6 +327,41 @@ mod tests {
         assert_eq!(h.strikes(), 1);
         assert!(!h.take_recycle_request());
         assert_eq!(h.snapshot().total_client_aborts, 2);
+    }
+
+    /// A recycle that could not be carried out must not spend the watchdog's
+    /// case. Before this, a failed stop left the flag cleared and the streak
+    /// zeroed, so a server that was still sick got a clean slate and needed
+    /// two fresh strikes before anyone tried again.
+    #[test]
+    fn a_failed_recycle_rearms_instead_of_spending_the_request() {
+        let h = UpstreamHealth::new();
+        h.record_stream_outcome(StreamVerdict::Empty);
+        h.record_stream_outcome(StreamVerdict::Empty);
+        assert!(h.take_recycle_request(), "threshold reached");
+
+        // The stop failed, so the request goes back.
+        h.rearm_recycle();
+        assert!(
+            h.take_recycle_request(),
+            "the re-armed request is available to the next idle caller"
+        );
+
+        let snap = h.snapshot();
+        assert_eq!(snap.total_recycle_failures, 1);
+        // Both takes count as triggered — the failure is tracked separately
+        // rather than by rewriting a cumulative counter.
+        assert_eq!(snap.total_recycles, 2);
+    }
+
+    #[test]
+    fn rearming_is_not_needed_on_the_happy_path() {
+        let h = UpstreamHealth::new();
+        h.record_stream_outcome(StreamVerdict::Empty);
+        h.record_stream_outcome(StreamVerdict::Empty);
+        assert!(h.take_recycle_request());
+        assert!(!h.take_recycle_request(), "still one-shot when it succeeds");
+        assert_eq!(h.snapshot().total_recycle_failures, 0);
     }
 
     #[test]

@@ -831,7 +831,17 @@ async fn chat_completions(
     // honored by the next request that arrives while the upstream is idle.
     if state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request() {
         warn!("upstream watchdog: recycling degraded model before next request");
-        let _ = state.runtime_port.stop_current().await;
+        // Taking the request already cleared the flag and zeroed the streak, so
+        // a swallowed failure here spends the watchdog's entire case against a
+        // server that is still sick. Put it back instead, the way the cache
+        // clear path above already reports its own recycle failures.
+        if let Err(e) = state.runtime_port.stop_current().await {
+            warn!(
+                error = %e,
+                "upstream watchdog: recycle failed; re-arming for the next idle request"
+            );
+            state.upstream_health.rearm_recycle();
+        }
     }
 
     // The one catalog round-trip this request pays for. Resolved here rather
