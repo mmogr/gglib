@@ -272,15 +272,6 @@ impl ProxySupervisor {
         Arc::clone(&self.agent_metrics)
     }
 
-    /// The per-model defect ledger — the Tier C signals, kept as diagnosis.
-    ///
-    /// Nothing acts on these automatically since ADR 0006; they record what
-    /// actually fails, per model, for a person to read.
-    #[must_use]
-    pub fn defects(&self) -> Arc<gglib_core::domain::defects::ModelDefectLedger> {
-        Arc::clone(&self.defects)
-    }
-
     /// Get a watch receiver for proxy exit notifications.
     ///
     /// The receiver yields the new `ProxyStatus` whenever the proxy task exits

@@ -181,10 +181,24 @@ pub fn spawn_and_return(
                 );
                 // The repair re-issue needs the same endpoint, headers and
                 // body the original went out with. `try_clone` succeeds
-                // because the body is `Bytes`; a `None` here simply means no
-                // repair is possible for this turn, which is a degradation
-                // rather than a failure.
-                let repair = req_builder.try_clone().map(|builder| RepairContext {
+                // because the body is `Bytes` — the sibling call above
+                // `expect`s on that same invariant.
+                //
+                // A `None` here is therefore a should-never-happen, and it is
+                // worth saying so out loud: it silently disables repair *and*
+                // the tool-call hold-back for the whole turn, so the client's
+                // frames go out unwithheld and a malformed call reaches it
+                // unaltered. Degrading is the right behaviour; degrading
+                // without a trace is what made this hard to reason about.
+                let cloned = req_builder.try_clone();
+                if cloned.is_none() {
+                    warn!(
+                        model = %model_name_owned,
+                        "request builder could not be cloned; tool-call repair and hold-back \
+                         are disabled for this turn"
+                    );
+                }
+                let repair = cloned.map(|builder| RepairContext {
                     req_builder: builder,
                     request_body: body.clone(),
                     enabled: repair_enabled,
