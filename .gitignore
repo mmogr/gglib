@@ -1,7 +1,5 @@
 # Rust build artifacts
 /target
-/dist
-/build
 
 # Tauri build artifacts
 /src-tauri/target
@@ -77,6 +75,7 @@ desktop.ini
 
 # Coverage reports
 coverage/
+lcov.info
 tarpaulin-report.html
 *.profraw
 *.profdata
@@ -85,7 +84,4 @@ tarpaulin-report.html
 .env
 boundary-status.json
 .vscode/settings.json
-lcov.info
-coverage/html
-
 logs/

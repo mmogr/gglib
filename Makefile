@@ -1,4 +1,13 @@
-.PHONY: help install build test clean clean-llama clean-all run-serve run-proxy check fmt lint doc build-gui build-tauri build-all check-deps check-deps-verify check-rust llama-install-auto
+# Every target here is a command, not a file. The previous list named 15 of
+# them, so `make test` and `make setup` were one stray directory away from
+# being skipped as up-to-date.
+.PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
+        test check fmt lint doc dev pre-commit release \
+        lint-web typecheck-web test-web boundaries enforce \
+        clean clean-gui clean-llama clean-db clean-all \
+        check-deps check-deps-bootstrap check-deps-verify check-rust \
+        llama-install llama-install-auto llama-update llama-status llama-rebuild \
+        run-serve run-proxy run-gui run-web
 
 # Platform specific configuration
 UNAME_S := $(shell uname -s)
@@ -28,13 +37,15 @@ CARGO := $(CARGO_ENV) $(CARGO_BIN)
 # same values the manifest already had; because the env vars take precedence,
 # any future edit to Cargo.toml would have been silently ignored under `make`.
 
+##@ Dependencies
+
 # Bootstrap dependency check - runs WITHOUT requiring Rust compilation
-check-deps-bootstrap:
+check-deps-bootstrap: ## Run the bash dependency check (no Rust needed)
 	@chmod +x scripts/check-deps.sh
 	@./scripts/check-deps.sh
 
 # Check if Rust/Cargo is installed
-check-rust:
+check-rust: ## Verify Rust and Cargo are installed
 	@if ! command -v cargo >/dev/null 2>&1; then \
 		echo ""; \
 		echo "╔════════════════════════════════════════════════════════════════╗"; \
@@ -52,41 +63,31 @@ check-rust:
 # `config check-deps` adds extra parity checks for the GUI bootstrap
 # path; run it explicitly via `make check-deps-verify` when you want
 # both reports.
-check-deps: check-deps-bootstrap
+check-deps: check-deps-bootstrap ## Check system dependencies
 
 # Run BOTH the bash bootstrap check and the Rust `config check-deps`
 # command. Useful for cross-validating that the two implementations
 # agree on which deps are missing. Not part of `make setup`.
-check-deps-verify: check-deps-bootstrap
+check-deps-verify: check-deps-bootstrap ## Cross-validate the bash and Rust dependency checks
 	@echo ""
 	@echo "Running detailed dependency verification..."
 	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
 
-# Default target
-help:
-	@echo "GGLib Makefile - Available targets:"
-	@echo "  make setup                - Full setup (check deps + build + install)"
-	@echo "  make install              - Build and install gglib to ~/.cargo/bin/"
-	@echo "  make uninstall            - Uninstall gglib and clean everything"
-	@echo "  make build                - Build Rust CLI in release mode"
-	@echo "  make build-dev            - Build Rust CLI in debug mode"
-	@echo "  make build-gui            - Build web UI frontend"
-	@echo "  make build-tauri          - Build Tauri desktop app"
-	@echo "  make test                 - Run all tests"
-	@echo "  make clean                - Remove build artifacts"
-	@echo "  make clean-gui            - Remove web UI build"
-	@echo "  make clean-llama          - Remove llama.cpp installation"
-	@echo "  make clean-db             - Remove database files"
-	@echo "  make clean-all            - Remove everything (git clean -xffd)"
-	@echo "  make llama-install-auto   - Install llama.cpp (auto-detect GPU)"
-	@echo "  make run-serve            - Run gglib serve (release mode)"
-	@echo "  make run-proxy            - Run gglib proxy (release mode)"
-	@echo "  make run-gui              - Run desktop GUI"
-	@echo "  make run-web              - Run web server"
+##@ Help
 
-# Build & Install
+# Descriptions come from the `## ...` comment on each target, so this list can
+# no longer drift from the targets themselves — which the hand-written version
+# had, omitting check, fmt, lint, doc, dev, pre-commit, release and six others.
+help: ## Show this help
+	@echo "GGLib Makefile - Available targets:"
+	@awk 'BEGIN {FS = ":.*##"} \
+		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next } \
+		/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+##@ Build and install
+
 # Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
-install:
+install: ## Build and install gglib to ~/.cargo/bin/
 	@echo "Installing gglib..."
 	@mkdir -p "$$HOME/.cargo/bin"
 	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
@@ -95,7 +96,7 @@ ifeq ($(UNAME_S),Darwin)
 endif
 	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
-uninstall:
+uninstall: ## Uninstall gglib and remove local state
 	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
 	@echo "  - Binary from ~/.cargo/bin"
 	@echo "  - System configuration and database (~/Library/Application Support/gglib or ~/.local/share/gglib)"
@@ -127,7 +128,6 @@ uninstall:
 		if [ -d .python ]; then rm -rf .python || true; fi; \
 		if [ -d .conda ]; then rm -rf .conda || true; fi; \
 		if [ -d pids ]; then rm -rf pids || true; fi; \
-		if [ -f package-lock.json ]; then rm -f package-lock.json || true; fi; \
 		if [ -f .env ]; then rm -f .env || true; fi; \
 		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
 			rm -rf data/ || true; \
@@ -148,16 +148,16 @@ uninstall:
 		echo "Cancelled."; \
 	fi
 
-build:
+build: ## Build Rust CLI in release mode
 	@echo "Building release binary..."
-	$(TASKSET) $(CARGO) build --release
+	$(CARGO) build --release
 
-build-dev:
+build-dev: ## Build Rust CLI in debug mode
 	@echo "Building debug binary..."
 	$(CARGO) build
 
 # Build web UI frontend
-build-gui:
+build-gui: ## Build web UI frontend
 	@echo "Building web UI frontend..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	UV_USE_IO_URING=0 npm install
@@ -165,42 +165,73 @@ build-gui:
 	@echo "✓ Web UI built to web_ui/"
 
 # Build everything (Rust + Web UI)
-build-all: build-gui build
+build-all: build-gui build ## Build Rust CLI and web UI
 	@echo "✓ Built Rust CLI and Web UI"
 
+##@ Rust checks
+
 # Run all tests
-test:
+test: ## Run Rust tests
 	@echo "Running all tests..."
 	$(CARGO) test
 
 # Check code without building
-check:
+check: ## Check Rust code without building
 	@echo "Checking code..."
 	$(CARGO) check
 
 # Format code
-fmt:
+fmt: ## Format Rust code
 	@echo "Formatting code..."
 	$(CARGO) fmt
 
 # Run clippy
-lint:
+lint: ## Run clippy with warnings denied
 	@echo "Running clippy linter..."
 	$(CARGO) clippy -- -D warnings
 
 # Generate and open documentation
-doc:
+doc: ## Generate and open documentation
 	@echo "Generating documentation..."
 	$(CARGO) doc --open
 
+##@ Frontend and architecture checks
+
+lint-web: ## Run eslint over src/ (no warnings allowed)
+	@echo "Linting web UI..."
+	npm run lint -- --max-warnings 0
+
+typecheck-web: ## Type-check src, tests and the build config
+	@echo "Type-checking web UI..."
+	npm run typecheck
+
+test-web: ## Run the frontend test suite
+	@echo "Running frontend tests..."
+	npm run test:run
+
+boundaries: ## Check crate boundaries
+	@./scripts/check_boundaries.sh
+
+enforce: ## Run the architecture enforcement checks
+	@./scripts/check-tauri-commands.sh
+	@./scripts/check-frontend-ipc.sh
+	@./scripts/check_transport_branching.sh
+	@./scripts/check_param_source_exhaustive.sh
+	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
+	@# starts no jobs at all in a workflow file it will not parse. Local is the
+	@# only place that case gets caught before the push.
+	@./scripts/check_workflow_yaml.sh
+
+##@ Cleaning
+
 # Clean build artifacts
-clean:
+clean: ## Remove Rust build artifacts
 	@echo "Cleaning build artifacts..."
 	$(CARGO) clean
 	@echo "✓ Removed target/ directory"
 
 # Clean web UI build
-clean-gui:
+clean-gui: ## Remove web UI build and node_modules
 	@echo "Cleaning web UI build artifacts..."
 	@if [ -d web_ui ]; then \
 		rm -rf web_ui && echo "✓ Removed web_ui/ directory"; \
@@ -214,7 +245,7 @@ clean-gui:
 	fi
 
 # Clean llama.cpp installation
-clean-llama:
+clean-llama: ## Remove llama.cpp installation
 	@echo "Removing llama.cpp installation..."
 	@if [ -d .llama ]; then \
 		rm -rf .llama && echo "✓ Removed .llama/ directory"; \
@@ -223,7 +254,7 @@ clean-llama:
 	fi
 
 # Clean database files
-clean-db:
+clean-db: ## Remove database files
 	@echo "Removing database files..."
 	@if [ -d data ]; then \
 		rm -rf data && echo "✓ Removed data/ directory"; \
@@ -232,7 +263,7 @@ clean-db:
 	fi
 
 # Nuclear option - remove everything
-clean-all:
+clean-all: ## Remove everything (git clean -xffd)
 	@echo "⚠️  WARNING: This will remove ALL untracked files and build artifacts!"
 	@printf "Are you sure? [y/N] "; \
 	read REPLY; \
@@ -243,56 +274,62 @@ clean-all:
 		echo "Cancelled."; \
 	fi
 
+##@ llama.cpp
+
 # llama.cpp management targets
-llama-install:
+llama-install: ## Install llama.cpp (manual)
 	@echo "Installing llama.cpp (manual)..."
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama install; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama install; \
 	else $(CARGO) run -p gglib-cli -- config llama install; fi
 
-llama-install-auto:
+llama-install-auto: ## Install llama.cpp (auto-detect GPU)
 	@echo "Installing llama.cpp with auto-detected GPU support..."
 	@scripts/install-llama.sh
 
-llama-update:
+llama-update: ## Update llama.cpp
 	@echo "Updating llama.cpp..."
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama update; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama update; \
 	else $(CARGO) run -p gglib-cli -- config llama update; fi
 
-llama-status:
+llama-status: ## Show llama.cpp status
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama status; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama status; \
 	else $(CARGO) run -p gglib-cli -- config llama status; fi
 
-llama-rebuild: clean-llama llama-install-auto
+llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratch
 	@echo "✓ llama.cpp rebuilt"
 
+##@ Running
+
 # Quick run targets
-run-serve:
+run-serve: ## Run gglib serve (release mode)
 	@echo "Running gglib serve (release mode)..."
 	$(CARGO) run -p gglib-cli --release -- serve $(if $(ID),$(ID),1)
 
-run-proxy:
+run-proxy: ## Run gglib proxy (release mode)
 	@echo "Starting gglib proxy (release mode)..."
 	$(CARGO) run -p gglib-cli --release -- proxy
 
 # Run desktop GUI
-run-gui:
+run-gui: ## Run the desktop GUI
 	@echo "Starting desktop GUI..."
 	$(CARGO) run -p gglib-cli -- gui
 
 # Run web server
-run-web:
+run-web: ## Run the web server
 	@echo "Starting web server..."
 	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
+
+##@ Tauri
 
 # Build Tauri desktop app (production)
 # Uses "Manual Build + Bundle" strategy to avoid double compilation:
 # 1. Build frontend (vite)
 # 2. Build both CLI and Tauri app in a single cargo invocation (shared deps compile once)
 # 3. Bundle the already-built binary into platform installers
-build-tauri:
+build-tauri: ## Build Tauri desktop app
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
@@ -303,7 +340,7 @@ build-tauri:
 	# custom-protocol is required for Tauri to serve bundled frontend assets via
 	# its asset protocol.  Without it the WebView falls back to devUrl and shows
 	# a blank white screen in production.
-	$(TASKSET) $(CARGO) build --release -p gglib-cli -p gglib-app --features gglib-app/custom-protocol
+	$(CARGO) build --release -p gglib-cli -p gglib-app --features gglib-app/custom-protocol
 	# Step C: Bundle the already-built binary into platform installers
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
@@ -316,6 +353,8 @@ build-tauri:
 	fi
 	@echo "✓ Tauri app built to target/release/gglib-app"
 
+##@ Workflows
+
 # Full setup from scratch
 # Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
 # llama-install-auto runs last and is REQUIRED to succeed when a GPU
@@ -323,7 +362,7 @@ build-tauri:
 # llama-server, which is almost certainly not what the user wants if
 # they have a GPU. The script itself short-circuits to --cpu-only on
 # bare-CPU machines.
-setup: check-deps build-gui build-tauri install
+setup: check-deps build-gui build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
 	@# Optional accelerator. The command already refuses to fail — it skips
@@ -334,13 +373,19 @@ setup: check-deps build-gui build-tauri install
 	@$(MAKE) llama-install-auto
 
 # Development workflow
-dev: fmt lint test
+dev: fmt lint test ## Format, lint and test
 	@echo "✓ Development checks passed"
 
-# Pre-commit checks
-pre-commit: fmt lint check test
+# Pre-commit checks.
+#
+# These are exactly the jobs ci-success requires, in the same order: fmt,
+# clippy, cargo test, the eslint/tsc gate, the frontend suite, and the boundary
+# and architecture scripts. It used to be `fmt lint check test` — all Cargo —
+# which meant a clean local run could still fail CI on eslint, on a type error
+# in a test file, or on any of the five shell checks.
+pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow
-release: clean test lint build-all install
+release: clean test lint build-all install ## Clean, test, lint, build and install
 	@echo "✓ Release build and install complete"
