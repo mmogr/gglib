@@ -277,6 +277,11 @@ directory. `gglib config fast-downloads status` says what is there;
   cannot catch, why an observation organ has to be able to fail, and the A/B
   measurement behind the table above — including the positive control that
   failed on its first attempt and what that cost to notice
+- [ADR 0005 — The autonomous closed loop](docs/adr/0005-autonomous-closed-loop-and-reactive-grammar.md)
+  — the defect ledger, the idle-time scheduler, and the drift-gated apply
+  that lets the system tune its own models; why reactive tool-call repair is
+  the permanent mechanism after the lazy-grammar probe hit the endpoint's
+  wall
 - [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
   against the advertised schema, and re-issuing with `tool_choice: "required"`
   when they do not conform

@@ -35,12 +35,24 @@ Tier C made per-model: cumulative counts of requests, loop-guard trips, and
 tool-call repairs, written by the proxy through the context-metrics store
 (which already sees every event with the model name attached — the wiring
 is one constructor call, zero call-site changes). Supervisor-owned so it
-survives proxy restarts; deliberately **unpersisted**, because a defect
+survives proxy restarts; ~~deliberately **unpersisted**, because a defect
 rate is a claim about recent traffic on this build of everything, and
 yesterday's rate answering today's question is the staleness ADR 0001
-warns about. Windowing belongs to readers: the scheduler keeps its own
-baselines and rates deltas, so acting on a signal advances the baseline
-and one burst of events can never fire twice.
+warns about~~ *(retracted 2026-08-12: forgetting was the wrong mechanism
+for the right objection. The objection has two legs, and both are now
+answered mechanically rather than by amnesia: the scheduler persists its
+per-model **unacted windows** and restores them at boot decayed by
+wall-clock age — a 7-day half-life, so yesterday's rate answers today's
+question at yesterday's weight — and every row is scoped to the llama.cpp
+release it was observed against, so another build's rate is deleted, not
+decayed. What forgetting actually cost was the sample floor: on a
+restart-heavy host, ≥ 50 windowed requests rarely accumulated within one
+daemon lifetime, and the signals starved. Unchanged and accepted: a window
+held by a long-lived process does not decay in place)*. Windowing belongs
+to readers: the scheduler keeps its own baselines and rates deltas, so
+acting on a signal advances the baseline and one burst of events can never
+fire twice — and the spent window is zeroed in the store before the run
+starts, so a crash mid-run cannot resurrect it.
 
 **The idle-time scheduler** (`benchmark::auto_tune`, in the daemon — the
 one process that owns llama-server) runs nothing unless `Settings.auto_tune`
