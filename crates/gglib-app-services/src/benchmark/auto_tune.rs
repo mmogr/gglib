@@ -35,6 +35,12 @@
 //!   (IncumbentStands, WithinDrift, …) is an answer, and answers do not
 //!   expire in an afternoon; without this the scheduler would re-ask every
 //!   idle window forever.
+//! - **Evidence survives restarts.** Every tick persists the per-model
+//!   *unacted* defect windows (even while `auto_tune` is off, so enabling
+//!   it later starts from real history); boot restores them decayed by
+//!   wall-clock age ([`DEFECT_HALF_LIFE_DAYS`]) and discards them across a
+//!   llama.cpp release change. A window is zeroed in the store the moment
+//!   a signal spends it, so a crash mid-run cannot resurrect it.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -48,10 +54,11 @@ use gglib_core::domain::benchmark::run::{BenchmarkRun, BenchmarkRunStatus};
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::task::TaskSuite;
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
-use gglib_core::domain::defects::{self, ModelDefectCounts};
+use gglib_core::domain::defects::{self, ModelDefectCounts, PersistedDefectWindow};
 use gglib_core::domain::{DefaultsOrigin, Model};
+use gglib_runtime::llama::effective_llama_release;
 
-use super::BenchmarkOps;
+use super::{BenchmarkDeps, BenchmarkOps};
 
 /// How often the scheduler wakes to look at the world, in seconds.
 /// `GGLIB_AUTO_TUNE_TICK_SECS` overrides it — an operator knob, and what
@@ -125,44 +132,175 @@ const REPAIR_RATE_THRESHOLD: f64 = 0.05;
 /// window cannot produce 200 tune runs in seven days.
 const RUN_SCAN_LIMIT: i64 = 200;
 
+/// Half-life of persisted defect evidence, in days.
+/// `GGLIB_DEFECT_HALF_LIFE_DAYS` overrides it (values ≤ 0 fall back here).
+///
+/// Decay is what makes persistence honest: yesterday's rate must not
+/// answer today's question at full weight. Rates themselves are
+/// decay-invariant (numerator and denominator scale together), so the
+/// half-life really governs how long old traffic keeps counting toward
+/// [`MIN_SIGNAL_SAMPLE`] — seven days mirrors [`RETUNE_INTERVAL`]: the
+/// horizon on which this scheduler already treats answers as current.
+const DEFECT_HALF_LIFE_DAYS: f64 = 7.0;
+
+/// The half-life in seconds, after any environment override.
+fn defect_half_life_secs() -> f64 {
+    let days = env_override("GGLIB_DEFECT_HALF_LIFE_DAYS", DEFECT_HALF_LIFE_DAYS);
+    let days = if days > 0.0 {
+        days
+    } else {
+        DEFECT_HALF_LIFE_DAYS
+    };
+    days * 86_400.0
+}
+
+/// The scheduler's working memory, owned by [`run_loop`] for the daemon's
+/// lifetime.
+#[derive(Default)]
+struct SchedulerState {
+    /// Consecutive fully-idle ticks banked toward the threshold.
+    idle_ticks: u32,
+    /// Per-model baselines for the defect windows. The scheduler rates the
+    /// delta since its own last look, so acting on a signal advances the
+    /// baseline and the same events can never fire twice.
+    baselines: std::collections::HashMap<String, ModelDefectCounts>,
+    /// Per-model windows as last persisted. Flushing only what changed is
+    /// also what preserves a stored row's `updated_at` across idle
+    /// restarts, so decay keeps counting from the evidence's real age.
+    last_flushed: std::collections::HashMap<String, ModelDefectCounts>,
+}
+
 /// Drive the scheduler until the daemon shuts down.
 pub async fn run_loop(ops: Arc<BenchmarkOps>, shutdown: CancellationToken) {
-    let mut idle_ticks: u32 = 0;
-    // Per-model baselines for the defect windows. The scheduler rates the
-    // delta since its own last look, so acting on a signal advances the
-    // baseline and the same events can never fire twice.
-    let mut baselines: std::collections::HashMap<String, ModelDefectCounts> =
-        std::collections::HashMap::new();
+    let mut state = SchedulerState::default();
+    restore(&ops, &mut state).await;
     loop {
         tokio::select! {
-            () = shutdown.cancelled() => return,
+            () = shutdown.cancelled() => {
+                // One last flush of whatever the ticks have not written yet
+                // — a single local SQLite write, well inside the daemon's
+                // shutdown watchdog. The scheduler owns its state, so the
+                // scheduler flushes it; shutdown needs no hook.
+                flush_now(&ops, &mut state).await;
+                return;
+            }
             () = tokio::time::sleep(tick_interval()) => {}
         }
-        match tick(&ops, &mut idle_ticks, &mut baselines, &shutdown).await {
+        match tick(&ops, &mut state, &shutdown).await {
             Ok(()) => {}
             Err(e) => {
                 // The loop must survive anything a tick can throw — a failed
                 // settings read tonight must not cost the tuning the daemon
                 // would have done tomorrow.
                 warn!("auto-tune: tick failed: {e}");
-                idle_ticks = 0;
+                state.idle_ticks = 0;
             }
         }
+    }
+}
+
+/// Restore the persisted unacted windows into the live ledger, decayed by
+/// their age and discarded across a llama.cpp release change.
+///
+/// Baselines stay empty on purpose: spent evidence was subtracted before it
+/// was ever persisted, so the seeded counts *are* the resumed window and an
+/// empty baseline windows all of them. Best-effort throughout — persistence
+/// must never cost the scheduler its tuning.
+async fn restore(ops: &BenchmarkOps, state: &mut SchedulerState) {
+    let rows = match ops.deps.defect_windows.load_all().await {
+        Ok(rows) => rows,
+        Err(e) => {
+            warn!("auto-tune: could not load persisted defect windows: {e}");
+            return;
+        }
+    };
+    if rows.is_empty() {
+        return;
+    }
+
+    let plan = restore_plan(
+        rows,
+        Utc::now(),
+        &effective_llama_release(),
+        defect_half_life_secs(),
+    );
+    for (model, counts) in &plan.seed {
+        ops.deps.defects.seed(model, *counts);
+        // The store still holds the undecayed row with its original stamp;
+        // remembering the decayed value as "last flushed" leaves that row
+        // untouched until real traffic changes the window, so consecutive
+        // idle restarts keep decaying from the original age.
+        state.last_flushed.insert(model.clone(), *counts);
+        info!(
+            model = %model,
+            requests = counts.requests,
+            "auto-tune: restored a persisted defect window (decayed)"
+        );
+    }
+    if !plan.discard.is_empty() {
+        info!(
+            discarded = plan.discard.len(),
+            "auto-tune: discarded stale defect windows (foreign build or decayed to nothing)"
+        );
+        if let Err(e) = ops.deps.defect_windows.delete(&plan.discard).await {
+            warn!("auto-tune: could not delete stale defect windows: {e}");
+        }
+    }
+}
+
+/// Persist whatever the current windows say, skipping unchanged rows.
+async fn flush_now(ops: &BenchmarkOps, state: &mut SchedulerState) {
+    let ledger = ops.deps.defects.snapshot();
+    let windows = windowed(&ledger, &state.baselines);
+    flush_changed(&ops.deps, &windows, &mut state.last_flushed).await;
+}
+
+/// Upsert the windows that differ from what was last persisted; on success,
+/// remember them. Warn-only: a failed flush costs at most one tick of
+/// evidence, never the tick itself.
+async fn flush_changed(
+    deps: &BenchmarkDeps,
+    windows: &std::collections::HashMap<String, ModelDefectCounts>,
+    last_flushed: &mut std::collections::HashMap<String, ModelDefectCounts>,
+) {
+    let rows = rows_to_flush(
+        windows,
+        last_flushed,
+        Utc::now(),
+        &effective_llama_release(),
+    );
+    if rows.is_empty() {
+        return;
+    }
+    match deps.defect_windows.upsert_many(&rows).await {
+        Ok(()) => {
+            for row in rows {
+                last_flushed.insert(row.model_name, row.counts);
+            }
+        }
+        Err(e) => warn!("auto-tune: could not persist defect windows: {e}"),
     }
 }
 
 /// One observation of the world, and at most one run.
 async fn tick(
     ops: &BenchmarkOps,
-    idle_ticks: &mut u32,
-    baselines: &mut std::collections::HashMap<String, ModelDefectCounts>,
+    state: &mut SchedulerState,
     shutdown: &CancellationToken,
 ) -> anyhow::Result<()> {
     let deps = &ops.deps;
 
+    // Persist first, before anything can fail or stand the tick down:
+    // evidence keeps accumulating (and surviving restarts) even while
+    // `auto_tune` is off, so enabling the feature later starts from real
+    // history rather than from zero.
+    let ledger = deps.defects.snapshot();
+    let windows = windowed(&ledger, &state.baselines);
+    flush_changed(deps, &windows, &mut state.last_flushed).await;
+
     let settings = deps.settings_repo.load().await?;
     if settings.auto_tune != Some(true) {
-        *idle_ticks = 0;
+        state.idle_ticks = 0;
         return Ok(());
     }
 
@@ -170,7 +308,7 @@ async fn tick(
     let runs = deps.bench_repo.list_runs(RUN_SCAN_LIMIT, 0).await?;
     if runs.iter().any(|r| r.status == BenchmarkRunStatus::Running) {
         debug!("auto-tune: a benchmark run is live — standing down");
-        *idle_ticks = 0;
+        state.idle_ticks = 0;
         return Ok(());
     }
 
@@ -181,17 +319,17 @@ async fn tick(
             waiting = snapshot.waiting(),
             "auto-tune: the GPU is busy — idle window reset"
         );
-        *idle_ticks = 0;
+        state.idle_ticks = 0;
         return Ok(());
     }
 
-    *idle_ticks += 1;
+    state.idle_ticks += 1;
     let required = idle_ticks_required();
     debug!(
-        idle_ticks = *idle_ticks,
+        idle_ticks = state.idle_ticks,
         required, "auto-tune: idle tick banked"
     );
-    if *idle_ticks < required {
+    if state.idle_ticks < required {
         return Ok(());
     }
 
@@ -204,9 +342,8 @@ async fn tick(
 
     // Signals outrank the untuned queue: a model demonstrably failing in
     // production is a sharper reason to spend the GPU than one that has
-    // simply never been measured.
-    let ledger = deps.defects.snapshot();
-    let windows = windowed(&ledger, baselines);
+    // simply never been measured. (The ledger snapshot and windows were
+    // taken at the top of the tick, on the way through the flush.)
     if let Some((target, signal)) = select_signal_target(&models, &windows, &resident) {
         info!(
             model_id = target.id,
@@ -217,9 +354,15 @@ async fn tick(
         // Advance the baseline before running, so the events that earned
         // this sweep can never earn a second one.
         let current = ledger.get(&target.name).copied().unwrap_or_default();
-        baselines.insert(target.name.clone(), current);
+        let spent_model = target.name.clone();
+        state.baselines.insert(spent_model.clone(), current);
+        // Zero the spent window in the store *before* the (long) run: a
+        // crash mid-run must not leave the loud pre-signal row behind to
+        // re-seed and re-fire on the next boot.
+        let spent = std::iter::once((spent_model, ModelDefectCounts::default())).collect();
+        flush_changed(deps, &spent, &mut state.last_flushed).await;
         let id = target.id;
-        *idle_ticks = 0;
+        state.idle_ticks = 0;
         return run_one(ops, id, signal.sweep(), signal.initiator(), shutdown).await;
     }
 
@@ -234,7 +377,7 @@ async fn tick(
         model_id = target,
         "auto-tune: GPU idle past the threshold — starting a gated tune"
     );
-    *idle_ticks = 0;
+    state.idle_ticks = 0;
     run_one(ops, target, SweepSpec::default(), "idle", shutdown).await
 }
 
@@ -248,6 +391,105 @@ fn windowed(
         .map(|(name, counts)| {
             let baseline = baselines.get(name).copied().unwrap_or_default();
             (name.clone(), defects::delta(*counts, baseline))
+        })
+        .collect()
+}
+
+/// The exponential decay a gap of `gap_secs` applies: `0.5^(gap/half_life)`.
+/// A non-positive gap (clock skew, a future stamp) decays nothing — the
+/// evidence is at worst current, never amplified.
+fn decay_factor(gap_secs: f64, half_life_secs: f64) -> f64 {
+    if gap_secs <= 0.0 {
+        return 1.0;
+    }
+    0.5_f64.powf(gap_secs / half_life_secs)
+}
+
+/// Each count scaled and rounded independently. A window is a bundle of
+/// counts, not a ratio — per-field rounding noise of ±0.5 events is
+/// accepted, and documented here so nobody "fixes" it into a scheme that
+/// preserves ratios by inventing fractional events.
+fn decay_counts(counts: ModelDefectCounts, factor: f64) -> ModelDefectCounts {
+    let scale = |c: u64| -> u64 {
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
+        {
+            ((c as f64) * factor).round() as u64
+        }
+    };
+    ModelDefectCounts {
+        requests: scale(counts.requests),
+        loop_guard_trips: scale(counts.loop_guard_trips),
+        repairs_attempted: scale(counts.repairs_attempted),
+        repairs_succeeded: scale(counts.repairs_succeeded),
+    }
+}
+
+/// What boot does with the persisted rows: seed these, delete those.
+struct RestorePlan {
+    /// Rows to seed into the ledger, already decayed.
+    seed: Vec<(String, ModelDefectCounts)>,
+    /// Rows to delete: foreign-build evidence and windows decayed to
+    /// nothing.
+    discard: Vec<String>,
+}
+
+/// Sort persisted rows into seeds and discards.
+///
+/// A row from another llama.cpp release is discarded outright — another
+/// build's rate must not answer this build's question at any weight. A
+/// surviving row decays by its age; one whose decayed request count rounds
+/// below a single request has nothing left to say and is deleted rather
+/// than carried forever.
+fn restore_plan(
+    rows: Vec<PersistedDefectWindow>,
+    now: DateTime<Utc>,
+    llama_build: &str,
+    half_life_secs: f64,
+) -> RestorePlan {
+    let mut plan = RestorePlan {
+        seed: Vec::new(),
+        discard: Vec::new(),
+    };
+    for row in rows {
+        if row.llama_build != llama_build {
+            plan.discard.push(row.model_name);
+            continue;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let gap_secs = (now - row.updated_at).num_seconds() as f64;
+        let decayed = decay_counts(row.counts, decay_factor(gap_secs, half_life_secs));
+        if decayed.requests == 0 {
+            plan.discard.push(row.model_name);
+            continue;
+        }
+        plan.seed.push((row.model_name, decayed));
+    }
+    plan
+}
+
+/// The rows one flush writes: every window that differs from what was last
+/// persisted, stamped with now and the current release. Skipping unchanged
+/// rows is not just economy — it preserves a stored row's `updated_at`, so
+/// evidence that sits untouched keeps decaying from its real age instead
+/// of being re-dated by every tick.
+fn rows_to_flush(
+    windows: &std::collections::HashMap<String, ModelDefectCounts>,
+    last_flushed: &std::collections::HashMap<String, ModelDefectCounts>,
+    now: DateTime<Utc>,
+    llama_build: &str,
+) -> Vec<PersistedDefectWindow> {
+    windows
+        .iter()
+        .filter(|(name, counts)| last_flushed.get(*name) != Some(counts))
+        .map(|(name, counts)| PersistedDefectWindow {
+            model_name: name.clone(),
+            counts: *counts,
+            updated_at: now,
+            llama_build: llama_build.to_owned(),
         })
         .collect()
 }
@@ -814,5 +1056,161 @@ mod tests {
 
         let stale = vec![tune_run(1, 8)];
         assert_eq!(select_target(&models, &stale, &[], Utc::now()), Some(1));
+    }
+
+    // ── Persistence: decay, restore plans, flush rows ────────────────────
+
+    /// Seven days in seconds — the default half-life, spelled out so the
+    /// decay tests read as durations rather than magic floats.
+    const HL: f64 = 7.0 * 86_400.0;
+
+    fn full_window() -> ModelDefectCounts {
+        ModelDefectCounts {
+            requests: 100,
+            loop_guard_trips: 10,
+            repairs_attempted: 8,
+            repairs_succeeded: 4,
+        }
+    }
+
+    fn row(
+        model: &str,
+        counts: ModelDefectCounts,
+        now: DateTime<Utc>,
+        age_secs: i64,
+        build: &str,
+    ) -> PersistedDefectWindow {
+        PersistedDefectWindow {
+            model_name: model.to_owned(),
+            counts,
+            updated_at: now - chrono::Duration::seconds(age_secs),
+            llama_build: build.to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_zero_gap_decays_nothing() {
+        assert!((decay_factor(0.0, HL) - 1.0).abs() < f64::EPSILON);
+        assert_eq!(decay_counts(full_window(), 1.0), full_window());
+    }
+
+    #[test]
+    fn one_half_life_halves_the_window() {
+        let halved = decay_counts(full_window(), decay_factor(HL, HL));
+        assert_eq!(
+            halved,
+            ModelDefectCounts {
+                requests: 50,
+                loop_guard_trips: 5,
+                repairs_attempted: 4,
+                repairs_succeeded: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn a_huge_gap_decays_the_window_to_nothing() {
+        let sixty_days = 60.0 * 86_400.0;
+        let gone = decay_counts(full_window(), decay_factor(sixty_days, HL));
+        assert_eq!(gone.requests, 0);
+    }
+
+    /// Clock skew must never amplify evidence: a stamp from the future is
+    /// treated as current, not compounded.
+    #[test]
+    fn a_future_timestamp_decays_nothing() {
+        assert!((decay_factor(-3600.0, HL) - 1.0).abs() < f64::EPSILON);
+    }
+
+    /// Another build's rate must not answer this build's question at any
+    /// weight — however fresh the row.
+    #[test]
+    fn a_foreign_build_row_is_discarded() {
+        let now = Utc::now();
+        let rows = vec![row("m1", full_window(), now, 0, "b0001")];
+        let plan = restore_plan(rows, now, "b10327", HL);
+        assert!(plan.seed.is_empty());
+        assert_eq!(plan.discard, vec!["m1".to_owned()]);
+    }
+
+    /// A window with nothing left to say is deleted, not carried forever.
+    #[test]
+    fn a_row_decayed_below_one_request_is_discarded() {
+        let now = Utc::now();
+        let thin = ModelDefectCounts {
+            requests: 1,
+            ..ModelDefectCounts::default()
+        };
+        #[allow(clippy::cast_possible_truncation)]
+        let two_half_lives = (2.0 * HL) as i64;
+        let rows = vec![row("m1", thin, now, two_half_lives, "b10327")];
+        let plan = restore_plan(rows, now, "b10327", HL);
+        assert!(plan.seed.is_empty());
+        assert_eq!(plan.discard, vec!["m1".to_owned()]);
+    }
+
+    #[test]
+    fn a_restored_row_seeds_decayed_counts() {
+        let now = Utc::now();
+        #[allow(clippy::cast_possible_truncation)]
+        let one_half_life = HL as i64;
+        let rows = vec![row("m1", full_window(), now, one_half_life, "b10327")];
+        let plan = restore_plan(rows, now, "b10327", HL);
+        assert!(plan.discard.is_empty());
+        assert_eq!(plan.seed.len(), 1);
+        assert_eq!(plan.seed[0].0, "m1");
+        assert_eq!(plan.seed[0].1.requests, 50);
+        assert_eq!(plan.seed[0].1.loop_guard_trips, 5);
+    }
+
+    /// Skipping unchanged rows preserves a stored row's `updated_at`, so
+    /// untouched evidence keeps decaying from its real age.
+    #[test]
+    fn an_unchanged_window_is_not_rewritten() {
+        let windows = windows_for(&[("m1", full_window())]);
+        let rows = rows_to_flush(&windows, &windows, Utc::now(), "b10327");
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn a_changed_window_is_flushed_with_the_current_build() {
+        let now = Utc::now();
+        let windows = windows_for(&[("m1", full_window())]);
+        let rows = rows_to_flush(&windows, &std::collections::HashMap::new(), now, "b10327");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].model_name, "m1");
+        assert_eq!(rows[0].counts, full_window());
+        assert_eq!(rows[0].updated_at, now);
+        assert_eq!(rows[0].llama_build, "b10327");
+    }
+
+    /// The whole restore contract, end to end in miniature: a persisted
+    /// loud window seeds a fresh ledger, an empty baseline windows all of
+    /// it, and the signal selector fires on the restored evidence.
+    #[test]
+    fn a_restart_resumes_the_window_with_empty_baselines() {
+        use gglib_core::domain::defects::ModelDefectLedger;
+
+        let now = Utc::now();
+        let loud = ModelDefectCounts {
+            requests: 100,
+            repairs_attempted: 12,
+            ..ModelDefectCounts::default()
+        };
+        let plan = restore_plan(vec![row("m1", loud, now, 0, "b10327")], now, "b10327", HL);
+
+        let ledger = ModelDefectLedger::new();
+        for (model, counts) in &plan.seed {
+            ledger.seed(model, *counts);
+        }
+        let windows = windowed(&ledger.snapshot(), &std::collections::HashMap::new());
+        assert_eq!(windows["m1"], loud);
+
+        let models = vec![model(1, Some(DefaultsOrigin::Measured), 10)];
+        let hit = select_signal_target(&models, &windows, &[]);
+        assert_eq!(
+            hit.map(|(m, s)| (m.id, s)),
+            Some((1, SignalKind::RepairRate))
+        );
     }
 }
