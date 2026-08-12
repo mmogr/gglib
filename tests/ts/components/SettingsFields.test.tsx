@@ -61,7 +61,11 @@ const renderAdvanced = (
       setTrustClientSampling={noop}
       proxyLoopDetection
       setProxyLoopDetection={noop}
-      agentGuards={{ agenticSampling: true, maxStagnationSteps: overrides.stagnation ?? '' }}
+      agentGuards={{
+        agenticSampling: true,
+        autoTune: false,
+        maxStagnationSteps: overrides.stagnation ?? '',
+      }}
       setAgentGuardSetting={(key, value) => {
         if (target === 'stagnation' && key === 'maxStagnationSteps') onChange(value as string);
       }}

@@ -28,6 +28,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Banner } from '../ui/Banner';
 import { Icon } from '../ui/Icon';
+import { Checkbox } from '../ui/Checkbox';
 import { cn } from '../../utils/cn';
 import { formatBytes } from '../../utils/format';
 import type { SetupStatus, LlamaInstallProgress } from '../../types/setup';
@@ -90,15 +91,20 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
     }
   }, []);
 
+  // Pre-checked as the recommended answer: this is the consent moment the
+  // opt-in design routes through, so the feature does not ship dark. An
+  // unchecked box writes nothing — off stays the absence it already is.
+  const [autoTune, setAutoTune] = useState(true);
+
   const handleComplete = useCallback(async () => {
     try {
-      await updateSettings({ setupCompleted: true });
+      await updateSettings({ setupCompleted: true, ...(autoTune ? { autoTune: true } : {}) });
       onComplete();
     } catch {
       // Even if saving fails, let user through
       onComplete();
     }
-  }, [onComplete]);
+  }, [onComplete, autoTune]);
 
   const steps: readonly WizardStep[] = WIZARD_STEPS;
   const currentIndex = steps.indexOf(step);
@@ -172,7 +178,12 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
           />
         )}
         {step === 'complete' && (
-          <CompleteStep status={status} onFinish={handleComplete} />
+          <CompleteStep
+            status={status}
+            autoTune={autoTune}
+            onAutoTuneChange={setAutoTune}
+            onFinish={handleComplete}
+          />
         )}
       </div>
     </WizardShell>
@@ -622,7 +633,12 @@ const PythonSetupStep: FC<{
 // Step: Complete
 // ============================================================================
 
-const CompleteStep: FC<{ status: SetupStatus; onFinish: () => void }> = ({ status, onFinish }) => (
+const CompleteStep: FC<{
+  status: SetupStatus;
+  autoTune: boolean;
+  onAutoTuneChange: (value: boolean) => void;
+  onFinish: () => void;
+}> = ({ status, autoTune, onAutoTuneChange, onFinish }) => (
   <div className="flex flex-col gap-6">
     <div className="text-center py-4">
       <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success-subtle mb-4">
@@ -642,6 +658,23 @@ const CompleteStep: FC<{ status: SetupStatus; onFinish: () => void }> = ({ statu
       {/* Always ok: downloads work either way, so an absent accelerator is a
           choice of transport, not a failure to flag. */}
       <SummaryRow label="Downloads" ok value={status.fastDownloadReady ? 'Accelerated (hf_xet)' : 'Direct'} />
+    </div>
+
+    {/* The auto-tune consent — the one setup question that changes what
+        gglib does on its own. Off is a real choice, so it is a checkbox
+        here rather than a default nobody saw. */}
+    <div className="bg-background-secondary rounded-md p-4">
+      <Checkbox
+        checked={autoTune}
+        onChange={(e) => onAutoTuneChange(e.target.checked)}
+        label={
+          <>
+            Tune models automatically during idle time
+            <span className="ml-2 text-xs font-normal text-primary">Recommended</span>
+          </>
+        }
+        description="When the GPU is idle, gglib measures untuned models and applies better sampling defaults — only when the evidence clears a statistical gate. Warm models are never evicted, your own settings are never touched, and any request preempts the run instantly. Change anytime in Settings."
+      />
     </div>
 
     <div className="flex justify-center pt-4">
