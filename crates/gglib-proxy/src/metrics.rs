@@ -189,6 +189,13 @@ impl ContextMetricsStore {
         let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.dialect_residue = true;
+            // Also per model. This was the one flag of the three that never
+            // reached the ledger, so drift was visible fleet-wide but could
+            // not be attributed — and attribution is the whole point, since
+            // residue is a property of one model's dialect, not of traffic.
+            if let Some(ledger) = &self.ledger {
+                ledger.record_dialect_residue(&snapshot.model_name);
+            }
         }
     }
 
@@ -238,6 +245,56 @@ impl ContextMetricsStore {
             && let Some(ledger) = &self.ledger
         {
             ledger.record_stream_error(&snapshot.model_name);
+        }
+    }
+
+    /// Count one generation cut off at the token ceiling against `seq`'s model.
+    pub fn flag_truncated_generation(&self, seq: u64) {
+        self.with_model(seq, |ledger, model| {
+            ledger.record_truncated_generation(model);
+        });
+    }
+
+    /// Count one turn that produced nothing client-renderable.
+    ///
+    /// `reasoning_only` distinguishes a model that stranded its whole answer
+    /// in `reasoning_content` from one that produced nothing at all.
+    pub fn flag_empty_response(&self, seq: u64, reasoning_only: bool) {
+        self.with_model(seq, |ledger, model| {
+            ledger.record_empty_response(model, reasoning_only);
+        });
+    }
+
+    /// Count one turn whose tool call could not be validated at all.
+    pub fn flag_unvalidatable_schema(&self, seq: u64) {
+        self.with_model(seq, |ledger, model| {
+            ledger.record_unvalidatable_schema(model);
+        });
+    }
+
+    /// Count one turn whose normalization discarded a malformed tool call.
+    pub fn flag_normalization_error(&self, seq: u64) {
+        self.with_model(seq, |ledger, model| {
+            ledger.record_normalization_error(model);
+        });
+    }
+
+    /// Look up `seq`'s model name and hand it to the ledger.
+    ///
+    /// The ring row is consulted only for its model name, so an event whose
+    /// snapshot was already evicted is lost to the per-model ledger — the
+    /// same bounded, bias-free undercount [`Self::flag_tool_repair`] accepts,
+    /// falling on exactly the busiest traffic.
+    fn with_model(
+        &self,
+        seq: u64,
+        record: impl FnOnce(&gglib_core::domain::defects::ModelDefectLedger, &str),
+    ) {
+        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter().find(|s| s.seq == seq)
+            && let Some(ledger) = &self.ledger
+        {
+            record(ledger, &snapshot.model_name);
         }
     }
 

@@ -219,6 +219,27 @@ pub fn spawn_and_return(
                     // snapshot already exists.
                     context_metrics.flag_stream_error(snapshot_seq);
                 }
+                // The counted-only instruments. None of these change what the
+                // client receives — they exist so the escalation ladder is
+                // built against measured failure rates rather than guesses
+                // about which failures are common.
+                if outcome.finish_reason.as_deref() == Some("length") {
+                    context_metrics.flag_truncated_generation(snapshot_seq);
+                }
+                if !outcome.saw_visible_output {
+                    warn!(
+                        model = %model_name_owned,
+                        reasoning_only = outcome.saw_reasoning,
+                        "turn produced no client-renderable output"
+                    );
+                    context_metrics.flag_empty_response(snapshot_seq, outcome.saw_reasoning);
+                }
+                if outcome.normalization_errored {
+                    context_metrics.flag_normalization_error(snapshot_seq);
+                }
+                if outcome.unvalidatable_schema {
+                    context_metrics.flag_unvalidatable_schema(snapshot_seq);
+                }
                 // Feed the terminal outcome to the watchdog. The precedence
                 // between "produced output", "died upstream" and "the client
                 // left" lives in `health_verdict`, so this stays one line and

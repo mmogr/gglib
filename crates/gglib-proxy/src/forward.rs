@@ -155,6 +155,16 @@ pub(crate) struct StreamOutcome {
     ///
     /// Client disconnects never set this; hanging up is not a model defect.
     pub upstream_errored: bool,
+    /// Normalization discarded a malformed dialect tool call and surfaced the
+    /// raw body as visible text instead.
+    ///
+    /// A pure model defect, and one the existing repair never sees: repair
+    /// fires on schema violations of *parsed* calls, so a call too malformed
+    /// to parse falls outside it entirely.
+    pub normalization_errored: bool,
+    /// The turn's tool call could not be validated, so repair never had an
+    /// opinion to act on. See [`crate::repair::Skipped::Unvalidatable`].
+    pub unvalidatable_schema: bool,
     /// The client went away mid-turn, so the drain loop stopped forwarding.
     ///
     /// Kept because a turn the client abandoned is not evidence about the
@@ -963,6 +973,7 @@ pub(crate) async fn stream_response_to_channel(
                     // empty response when the whole turn was one bad tool call).
                     warn!(?kind, raw = %raw, "proxy: surfacing normalization issue as visible content");
                     outcome.saw_visible_output = true;
+                    outcome.normalization_errored = true;
                     let recovered = LlmStreamEvent::TextDelta {
                         content: format!("{NORMALIZATION_NOTICE_PREFIX}{raw}"),
                     };
@@ -1205,6 +1216,17 @@ async fn resolve_held_tool_calls(
     };
 
     let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
+    // A call the validator could not judge at all leaves repair with no
+    // opinion to act on. Recorded before the early return, because a client
+    // whose tools all use `anyOf` gets zero repair coverage and, without
+    // this, zero evidence that the repair rate beside it is measuring a much
+    // smaller slice of traffic than it appears to.
+    if matches!(
+        decision,
+        crate::repair::Decision::Forward(crate::repair::Skipped::Unvalidatable)
+    ) {
+        outcome.unvalidatable_schema = true;
+    }
     let crate::repair::Decision::Reissue { body, violations } = decision else {
         return original_frames;
     };
