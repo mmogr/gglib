@@ -65,8 +65,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/servers", get(handlers::servers::list))
         .route("/servers/start", post(handlers::servers::start_body))
         .route("/servers/stop", post(handlers::servers::stop_body))
-        .route("/servers/{id}/start", post(handlers::servers::start))
-        .route("/servers/{id}/stop", post(handlers::servers::stop))
         .route(
             "/servers/{id}/tool-support",
             get(handlers::servers::tool_support),
@@ -96,7 +94,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/mcp/servers/{id}/resolve",
             post(handlers::mcp::resolve_path),
         )
-        .route("/mcp/servers/{id}/tools", get(handlers::mcp::list_tools))
         .route(
             "/mcp/servers/{id}/test",
             post(handlers::mcp::test_connection),
@@ -233,7 +230,6 @@ fn model_routes() -> Router<AppState> {
             post(handlers::model::models::add_tag).delete(handlers::model::models::remove_tag),
         )
         .route("/tags", get(handlers::model::models::list_tags))
-        .route("/tags/{tag}", get(handlers::model::models::get_by_tag))
         .route(
             "/filter-options",
             get(handlers::model::models::filter_options),
@@ -246,7 +242,6 @@ fn model_routes() -> Router<AppState> {
         )
         .route("/{id}/repair", post(handlers::model::verification::repair))
         // Downloads
-        .route("/downloads", get(handlers::model::downloads::list))
         .route(
             "/downloads/queue",
             get(handlers::model::downloads::list).post(handlers::model::downloads::queue),
@@ -312,16 +307,8 @@ fn config_routes() -> Router<AppState> {
         )
         .route("/system/setup-status", get(handlers::config::setup::status))
         .route(
-            "/system/vulkan-status",
-            get(handlers::config::setup::vulkan_status_handler),
-        )
-        .route(
             "/system/install-llama",
             post(handlers::config::setup::install_llama),
-        )
-        .route(
-            "/system/build-llama-from-source",
-            post(handlers::config::setup::build_llama_from_source),
         )
         .route(
             "/system/llama-status",

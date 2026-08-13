@@ -140,7 +140,6 @@ fn main() {
             // OS integration: llama.cpp binary management
             commands::llama::check_llama_status,
             commands::llama::install_llama,
-            commands::llama::build_llama_from_source,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

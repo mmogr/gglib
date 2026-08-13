@@ -235,15 +235,6 @@ impl ModelService {
         Ok(model.tags)
     }
 
-    /// Get all models that have a specific tag.
-    pub async fn get_by_tag(&self, tag: &str) -> Result<Vec<Model>, CoreError> {
-        let models = self.repo.list().await.map_err(CoreError::from)?;
-        Ok(models
-            .into_iter()
-            .filter(|m| m.tags.contains(&tag.to_string()))
-            .collect())
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // Filter/Aggregate Operations
     // ─────────────────────────────────────────────────────────────────────────

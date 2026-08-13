@@ -7,30 +7,23 @@ use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use futures_util::StreamExt;
 use futures_util::stream::Stream;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::dto::diagnostics::{
     AccelerationDto, DiagnosticsDto, FastDownloadsDto, RecommendationDto, ResolvedPathsDto,
 };
-use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome,
-    detect_optimal_acceleration, llama_status, llama_update_check, run_llama_source_build,
-    run_llama_update, uninstall_llama, update_acceleration, vulkan_status,
+    Acceleration, BuildEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome, llama_status,
+    llama_update_check, run_llama_update, uninstall_llama, update_acceleration,
 };
 
 /// Get the full system setup status for the first-run wizard.
 pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
     Ok(Json(state.setup.get_status().await?))
-}
-
-/// Get Vulkan build-readiness status.
-pub async fn vulkan_status_handler() -> Json<VulkanStatusDto> {
-    Json(vulkan_status().into())
 }
 
 /// Install llama.cpp pre-built binaries with SSE progress streaming.
@@ -146,91 +139,6 @@ enum LlamaProgressEvent {
     Error {
         message: String,
     },
-}
-
-/// Optional request body for [`build_llama_from_source`].
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BuildLlamaRequest {
-    /// Acceleration backend override. If omitted, auto-detection is used.
-    /// Valid values: `"metal"`, `"cuda"`, `"vulkan"`, `"cpu"`.
-    pub acceleration: Option<String>,
-}
-
-/// Build llama.cpp from source with SSE progress streaming.
-///
-/// Returns a server-sent event stream. Named event types:
-/// - `phase_started`: `{ "type": "phase_started", "phase": "<phase>" }`
-/// - `progress`: `{ "type": "progress", "current": <n>, "total": <n> }`
-/// - `log`: `{ "type": "log", "message": "<text>" }`
-/// - `phase_completed`: `{ "type": "phase_completed", "phase": "<phase>" }`
-/// - `completed`: `{ "type": "completed", "version": "<ver>", "acceleration": "<accel>" }`
-/// - `failed`: `{ "type": "failed", "message": "<error>" }`
-pub async fn build_llama_from_source(
-    Json(req): Json<BuildLlamaRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-    let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
-
-    tokio::spawn(async move {
-        let llama_dir = match llama_cpp_dir() {
-            Ok(p) => p,
-            Err(e) => {
-                let _ = tx
-                    .send(BuildEvent::Failed {
-                        message: e.to_string(),
-                    })
-                    .await;
-                return;
-            }
-        };
-        let server_path = match llama_server_path() {
-            Ok(p) => p,
-            Err(e) => {
-                let _ = tx
-                    .send(BuildEvent::Failed {
-                        message: e.to_string(),
-                    })
-                    .await;
-                return;
-            }
-        };
-
-        let acceleration = match req.acceleration.as_deref() {
-            Some("metal") => Acceleration::Metal,
-            Some("cuda") => Acceleration::Cuda,
-            Some("vulkan") => Acceleration::Vulkan,
-            Some("cpu") => Acceleration::Cpu,
-            _ => match detect_optimal_acceleration() {
-                Ok(a) => a,
-                Err(e) => {
-                    let _ = tx
-                        .send(BuildEvent::Failed {
-                            message: e.to_string(),
-                        })
-                        .await;
-                    return;
-                }
-            },
-        };
-
-        if let Err(e) =
-            run_llama_source_build(acceleration, llama_dir, server_path, tx.clone()).await
-        {
-            let _ = tx
-                .send(BuildEvent::Failed {
-                    message: e.to_string(),
-                })
-                .await;
-        }
-    });
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
-
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(std::time::Duration::from_secs(30))
-            .text("ping"),
-    )
 }
 
 /// What llama.cpp install is present, if any — the GUI face of

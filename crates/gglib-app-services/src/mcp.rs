@@ -239,16 +239,6 @@ impl McpOps {
         })
     }
 
-    /// List available tools from a running MCP server.
-    pub async fn list_tools(&self, id: i64) -> Result<Vec<McpToolInfo>, GuiError> {
-        let tools = self
-            .mcp
-            .list_server_tools(id)
-            .await
-            .map_err(|e| GuiError::Internal(e.to_string()))?;
-        Ok(tools.iter().map(Self::tool_to_info).collect())
-    }
-
     /// Test a configured server end to end — `gglib mcp test`.
     ///
     /// Starts a throwaway instance of the stored configuration, lists what it

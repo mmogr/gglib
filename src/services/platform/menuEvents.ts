@@ -22,7 +22,6 @@ export const MENU_EVENTS = {
   INSTALL_LLAMA: 'menu:install-llama',
   CHECK_LLAMA_STATUS: 'menu:check-llama-status',
   COPY_TO_CLIPBOARD: 'menu:copy-to-clipboard',
-  PROXY_ERROR: 'menu:proxy-error',
   PROXY_STOPPED: 'menu:proxy-stopped',
   START_PROXY: 'menu:start-proxy',
 } as const;
@@ -41,7 +40,6 @@ export interface MenuEventHandlers {
   [MENU_EVENTS.INSTALL_LLAMA]?: () => void;
   [MENU_EVENTS.CHECK_LLAMA_STATUS]?: () => void;
   [MENU_EVENTS.COPY_TO_CLIPBOARD]?: (payload: string) => void;
-  [MENU_EVENTS.PROXY_ERROR]?: (payload: string) => void;
   [MENU_EVENTS.PROXY_STOPPED]?: () => void;
   [MENU_EVENTS.START_PROXY]?: () => void;
 }
@@ -65,7 +63,7 @@ export async function listenToMenuEvents(
     if (handler) {
       const unlisten = await listen(event, (e: any) => {
         // Events with string payloads
-        if (event === MENU_EVENTS.COPY_TO_CLIPBOARD || event === MENU_EVENTS.PROXY_ERROR) {
+        if (event === MENU_EVENTS.COPY_TO_CLIPBOARD) {
           (handler as (payload: string) => void)(e.payload);
         } else {
           (handler as () => void)();

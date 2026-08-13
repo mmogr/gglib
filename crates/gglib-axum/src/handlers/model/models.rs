@@ -166,14 +166,6 @@ pub async fn remove_tag(
     Ok(())
 }
 
-/// Get models with a specific tag.
-pub async fn get_by_tag(
-    State(state): State<AppState>,
-    Path(tag): Path<String>,
-) -> Result<Json<Vec<i64>>, HttpError> {
-    Ok(Json(state.models.get_by_tag(tag).await?))
-}
-
 /// Get filter options for the model list UI.
 pub async fn filter_options(
     State(state): State<AppState>,
