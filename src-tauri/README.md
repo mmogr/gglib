@@ -196,7 +196,7 @@ the three ways it comes by one and what quitting is allowed to take with it.
 | **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
 | **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
-| **commands/** | 7 OS integration commands in 3 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management), `app_logs.rs` (frontend log ingestion) |
+| **commands/** | 6 OS integration commands in 3 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management), `app_logs.rs` (frontend log ingestion) |
 
 ### Communication Flow
 

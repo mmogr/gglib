@@ -8,16 +8,14 @@ use tauri::AppHandle;
 
 /// Where the frontend reaches the backend API.
 ///
-/// The name and shape predate the daemon: the WebView used to talk to an
-/// embedded server on an ephemeral port with a bearer token. It now points
-/// at the gglib daemon's fixed loopback port; the empty token means "send no
-/// Authorization header".
+/// The name predates the daemon: the WebView used to talk to an embedded
+/// server on an ephemeral port with a bearer token. It now points at the
+/// daemon's fixed loopback port, which is unauthenticated — the token field
+/// went with the embedded server, having been an empty string ever since.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ApiInfo {
     /// Port of the daemon's management API.
     pub port: u16,
-    /// Always empty — the daemon's loopback API is unauthenticated.
-    pub token: String,
 }
 
 /// Get backend API info (port and auth token).
@@ -27,7 +25,6 @@ pub struct ApiInfo {
 pub fn get_embedded_api_info() -> ApiInfo {
     ApiInfo {
         port: gglib_core::DAEMON_PORT,
-        token: String::new(),
     }
 }
 

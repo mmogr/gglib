@@ -60,14 +60,6 @@ export interface MissingPackage {
   installHints: InstallHint[];
 }
 
-/** Vulkan build-readiness status. */
-export interface VulkanStatus {
-  hasLoader: boolean;
-  hasHeaders: boolean;
-  hasGlslc: boolean;
-  readyForBuild: boolean;
-  missing: MissingPackage[];
-}
 
 /** What gglib recorded when it built the binary. Absent for a prebuilt install. */
 export interface LlamaBuildInfo {

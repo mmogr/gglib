@@ -103,9 +103,6 @@ function AppContent() {
           );
         }
       },
-      [MENU_EVENTS.PROXY_ERROR]: (message) => {
-        showToast(message, 'warning');
-      },
       [MENU_EVENTS.PROXY_STOPPED]: async () => {
         try {
           await getTransport().stopProxy();

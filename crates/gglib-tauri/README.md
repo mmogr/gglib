@@ -43,23 +43,18 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Internal Structure
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                               gglib-tauri                                           │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌──────────────────────────────────────┐   │
-│  │   lib.rs    │ ──► │bootstrap.rs │ ──► │           gui_backend/               │   │
-│  │  Tauri app  │     │  DI setup   │     │  ┌────────────┐  ┌────────────────┐  │   │
-│  │  commands   │     │  & wiring   │     │  │  commands  │  │  event_bridge  │  │   │
-│  └─────────────┘     └─────────────┘     │  │  (IPC)     │  │  (Tauri emit)  │  │   │
-│                                          │  └────────────┘  └────────────────┘  │   │
-│  ┌─────────────┐     ┌─────────────┐     │  ┌────────────┐  ┌────────────────┐  │   │
-│  │  error.rs   │     │event_emitter│     │  │   state    │  │     ...        │  │   │
-│  │  IPC errors │     │ TauriEmitter│     │  │  (shared)  │  │                │  │   │
-│  └─────────────┘     └─────────────┘     │  └────────────┘  └────────────────┘  │   │
-│                                          └──────────────────────────────────────┘   │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                          gglib-tauri                             │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌────────────┐        ┌──────────────────────────────────────┐  │
+│  │   lib.rs   │  ────► │              events.rs               │  │
+│  │  re-export │        │  names::*   every event this app     │  │
+│  │            │        │             emits to its webviews    │  │
+│  │            │        │  emit_or_log  best-effort delivery   │  │
+│  └────────────┘        └──────────────────────────────────────┘  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 <details>
@@ -106,7 +101,6 @@ HTTP cannot do, and those commands live in
 | `sync_menu_state` | util | Update native menu item states |
 | `check_llama_status` | llama | Check llama.cpp installation |
 | `install_llama` | llama | Install/build llama.cpp |
-| `build_llama_from_source` | llama | Build llama.cpp from source |
 | `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |
 
 `scripts/check-frontend-ipc.sh` holds the allowlist this table describes; the
@@ -116,7 +110,9 @@ See [src-tauri/README.md](../../src-tauri/README.md) for the full architecture e
 
 ## Events
 
-Real-time events are delivered via SSE (`/api/events`) with Bearer auth, not Tauri emit:
+Domain events are delivered via SSE (`/api/events`), not Tauri emit. Loopback
+is unauthenticated; a bearer token is required only against a LAN-shared
+daemon:
 
 | Event | Description |
 |-------|-------------|
@@ -138,7 +134,8 @@ npm run tauri build
 
 1. **One event bus, not two** — the daemon's SSE stream carries every domain
    event to every client. Tauri emit is reserved for things that originate in
-   the app itself (menu clicks, llama build progress), which have no HTTP source
+   the app itself — menu clicks, llama install progress — which have no HTTP
+   source to arrive from
 2. **Names, not payloads** — this crate owns the event *names* so a Rust
    emitter and a TypeScript listener cannot drift; the payloads are the domain
    types the daemon already serialises
