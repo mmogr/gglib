@@ -23,8 +23,6 @@ function sourceLabel(source: TuneCandidateResult['source']): string {
   switch (source.kind) {
     case 'user_grid':
       return 'sweep';
-    case 'gguf_author_default':
-      return 'gguf default';
     case 'family_preset':
       return source.family;
     case 'incumbent':

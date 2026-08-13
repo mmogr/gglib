@@ -211,7 +211,6 @@ export interface TuneConfig {
   model_id: number;
   task_suite: TaskSuite;
   sweep: SweepSpec;
-  seed_from_gguf: boolean;
   seed_from_family_presets: boolean;
   weights: ScoreWeights;
   prune_fraction: number;
@@ -226,7 +225,6 @@ export interface TuneConfig {
  */
 export type CandidateSource =
   | { kind: 'user_grid' }
-  | { kind: 'gguf_author_default' }
   | { kind: 'family_preset'; family: string }
   | { kind: 'incumbent' }
   | { kind: 'incumbent_calibration' };

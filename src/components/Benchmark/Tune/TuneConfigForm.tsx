@@ -54,7 +54,6 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [seedFromGguf, setSeedFromGguf] = useState(true);
   const [seedFromFamilyPresets, setSeedFromFamilyPresets] = useState(true);
   const [pruneFraction, setPruneFraction] = useState('0.5');
   const [ctxSize, setCtxSize] = useState('');
@@ -106,7 +105,6 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         dynatemp_exponent: parseNumberList(dynatempExponent),
         top_n_sigma: parseNumberList(topNSigma),
       },
-      seed_from_gguf: seedFromGguf,
       seed_from_family_presets: seedFromFamilyPresets,
       weights: {
         tool_accuracy: 0.4,
@@ -250,12 +248,6 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
       </div>
 
       <div className="flex flex-col gap-xs">
-        <Checkbox
-          checked={seedFromGguf}
-          disabled={disabled}
-          onChange={e => setSeedFromGguf(e.target.checked)}
-          label="Seed from GGUF author defaults"
-        />
         <Checkbox
           checked={seedFromFamilyPresets}
           disabled={disabled}
