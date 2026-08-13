@@ -47,6 +47,9 @@ pub enum Ownership {
     /// Running inside this process (bundle-only fallback). Its lifetime is
     /// this app's whether we like it or not.
     Hosted,
+    /// Nothing was reachable when the app started, and nothing has been
+    /// claimed since. The app runs anyway — see [`Daemon::disconnected`].
+    Unresolved,
 }
 
 impl Ownership {
@@ -96,6 +99,26 @@ async fn probe(client: &reqwest::Client) -> Probe {
 }
 
 impl Daemon {
+    /// A client for a daemon that is not there.
+    ///
+    /// The app used to `expect` its way past a failed connection, so a port
+    /// 9887 held by another program, or a `gglib daemon run` that died on
+    /// startup, killed the process before `setup_app` had built a tray or
+    /// shown a window: gglib simply never appeared, and the reason was in a
+    /// log file. Coming up disconnected instead means the tray exists, reads
+    /// "not running", and offers Start gglib Service — which is the state that
+    /// affordance was added for.
+    ///
+    /// Every call made through this fails until a daemon answers, which is
+    /// exactly what the watcher reports as unreachable.
+    #[must_use]
+    pub fn disconnected() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            ownership: Ownership::Unresolved,
+        }
+    }
+
     /// Find the daemon, launching or hosting one if nothing is running.
     ///
     /// # Errors

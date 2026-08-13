@@ -46,8 +46,19 @@ fn main() {
             // The daemon owns the backend: connect to a running one, launch
             // `gglib daemon run` detached, or — bundle-only fallback — host
             // the daemon composition in this process behind the same lock.
-            let daemon = tauri::async_runtime::block_on(Daemon::connect_or_launch())
-                .expect("Failed to reach or start the gglib daemon");
+            // A daemon that will not start is a state, not a crash. Panicking
+            // here killed the process before `setup_app` had built a tray or
+            // shown a window, so gglib never appeared at all and the reason
+            // was only in a log file.
+            let (daemon, startup_failure) =
+                match tauri::async_runtime::block_on(Daemon::connect_or_launch()) {
+                    Ok(daemon) => (daemon, None),
+                    Err(e) => {
+                        error!(error = %e, "Could not reach or start the gglib daemon");
+                        (Daemon::disconnected(), Some(e))
+                    }
+                };
+
             let ownership = daemon.ownership;
             let app_state = AppState::new(Arc::new(daemon));
             app.manage(app_state);
@@ -59,6 +70,12 @@ fn main() {
 
             // Continue with rest of setup
             setup_app(app)?;
+
+            // After the tray exists, so the report arrives alongside the
+            // Start gglib Service entry that acts on it.
+            if let Some(e) = startup_failure {
+                tray::report_failure(app.handle(), "gglib is not running", &e);
+            }
 
             // Register/unregister the login item to match settings once the
             // window exists. (Proxy autostart is the daemon's job now.)

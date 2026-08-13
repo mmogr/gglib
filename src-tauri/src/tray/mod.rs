@@ -13,6 +13,8 @@ mod linux;
 pub mod placement;
 pub mod window;
 
+pub use confirm::report_failure;
+
 use tauri::{AppHandle, Manager};
 
 use crate::app::AppState;

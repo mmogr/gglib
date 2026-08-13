@@ -81,12 +81,20 @@ pub fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
 /// reading and a menu that appeared to do nothing at all. The daemon's own
 /// messages are worth showing verbatim: "Port 8080 is already in use … Stop
 /// it, or change the proxy port in Settings" is the whole answer.
+///
+/// Spawns rather than blocking, so it is safe to call from the setup hook —
+/// which runs before the event loop is pumping and would otherwise deadlock on
+/// a modal.
 pub fn report_failure(app: &AppHandle, title: &str, detail: &str) {
-    app.dialog()
-        .message(detail)
-        .title(title)
-        .kind(MessageDialogKind::Error)
-        .blocking_show();
+    let (app, title, detail) = (app.clone(), title.to_owned(), detail.to_owned());
+
+    tauri::async_runtime::spawn(async move {
+        app.dialog()
+            .message(detail)
+            .title(title)
+            .kind(MessageDialogKind::Error)
+            .blocking_show();
+    });
 }
 
 /// Put one warning on screen and wait for an answer.

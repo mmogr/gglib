@@ -134,10 +134,12 @@ mod tests {
 
     /// The exception, and the reason ownership is tracked at all: a daemon
     /// that was already serving when the app connected belongs to whoever
-    /// started it.
+    /// started it. `Unresolved` gets the same treatment for the same reason —
+    /// this app never established that anything out there is its to stop.
     #[test]
-    fn quitting_leaves_an_adopted_daemon_alone() {
+    fn quitting_leaves_a_daemon_we_did_not_start_alone() {
         assert!(!Ownership::Adopted.ends_with_the_app());
+        assert!(!Ownership::Unresolved.ends_with_the_app());
     }
 
     /// The app's wait has to outlast the daemon's own force-exit watchdog, or
