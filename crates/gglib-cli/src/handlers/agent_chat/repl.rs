@@ -1,4 +1,4 @@
-//! Async REPL loop for `gglib chat --agent`.
+//! Async REPL loop for `gglib chat`.
 //!
 //! # Design choices
 //!

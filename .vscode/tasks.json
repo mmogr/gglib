@@ -294,10 +294,10 @@
 			"type": "shell",
 			"command": "cargo",
 			"args": [
-				"install",
-				"--path",
-				".",
-				"--force"
+				"build",
+				"--release",
+				"--package",
+				"gglib-cli"
 			],
 			"group": "none",
 			"problemMatcher": [
@@ -402,8 +402,8 @@
 			"label": "🚢 Full CI Pipeline",
 			"dependsOn": [
 				"🔍 Check Formatting",
-				"� Check Boundaries",
-				"�📎 Clippy (Strict)",
+				"🔒 Check Boundaries",
+				"📎 Clippy (Strict)",
 				"🧪 Run All Tests",				"🧪 Run Frontend Tests",				"🚀 Build (Release)"
 			],
 			"dependsOrder": "sequence",
@@ -539,12 +539,8 @@
 				"--package",
 				"gglib-cli",
 				"--",
-				"web",
-				"--api-only",
-				"--port",
-				"9887",
-				"--base-port",
-				"9000"
+				"daemon",
+				"run"
 			],
 			"isBackground": true,
 			"group": "none",
@@ -575,13 +571,7 @@
 				"--package",
 				"gglib-cli",
 				"--",
-				"web",
-				"--port",
-				"9887",
-				"--base-port",
-				"9000",
-				"--static-dir",
-				"./web_ui"
+				"web"
 			],
 			"isBackground": true,
 			"group": "none",

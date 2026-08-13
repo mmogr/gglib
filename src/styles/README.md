@@ -231,7 +231,7 @@ if (isTauri()) {
 **Manual verification checklist:**
 
 1. **Run Tauri desktop**: `npm run tauri:dev`
-2. **Run Axum WebUI**: `cargo run --package gglib-cli -- web --api-only --port 9887` + `npm run dev`
+2. **Run the daemon**: `cargo run --package gglib-cli -- daemon run` + `npm run dev`
 3. **Test UI features**:
    - Button styles and interactions (hover, active, disabled)
    - Modal dialogs (open, close, backdrop click)

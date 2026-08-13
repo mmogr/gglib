@@ -87,8 +87,8 @@ Concrete examples of established patterns:
 
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
-| Agent loop | `AgentEvent` | spinner + streaming print | SSE at `/api/agent/stream` | `agent-event` Tauri event |
-| llama install | `LlamaProgressEvent` | progress bar | SSE at `/api/llama/install` | `llama-install-progress` |
+| Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
+| llama install | `LlamaProgressEvent` | progress bar | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
 | llama build | `BuildEvent` | spinner + progress bar | SSE at `/api/config/system/build-llama-from-source` | `llama-build-progress` |
 
 When adding a new long-running operation:
@@ -393,7 +393,7 @@ Download progress events for the pre-built binary pipeline.
 | Consumer | Output                                        |
 |----------|-----------------------------------------------|
 | CLI      | `indicatif` progress bar                      |
-| Axum     | SSE stream at `GET /api/llama/install`        |
+| Axum     | SSE stream at `POST /api/config/system/install-llama` |
 | Tauri    | `llama-install-progress` event to WebView     |
 
 <!-- module-docs:end -->
@@ -612,7 +612,8 @@ make lint
 # Build and open Rustdoc locally
 make doc
 
-# Run all pre-commit checks in sequence: fmt + lint + check + test
+# Run all pre-commit checks in sequence: fmt, lint, check, test, lint-web,
+# typecheck-web, test-web, boundaries, enforce
 make pre-commit
 ```
 
@@ -648,12 +649,13 @@ Every PR must pass the following gates in order. They are not advisory.
 |---|---|---|
 | **Format** | `cargo fmt --all -- --check` | Consistent code style |
 | **Boundaries** | `./scripts/check_boundaries.sh` | Layer dependency rules |
-| **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh` | Tauri policy; no IPC in product routes; no frontend transport branching |
+| **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` | Tauri policy; no IPC in product routes; no frontend transport branching; no catch-all over `ParamSource`; every setting reachable; the two file-size ratchets |
 | **Clippy** | `cargo clippy --all-targets --all-features -- -D warnings` | No warnings, ever |
 | **Rust tests** | `cargo test` (aggregate + per-crate) | Correctness |
 | **Doc tests** | `cargo test --doc --verbose` | Doc examples compile and run |
 | **Frontend tests** | `npm run test:run` | TypeScript correctness |
-| **Cross-OS check** | `cargo check` on Linux/macOS/Windows | No platform-specific breakage |
+| **Lint & typecheck** | `npm run lint -- --max-warnings 0`, `npm run typecheck`, `./scripts/check_workflow_yaml.sh` | Design-system guardrails; TS correctness; parseable workflows |
+| **Cross-OS check** | `cargo test -p gglib-cli --no-run` on Linux/macOS/Windows | No platform-specific breakage |
 
 After each successful CI run, `badges.yml` downloads the test/boundary/coverage artifacts and pushes updated badge JSON files to the `badges` branch. Shields.io badges in crate READMEs resolve from there.
 
@@ -693,7 +695,7 @@ In practice: if your PR closes a fully-labelled issue, you'll rarely touch label
 
 Before requesting review, confirm each item:
 
-- [ ] `make pre-commit` passes locally (`fmt` + `lint` + `check` + `test`).
+- [ ] `make pre-commit` passes locally — everything CI requires, including the frontend gates and the architecture checks.
 - [ ] `cargo test --doc` passes.
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented in `//!` module-level Rustdoc. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.

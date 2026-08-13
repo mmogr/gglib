@@ -216,7 +216,7 @@ resume from prior context without re-computation.
 
 CLI usage:
 ```bash
-gglib proxy start --cache --slot-dir ~/.cache/gglib/slots --cache-disk-gb 100
+gglib proxy --cache --slot-dir ~/.cache/gglib/slots --cache-disk-gb 100
 gglib proxy cache-clear --host 127.0.0.1 --port 8080 --session-id my-session
 ```
 
