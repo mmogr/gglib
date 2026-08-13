@@ -1,9 +1,9 @@
 // Re-export all hooks for ChatMessagesPanel
-export { useChatPersistence } from './useChatPersistence';
+export { useThreadHydration } from './useThreadHydration';
 export type {
-  UseChatPersistenceOptions,
-  UseChatPersistenceResult,
-} from './useChatPersistence';
+  UseThreadHydrationOptions,
+  UseThreadHydrationResult,
+} from './useThreadHydration';
 
 export { useMessageDeletion } from './useMessageDeletion';
 export type {
