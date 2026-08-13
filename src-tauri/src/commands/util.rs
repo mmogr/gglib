@@ -40,6 +40,10 @@ pub async fn open_url(url: String) -> Result<(), String> {
 }
 
 /// Set the currently selected model ID and sync menu state.
+///
+/// The selection lives in this process, not in the daemon, so repainting from
+/// the snapshot already in hand is correct here — nothing about the daemon
+/// changed.
 #[tauri::command]
 pub async fn set_selected_model(
     model_id: Option<i64>,
@@ -53,11 +57,32 @@ pub async fn set_selected_model(
     state_sync::sync_all_state(&app, &state).await
 }
 
-/// Sync menu state based on current application state.
+/// Sync menu state after the frontend has changed something.
+///
+/// Every caller is a fire-and-forget `syncMenuStateSilent()` after an action
+/// that changed something the menu shows: a server stopped, a model removed,
+/// llama.cpp installed. Two kinds of state are involved and they need
+/// different treatment, which is why this does both things.
+///
+/// **Ask for a poll**, because `sync_all_state` paints from
+/// `AppState::snapshot` and only `daemon::watch` writes it. Painting without
+/// asking redraws from what was true *before* the action, and it stays wrong
+/// until the next tick. The Rust-side callers were all converted to
+/// `Refresh::now` when the watcher landed; this is the frontend's equivalent
+/// and was missed.
+///
+/// **Then paint anyway**, because not everything the menu reads is in that
+/// snapshot — `llama_installed` is a filesystem check, and an install changes
+/// it without changing anything the daemon would report. The watcher would see
+/// no difference and skip the repaint.
+///
+/// So: the immediate paint catches the local state, and the poll it just asked
+/// for catches the daemon's, a moment later.
 #[tauri::command]
 pub async fn sync_menu_state(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    state.refresh.now();
     state_sync::sync_all_state(&app, &state).await
 }
