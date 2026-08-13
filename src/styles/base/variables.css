@@ -11,39 +11,30 @@
   --color-primary: #f08c26;
   --color-primary-hover: #de7d1b;
   --color-primary-light: #f7a950;
-  --color-primary-dark: #b5641a;
   --color-primary-subtle: rgba(240, 140, 38, 0.12);
   --color-primary-border: rgba(240, 140, 38, 0.35);
 
   /* Semantic Colors */
   --color-success: #45bd85;
-  --color-success-hover: #38a873;
   --color-success-subtle: rgba(69, 189, 133, 0.12);
   --color-success-border: rgba(69, 189, 133, 0.3);
   --color-warning: #e8d666;
-  --color-warning-hover: #d4c14f;
   --color-warning-subtle: rgba(232, 214, 102, 0.12);
-  --color-warning-border: rgba(232, 214, 102, 0.3);
   --color-danger: #e05252;
   --color-danger-hover: #c94343;
   --color-danger-subtle: rgba(224, 82, 82, 0.12);
   --color-danger-border: rgba(224, 82, 82, 0.3);
-  --color-info: #7fa6cc;
 
   /* Neutral Colors - Dark Theme (graphite ramp, near-achromatic) */
   --color-background: #0e0e10;
   --color-background-elevated: #131316;
-  --color-background-overlay: #17171a;
   --color-background-hover: #1d1d21;
-  --color-background-active: #26262b;
   --color-background-input: #101013;
 
   /* Surface Colors */
   --color-surface: #17171a;
   --color-surface-elevated: #202024;
   --color-surface-hover: #28282d;
-  /* Alias: fixes broken bg-surface-raised references in components */
-  --color-surface-raised: var(--color-surface-elevated);
 
   /* Border Colors (white-alpha hairlines so they read on every surface level) */
   --color-border: rgba(255, 255, 255, 0.1);
@@ -65,9 +56,7 @@
   --color-accent: var(--color-primary-light);
 
   /* Status Colors */
-  --color-online: #45bd85;
   --color-offline: #8a8983;
-  --color-error: #e05252;
 
   /* Terminal (console log surface, one step below canvas) */
   --color-terminal: #0a0a0c;
@@ -90,7 +79,6 @@
   --spacing-lg: 1.5rem;     /* 24px */
   --spacing-xl: 2rem;       /* 32px */
   --spacing-2xl: 3rem;      /* 48px */
-  --spacing-3xl: 4rem;      /* 64px */
 
   /* ==================
      Typography Scale
@@ -149,10 +137,6 @@
      Transitions
      ================== */
 
-  --transition-fast: 0.1s ease;
-  --transition-base: 0.2s ease;
-  --transition-slow: 0.3s ease;
-  --transition-all: all 0.2s ease;
 
   /* ==================
      Z-Index Scale
@@ -174,7 +158,6 @@
 
   --header-height: 52px;
   --sidebar-width: 280px;
-  --sidebar-collapsed-width: 60px;
 
   /* ==================
      Component Sizes (desktop density)

@@ -49,7 +49,7 @@ Tokens follow a **semantic layering** approach:
 ### Migration Path
 
 - **Phase 0**: All tokens defined, gaps filled
-- **Phase 4**: Token hygiene audit — ✅ **COMPLETE**. All semantic subtle-tint and border tokens added (`--color-{primary,success,warning,danger}-subtle` and `--color-{primary,success,warning,danger}-border`). Surface alias `--color-surface-raised` added. Bridged to Tailwind @theme.
+- **Phase 4**: Token hygiene audit — ✅ **COMPLETE**. All semantic subtle-tint and border tokens added (`--color-{primary,success,warning,danger}-subtle` and `--color-{primary,success,warning,danger}-border`). Bridged to Tailwind @theme. (The `--color-surface-raised` alias added here was later removed: it existed to fix references that the restyle had already deleted.)
 - **Phase 5**: Enforce via linting
 
 ### Component Color Rule (enforced as of Phase 4)
