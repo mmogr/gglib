@@ -178,6 +178,24 @@ mod tests {
     use super::*;
     use std::net::TcpListener;
 
+    /// Budget for a probe *in tests*, deliberately far larger than
+    /// [`PROBE_TIMEOUT`].
+    ///
+    /// These tests assert a behavioural property — a healthy server passes,
+    /// a silent one does not — never a latency one. The timeout is scaffolding.
+    ///
+    /// Five seconds was not scaffolding enough. Under a full-workspace
+    /// `cargo test` the loopback connect alone was measured at **4.0s** on an
+    /// otherwise-healthy machine, leaving the read almost no budget and making
+    /// this fail in CI while passing whenever the crate was tested alone. The
+    /// delay is *before* the request is even written, which is why a readiness
+    /// handshake and a full request drain both failed to fix it.
+    ///
+    /// The product's own [`PROBE_TIMEOUT`] stays at five seconds: that is a
+    /// real decision about how long a wedged daemon may hide, and a test's
+    /// scheduling luck must not be the reason to weaken it.
+    const TEST_PROBE_BUDGET: Duration = Duration::from_secs(30);
+
     /// A scratch server that answers one connection with `response`.
     ///
     /// Returns only once the serving thread is scheduled and about to
@@ -194,9 +212,26 @@ mod tests {
         std::thread::spawn(move || {
             let _ = ready_tx.send(());
             if let Ok((mut stream, _)) = listener.accept() {
-                let mut discard = [0u8; 512];
-                let _ = stream.read(&mut discard);
+                // Drain the *whole* request before answering.
+                //
+                // A single `read` returns whatever one segment carried, which
+                // is the entire request when the machine is idle and only part
+                // of it when the machine is busy. Dropping the socket with
+                // unread bytes still in its receive buffer makes the OS send
+                // RST rather than FIN, and an RST discards the peer's receive
+                // buffer — destroying a response that had already been written.
+                // That is why this failed only under parallel load, and only
+                // ever on the arm that expects to read a reply.
+                let mut request = Vec::new();
+                let mut chunk = [0u8; 512];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => request.extend_from_slice(&chunk[..n]),
+                    }
+                }
                 let _ = stream.write_all(response);
+                let _ = stream.flush();
             }
         });
         ready_rx.recv().expect("serving thread started");
@@ -206,13 +241,13 @@ mod tests {
     #[test]
     fn a_healthy_daemon_passes_the_probe() {
         let addr = one_shot_server(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok");
-        assert!(probe(addr, Duration::from_secs(5)));
+        assert!(probe(addr, TEST_PROBE_BUDGET));
     }
 
     #[test]
     fn a_non_200_answer_fails_the_probe() {
         let addr = one_shot_server(b"HTTP/1.1 403 Forbidden\r\n\r\n");
-        assert!(!probe(addr, Duration::from_secs(5)));
+        assert!(!probe(addr, TEST_PROBE_BUDGET));
     }
 
     #[test]

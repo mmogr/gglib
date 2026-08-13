@@ -53,12 +53,13 @@ mod tests {
         ));
     }
 
+    /// `UserGrid` is the only unit variant left since `GgufAuthorDefault` was
+    /// deleted, so this is a single case rather than the loop it used to be.
     #[test]
     fn candidate_source_unit_variants_round_trip() {
-        for source in [CandidateSource::UserGrid] {
-            let json = serde_json::to_string(&source).expect("serializes");
-            let _: CandidateSource = serde_json::from_str(&json).expect("deserializes");
-        }
+        let json = serde_json::to_string(&CandidateSource::UserGrid).expect("serializes");
+        let round_tripped: CandidateSource = serde_json::from_str(&json).expect("deserializes");
+        assert!(matches!(round_tripped, CandidateSource::UserGrid));
     }
 }
 

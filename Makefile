@@ -188,7 +188,12 @@ fmt: ## Format Rust code
 # Run clippy
 lint: ## Run clippy with warnings denied
 	@echo "Running clippy linter..."
-	$(CARGO) clippy -- -D warnings
+	@# `--all-targets --all-features`, matching ci.yml exactly. Without
+	@# --all-targets clippy skips test code, so a lint error inside a
+	@# `#[cfg(test)]` module passes `make pre-commit` and fails CI — which is
+	@# precisely how a single-element loop reached main. A pre-commit target
+	@# that claims to run everything CI requires has to actually run it.
+	$(CARGO) clippy --all-targets --all-features -- -D warnings
 
 # Generate and open documentation
 doc: ## Generate and open documentation
