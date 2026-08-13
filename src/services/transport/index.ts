@@ -8,7 +8,6 @@
 
 import type { Transport } from './types';
 import { createApiTransport } from './api';
-import { createPlatform } from './platform';
 import { createEventBus } from './events';
 import { checkCollisions } from './utils';
 
@@ -30,16 +29,14 @@ export function getTransport(): Transport {
 
   // Create all transport modules
   const api = createApiTransport();
-  const platform = createPlatform();
   const events = createEventBus();
   
   // Check for collisions in dev mode
-  checkCollisions(api, platform, events);
+  checkCollisions(api, events);
   
   // Compose into unified transport with explicit interface satisfaction
   const transport = {
     ...api,
-    ...platform,
     ...events,
   } satisfies Transport;
   
