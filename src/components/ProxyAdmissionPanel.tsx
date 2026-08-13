@@ -29,15 +29,11 @@ import type {
   ResidentSlotSnapshot,
   SecondarySlotState,
 } from '../services/transport/types/dashboard';
+import { formatCount } from '../utils/format';
 
 export interface ProxyAdmissionPanelProps {
   /** `null`/`undefined` on a proxy that predates admission control. */
   admission?: AdmissionSnapshot | null;
-}
-
-/** Thousands-separated count, matching the cache panel's type scale. */
-function formatCount(value: number): string {
-  return value.toLocaleString();
 }
 
 /** Whole seconds, or a coarse minutes figure once a wait gets long. */

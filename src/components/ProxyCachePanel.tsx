@@ -21,15 +21,11 @@ import type { FC } from 'react';
 import { Banner } from './ui/Banner';
 import { Readout } from './primitives';
 import type { CacheStatus, CacheUsage } from '../services/transport/types/dashboard';
+import { formatCount } from '../utils/format';
 
 export interface ProxyCachePanelProps {
   /** `null`/`undefined` before the first request resolves a model. */
   cache?: CacheStatus | null;
-}
-
-/** Thousands-separated count, so six-figure token totals stay readable. */
-function formatCount(value: number): string {
-  return value.toLocaleString();
 }
 
 /** One label/value row, matching the modal's existing type scale. */

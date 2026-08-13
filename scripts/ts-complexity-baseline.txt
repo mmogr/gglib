@@ -8,7 +8,6 @@ src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 352
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 373
 src/components/SettingsModal.tsx 373
-src/components/SettingsModal/SystemSettings.tsx 312
 src/components/SetupWizard/SetupWizard.tsx 721
 src/components/VerificationModal.tsx 454
 src/hooks/useDownloadManager.ts 451

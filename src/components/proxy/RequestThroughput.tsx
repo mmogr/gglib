@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { Readout, Sparkline } from '../primitives';
 import { useMetricHistory } from '../../hooks/useMetricHistory';
-import { formatRate } from '../../utils/formatRate';
+import { formatPerSecond } from '../../utils/formatPerSecond';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
 
 interface RequestThroughputProps {
@@ -27,7 +27,7 @@ export const RequestThroughput: FC<RequestThroughputProps> = ({ snapshot }) => {
       <Readout
         size="sm"
         label="Throughput"
-        value={rate.latest != null ? formatRate(rate.latest) : '—'}
+        value={rate.latest != null ? formatPerSecond(rate.latest) : '—'}
         unit="req/s"
       />
       <Sparkline

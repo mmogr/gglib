@@ -134,3 +134,11 @@ export const getHuggingFaceUrl = (
 export const getHuggingFaceModelUrl = (modelId: string): string => {
   return `https://huggingface.co/${modelId}`;
 };
+
+/**
+ * Thousands-separated count, so six-figure token totals stay readable.
+ *
+ * Trivial enough that two panels each grew their own copy; here so a third
+ * does not, and so a future change of mind about separators lands once.
+ */
+export const formatCount = (value: number): string => value.toLocaleString();

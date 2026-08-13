@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import { ContextUsageDonut } from '../ContextUsageDonut';
 import { Readout, Sparkline } from '../primitives';
 import { useMetricHistory } from '../../hooks/useMetricHistory';
-import { formatRate } from '../../utils/formatRate';
+import { formatPerSecond } from '../../utils/formatPerSecond';
 import { tokensInUse, type SlotSnapshot } from '../../services/transport/types/dashboard';
 
 interface SlotCardProps {
@@ -44,7 +44,7 @@ export const SlotCard: FC<SlotCardProps> = ({ slot, size = 80, tick, resetKey })
         size="sm"
         align="center"
         label={`Slot ${slot.id}${slot.is_processing ? ' · active' : ''}`}
-        value={genRate.latest != null ? formatRate(genRate.latest) : '—'}
+        value={genRate.latest != null ? formatPerSecond(genRate.latest) : '—'}
         unit="tok/s"
         trend={
           <Sparkline
