@@ -61,7 +61,9 @@ Concretely:
 4. **The defect ledger stays, as diagnosis.** Per-model counters keep recording
    what actually fails — now including stream errors, truncations, empty and
    reasoning-only turns, dialect residue, unvalidatable schemas and
-   normalization errors. Nothing acts on them automatically.
+   normalization errors. Nothing acts on them automatically — they are read by
+   a person, in `gglib proxy dashboard`, which lists only the models with
+   something to report.
 
 ## What ADR 0005 got right and keeps
 

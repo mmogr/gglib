@@ -27,13 +27,13 @@ crates/gglib-cli/src/commands.rs 416
 crates/gglib-cli/src/daemon_client/mod.rs 312
 crates/gglib-cli/src/handlers/benchmark.rs 1479
 crates/gglib-cli/src/handlers/config/llama_install.rs 341
-crates/gglib-cli/src/handlers/config/settings/mod.rs 349
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 508
 crates/gglib-cli/src/handlers/config/settings/settings_display.rs 404
 crates/gglib-cli/src/handlers/inference/serve.rs 315
 crates/gglib-cli/src/handlers/model/download/interactive.rs 426
 crates/gglib-cli/src/handlers/model/update.rs 712
-crates/gglib-cli/src/handlers/proxy_dashboard.rs 1255
+crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 624
+crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 440
 crates/gglib-cli/src/model_commands.rs 437
 crates/gglib-cli/src/presentation/explain_display.rs 735
 crates/gglib-cli/src/presentation/inspect_display.rs 405
