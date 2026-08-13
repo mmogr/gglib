@@ -19,7 +19,7 @@ import {
 } from './components';
 import type { MessageActionsContextValue } from './components';
 import {
-  useChatPersistence,
+  useThreadHydration,
   useTitleGeneration,
   useMessageDeletion,
 } from './hooks';
@@ -87,14 +87,14 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   const tick = useSharedTicker(!!currentStreamingAssistantMessageId, 100);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Persistence hook — handles message hydration and persistence
+  // Hydration hook — loads a conversation's messages into the thread runtime.
+  // Saving belongs to the hooks-level useChatPersistence, exclusively.
   // ─────────────────────────────────────────────────────────────────────────────
-  const { isLoading: messageLoading, dbIdByPosition } = useChatPersistence({
+  const { isLoading: messageLoading, dbIdByPosition } = useThreadHydration({
     threadRuntime,
     activeConversationId,
     activeConversation,
     persistedMessageIds,
-    syncConversations,
     setChatError,
   });
 
@@ -203,7 +203,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         {/* Messages area */}
         <div className="flex-1 min-h-0 flex flex-col rounded-md bg-background overflow-hidden">
           {messageLoading ? (
-            <div className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
+            <div role="status" className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
