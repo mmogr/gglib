@@ -11,8 +11,9 @@
 #     as "chosen", so the ceiling silently stops firing. That is the same
 #     shape as #741's floor and #744's ceiling, both of which shipped inert
 #     and were found in production rather than by a test.
-#   - `is_floor` had the same problem in the other direction: a new variant
-#     silently reads as "not the floor".
+#   - `is_floor` had the same problem in the other direction — a new variant
+#     silently read as "not the floor". It has since been deleted for having
+#     no callers, which is the other way that question stops being asked.
 #
 # The type system cannot enforce this on its own — `matches!` and a `match`
 # with `_ =>` are both legal — so this is a grep, in the same spirit as
@@ -230,8 +231,8 @@ A match over `ParamSource` uses a catch-all arm.
 
 Adding a variant would then change behaviour at that site silently instead of
 failing the build. Spell out every variant, or — better — express the question
-as a method on `ParamSource` itself, next to `is_floor` and
-`is_deliberate_choice`, so there is one exhaustive answer rather than several.
+as a method on `ParamSource` itself, next to `is_deliberate_choice`, so there
+is one exhaustive answer rather than several.
 MSG
   exit 1
 fi

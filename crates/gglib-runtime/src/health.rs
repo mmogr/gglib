@@ -1,14 +1,20 @@
-//! Health check utilities for llama-server processes.
+//! Health checking for the monitor, which needs to know *why* a check failed.
 //!
-//! This module provides HTTP health checking for server processes.
-//! It is intentionally minimal and has no domain logic.
-#![allow(dead_code)] // Utility functions may not all be used yet
+//! There is a second `check_http_health` in [`crate::process::health`], and
+//! the difference between them is deliberate rather than accidental. That one
+//! returns a bare `bool` and documents that any failure — refused, timed out,
+//! non-2xx — is reported identically, because its caller is the request fast
+//! path and cannot act on the distinction. This one returns `Result<bool>` so
+//! [`crate::health_monitor`] can turn a timeout, a refused connection and a
+//! non-success status into three different `ServerHealthStatus` values.
+//!
+//! Collapsing them would cost the monitor its diagnosis or the fast path its
+//! simplicity. What was genuinely duplicated — a `wait_for_http_health` with
+//! no callers, hidden by a module-level `allow(dead_code)` — is gone.
 
 use anyhow::Result;
 use reqwest::Client;
 use std::time::Duration;
-use tokio::time::sleep;
-use tracing::{debug, info};
 
 /// Shared client for health polling.
 ///
@@ -49,86 +55,5 @@ pub async fn check_http_health(port: u16) -> Result<bool> {
         Ok(response) if response.status().is_success() => Ok(true),
         Ok(_) => Ok(false),
         Err(_) => Ok(false),
-    }
-}
-
-/// Wait for HTTP health check to succeed.
-///
-/// Polls the llama-server's /health endpoint until it returns 200 OK
-/// or the timeout is reached.
-///
-/// # Arguments
-///
-/// * `port` - Port the server is listening on
-/// * `timeout_secs` - Maximum seconds to wait
-pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
-    let health_url = format!("http://127.0.0.1:{}/health", port);
-    info!("Waiting for llama-server to be ready at {}", health_url);
-
-    let max_attempts = timeout_secs;
-    let mut attempt = 0;
-    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
-
-    loop {
-        attempt += 1;
-        sleep(Duration::from_secs(1)).await;
-
-        match client.get(&health_url).send().await {
-            Ok(response) => {
-                let status = response.status();
-
-                if !status.is_success() {
-                    debug!(
-                        "Health check returned status {} (expected 200), retrying...",
-                        status
-                    );
-
-                    // Fail faster if clearly wrong service
-                    if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
-                        return Err(anyhow::anyhow!(
-                            "Port {} appears to be in use by another service (status {})",
-                            port,
-                            status
-                        ));
-                    }
-                } else {
-                    // Got 200 OK - verify it's actually llama-server
-                    match response.text().await {
-                        Ok(body) => {
-                            if body.contains("status")
-                                || body.contains("slots")
-                                || body.contains("error")
-                                || body.is_empty()
-                            {
-                                info!("llama-server is ready on port {}", port);
-                                return Ok(());
-                            } else {
-                                debug!("Health check returned unexpected response: {}", body);
-                                if attempt > 5 {
-                                    return Err(anyhow::anyhow!(
-                                        "Port {} is responding but doesn't appear to be llama-server",
-                                        port
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            debug!("Failed to read health response: {}", e);
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                debug!("Health check failed: {}, retrying...", e);
-            }
-        }
-
-        if attempt >= max_attempts {
-            return Err(anyhow::anyhow!(
-                "llama-server failed to start within {}s on port {}",
-                max_attempts,
-                port
-            ));
-        }
     }
 }

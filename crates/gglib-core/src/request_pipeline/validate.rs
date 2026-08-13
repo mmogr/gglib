@@ -175,17 +175,6 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    /// Whether this verdict should trigger a repair attempt.
-    ///
-    /// Only [`Verdict::Invalid`]. [`Verdict::Unvalidatable`] deliberately does
-    /// not: re-rolling a call that may well be correct, because gglib cannot
-    /// read its schema, spends a generation to trade a working call for a
-    /// different one.
-    #[must_use]
-    pub const fn warrants_repair(&self) -> bool {
-        matches!(self, Self::Invalid(_))
-    }
-
     /// The violations, empty for every other verdict.
     #[must_use]
     pub fn violations(&self) -> &[Violation] {
@@ -490,7 +479,7 @@ mod tests {
     fn the_llama_32_failure_is_caught() {
         let v = verdict(r#"{"path":"42","mode":"text","max_lines":"42"}"#);
 
-        assert!(v.warrants_repair());
+        assert!(matches!(v, Verdict::Invalid(_)));
         assert_eq!(
             kinds(&v),
             vec![ViolationKind::WrongType {
@@ -509,7 +498,7 @@ mod tests {
         let v =
             verdict(r#"{"path":"/etc/hosts","mode":"text","options":{"follow_symlinks":"null"}}"#);
 
-        assert!(v.warrants_repair());
+        assert!(matches!(v, Verdict::Invalid(_)));
         assert_eq!(v.violations()[0].pointer, "/options/follow_symlinks");
         assert_eq!(
             kinds(&v),
@@ -622,7 +611,7 @@ mod tests {
     #[test]
     fn a_fractional_float_does_not_satisfy_integer() {
         let v = verdict(r#"{"path":"a","mode":"text","max_lines":3.5}"#);
-        assert!(v.warrants_repair());
+        assert!(matches!(v, Verdict::Invalid(_)));
     }
 
     /// One wrong-typed value yields one finding, not a cascade of unrelated
@@ -682,7 +671,7 @@ mod tests {
         let v = validate_tool_calls(Some(&tools), Some(&calls));
         assert_eq!(v, Verdict::Unvalidatable("anyOf"));
         assert!(
-            !v.warrants_repair(),
+            !matches!(v, Verdict::Invalid(_)),
             "must not re-roll a call it cannot judge"
         );
     }
@@ -726,7 +715,7 @@ mod tests {
         ]);
 
         let v = validate_tool_calls(Some(&tools), Some(&calls));
-        assert!(v.warrants_repair());
+        assert!(matches!(v, Verdict::Invalid(_)));
         assert_eq!(kinds(&v), vec![ViolationKind::MissingRequired]);
     }
 

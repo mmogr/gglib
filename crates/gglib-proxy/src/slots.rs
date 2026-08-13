@@ -251,17 +251,6 @@ impl SlotSnapshot {
 
         self.n_past.or(self.cache_tokens).or(n_decoded)
     }
-
-    /// Remaining context budget for this slot (`n_ctx - tokens_in_use`).
-    ///
-    /// `None` if either the slot's context size or its token usage is
-    /// unknown on this llama-server version.
-    #[must_use]
-    pub fn context_remaining(&self) -> Option<u64> {
-        let n_ctx = self.n_ctx?;
-        let used = self.tokens_in_use()?;
-        Some(n_ctx.saturating_sub(used))
-    }
 }
 
 // =============================================================================
@@ -411,10 +400,8 @@ mod tests {
         assert!(slots[0].is_processing);
         // No n_past/cache_tokens in this schema; falls back to next_token.n_decoded.
         assert_eq!(slots[0].tokens_in_use(), Some(0));
-        assert_eq!(slots[0].context_remaining(), Some(65536));
 
         assert_eq!(slots[1].tokens_in_use(), Some(136));
-        assert_eq!(slots[1].context_remaining(), Some(65536 - 136));
     }
 
     #[test]
@@ -425,7 +412,6 @@ mod tests {
         };
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].tokens_in_use(), Some(512));
-        assert_eq!(slots[0].context_remaining(), Some(4096 - 512));
     }
 
     #[test]
@@ -450,7 +436,6 @@ mod tests {
             panic!("expected Available");
         };
         assert_eq!(slots[0].tokens_in_use(), None);
-        assert_eq!(slots[0].context_remaining(), None);
     }
 
     #[test]
@@ -514,7 +499,6 @@ mod tests {
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].n_ctx, Some(131072));
         assert_eq!(slots[0].tokens_in_use(), Some(20906 + 89));
-        assert_eq!(slots[0].context_remaining(), Some(131072 - (20906 + 89)));
     }
 
     #[test]

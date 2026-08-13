@@ -22,7 +22,7 @@ pub mod unified_server_config;
 // Re-export the main ProcessRunner implementation
 
 // Re-export health utilities for direct use if needed
-pub use health::{check_http_health, wait_for_http_health};
+pub use health::check_http_health;
 
 // Re-export health monitoring primitives
 pub use health_monitor::{ServerHealthChecker, ServerHealthMonitor};
