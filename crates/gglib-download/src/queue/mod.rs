@@ -58,7 +58,11 @@ impl DownloadQueue {
         self.failed.len()
     }
 
-    /// Check if a download ID is currently queued.
+    /// Check if a download ID is waiting in `pending`.
+    ///
+    /// Pending only — an item that has started downloading has left this queue
+    /// for the manager's `active` map and will not be found here. Callers
+    /// guarding against duplicate work need to check both.
     pub fn is_queued(&self, id: &DownloadId) -> bool {
         self.pending.iter().any(|item| &item.id == id)
     }

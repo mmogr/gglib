@@ -3,6 +3,9 @@ mod paths;
 mod shard_group_tracker;
 mod worker;
 
+#[cfg(test)]
+mod duplicate_guard_tests;
+
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1805,6 +1808,39 @@ impl DownloadManagerImpl {
 
         let has_active = self.has_active().await;
         let shard_count = resolution.files.len();
+        #[allow(clippy::cast_possible_truncation)]
+        let queued = shard_count as u32;
+
+        // A repeat request for a download already in flight attaches to it
+        // instead of enqueueing a second copy. `Queue::is_queued` scans only
+        // `pending`, so once the first request moved to `active` it stopped
+        // matching — which is how a retried `gglib model download` left two
+        // entries for one model, the second wedged behind the first.
+        //
+        // Deliberately not `has_download`: that also answers `true` for a
+        // *failed* download, and a failure has to stay re-queueable — hence the
+        // `remove_from_failed` inside `queue_sharded`.
+        //
+        // Two statements, not one `||` expression: each guard drops at the end
+        // of its own statement, so the two locks are never held at once. They
+        // are read in the order this struct documents on `active` — queue
+        // before active — and both are released before the queue *write* lock
+        // below. `self.queue` is not reentrant, and nesting these is the shape
+        // of the AdmissionQueue deadlock fixed in #722.
+        let is_pending = self.queue.read().await.is_queued(&id);
+        let is_active = self.active.lock().await.contains_key(&id);
+        if is_pending || is_active {
+            tracing::info!(
+                id = %id,
+                "Download already in flight - attaching rather than queueing a duplicate"
+            );
+            let group_id = Some(id.to_string());
+            return Ok(QueueAutoResult {
+                root_id: id,
+                queued,
+                group_id,
+            });
+        }
 
         // Build shard files outside lock
         let shard_files: Vec<_> = resolution
@@ -1857,10 +1893,9 @@ impl DownloadManagerImpl {
         self.queue_notify.notify_one();
         self.emit_queue_snapshot().await;
 
-        #[allow(clippy::cast_possible_truncation)]
         Ok(QueueAutoResult {
             root_id: id,
-            queued: shard_count as u32,
+            queued,
             group_id,
         })
     }
