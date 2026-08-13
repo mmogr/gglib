@@ -1,89 +1,87 @@
 /**
- * Server Events Initialization
- * TRANSPORT_EXCEPTION: Auto-selects the appropriate event adapter (Tauri only) based on platform.
- * Uses platform detection to initialize server lifecycle event handling.
- * 
- * Note: SSE adapter has been removed. Server events are now handled through
- * the unified transport layer in services/transport/events/sse.ts
+ * Server lifecycle events, from the daemon into the registry.
+ *
+ * One path for every mode. Server lifecycle is the daemon's news, and the
+ * daemon tells every client the same way — `/api/events`, over SSE, through
+ * `services/transport`. The desktop app is a client like any other.
+ *
+ * It used to branch: `isDesktop()` took a Tauri-event adapter that listened
+ * for `server:snapshot|started|stopped|error|health_changed` on the Tauri bus.
+ * Nothing emitted those. The GUI's own backend had been consolidated into the
+ * daemon, and with it went the `AppEventEmitter` implementation that would
+ * have. So the desktop branch registered listeners for events that could never
+ * fire and skipped the subscription that works — leaving `useServerState`,
+ * `useIsServerRunning` and the health indicator inert in the app, and only in
+ * the app. The web build was fine, which is why it went unnoticed.
+ *
+ * Nothing here is desktop-aware any more, and that is the point: a second path
+ * is a second thing to keep true.
  */
 
-import { isDesktop } from './platform';
-import { initTauriServerEvents, cleanupTauriServerEvents } from './serverEvents.tauri';
 import { getTransport } from './transport';
 import type { Unsubscribe } from './transport/types/common';
 import { ingestServerEvent } from './serverRegistry';
 import { normalizeServerEventFromAppEvent } from './serverEvents.normalize';
 
 let initialized = false;
-let webUnsubscribe: Unsubscribe | null = null;
-let webEventVersion = 0;
+let unsubscribe: Unsubscribe | null = null;
+let eventVersion = 0;
 
 /**
- * Initialize server lifecycle event handling.
- * Desktop app uses Tauri events; web uses unified SSE transport.
- * Safe to call multiple times - will only initialize once.
+ * Start bridging server lifecycle events into the registry.
+ *
+ * Safe to call multiple times — only the first call does anything.
  */
-export async function initServerEvents(): Promise<void> {
+export function initServerEvents(): void {
   if (initialized) {
     return;
   }
 
-  if (isDesktop()) {
-    await initTauriServerEvents();
-  }
-  // Web: Bridge canonical backend AppEvent server lifecycle events into serverRegistry.
-  // This enables UI (e.g. Chat composer) to reactively switch to read-only when servers stop.
-  else {
-    webEventVersion = 0;
+  eventVersion = 0;
 
-    // 1. Subscribe FIRST so no events are missed during hydration fetch
-    webUnsubscribe = getTransport().subscribe('server', (payload) => {
-      webEventVersion++;
-      const normalized = normalizeServerEventFromAppEvent(payload as unknown);
+  // Subscribe FIRST so no event is missed during the hydration fetch below.
+  unsubscribe = getTransport().subscribe('server', (payload) => {
+    eventVersion++;
+    const normalized = normalizeServerEventFromAppEvent(payload as unknown);
+    if (normalized) {
+      ingestServerEvent(normalized);
+    }
+  });
+
+  // Hydration: seed the registry with servers already running at load. Routed
+  // through the tolerant normalizer so both camelCase and snake_case payloads
+  // map correctly and malformed entries are dropped rather than becoming
+  // "undefined" registry keys.
+  const versionBeforeFetch = eventVersion;
+  getTransport()
+    .listServers()
+    .then((servers) => {
+      // Drop stale hydration if a live event already arrived.
+      if (eventVersion !== versionBeforeFetch) return;
+      const normalized = normalizeServerEventFromAppEvent({
+        type: 'server_snapshot',
+        servers,
+      });
       if (normalized) {
         ingestServerEvent(normalized);
       }
+    })
+    .catch(() => {
+      // Non-fatal — live events will populate state as servers start.
     });
-
-    // 2. Hydration fetch — seed registry with servers already running on page load.
-    // Routed through the tolerant normalizer so both camelCase and snake_case
-    // payloads (older backends) map correctly and malformed entries are dropped
-    // instead of becoming "undefined" registry keys.
-    const versionBeforeFetch = webEventVersion;
-    getTransport()
-      .listServers()
-      .then((servers) => {
-        // Drop stale hydration if a live server event already arrived
-        if (webEventVersion !== versionBeforeFetch) return;
-        const normalized = normalizeServerEventFromAppEvent({
-          type: 'server_snapshot',
-          servers,
-        });
-        if (normalized) {
-          ingestServerEvent(normalized);
-        }
-      })
-      .catch(() => {
-        // Non-fatal — live events will populate state as servers start
-      });
-  }
 
   initialized = true;
 }
 
 /**
- * Cleanup server event handling.
- * Should be called on app unmount.
+ * Stop bridging server lifecycle events. Call on app unmount.
  */
 export function cleanupServerEvents(): void {
-  if (isDesktop()) {
-    cleanupTauriServerEvents();
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
   }
-  if (webUnsubscribe) {
-    webUnsubscribe();
-    webUnsubscribe = null;
-  }
-  webEventVersion = 0;
+  eventVersion = 0;
   initialized = false;
 }
 
