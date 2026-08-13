@@ -23,7 +23,7 @@ const rec: ModelRecommendation = {
   repo: 'unsloth/Qwen3-30B-A3B-GGUF',
   quantization: 'Q4_K_M',
   rationale: 'mixture-of-experts: 30B of knowledge, ~3B active per token',
-  // Binary GB, matching formatMemorySize: 21 GiB and 32 GiB exactly.
+  // Binary, matching formatMemorySize: 21 GiB and 32 GiB exactly.
   requiredBytes: 21 * 1024 ** 3,
   budgetBytes: 32 * 1024 ** 3,
   budgetSource: 'unifiedMemory',
@@ -41,8 +41,8 @@ describe('RecommendedModel', () => {
 
     expect(await screen.findByText('unsloth/Qwen3-30B-A3B-GGUF')).toBeInTheDocument();
     // Binary units, the same convention as the fit indicators and `gglib up`.
-    expect(screen.getByText('21.0 GB')).toBeInTheDocument();
-    expect(screen.getByText('32.0 GB')).toBeInTheDocument();
+    expect(screen.getByText('21.0 GiB')).toBeInTheDocument();
+    expect(screen.getByText('32.0 GiB')).toBeInTheDocument();
     expect(screen.getByText(/unified memory/)).toBeInTheDocument();
   });
 

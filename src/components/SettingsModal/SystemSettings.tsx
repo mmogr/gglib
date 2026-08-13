@@ -15,22 +15,7 @@ import { getTransport } from '../../services/transport';
 import { useSystemSettings } from './useSystemSettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import type { LlamaStatus } from '../../types/setup';
-
-/** One label/value row. Values are mono so paths and hashes line up. */
-const Row: FC<{ label: string; value: string; mono?: boolean }> = ({
-  label,
-  value,
-  mono = true,
-}) => (
-  <div className="flex items-baseline justify-between gap-md">
-    <span className="text-xs text-text-muted shrink-0">{label}</span>
-    <span
-      className={`text-xs text-text-secondary text-right break-all ${mono ? 'font-mono tabular-nums' : ''}`}
-    >
-      {value}
-    </span>
-  </div>
-);
+import { LabelledValue } from './LabelledValue';
 
 /** Installed / degraded / absent, as a dot and a word. */
 const InstallState: FC<{ status: LlamaStatus }> = ({ status }) => {
@@ -150,15 +135,15 @@ export const SystemSettings: FC = () => {
 
         {status && (
           <Stack gap="xs">
-            <Row label="Binary" value={status.binaryPath} />
+            <LabelledValue label="Binary" value={status.binaryPath} />
             {status.build ? (
               <>
-                <Row label="Built from" value={status.build.version} />
-                <Row label="Acceleration" value={status.build.acceleration} mono={false} />
-                <Row label="Built" value={status.build.buildDate.split('T')[0]} />
+                <LabelledValue label="Built from" value={status.build.version} />
+                <LabelledValue label="Acceleration" value={status.build.acceleration} mono={false} />
+                <LabelledValue label="Built" value={status.build.buildDate.split('T')[0]} />
               </>
             ) : (
-              <Row
+              <LabelledValue
                 label="Build record"
                 value={
                   status.buildError ??
@@ -168,7 +153,7 @@ export const SystemSettings: FC = () => {
               />
             )}
             {status.runtime && (
-              <Row
+              <LabelledValue
                 label="Binary reports"
                 value={
                   status.runtime.build

@@ -25,8 +25,8 @@ export interface ProxyLaunchPanelProps {
 }
 
 /** Bytes as GiB with one decimal, matching the backend's `format_gib`. */
-export function formatWeights(bytes: number): string {
-  return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+function formatWeights(bytes: number): string {
+  return `${(bytes / 1_073_741_824).toFixed(1)} GiB`;
 }
 
 /**

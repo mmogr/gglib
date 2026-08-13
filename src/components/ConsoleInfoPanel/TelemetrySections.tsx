@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { Readout, Sparkline, Stack } from '../primitives';
 import { useMetricHistory } from '../../hooks/useMetricHistory';
-import { formatRate } from '../../utils/formatRate';
+import { formatPerSecond } from '../../utils/formatPerSecond';
 import type { ServerMetrics } from './useServerMetrics';
 
 interface TelemetryProps {
@@ -87,7 +87,7 @@ export const StatisticsSection: FC<Omit<TelemetryProps, 'contextLength'>> = ({
       <h3 className="m-0 text-sm font-semibold text-text">Statistics</h3>
       <Readout
         label="Generation"
-        value={genRate.latest != null ? formatRate(genRate.latest) : '—'}
+        value={genRate.latest != null ? formatPerSecond(genRate.latest) : '—'}
         unit="tok/s"
         trend={
           <Sparkline

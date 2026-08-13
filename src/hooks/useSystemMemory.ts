@@ -45,15 +45,21 @@ export function determineFitStatus(requiredBytes: number, availableBytes: number
 }
 
 /**
- * Format bytes to a human-readable string.
+ * Format a memory size, in binary units.
+ *
+ * The divisors were always 1024-based — the same convention `gglib up` and the
+ * fit indicators use, and the reason those three agree. The *labels* said `GB`,
+ * `MB`, `KB`, so a 21 GiB figure was printed as "21 GB", which is a different
+ * number. Fixed on the label rather than the maths: changing the divisors would
+ * have made this disagree with every fit calculation it sits beside.
  */
 export function formatMemorySize(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
   } else if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+    return `${(bytes / (1024 * 1024)).toFixed(0)} MiB`;
   } else {
-    return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / 1024).toFixed(0)} KiB`;
   }
 }
 
