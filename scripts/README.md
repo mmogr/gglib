@@ -12,6 +12,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check-tauri-commands.sh](#check-tauri-commandssh) | Enforce HTTP-first Tauri policy | CI |
 | [check_file_complexity.sh](#check_file_complexitysh) | Flag large files for decomposition | Manual |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
+| [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
 | [discover_modules.sh](#discover_modulessh) | Auto-discover crate modules | Badge generation |
@@ -91,6 +92,25 @@ Ensures platform-specific code (`isTauriApp`) never appears in client modules:
 
 ```bash
 ./scripts/check_transport_branching.sh
+```
+
+### `check_settings_surfaces.sh`
+
+Fails if a `Settings` field is settable from no surface a person has — no CLI
+flag on `gglib config settings set`, and no camelCase mention anywhere in
+`src/`. One surface is enough; several settings are deliberately CLI-only, and
+`close_to_tray` means nothing to a terminal.
+
+Written after `tool_call_repair` spent months stored, plumbed, read by the
+proxy and settable from nowhere. Nothing catches that: every layer compiles,
+and `config settings show` even printed it, because that display is derived
+from serde. The failure is an absence, and absences do not fail type checks.
+
+Exemptions live in the script with a reason each, and should stay rare — an
+exemption claims the field is written by something other than a person.
+
+```bash
+./scripts/check_settings_surfaces.sh
 ```
 
 ---

@@ -126,6 +126,13 @@ All four must hold. Anything else forwards unchanged.
    `GGLIB_DISABLE_TOOL_REPAIR` env kill switch matching the convention of
    `GGLIB_DISABLE_GRAMMAR` and `GGLIB_DISABLE_AGENTIC_SAMPLING`).
 
+   Settable as `gglib config settings set --tool-call-repair false`, or from
+   Settings → Advanced in the app. Turn it off to measure what a model
+   actually produces: with repair on, a model that packages tool calls badly
+   looks like a model that does not, because the proxy fixes it before the
+   client sees it — which is the right default for using one and the wrong
+   one for judging one.
+
 Per ADR 0002 we validate *every* applicable response rather than gating on a
 pre-emptive per-model detector. Validation is a schema walk over a few hundred
 bytes; a detector would be a second thing to keep correct for no measurable

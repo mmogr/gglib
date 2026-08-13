@@ -222,6 +222,10 @@ enforce: ## Run the architecture enforcement checks
 	@./scripts/check-frontend-ipc.sh
 	@./scripts/check_transport_branching.sh
 	@./scripts/check_param_source_exhaustive.sh
+	@# A setting that exists, is plumbed, is read, and is settable from nowhere
+	@# compiles perfectly — the failure is an absence. tool_call_repair sat that
+	@# way for months while `config settings show` printed it.
+	@./scripts/check_settings_surfaces.sh
 	@# The repo's "small files" constraint was enforced only over src/ (TS and
 	@# CSS); Rust was never checked, and 175 files are already over the same
 	@# budget. A ratchet rather than a threshold, so the rule can bite today
