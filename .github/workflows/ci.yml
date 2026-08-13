@@ -104,6 +104,9 @@ jobs:
       - name: Check the Rust file-size ratchet
         run: ./scripts/check_rust_complexity.sh
 
+      - name: Check the TypeScript file-size ratchet
+        run: ./scripts/check_file_complexity.sh
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest

@@ -231,6 +231,10 @@ enforce: ## Run the architecture enforcement checks
 	@# budget. A ratchet rather than a threshold, so the rule can bite today
 	@# instead of after a refactor nobody has scheduled.
 	@./scripts/check_rust_complexity.sh
+	@# Its TypeScript sibling, which CONTRIBUTING documented and nothing ran:
+	@# a hard 300-LOC threshold cannot be switched on when 24 files are already
+	@# over it. Same ratchet, same escape hatch.
+	@./scripts/check_file_complexity.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
@@ -332,9 +336,15 @@ run-gui: ## Run the desktop GUI
 	$(CARGO) run -p gglib-cli -- gui
 
 # Run web server
+#
+# No PORT: `gglib web` ensures the daemon and prints its URL, and the daemon's
+# port is a fixed loopback constant by design so every client can find the one
+# daemon without configuration. This target passed `--port $(PORT)`, which the
+# command has never accepted — `make run-web PORT=9999` failed with a clap
+# error.
 run-web: ## Run the web server
 	@echo "Starting web server..."
-	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
+	$(CARGO) run -p gglib-cli -- web
 
 ##@ Tauri
 
