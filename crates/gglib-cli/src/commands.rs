@@ -392,9 +392,6 @@ pub enum Commands {
         /// Port to bind the proxy to
         #[arg(short, long, default_value = "8080")]
         port: u16,
-        /// Starting port for llama-server instances (5500+ to avoid macOS AirPlay on 5000)
-        #[arg(long, default_value = "5500")]
-        llama_port: u16,
         /// Default context size when not specified by client.
         /// Falls back to the app settings `default_context_size`, then to the
         /// compiled default (4096) if unset. Must be a positive number — `max`

@@ -283,7 +283,7 @@ or CLI will behave identically when auto-started by the proxy.
 requests for any other model rather than swapping, which gives clients that
 cannot switch via `/v1/models` a fixed endpoint without giving up the
 dashboard, cache lifecycle or request normalization. It takes the same cache
-flags (`--cache`, `--cache-ram-mb`, `--cache-reuse`, …) as `gglib proxy`,
+flags (`--cache`, `--slot-dir`, `--cache-disk-gb`) as `gglib proxy`,
 opt-in on both.
 
 In pinned mode `GET /v1/models` advertises only the pinned model, so a client

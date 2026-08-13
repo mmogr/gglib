@@ -13,7 +13,7 @@ automatically and each overridable:
 ## KV cache quantization
 
 Every launch defaults the KV cache to `q8_0` quantization on both K and V
-(`--cache-type-k`/`--cache-type-v`), roughly halving KV memory versus
+(llama-server's `--cache-type-k`/`--cache-type-v`), roughly halving KV memory versus
 llama-server's own `f16` default — which directly buys context headroom on a
 16–24 GB card. Override per-axis with the same flags, or set
 `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`.
@@ -22,7 +22,10 @@ llama-server's own `f16` default — which directly buys context headroom on a
 
 Independently of disk persistence, every launch auto-sizes llama-server's own
 host-RAM prompt cache (`--cache-ram`) from system RAM, the model's weights, and
-its KV footprint — override with `--cache-ram-mb`.
+its KV footprint. Set `GGLIB_DISABLE_CACHE_AUTOSIZE=1` in the daemon's
+environment to skip auto-sizing and take llama-server's own default; there is
+no per-run flag, because the daemon builds its `ProcessManager` once at
+startup.
 
 ## Disk slot persistence
 

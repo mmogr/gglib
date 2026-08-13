@@ -22,14 +22,11 @@ pub async fn execute(
     ctx: &CliContext,
     host: String,
     port: u16,
-    llama_port: u16,
     default_context: Option<String>,
     sampling: SamplingArgs,
     cache: CacheArgs,
     access: AccessArgs,
 ) -> Result<()> {
-    warn_construction_time_flags(&cache, llama_port);
-
     let settings = ctx.app.settings().get().await?;
     let effective_context = resolve_context_size(&ServerConfigOptions {
         context_size: default_context
@@ -98,31 +95,6 @@ pub(in crate::handlers) async fn attach_dashboard(
     eprintln!("    stop it:    gglib proxy stop");
     eprintln!();
     result
-}
-
-/// Warn about flags the daemon cannot apply per-run.
-///
-/// These used to configure the `ProcessManager` this command constructed for
-/// itself. The manager now lives in the daemon and is built once at daemon
-/// startup, so per-run values here have nothing to attach to.
-pub(in crate::handlers) fn warn_construction_time_flags(cache: &CacheArgs, llama_port: u16) {
-    if llama_port != 5500 {
-        eprintln!(
-            "  \u{26a0}\u{fe0f}  --llama-port is no longer applied per run: the daemon owns \
-             llama-server port allocation.\n     Configure it with `gglib config settings set \
-             --llama-base-port {llama_port}` and restart the daemon."
-        );
-    }
-    if cache.cache_ram_mb.is_some()
-        || cache.cache_reuse.is_some()
-        || cache.cache_type_k.is_some()
-        || cache.cache_type_v.is_some()
-    {
-        eprintln!(
-            "  \u{26a0}\u{fe0f}  --cache-ram/--cache-reuse/--cache-type-k/--cache-type-v are not \
-             applied per run by the daemon yet; the daemon's own defaults are used."
-        );
-    }
 }
 
 /// Execute `gglib proxy stop`.
