@@ -89,12 +89,7 @@ pub const DISABLE_GRAMMAR_ENV: &str = "GGLIB_DISABLE_GRAMMAR";
 
 /// Whether [`DISABLE_GRAMMAR_ENV`] is set to a truthy value.
 fn grammar_disabled_via_env() -> bool {
-    std::env::var(DISABLE_GRAMMAR_ENV).ok().is_some_and(|v| {
-        matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    crate::debug_switches::enabled(DISABLE_GRAMMAR_ENV)
 }
 
 /// Originate a decode-time grammar for a demanded dialect tool call.

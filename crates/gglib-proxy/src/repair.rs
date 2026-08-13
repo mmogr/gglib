@@ -51,12 +51,7 @@ pub const DISABLE_REPAIR_ENV: &str = "GGLIB_DISABLE_TOOL_REPAIR";
 
 /// Whether [`DISABLE_REPAIR_ENV`] is set to a truthy value.
 fn repair_disabled_via_env() -> bool {
-    std::env::var(DISABLE_REPAIR_ENV).ok().is_some_and(|v| {
-        matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    gglib_core::debug_switches::enabled(DISABLE_REPAIR_ENV)
 }
 
 /// Why a response was not repaired, for the record.

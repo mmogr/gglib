@@ -170,14 +170,7 @@ pub const DISABLE_AGENTIC_SAMPLING_ENV: &str = "GGLIB_DISABLE_AGENTIC_SAMPLING";
 
 /// Whether [`DISABLE_AGENTIC_SAMPLING_ENV`] is set to a truthy value.
 fn agentic_sampling_disabled_via_env() -> bool {
-    std::env::var(DISABLE_AGENTIC_SAMPLING_ENV)
-        .ok()
-        .is_some_and(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
+    crate::debug_switches::enabled(DISABLE_AGENTIC_SAMPLING_ENV)
 }
 
 /// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
