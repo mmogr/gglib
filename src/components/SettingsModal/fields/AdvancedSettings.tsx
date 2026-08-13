@@ -157,6 +157,20 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           value nobody deliberately chose. Anything set by a person stands.
         </ToggleField>
 
+        <ToggleField
+          id="tool-call-repair-input"
+          label="Tool call repair"
+          checked={agentGuards.toolCallRepair}
+          onChange={(value) => setAgentGuardSetting('toolCallRepair', value)}
+          disabled={saving}
+        >
+          On by default: a tool call that fails its schema is re-issued once with
+          <code className="font-mono"> tool_choice: &quot;required&quot;</code>, which makes
+          llama.cpp&apos;s own grammar non-lazy from the first token — so a malformed call is
+          usually repaired rather than forwarded to the client as a broken turn. Turn this off
+          when you are measuring what a model actually produces, rather than using it.
+        </ToggleField>
+
         <NumberSettingField
           id="max-stagnation-steps-input"
           label="Max Stagnation Steps"

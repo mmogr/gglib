@@ -449,6 +449,14 @@ export interface AppSettings {
    * human chose one. Unset/true = active; anything set by a person stands.
    */
   agenticSampling?: boolean | null;
+  /**
+   * Whether a tool call that fails schema validation is re-issued with
+   * `tool_choice: "required"`. Unset/`true` (the default) means active.
+   * `false` forwards the malformed call as the model produced it — which is
+   * what you want when you are measuring a model's own behaviour rather than
+   * using it.
+   */
+  toolCallRepair?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -493,6 +501,8 @@ export interface UpdateSettingsRequest {
   shareLan?: boolean | null | undefined;
   /** See `AppSettings.agenticSampling`. */
   agenticSampling?: boolean | null | undefined;
+  /** See `AppSettings.toolCallRepair`. */
+  toolCallRepair?: boolean | null | undefined;
 }
 
 // ============================================================================

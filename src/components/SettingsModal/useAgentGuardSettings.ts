@@ -13,12 +13,15 @@ import type { AppSettings, UpdateSettingsRequest } from '../../types';
 export interface AgentGuardSettingsValues {
   /** Inverse polarity on the wire: unset means enabled. */
   agenticSampling: boolean;
+  /** Inverse polarity on the wire: unset means enabled. */
+  toolCallRepair: boolean;
   /** Raw input string; blank = server default. */
   maxStagnationSteps: string;
 }
 
 const DEFAULTS: AgentGuardSettingsValues = {
   agenticSampling: true,
+  toolCallRepair: true,
   maxStagnationSteps: '',
 };
 
@@ -30,7 +33,7 @@ export interface UseAgentGuardSettingsResult {
     key: K,
     value: AgentGuardSettingsValues[K],
   ) => void;
-  updates: Pick<UpdateSettingsRequest, 'agenticSampling' | 'maxStagnationSteps'>;
+  updates: Pick<UpdateSettingsRequest, 'agenticSampling' | 'toolCallRepair' | 'maxStagnationSteps'>;
 }
 
 /** Track the agent-guard fields, seeded from persisted settings. */
@@ -42,6 +45,7 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
       setValues({
         // Unset means enabled, like proxyLoopDetection.
         agenticSampling: settings.agenticSampling !== false,
+        toolCallRepair: settings.toolCallRepair !== false,
         maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
       });
     }
@@ -64,6 +68,7 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
     reset,
     updates: {
       agenticSampling: values.agenticSampling,
+      toolCallRepair: values.toolCallRepair,
       maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,
     },
   };

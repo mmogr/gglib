@@ -1,8 +1,7 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod profiles;
+mod set;
 mod settings_display;
-
-use std::collections::BTreeSet;
 
 use anyhow::Result;
 
@@ -13,11 +12,9 @@ use gglib_core::paths::{
     DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
     resolve_models_dir,
 };
-use gglib_core::{Settings, SettingsUpdate, validate_settings};
+use gglib_core::{Settings, SettingsUpdate};
 
-use settings_display::{
-    print_display_rows, print_sections, settings_display_rows, settings_to_sections,
-};
+use settings_display::{print_sections, settings_display_rows, settings_to_sections};
 
 pub use profiles::handle_profile;
 
@@ -142,185 +139,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             print_sections(&settings_to_sections(&rows));
             Ok(())
         }
-        SettingsCommand::Set {
-            default_context_size,
-            proxy_port,
-            llama_base_port,
-            max_download_queue_size,
-            default_download_path,
-            max_tool_iterations,
-            max_stagnation_steps,
-            show_memory_fit_indicators,
-            bind_host,
-            share_lan,
-            proxy_api_key,
-            trust_client_sampling,
-            proxy_loop_detection,
-            agentic_sampling,
-            proxy_autostart,
-            close_to_tray,
-            start_at_login,
-        } => {
-            // Collect the kebab-case keys of every flag that was provided.
-            let mut changed: BTreeSet<&str> = BTreeSet::new();
-            if default_download_path.is_some() {
-                changed.insert("default-download-path");
-            }
-            if default_context_size.is_some() {
-                changed.insert("default-context-size");
-            }
-            if proxy_port.is_some() {
-                changed.insert("proxy-port");
-            }
-            if llama_base_port.is_some() {
-                changed.insert("llama-base-port");
-            }
-            if max_download_queue_size.is_some() {
-                changed.insert("max-download-queue-size");
-            }
-            if max_tool_iterations.is_some() {
-                changed.insert("max-tool-iterations");
-            }
-            if max_stagnation_steps.is_some() {
-                changed.insert("max-stagnation-steps");
-            }
-            if show_memory_fit_indicators.is_some() {
-                changed.insert("show-memory-fit-indicators");
-            }
-            if bind_host.is_some() {
-                changed.insert("bind-host");
-            }
-            if share_lan.is_some() {
-                changed.insert("share-lan");
-            }
-            if proxy_api_key.is_some() {
-                changed.insert("proxy-api-key");
-            }
-            if trust_client_sampling.is_some() {
-                changed.insert("trust-client-sampling");
-            }
-            if proxy_loop_detection.is_some() {
-                changed.insert("proxy-loop-detection");
-            }
-            if agentic_sampling.is_some() {
-                changed.insert("agentic-sampling");
-            }
-            if proxy_autostart.is_some() {
-                changed.insert("proxy-autostart");
-            }
-            if close_to_tray.is_some() {
-                changed.insert("close-to-tray");
-            }
-            if start_at_login.is_some() {
-                changed.insert("start-at-login");
-            }
-
-            if changed.is_empty() {
-                println!("No settings provided. Use --help to see available options.");
-                return Ok(());
-            }
-
-            let update = SettingsUpdate {
-                default_download_path: default_download_path.map(Some),
-                default_context_size: default_context_size.map(Some),
-                proxy_port: proxy_port.map(Some),
-                llama_base_port: llama_base_port.map(Some),
-                max_download_queue_size: max_download_queue_size.map(Some),
-                show_memory_fit_indicators: show_memory_fit_indicators.map(Some),
-                max_tool_iterations: max_tool_iterations.map(Some),
-                max_stagnation_steps: max_stagnation_steps.map(Some),
-                default_model_id: None,
-                inference_defaults: None,
-                inference_profiles: None,
-                setup_completed: None,
-                title_generation_prompt: None,
-                bind_host: bind_host.map(Some),
-                share_lan: share_lan.map(Some),
-                proxy_api_key: proxy_api_key.map(Some),
-                trust_client_sampling: trust_client_sampling.map(Some),
-                proxy_loop_detection: proxy_loop_detection.map(Some),
-                tool_call_repair: None,
-                agentic_sampling: agentic_sampling.map(Some),
-                proxy_autostart: proxy_autostart.map(Some),
-                close_to_tray: close_to_tray.map(Some),
-                start_at_login: start_at_login.map(Some),
-            };
-
-            // Pre-validate: merge the prospective update into a local copy and validate
-            // before persisting, so the user gets a clear error without a partial write.
-            let mut prospective = ctx.app.settings().get().await?;
-            if let Some(Some(v)) = &update.default_download_path {
-                prospective.default_download_path = Some(v.clone());
-            }
-            if let Some(Some(v)) = update.default_context_size {
-                prospective.default_context_size = Some(v);
-            }
-            if let Some(Some(v)) = update.proxy_port {
-                prospective.proxy_port = Some(v);
-            }
-            if let Some(Some(v)) = update.llama_base_port {
-                prospective.llama_base_port = Some(v);
-            }
-            if let Some(Some(v)) = update.max_download_queue_size {
-                prospective.max_download_queue_size = Some(v);
-            }
-            if let Some(Some(v)) = update.max_tool_iterations {
-                prospective.max_tool_iterations = Some(v);
-            }
-            if let Some(Some(v)) = update.max_stagnation_steps {
-                prospective.max_stagnation_steps = Some(v);
-            }
-            if let Some(Some(v)) = update.show_memory_fit_indicators {
-                prospective.show_memory_fit_indicators = Some(v);
-            }
-            if let Some(Some(v)) = &update.bind_host {
-                prospective.bind_host = Some(v.clone());
-            }
-            if let Some(Some(v)) = update.share_lan {
-                prospective.share_lan = Some(v);
-            }
-            if let Some(Some(v)) = &update.proxy_api_key {
-                prospective.proxy_api_key = Some(v.clone());
-            }
-            if let Some(Some(v)) = update.trust_client_sampling {
-                prospective.trust_client_sampling = Some(v);
-            }
-            if let Some(Some(v)) = update.proxy_loop_detection {
-                prospective.proxy_loop_detection = Some(v);
-            }
-            if let Some(Some(v)) = update.agentic_sampling {
-                prospective.agentic_sampling = Some(v);
-            }
-            if let Some(Some(v)) = update.proxy_autostart {
-                prospective.proxy_autostart = Some(v);
-            }
-            if let Some(Some(v)) = update.close_to_tray {
-                prospective.close_to_tray = Some(v);
-            }
-            if let Some(Some(v)) = update.start_at_login {
-                prospective.start_at_login = Some(v);
-            }
-            validate_settings(&prospective)?;
-
-            let updated = ctx.app.settings().update(update).await?;
-            let model_display = resolve_model_display(ctx, &updated).await?;
-            let all_rows = settings_display_rows(&updated, model_display);
-
-            // Match exact key OR any dot-notation sub-row that starts with
-            // "{changed_key}." — needed for nested fields such as inference-defaults.
-            let changed_rows: Vec<_> = all_rows
-                .into_iter()
-                .filter(|(k, _)| {
-                    changed
-                        .iter()
-                        .any(|c| k == c || k.starts_with(&format!("{c}.")))
-                })
-                .collect();
-
-            println!("✓ Settings updated successfully:");
-            print_display_rows(&changed_rows);
-            Ok(())
-        }
+        SettingsCommand::Set(args) => set::handle_set(ctx, *args).await,
         SettingsCommand::Reset { force } => {
             if !force {
                 let confirm = crate::utils::input::prompt_confirmation(

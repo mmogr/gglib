@@ -63,6 +63,7 @@ const renderAdvanced = (
       setProxyLoopDetection={noop}
       agentGuards={{
         agenticSampling: true,
+        toolCallRepair: true,
         maxStagnationSteps: overrides.stagnation ?? '',
       }}
       setAgentGuardSetting={(key, value) => {
