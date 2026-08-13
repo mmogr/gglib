@@ -98,6 +98,31 @@ that should be chosen from measured failure rates, not from a candidate list;
 the counters exist for exactly that, and the plan's own analysis killed three
 of four originally-proposed rungs before any data was collected.
 
+## Postscript, 2026-08-13 — decision 2 names three channels, and they are not peers
+
+The decision above lists the GGUF's `general.sampling.*` keys, the publisher's
+`generation_config.json` and the curated task-regime table as one mechanism.
+Read against the code they are three different things, and only one of them
+writes a model's stored defaults:
+
+- **`generation_config.json` is the one that does.** It produces the
+  `Published` origin, and only for HuggingFace imports —
+  `services/model_import.rs` returns `None` for `ModelOrigin::LocalFile`, so a
+  local GGUF never gets one however good its metadata.
+- **The GGUF keys feed observability, not defaults.**
+  `ModelSamplingDefaults::from_metadata` is read by `props.rs`, the sampling
+  audit and `model explain`. llama.cpp applies those keys server-side, which
+  the `/props` probe confirmed — so "the defaults come from the GGUF" is a true
+  claim about llama.cpp and not about gglib.
+- **The task-regime table seeds tune candidates.** It reaches a model's
+  defaults only if a person runs a tune and the gate approves the winner. With
+  the scheduler gone that is a manual, hours-long path.
+
+None of this changes the decision — sending explicit values from a claim about
+the model still beats predicting them from traffic. It corrects the sentence,
+which reads as though three automatic channels are all writing defaults when
+one is.
+
 ## Notes
 
 The scheduler's removal was mechanical but wide: 45 references across the Rust

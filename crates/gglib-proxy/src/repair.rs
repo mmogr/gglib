@@ -37,7 +37,7 @@
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
 //! [`docs/tool-call-repair.md`]: https://github.com/mmogr/gglib/blob/main/docs/tool-call-repair.md
-//! [`the_repair_body_survives_the_pipeline_with_required_intact`]: tests::the_repair_body_survives_the_pipeline_with_required_intact
+//! [`the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`]: tests::the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it
 
 use bytes::Bytes;
 use gglib_core::LlmStreamEvent;

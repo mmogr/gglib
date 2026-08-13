@@ -117,7 +117,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `chat <id>` | Start interactive llama-cli chat |
 | `chat <id> --continue <N>` | Resume a previous conversation by ID |
 | `question <text>` | Ask a question (with optional piped context) |
-| `question --agent <text>` | Agentic question with filesystem tools |
+| `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `chat history` | List past conversations with message counts |
 | `proxy` | Start the OpenAI-compatible proxy (context defaults to settings `default_context_size`) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
@@ -169,7 +169,7 @@ This is a simple redraw-in-place view (via `crossterm` cursor moves), not a full
 
 | Command | Description |
 |---|---|
-| `gglib proxy start --cache --slot-dir <path>` | Start proxy with KV cache session persistence enabled |
+| `gglib proxy --cache --slot-dir <path>` | Start proxy with KV cache session persistence enabled |
 | `gglib proxy cache-clear` | Clear KV cache for a session or all sessions on an already-running proxy |
 
 Proxy cache-clear options:
@@ -220,10 +220,10 @@ gglib q --verbose --file CODE.rs "Explain this"
 gglib q -Q "What is 2+2?"
 
 # Agentic mode: multi-step exploration with filesystem tools
-gglib q --agent "How is error handling structured in this project?"
+gglib q "How is error handling structured in this project?"
 
 # Agentic mode with piped context
-git diff | gglib q --agent "Review these changes for potential issues"
+git diff | gglib q "Review these changes for potential issues"
 ```
 
 ### Rendering Modes
@@ -311,11 +311,11 @@ gglib serve 1 --cache --slot-dir ~/.gglib/slots
 gglib model search "llama 3 GGUF"
 
 # Download from HuggingFace
-gglib model download TheBloke/Llama-2-7B-GGUF --quant Q4_K_M
+gglib model download TheBloke/Llama-2-7B-GGUF --quantization Q4_K_M
 
 # Download an Unsloth Dynamic ("UD-") quant -- distinct from the plain quant
 # of the same suffix, e.g. "UD-Q6_K" vs "Q6_K"
-gglib model download unsloth/Qwen3-Coder-Next-GGUF --quant UD-Q6_K
+gglib model download unsloth/Qwen3-Coder-Next-GGUF --quantization UD-Q6_K
 ```
 
 ## Design Decisions

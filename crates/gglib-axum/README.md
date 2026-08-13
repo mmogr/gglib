@@ -98,8 +98,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `GET` | `/api/models` | List all models |
 | `POST` | `/api/models` | Add a new model |
 | `DELETE` | `/api/models/:id` | Remove a model |
-| `POST` | `/api/serve/:id` | Start llama-server |
-| `DELETE` | `/api/serve/:id` | Stop llama-server |
+| `POST` | `/api/servers/start` | Start llama-server (id in the body) |
+| `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
 | `POST` | `/api/models/hf/search` | Search HuggingFace |
 | `POST` | `/api/models/downloads/queue` | Queue a download |
 | `GET` | `/api/models/downloads` | Get download status |
@@ -113,12 +113,15 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 ## Usage
 
-```bash
-# Start the API server
-gglib-axum --port 9887
+This crate is a library — it has no binary target. The daemon that mounts it
+is `gglib daemon run`, on a fixed loopback port:
 
-# Or run from the workspace
-cargo run --package gglib-axum -- --port 9887
+```bash
+# Start the daemon (this crate's router is what answers)
+gglib daemon run
+
+# Or have any command that needs it start one for you
+gglib up
 ```
 
 ```rust,ignore

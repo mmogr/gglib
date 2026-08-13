@@ -57,69 +57,28 @@ This module contains the **handler functions** that implement the actual logic f
 
 ## Handler Organization
 
-### Model Management
-- **`add.rs`** - Add new models to catalog
-  - Parse model paths or HuggingFace IDs
-  - Validate model files
-  - Call `ModelService::add_model`
-  - Display confirmation
+Handlers are grouped by the command they serve, one directory per family. The
+list below is the directory tree, not a summary of it — an earlier version of
+this section described `add.rs`, `list.rs`, `download/{start,pause,resume}.rs`
+and `question.rs` at this level, none of which have been here since the
+handlers were grouped.
 
-- **`list.rs`** - List all models
-  - Call `ModelService::list_models`
-  - Format as table using `../presentation/tables`
-  - Filter and sort options
+| Path | Serves |
+|------|--------|
+| `model/` | `gglib model …` — add, list, inspect, explain, remove, capabilities, and `download/` |
+| `inference/` | `serve`, `proxy`, `chat`, and `agent_question` (`gglib q`) |
+| `config/` | `gglib config …` — `settings/`, `paths.rs`, `llama*.rs`, `check_deps/`, `fast_downloads.rs` |
+| `agent_chat/` | The interactive agent REPL behind `gglib chat` |
+| `daemon/` | `gglib daemon run / status / stop` |
+| `up/` | `gglib up` — the one-command setup path |
+| `proxy_dashboard/` | `gglib proxy dashboard` — the live terminal view |
+| `benchmark.rs` | `gglib benchmark …`, including `tune` |
+| `mcp_cli.rs` | `gglib mcp …` |
+| `history.rs`, `web.rs`, `gui.rs`, `completions.rs`, `proxy_cache_clear.rs` | One command each |
 
-- **`remove.rs`** - Remove models from catalog
-  - Confirm deletion
-  - Call `ModelService::remove_model`
-  - Handle errors if model in use
+Each directory carries its own README with the detail; this table exists so a
+newcomer can find the right one, and so it stays true by being short.
 
-- **`inference/serve.rs`** - Start the proxy pinned to a single model
-  - Validate model exists
-  - Call `start_proxy_standalone` (unified proxy stack)
-  - Display server URL and status
-
-- **`update.rs`** - Update model metadata
-  - Parse update parameters
-  - Call `ModelService::update_model`
-  - Display changes
-
-### Download Management
-- **`download/`** - Download command handlers
-  - `start.rs` - Start new download
-  - `list.rs` - List active downloads
-  - `pause.rs` - Pause download
-  - `resume.rs` - Resume paused download
-  - `cancel.rs` - Cancel download
-
-### Configuration
-- **`config.rs`** - Configuration management
-  - Get/set configuration values
-  - Validate configuration
-  - Display current settings
-
-- **`paths.rs`** - Display path information
-  - Show data directories
-  - Show model paths
-  - Show log locations
-
-### System
-- **`check_deps/`** - Dependency checking
-  - `check.rs` - Check system dependencies
-  - `install.rs` - Install missing dependencies
-
-### Agentic
-- **`agent_chat/`** - Interactive multi-turn agent REPL (`gglib chat --agent`)
-  - Drives the agentic loop via `AgentLoopPort`
-  - Streams tool-call and text events to the terminal
-
-- **`agent_question.rs`** - Single-turn agentic question (`gglib q --agent`)
-  - Sandboxes filesystem tools to the current working directory
-  - Runs one agent turn, drains events, and exits
-
-### Question
-- **`question.rs`** - Shared argument types for the question command
-  - `QuestionArgs` struct used by both standard and agentic question handlers
 
 ## Handler Pattern
 

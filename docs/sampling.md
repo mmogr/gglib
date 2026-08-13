@@ -20,7 +20,7 @@ default, it drops out of the hierarchy entirely except for `max_tokens`.
 
 "Per-model defaults" isn't always one rung: it sits *above* global settings when a person set
 it, and *below* global settings when gglib auto-detected it — see [Reasoning model
-auto-defaults](#reasoning-model-auto-defaults) and [Where a model's defaults came
+auto-defaults](#2-the-reasoning-tag-guess-fallback) and [Where a model's defaults came
 from](#where-a-models-defaults-came-from) below.
 
 The full set of configurable parameters:
@@ -469,7 +469,7 @@ real candidate meaning "off", so one run compares disabled against two
 strengths on your own model and task suite:
 
 ```bash
-gglib benchmark tune <model> --sweep dry_multiplier=0,0.4,0.8
+gglib benchmark tune --model <model> --sweep dry_multiplier=0,0.4,0.8
 ```
 
 `dry_base`, `dry_allowed_length` and `dry_penalty_last_n` have no floor value.
