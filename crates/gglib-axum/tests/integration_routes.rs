@@ -150,7 +150,7 @@ async fn downloads_endpoint_returns_queue_snapshot() {
         .oneshot(
             Request::builder()
                 .header("Host", "127.0.0.1:9887")
-                .uri("/api/models/downloads")
+                .uri("/api/models/downloads/queue")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -854,7 +854,7 @@ async fn model_tags_by_id_returns_json_not_html() {
 }
 
 #[tokio::test]
-async fn mcp_server_tools_by_id_returns_json_not_html() {
+async fn a_path_param_route_returns_json_not_html() {
     use gglib_axum::routes::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
@@ -880,7 +880,7 @@ async fn mcp_server_tools_by_id_returns_json_not_html() {
         .oneshot(
             Request::builder()
                 .header("Host", "127.0.0.1:9887")
-                .uri("/api/mcp/servers/test-mcp-id/tools")
+                .uri("/api/servers/1/tool-support")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -895,7 +895,7 @@ async fn mcp_server_tools_by_id_returns_json_not_html() {
 
     assert!(
         !content_type.contains("text/html"),
-        "MCP tools /{{id}}/tools was intercepted by SPA fallback (returned HTML). \
+        "a /{{id}}/ API route was intercepted by the SPA fallback (returned HTML). \
          Check route param syntax ('{{{{id}}}}' for Axum 0.8)"
     );
 }

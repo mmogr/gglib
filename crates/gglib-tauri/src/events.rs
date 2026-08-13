@@ -13,7 +13,6 @@ use tracing::error;
 /// Keep strings stable to avoid frontend breakage.
 pub mod names {
     // Download events
-    pub const DOWNLOAD_PROGRESS: &str = "download-progress";
 
     // Download system initialization.
     //
@@ -25,14 +24,9 @@ pub mod names {
     pub const DOWNLOAD_SYSTEM_ERROR: &str = "download-system:error";
 
     // Server log event stream (separate from AppEvent::* server lifecycle events)
-    pub const SERVER_LOG: &str = "server-log";
 
     // Llama installation events
     pub const LLAMA_INSTALL_PROGRESS: &str = "llama-install-progress";
-
-    /// Emitted during a llama.cpp source build (cmake + make).
-    /// Payload is a serialised [`BuildEvent`](gglib_runtime::llama::BuildEvent).
-    pub const LLAMA_BUILD_PROGRESS: &str = "llama-build-progress";
 
     // Menu action events (menu -> frontend)
     pub const MENU_ADD_MODEL_FILE: &str = "menu:add-model-file";
@@ -43,18 +37,11 @@ pub mod names {
     pub const MENU_REMOVE_MODEL: &str = "menu:remove-model";
     pub const MENU_START_PROXY: &str = "menu:start-proxy";
     pub const MENU_PROXY_STOPPED: &str = "menu:proxy-stopped";
-    pub const MENU_PROXY_ERROR: &str = "menu:proxy-error";
     pub const MENU_COPY_TO_CLIPBOARD: &str = "menu:copy-to-clipboard";
     pub const MENU_SHOW_CHAT: &str = "menu:show-chat";
     pub const MENU_INSTALL_LLAMA: &str = "menu:install-llama";
     pub const MENU_CHECK_LLAMA_STATUS: &str = "menu:check-llama-status";
     pub const MENU_OPEN_SETTINGS: &str = "menu:open-settings";
-}
-
-/// Payload emitted when the download subsystem fails to initialize.
-#[derive(Clone, Debug, Serialize)]
-pub struct DownloadSystemErrorPayload {
-    pub message: String,
 }
 
 /// Emit an event to the frontend, logging any errors.

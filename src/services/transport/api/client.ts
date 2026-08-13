@@ -50,7 +50,6 @@ export function getAuthHeaders(): HeadersInit {
  */
 interface EmbeddedApiInfo {
   port: number;
-  token: string;
 }
 
 /**
@@ -104,7 +103,6 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
     
     appLogger.debug('transport.api', '[ApiClient] Embedded API discovered', {
       port: info.port,
-      tokenPrefix: info.token.substring(0, 8) + '...',
     });
     
     return info;
@@ -268,10 +266,10 @@ export async function getClient(): Promise<HttpClient> {
     try {
       if (isTauri()) {
         const info = await discoverEmbeddedApi();
-        const config = {
-          baseUrl: `http://127.0.0.1:${info.port}`,
-          token: info.token,
-        };
+        // No token: the daemon's loopback API is unauthenticated. A key is
+        // only required once `--share-lan` puts it on a LAN interface, which
+        // the desktop app never reaches it by.
+        const config = { baseUrl: `http://127.0.0.1:${info.port}`, token: '' };
         // Set module-level session for SSE and other fetch-based utilities
         setApiSession(config.baseUrl, config.token);
         return buildClient(config);
@@ -348,11 +346,11 @@ export async function getAuthenticatedFetchConfig(): Promise<{
 }> {
   if (isTauri()) {
     const info = await discoverEmbeddedApi();
+    // Loopback needs no Authorization header. This sent `Bearer ` with an
+    // empty token for as long as the field existed.
     return {
       baseUrl: `http://127.0.0.1:${info.port}`,
-      headers: {
-        'Authorization': `Bearer ${info.token}`,
-      },
+      headers: {},
     };
   } else {
     return {

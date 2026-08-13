@@ -8,7 +8,7 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
     CreateMcpServerRequest, McpServerInfo, McpTestResult, McpToolCallRequest, McpToolCallResponse,
-    McpToolInfo, UpdateMcpServerRequest,
+    UpdateMcpServerRequest,
 };
 
 /// List all MCP servers.
@@ -53,14 +53,6 @@ pub async fn stop(
     Path(id): Path<i64>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
     Ok(Json(state.mcp_ops.stop(id).await?))
-}
-
-/// List tools from a running MCP server.
-pub async fn list_tools(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> Result<Json<Vec<McpToolInfo>>, HttpError> {
-    Ok(Json(state.mcp_ops.list_tools(id).await?))
 }
 
 /// Test a server's stored configuration end to end — `gglib mcp test`.

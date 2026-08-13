@@ -8,7 +8,6 @@ import { parseFrame, streamSse } from './sse';
 import type {
   SetupStatus,
   LlamaInstallProgress,
-  VulkanStatus,
   LlamaStatus,
   LlamaUpdateCheck,
   LlamaUninstallOutcome,
@@ -24,12 +23,6 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   return get<SetupStatus>('/api/config/system/setup-status');
 }
 
-/**
- * Get Vulkan build-readiness status.
- */
-export async function getVulkanStatus(): Promise<VulkanStatus> {
-  return get<VulkanStatus>('/api/config/system/vulkan-status');
-}
 
 /**
  * Install llama.cpp pre-built binaries with progress streaming.

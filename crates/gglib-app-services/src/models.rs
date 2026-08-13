@@ -282,18 +282,6 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Failed to get tags: {e}")))
     }
 
-    /// Get all model IDs that have a specific tag.
-    pub async fn get_by_tag(&self, tag: String) -> Result<Vec<i64>, GuiError> {
-        let models = self
-            .deps
-            .core
-            .models()
-            .get_by_tag(&tag)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get models by tag: {e}")))?;
-        Ok(models.into_iter().map(|m| m.id).collect())
-    }
-
     /// Get filter options for the model library UI.
     pub async fn get_filter_options(&self) -> Result<ModelFilterOptions, GuiError> {
         self.deps
