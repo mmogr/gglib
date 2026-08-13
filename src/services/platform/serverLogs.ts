@@ -4,10 +4,18 @@
  * Logs live on the gglib daemon in every mode, so both the snapshot and the
  * live stream go over HTTP/SSE — the desktop WebView uses the same endpoints
  * a browser tab does.
+ *
+ * The base URL comes from the transport client, which is the one thing that
+ * knows where this session's daemon actually is. A second helper used to live
+ * in `src/config/api.ts` returning `''` in production builds — correct for a
+ * browser tab served by the daemon, and wrong for the desktop app, where a
+ * relative path resolves against the WebView's own origin rather than
+ * 127.0.0.1:9887. That made these two functions the only ones in the app that
+ * silently failed in a packaged build and worked in `npm run dev`.
  */
 
 import { appLogger } from './index';
-import { getApiBaseUrl } from '../../config/api';
+import { getApiBaseUrl, getAuthHeaders } from '../transport/api/client';
 
 export interface ServerLogEntry {
   timestamp: number;
@@ -46,7 +54,9 @@ function normalizeServerLogSnapshot(payload: unknown): ServerLogEntry[] {
  */
 export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
   const baseUrl = getApiBaseUrl();
-  const response = await fetch(`${baseUrl}/api/servers/${port}/logs`);
+  const response = await fetch(`${baseUrl}/api/servers/${port}/logs`, {
+    headers: getAuthHeaders(),
+  });
   if (response.ok) {
     const json = await response.json();
     return normalizeServerLogSnapshot(json);
