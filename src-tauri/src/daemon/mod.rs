@@ -49,6 +49,19 @@ pub enum Ownership {
     Hosted,
 }
 
+impl Ownership {
+    /// Whether quitting this app should take the daemon with it.
+    ///
+    /// A daemon this app started or hosts is this app's to end. One that was
+    /// already answering when we probed belongs to whoever started it — a CLI
+    /// session, an earlier instance — and quitting a dashboard is no reason to
+    /// take their endpoint away.
+    #[must_use]
+    pub const fn ends_with_the_app(self) -> bool {
+        matches!(self, Self::Launched | Self::Hosted)
+    }
+}
+
 /// A connected daemon.
 pub struct Daemon {
     /// Shared HTTP client for daemon calls.
@@ -212,8 +225,12 @@ impl Daemon {
         serde_json::from_value(value).map_err(|e| e.to_string())
     }
 
-    /// Ask the daemon to shut down (used only for the in-process fallback,
-    /// whose lifetime is this app's).
+    /// Ask the daemon to shut down.
+    ///
+    /// Returns as soon as the request is accepted; the daemon's own ordered
+    /// teardown — proxy drained, every llama-server stopped gracefully,
+    /// downloads cancelled — runs after. Pair with [`Self::wait_for_exit`]
+    /// when the caller needs it finished.
     pub async fn request_shutdown(&self) {
         let _ = self
             .client

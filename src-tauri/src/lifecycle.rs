@@ -1,18 +1,27 @@
 //! Application lifecycle and shutdown orchestration.
 //!
-//! The daemon owns llama-server, downloads and pidfiles, so quitting the
-//! desktop app tears down almost nothing. The one exception is the
-//! in-process daemon fallback: when this app is hosting the daemon itself,
-//! quitting the app is quitting the daemon, so its ordered teardown (proxy
-//! drain, child shutdown, pidfile audit) is triggered over the API and
-//! awaited before exit.
+//! Quit means quit. Close-to-tray is already the verb for "keep serving
+//! without a window", so an exit that silently left a daemon holding VRAM —
+//! with the tray icon gone and nothing on screen to say so — was one button
+//! doing another's job.
+//!
+//! What quitting ends is decided by [`Ownership`]: a daemon this app launched
+//! or hosts gets its ordered teardown (proxy drain, child shutdown, pidfile
+//! audit) triggered over the API and awaited before exit. One that was already
+//! answering when the app connected belongs to whoever started it and is left
+//! alone.
 
 use crate::app::AppState;
-use crate::daemon::Ownership;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tracing::info;
+
+/// How long to wait for the daemon's ordered teardown before exiting anyway.
+///
+/// Two seconds past the daemon's own 10-second force-exit watchdog, so the
+/// app outlasts the deadline the daemon holds itself to rather than racing it.
+const TEARDOWN_WAIT: Duration = Duration::from_secs(12);
 
 /// Whether a shutdown has been started, so it is sequenced exactly once.
 ///
@@ -69,29 +78,33 @@ pub fn request_shutdown(app: &AppHandle) {
 
 /// Perform graceful application shutdown.
 ///
-/// With an external daemon there is nothing backend-shaped to stop — the
-/// daemon and its llama-servers deliberately outlive the app. With the
-/// in-process fallback, this app *is* the daemon: ask it to shut down over
-/// the API (its own ordered teardown runs — proxy drain, graceful child
-/// stop, pidfile audit, all under its watchdog) and wait, bounded, for it
-/// to finish before letting the process exit.
+/// Asks the daemon to shut down over the API — its own ordered teardown runs
+/// there, under its own watchdog — and waits, bounded, for it to finish before
+/// letting the process exit. Skipped entirely for an adopted daemon, which was
+/// serving before this app opened and has no reason to stop because it closed.
 ///
 /// Reach this through [`request_shutdown`] rather than calling it directly.
 async fn perform_shutdown(state: &AppState) {
-    if state.daemon.ownership != Ownership::Hosted {
-        info!("External daemon stays running - nothing to tear down");
+    let ownership = state.daemon.ownership;
+
+    if !ownership.ends_with_the_app() {
+        info!(
+            ?ownership,
+            "Daemon was not ours to stop - leaving it running"
+        );
         return;
     }
 
-    info!("Hosted daemon: requesting its ordered teardown before exit");
+    info!(?ownership, "Requesting the daemon's teardown before exit");
     state.daemon.request_shutdown().await;
-    state.daemon.wait_for_exit(Duration::from_secs(12)).await;
-    info!("Hosted daemon teardown complete");
+    state.daemon.wait_for_exit(TEARDOWN_WAIT).await;
+    info!("Daemon teardown complete");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::daemon::Ownership;
 
     /// The first exit request has to be prevented, or cleanup never runs: the
     /// process would go away with llama-server children still alive.
@@ -107,6 +120,31 @@ mod tests {
     #[test]
     fn the_exit_we_asked_for_is_allowed_through() {
         assert!(!should_prevent_exit(true));
+    }
+
+    /// A daemon this app started or hosts is this app's to end. The old rule
+    /// tore down only the in-process fallback, so the ordinary case — an
+    /// external daemon this app launched itself — survived a quit that had
+    /// just warned it was stopping the proxy.
+    #[test]
+    fn quitting_ends_the_daemon_this_app_started() {
+        assert!(Ownership::Launched.ends_with_the_app());
+        assert!(Ownership::Hosted.ends_with_the_app());
+    }
+
+    /// The exception, and the reason ownership is tracked at all: a daemon
+    /// that was already serving when the app connected belongs to whoever
+    /// started it.
+    #[test]
+    fn quitting_leaves_an_adopted_daemon_alone() {
+        assert!(!Ownership::Adopted.ends_with_the_app());
+    }
+
+    /// The app's wait has to outlast the daemon's own force-exit watchdog, or
+    /// it gives up while a teardown that is about to finish is still running.
+    #[test]
+    fn the_teardown_budget_outlasts_the_daemons_watchdog() {
+        assert!(TEARDOWN_WAIT > Duration::from_secs(10));
     }
 
     /// The guard is a swap, not a load-then-store, so two quit paths firing

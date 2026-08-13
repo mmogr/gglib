@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 #[cfg(not(target_os = "linux"))]
 mod build;
+mod confirm;
 mod handlers;
 mod icon;
 mod ids;

@@ -8,7 +8,6 @@
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tracing::{debug, error};
 
 use crate::app::AppState;
@@ -16,7 +15,7 @@ use crate::app::events::{emit_or_log, names};
 use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::placement::Anchor;
-use crate::tray::{ids, window};
+use crate::tray::{confirm, ids, window};
 
 /// How long to wait for a daemon asked to stop to actually go.
 ///
@@ -94,6 +93,11 @@ fn spawn_service(app: AppHandle, start: bool) {
         let result = if start {
             state.daemon.restart().await
         } else {
+            let snapshot = state.snapshot.read().await.clone();
+            if !confirm::stop_service(&app, &snapshot) {
+                return;
+            }
+
             state.daemon.request_shutdown().await;
             state.daemon.wait_for_exit(SERVICE_STOP_WAIT).await;
             Ok(())
@@ -118,31 +122,21 @@ fn open_preferences(app: &AppHandle) {
     emit_or_log(app, names::MENU_OPEN_SETTINGS, ());
 }
 
-/// Confirm before quitting while the proxy is serving, then exit.
+/// Confirm before quitting takes a running service with it, then exit.
 ///
-/// Quitting used to be the only way to close the app, so it needed no
-/// warning. With close-to-tray it becomes the one action that takes the
-/// endpoint away from whatever is still pointed at it.
+/// The warning describes what will actually happen rather than assuming it.
+/// It used to claim quitting stopped the proxy, which stopped being true when
+/// the daemon took ownership of the runtime — against an adopted daemon there
+/// is nothing to warn about, because it keeps serving.
 fn confirm_quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let running = app.state::<AppState>().snapshot.read().await.proxy_running;
+        let state = app.state::<AppState>();
+        let snapshot = state.snapshot.read().await.clone();
+        let ends_with_the_app = state.daemon.ownership.ends_with_the_app();
 
-        if running {
-            let confirmed = app
-                .dialog()
-                .message("The proxy is running. Quitting stops it, and any client using the endpoint will lose it.")
-                .title("Quit gglib?")
-                .kind(MessageDialogKind::Warning)
-                .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Quit".to_owned(),
-                    "Cancel".to_owned(),
-                ))
-                .blocking_show();
-
-            if !confirmed {
-                return;
-            }
+        if !confirm::quit(&app, &snapshot, ends_with_the_app) {
+            return;
         }
 
         // The same entry point Cmd+Q and window close use, so there is exactly
