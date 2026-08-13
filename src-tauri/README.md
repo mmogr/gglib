@@ -140,7 +140,7 @@ The Rust backend is organized into three main modules:
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                          main.rs                                   │ │
 │  │  • Tauri app setup (plugins, window, menu)                         │ │
-│  │  • Embedded API server startup                                     │ │
+│  │  • Daemon connect-or-launch, then spawn the watcher                │ │
 │  │  • Command handler registration                                    │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                    │                                    │
@@ -151,9 +151,9 @@ The Rust backend is organized into three main modules:
 │  │              │  │  (macOS)   │  │  (all OS)  │   │              │    │
 │  │ • AppState   │◄─┤ • AppMenu  │  │ • build    │   │ • util       │    │
 │  │ • Events     │  │ • MenuState│  │ • icon     │   │ • llama      │    │
-│  │ • emit_or_log│  │ • build    │  │ • handlers │   │   (OS-only)  │    │
-│  │              │  │ • handlers │  │ • window   │   │              │    │
-│  │              │  │ • state_sync──►│ • sync    │   │              │    │
+│  │ • emit_or_log│  │ • build    │  │ • handlers │   │ • app_logs   │    │
+│  │              │  │ • handlers │  │ • confirm  │   │   (OS-only)  │    │
+│  │              │  │ • state_sync──►│ • window  │   │              │    │
 │  │              │  │            │  │            │   │              │    │
 │  └──────┬───────┘  └────────────┘  └─────┬──────┘   └──────┬───────┘    │
 │         │                             │                   │             │
@@ -161,15 +161,17 @@ The Rust backend is organized into three main modules:
 │                                │                                        │
 │                                ▼                                        │
 │                    ┌───────────────────────┐                            │
-│                    │      GuiBackend       │                            │
-│                    │   (from gglib crate)  │                            │
+│                    │       daemon/         │                            │
+│                    │  • connect_or_launch  │                            │
+│                    │  • DaemonSnapshot     │                            │
+│                    │  • watch (2s poll)    │                            │
 │                    └───────────┬───────────┘                            │
 │                                │                                        │
 └────────────────────────────────┼─────────────────────────────────────────┘
-                                 │
+                                 │ HTTP, 127.0.0.1:9887
                                  ▼
                     ┌───────────────────────┐
-                    │      gglib crate      │
+                    │    gglib daemon       │
                     │  • Database           │
                     │  • ProcessManager     │
                     │  • DownloadService    │
@@ -178,18 +180,23 @@ The Rust backend is organized into three main modules:
                     └───────────────────────┘
 ```
 
+The app hosts none of that. It finds a daemon, watches it, and paints two OS
+surfaces from what it sees — see [`daemon/README.md`](src/daemon/README.md) for
+the three ways it comes by one and what quitting is allowed to take with it.
+
 ### Module Responsibilities
 
 | Module | Purpose | Key Components |
 |--------|---------|----------------|
-| **app/** | Central state & event infrastructure | `AppState` (managed state), `BackgroundTasks` (task handles), `emit_or_log()` (event helper), event constants |
-| **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
+| **app/** | Central state & event infrastructure | `AppState` (daemon, menu, tray, selected model, snapshot, refresh), `emit_or_log()` (event helper), event constants |
+| **daemon/** | The connection, and the picture of it | `connect_or_launch()` / `Ownership` (adopted, launched, hosted, unresolved), `DaemonSnapshot` (pure derivation), `watch` (the only writer of that snapshot) |
+| **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `perform_shutdown()` (daemon teardown, bounded, and only when the daemon is ours) |
 | **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, `sync_all_state` (drives both the menu and the tray) |
-| **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `window` (panel show/hide/position) |
-| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; publishes state and broadcasts the lifecycle event the HTTP handler would have |
-| **autostart.rs** | Always-on proxy settings & launch visibility | `proxy_autostart` startup, `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible) |
+| **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `confirm` (what a teardown would take away), `window` (panel show/hide/position) |
+| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
+| **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
-| **commands/** | 6 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management) |
+| **commands/** | 7 OS integration commands in 3 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management), `app_logs.rs` (frontend log ingestion) |
 
 ### Communication Flow
 
@@ -217,21 +224,23 @@ The Rust backend is organized into three main modules:
          │                                                │
          ▼                                                ▼
 ┌─────────────────┐                              ┌─────────────────┐
-│ GuiBackend      │◄─────────────────────────────│ AppState        │
-│ .start_server() │                              │ .embedded_api   │
-└────────┬────────┘                              └─────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│ gglib-runtime   │
-│ ProcessManager  │
-└─────────────────┘
+│ gglib-runtime   │                              │ AppState        │
+│ ProcessManager  │                              │ .snapshot       │
+└────────┬────────┘                              └────────▲────────┘
+         │                                                │
+         └──────────────► /api/proxy/status ──────────────┘
+                          /api/servers          daemon/watch, every 2s
 ```
+
+Both columns end at the same daemon. The native surfaces never learn what
+happened by being told: `daemon/watch` polls, and every action asks it for an
+immediate poll rather than publishing a guess.
 
 ## Internal Structure
 
 For detailed documentation on each module, see:
 - [app/README.md](src/app/README.md) — State and event infrastructure
+- [daemon/README.md](src/daemon/README.md) — Finding a daemon, watching it, owning it
 - [LIFECYCLE.md](LIFECYCLE.md) — Application startup and hardened shutdown architecture
 - [menu/README.md](src/menu/README.md) — Native menu implementation (macOS)
 - [tray/README.md](src/tray/README.md) — System tray, popover panel, and platform differences

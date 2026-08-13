@@ -59,14 +59,13 @@ Enforces Tauri `invoke()` allowlist in frontend code:
 - Only OS integration commands should be invoked from frontend
 - Prevents dynamic command string construction (security risk)
 
-**Allowlist** (8 commands):
+**Allowlist** (7 commands):
 - `get_embedded_api_info` (API discovery)
 - `check_llama_status` (binary management)
 - `install_llama` (binary management)
 - `open_url` (shell integration)
 - `set_selected_model` (menu sync)
 - `sync_menu_state` (menu sync)
-- `set_proxy_state` (proxy OS integration)
 - `log_from_frontend` (frontend log forwarding)
 
 ```bash

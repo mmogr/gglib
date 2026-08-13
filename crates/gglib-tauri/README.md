@@ -74,35 +74,43 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
-- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` initialization)
-- **`error.rs`** — IPC-compatible error types
-- **`event_emitter.rs`** — `TauriEmitter` implementation of `AppEventEmitter`
-- **`events.rs`** — Event type definitions and serialization
-- **`server_events.rs`** — Server-specific event handling
-- **`gui_backend/`** — IPC command handlers and shared state
+- **`events.rs`** — The names of every event the app emits to its webviews, and `emit_or_log`
+
+This crate is deliberately two files. It used to carry the whole GUI backend —
+`bootstrap.rs`, `error.rs`, `event_emitter.rs`, `server_events.rs`,
+`gui_backend/` — back when the desktop app hosted gglib's services itself. The
+daemon consolidation moved all of that behind HTTP, and a `TauriEmitter`
+implementation of `AppEventEmitter` no longer exists: the daemon's own
+`SseBroadcaster` is the only emitter, and every webview subscribes to
+`/api/events` like any other client.
 
 ## Features
 
-- **IPC Commands** — Tauri commands expose gglib services to the React UI
-- **Event Bridge** — `TauriEmitter` sends real-time events to the frontend
-- **Shared State** — Managed state accessible across all commands
-- **Native Dialogs** — File picker, notifications via Tauri APIs
+- **Event names in one place** — so a Rust emitter and a TypeScript listener
+  cannot drift apart silently
+- **`emit_or_log`** — emit to every webview, log rather than propagate on
+  failure; a webview that has gone away is not an error worth unwinding for
 
 ## IPC Commands
 
-The desktop app uses an **HTTP-first architecture** — model operations, chat, downloads, and proxy management all go through the embedded Axum API server. Tauri IPC commands are limited to OS integration:
+The desktop app is **HTTP-first** — models, chat, downloads and proxy
+management all go through the daemon's Axum API. Tauri IPC is limited to things
+HTTP cannot do, and those commands live in
+[`src-tauri/src/commands/`](../../src-tauri/src/commands/), not here:
 
 | Command | Module | Description |
 |---------|--------|-------------|
-| `get_embedded_api_info` | util | Discover API port and auth token |
-| `get_server_logs` | util | Fetch server log buffer |
+| `get_embedded_api_info` | util | Discover the daemon's port |
 | `open_url` | util | Open URL in system browser |
 | `set_selected_model` | util | Sync native menu selection |
 | `sync_menu_state` | util | Update native menu item states |
-| `set_proxy_state` | util | Update proxy menu toggle |
 | `check_llama_status` | llama | Check llama.cpp installation |
 | `install_llama` | llama | Install/build llama.cpp |
+| `build_llama_from_source` | llama | Build llama.cpp from source |
 | `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |
+
+`scripts/check-frontend-ipc.sh` holds the allowlist this table describes; the
+two are checked against each other in CI.
 
 See [src-tauri/README.md](../../src-tauri/README.md) for the full architecture explanation.
 
@@ -128,7 +136,11 @@ npm run tauri build
 
 ## Design Decisions
 
-1. **TauriEmitter** — Implements `AppEventEmitter` to bridge Rust events to JS
-2. **State Injection** — Services stored in Tauri's managed state
-3. **Command Pattern** — Each IPC command maps to a service method
-4. **Error Serialization** — All errors converted to JSON for frontend
+1. **One event bus, not two** — the daemon's SSE stream carries every domain
+   event to every client. Tauri emit is reserved for things that originate in
+   the app itself (menu clicks, llama build progress), which have no HTTP source
+2. **Names, not payloads** — this crate owns the event *names* so a Rust
+   emitter and a TypeScript listener cannot drift; the payloads are the domain
+   types the daemon already serialises
+3. **Emit is best-effort** — `emit_or_log` logs rather than propagates. A
+   webview that has gone away is not an error worth unwinding a menu handler for
