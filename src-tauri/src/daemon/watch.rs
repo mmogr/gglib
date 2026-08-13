@@ -121,3 +121,72 @@ async fn read(daemon: &Daemon) -> DaemonSnapshot {
         _ => DaemonSnapshot::default(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A clone has to reach the same waiter. `Refresh` is handed out by
+    /// cloning it off `AppState`, so a clone that notified its own private
+    /// `Notify` would make every caller's `now()` a silent no-op — and that
+    /// failure looks exactly like the stale-surface bug this handle exists to
+    /// prevent.
+    #[tokio::test(start_paused = true)]
+    async fn a_clone_wakes_the_original() {
+        let refresh = Refresh::default();
+        let clone = refresh.clone();
+
+        clone.now();
+
+        // Returns without the interval elapsing, so the wake came from `now()`.
+        tokio::time::timeout(Duration::from_millis(1), refresh.wait())
+            .await
+            .expect("a clone's notify must reach the original's waiter");
+    }
+
+    /// `notify_one` stores a permit when nobody is waiting. That is what makes
+    /// the ordering safe: an action can call `now()` before the watcher gets
+    /// back to `wait()`, which is the ordinary case for a fast action.
+    #[tokio::test(start_paused = true)]
+    async fn a_wake_that_arrives_early_is_not_lost() {
+        let refresh = Refresh::default();
+
+        refresh.now();
+
+        tokio::time::timeout(Duration::from_millis(1), refresh.wait())
+            .await
+            .expect("a notify with no waiter must be held, not dropped");
+    }
+
+    /// With nothing asking, the watcher still polls — that is what catches a
+    /// proxy the CLI started, or a daemon that died.
+    #[tokio::test(start_paused = true)]
+    async fn the_interval_wakes_it_on_its_own() {
+        let refresh = Refresh::default();
+
+        let start = tokio::time::Instant::now();
+        refresh.wait().await;
+
+        assert!(
+            start.elapsed() >= POLL_INTERVAL,
+            "an unprompted wait must run the full interval"
+        );
+    }
+
+    /// One permit, one wake. A stored notification must not satisfy the next
+    /// wait as well, or the watcher spins on a single `now()`.
+    #[tokio::test(start_paused = true)]
+    async fn one_wake_does_not_satisfy_two_waits() {
+        let refresh = Refresh::default();
+        refresh.now();
+        refresh.wait().await;
+
+        let start = tokio::time::Instant::now();
+        refresh.wait().await;
+
+        assert!(
+            start.elapsed() >= POLL_INTERVAL,
+            "the second wait must fall back to the interval"
+        );
+    }
+}

@@ -41,6 +41,13 @@ gtk.workspace = true
 ksni.workspace = true
 libloading.workspace = true
 
+[dev-dependencies]
+# `test-util` for `#[tokio::test(start_paused = true)]`, and `macros` for the
+# attribute itself. The watcher's timing rules — a wake arrives, or the poll
+# interval elapses — are only testable against a clock the test controls; the
+# alternative is a suite that sleeps two seconds per assertion.
+tokio = { workspace = true, features = ["macros", "test-util"] }
+
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
