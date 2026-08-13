@@ -32,7 +32,12 @@ pub fn dispatch(app: &AppHandle, id: &str) {
         ids::OPEN_MAIN => spawn_ui(app.clone(), |app| window::show_main(&app)),
         ids::START_PROXY => spawn_proxy(app.clone(), true),
         ids::STOP_PROXY => spawn_proxy(app.clone(), false),
-        ids::COPY_PROXY_URL => copy_endpoint_url(app),
+        ids::COPY_PROXY_URL => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                proxy_actions::copy_endpoint_url(&app).await;
+            });
+        }
         ids::PREFERENCES => open_preferences(app),
         ids::QUIT => confirm_quit(app),
         _ => debug!(tray_id = %id, "Unhandled tray menu event"),
@@ -66,23 +71,6 @@ fn spawn_proxy(app: AppHandle, start: bool) {
     });
 }
 
-/// Put the endpoint URL on the clipboard.
-///
-/// Goes through the frontend because clipboard access is a webview capability
-/// here, matching how the application menu does it.
-fn copy_endpoint_url(app: &AppHandle) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<AppState>();
-        let port = state.proxy_port.read().await.unwrap_or(8080);
-        emit_or_log(
-            &app,
-            names::MENU_COPY_TO_CLIPBOARD,
-            format!("http://127.0.0.1:{port}/v1"),
-        );
-    });
-}
-
 /// Bring the main window forward and ask it to open settings.
 ///
 /// Showing the window first matters: with close-to-tray on, preferences may be
@@ -102,7 +90,7 @@ fn open_preferences(app: &AppHandle) {
 fn confirm_quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let running = *app.state::<AppState>().proxy_enabled.read().await;
+        let running = app.state::<AppState>().snapshot.read().await.proxy_running;
 
         if running {
             let confirmed = app

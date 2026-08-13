@@ -9,6 +9,15 @@
 //!
 //! Everything the app needs from the backend goes through the daemon's HTTP
 //! API from here on; this module is the one place that knows the base URL.
+//!
+//! [`snapshot`] is what the daemon reports, and [`watch`] is the one task that
+//! keeps it current.
+
+mod snapshot;
+mod watch;
+
+pub use snapshot::DaemonSnapshot;
+pub use watch::{Refresh, spawn as watch};
 
 use std::time::Duration;
 

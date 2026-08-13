@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, DaemonSnapshot, Refresh};
 #[cfg(target_os = "macos")]
 use crate::menu::AppMenu;
 use crate::tray::Tray;
@@ -12,8 +12,8 @@ use crate::tray::Tray;
 /// Application state with the daemon connection.
 ///
 /// The desktop app is a dashboard: everything backend-shaped goes through
-/// [`Daemon`]'s HTTP API. What remains here is OS-surface state — menu,
-/// tray, and the mirror of proxy state those surfaces display.
+/// [`Daemon`]'s HTTP API. What remains here is OS-surface state — menu, tray,
+/// and the picture of the daemon those surfaces paint from.
 ///
 /// This struct is managed by Tauri and accessible to all commands
 /// via `tauri::State<'_, AppState>`.
@@ -28,10 +28,15 @@ pub struct AppState {
     pub tray: Arc<RwLock<Option<Tray>>>,
     /// Currently selected model ID (for menu state sync)
     pub selected_model_id: Arc<RwLock<Option<i64>>>,
-    /// Proxy server enabled state (for menu sync)
-    pub proxy_enabled: Arc<RwLock<bool>>,
-    /// Proxy server port (for copy URL)
-    pub proxy_port: Arc<RwLock<Option<u16>>>,
+    /// What the daemon is doing, as of the last poll.
+    ///
+    /// The single source of truth every surface paints from. Written only by
+    /// `daemon::watch`; everything else reads it, and anything that changes
+    /// the daemon asks for a fresh poll through [`Self::refresh`] rather than
+    /// writing what it expects to be true.
+    pub snapshot: Arc<RwLock<DaemonSnapshot>>,
+    /// Asks the watcher for an immediate poll.
+    pub refresh: Refresh,
 }
 
 impl AppState {
@@ -43,8 +48,8 @@ impl AppState {
             menu: Arc::new(RwLock::new(None)),
             tray: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),
-            proxy_enabled: Arc::new(RwLock::new(false)),
-            proxy_port: Arc::new(RwLock::new(None)),
+            snapshot: Arc::new(RwLock::new(DaemonSnapshot::default())),
+            refresh: Refresh::default(),
         }
     }
 }

@@ -6,16 +6,17 @@
 //! when the window is hidden, and during autostart it runs before any webview
 //! exists at all.
 //!
-//! So these call the daemon's `/api/proxy/*` routes directly — the same
-//! routes the frontend uses — and then publish the new state to `AppState`
-//! so the menu and tray repaint. The lifecycle SSE event is the daemon's to
-//! broadcast; it does so from the handler these calls hit.
+//! So these call the daemon's `/api/proxy/*` routes directly — the same routes
+//! the frontend uses — and then ask `daemon::watch` for an immediate poll.
+//! They deliberately do **not** publish what they expect to be true: the
+//! watcher is the only writer of the snapshot, so a poll already in flight
+//! cannot overwrite an optimistic guess with a reading taken before the call.
 
 use tauri::{AppHandle, Manager};
-use tracing::error;
+use tracing::debug;
 
 use crate::app::AppState;
-use crate::menu::state_sync::sync_all_state;
+use crate::app::events::{emit_or_log, names};
 
 /// Start the proxy if it is not already running, returning the bound port.
 ///
@@ -34,7 +35,7 @@ pub async fn start(app: &AppHandle) -> Result<u16, String> {
         .and_then(|p| u16::try_from(p).ok())
         .ok_or_else(|| "daemon reported no proxy port".to_string())?;
 
-    publish(app, true, Some(port)).await;
+    state.refresh.now();
 
     Ok(port)
 }
@@ -49,22 +50,25 @@ pub async fn stop(app: &AppHandle) -> Result<(), String> {
         .post_json("/api/proxy/stop", &serde_json::json!({}))
         .await?;
 
-    publish(app, false, None).await;
+    state.refresh.now();
 
     Ok(())
 }
 
-/// Record proxy state on `AppState` and refresh anything that displays it.
+/// Put the endpoint URL on the clipboard.
 ///
-/// Public because proxy state also arrives from the frontend, through
-/// `commands::util::set_proxy_state`.
-pub async fn publish(app: &AppHandle, running: bool, port: Option<u16>) {
+/// Shared by the tray menu and the macOS application menu, which had a copy of
+/// this each — including a copy each of a default port to fall back on. Both
+/// surfaces disable the action while the proxy is stopped, so there is nothing
+/// to fall back to and the snapshot is the only source of the port.
+///
+/// Goes through the frontend because clipboard access is a webview capability.
+pub async fn copy_endpoint_url(app: &AppHandle) {
     let state = app.state::<AppState>();
+    let url = state.snapshot.read().await.endpoint_url();
 
-    *state.proxy_enabled.write().await = running;
-    *state.proxy_port.write().await = port;
-
-    if let Err(e) = sync_all_state(app, &state).await {
-        error!(error = %e, "Failed to sync menu and tray state");
+    match url {
+        Some(url) => emit_or_log(app, names::MENU_COPY_TO_CLIPBOARD, url),
+        None => debug!("Copy endpoint URL with no proxy listening - nothing to copy"),
     }
 }
