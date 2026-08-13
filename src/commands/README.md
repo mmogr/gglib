@@ -33,8 +33,10 @@ web UI — is a client of it. No CLI command spawns llama-server itself.
 
 That is why a model started from the GUI is the same model the proxy serves, why
 the endpoint keeps running after you close the desktop window, and why commands
-that used to configure a per-run process (`--llama-port`, the `--cache-*` flags)
-now warn that the daemon does not apply them per run.
+that used to configure a per-run process no longer take flags for it:
+`--llama-port` and the host-RAM/KV `--cache-*` flags are gone, because the
+daemon builds its `ProcessManager` once at startup and a per-invocation value
+had nothing to attach to.
 
 Commands that need the runtime start a daemon automatically if one is not
 already up. A *foreign* process on the daemon port is never fought — it is
@@ -104,7 +106,8 @@ still win. Subcommands: `dashboard` (live terminal view), `cache-clear`, `stop`.
 The same proxy stack pinned to one model — requests naming any other are refused
 rather than swapped. That is what clients which cannot switch models via
 `/v1/models` need, VS Code Copilot's BYOK endpoint among them. `--port` is the
-endpoint; `--llama-port` is the upstream behind it.
+endpoint; the daemon allocates the upstream llama-server port behind it, from
+`config settings set --llama-base-port`.
 
 ### `daemon`
 
@@ -120,7 +123,7 @@ Several commands flatten the same argument groups. Learning them once covers
 |---|---|---|
 | **Context** | `--ctx-size` / `-c` | A number, or `max` to take the model's own metadata. Falls back to the global default. |
 | **Sampling** | temperature, top-p, penalties, … | One layer of a five-level hierarchy — see [Sampling resolution](../../docs/sampling.md). Use [`model explain`](#models) to see which layer won. |
-| **Cache** | `--cache-ram`, `--cache-reuse`, KV cache types | KV quantization and host-RAM prompt cache — see [KV cache tiering](../../docs/cache.md). |
+| **Cache** | `--cache`, `--slot-dir`, `--cache-disk-gb` | The on-disk slot cache. KV quantization and the host-RAM prompt cache are auto-sized by the daemon, not per run — see [KV cache tiering](../../docs/cache.md). |
 | **Access** | `--host`, `--api-key`, `--allowed-host` | Loopback needs no key. Binding elsewhere mints one and prints it, and every host a client will reach the endpoint by must be named with `--allowed-host` (DNS-rebinding guard). |
 | **MTP** | `--mtp-draft-n-max`, `--mtp-draft-p-min` | Auto-enabled for `mtp`-tagged models; set `n-max` to `0` to force it off. |
 | **Retry** | retry budget, `--no-retry` | Transient upstream failures on the completion path. |

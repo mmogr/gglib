@@ -76,7 +76,9 @@ pub async fn execute(
             host: Some(options.host.clone()),
             default_ctx: None,
             proxy_port: Some(options.port),
-            llama_base_port: Some(options.llama_port),
+            // The daemon owns llama-server port allocation; a per-run value
+            // has nothing to attach to. `config settings set --llama-base-port`.
+            llama_base_port: None,
             cache_enabled: cache.cache,
             slot_dir: cache.slot_dir.clone(),
             api_key: access.api_key.clone(),
@@ -113,8 +115,6 @@ pub async fn execute(
     }
 
     let proxy_config = plan.unified.to_proxy_config();
-
-    super::proxy::warn_construction_time_flags(&cache, options.llama_port);
 
     let handle = daemon_client::ensure_daemon().await?;
     let status = handle

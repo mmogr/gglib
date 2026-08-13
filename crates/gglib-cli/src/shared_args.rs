@@ -5,7 +5,6 @@
 //! `Serve`, `Chat`, and `Question`.
 
 use clap::Args;
-use gglib_core::cache_config::KvCacheType;
 
 /// Sampling-parameter overrides common to all inference commands.
 ///
@@ -186,27 +185,6 @@ pub struct CacheArgs {
     /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
     #[arg(long)]
     pub slot_dir: Option<std::path::PathBuf>,
-    /// RAM budget in MiB for llama-server's own host-RAM prompt cache
-    /// (`--cache-ram`) — what makes switching between conversations fast.
-    ///
-    /// Omit to auto-size it from total system RAM, the model's weights, and
-    /// its KV footprint at the launch context size; the chosen budget and
-    /// its arithmetic are logged at startup.
-    ///
-    /// Pass a value to override — `0` disables the cache. Set
-    /// `GGLIB_DISABLE_CACHE_AUTOSIZE=1` to skip auto-sizing entirely and
-    /// use llama-server's built-in default. Independent of
-    /// `--cache`/`--slot-dir`.
-    #[arg(long)]
-    pub cache_ram_mb: Option<u64>,
-    /// Minimum chunk size in tokens for KV-shift cache reuse past the first
-    /// prefix divergence point (`--cache-reuse`). Helps a follow-up prompt
-    /// whose earlier messages were edited or summarized (e.g. a Copilot
-    /// history compaction), which plain prefix matching can't reuse at all.
-    /// Omit to disable. Can be suppressed at runtime without editing this
-    /// flag via `GGLIB_DISABLE_CACHE_REUSE=1`.
-    #[arg(long)]
-    pub cache_reuse: Option<u32>,
     /// Byte budget, in GiB, for the on-disk KV cache slot file eviction
     /// sweep. Only meaningful with `--cache`.
     ///
@@ -217,23 +195,6 @@ pub struct CacheArgs {
     /// without editing this flag; the flag wins if both are set.
     #[arg(long)]
     pub cache_disk_gb: Option<u64>,
-    /// Override the K cache element type (`--cache-type-k`).
-    ///
-    /// Omit to use the `q8_0` default, which roughly halves KV cache
-    /// bytes-per-token versus llama-server's own `f16` default. Set
-    /// `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`/`f16` for any
-    /// axis not explicitly overridden here.
-    #[arg(long, value_parser = kv_cache_type_parser())]
-    pub cache_type_k: Option<KvCacheType>,
-    /// Override the V cache element type (`--cache-type-v`).
-    ///
-    /// Quantizing V additionally requires Flash Attention to be active —
-    /// llama-server hard-errors at startup otherwise. gglib leaves
-    /// `--flash-attn` at llama-server's own `auto`; if that resolves off
-    /// for your model/backend, override this to `f16` or set
-    /// `GGLIB_DISABLE_KV_QUANT=1`.
-    #[arg(long, value_parser = kv_cache_type_parser())]
-    pub cache_type_v: Option<KvCacheType>,
 }
 
 /// Who may reach the endpoint this run puts up.
@@ -269,26 +230,6 @@ pub struct AccessArgs {
     pub allowed_hosts: Vec<String>,
 }
 
-/// Value parser for `--cache-type-k`/`--cache-type-v`.
-///
-/// Built from [`KvCacheType::ALL`] so `--help` and shell completions list the
-/// accepted values instead of leaving users to discover them from a parse
-/// error. Wrapping the domain type's `FromStr` here rather than deriving
-/// `ValueEnum` on it keeps clap out of `gglib-core`, which has no CLI
-/// dependency and should not gain one to improve a help string.
-fn kv_cache_type_parser() -> impl clap::builder::TypedValueParser {
-    use clap::builder::TypedValueParser as _;
-
-    clap::builder::PossibleValuesParser::new(KvCacheType::ALL.iter().map(|t| t.as_llama_arg())).map(
-        |s| {
-            // Unreachable: clap has already rejected anything outside `ALL`,
-            // and every entry there round-trips through `as_llama_arg`.
-            s.parse::<KvCacheType>()
-                .expect("clap accepted a value outside KvCacheType::ALL")
-        },
-    )
-}
-
 /// Serve-command options that don't belong to another group.
 #[derive(Args, Debug, Clone)]
 pub struct ServeOptions {
@@ -309,12 +250,6 @@ pub struct ServeOptions {
     /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
     #[arg(short, long, default_value = "8080")]
     pub port: u16,
-    /// Starting port for the underlying llama-server instance
-    ///
-    /// `gglib serve` runs the model behind the proxy stack, so the upstream
-    /// llama-server binds its own port separately from `--port`.
-    #[arg(long, default_value = "5500")]
-    pub llama_port: u16,
 }
 
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)

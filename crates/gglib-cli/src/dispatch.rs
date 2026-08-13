@@ -174,7 +174,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Proxy {
             host,
             port,
-            llama_port,
             default_context,
             sampling,
             cache,
@@ -220,7 +219,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx,
                 host,
                 port,
-                llama_port,
                 default_context,
                 sampling,
                 cache,

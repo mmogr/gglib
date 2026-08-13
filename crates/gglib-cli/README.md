@@ -179,13 +179,19 @@ Proxy cache-clear options:
 | `-p`, `--port` | Proxy port (default: 8080) |
 | `--session-id` | Optional session ID to target (without it, clears all sessions) |
 
-Cache tuning flags (`gglib proxy start`):
+Cache flags (`gglib proxy`, `gglib serve`):
 | Flag | Description |
 |---|---|
-| `--cache-ram-mb <mb>` | Host-RAM prompt cache budget (`--cache-ram`). Omit to auto-size from RAM/weights/KV; `0` disables it. `GGLIB_DISABLE_CACHE_AUTOSIZE=1` skips auto-sizing entirely. Independent of `--cache`/`--slot-dir`. |
-| `--cache-reuse <n>` | Min chunk size (tokens) for KV-shift cache reuse (`--cache-reuse`). Omit to disable; `GGLIB_DISABLE_CACHE_REUSE=1` suppresses it. |
+| `--cache` | Persist llama-server slot state to disk per session |
+| `--slot-dir <path>` | Where those slot files live (defaults to `<app-data-dir>/slots`) |
 | `--cache-disk-gb <gb>` | Byte budget for on-disk slot cache eviction. Omit to auto-size from free disk space; also settable via `GGLIB_CACHE_DISK_GB`. Ignored for sliding-window/hybrid/recurrent models, where the disk layer is disabled automatically — `GGLIB_FORCE_HYBRID_DISK_CACHE=1` re-enables it. |
-| `--cache-type-k <type>` / `--cache-type-v <type>` | KV cache element type (`f32`, `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`). Defaults to `q8_0` on both axes; `GGLIB_DISABLE_KV_QUANT=1` falls back to `f16`. Quantizing V requires Flash Attention to be active. |
+
+The host-RAM prompt cache and KV element types are **not** per-run flags. The
+daemon builds its `ProcessManager` once at startup, so there is nothing for a
+per-invocation value to attach to; both are auto-sized per launch, and the
+environment switches (`GGLIB_DISABLE_CACHE_AUTOSIZE`, `GGLIB_DISABLE_KV_QUANT`,
+`GGLIB_DISABLE_CACHE_REUSE`) are read by the daemon process. See
+[KV cache tiering](../../docs/cache.md).
 
 ### Question Command
 
@@ -296,7 +302,7 @@ gglib model add ~/models/llama-2-7b.Q4_K_M.gguf
 gglib model list
 
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
-gglib serve 1 --port 8080 --llama-port 5500
+gglib serve 1 --port 8080
 
 # Same, with KV cache session persistence on disk
 gglib serve 1 --cache --slot-dir ~/.gglib/slots

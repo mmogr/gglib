@@ -33,27 +33,37 @@ fn long_flags(subcommand: &str) -> Vec<String> {
 }
 
 /// The flags `CacheArgs` contributes.
-const CACHE_FLAGS: &[&str] = &[
-    "cache",
-    "cache-disk-gb",
-    "cache-ram-mb",
-    "cache-reuse",
-    "cache-type-k",
-    "cache-type-v",
-    "slot-dir",
-];
+///
+/// Three, not seven. `--cache-ram-mb`, `--cache-reuse` and `--cache-type-k/v`
+/// were removed: the daemon builds its `ProcessManager` once at startup, so a
+/// per-run value had nothing to attach to and the command warned as much at
+/// runtime while still advertising them in `--help`.
+const CACHE_FLAGS: &[&str] = &["cache", "cache-disk-gb", "slot-dir"];
 
 /// The flags `AccessArgs` contributes.
 const ACCESS_FLAGS: &[&str] = &["allowed-host", "api-key"];
 
 /// The flags `SamplingArgs` contributes.
+///
+/// All fifteen. This listed seven, and since every assertion below is a
+/// `contains`, the guard passed while covering under half the surface it
+/// claims to guard — the eight DRY/dynatemp/frequency/top-n-sigma flags could
+/// have vanished from either command without a word.
 const SAMPLING_FLAGS: &[&str] = &[
+    "dry-allowed-length",
+    "dry-base",
+    "dry-multiplier",
+    "dry-penalty-last-n",
+    "dynatemp-exponent",
+    "dynatemp-range",
+    "frequency-penalty",
     "max-tokens",
     "min-p",
     "presence-penalty",
     "repeat-penalty",
     "temperature",
     "top-k",
+    "top-n-sigma",
     "top-p",
 ];
 
@@ -161,14 +171,8 @@ fn serve_parses_the_cache_and_sampling_flags() {
         "--cache",
         "--slot-dir",
         "/tmp/slots",
-        "--cache-ram-mb",
-        "4096",
-        "--cache-reuse",
-        "256",
         "--cache-disk-gb",
         "8",
-        "--cache-type-k",
-        "f16",
         "--top-p",
         "0.9",
         "--max-tokens",
@@ -192,13 +196,7 @@ fn serve_parses_the_cache_and_sampling_flags() {
         cache.slot_dir.as_deref(),
         Some(std::path::Path::new("/tmp/slots"))
     );
-    assert_eq!(cache.cache_ram_mb, Some(4096));
-    assert_eq!(cache.cache_reuse, Some(256));
     assert_eq!(cache.cache_disk_gb, Some(8));
-    assert_eq!(
-        cache.cache_type_k,
-        Some(gglib_core::cache_config::KvCacheType::F16)
-    );
     assert_eq!(sampling.top_p, Some(0.9));
     assert_eq!(sampling.max_tokens, Some(100));
 }
@@ -217,8 +215,6 @@ fn proxy_still_parses_its_sampling_and_cache_flags() {
         "--min-p",
         "0.05",
         "--cache",
-        "--cache-type-v",
-        "q8_0",
     ])
     .expect("proxy should still accept its pre-refactor flags");
 
@@ -233,10 +229,6 @@ fn proxy_still_parses_its_sampling_and_cache_flags() {
     assert_eq!(sampling.top_p, Some(0.9));
     assert_eq!(sampling.min_p, Some(0.05));
     assert!(cache.cache);
-    assert_eq!(
-        cache.cache_type_v,
-        Some(gglib_core::cache_config::KvCacheType::Q8_0)
-    );
 }
 
 /// Absent flags must stay `None` rather than defaulting: on the sampling
@@ -255,8 +247,7 @@ fn omitted_flags_express_no_opinion() {
 
     assert!(!cache.cache);
     assert_eq!(cache.slot_dir, None);
-    assert_eq!(cache.cache_ram_mb, None);
-    assert_eq!(cache.cache_type_k, None);
+    assert_eq!(cache.cache_disk_gb, None);
     assert_eq!(sampling.temperature, None);
     assert_eq!(sampling.top_p, None);
 }
