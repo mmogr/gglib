@@ -148,12 +148,11 @@ fn detect_free_vram_source() -> FreeVramSource {
 /// Parse a string as a truthy on/off flag (case- and whitespace-insensitive).
 ///
 /// Used by `GGLIB_DISABLE_<FEATURE>` environment variable checks throughout
-/// the crate. Truthy values: `1`, `true`, `yes`, `on`.
+/// the crate. Delegates rather than repeating the spelling: every switch in
+/// the tree has to accept the same set, and this crate's copy is how they
+/// would drift.
 pub(crate) fn is_truthy_flag(v: &str) -> bool {
-    matches!(
-        v.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    gglib_core::debug_switches::is_truthy(v)
 }
 
 /// Identify the running distribution from `/etc/os-release`.

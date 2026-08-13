@@ -44,14 +44,7 @@ pub const DISABLE_CANONICALIZATION_ENV: &str = "GGLIB_DISABLE_PROMPT_CANONICALIZ
 
 /// Whether [`DISABLE_CANONICALIZATION_ENV`] is set to a truthy value.
 fn canonicalization_disabled_via_env() -> bool {
-    std::env::var(DISABLE_CANONICALIZATION_ENV)
-        .ok()
-        .is_some_and(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
+    gglib_core::debug_switches::enabled(DISABLE_CANONICALIZATION_ENV)
 }
 
 /// Matches dynamic IDE-injected lines at the start of a line (multiline mode).
