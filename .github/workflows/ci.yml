@@ -96,6 +96,11 @@ jobs:
       - name: Check ParamSource matches are exhaustive
         run: ./scripts/check_param_source_exhaustive.sh
 
+      # Added to `make enforce` but not here, so it only ever ran locally —
+      # which is the same decorative enforcement it was written to end.
+      - name: Check the Rust file-size ratchet
+        run: ./scripts/check_rust_complexity.sh
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest
