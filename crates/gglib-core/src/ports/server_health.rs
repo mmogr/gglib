@@ -38,12 +38,6 @@ pub enum ServerHealthStatus {
 }
 
 impl ServerHealthStatus {
-    /// Check if the status represents a healthy state.
-    #[must_use]
-    pub const fn is_healthy(&self) -> bool {
-        matches!(self, Self::Healthy)
-    }
-
     /// Check if the status represents a failed/critical state.
     #[must_use]
     pub const fn is_failed(&self) -> bool {
@@ -57,22 +51,18 @@ mod tests {
 
     #[test]
     fn test_health_status_classification() {
-        assert!(ServerHealthStatus::Healthy.is_healthy());
         assert!(!ServerHealthStatus::Healthy.is_failed());
 
         let degraded = ServerHealthStatus::Degraded {
             reason: "slow response".to_string(),
         };
-        assert!(!degraded.is_healthy());
         assert!(!degraded.is_failed());
 
         let unreachable = ServerHealthStatus::Unreachable {
             last_error: "connection refused".to_string(),
         };
-        assert!(!unreachable.is_healthy());
         assert!(unreachable.is_failed());
 
-        assert!(!ServerHealthStatus::ProcessDied.is_healthy());
         assert!(ServerHealthStatus::ProcessDied.is_failed());
     }
 

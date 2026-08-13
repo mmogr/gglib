@@ -219,12 +219,6 @@ impl UpstreamHealth {
         self.recycle_requested.store(true, Ordering::Relaxed);
     }
 
-    /// Current consecutive-strike count (for observability/tests).
-    #[must_use]
-    pub fn strikes(&self) -> u32 {
-        self.consecutive_strikes.load(Ordering::Relaxed)
-    }
-
     /// Serializable snapshot of the cumulative counters for the dashboard.
     #[must_use]
     pub fn snapshot(&self) -> UpstreamHealthSnapshot {
@@ -249,7 +243,7 @@ mod tests {
         let h = UpstreamHealth::new();
         h.record_stream_outcome(StreamVerdict::Healthy);
         h.record_stream_outcome(StreamVerdict::Healthy);
-        assert_eq!(h.strikes(), 0);
+        assert_eq!(h.snapshot().consecutive_strikes, 0);
         assert!(!h.take_recycle_request());
     }
 
@@ -257,7 +251,7 @@ mod tests {
     fn single_strike_does_not_trip_recycle() {
         let h = UpstreamHealth::new();
         h.record_stream_outcome(StreamVerdict::Empty);
-        assert_eq!(h.strikes(), 1);
+        assert_eq!(h.snapshot().consecutive_strikes, 1);
         assert!(!h.take_recycle_request());
     }
 
@@ -269,7 +263,7 @@ mod tests {
         assert!(h.take_recycle_request());
         // One-shot: a second consume returns false and the counter is reset.
         assert!(!h.take_recycle_request());
-        assert_eq!(h.strikes(), 0);
+        assert_eq!(h.snapshot().consecutive_strikes, 0);
     }
 
     #[test]
@@ -280,7 +274,7 @@ mod tests {
         h.record_stream_outcome(StreamVerdict::Empty);
         // Only one strike since the reset — threshold not reached.
         assert!(!h.take_recycle_request());
-        assert_eq!(h.strikes(), 1);
+        assert_eq!(h.snapshot().consecutive_strikes, 1);
     }
 
     #[test]
@@ -304,7 +298,7 @@ mod tests {
     fn a_stream_that_dies_upstream_strikes_instead_of_resetting() {
         let h = UpstreamHealth::new();
         h.record_stream_outcome(StreamVerdict::UpstreamError);
-        assert_eq!(h.strikes(), 1);
+        assert_eq!(h.snapshot().consecutive_strikes, 1);
         h.record_stream_outcome(StreamVerdict::UpstreamError);
         assert!(h.take_recycle_request());
         let snap = h.snapshot();
@@ -324,7 +318,7 @@ mod tests {
         h.record_stream_outcome(StreamVerdict::ClientAborted);
         h.record_stream_outcome(StreamVerdict::ClientAborted);
         // The one real strike still stands — abstaining is not forgiving.
-        assert_eq!(h.strikes(), 1);
+        assert_eq!(h.snapshot().consecutive_strikes, 1);
         assert!(!h.take_recycle_request());
         assert_eq!(h.snapshot().total_client_aborts, 2);
     }
@@ -370,7 +364,7 @@ mod tests {
         for _ in 0..STRIKE_THRESHOLD + 5 {
             h.record_stream_outcome(StreamVerdict::ClientAborted);
         }
-        assert_eq!(h.strikes(), 0);
+        assert_eq!(h.snapshot().consecutive_strikes, 0);
         assert!(!h.take_recycle_request());
     }
 }

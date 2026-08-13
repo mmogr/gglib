@@ -81,20 +81,6 @@ pub enum ParamSource {
 }
 
 impl ParamSource {
-    /// Whether the value came from the floor rather than from any layer.
-    ///
-    /// Written as an exhaustive `match` rather than a `matches!` so adding a
-    /// variant is a compile error here. See
-    /// [`is_deliberate_choice`](Self::is_deliberate_choice) for why that
-    /// distinction is not stylistic.
-    #[must_use]
-    pub const fn is_floor(self) -> bool {
-        match self {
-            Self::Floor | Self::FloorCoupled => true,
-            Self::Layer(_) | Self::Unset => false,
-        }
-    }
-
     /// Whether a person actually chose this value.
     ///
     /// `auto_detected_rung` is the index of the auto-detected per-model rung
@@ -387,13 +373,5 @@ mod tests {
             Some(SamplingLayer::ModelAutoDetected)
         );
         assert_eq!(SamplingLayer::from_index(5), None);
-    }
-
-    #[test]
-    fn only_the_floor_variants_report_as_floor() {
-        assert!(ParamSource::Floor.is_floor());
-        assert!(ParamSource::FloorCoupled.is_floor());
-        assert!(!ParamSource::Layer(0).is_floor());
-        assert!(!ParamSource::Unset.is_floor());
     }
 }

@@ -8,12 +8,14 @@
 //!
 //! Counters are cumulative and process-lifetime (they live on the proxy
 //! supervisor, like the agent cache metrics, so a proxy restart does not
-//! zero them). Windowing is the *reader's* job: a reader keeps its own
-//! per-model baselines and rates the delta, so two readers can window
-//! differently without fighting over a reset button.
+//! zero them). There is no windowing here, and no `delta` helper: that pair
+//! existed for the tune scheduler, which kept per-model baselines and rated
+//! the difference. Since ADR 0006 nothing acts on these automatically, and the
+//! one reader left — `gglib proxy dashboard` — shows the run's totals, which
+//! is the honest shape for a counter that resets with the process.
 //!
-//! Since ADR 0006 nothing acts on these automatically. They are diagnosis —
-//! what actually fails, per model, for a person to read and act on.
+//! They are diagnosis: what actually fails, per model, for a person to read
+//! and act on.
 //!
 //! Deliberately not persisted: a defect rate is a claim about recent traffic
 //! on this build of everything, and yesterday's rate answering today's
@@ -206,43 +208,6 @@ impl ModelDefectLedger {
     }
 }
 
-/// The counts accumulated between two snapshots — what a windowing reader
-/// actually rates.
-#[must_use]
-pub const fn delta(current: ModelDefectCounts, baseline: ModelDefectCounts) -> ModelDefectCounts {
-    ModelDefectCounts {
-        requests: current.requests.saturating_sub(baseline.requests),
-        loop_guard_trips: current
-            .loop_guard_trips
-            .saturating_sub(baseline.loop_guard_trips),
-        repairs_attempted: current
-            .repairs_attempted
-            .saturating_sub(baseline.repairs_attempted),
-        repairs_succeeded: current
-            .repairs_succeeded
-            .saturating_sub(baseline.repairs_succeeded),
-        stream_errors: current.stream_errors.saturating_sub(baseline.stream_errors),
-        truncated_generations: current
-            .truncated_generations
-            .saturating_sub(baseline.truncated_generations),
-        empty_responses: current
-            .empty_responses
-            .saturating_sub(baseline.empty_responses),
-        reasoning_only: current
-            .reasoning_only
-            .saturating_sub(baseline.reasoning_only),
-        dialect_residue: current
-            .dialect_residue
-            .saturating_sub(baseline.dialect_residue),
-        unvalidatable_schemas: current
-            .unvalidatable_schemas
-            .saturating_sub(baseline.unvalidatable_schemas),
-        normalization_errors: current
-            .normalization_errors
-            .saturating_sub(baseline.normalization_errors),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,45 +276,5 @@ mod tests {
         assert_eq!(snap.dialect_residue, 1);
         assert_eq!(snap.unvalidatable_schemas, 1);
         assert_eq!(snap.normalization_errors, 1);
-    }
-
-    /// Every new field must window like the old ones, or a reader silently
-    /// rates a cumulative total against a windowed denominator.
-    #[test]
-    fn every_counter_windows_against_its_baseline() {
-        let ledger = ModelDefectLedger::new();
-        ledger.record_truncated_generation("a");
-        ledger.record_empty_response("a", true);
-        ledger.record_dialect_residue("a");
-        let baseline = ledger.snapshot()["a"];
-
-        ledger.record_truncated_generation("a");
-        ledger.record_empty_response("a", true);
-        ledger.record_dialect_residue("a");
-        ledger.record_unvalidatable_schema("a");
-        ledger.record_normalization_error("a");
-
-        let window = delta(ledger.snapshot()["a"], baseline);
-        assert_eq!(window.truncated_generations, 1);
-        assert_eq!(window.empty_responses, 1);
-        assert_eq!(window.reasoning_only, 1);
-        assert_eq!(window.dialect_residue, 1);
-        assert_eq!(window.unvalidatable_schemas, 1);
-        assert_eq!(window.normalization_errors, 1);
-    }
-
-    #[test]
-    fn a_windowing_reader_rates_the_delta() {
-        let ledger = ModelDefectLedger::new();
-        for _ in 0..10 {
-            ledger.record_request("a");
-        }
-        let baseline = ledger.snapshot()["a"];
-        ledger.record_loop_guard_trip("a");
-        ledger.record_request("a");
-
-        let window = delta(ledger.snapshot()["a"], baseline);
-        assert_eq!(window.requests, 2);
-        assert_eq!(window.loop_guard_trips, 1);
     }
 }

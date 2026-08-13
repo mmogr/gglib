@@ -842,8 +842,7 @@ gap without changing the adapter.
 compute "tokens in use" via the same priority-fallback chain the proxy itself
 uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 `next_token.n_decoded`, `None` if none are present. Context remaining is
-`n_ctx.saturating_sub(tokens_in_use())` when both are known
-(`SlotSnapshot::context_remaining()`).
+`n_ctx.saturating_sub(tokens_in_use())` when both are known.
 
 #### `recent_requests[]` (`ContextSnapshot`)
 
