@@ -1,14 +1,13 @@
-//! The desktop app's connection to the gglib daemon.
-//!
-//! The daemon — not this app — owns llama-server. On startup the app probes
-//! the fixed daemon port; if nothing answers it launches `gglib daemon run`
-//! detached when a CLI binary can be found, and otherwise hosts the same
-//! daemon composition in-process as a fallback (bundle-only installs). The
-//! in-process fallback still goes through the daemon's file lock, so it
-//! loses gracefully to an external daemon that starts first.
+#![doc = include_str!("README.md")]
 //!
 //! Everything the app needs from the backend goes through the daemon's HTTP
-//! API from here on; this module is the one place that knows the base URL.
+//! API; this module is the one place that knows the base URL.
+
+mod snapshot;
+mod watch;
+
+pub use snapshot::DaemonSnapshot;
+pub use watch::{Refresh, spawn as watch};
 
 use std::time::Duration;
 
@@ -22,14 +21,46 @@ const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
 /// How long to wait for a launched (or in-process) daemon to come up.
 const LAUNCH_WAIT: Duration = Duration::from_secs(15);
 
+/// How this app came by the daemon it is talking to.
+///
+/// The distinction decides what quitting is allowed to take down with it, and
+/// [`Daemon::connect_or_launch`] already knows it — it used to be flattened
+/// into a single "hosted" bool, which could not tell a daemon we started from
+/// one that was already serving somebody else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ownership {
+    /// Already answering when we probed. Someone else's — a CLI session's, or
+    /// an earlier app instance's — so this app does not get to end it.
+    Adopted,
+    /// We spawned `gglib daemon run` detached, so it is ours to stop.
+    Launched,
+    /// Running inside this process (bundle-only fallback). Its lifetime is
+    /// this app's whether we like it or not.
+    Hosted,
+    /// Nothing was reachable when the app started, and nothing has been
+    /// claimed since. The app runs anyway — see [`Daemon::disconnected`].
+    Unresolved,
+}
+
+impl Ownership {
+    /// Whether quitting this app should take the daemon with it.
+    ///
+    /// A daemon this app started or hosts is this app's to end. One that was
+    /// already answering when we probed belongs to whoever started it — a CLI
+    /// session, an earlier instance — and quitting a dashboard is no reason to
+    /// take their endpoint away.
+    #[must_use]
+    pub const fn ends_with_the_app(self) -> bool {
+        matches!(self, Self::Launched | Self::Hosted)
+    }
+}
+
 /// A connected daemon.
 pub struct Daemon {
     /// Shared HTTP client for daemon calls.
     pub client: reqwest::Client,
-    /// Whether this app process hosts the daemon itself (bundle-only
-    /// fallback). Decides shutdown behaviour: a hosted daemon dies with the
-    /// app; an external one is left running.
-    pub hosted_in_process: bool,
+    /// How this app came by it — see [`Ownership`].
+    pub ownership: Ownership,
 }
 
 /// The daemon's base URL — fixed loopback port by design.
@@ -58,6 +89,26 @@ async fn probe(client: &reqwest::Client) -> Probe {
 }
 
 impl Daemon {
+    /// A client for a daemon that is not there.
+    ///
+    /// The app used to `expect` its way past a failed connection, so a port
+    /// 9887 held by another program, or a `gglib daemon run` that died on
+    /// startup, killed the process before `setup_app` had built a tray or
+    /// shown a window: gglib simply never appeared, and the reason was in a
+    /// log file. Coming up disconnected instead means the tray exists, reads
+    /// "not running", and offers Start gglib Service — which is the state that
+    /// affordance was added for.
+    ///
+    /// Every call made through this fails until a daemon answers, which is
+    /// exactly what the watcher reports as unreachable.
+    #[must_use]
+    pub fn disconnected() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            ownership: Ownership::Unresolved,
+        }
+    }
+
     /// Find the daemon, launching or hosting one if nothing is running.
     ///
     /// # Errors
@@ -72,7 +123,7 @@ impl Daemon {
                 info!("connected to running gglib daemon");
                 return Ok(Self {
                     client,
-                    hosted_in_process: false,
+                    ownership: Ownership::Adopted,
                 });
             }
             Probe::Foreign => {
@@ -83,12 +134,12 @@ impl Daemon {
             Probe::NotRunning => {}
         }
 
-        // Prefer an external daemon: it outlives this app, which is what
-        // makes the proxy a background service rather than an app feature.
-        let hosted_in_process = match spawn_external_daemon() {
+        // Prefer an external daemon: it survives a crash of this app, and it
+        // is the same process the CLI would have started.
+        let ownership = match spawn_external_daemon() {
             Ok(()) => {
                 info!("launched external gglib daemon");
-                false
+                Ownership::Launched
             }
             Err(e) => {
                 warn!("no external gglib binary ({e}); hosting the daemon in-process");
@@ -100,34 +151,47 @@ impl Daemon {
                         error!("in-process daemon exited with error: {e}");
                     }
                 });
-                true
+                Ownership::Hosted
             }
         };
 
-        let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
-        loop {
-            tokio::time::sleep(Duration::from_millis(250)).await;
-            match probe(&client).await {
-                Probe::Running => {
-                    return Ok(Self {
-                        client,
-                        hosted_in_process,
-                    });
-                }
-                Probe::Foreign => {
-                    return Err(format!(
-                        "port {DAEMON_PORT} was taken by another program during startup"
-                    ));
-                }
-                Probe::NotRunning => {}
-            }
-            if tokio::time::Instant::now() >= deadline {
+        wait_until_healthy(&client).await?;
+
+        Ok(Self { client, ownership })
+    }
+
+    /// Start a daemon again after one has been stopped.
+    ///
+    /// The tray's Start gglib Service. Only ever launches an external daemon:
+    /// the in-process fallback is a one-shot at startup, and hosting a second
+    /// one inside a process that may still be unwinding the first is not worth
+    /// the failure modes.
+    ///
+    /// [`Ownership`] is deliberately not revised. An app that adopted
+    /// somebody's daemon, watched it stop, and started a new one keeps erring
+    /// toward leaving it alone at quit, which is the safe direction to be
+    /// wrong in.
+    ///
+    /// # Errors
+    ///
+    /// Fails when one is already running, when the port is held by a foreign
+    /// program, when no `gglib` binary can be found, or when the launched
+    /// daemon does not become healthy in time.
+    pub async fn restart(&self) -> Result<(), String> {
+        match probe(&self.client).await {
+            Probe::Running => return Err("the gglib daemon is already running".to_owned()),
+            Probe::Foreign => {
                 return Err(format!(
-                    "the gglib daemon did not come up within {}s",
-                    LAUNCH_WAIT.as_secs()
+                    "port {DAEMON_PORT} is held by another program (not a gglib daemon)"
                 ));
             }
+            Probe::NotRunning => {}
         }
+
+        spawn_external_daemon()?;
+        info!("relaunched external gglib daemon");
+
+        wait_until_healthy(&self.client).await
     }
 
     /// GET a JSON value from the daemon.
@@ -174,8 +238,12 @@ impl Daemon {
         serde_json::from_value(value).map_err(|e| e.to_string())
     }
 
-    /// Ask the daemon to shut down (used only for the in-process fallback,
-    /// whose lifetime is this app's).
+    /// Ask the daemon to shut down.
+    ///
+    /// Returns as soon as the request is accepted; the daemon's own ordered
+    /// teardown — proxy drained, every llama-server stopped gracefully,
+    /// downloads cancelled — runs after. Pair with [`Self::wait_for_exit`]
+    /// when the caller needs it finished.
     pub async fn request_shutdown(&self) {
         let _ = self
             .client
@@ -193,6 +261,32 @@ impl Daemon {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+}
+
+/// Poll until a just-launched daemon answers, or the launch budget runs out.
+async fn wait_until_healthy(client: &reqwest::Client) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
+
+    loop {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        match probe(client).await {
+            Probe::Running => return Ok(()),
+            Probe::Foreign => {
+                return Err(format!(
+                    "port {DAEMON_PORT} was taken by another program during startup"
+                ));
+            }
+            Probe::NotRunning => {}
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            return Err(format!(
+                "the gglib daemon did not come up within {}s",
+                LAUNCH_WAIT.as_secs()
+            ));
         }
     }
 }

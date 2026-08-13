@@ -5,8 +5,9 @@
 //! diverge, and the quit path stays in [`crate::lifecycle`] so the tray gets
 //! the same hardened shutdown as every other exit.
 
+use std::time::Duration;
+
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tracing::{debug, error};
 
 use crate::app::AppState;
@@ -14,7 +15,13 @@ use crate::app::events::{emit_or_log, names};
 use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::placement::Anchor;
-use crate::tray::{ids, window};
+use crate::tray::{confirm, ids, window};
+
+/// How long to wait for a daemon asked to stop to actually go.
+///
+/// Matches the budget `lifecycle` gives a hosted daemon, which is in turn
+/// sized against the daemon's own 10-second shutdown watchdog.
+const SERVICE_STOP_WAIT: Duration = Duration::from_secs(12);
 
 /// Perform the action a menu item id names.
 ///
@@ -32,7 +39,14 @@ pub fn dispatch(app: &AppHandle, id: &str) {
         ids::OPEN_MAIN => spawn_ui(app.clone(), |app| window::show_main(&app)),
         ids::START_PROXY => spawn_proxy(app.clone(), true),
         ids::STOP_PROXY => spawn_proxy(app.clone(), false),
-        ids::COPY_PROXY_URL => copy_endpoint_url(app),
+        ids::START_SERVICE => spawn_service(app.clone(), true),
+        ids::STOP_SERVICE => spawn_service(app.clone(), false),
+        ids::COPY_PROXY_URL => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                proxy_actions::copy_endpoint_url(&app).await;
+            });
+        }
         ids::PREFERENCES => open_preferences(app),
         ids::QUIT => confirm_quit(app),
         _ => debug!(tray_id = %id, "Unhandled tray menu event"),
@@ -60,27 +74,62 @@ fn spawn_proxy(app: AppHandle, start: bool) {
             proxy_actions::stop(&app).await
         };
 
-        if let Err(e) = result {
-            error!(error = %e, start, "Tray proxy action failed");
-        }
+        report(&app, result, start, "proxy", "Could not start the proxy");
     });
 }
 
-/// Put the endpoint URL on the clipboard.
+/// Start or stop the daemon off the event thread.
 ///
-/// Goes through the frontend because clipboard access is a webview capability
-/// here, matching how the application menu does it.
-fn copy_endpoint_url(app: &AppHandle) {
-    let app = app.clone();
+/// Stopping waits for it to go before refreshing, so the tray repaints once
+/// the teardown has actually finished rather than showing a daemon that is
+/// halfway out. Starting is already synchronous — `restart` returns when the
+/// new daemon answers.
+fn spawn_service(app: AppHandle, start: bool) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let port = state.proxy_port.read().await.unwrap_or(8080);
-        emit_or_log(
+
+        let result = if start {
+            state.daemon.restart().await
+        } else {
+            let snapshot = state.snapshot.read().await.clone();
+            if !confirm::stop_service(&app, &snapshot) {
+                return;
+            }
+
+            state.daemon.request_shutdown().await;
+            state.daemon.wait_for_exit(SERVICE_STOP_WAIT).await;
+            Ok(())
+        };
+
+        report(
             &app,
-            names::MENU_COPY_TO_CLIPBOARD,
-            format!("http://127.0.0.1:{port}/v1"),
+            result,
+            start,
+            "service",
+            "Could not start the gglib service",
         );
+
+        state.refresh.now();
     });
+}
+
+/// Log a menu action's outcome, and put a failed *start* on screen.
+///
+/// Starting is where the interesting failures live — a port already in use, no
+/// `gglib` binary to launch — and the daemon's own message names both the
+/// cause and the fix, so it is shown verbatim. Stopping is left to the log: it
+/// is idempotent on both routes, so a failure there means the thing the user
+/// wanted gone is already gone.
+fn report(app: &AppHandle, result: Result<(), String>, start: bool, kind: &str, title: &str) {
+    let Err(e) = result else {
+        return;
+    };
+
+    error!(error = %e, start, kind, "Tray action failed");
+
+    if start {
+        confirm::report_failure(app, title, &e);
+    }
 }
 
 /// Bring the main window forward and ask it to open settings.
@@ -94,31 +143,21 @@ fn open_preferences(app: &AppHandle) {
     emit_or_log(app, names::MENU_OPEN_SETTINGS, ());
 }
 
-/// Confirm before quitting while the proxy is serving, then exit.
+/// Confirm before quitting takes a running service with it, then exit.
 ///
-/// Quitting used to be the only way to close the app, so it needed no
-/// warning. With close-to-tray it becomes the one action that takes the
-/// endpoint away from whatever is still pointed at it.
+/// The warning describes what will actually happen rather than assuming it.
+/// It used to claim quitting stopped the proxy, which stopped being true when
+/// the daemon took ownership of the runtime — against an adopted daemon there
+/// is nothing to warn about, because it keeps serving.
 fn confirm_quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let running = *app.state::<AppState>().proxy_enabled.read().await;
+        let state = app.state::<AppState>();
+        let snapshot = state.snapshot.read().await.clone();
+        let ends_with_the_app = state.daemon.ownership.ends_with_the_app();
 
-        if running {
-            let confirmed = app
-                .dialog()
-                .message("The proxy is running. Quitting stops it, and any client using the endpoint will lose it.")
-                .title("Quit gglib?")
-                .kind(MessageDialogKind::Warning)
-                .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Quit".to_owned(),
-                    "Cancel".to_owned(),
-                ))
-                .blocking_show();
-
-            if !confirmed {
-                return;
-            }
+        if !confirm::quit(&app, &snapshot, ends_with_the_app) {
+            return;
         }
 
         // The same entry point Cmd+Q and window close use, so there is exactly

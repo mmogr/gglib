@@ -7,7 +7,7 @@ export { isDesktop, isWeb } from './detect';
 
 // Shell integration
 export { openUrl } from './openUrl';
-export { setSelectedModel, syncMenuState, syncMenuStateSilent, setProxyState } from './menuSync';
+export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync';
 
 // Desktop menu events
 export { listenToMenuEvents, MENU_EVENTS } from './menuEvents';

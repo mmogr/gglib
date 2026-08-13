@@ -20,11 +20,11 @@ The Desktop GUI is built using:
 
 The Tauri application uses an **HTTP-first architecture** with minimal OS integration:
 
-1. **Backend (Rust)**: The Tauri backend in `src-tauri/src/main.rs` uses the shared `GuiBackend` service from the main library. This is the same backend used by the Web UI.
+1. **Backend (Rust)**: The Tauri backend in `src-tauri/src/main.rs` owns no runtime of its own. `src/daemon/` connects to the gglib daemon, launching `gglib daemon run` detached when nothing answers, and hosting the daemon composition in-process only as a bundle-only fallback. A daemon that will not start is a state, not a crash: the app comes up disconnected, and the tray says so.
 
-2. **Embedded API Server**: When the desktop app starts, it spawns an embedded Axum HTTP server on `127.0.0.1` with an ephemeral port (OS-assigned). The server requires **Bearer token authentication** for all `/api/*` endpoints, providing security without exposing the API to other processes.
+2. **The daemon's API**: Everything backend-shaped goes to `127.0.0.1:{DAEMON_PORT}` — a fixed loopback port, deliberately a constant rather than a setting, so every client can find the one daemon without configuration. Loopback traffic is unauthenticated; the stored API key is required only for a LAN-shared daemon (`gglib daemon run --share-lan`).
 
-3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the embedded API server:
+3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models
    - `/api/servers` - Control llama-server instances
    - `/api/chat` - Chat history and conversations
@@ -33,21 +33,23 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/mcp` - MCP server configuration
    - `/api/events` - Server-Sent Events for real-time updates
 
-4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the embedded API through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged.
+4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the daemon through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit, and starting or stopping the service) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged. The icon tracks whether gglib is consuming anything on this machine — a listening proxy *or* a resident model — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
 
-5. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to 6 OS integration functions**:
-   - `get_embedded_api_info` - Discover API port and auth token
+5. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to OS integration**:
+   - `get_embedded_api_info` - Discover the daemon's port (the name predates the daemon)
    - `open_url` - Open URLs in system browser
    - `set_selected_model`, `sync_menu_state` - Native menu synchronization
    - `check_llama_status`, `install_llama` - llama.cpp binary management
+   - `log_from_frontend` - Forward frontend logs to the Rust logger
 
-6. **Real-Time Events**: The `/api/events` endpoint streams Server-Sent Events with Bearer authentication:
+6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
    - `server:*` events - Server lifecycle updates
    - `download:*` events - Download progress
-   - `log:*` events - Server console output
+   - `proxy:*` events - Proxy lifecycle
+
+   The Rust side deliberately does not subscribe: it polls instead, because the lifecycle events are deltas that a lagging subscriber drops silently, and a tray rebuilt from deltas drifts. See `src/daemon/watch.rs`.
 
 This architecture means:
-- **Security**: All API access requires Bearer token, no unauthorized access to embedded server
 - **Consistency**: Desktop GUI uses identical HTTP API as standalone Web UI
 - **Simplicity**: Business logic lives in one place (Axum handlers), not duplicated in IPC commands
 - **Testability**: HTTP API can be tested with standard tools (curl, Postman, etc.)
@@ -93,14 +95,14 @@ The output binary will be located in `target/release/bundle/`.
 
 **Desktop-Specific Benefits:**
 - Native OS integration (file dialogs, notifications, system tray)
-- No need to manage separate server processes (embedded API server)
+- The daemon is launched for you; no separate server process to manage
 - Works offline once models are downloaded
 - Better performance for local operations
 
 **Stability & Resource Management:**
-- **Hardened shutdown with watchdog**: 10-second timeout prevents hung closes
-- **Background task cleanup**: Embedded server and event emitters are explicitly aborted
-- **Parallel cleanup**: Servers and downloads stop concurrently (8s timeout)
+- **One owner**: llama-server belongs to the daemon, so the app has almost nothing to tear down
+- **Honest quit**: the daemon this app launched or hosts is stopped with it; one it merely connected to is left serving
+- **Ordered teardown**: proxy drained, children stopped gracefully, downloads cancelled, pidfiles audited — all in the daemon, under its own watchdog
 - **PID file audit**: Final safety net catches any orphaned llama-server processes
 - **No resource leaks**: Proper cleanup prevents thread exhaustion and zombie processes
 

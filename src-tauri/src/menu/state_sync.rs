@@ -11,23 +11,26 @@
 //! needs — the shared part is just the proxy, which is all the tray displays.
 
 use crate::app::AppState;
+use crate::daemon::DaemonSnapshot;
 use crate::tray;
 use tauri::AppHandle;
 use tracing::warn;
 
 /// Sync every surface that displays application state.
 ///
-/// Called by `commands::util` (frontend-driven changes), `proxy_actions`
-/// (tray- and autostart-driven changes), and app setup for the initial paint.
+/// Called by `daemon::watch` whenever the daemon's state changes, and by
+/// `commands::util` when the selected model does.
+///
+/// The snapshot is cloned out of its lock rather than read through it: both
+/// surfaces below await, and the tray's await is a D-Bus round trip on Linux.
 pub async fn sync_all_state(
     app: &AppHandle,
     state: &tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let proxy_running = *state.proxy_enabled.read().await;
-    let proxy_port = *state.proxy_port.read().await;
+    let snapshot = state.snapshot.read().await.clone();
 
-    sync_app_menu(state, proxy_running).await?;
-    tray::sync(app, proxy_running, proxy_port).await?;
+    sync_app_menu(state, &snapshot).await?;
+    tray::sync(app, &snapshot).await?;
 
     Ok(())
 }
@@ -39,7 +42,7 @@ pub async fn sync_all_state(
 #[cfg(target_os = "macos")]
 async fn sync_app_menu(
     state: &tauri::State<'_, AppState>,
-    proxy_running: bool,
+    snapshot: &DaemonSnapshot,
 ) -> Result<(), String> {
     use crate::menu::MenuState;
     use gglib_runtime::llama::check_llama_installed;
@@ -52,31 +55,14 @@ async fn sync_app_menu(
 
     let selected_id = *state.selected_model_id.read().await;
 
-    // A selected model with a running server enables Stop rather than Start.
-    // Read from the daemon — the owner of every llama-server.
-    let selected_model_server_active = if let Some(id) = selected_id {
-        state
-            .daemon
-            .get_json("/api/servers")
-            .await
-            .ok()
-            .and_then(|v| {
-                v.as_array().map(|servers| {
-                    servers
-                        .iter()
-                        .any(|s| s.get("model_id").and_then(serde_json::Value::as_i64) == Some(id))
-                })
-            })
-            .unwrap_or(false)
-    } else {
-        false
-    };
-
     menu.sync_state(&MenuState {
         llama_installed: check_llama_installed(),
-        proxy_running,
+        proxy_running: snapshot.proxy_running,
         model_selected: selected_id.is_some(),
-        selected_model_server_active,
+        // A selected model with a running server enables Stop rather than
+        // Start. The snapshot already carries every resident model id, so this
+        // no longer costs a `/api/servers` round trip of its own.
+        selected_model_server_active: selected_id.is_some_and(|id| snapshot.serves(id)),
     })
     .map_err(|e| format!("Failed to sync menu state: {e}"))
 }
@@ -87,7 +73,7 @@ async fn sync_app_menu(
 #[allow(clippy::unused_async)] // Mirrors the macOS signature.
 async fn sync_app_menu(
     _state: &tauri::State<'_, AppState>,
-    _proxy_running: bool,
+    _snapshot: &DaemonSnapshot,
 ) -> Result<(), String> {
     Ok(())
 }

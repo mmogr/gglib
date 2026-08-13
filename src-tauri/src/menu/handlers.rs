@@ -1,9 +1,8 @@
 //! Menu event handling.
 
-use crate::app::AppState;
 use crate::app::events::{emit_or_log, names};
 use crate::menu::ids;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tracing::debug;
 
 /// Handle menu item click events.
@@ -78,12 +77,6 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 fn handle_copy_proxy_url(app: &AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        let state: tauri::State<AppState> = app_clone.state();
-        let proxy_port = *state.proxy_port.read().await;
-
-        // Build URL from stored proxy port (or default)
-        let port = proxy_port.unwrap_or(8080);
-        let url = format!("http://127.0.0.1:{}/v1", port);
-        emit_or_log(&app_clone, names::MENU_COPY_TO_CLIPBOARD, url);
+        crate::proxy_actions::copy_endpoint_url(&app_clone).await;
     });
 }
