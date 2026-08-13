@@ -153,8 +153,9 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           disabled={saving}
         >
           On by default: a turn that may emit structured output has its temperature
-          capped (0.6 on reasoning-tagged models, 0.3 otherwise) — but only over a
-          value nobody deliberately chose. Anything set by a person stands.
+          capped to 0.3 — but only over a value nobody deliberately chose, and never
+          on a reasoning-tagged model, whose thinking block shares one sampler with
+          its tool call. Anything set by a person stands.
         </ToggleField>
 
         <ToggleField

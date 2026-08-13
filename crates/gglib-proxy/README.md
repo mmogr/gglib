@@ -353,23 +353,34 @@ request params  →  profile  →  model defaults  →  global settings  →  ha
    catalog (`ModelSummary::inference_defaults`).
 4. **Global settings** — `Settings::inference_defaults`, read from the
    per-request settings snapshot (`settings_cache`).
-5. **Hardcoded fallback** — `temperature=0.7`, `top_p=0.95`, `top_k=40`,
-   `repeat_penalty=1.0`, `presence_penalty=0.0`, `min_p=0.05`. **`max_tokens`
-   has no fallback**: because resolution force-writes every set parameter, one
-   here would cap every request that did not name its own. Left unset, no
-   `max_tokens` key is sent and llama-server generates until a stop token or the
-   context limit. `min_p=0.05` restates llama.cpp's own default for the same
-   force-write reason, in reverse: a `0.0` here would not read as "unset", it
-   would be written, explicitly disabling the tail cut on every request.
-   A `reasoning`-tagged model floors at `presence_penalty=1.0` and `min_p=0.0`
-   instead — the two parameters whose floor is model-dependent.
+5. **Hardcoded fallback** — `temperature=0.7`, and nothing else. Every other
+   parameter is deferred to llama.cpp, which is a decision rather than an
+   omission: [ADR 0003](../../docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md) finding 1 measured each of them equal to the upstream
+   default on the pinned build, so asserting one again would mean overriding
+   whatever upstream chooses next. This floor listed six values until that
+   measurement; `docs/sampling.md` has the current table.
 
-A request carrying a non-empty `tools` array has its temperature **capped** —
-`0.6` on a `reasoning`-tagged model, `0.3` otherwise — but only when the value
-that won came from an auto-detected recipe or the floor. Anything a person set
-stands. Reasoning models are capped far higher because the `<think>` block and
-the tool call share one sampler configuration, and both Qwen3 and DeepSeek-R1
-warn that near-greedy thinking degrades into endless repetition. DRY is not
+   **`max_tokens` has no fallback**: because resolution force-writes every set
+   parameter, one here would cap every request that did not name its own. Left
+   unset, no `max_tokens` key is sent and llama-server generates until a stop
+   token or the context limit.
+
+   A `reasoning`-tagged model does still take a profile of its own
+   (`InferenceConfig::reasoning_profile`), which is a layer above this floor
+   rather than a variant of it.
+
+A request carrying a non-empty `tools` array has its temperature **capped to
+`0.3`** — but only when the value that won came from an auto-detected recipe or
+the floor. Anything a person set stands.
+
+A `reasoning`-tagged model is **not capped at all**. It used to be, at `0.6`;
+[ADR 0004](../../docs/adr/0004-observe-the-sampling-boundary.md)'s addendum named the evidence that would change that, the experiment
+ran, and the cap lost on every count — the uncapped recipe temperature beat it
+on paired composite (p = 0.0099), tool-call formatting passed 100% uncapped
+against 98.6% under the cap, and cooling the model *increased* the
+loop/stagnation triggers the cap was supposed to avoid. A reasoning model
+decodes its `<think>` block and its tool call under one sampler configuration,
+so a cap imposed for structured output lands on the thinking too. DRY is not
 touched. Disable with `gglib config settings set --agentic-sampling false` or
 `GGLIB_DISABLE_AGENTIC_SAMPLING=1`; see
 [Sampling resolution](../../docs/sampling.md#the-agentic-turn-temperature-ceiling).
