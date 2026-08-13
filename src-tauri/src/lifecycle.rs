@@ -8,6 +8,7 @@
 //! awaited before exit.
 
 use crate::app::AppState;
+use crate::daemon::Ownership;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -77,7 +78,7 @@ pub fn request_shutdown(app: &AppHandle) {
 ///
 /// Reach this through [`request_shutdown`] rather than calling it directly.
 async fn perform_shutdown(state: &AppState) {
-    if !state.daemon.hosted_in_process {
+    if state.daemon.ownership != Ownership::Hosted {
         info!("External daemon stays running - nothing to tear down");
         return;
     }

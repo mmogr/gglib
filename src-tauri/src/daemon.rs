@@ -22,14 +22,30 @@ const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
 /// How long to wait for a launched (or in-process) daemon to come up.
 const LAUNCH_WAIT: Duration = Duration::from_secs(15);
 
+/// How this app came by the daemon it is talking to.
+///
+/// The distinction decides what quitting is allowed to take down with it, and
+/// [`Daemon::connect_or_launch`] already knows it — it used to be flattened
+/// into a single "hosted" bool, which could not tell a daemon we started from
+/// one that was already serving somebody else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ownership {
+    /// Already answering when we probed. Someone else's — a CLI session's, or
+    /// an earlier app instance's — so this app does not get to end it.
+    Adopted,
+    /// We spawned `gglib daemon run` detached, so it is ours to stop.
+    Launched,
+    /// Running inside this process (bundle-only fallback). Its lifetime is
+    /// this app's whether we like it or not.
+    Hosted,
+}
+
 /// A connected daemon.
 pub struct Daemon {
     /// Shared HTTP client for daemon calls.
     pub client: reqwest::Client,
-    /// Whether this app process hosts the daemon itself (bundle-only
-    /// fallback). Decides shutdown behaviour: a hosted daemon dies with the
-    /// app; an external one is left running.
-    pub hosted_in_process: bool,
+    /// How this app came by it — see [`Ownership`].
+    pub ownership: Ownership,
 }
 
 /// The daemon's base URL — fixed loopback port by design.
@@ -72,7 +88,7 @@ impl Daemon {
                 info!("connected to running gglib daemon");
                 return Ok(Self {
                     client,
-                    hosted_in_process: false,
+                    ownership: Ownership::Adopted,
                 });
             }
             Probe::Foreign => {
@@ -83,12 +99,12 @@ impl Daemon {
             Probe::NotRunning => {}
         }
 
-        // Prefer an external daemon: it outlives this app, which is what
-        // makes the proxy a background service rather than an app feature.
-        let hosted_in_process = match spawn_external_daemon() {
+        // Prefer an external daemon: it survives a crash of this app, and it
+        // is the same process the CLI would have started.
+        let ownership = match spawn_external_daemon() {
             Ok(()) => {
                 info!("launched external gglib daemon");
-                false
+                Ownership::Launched
             }
             Err(e) => {
                 warn!("no external gglib binary ({e}); hosting the daemon in-process");
@@ -100,7 +116,7 @@ impl Daemon {
                         error!("in-process daemon exited with error: {e}");
                     }
                 });
-                true
+                Ownership::Hosted
             }
         };
 
@@ -109,10 +125,7 @@ impl Daemon {
             tokio::time::sleep(Duration::from_millis(250)).await;
             match probe(&client).await {
                 Probe::Running => {
-                    return Ok(Self {
-                        client,
-                        hosted_in_process,
-                    });
+                    return Ok(Self { client, ownership });
                 }
                 Probe::Foreign => {
                     return Err(format!(

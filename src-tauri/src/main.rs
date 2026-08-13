@@ -49,10 +49,10 @@ fn main() {
             // the daemon composition in this process behind the same lock.
             let daemon = tauri::async_runtime::block_on(Daemon::connect_or_launch())
                 .expect("Failed to reach or start the gglib daemon");
-            let hosted = daemon.hosted_in_process;
+            let ownership = daemon.ownership;
             let app_state = AppState::new(Arc::new(daemon));
             app.manage(app_state);
-            info!(hosted_in_process = hosted, "daemon connection established");
+            info!(?ownership, "daemon connection established");
 
             // Downloads run on the daemon and need nothing provisioned in
             // this process, so the subsystem is ready by construction.
