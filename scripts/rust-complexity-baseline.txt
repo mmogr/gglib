@@ -21,7 +21,6 @@ crates/gglib-app-services/src/types.rs 911
 crates/gglib-axum/src/bootstrap.rs 345
 crates/gglib-axum/src/chat_api.rs 761
 crates/gglib-axum/src/handlers/config/setup.rs 398
-crates/gglib-axum/src/handlers/proxy.rs 387
 crates/gglib-axum/src/routes.rs 479
 crates/gglib-axum/tests/integration_routes.rs 1280
 crates/gglib-cli/src/commands.rs 416

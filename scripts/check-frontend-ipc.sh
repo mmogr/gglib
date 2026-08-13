@@ -9,15 +9,19 @@
 # Run this in CI to prevent architectural regression.
 # Policy: Only OS integration commands should be invoked from frontend.
 #
-# Allowlist (8 commands):
+# Allowlist (7 commands):
 #   - get_embedded_api_info (API discovery)
 #   - check_llama_status (binary management)
 #   - install_llama (binary management)
 #   - open_url (shell integration)
 #   - set_selected_model (menu sync)
 #   - sync_menu_state (menu sync)
-#   - set_proxy_state (proxy/menu state)
 #   - log_from_frontend (frontend log ingestion)
+#
+# `set_proxy_state` was here until the tray began reading proxy state from the
+# daemon rather than being told it. Allowlisting a command that no longer
+# exists is worse than useless: this gate would pass an `invoke` that can only
+# fail at runtime, which is exactly the class of thing it was written to catch.
 
 set -euo pipefail
 
@@ -44,7 +48,6 @@ ALLOWED_COMMANDS=(
     "open_url"
     "set_selected_model"
     "sync_menu_state"
-    "set_proxy_state"
     "log_from_frontend"
 )
 
