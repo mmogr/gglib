@@ -74,6 +74,21 @@ pub fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
     )
 }
 
+/// Tell the user an action they asked for did not happen.
+///
+/// The tray has no toast host and, with close-to-tray on, often no window
+/// either — so a failed menu item used to be an `error!` in a log nobody was
+/// reading and a menu that appeared to do nothing at all. The daemon's own
+/// messages are worth showing verbatim: "Port 8080 is already in use … Stop
+/// it, or change the proxy port in Settings" is the whole answer.
+pub fn report_failure(app: &AppHandle, title: &str, detail: &str) {
+    app.dialog()
+        .message(detail)
+        .title(title)
+        .kind(MessageDialogKind::Error)
+        .blocking_show();
+}
+
 /// Put one warning on screen and wait for an answer.
 fn ask(app: &AppHandle, title: &str, message: &str, confirm: &str) -> bool {
     app.dialog()

@@ -74,9 +74,7 @@ fn spawn_proxy(app: AppHandle, start: bool) {
             proxy_actions::stop(&app).await
         };
 
-        if let Err(e) = result {
-            error!(error = %e, start, "Tray proxy action failed");
-        }
+        report(&app, result, start, "proxy", "Could not start the proxy");
     });
 }
 
@@ -103,12 +101,35 @@ fn spawn_service(app: AppHandle, start: bool) {
             Ok(())
         };
 
-        if let Err(e) = result {
-            error!(error = %e, start, "Tray service action failed");
-        }
+        report(
+            &app,
+            result,
+            start,
+            "service",
+            "Could not start the gglib service",
+        );
 
         state.refresh.now();
     });
+}
+
+/// Log a menu action's outcome, and put a failed *start* on screen.
+///
+/// Starting is where the interesting failures live — a port already in use, no
+/// `gglib` binary to launch — and the daemon's own message names both the
+/// cause and the fix, so it is shown verbatim. Stopping is left to the log: it
+/// is idempotent on both routes, so a failure there means the thing the user
+/// wanted gone is already gone.
+fn report(app: &AppHandle, result: Result<(), String>, start: bool, kind: &str, title: &str) {
+    let Err(e) = result else {
+        return;
+    };
+
+    error!(error = %e, start, kind, "Tray action failed");
+
+    if start {
+        confirm::report_failure(app, title, &e);
+    }
 }
 
 /// Bring the main window forward and ask it to open settings.

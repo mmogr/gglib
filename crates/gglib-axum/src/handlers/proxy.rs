@@ -223,6 +223,18 @@ pub async fn start(
             if !matches!(http, HttpError::Conflict(_)) {
                 return Err(http);
             }
+
+            // `Conflict` covers two different outcomes. `AlreadyRunning` is
+            // the idempotent success this branch exists for; `BindFailed` is
+            // somebody else's process on the port, and it leaves nothing
+            // running. Only the first is success, so ask which one happened
+            // rather than assuming — treating a bind failure as success
+            // answered 200 with `running: false` and discarded the one message
+            // that named the port and what to do about it.
+            if !fetch_status(&state).await.running {
+                return Err(http);
+            }
+
             let requested = cfg.pinned.as_ref().map(|p| p.name.clone());
             if requested.is_some() && state.proxy.pinned_model() != requested {
                 return Err(HttpError::Conflict(format!(
