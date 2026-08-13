@@ -7,17 +7,17 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | Script | Purpose | Used By |
 |--------|---------|---------|
 | [check_boundaries.sh](#check_boundariessh) | Validate crate dependency rules | CI |
-| [check-abstractions.sh](#check-abstractionssh) | Enforce database abstraction layer | CI |
 | [check-frontend-ipc.sh](#check-frontend-ipcsh) | Enforce Tauri invoke() allowlist | CI |
 | [check-tauri-commands.sh](#check-tauri-commandssh) | Enforce HTTP-first Tauri policy | CI |
-| [check_file_complexity.sh](#check_file_complexitysh) | Flag large files for decomposition | Manual |
+| [check_file_complexity.sh](#check_file_complexitysh) | TypeScript/CSS file-size ratchet | CI |
+| [check_rust_complexity.sh](#check_rust_complexitysh) | Rust file-size ratchet | CI |
+| [check_param_source_exhaustive.sh](#check_param_source_exhaustivesh) | No catch-all arm over `ParamSource` | CI |
+| [check_workflow_yaml.sh](#check_workflow_yamlsh) | No duplicate keys in workflow YAML | CI |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
 | [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
-| [discover_modules.sh](#discover_modulessh) | Auto-discover crate modules | Badge generation |
-| [generate_badges_for_crate.sh](#generate_badges_for_cratesh) | Generate badge JSONs for crate | CI (badges.yml) |
-| [generate_module_tables.sh](#generate_module_tablessh) | Update README badge tables | CI |
+| [generate_module_tables.sh](#generate_module_tablessh) | Update README badge tables | Manual |
 | [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Update submodule README templates | Manual |
 | [complexity_hotspots.sh](#complexity_hotspotssh) | Find high-complexity files | Manual |
 | [sync_versions.py](#sync_versionspy) | Sync version across package files | Release |
@@ -43,16 +43,6 @@ Validates workspace crate dependency boundaries enforcing the layered architectu
 **Output**: `boundary-status.json` with pass/fail per crate
 
 **Exit codes**: 0 = pass, 1 = violation
-
-### `check-abstractions.sh`
-
-Prevents leaky database abstractions by checking:
-1. `setup_database()` calls only in approved entry points
-2. Raw SQL (`sqlx::query`) only in approved database modules
-
-```bash
-./scripts/check-abstractions.sh
-```
 
 ### `check-frontend-ipc.sh`
 
@@ -92,6 +82,46 @@ Ensures platform-specific code (`isTauriApp`) never appears in client modules:
 
 ```bash
 ./scripts/check_transport_branching.sh
+```
+
+### `check_file_complexity.sh` / `check_rust_complexity.sh`
+
+The file-size ratchets, one per language. A file already over the 300-LOC
+budget is recorded in a baseline at its current size and may shrink freely;
+growing it fails. A file not in the baseline may not cross the line at all.
+
+A ratchet rather than a threshold because a threshold could not be switched on:
+174 Rust files and 24 TypeScript ones are already over. A gate that fails on
+every commit gets switched off within a day, which is how a constraint becomes
+decorative — and `check_file_complexity.sh` *was* decorative, documented in
+CONTRIBUTING and run by nothing at all.
+
+`--update` rewrites the baseline. Use it when a file legitimately grew and the
+growth is the point: the diff then shows the number going up.
+
+```bash
+./scripts/check_file_complexity.sh [--update]   # src/**/*.{ts,tsx,css}
+./scripts/check_rust_complexity.sh [--update]   # crates/ and src-tauri/
+```
+
+### `check_param_source_exhaustive.sh`
+
+Fails if anything matches on `ParamSource` with a catch-all arm — several
+decisions read it to mean "did a person choose this?", and a wildcard makes
+adding a variant a silent behaviour change instead of a compile error.
+
+```bash
+./scripts/check_param_source_exhaustive.sh
+```
+
+### `check_workflow_yaml.sh`
+
+Fails on duplicate mapping keys in `.github/workflows/`. GitHub rejects such a
+file outright — the run is marked "failed because of a workflow file issue" and
+no jobs start, including the one that would have caught it.
+
+```bash
+./scripts/check_workflow_yaml.sh
 ```
 
 ### `check_settings_surfaces.sh`
@@ -145,17 +175,6 @@ Automated script to download, build, and install `llama.cpp`:
 
 Used by `make llama-install-auto`.
 
-### `check_file_complexity.sh`
-
-Flags large files that should be decomposed based on LOC threshold:
-
-```bash
-./scripts/check_file_complexity.sh [threshold_loc]
-# Default threshold: 300 LOC
-```
-
-Checks TypeScript, TSX, and CSS files.
-
 ### `complexity_hotspots.sh`
 
 Generates a ranked list of high-complexity files using `scc`:
@@ -172,36 +191,6 @@ Requires [scc](https://github.com/boyter/scc) (`brew install scc`).
 ## Documentation Generation Scripts
 
 These scripts generate and maintain the badge tables and README documentation.
-
-### `discover_modules.sh`
-
-Auto-discovers modules in crate `src/` directories for badge generation:
-
-```bash
-./scripts/discover_modules.sh                         # All crates
-./scripts/discover_modules.sh gglib-core              # Specific crate
-./scripts/discover_modules.sh --modules-only gglib-core  # Module names only
-./scripts/discover_modules.sh --format=json           # JSON output
-```
-
-**Output format**: `CRATE:MODULE:BADGE_PREFIX`
-
-### `generate_badges_for_crate.sh`
-
-Generates badge JSON files for all modules in a crate:
-
-```bash
-./scripts/generate_badges_for_crate.sh <crate-name> <metric> [options]
-```
-
-**Metrics**: `loc`, `complexity`, `coverage`, `tests`
-
-**Options**:
-- `--lcov-file <path>` — Path to lcov.info (for coverage)
-- `--test-file <path>` — Path to test output (for tests)
-- `--output-dir <path>` — Output directory (default: `./badges`)
-
-Used by CI workflow `.github/workflows/badges.yml`.
 
 ### `generate_module_tables.sh`
 
@@ -269,8 +258,13 @@ Plain text instructions for macOS users explaining:
 
 The main CI workflows that use these scripts:
 
-| Workflow | Scripts Used |
-|----------|--------------|
-| `ci.yml` | `check_boundaries.sh`, `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh` |
-| `badges.yml` | `generate_badges_for_crate.sh`, `discover_modules.sh` |
-| `release.yml` | `sync_versions.py`, bundles `macos-install.command` |
+| Workflow | Job | Scripts Used |
+|----------|-----|--------------|
+| `ci.yml` | `boundaries` | `check_boundaries.sh` |
+| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` |
+| `ci.yml` | `quality` | `check_workflow_yaml.sh` |
+| `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
+| `bump-version.yml` | — | `sync_versions.py` |
+| `release.yml` | — | bundles `macos-install.command` |
+
+`badges.yml` inlines its own badge generation and invokes no script here.

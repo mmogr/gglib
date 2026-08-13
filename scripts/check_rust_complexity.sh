@@ -28,8 +28,12 @@ THRESHOLD=300
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASELINE="$ROOT_DIR/scripts/rust-complexity-baseline.txt"
 
+# `src-tauri` is a workspace member with several thousand lines of Rust and was
+# outside this scan until now — which is where the desktop refactor's growth
+# landed. Its two over-budget files enter the baseline at their current size,
+# like every other file did when this script was written.
 current_sizes() {
-  find "$ROOT_DIR/crates" -name "*.rs" -not -path "*/target/*" -exec wc -l {} + \
+  find "$ROOT_DIR/crates" "$ROOT_DIR/src-tauri" -name "*.rs" -not -path "*/target/*" -exec wc -l {} + \
     | awk -v root="$ROOT_DIR/" '$2 != "total" && $1 > '"$THRESHOLD"' {
         path = $2; sub(root, "", path); print path" "$1
       }' \
