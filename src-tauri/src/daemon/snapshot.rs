@@ -92,6 +92,12 @@ impl DaemonSnapshot {
     ///
     /// Binary search because [`Self::resident`] is sorted; this is what lets
     /// the macOS menu answer the question without its own HTTP call.
+    ///
+    /// That menu is also its only caller, and it does not exist off macOS —
+    /// where `sync_app_menu` is a no-op — so this is genuinely dead there
+    /// rather than merely unproven. Scoped to the platforms where that is
+    /// true, so a caller disappearing on macOS still fails the build.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     #[must_use]
     pub fn serves(&self, model_id: i64) -> bool {
         self.resident.binary_search(&model_id).is_ok()
