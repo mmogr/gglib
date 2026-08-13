@@ -1,19 +1,22 @@
 //! Observable events for the llama.cpp source-build pipeline.
 //!
-//! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by three
-//! surfaces, each adapting the event stream to its own output medium:
+//! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by
+//! one surface, which adapts the event stream to its own output medium:
 //!
 //! | Consumer    | Crate        | Output                                                                    |
 //! |-------------|--------------|--------------------------------------------------------------------------|
 //! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `consume_build_events_cli`         |
-//! | REST / SSE  | `gglib-axum` | Server-Sent Events at `POST /api/system/build-llama-from-source`          |
-//! | Desktop GUI | `gglib-tauri`| Tauri event `llama-build-progress` emitted to the WebView                 |
+//!
+//! There were two more. #834 removed both as dead end to end: the SSE route at
+//! `POST /api/system/build-llama-from-source` and the Tauri command behind it,
+//! neither of which had a caller, taking the `llama-build-progress` event the
+//! WebView listened for with them.
 //!
 //! The sender end is a `tokio::sync::mpsc::Sender<BuildEvent>` with capacity 64.
 //! When the sender is dropped the consumer loop terminates naturally.
 //!
-//! The event type is **not** feature-gated: all three surfaces import [`BuildEvent`]
-//! and [`BuildPhase`] unconditionally. Only the pipeline that *produces* the events
+//! The event type is **not** feature-gated: [`BuildEvent`] and [`BuildPhase`] are
+//! imported unconditionally. Only the pipeline that *produces* the events
 //! (in `build/` and `install/`) is gated behind `feature = "cli"`.
 
 use serde::Serialize;
