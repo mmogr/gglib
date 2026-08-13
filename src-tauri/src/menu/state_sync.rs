@@ -30,7 +30,7 @@ pub async fn sync_all_state(
     let snapshot = state.snapshot.read().await.clone();
 
     sync_app_menu(state, &snapshot).await?;
-    tray::sync(app, snapshot.proxy_running, snapshot.proxy_port).await?;
+    tray::sync(app, &snapshot).await?;
 
     Ok(())
 }

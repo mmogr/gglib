@@ -20,19 +20,21 @@ use ksni::{Handle as ServiceHandle, Icon, MenuItem, ToolTip, Tray, TrayMethods};
 use tauri::AppHandle;
 use tracing::{error, info};
 
-use crate::tray::icon::{self, TrayVisual};
+use crate::daemon::DaemonSnapshot;
+use crate::tray::icon::{self, TrayState};
 use crate::tray::items::{ITEMS, Item, is_enabled};
 use crate::tray::placement::Anchor;
 use crate::tray::{handlers, ids, window};
 
 /// The tray's own state. `ksni` regenerates the menu from this whenever
-/// [`ServiceHandle::update`] runs, so `sync` only has to assign fields.
+/// [`ServiceHandle::update`] runs, so `sync` only has to assign the snapshot.
+///
+/// One field rather than a copy of each thing drawn from it: [`icon::derive`]
+/// is pure and cheap, so every accessor below derives what it needs and the
+/// appearance cannot fall out of step with what the menu is enabling.
 struct GglibTray {
     app: AppHandle,
-    /// Endpoint status, shared with the tooltip and the menu's header.
-    status: String,
-    active: bool,
-    proxy_running: bool,
+    snapshot: DaemonSnapshot,
 }
 
 impl Tray for GglibTray {
@@ -41,16 +43,16 @@ impl Tray for GglibTray {
     }
 
     fn title(&self) -> String {
-        self.status.clone()
+        icon::derive(&self.snapshot).status
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        pixmap(self.active)
+        pixmap(icon::derive(&self.snapshot).state)
     }
 
     fn tool_tip(&self) -> ToolTip {
         ToolTip {
-            title: self.status.clone(),
+            title: icon::derive(&self.snapshot).status,
             ..ToolTip::default()
         }
     }
@@ -83,14 +85,14 @@ impl Tray for GglibTray {
                 // Disabled: a label, not a command. It is the only place the
                 // endpoint is visible on Linux, where tooltips are unreliable.
                 Item::Status => StandardItem {
-                    label: self.status.clone(),
-                    enabled: is_enabled(ids::STATUS, self.proxy_running),
+                    label: icon::derive(&self.snapshot).status,
+                    enabled: is_enabled(ids::STATUS, &self.snapshot),
                     ..StandardItem::default()
                 }
                 .into(),
                 Item::Action { id, label } => StandardItem {
                     label: label.to_owned(),
-                    enabled: is_enabled(id, self.proxy_running),
+                    enabled: is_enabled(id, &self.snapshot),
                     // Hands straight off; `dispatch` spawns anything slow, as
                     // ksni requires of a menu callback.
                     activate: Box::new(move |tray: &mut Self| handlers::dispatch(&tray.app, id)),
@@ -112,8 +114,8 @@ impl Tray for GglibTray {
     clippy::cast_possible_wrap,
     reason = "icon dimensions are far below i32::MAX"
 )]
-fn pixmap(active: bool) -> Vec<Icon> {
-    let Ok(image) = icon::for_state(active) else {
+fn pixmap(state: TrayState) -> Vec<Icon> {
+    let Ok(image) = icon::for_state(state) else {
         error!("Failed to decode tray icon");
         return Vec::new();
     };
@@ -140,12 +142,12 @@ pub struct Handle(ServiceHandle<GglibTray>);
 /// which the caller treats exactly as it treats a failed Tauri tray: the app
 /// runs, and `autostart::should_start_hidden` refuses to hide the window.
 pub fn build(app: &AppHandle) -> Result<Handle, String> {
-    let visual = icon::derive(false, None);
     let tray = GglibTray {
         app: app.clone(),
-        status: visual.status,
-        active: visual.active,
-        proxy_running: false,
+        // Nothing has been polled yet, and the default says so: the tray
+        // starts out reading "not running" rather than asserting a state it
+        // cannot know.
+        snapshot: DaemonSnapshot::default(),
     };
 
     // Blocking here matches the rest of `setup_app`, which is not itself inside
@@ -157,18 +159,14 @@ pub fn build(app: &AppHandle) -> Result<Handle, String> {
     Ok(Handle(handle))
 }
 
-/// Apply proxy state to the icon, tooltip and menu.
+/// Apply the daemon's state to the icon, tooltip and menu.
 ///
 /// One `update` for all three: `ksni` rebuilds the menu from the tray's state
 /// after the closure returns, so there is nothing to keep in step by hand.
-pub async fn sync(handle: &Handle, visual: &TrayVisual, proxy_running: bool) -> Result<(), String> {
+pub async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
     handle
         .0
-        .update(|tray| {
-            tray.status.clone_from(&visual.status);
-            tray.active = visual.active;
-            tray.proxy_running = proxy_running;
-        })
+        .update(|tray| tray.snapshot.clone_from(snapshot))
         .await;
 
     Ok(())

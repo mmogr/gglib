@@ -13,7 +13,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, Tray
 use tauri::{AppHandle, Wry};
 use tracing::error;
 
-use crate::tray::icon::{self, TrayVisual};
+use crate::daemon::DaemonSnapshot;
+use crate::tray::icon;
 use crate::tray::items::{ITEMS, Item, is_enabled};
 use crate::tray::placement::Anchor;
 use crate::tray::{handlers, ids, window};
@@ -27,13 +28,13 @@ pub struct TrayMenu {
 }
 
 impl TrayMenu {
-    /// Apply proxy state to every item that tracks it.
-    fn apply(&self, status: &str, proxy_running: bool) -> tauri::Result<()> {
+    /// Apply the daemon's state to every item that tracks it.
+    fn apply(&self, status: &str, snapshot: &DaemonSnapshot) -> tauri::Result<()> {
         for (id, item) in &self.items {
             if *id == ids::STATUS {
                 item.set_text(status)?;
             } else {
-                item.set_enabled(is_enabled(id, proxy_running))?;
+                item.set_enabled(is_enabled(id, snapshot))?;
             }
         }
         Ok(())
@@ -47,10 +48,11 @@ pub struct Handle {
     menu: TrayMenu,
 }
 
-/// Apply proxy state to the icon, tooltip and menu.
-pub async fn sync(handle: &Handle, visual: &TrayVisual, proxy_running: bool) -> Result<(), String> {
+/// Apply the daemon's state to the icon, tooltip and menu.
+pub async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
+    let visual = icon::derive(snapshot);
     let image =
-        icon::for_state(visual.active).map_err(|e| format!("Failed to decode tray icon: {e}"))?;
+        icon::for_state(visual.state).map_err(|e| format!("Failed to decode tray icon: {e}"))?;
 
     handle
         .tray
@@ -63,7 +65,7 @@ pub async fn sync(handle: &Handle, visual: &TrayVisual, proxy_running: bool) -> 
 
     handle
         .menu
-        .apply(&visual.status, proxy_running)
+        .apply(&visual.status, snapshot)
         .map_err(|e| format!("Failed to sync tray menu: {e}"))
 }
 
@@ -79,6 +81,10 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let mut separators = Vec::new();
     let mut order: Vec<(Option<&'static str>, usize)> = Vec::new();
 
+    // Nothing has been polled yet, and the default says so: the tray starts
+    // out reading "not running" rather than asserting a state it cannot know.
+    let initial = DaemonSnapshot::default();
+
     for item in ITEMS {
         match item {
             // Disabled: a label, not a command. It carries the endpoint into
@@ -87,8 +93,8 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
                 let status = MenuItem::with_id(
                     app,
                     ids::STATUS,
-                    icon::derive(false, None).status,
-                    is_enabled(ids::STATUS, false),
+                    icon::derive(&initial).status,
+                    is_enabled(ids::STATUS, &initial),
                     None::<&str>,
                 )?;
                 items.insert(ids::STATUS, status);
@@ -96,7 +102,7 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
             }
             Item::Action { id, label } => {
                 let built =
-                    MenuItem::with_id(app, *id, label, is_enabled(id, false), None::<&str>)?;
+                    MenuItem::with_id(app, *id, label, is_enabled(id, &initial), None::<&str>)?;
                 items.insert(id, built);
                 order.push((Some(id), 0));
             }
@@ -118,13 +124,14 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let menu = Menu::with_items(app, &refs)?;
     drop(refs);
 
+    let initial_visual = icon::derive(&initial);
     let tray = TrayIconBuilder::with_id(icon::TRAY_ID)
-        .icon(icon::idle_icon()?)
+        .icon(icon::for_state(initial_visual.state)?)
         // macOS recolours template images for light and dark menu bars. The
         // icons are pure black with the glyph carried by alpha, which is what
         // that mode expects.
         .icon_as_template(true)
-        .tooltip("gglib — proxy stopped")
+        .tooltip(&initial_visual.status)
         .menu(&menu)
         // Left click opens the panel; the menu stays on right click, so the
         // common action does not require reading a list first.

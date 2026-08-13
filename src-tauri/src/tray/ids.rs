@@ -12,11 +12,16 @@ pub const START_PROXY: &str = "tray_start_proxy";
 pub const STOP_PROXY: &str = "tray_stop_proxy";
 pub const COPY_PROXY_URL: &str = "tray_copy_proxy_url";
 
+/// Start the gglib daemon, when nothing is running.
+pub const START_SERVICE: &str = "tray_start_service";
+/// Stop the gglib daemon: the proxy, every llama-server, the lot.
+pub const STOP_SERVICE: &str = "tray_stop_service";
+
 /// Show the main window.
 pub const OPEN_MAIN: &str = "tray_open_main";
 pub const PREFERENCES: &str = "tray_preferences";
 
-/// Quit the application, stopping the proxy with it.
+/// Quit the application.
 pub const QUIT: &str = "tray_quit";
 
 #[cfg(test)]
@@ -33,6 +38,8 @@ mod tests {
             START_PROXY,
             STOP_PROXY,
             COPY_PROXY_URL,
+            START_SERVICE,
+            STOP_SERVICE,
             OPEN_MAIN,
             PREFERENCES,
             QUIT,

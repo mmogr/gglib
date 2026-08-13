@@ -5,6 +5,8 @@
 //! diverge, and the quit path stays in [`crate::lifecycle`] so the tray gets
 //! the same hardened shutdown as every other exit.
 
+use std::time::Duration;
+
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tracing::{debug, error};
@@ -15,6 +17,12 @@ use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::placement::Anchor;
 use crate::tray::{ids, window};
+
+/// How long to wait for a daemon asked to stop to actually go.
+///
+/// Matches the budget `lifecycle` gives a hosted daemon, which is in turn
+/// sized against the daemon's own 10-second shutdown watchdog.
+const SERVICE_STOP_WAIT: Duration = Duration::from_secs(12);
 
 /// Perform the action a menu item id names.
 ///
@@ -32,6 +40,8 @@ pub fn dispatch(app: &AppHandle, id: &str) {
         ids::OPEN_MAIN => spawn_ui(app.clone(), |app| window::show_main(&app)),
         ids::START_PROXY => spawn_proxy(app.clone(), true),
         ids::STOP_PROXY => spawn_proxy(app.clone(), false),
+        ids::START_SERVICE => spawn_service(app.clone(), true),
+        ids::STOP_SERVICE => spawn_service(app.clone(), false),
         ids::COPY_PROXY_URL => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
@@ -68,6 +78,32 @@ fn spawn_proxy(app: AppHandle, start: bool) {
         if let Err(e) = result {
             error!(error = %e, start, "Tray proxy action failed");
         }
+    });
+}
+
+/// Start or stop the daemon off the event thread.
+///
+/// Stopping waits for it to go before refreshing, so the tray repaints once
+/// the teardown has actually finished rather than showing a daemon that is
+/// halfway out. Starting is already synchronous — `restart` returns when the
+/// new daemon answers.
+fn spawn_service(app: AppHandle, start: bool) {
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+
+        let result = if start {
+            state.daemon.restart().await
+        } else {
+            state.daemon.request_shutdown().await;
+            state.daemon.wait_for_exit(SERVICE_STOP_WAIT).await;
+            Ok(())
+        };
+
+        if let Err(e) = result {
+            error!(error = %e, start, "Tray service action failed");
+        }
+
+        state.refresh.now();
     });
 }
 

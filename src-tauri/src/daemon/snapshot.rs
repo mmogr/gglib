@@ -67,6 +67,15 @@ impl DaemonSnapshot {
         }
     }
 
+    /// Whether gglib is consuming anything on this machine right now.
+    ///
+    /// The question a menu bar icon is actually asked. A resident model holds
+    /// VRAM whether or not the proxy is listening, so both count.
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.proxy_running || !self.resident.is_empty()
+    }
+
     /// The OpenAI-compatible endpoint to hand to another client.
     ///
     /// `None` unless the proxy is actually listening. Both menus already grey

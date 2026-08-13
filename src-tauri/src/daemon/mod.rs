@@ -129,27 +129,43 @@ impl Daemon {
             }
         };
 
-        let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
-        loop {
-            tokio::time::sleep(Duration::from_millis(250)).await;
-            match probe(&client).await {
-                Probe::Running => {
-                    return Ok(Self { client, ownership });
-                }
-                Probe::Foreign => {
-                    return Err(format!(
-                        "port {DAEMON_PORT} was taken by another program during startup"
-                    ));
-                }
-                Probe::NotRunning => {}
-            }
-            if tokio::time::Instant::now() >= deadline {
+        wait_until_healthy(&client).await?;
+
+        Ok(Self { client, ownership })
+    }
+
+    /// Start a daemon again after one has been stopped.
+    ///
+    /// The tray's Start gglib Service. Only ever launches an external daemon:
+    /// the in-process fallback is a one-shot at startup, and hosting a second
+    /// one inside a process that may still be unwinding the first is not worth
+    /// the failure modes.
+    ///
+    /// [`Ownership`] is deliberately not revised. An app that adopted
+    /// somebody's daemon, watched it stop, and started a new one keeps erring
+    /// toward leaving it alone at quit, which is the safe direction to be
+    /// wrong in.
+    ///
+    /// # Errors
+    ///
+    /// Fails when one is already running, when the port is held by a foreign
+    /// program, when no `gglib` binary can be found, or when the launched
+    /// daemon does not become healthy in time.
+    pub async fn restart(&self) -> Result<(), String> {
+        match probe(&self.client).await {
+            Probe::Running => return Err("the gglib daemon is already running".to_owned()),
+            Probe::Foreign => {
                 return Err(format!(
-                    "the gglib daemon did not come up within {}s",
-                    LAUNCH_WAIT.as_secs()
+                    "port {DAEMON_PORT} is held by another program (not a gglib daemon)"
                 ));
             }
+            Probe::NotRunning => {}
         }
+
+        spawn_external_daemon()?;
+        info!("relaunched external gglib daemon");
+
+        wait_until_healthy(&self.client).await
     }
 
     /// GET a JSON value from the daemon.
@@ -215,6 +231,32 @@ impl Daemon {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+}
+
+/// Poll until a just-launched daemon answers, or the launch budget runs out.
+async fn wait_until_healthy(client: &reqwest::Client) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
+
+    loop {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+
+        match probe(client).await {
+            Probe::Running => return Ok(()),
+            Probe::Foreign => {
+                return Err(format!(
+                    "port {DAEMON_PORT} was taken by another program during startup"
+                ));
+            }
+            Probe::NotRunning => {}
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            return Err(format!(
+                "the gglib daemon did not come up within {}s",
+                LAUNCH_WAIT.as_secs()
+            ));
         }
     }
 }
