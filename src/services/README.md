@@ -76,15 +76,23 @@ The `clients/` directory contains domain-specific API functions:
 
 ## Server Event Types
 
-Events are the source of truth for server state. All events flow from the Rust backend:
+Events are the source of truth for server state. They arrive from the daemon
+over SSE (`/api/events`) — one path, desktop and web alike — and are normalized
+into the registry's union by `serverEvents.normalize.ts`:
 
-| Event | Description |
+| `AppEvent` type | Description |
 |-------|-------------|
-| `server:snapshot` | Initial state of all running servers (emitted on app init) |
-| `server:started` | Server started and ready |
-| `server:stopped` | Server stopped cleanly |
-| `server:error` | Server encountered an error |
-| `server:health_changed` | Server health status changed |
+| `server_snapshot` | Initial state of all running servers (emitted at daemon startup) |
+| `server_started` | Server started and ready |
+| `server_stopped` | Server stopped cleanly |
+| `server_error` | Server encountered an error |
+| `server_health_changed` | Server health status changed |
+
+There is no Tauri-event branch. There was one, listening for these same names
+in `server:started` form on the Tauri bus, and nothing emitted them once the
+GUI backend moved into the daemon — so the desktop registry was never
+populated. `tests/ts/services/server/serverEvents.init.test.ts` pins the
+single-path invariant against both platforms.
 
 ## Platform Utilities
 

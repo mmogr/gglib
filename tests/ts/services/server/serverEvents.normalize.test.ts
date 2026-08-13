@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import {
-  normalizeServerEventFromAppEvent,
-  normalizeServerEventFromNamedEvent,
-} from '../../../../src/services/serverEvents.normalize';
+import { normalizeServerEventFromAppEvent } from '../../../../src/services/serverEvents.normalize';
 import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../../fixtures/ports';
 
 describe('serverEvents.normalize', () => {
@@ -184,15 +181,8 @@ describe('serverEvents.normalize', () => {
     expect(evt).toBeNull();
   });
 
-  it('named-event path matches app-event path for snapshot', () => {
-    const payload = {
-      type: 'server_snapshot',
-      servers: [{ modelId: 1, port: MOCK_PROXY_PORT, started_at: 1_700_000_000 }],
-    };
-
-    const a = normalizeServerEventFromAppEvent(payload);
-    const b = normalizeServerEventFromNamedEvent('server:snapshot', payload);
-
-    expect(b).toEqual(a);
+  it('ignores an event type it does not know', () => {
+    expect(normalizeServerEventFromAppEvent({ type: 'server:snapshot' })).toBeNull();
+    expect(normalizeServerEventFromAppEvent({ type: 'download_progress' })).toBeNull();
   });
 });

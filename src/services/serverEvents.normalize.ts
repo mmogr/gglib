@@ -1,19 +1,19 @@
 /**
- * Shared server lifecycle event normalization.
+ * Server lifecycle event normalization.
  *
- * Keeps Tauri and Web(SSE) behavior identical by translating backend event payloads
- * into the `serverRegistry` event union.
+ * Translates the daemon's `AppEvent` payloads into the `serverRegistry` event
+ * union, tolerantly: unknown types, malformed records and ids that will not
+ * coerce are dropped rather than becoming garbage registry keys.
+ *
+ * There used to be a second entry point here keyed by Tauri event *name*
+ * (`server:started` and friends), because the desktop app listened on the
+ * Tauri bus while the web build listened over SSE. Nothing emitted those
+ * names once the GUI backend moved into the daemon, so both surfaces now
+ * arrive through `normalizeServerEventFromAppEvent`.
  */
 
 import type { ServerEvent } from './serverRegistry';
 import type { RuntimeErrorInfo } from '../types';
-
-export type CanonicalServerEventName =
-  | 'server:snapshot'
-  | 'server:started'
-  | 'server:stopped'
-  | 'server:error'
-  | 'server:health_changed';
 
 function toRecord(payload: unknown): Record<string, unknown> | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -151,32 +151,6 @@ function normalizeLifecycle(
 
   // server:error may omit modelId on the Rust side; ignore in that case.
   return { type: 'crashed', modelId, port, updatedAt, modelName, error: toRuntimeErrorInfo(data.error) };
-}
-
-/**
- * Normalize a named canonical server:* event (Tauri uses event names).
- */
-export function normalizeServerEventFromNamedEvent(
-  eventName: CanonicalServerEventName,
-  payload: unknown
-): ServerEvent | null {
-  const data = toRecord(payload);
-  if (!data) return null;
-
-  switch (eventName) {
-    case 'server:snapshot':
-      return normalizeSnapshot(data);
-    case 'server:started':
-      return normalizeLifecycle('running', data);
-    case 'server:stopped':
-      return normalizeLifecycle('stopped', data);
-    case 'server:error':
-      return normalizeLifecycle('crashed', data);
-    case 'server:health_changed':
-      return normalizeHealthChanged(data);
-    default:
-      return null;
-  }
 }
 
 /**
