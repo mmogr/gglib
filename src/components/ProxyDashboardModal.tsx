@@ -97,13 +97,14 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
         </section>
 
         {/*
-          The loop's decisions, visible where the operator already looks.
+          What the gate decided, visible where the operator already looks.
           Refusals shown beside applies: a feed of only applies would read
-          as a system that always meddles.
+          as a system that always meddles — and since ADR 0006 every run here
+          is one a person asked for, so there is no loop to speak of.
         */}
         <section>
           <h3 className="m-0 text-sm font-semibold text-text mb-sm">
-            Auto-Tune Activity
+            Tune Activity
           </h3>
           <TuneActivityCard />
         </section>

@@ -2023,10 +2023,7 @@ dependencies = [
  "async-trait",
  "futures-core",
  "futures-util",
- "gglib-app-services",
  "gglib-core",
- "gglib-db",
- "gglib-runtime",
  "reqwest 0.13.4",
  "serde_json",
  "tokio",
@@ -2037,7 +2034,6 @@ dependencies = [
 name = "gglib-app"
 version = "0.13.0"
 dependencies = [
- "async-trait",
  "dotenvy",
  "gglib-app-services",
  "gglib-axum",

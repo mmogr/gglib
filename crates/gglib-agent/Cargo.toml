@@ -27,8 +27,5 @@ serde_json   = { workspace = true }
 workspace = true
 
 [dev-dependencies]
-gglib-runtime       = { path = "../gglib-runtime" }
-gglib-app-services  = { path = "../gglib-app-services" }
-gglib-db            = { path = "../gglib-db", features = ["test-utils"] }
 reqwest             = { workspace = true }
 tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }
