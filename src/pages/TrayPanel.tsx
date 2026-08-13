@@ -1,9 +1,16 @@
 /**
  * TrayPanel — the popover behind the system tray icon.
  *
- * Answers the two questions the tray exists for: is the endpoint up, and what
- * is it doing. Everything it renders comes from `components/proxy/`, so it
- * cannot drift from the in-app dashboard.
+ * Answers the questions the tray exists for: is there a service, is the
+ * endpoint up, and what is it doing. Everything it renders comes from
+ * `components/proxy/`, so it cannot drift from the in-app dashboard.
+ *
+ * The first of those three is newer than the others. This panel read only
+ * `useProxyState()`, which reports `{running: false}` for a stopped proxy and
+ * for a daemon that is not answering — so a machine with no daemon was told
+ * "The proxy is stopped", and its Start button fell into a connection error.
+ * The native tray menu had learned the difference; the popover behind it had
+ * not.
  *
  * Window-level actions (open gglib, preferences, quit) are deliberately absent:
  * they live on the native tray menu, handled in Rust. Keeping them there means
@@ -21,6 +28,7 @@ import {
   ProxyToggleButton,
 } from '../components/proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
+import { useDaemonReachable } from '../hooks/useDaemonReachable';
 import { useProxyState } from '../services/proxyRegistry';
 import { initProxyEvents, cleanupProxyEvents } from '../services/proxyEvents';
 import { getTransport } from '../services/transport';
@@ -54,6 +62,10 @@ function describeError(err: unknown): string {
 
 export const TrayPanel: FC = () => {
   const proxy = useProxyState();
+  // `useProxyState` reports {running: false} for a stopped proxy and for a
+  // daemon that is not answering. Only one of those is worth offering a Start
+  // button for; the other needs the tray menu's Start gglib Service.
+  const daemonReachable = useDaemonReachable();
   const [proxyApiKey, setProxyApiKey] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,11 +154,17 @@ export const TrayPanel: FC = () => {
     <div className="flex flex-col h-screen bg-background text-text overflow-hidden tabular-nums">
       <header className="flex items-center justify-between px-base py-md border-b border-border-light shrink-0">
         <span className="text-sm font-semibold">gglib</span>
-        <ProxyStatusPill running={proxy.running} />
+        <ProxyStatusPill running={proxy.running} daemonReachable={daemonReachable !== false} />
       </header>
 
       <div className="flex-1 overflow-y-auto px-base py-md flex flex-col gap-md">
-        {proxy.running && proxy.port !== null ? (
+        {daemonReachable === false ? (
+          <p className="text-sm text-text-muted">
+            The gglib service is not running, so there is nothing to serve models
+            from. Start it from the tray menu — right-click the icon and choose
+            Start gglib Service.
+          </p>
+        ) : proxy.running && proxy.port !== null ? (
           <>
             <div className="flex flex-col gap-xs">
               <EndpointCopyBar
@@ -183,6 +201,12 @@ export const TrayPanel: FC = () => {
         <ProxyToggleButton
           running={proxy.running}
           pending={pending}
+          // Disabled rather than hidden while the daemon is away: a button
+          // moving under the pointer as the daemon comes up is worse than one
+          // visibly not available yet, and a Start that can only fail teaches
+          // nothing. Not `pending`, which would read "Starting…" at a proxy
+          // that is not starting.
+          disabled={daemonReachable !== true}
           onStart={handleStart}
           onStop={handleStop}
         />

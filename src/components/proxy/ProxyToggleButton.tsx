@@ -7,6 +7,12 @@ interface ProxyToggleButtonProps {
   running: boolean;
   /** Disables the button and switches the label to its -ing form. */
   pending: boolean;
+  /**
+   * Disables without changing the label — the action is unavailable rather
+   * than in progress. Reusing `pending` for this reads "Starting…" while
+   * nothing is starting, which is a worse lie than a greyed-out button.
+   */
+  disabled?: boolean;
   onStart: () => void;
   onStop: () => void;
   className?: string;
@@ -26,6 +32,7 @@ const LABELS = {
 export const ProxyToggleButton: FC<ProxyToggleButtonProps> = ({
   running,
   pending,
+  disabled = false,
   onStart,
   onStop,
   className = 'w-full p-md rounded-md text-sm font-semibold',
@@ -37,7 +44,7 @@ export const ProxyToggleButton: FC<ProxyToggleButtonProps> = ({
       variant={running ? 'dangerGhost' : 'primary'}
       className={className}
       onClick={running ? onStop : onStart}
-      disabled={pending}
+      disabled={pending || disabled}
       leftIcon={<Icon icon={Power} size={14} />}
     >
       {pending ? labels.pending : labels.idle}

@@ -61,6 +61,7 @@ function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot
 describe('TrayPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    transport.getProxyStatus.mockResolvedValue({ running: false, port: null });
     proxyState.current = { running: false, port: null };
     dashboard.current = { snapshot: null, connected: false };
     Object.assign(navigator, {
@@ -176,5 +177,72 @@ describe('TrayPanel', () => {
     expect(screen.queryByRole('button', { name: /open gglib/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /quit/i })).not.toBeInTheDocument();
     expect(screen.getByText(/right-click the tray icon/i)).toBeInTheDocument();
+  });
+
+  /**
+   * A daemon that is not answering and a proxy that is switched off both
+   * arrive as `{running: false}` from `useProxyState`. They are not the same
+   * situation: one needs the Start button, the other needs a service that
+   * does not exist yet, and only the tray menu can start that.
+   *
+   * Before this, a machine with no daemon read "The proxy is stopped" and its
+   * Start button fell into a connection error.
+   */
+  describe('with no daemon answering', () => {
+    beforeEach(() => {
+      transport.getProxyStatus.mockRejectedValue(new Error('fetch failed'));
+    });
+
+    it('says the service is missing, not that the proxy is stopped', async () => {
+      render(<TrayPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/gglib service is not running/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/openai-compatible endpoint/i)).not.toBeInTheDocument();
+    });
+
+    it('points at the surface that can actually start it', async () => {
+      render(<TrayPanel />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/start gglib service/i)).toBeInTheDocument();
+      });
+    });
+
+    it('distinguishes no service from a stopped proxy in the pill', async () => {
+      render(<TrayPanel />);
+
+      await waitFor(() => expect(screen.getByText('No service')).toBeInTheDocument());
+      expect(screen.queryByText('Stopped')).not.toBeInTheDocument();
+    });
+
+    /**
+     * Disabled rather than "Starting…": the action is unavailable, not in
+     * progress, and a Start that can only fail teaches nothing.
+     */
+    it('disables Start without pretending it is starting', async () => {
+      render(<TrayPanel />);
+
+      const button = await screen.findByRole('button', { name: /start proxy/i });
+      await waitFor(() => expect(button).toBeDisabled());
+      expect(screen.queryByText(/starting…/i)).not.toBeInTheDocument();
+    });
+
+    /**
+     * The probe polls, so a daemon that comes up is picked up without the
+     * popover being reopened.
+     */
+    it('recovers when the daemon starts answering', async () => {
+      render(<TrayPanel />);
+      await waitFor(() => expect(screen.getByText('No service')).toBeInTheDocument());
+
+      transport.getProxyStatus.mockResolvedValue({ running: false, port: null });
+
+      await waitFor(() => expect(screen.getByText('Stopped')).toBeInTheDocument(), {
+        timeout: 4000,
+      });
+      expect(screen.getByRole('button', { name: /start proxy/i })).toBeEnabled();
+    });
   });
 });
