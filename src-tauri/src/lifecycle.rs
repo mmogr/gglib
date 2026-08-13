@@ -5,7 +5,7 @@
 //! with the tray icon gone and nothing on screen to say so — was one button
 //! doing another's job.
 //!
-//! What quitting ends is decided by [`Ownership`]: a daemon this app launched
+//! What quitting ends is decided by [`crate::daemon::Ownership`]: one this app launched
 //! or hosts gets its ordered teardown (proxy drain, child shutdown, pidfile
 //! audit) triggered over the API and awaited before exit. One that was already
 //! answering when the app connected belongs to whoever started it and is left

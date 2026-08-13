@@ -2,18 +2,42 @@
 
 System tray icon, menu and popover panel.
 
-The tray is what makes the proxy usable as a background service: with
+The tray is what makes gglib usable as a background service: with
 `close_to_tray` and `proxy_autostart` set, gglib's window is incidental and the
-tray is the whole interface. The icon reflects the **proxy**, not the
-application — the app being open says nothing about whether anything is being
-served, and an icon that lit up merely because gglib was running would answer
-a question nobody asked.
+tray is the whole interface.
+
+## What the icon means
+
+**Consumption, not existence.** Not the application — an icon that lit up
+merely because a window was open would answer a question nobody asked — and not
+a live daemon either, which is the trap the obvious reading falls into: nearly
+every CLI command calls `ensure_daemon()` and leaves one running, so an icon lit
+by that would be lit permanently and mean nothing.
+
+What it reports is whether gglib is doing something to this machine right now:
+
+| | |
+|---|---|
+| **Offline** | No daemon answering. gglib is not running here. |
+| **Idle** | A daemon is up, serving nothing and holding nothing. |
+| **Active** | The proxy is listening, **or** a model is resident. |
+
+The `or` is the point. The runtime holds up to `SLOT_COUNT` models in VRAM, and
+`gglib chat`, `gglib serve` and benchmarks all leave one there with the proxy
+stopped. An icon that tracked only the proxy showed idle while tens of
+gigabytes were spoken for — which is precisely the question a menu bar is good
+at answering.
+
+This was a proxy-only tray until the daemon consolidation moved runtime
+ownership out of the desktop app. The rule did not change; what counts as
+"exists" did.
 
 # Module Structure
 
 - `ids` — tray menu item ID constants
 - `items` — the menu itself: order, labels, and the one enabled rule
 - `icon` — the tray id, the decoded icons, and pure state → appearance derivation
+- `confirm` — what a teardown would cost, and the dialogs that say so
 - `handlers` — `dispatch(app, id)`, the single router every backend calls
 - `build` — the `muda` backend (macOS, Windows)
 - `linux` — the `StatusNotifierItem` backend (Linux)
@@ -21,26 +45,48 @@ a question nobody asked.
 - `placement` — where the panel appears; the only module that branches on platform
 - `layer_shell` — Linux-only Wayland placement, loaded at runtime
 
-State is applied by `sync`, which is called from `menu::state_sync::sync_all_state`
-rather than directly, so the tray cannot fall out of step with the macOS
-application menu.
+## Where the state comes from
+
+A [`crate::daemon::DaemonSnapshot`], written by one polling task
+(`daemon::watch`) and by nothing else. The tray does not track what it last did:
+it used to, and a proxy started by `proxy_autostart`, by the CLI or by the
+window left it wrong for the rest of the session.
+
+`sync` is called from `menu::state_sync::sync_all_state` rather than directly,
+so the tray cannot fall out of step with the macOS application menu — and only
+when the snapshot actually changed, because a repaint re-decodes the icon on
+macOS and makes `ksni` rebuild the whole menu over D-Bus on Linux.
 
 Proxy actions go through [`crate::proxy_actions`] rather than emitting an event
 for the frontend to act on, the way the application menu does. The tray is
 reachable when no window is visible and during autostart before any webview
-exists, so it cannot assume something is loaded and listening.
+exists, so it cannot assume something is loaded and listening. Those actions
+ask the watcher for an immediate poll rather than publishing what they expect
+to be true, so there is exactly one writer and nothing to lose an update to.
+
+## Quit, and the service
 
 Quit goes through [`crate::lifecycle::request_shutdown`], the same entry point
 Cmd+Q and window close use, so there is exactly one shutdown sequence however
-the user asked to quit.
+the user asked to quit. What that shutdown *takes with it* is decided by
+[`crate::daemon::Ownership`]: a daemon this app launched or hosts is stopped,
+one that was already answering is left alone.
+
+**Stop gglib Service** is the separate verb for ending a daemon without
+quitting, and **Start gglib Service** the way back — reachable even when the
+app came up with no daemon at all, which used to be a panic before any tray
+existed. Both warn first, from `confirm`, and the warning is derived from the
+snapshot: it names the port and the resident models actually at stake rather
+than asserting a fixed sentence, which is how the old one came to claim that
+quitting stopped a proxy it had long since stopped stopping.
 
 ## What the panel depends on staying alive
 
-The panel reaches the backend over HTTP, through the embedded Axum server the
-main window uses. That server has to outlive the window: closing to the tray
-must hide it and tear down nothing, or the panel is left holding a dead port
-and every button on it fails. `lifecycle::request_shutdown` is therefore the
-*only* thing that runs cleanup, and close-to-tray never calls it.
+The panel reaches the daemon over HTTP, on the fixed loopback port every
+surface uses. The daemon has to outlive the window: closing to the tray must
+hide it and tear down nothing, or the panel is left holding a dead port and
+every button on it fails. `lifecycle::request_shutdown` is therefore the *only*
+thing that runs cleanup, and close-to-tray never calls it.
 
 ## Menu-bar-only mode on macOS
 
@@ -113,9 +159,10 @@ What must not diverge is shared outright rather than by convention:
 - **`icon::derive`** produces one status string for the tooltip and the menu
   header, so they cannot disagree.
 
-The icons are decoded once in `icon` and reused: `ksni` wants ARGB32 in network
-byte order and Tauri hands back RGBA, so the conversion is moving the alpha byte
-to the front of each pixel — no image dependency for a byte swap.
+Both backends decode through `icon`, and both work in raw RGBA from there:
+`ksni` wants ARGB32 in network byte order and Tauri hands back RGBA, so the
+conversion is moving the alpha byte to the front of each pixel — no image
+dependency for a byte swap.
 
 **Every action is on the menu**, on both backends. The click gesture is a
 shortcut, never the only route to a feature.
@@ -167,6 +214,13 @@ macOS recolours template images for light and dark menu bars. Both icons are
 pure black with the glyph carried entirely by the alpha channel, which is what
 `icon_as_template` expects; a coloured icon would render as a dark smudge on a
 dark menu bar.
+
+That is also why there are two files for three states. The offline icon is the
+idle ring with its alpha scaled down, derived at runtime in `icon` rather than
+shipped: it is the same glyph, so a third asset could only drift from it, and
+because the shape lives entirely in the alpha channel, fading that channel is
+exactly "draw the same thing fainter" on all three platforms — the same
+reasoning that keeps the ARGB byte swap dependency-free.
 
 <!-- module-docs:end -->
 

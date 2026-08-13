@@ -1,17 +1,7 @@
-//! The desktop app's connection to the gglib daemon.
-//!
-//! The daemon — not this app — owns llama-server. On startup the app probes
-//! the fixed daemon port; if nothing answers it launches `gglib daemon run`
-//! detached when a CLI binary can be found, and otherwise hosts the same
-//! daemon composition in-process as a fallback (bundle-only installs). The
-//! in-process fallback still goes through the daemon's file lock, so it
-//! loses gracefully to an external daemon that starts first.
+#![doc = include_str!("README.md")]
 //!
 //! Everything the app needs from the backend goes through the daemon's HTTP
-//! API from here on; this module is the one place that knows the base URL.
-//!
-//! [`snapshot`] is what the daemon reports, and [`watch`] is the one task that
-//! keeps it current.
+//! API; this module is the one place that knows the base URL.
 
 mod snapshot;
 mod watch;
