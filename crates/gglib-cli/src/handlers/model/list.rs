@@ -72,7 +72,8 @@ async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>
 
 async fn fetch_from_daemon(port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
     let mut url = format!(
-        "http://127.0.0.1:{port}/api/models?sort={}&order={}",
+        "http://127.0.0.1:{port}{}?sort={}&order={}",
+        crate::daemon_client::paths::MODELS_LIST_PATH,
         args.sort.api_value(),
         args.order.api_value(),
     );
