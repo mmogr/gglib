@@ -62,13 +62,6 @@ export function streamLlamaInstall(
 }
 
 /**
- * Set up the Python fast-download helper environment.
- */
-export async function setupPython(): Promise<void> {
-  return post<void>('/api/config/system/setup-python');
-}
-
-/**
  * What llama.cpp install is present — version, health, acceleration, and what
  * the binary reports about itself. Local and cheap; safe on mount.
  */
@@ -125,7 +118,15 @@ export async function getDiagnostics(): Promise<Diagnostics> {
   return get<Diagnostics>('/api/config/system/diagnostics');
 }
 
-/** Provision the hf_xet download accelerator. */
+/**
+ * Provision the hf_xet download accelerator.
+ *
+ * The route is named for its mechanism — it builds the Python environment the
+ * accelerator lives in — and this is named for what a person gets. There was a
+ * `setupPython` beside it hitting the same path with the same signature, one
+ * name per caller; the setup wizard used one and the diagnostics panel the
+ * other, and neither knew about the other.
+ */
 export async function enableFastDownloads(): Promise<void> {
   return post<void>('/api/config/system/setup-python');
 }

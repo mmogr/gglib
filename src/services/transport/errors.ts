@@ -98,71 +98,6 @@ function httpStatusToCode(status: number): TransportErrorCode {
   return 'INTERNAL';
 }
 
-/**
- * Map a raw error to TransportError.
- */
-export function mapError(error: unknown): TransportError {
-  // Already a TransportError
-  if (TransportError.isTransportError(error)) {
-    return error;
-  }
-
-  // Fetch Response error (shouldn't happen, but handle it)
-  if (error instanceof Response) {
-    return new TransportError(
-      httpStatusToCode(error.status),
-      error.statusText || `HTTP ${error.status}`,
-      { status: error.status }
-    );
-  }
-
-  // Standard Error
-  if (error instanceof Error) {
-    // Network errors
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return new TransportError('NETWORK', 'Network request failed', error);
-    }
-    if (error.name === 'AbortError') {
-      return new TransportError('TIMEOUT', 'Request was aborted', error);
-    }
-
-    // Tauri invoke errors come as Error with message - try to parse JSON
-    try {
-      const parsed = JSON.parse(error.message);
-      if (parsed && typeof parsed === 'object' && parsed.type === 'LLAMA_SERVER_NOT_INSTALLED') {
-        return new TransportError('LLAMA_SERVER_NOT_INSTALLED', parsed.message || 'llama-server not installed', parsed.metadata);
-      }
-    } catch {
-      // Not JSON, fall through
-    }
-
-    return new TransportError('INTERNAL', error.message, error);
-  }
-
-  // String error - try to parse as JSON (Tauri structured error)
-  if (typeof error === 'string') {
-    try {
-      const parsed = JSON.parse(error);
-      if (parsed && typeof parsed === 'object' && parsed.type === 'LLAMA_SERVER_NOT_INSTALLED') {
-        return new TransportError('LLAMA_SERVER_NOT_INSTALLED', parsed.message || 'llama-server not installed', parsed.metadata);
-      }
-    } catch {
-      // Not JSON
-    }
-    return new TransportError('INTERNAL', error);
-  }
-
-  // Object with type field (structured error)
-  if (error && typeof error === 'object' && 'type' in error) {
-    const typed = error as { type: string; message?: string; metadata?: unknown };
-    if (typed.type === 'LLAMA_SERVER_NOT_INSTALLED') {
-      return new TransportError('LLAMA_SERVER_NOT_INSTALLED', typed.message || 'llama-server not installed', typed.metadata);
-    }
-  }
-
-  // Unknown error
-  return new TransportError('INTERNAL', 'An unknown error occurred', error);
-}
 
 /**
  * Standard API response shape from our backend.
@@ -279,15 +214,3 @@ export async function readData<T>(response: Response): Promise<T> {
   }
 }
 
-/**
- * Wrap a Tauri invoke call with error mapping.
- */
-export async function wrapInvoke<T>(
-  invokePromise: Promise<T>
-): Promise<T> {
-  try {
-    return await invokePromise;
-  } catch (error) {
-    throw mapError(error);
-  }
-}

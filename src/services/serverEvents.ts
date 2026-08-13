@@ -95,5 +95,4 @@ export {
   useIsServerRunning,
   isServerRunning,
   getServerState,
-  getAllServerStates,
 } from './serverRegistry';

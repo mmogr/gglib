@@ -45,10 +45,7 @@ export {
   registerMcpTools,
   unregisterMcpTools,
   syncAllMcpTools,
-  getMcpToolsByServer,
   getMcpSource,
-  onMcpToolsChange,
-  notifyMcpToolsChanged,
 } from './mcpIntegration';
 
 // Re-export built-in integration

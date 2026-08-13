@@ -78,13 +78,6 @@ export function getServerState(modelId: string): ServerState | undefined {
   return state.get(modelId);
 }
 
-/**
- * Get all server states as a snapshot.
- * Used for debugging and initial hydration checks.
- */
-export function getAllServerStates(): Map<string, ServerState> {
-  return new Map(state);
-}
 
 /**
  * Subscribe to state changes.

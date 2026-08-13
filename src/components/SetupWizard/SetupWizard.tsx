@@ -34,7 +34,7 @@ import type { SetupStatus, LlamaInstallProgress } from '../../types/setup';
 import {
   getSetupStatus,
   streamLlamaInstall,
-  setupPython,
+  enableFastDownloads,
 } from '../../services/transport/api/setup';
 import { updateSettings } from '../../services/transport/api/settings';
 
@@ -519,7 +519,7 @@ const PythonSetupStep: FC<{
     setSetting(true);
     setSetupError(null);
     try {
-      await setupPython();
+      await enableFastDownloads();
       setReady(true);
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : 'Setup failed');
