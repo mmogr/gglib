@@ -718,6 +718,32 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
 | `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued with `tool_choice: "required"`, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
+| `upstream_health` | `object` | Degradation watchdog counters since proxy start: empty responses, first-byte timeouts, proactive recycles |
+| `per_model_defects` | `object` | Per-model defect counts, keyed by the model name requests carry — see below |
+
+#### `per_model_defects`
+
+The fleet totals above answer *"is something wrong"*; this answers *"with which
+model"*, which is the only form the answer is actionable in. Each value carries
+`requests` (the denominator) plus `loop_guard_trips`, `repairs_attempted`,
+`repairs_succeeded`, `stream_errors`, `truncated_generations`,
+`empty_responses`, `reasoning_only`, `dialect_residue`,
+`unvalidatable_schemas` and `normalization_errors`.
+
+Two shapes worth knowing before reading them:
+
+- **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
+  The turn was empty from the client's point of view either way; the
+  distinction is *why*. Adding them double-counts.
+- **Only `loop_guard_trips` bumps `requests`.** The guard fires *instead of* a
+  forward, so it has to count its own denominator; every other counter
+  describes a turn that was already counted when it was forwarded.
+
+Process-lifetime and reset on restart, deliberately — see
+[ADR 0006](../../docs/adr/0006-recover-dont-predict.md). Nothing acts on them
+automatically; they are diagnosis. `gglib proxy dashboard` renders them, listing
+only models with something to report, since a healthy model produces zero of
+every counter.
 
 #### `cache` (`CacheStatus`)
 
