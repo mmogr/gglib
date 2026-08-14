@@ -54,15 +54,15 @@ pub(crate) fn format_relative_time(datetime_str: &str) -> String {
 ///
 /// # Examples
 ///
-/// Illustrative rather than executable: this function is crate-internal, so a
-/// doctest (which compiles as its own crate) cannot name it. The two cases
-/// below are asserted for real in this module's tests.
+/// Illustrative rather than executable: this function is crate-internal, and a
+/// doctest compiles as its own crate, so no import path can name it. Fenced as
+/// `text` rather than `ignore` so rustdoc renders it as prose instead of an
+/// untested example. The two cases below are asserted for real in this
+/// module's tests.
 ///
-/// ```rust,ignore
-/// use crate::presentation::truncate_string;
-///
-/// assert_eq!(truncate_string("Hello", 10), "Hello");
-/// assert_eq!(truncate_string("Hello World", 8), "Hello W\u{2026}");
+/// ```text
+/// truncate_string("Hello", 10)       == "Hello"
+/// truncate_string("Hello World", 8)  == "Hello W…"
 /// ```
 pub(crate) fn truncate_string(s: &str, max_len: usize) -> String {
     if s.chars().count() <= max_len {

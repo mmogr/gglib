@@ -300,8 +300,11 @@ pub enum ModelCommand {
         /// mirroring how the GUI handles authentication.
         #[arg(long)]
         token: Option<String>,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
+        /// Accepted and ignored: this path has no prompt to skip, unlike
+        /// `model remove` and `model update`.
+        // TODO: retire with the other inert flags. Hidden rather than deleted
+        // so invocations that pass it today keep working.
+        #[arg(short, long, hide = true)]
         force: bool,
     },
 

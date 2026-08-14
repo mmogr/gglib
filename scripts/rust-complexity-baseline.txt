@@ -24,7 +24,7 @@ crates/gglib-axum/src/handlers/config/setup.rs 306
 crates/gglib-axum/src/routes.rs 472
 crates/gglib-axum/tests/integration_routes.rs 1280
 crates/gglib-cli/src/commands.rs 413
-crates/gglib-cli/src/daemon_client/mod.rs 366
+crates/gglib-cli/src/daemon_client/mod.rs 362
 crates/gglib-cli/src/handlers/benchmark.rs 1499
 crates/gglib-cli/src/handlers/config/llama_install.rs 341
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 508
@@ -34,7 +34,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 426
 crates/gglib-cli/src/handlers/model/update.rs 712
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 624
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 440
-crates/gglib-cli/src/model_commands.rs 437
+crates/gglib-cli/src/model_commands.rs 440
 crates/gglib-cli/src/presentation/explain_display.rs 735
 crates/gglib-cli/src/presentation/inspect_display.rs 405
 crates/gglib-cli/src/shared_args.rs 312

@@ -29,7 +29,7 @@ use gglib_proxy as _;
 
 // Nothing in the workspace depends on this crate: its only outside consumers
 // are its own `gglib` binary and its own `tests/`, and between them they need
-// the seven types re-exported below and nothing else. So the module tree is
+// the twelve names re-exported below and nothing else. So the module tree is
 // crate-internal and the re-export list *is* the public API — which is what
 // lets `unreachable_pub` and then `dead_code` see inside `handlers/`.
 pub(crate) mod benchmark_commands;
