@@ -13,6 +13,11 @@ build = "build.rs"
 name = "gglib_sse"
 path = "src/lib.rs"
 
+[features]
+# Exposes `Broadcaster::subscribe_events`, the raw-stream door other crates'
+# tests observe through. Off by default so a release build does not carry it.
+test-support = []
+
 [dependencies]
 # Axum SSE response types only - this crate does NOT depend on any other
 # gglib-* crate. It is a pure, reusable leaf so that both the Adapter layer

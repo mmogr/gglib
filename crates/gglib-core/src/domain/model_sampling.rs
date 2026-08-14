@@ -180,14 +180,6 @@ impl ModelSamplingDefaults {
             .find(|(name, _)| *name == field)
             .map(|(_, key)| *key)
     }
-
-    /// Whether this model declares anything at all.
-    #[must_use]
-    pub fn declares_anything(&self) -> bool {
-        MODEL_SAMPLING_KEYS
-            .iter()
-            .any(|(name, _)| !matches!(self.get(name), ModelSamplingDefault::Absent))
-    }
 }
 
 // =============================================================================
@@ -391,7 +383,6 @@ mod tests {
         ]));
 
         assert_eq!(d, ModelSamplingDefaults::default());
-        assert!(!d.declares_anything());
         assert_eq!(d.get("temperature"), ModelSamplingDefault::Absent);
     }
 
@@ -401,7 +392,6 @@ mod tests {
 
         assert_eq!(d.temperature, ModelSamplingDefault::Declared(0.33));
         assert_eq!(d.get("temperature"), ModelSamplingDefault::Declared(0.33));
-        assert!(d.declares_anything());
         assert_eq!(d.top_p, ModelSamplingDefault::Absent, "others untouched");
     }
 
@@ -433,7 +423,6 @@ mod tests {
 
         assert_eq!(d.temperature, ModelSamplingDefault::Unreadable);
         assert_ne!(d.temperature, ModelSamplingDefault::Absent);
-        assert!(d.declares_anything());
     }
 
     /// Unlike `kv_estimate` and `kv_memory`, whose keys are `{arch}.{suffix}`.
@@ -477,7 +466,6 @@ mod tests {
                 "{field} must be unreachable by a model, not merely unset"
             );
         }
-        assert!(!d.declares_anything());
     }
 
     #[test]

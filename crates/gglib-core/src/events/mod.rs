@@ -1,6 +1,5 @@
 #![doc = include_str!("README.md")]
 mod app;
-mod download;
 mod mcp;
 mod server;
 
@@ -268,11 +267,9 @@ mod tests {
             AppEvent::server_started(1, "test", 8080).event_name(),
             "server:started"
         );
-        assert_eq!(
-            AppEvent::download_started("id", "name").event_name(),
-            "download:started"
-        );
         assert_eq!(AppEvent::model_removed(1).event_name(), "model:removed");
+        // The download names are covered exhaustively by
+        // `download_event_names_are_stable` below.
     }
 
     /// Lock down download event names to prevent frontend subscription mismatches.
@@ -285,22 +282,22 @@ mod tests {
     /// because frontend listened to wrong event names.
     #[test]
     fn download_event_names_are_stable() {
-        let cases = vec![
-            (AppEvent::download_started("id", "name"), "download:started"),
+        let cases = [
+            (DownloadEvent::started("id"), "download:started"),
             (
-                AppEvent::download_progress("id", 50, 100, Some(1024.0), Some(10.0)),
+                DownloadEvent::progress("id", 50, 100, Some(1024.0), Some(10.0)),
                 "download:progress",
             ),
             (
-                AppEvent::download_completed("id", None),
+                DownloadEvent::completed("id", None::<String>),
                 "download:completed",
             ),
-            (AppEvent::download_failed("id", "error"), "download:failed"),
-            (AppEvent::download_cancelled("id"), "download:cancelled"),
+            (DownloadEvent::failed("id", "error"), "download:failed"),
+            (DownloadEvent::cancelled("id"), "download:cancelled"),
         ];
 
         for (event, expected_name) in cases {
-            assert_eq!(event.event_name(), expected_name);
+            assert_eq!(AppEvent::Download { event }.event_name(), expected_name);
         }
     }
 }

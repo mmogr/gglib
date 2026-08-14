@@ -100,19 +100,6 @@ impl ModelFilesRepository {
         Ok(())
     }
 
-    /// Delete all model files for a specific model.
-    ///
-    /// This is typically called when a model is being deleted (cascade delete
-    /// handles this automatically, but this method is provided for explicit cleanup).
-    pub async fn delete_by_model_id(&self, model_id: i64) -> Result<()> {
-        sqlx::query("DELETE FROM model_files WHERE model_id = ?")
-            .bind(model_id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-
     /// Get a specific model file by ID.
     pub async fn get_by_id(&self, id: i64) -> Result<Option<ModelFile>> {
         let row = sqlx::query(
@@ -203,29 +190,5 @@ mod tests {
         // Verify it was updated
         let file = repo.get_by_id(file_id).await.unwrap().unwrap();
         assert!(file.last_verified_at.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_delete_by_model_id() {
-        let pool = setup_test_database().await.unwrap();
-        let model_id = setup_test_model(&pool).await.unwrap();
-        let repo = ModelFilesRepository::new(pool);
-
-        // Insert multiple files
-        for i in 0..3 {
-            let new_file = NewModelFile::new(model_id, format!("shard-{}.gguf", i), i, 1024, None);
-            repo.insert(&new_file).await.unwrap();
-        }
-
-        // Verify they exist
-        let files = repo.get_by_model_id(model_id).await.unwrap();
-        assert_eq!(files.len(), 3);
-
-        // Delete all
-        repo.delete_by_model_id(model_id).await.unwrap();
-
-        // Verify they're gone
-        let files = repo.get_by_model_id(model_id).await.unwrap();
-        assert_eq!(files.len(), 0);
     }
 }

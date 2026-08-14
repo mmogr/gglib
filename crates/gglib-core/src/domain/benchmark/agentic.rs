@@ -471,7 +471,7 @@ pub struct AgenticEvalReport {
     pub seeds: Vec<u32>,
     /// Scores under the positive control arm, when it ran.
     ///
-    /// Read [`Self::control_moved`] rather than these numbers directly: what
+    /// Read [`Self::control_verdict`] rather than these numbers directly: what
     /// matters is not the control's score but whether it *differs*. Its
     /// [`ArmScores::seeds`] is usually smaller than the real arms' — see
     /// [`AgenticEvalConfig::control_seeds`] — so its composite is a coarser
@@ -710,13 +710,6 @@ impl AgenticEvalReport {
         } else {
             ControlVerdict::WrongDirection { gap: -gap }
         })
-    }
-
-    /// Whether the control demonstrated sensitivity. `None` when it did not
-    /// run.
-    #[must_use]
-    pub fn control_moved(&self) -> Option<bool> {
-        self.control_verdict().map(|v| v.demonstrated_sensitivity())
     }
 
     /// The eval's own drift: the mean pairwise composite gap over every run
@@ -1227,8 +1220,8 @@ mod tests {
     /// run proved nothing about its own sensitivity.
     #[test]
     fn a_control_that_scored_well_below_gglib_demonstrates_sensitivity() {
-        let report = report_with(Some(scores(0.2, None, 0.30)), 0.90);
-        assert_eq!(report.control_moved(), Some(true));
+        let verdict = report_with(Some(scores(0.2, None, 0.30)), 0.90).control_verdict();
+        assert!(matches!(verdict, Some(ControlVerdict::Moved { .. })));
     }
 
     /// **The failure this exists to catch.** Forcing temperature 2.0 barely
@@ -1236,8 +1229,8 @@ mod tests {
     /// and therefore cannot support any other delta in the report.
     #[test]
     fn a_control_that_barely_moved_reports_failure() {
-        let report = report_with(Some(scores(0.88, None, 0.89)), 0.90);
-        assert_eq!(report.control_moved(), Some(false));
+        let verdict = report_with(Some(scores(0.88, None, 0.89)), 0.90).control_verdict();
+        assert!(matches!(verdict, Some(ControlVerdict::TooSmall { .. })));
     }
 
     /// **The failure that was measured, and that the old bool hid.** A control
@@ -1246,14 +1239,15 @@ mod tests {
     #[test]
     fn a_control_that_scored_higher_is_its_own_verdict() {
         let report = report_with(Some(scores(0.95, None, 0.99)), 0.90);
+        let verdict = report.control_verdict().expect("a verdict");
+        assert!(!verdict.demonstrated_sensitivity());
 
-        match report.control_verdict() {
-            Some(ControlVerdict::WrongDirection { gap }) => {
+        match verdict {
+            ControlVerdict::WrongDirection { gap } => {
                 assert!((gap - 0.09).abs() < 1e-9, "gap is reported positive: {gap}");
             }
             other => panic!("expected WrongDirection, got {other:?}"),
         }
-        assert_eq!(report.control_moved(), Some(false));
     }
 
     /// The two failures are distinct states: one says the suite is too small
@@ -1314,7 +1308,7 @@ mod tests {
     /// sampling readback draws between blind and zero divergences.
     #[test]
     fn no_control_arm_claims_nothing_either_way() {
-        assert_eq!(report_with(None, 0.90).control_moved(), None);
+        assert!(report_with(None, 0.90).control_verdict().is_none());
     }
 
     // =========================================================================
@@ -1544,9 +1538,9 @@ mod tests {
             Some(scores(0.5, None, 0.90 - CONTROL_MIN_COMPOSITE_GAP)),
             0.90,
         );
-        assert_eq!(
-            exactly_at.control_moved(),
-            Some(true),
+        let verdict = exactly_at.control_verdict();
+        assert!(
+            matches!(verdict, Some(ControlVerdict::Moved { .. })),
             "the bound is inclusive"
         );
     }

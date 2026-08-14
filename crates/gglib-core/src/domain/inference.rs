@@ -749,9 +749,59 @@ impl InferenceConfig {
         }
     }
 
+    /// Write the temperature-coupled set into `result` and report which rung
+    /// supplied each member.
+    ///
+    /// Split out of [`resolve_layers_with_sources`] only for length; that is
+    /// also where the rule it implements is documented. `temperature` is the
+    /// rung that claimed the temperature, if any — the whole coupling rule
+    /// hangs off whether that is `Some`.
+    ///
+    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
+    fn resolve_coupled(
+        layers: &[Option<&Self>],
+        temperature: Option<usize>,
+        result: &mut Self,
+    ) -> CoupledLayers {
+        let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
+            layers.iter().position(|l| l.is_some_and(declares))
+        };
+
+        // The layer claiming `temperature` supplies the whole set, including
+        // the fields it left unset — those drop to the floor rather than
+        // inheriting a value tuned for a temperature nobody chose.
+        if let Some(claim) = temperature {
+            let c = layers[claim].expect("index came from a Some layer");
+            result.repeat_penalty = c.repeat_penalty;
+            result.presence_penalty = c.presence_penalty;
+            result.min_p = c.min_p;
+            return CoupledLayers {
+                repeat_penalty: c.repeat_penalty.and(Some(claim)),
+                presence_penalty: c.presence_penalty.and(Some(claim)),
+                min_p: c.min_p.and(Some(claim)),
+            };
+        }
+
+        // Nothing was tuned against anything, so the set gap-fills like any
+        // uncoupled parameter.
+        let found = CoupledLayers {
+            repeat_penalty: first(&|c| c.repeat_penalty.is_some()),
+            presence_penalty: first(&|c| c.presence_penalty.is_some()),
+            min_p: first(&|c| c.min_p.is_some()),
+        };
+        result.repeat_penalty = found
+            .repeat_penalty
+            .and_then(|i| layers[i].and_then(|c| c.repeat_penalty));
+        result.presence_penalty = found
+            .presence_penalty
+            .and_then(|i| layers[i].and_then(|c| c.presence_penalty));
+        result.min_p = found.min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
+        found
+    }
+
     /// Resolve an ordered list of sampling layers (highest priority first)
-    /// into a single fully-resolved config, then fill anything still unset
-    /// from `floor`.
+    /// into a single fully-resolved config, filling anything still unset from
+    /// `floor`, and report which layer supplied each field.
     ///
     /// This is the one fold every multi-layer resolution surface goes
     /// through: [`resolve_with_profile`] wraps it for the simple
@@ -760,6 +810,13 @@ impl InferenceConfig {
     /// (`cli`, `client`, `profile`, `model`, `global`, `model auto-detected`)
     /// array and calls it directly. There is exactly one place that decides
     /// what "wins" means.
+    ///
+    /// Values and provenance come from one pass over one ladder and so cannot
+    /// disagree — a second function that re-derived the rules would eventually
+    /// explain a decision the resolution did not take, which is exactly what
+    /// the `describe_provenance` helper this replaced had already started
+    /// doing. See [`FieldSources`] for how to read the second half of the
+    /// return; callers wanting only the values take `.0`.
     ///
     /// # Uncoupled parameters
     ///
@@ -804,75 +861,6 @@ impl InferenceConfig {
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
     /// [`reasoning_profile`]: Self::reasoning_profile
-    #[must_use]
-    pub fn resolve_layers(layers: &[Option<&Self>], floor: &Self) -> Self {
-        Self::resolve_layers_with_sources(layers, floor).0
-    }
-
-    /// Write the temperature-coupled set into `result` and report which rung
-    /// supplied each member.
-    ///
-    /// Split out of [`resolve_layers_with_sources`] only for length; the rule
-    /// it implements is documented on [`resolve_layers`]. `temperature` is the
-    /// rung that claimed the temperature, if any — the whole coupling rule
-    /// hangs off whether that is `Some`.
-    ///
-    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
-    /// [`resolve_layers`]: Self::resolve_layers
-    fn resolve_coupled(
-        layers: &[Option<&Self>],
-        temperature: Option<usize>,
-        result: &mut Self,
-    ) -> CoupledLayers {
-        let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
-            layers.iter().position(|l| l.is_some_and(declares))
-        };
-
-        // The layer claiming `temperature` supplies the whole set, including
-        // the fields it left unset — those drop to the floor rather than
-        // inheriting a value tuned for a temperature nobody chose.
-        if let Some(claim) = temperature {
-            let c = layers[claim].expect("index came from a Some layer");
-            result.repeat_penalty = c.repeat_penalty;
-            result.presence_penalty = c.presence_penalty;
-            result.min_p = c.min_p;
-            return CoupledLayers {
-                repeat_penalty: c.repeat_penalty.and(Some(claim)),
-                presence_penalty: c.presence_penalty.and(Some(claim)),
-                min_p: c.min_p.and(Some(claim)),
-            };
-        }
-
-        // Nothing was tuned against anything, so the set gap-fills like any
-        // uncoupled parameter.
-        let found = CoupledLayers {
-            repeat_penalty: first(&|c| c.repeat_penalty.is_some()),
-            presence_penalty: first(&|c| c.presence_penalty.is_some()),
-            min_p: first(&|c| c.min_p.is_some()),
-        };
-        result.repeat_penalty = found
-            .repeat_penalty
-            .and_then(|i| layers[i].and_then(|c| c.repeat_penalty));
-        result.presence_penalty = found
-            .presence_penalty
-            .and_then(|i| layers[i].and_then(|c| c.presence_penalty));
-        result.min_p = found.min_p.and_then(|i| layers[i].and_then(|c| c.min_p));
-        found
-    }
-
-    /// [`resolve_layers`] plus a record of which layer supplied each field.
-    ///
-    /// This is the implementation; [`resolve_layers`] delegates here and
-    /// discards the provenance. Values and provenance therefore come from one
-    /// pass over one ladder and cannot disagree — a second function that
-    /// re-derived the rules would eventually explain a decision the resolution
-    /// did not take, which is exactly what the `describe_provenance` helper
-    /// this replaced had already started doing.
-    ///
-    /// See [`FieldSources`] for how to read the result, and [`resolve_layers`]
-    /// for the coupling rule the sources reflect.
-    ///
-    /// [`resolve_layers`]: Self::resolve_layers
     #[must_use]
     pub fn resolve_layers_with_sources(
         layers: &[Option<&Self>],
@@ -1131,7 +1119,7 @@ impl InferenceConfig {
 
     /// The coupled-trio floor for models tagged `reasoning`.
     ///
-    /// [`resolve_layers`] falls back to a floor once it has decided which
+    /// [`resolve_layers_with_sources`] falls back to a floor once it has decided which
     /// layer (if any) claims the coupled set and that layer left a field
     /// unset. [`with_hardcoded_defaults`]'s neutral `presence_penalty: 0.0` is
     /// the right floor for most models, but wrong for a `reasoning`-tagged
@@ -1165,7 +1153,7 @@ impl InferenceConfig {
     ///
     /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
     ///
-    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`reasoning_profile`]: Self::reasoning_profile
     #[must_use]
@@ -1291,7 +1279,7 @@ impl InferenceConfig {
     ///
     /// `model_ctx` carries the two facts about the target model that change
     /// how resolution behaves — see [`ModelSamplingContext`],
-    /// [`resolve_layers`] and [`reasoning_floor`].
+    /// [`resolve_layers_with_sources`] and [`reasoning_floor`].
     ///
     /// # Example
     ///
@@ -1310,7 +1298,7 @@ impl InferenceConfig {
     /// ```
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
-    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
     /// [`reasoning_floor`]: Self::reasoning_floor
     #[must_use]
     pub fn resolve_with_defaults(
@@ -1341,7 +1329,7 @@ impl InferenceConfig {
     /// order to reason about and to test.
     /// [`crate::request_pipeline::sampling`] needs a sixth rung (the client's
     /// own request, sitting *below* the CLI override rather than between
-    /// `self` and `profile`) and calls the underlying [`resolve_layers`]
+    /// `self` and `profile`) and calls the underlying [`resolve_layers_with_sources`]
     /// directly for that reason — the merge semantics are identical either
     /// way.
     ///
@@ -1371,7 +1359,7 @@ impl InferenceConfig {
     ///
     /// # Temperature-tuned parameters do not fall through
     ///
-    /// See [`resolve_layers`] for the full rule. In short: once a layer
+    /// See [`resolve_layers_with_sources`] for the full rule. In short: once a layer
     /// declares a `temperature`, lower layers may not contribute
     /// `presence_penalty`, `repeat_penalty` or `min_p` — those resolve from
     /// the claiming layer alone, falling to the class floor if it left them
@@ -1401,7 +1389,7 @@ impl InferenceConfig {
     /// assert_eq!(resolved.top_k,            Some(20));  // untuned: still fills
     /// ```
     ///
-    /// [`resolve_layers`]: Self::resolve_layers
+    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
     /// [`reasoning_floor`]: Self::reasoning_floor
     /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`resolve_with_defaults`]: Self::resolve_with_defaults
@@ -1460,22 +1448,13 @@ impl InferenceConfig {
         )
     }
 
-    /// Parse inference parameters from an OpenAI-format JSON body (`snake_case` keys).
+    /// Parse inference parameters from an OpenAI-format JSON body
+    /// (`snake_case` keys), plus what the read had to reject or normalise.
     ///
     /// Missing keys, explicit `null`s and keys this type does not model all
-    /// yield `None` for that field and leave the rest untouched.
-    ///
-    /// This is the inverse of [`to_openai_json_patch`]. Use
-    /// [`extract_client_sampling`] when the caller can report what went wrong.
-    ///
-    /// [`to_openai_json_patch`]: Self::to_openai_json_patch
-    /// [`extract_client_sampling`]: Self::extract_client_sampling
-    #[must_use]
-    pub fn from_openai_json(value: &serde_json::Value) -> Self {
-        Self::extract_client_sampling(value).0
-    }
-
-    /// [`from_openai_json`] plus what it had to reject or normalise.
+    /// yield `None` for that field and leave the rest untouched. This is the
+    /// inverse of [`Self::to_openai_json_patch`]; a caller with nothing to
+    /// report on the rejections takes `.0`.
     ///
     /// # One bad field must not cost the other ten
     ///
@@ -1544,9 +1523,9 @@ impl InferenceConfig {
     /// values are filtered out. The returned map can be merged directly into an
     /// OpenAI-compatible request body with `body_obj.insert(k, v)`.
     ///
-    /// This is the inverse of [`from_openai_json`].
+    /// This is the inverse of [`extract_client_sampling`].
     ///
-    /// [`from_openai_json`]: Self::from_openai_json
+    /// [`extract_client_sampling`]: Self::extract_client_sampling
     #[must_use]
     pub fn to_openai_json_patch(&self) -> serde_json::Map<String, serde_json::Value> {
         let camel = serde_json::to_value(self).unwrap_or_default();
@@ -1618,7 +1597,7 @@ mod tests {
             ..InferenceConfig::default()
         };
 
-        let resolved = InferenceConfig::resolve_layers(
+        let (resolved, _) = InferenceConfig::resolve_layers_with_sources(
             &[Some(&top), Some(&below)],
             &InferenceConfig::with_hardcoded_defaults(),
         );
@@ -2396,9 +2375,9 @@ mod tests {
         assert!(!patch.contains_key("top_k"));
         assert!(!patch.contains_key("max_tokens"));
 
-        // Roundtrip via from_openai_json
+        // Roundtrip via extract_client_sampling
         let val = serde_json::Value::Object(patch);
-        let back = InferenceConfig::from_openai_json(&val);
+        let (back, _) = InferenceConfig::extract_client_sampling(&val);
         assert_eq!(back.temperature, Some(0.7));
         assert_eq!(back.top_p, Some(0.9));
         assert_eq!(back.repeat_penalty, Some(1.1));
@@ -2406,13 +2385,13 @@ mod tests {
     }
 
     #[test]
-    fn test_from_openai_json_unknown_fields_ignored() {
+    fn test_client_sampling_unknown_fields_ignored() {
         let val = serde_json::json!({
             "temperature": 0.5,
             "model": "llama3",
             "messages": []
         });
-        let config = InferenceConfig::from_openai_json(&val);
+        let (config, _) = InferenceConfig::extract_client_sampling(&val);
         assert_eq!(config.temperature, Some(0.5));
         assert!(config.top_p.is_none());
     }

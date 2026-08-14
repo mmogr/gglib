@@ -27,7 +27,7 @@ use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, P
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
 /// Grouped because they are only ever used together, at the single point where
-/// [`resolve_sampling`] folds them through [`InferenceConfig::resolve_layers`].
+/// [`resolve_sampling`] folds them through [`InferenceConfig::resolve_layers_with_sources`].
 ///
 /// The per-model layer is deliberately absent: it arrives with the rest of the
 /// per-model facts, as
@@ -178,7 +178,7 @@ fn agentic_sampling_disabled_via_env() -> bool {
 /// # Force-insert, not `or_insert`
 ///
 /// The client's own parameters are extracted from `body` first, folded
-/// through [`InferenceConfig::resolve_layers`] alongside cli / profile /
+/// through [`InferenceConfig::resolve_layers_with_sources`] alongside cli / profile /
 /// model / global, and the fully-resolved result is then written back over
 /// the top. Client parameters still win — they win by being the
 /// highest-priority *layer* in the fold, not by surviving an `or_insert`.
@@ -452,7 +452,7 @@ pub fn resolve_sampling(
     // The gate is provenance, not rank. A ladder rung would have been the
     // obvious way to express "outranks the auto-detected recipe", and it is
     // wrong: a rung that names a `temperature` *claims the coupled trio* under
-    // `resolve_layers`, so `presence_penalty`, `repeat_penalty` and `min_p`
+    // `resolve_layers_with_sources`, so `presence_penalty`, `repeat_penalty` and `min_p`
     // would drop to the floor behind it. A `reasoning` model would silently
     // lose the 1.5 presence penalty its own recipe pairs with its temperature
     // on every agentic turn. Clamping after the fold leaves the trio
@@ -1026,7 +1026,7 @@ mod tests {
     /// user), a client that sends `temperature: 0` must still not silently
     /// zero out a reasoning model's only anti-repetition guard. The client
     /// still wins the temperature it asked for — it just doesn't also claim
-    /// penalties it never named an opinion on. See `resolve_layers`'s
+    /// penalties it never named an opinion on. See `resolve_layers_with_sources`'s
     /// coupling rule.
     #[test]
     fn trusted_client_temperature_zero_does_not_zero_a_reasoning_models_presence_penalty() {
@@ -1083,7 +1083,7 @@ mod tests {
     /// hardcoding `temperature: 0` with no way for its user to change it (VS
     /// Code Copilot's LLM Gateway) claims the coupled set on every request
     /// and supplies none of it — so the model's own tuned recipe never has a
-    /// chance to apply, no matter what `resolve_layers`'s coupling rule does.
+    /// chance to apply, no matter what `resolve_layers_with_sources`'s coupling rule does.
     /// With the client out of the ladder entirely, the model's full recipe —
     /// temperature *and* the penalties tuned for it — resolves untouched.
     #[test]

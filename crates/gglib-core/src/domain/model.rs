@@ -309,40 +309,6 @@ impl NewModel {
     }
 }
 
-impl Model {
-    /// Convert this model to a `NewModel` (drops the ID).
-    ///
-    /// Useful when you need to clone a model's data without the ID.
-    #[must_use]
-    pub fn to_new_model(&self) -> NewModel {
-        NewModel {
-            name: self.name.clone(),
-            file_path: self.file_path.clone(),
-            param_count_b: self.param_count_b,
-            architecture: self.architecture.clone(),
-            quantization: self.quantization.clone(),
-            context_length: self.context_length,
-            expert_count: self.expert_count,
-            expert_used_count: self.expert_used_count,
-            expert_shared_count: self.expert_shared_count,
-            metadata: self.metadata.clone(),
-            added_at: self.added_at,
-            hf_repo_id: self.hf_repo_id.clone(),
-            hf_commit_sha: self.hf_commit_sha.clone(),
-            hf_filename: self.hf_filename.clone(),
-            download_date: self.download_date,
-            last_update_check: self.last_update_check,
-            tags: self.tags.clone(),
-            file_paths: None, // Not preserved in conversion
-            capabilities: self.capabilities,
-            inference_defaults: self.inference_defaults.clone(),
-            defaults_origin: self.defaults_origin,
-            server_defaults: self.server_defaults.clone(),
-            dialect_spec: self.dialect_spec.clone(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,41 +327,5 @@ mod tests {
         assert!((model.param_count_b - 7.0).abs() < f64::EPSILON);
         assert!(model.architecture.is_none());
         assert!(model.tags.is_empty());
-    }
-
-    #[test]
-    fn test_model_to_new_model() {
-        let model = Model {
-            id: 42,
-            name: "Persisted Model".to_string(),
-            model_key: String::new(),
-            file_path: PathBuf::from("/path/to/model.gguf"),
-            param_count_b: 13.0,
-            architecture: Some("llama".to_string()),
-            quantization: Some("Q4_0".to_string()),
-            context_length: Some(4096),
-            expert_count: None,
-            expert_used_count: None,
-            expert_shared_count: None,
-            metadata: HashMap::new(),
-            added_at: Utc::now(),
-            hf_repo_id: Some("TheBloke/Model-GGUF".to_string()),
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: vec!["chat".to_string()],
-            capabilities: ModelCapabilities::default(),
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-            dialect_spec: None,
-            benchmark_summary: None,
-        };
-
-        let new_model = model.to_new_model();
-        assert_eq!(new_model.name, "Persisted Model");
-        assert_eq!(new_model.architecture, Some("llama".to_string()));
-        assert_eq!(new_model.tags, vec!["chat".to_string()]);
     }
 }

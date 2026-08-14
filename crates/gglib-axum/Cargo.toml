@@ -41,6 +41,9 @@ futures-core = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
 
 [dev-dependencies]
+# Re-declared to turn on `test-support`, which carries
+# `Broadcaster::subscribe_events`. The feature stays off in the normal build.
+gglib-sse = { path = "../gglib-sse", features = ["test-support"] }
 tokio-test = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

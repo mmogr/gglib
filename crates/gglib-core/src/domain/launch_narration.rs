@@ -82,15 +82,6 @@ impl LaunchDecision {
             source: None,
         }
     }
-
-    /// Render as `value (source)`, or just `value` when unsourced.
-    #[must_use]
-    pub fn render_value(&self) -> String {
-        self.source.as_ref().map_or_else(
-            || self.value.clone(),
-            |source| format!("{} ({})", self.value, source),
-        )
-    }
 }
 
 /// Everything the runtime decided for one llama-server launch.
@@ -182,17 +173,6 @@ pub fn format_mib_as_gib(mib: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn render_value_appends_provenance_in_parentheses() {
-        let d = LaunchDecision::new("ctx", "32768", "model server_defaults");
-        assert_eq!(d.render_value(), "32768 (model server_defaults)");
-    }
-
-    #[test]
-    fn render_value_omits_parentheses_when_unsourced() {
-        assert_eq!(LaunchDecision::bare("ctx", "32768").render_value(), "32768");
-    }
 
     #[test]
     fn headline_joins_the_three_identity_parts() {
