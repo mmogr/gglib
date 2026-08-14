@@ -38,7 +38,6 @@ console = "0.16"
 chrono = { workspace = true }
 serde_json = { workspace = true }
 hf-hub = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 anyhow = { workspace = true }
 dotenvy = "0.15"
