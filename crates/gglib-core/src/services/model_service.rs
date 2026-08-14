@@ -124,7 +124,29 @@ impl ModelService {
         )
         .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {e}")))?;
 
-        // 2. Build the model row via the naming/capability/tag policy shared
+        // 2. A file already in the library is a conflict, not a silent
+        //    overwrite. `insert` upserts so that registration after a download
+        //    can be retried; an explicit "add this file" is the opposite
+        //    intent, and without this check the caller gets a success response
+        //    for a model it did not add, with the existing row's tags and
+        //    capabilities rewritten underneath it.
+        //
+        if let Some(existing) = self
+            .repo
+            .find_by_path(file_path)
+            .await
+            .map_err(CoreError::from)?
+        {
+            return Err(CoreError::Repository(RepositoryError::AlreadyExists(
+                format!(
+                    "'{}' is already in the library as \"{}\"",
+                    file_path.display(),
+                    existing.name
+                ),
+            )));
+        }
+
+        // 3. Build the model row via the naming/capability/tag policy shared
         //    with the HuggingFace download path.
         let origin = ModelOrigin::LocalFile {
             param_count_override,
@@ -137,7 +159,7 @@ impl ModelService {
             chrono::Utc::now(),
         );
 
-        // 3. Persist to repository
+        // 4. Persist to repository
         self.repo.insert(&new_model).await.map_err(CoreError::from)
     }
 
@@ -565,6 +587,58 @@ mod tests {
 
         assert_eq!(model.name, "Qwen3-8B-Q4_K_M");
         assert_eq!(model.hf_repo_id, None);
+    }
+
+    /// **The 409 this was written for.** Adding a file already in the library
+    /// used to succeed: `insert` upserts on the model key, so the second add
+    /// overwrote the first row and returned it, and the caller was told the
+    /// model had been added. `AlreadyExists` was never constructed anywhere in
+    /// the workspace, so `models.rs`'s Conflict arm and the
+    /// `AlreadyExists -> HttpError::Conflict` mapping both sat unreachable.
+    #[tokio::test]
+    async fn importing_the_same_file_twice_is_a_conflict() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        service
+            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .await
+            .expect("first add succeeds");
+
+        let err = service
+            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .await
+            .expect_err("second add is a conflict");
+
+        assert!(
+            matches!(
+                err,
+                CoreError::Repository(RepositoryError::AlreadyExists(_))
+            ),
+            "expected AlreadyExists, got {err:?}"
+        );
+    }
+
+    /// A second *different* file must still go in — the check keys on the
+    /// path, not on "the library is non-empty".
+    #[tokio::test]
+    async fn a_different_file_is_not_a_conflict() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["a.gguf", "b.gguf"] {
+            let path = dir.path().join(name);
+            std::fs::File::create(&path).unwrap();
+            service
+                .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+                .await
+                .unwrap_or_else(|e| panic!("{name} should import: {e:?}"));
+        }
     }
 
     #[tokio::test]

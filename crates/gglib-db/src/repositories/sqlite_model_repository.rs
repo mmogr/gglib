@@ -324,6 +324,77 @@ mod tests {
         assert_eq!(repo.list().await.unwrap().len(), 1);
     }
 
+    /// `insert` upserts on the model key: a second registration of the same
+    /// model is not an error, it returns the same row. Recorded as a test
+    /// because the port doc used to claim the opposite, and the paths that
+    /// register a model after a download depend on this being retry-safe.
+    #[tokio::test]
+    async fn inserting_the_same_model_twice_upserts_rather_than_failing() {
+        let repo = repo().await;
+
+        let first = repo.insert(&make_model("Dup")).await.unwrap();
+        let second = repo
+            .insert(&make_model("Dup"))
+            .await
+            .expect("a repeat registration must not fail");
+
+        assert_eq!(second.id, first.id, "same row, not a second one");
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+
+    /// The lookup `ModelService::import_from_file` asks before inserting, so
+    /// that an explicit add of a file already present is a conflict instead of
+    /// a silent overwrite.
+    #[tokio::test]
+    async fn find_by_path_locates_a_model_by_the_path_it_was_stored_under() {
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Findable")).await.unwrap();
+
+        let found = repo
+            .find_by_path(&PathBuf::from("/models/Findable.gguf"))
+            .await
+            .unwrap()
+            .expect("the model just inserted");
+        assert_eq!(found.id, inserted.id);
+
+        assert!(
+            repo.find_by_path(&PathBuf::from("/models/Absent.gguf"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    /// The repository canonicalises on write, so a caller holding the path it
+    /// was handed must still match. On macOS a `tempfile` path resolves
+    /// through `/private`, which is exactly the mismatch that would make a
+    /// duplicate look like a new model.
+    #[tokio::test]
+    async fn find_by_path_matches_across_canonicalisation() {
+        let repo = repo().await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Real.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        let inserted = repo
+            .insert(&NewModel::new(
+                "Real".to_string(),
+                path.clone(),
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        let found = repo
+            .find_by_path(&path)
+            .await
+            .unwrap()
+            .expect("the uncanonicalised path must still find it");
+        assert_eq!(found.id, inserted.id);
+    }
+
     #[tokio::test]
     async fn get_by_id_returns_inserted_model() {
         let repo = repo().await;

@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
 use gglib_core::ports::chat_history::ChatHistoryError;
-use gglib_core::{CoreError, ProcessError, RepositoryError};
+use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -111,12 +111,8 @@ impl From<CoreError> for HttpError {
     fn from(err: CoreError) -> Self {
         match err {
             CoreError::Repository(repo_err) => repo_err.into(),
-            CoreError::Process(proc_err) => proc_err.into(),
             CoreError::Settings(settings_err) => HttpError::BadRequest(settings_err.to_string()),
             CoreError::Validation(msg) => HttpError::BadRequest(msg),
-            CoreError::Configuration(msg) => HttpError::Internal(format!("Config: {}", msg)),
-            CoreError::ExternalService(msg) => HttpError::ServiceUnavailable(msg),
-            CoreError::Internal(msg) => HttpError::Internal(msg),
         }
     }
 }
@@ -131,20 +127,6 @@ impl From<RepositoryError> for HttpError {
                 HttpError::Internal(format!("Serialization: {}", msg))
             }
             RepositoryError::Constraint(msg) => HttpError::BadRequest(msg),
-        }
-    }
-}
-
-impl From<ProcessError> for HttpError {
-    fn from(err: ProcessError) -> Self {
-        match err {
-            ProcessError::NotRunning(msg) => HttpError::NotFound(msg),
-            ProcessError::StartFailed(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::StopFailed(msg) => HttpError::Internal(format!("Stop failed: {}", msg)),
-            ProcessError::HealthCheckFailed(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::Configuration(msg) => HttpError::BadRequest(msg),
-            ProcessError::ResourceExhausted(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::Internal(msg) => HttpError::Internal(msg),
         }
     }
 }
@@ -193,5 +175,41 @@ impl From<ChatHistoryError> for HttpError {
                 HttpError::Internal(format!("Database error: {}", msg))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The last link of the duplicate-model chain. `AlreadyExists` is now
+    /// raised by `ModelService::import_from_file`; this pins the other end, so
+    /// that a future rearrangement of these `From` impls cannot quietly send a
+    /// duplicate back as a 500 again.
+    ///
+    /// Both routes in, because the GUI path arrives wrapped in `CoreError` and
+    /// the repository path does not.
+    #[test]
+    fn already_exists_reaches_the_client_as_409() {
+        let direct: HttpError = RepositoryError::AlreadyExists("dup".to_string()).into();
+        assert_eq!(direct.into_response().status(), StatusCode::CONFLICT);
+
+        let wrapped: HttpError =
+            CoreError::Repository(RepositoryError::AlreadyExists("dup".to_string())).into();
+        assert_eq!(wrapped.into_response().status(), StatusCode::CONFLICT);
+    }
+
+    /// The neighbouring repository errors must not also become 409 — a
+    /// conflict has to mean something.
+    #[test]
+    fn other_repository_errors_keep_their_own_status() {
+        let not_found: HttpError = RepositoryError::NotFound("gone".to_string()).into();
+        assert_eq!(not_found.into_response().status(), StatusCode::NOT_FOUND);
+
+        let storage: HttpError = RepositoryError::Storage("disk".to_string()).into();
+        assert_eq!(
+            storage.into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 }

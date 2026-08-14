@@ -563,8 +563,8 @@ pub struct PinnedSpec {
 
 /// A [`ModelRuntimePort`] that never has anything running.
 ///
-/// For callers with no shared [`ProcessManager`](crate::ports::ProcessRunner)
-/// to point at — the CLI's single-shot commands, whose `is_serving` checks
+/// For callers with no shared `ProcessManager` to point at — the CLI's
+/// single-shot commands, whose `is_serving` checks
 /// against a runtime scoped to that one process invocation would report
 /// "nothing running" regardless, since nothing was started in it. Making that
 /// explicit here is more honest than wiring in a real runner that can only

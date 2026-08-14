@@ -3,6 +3,8 @@
 //! This port defines the interface for model persistence operations.
 //! Implementations must handle all storage details internally.
 
+use std::path::Path;
+
 use async_trait::async_trait;
 
 use super::RepositoryError;
@@ -36,12 +38,50 @@ pub trait ModelRepository: Send + Sync {
     /// Returns `Err(RepositoryError::NotFound)` if no model with that name exists.
     async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError>;
 
-    /// Insert a new model into the repository.
+    /// Insert a new model into the repository, or update the existing row for
+    /// the same model.
     ///
-    /// Returns the persisted model with its assigned ID.
-    /// Returns `Err(RepositoryError::AlreadyExists)` if a model with the same
-    /// file path already exists.
+    /// **This upserts.** Registering the same model twice is not an error: it
+    /// overwrites the mutable columns and returns the existing row, id
+    /// included. That is deliberate — post-download registration has to be
+    /// safe to retry, and a re-scan must not fail on what it already knows.
+    ///
+    /// It also means this method never reports a duplicate. A caller for whom
+    /// "already there" *is* an error — an explicit "add this file to my
+    /// library" rather than a registration — must ask [`Self::find_by_path`]
+    /// first. `ModelService::import_from_file` does.
+    ///
+    /// This doc used to promise `Err(RepositoryError::AlreadyExists)` on a
+    /// duplicate file path. No implementation ever did that, and the promise
+    /// is what made the silent overwrite hard to see.
     async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError>;
+
+    /// Find the model registered under `path`, if there is one.
+    ///
+    /// Both sides are canonicalised before comparing, falling back to the
+    /// literal path when canonicalisation fails (a deleted file, a broken
+    /// symlink). Doing it on both sides rather than trusting the stored form
+    /// is what makes this agree with every implementation: the `SQLite`
+    /// repository canonicalises on write, test doubles store what they are
+    /// given, and on macOS a `tempfile` directory differs from its resolved
+    /// path by a `/private` prefix — so a one-sided comparison finds nothing
+    /// and reports "no duplicate" for a file that is plainly already there.
+    ///
+    /// Provided rather than required so implementors and test doubles inherit
+    /// it automatically. The scan is over the whole library, which is a table
+    /// of tens to hundreds of rows and is read once per explicit add.
+    async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
+        fn resolved(path: &Path) -> std::path::PathBuf {
+            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        }
+
+        let target = resolved(path);
+        Ok(self
+            .list()
+            .await?
+            .into_iter()
+            .find(|model| resolved(&model.file_path) == target))
+    }
 
     /// Update an existing model.
     ///

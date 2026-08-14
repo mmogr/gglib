@@ -2179,7 +2179,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "termimad",
- "thiserror 2.0.20",
  "tokio",
  "tokio-test",
  "tracing",
