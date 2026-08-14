@@ -1,10 +1,14 @@
 //! GUI-oriented process lifecycle management.
 //!
 //! This module provides process spawning, tracking, and management with
-//! integrated log streaming and event broadcasting for GUI use cases.
+//! integrated log streaming and event broadcasting.
 //!
-//! Note: This is distinct from the port-aligned `ProcessCore` in `process_core.rs`
-//! which implements the `ProcessRunner` port for CLI use cases.
+//! [`GuiProcessCore`] keeps its `Gui` prefix from a time when a second,
+//! port-aligned `ProcessCore` sat beside it in `process_core.rs` and
+//! implemented a `ProcessRunner` trait for the CLI. Both are gone, though not
+//! together: `process_core.rs` went in #708, and the trait outlived it until
+//! #849, by which point nothing implemented it. This is now the only process
+//! core, serving every caller rather than only the GUI.
 
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
@@ -25,7 +29,8 @@ use tracing::{debug, warn};
 /// integrated log streaming for GUI applications. Uses `u32` model IDs
 /// for frontend compatibility.
 ///
-/// For CLI/port-based process management, see `ProcessCore` in `process_core.rs`.
+/// The only process core. See the module docs above for why the name still
+/// carries a `Gui` prefix.
 pub struct GuiProcessCore {
     /// Running processes keyed by `model_id`
     processes: HashMap<u32, RunningProcess>,
@@ -159,7 +164,7 @@ impl GuiProcessCore {
 
     /// List all running processes
     pub fn list_all(&self) -> Vec<&ServerInfo> {
-        debug!(process_count = %self.processes.len(), "ProcessCore: list_all called");
+        debug!(process_count = %self.processes.len(), "GuiProcessCore: list_all called");
         self.processes.values().map(|p| &p.info).collect()
     }
 

@@ -191,8 +191,34 @@ gglib model retag --all --full
 gglib model retag qwen3-30b
 ```
 
-Re-registering a model (re-import or re-download) also re-derives the spec,
-overwriting the stored one — the same semantics as `--full`.
+Re-registering a model also re-derives the spec, overwriting the stored one —
+the same semantics as `--full`. Re-downloading does this implicitly;
+re-importing a file already in the library needs `--force`, because adding a
+file that is already there is otherwise a conflict rather than a silent
+overwrite:
+
+```bash
+# Re-derive the detected metadata: tags and dialect spec, plus the columns
+# `retag` does not touch — capabilities, quantization, context length,
+# expert counts
+gglib model add --force ~/models/qwen3-30b.gguf
+```
+
+Without `--force` the command reports the model already present and changes
+nothing.
+
+`--force` refreshes what was *detected*, not the whole row, and the columns it
+touches do not all behave alike:
+
+| Column | On refresh |
+|---|---|
+| `tags`, `capabilities`, `dialect_spec` | Replaced — including with nothing, so these **can** be cleared |
+| `quantization`, `context_length`, expert counts | Replaced only when newly detected; a stored value is never emptied |
+| `name`, parameter count, `architecture` | Untouched — a name you chose yourself survives |
+
+This is a CLI-only workflow. The GUI's *Add Model* and `POST /api/models` have
+no equivalent — adding a file already in the library is a `409` there, with no
+way to ask for the overwrite.
 
 End-to-end round-trip coverage lives in
 [`crates/gglib-proxy/tests/integration_proxy_pipeline.rs`](../crates/gglib-proxy/tests/integration_proxy_pipeline.rs).

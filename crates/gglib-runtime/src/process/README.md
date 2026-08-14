@@ -50,11 +50,13 @@ template  ⊕  per-call overrides  ⊕  this request's context chain
 so a flag added to `ServerConfigOptions` reaches llama-server through this path
 with no change here at all.
 
-# Distinction from `ProcessCore`
+# On the `Gui` prefix
 
-This module's `GuiProcessCore` is distinct from the port-aligned `ProcessCore`
-in `process_core.rs`. The port version implements `ProcessRunner` for CLI use
-with `i64` model IDs and no log/event infrastructure.
+`GuiProcessCore` was named against a second, port-aligned `ProcessCore` in
+`process_core.rs`, which implemented a `ProcessRunner` trait for CLI use with
+no log or event infrastructure. `process_core.rs` went in #708; the trait
+outlived it and went in #849, once it had no implementor left. This is now the
+only process core and serves every caller — the prefix is vestigial.
 
 <!-- module-docs:end -->
 
