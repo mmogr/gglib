@@ -21,22 +21,6 @@ use crate::repositories::{
 pub struct CoreFactory;
 
 impl CoreFactory {
-    /// Create a `SQLite` connection pool.
-    ///
-    /// # Arguments
-    ///
-    /// * `db_url` - `SQLite` connection URL (e.g., "sqlite:~/.gglib/gglib.db")
-    pub async fn create_pool(db_url: &str) -> anyhow::Result<SqlitePool> {
-        let pool = SqlitePool::connect(db_url).await?;
-        Ok(pool)
-    }
-
-    /// Create an in-memory `SQLite` pool for testing.
-    pub async fn create_test_pool() -> anyhow::Result<SqlitePool> {
-        let pool = SqlitePool::connect("sqlite::memory:").await?;
-        Ok(pool)
-    }
-
     /// Build all `SQLite` repositories from a pool.
     ///
     /// This is the recommended way for adapters to obtain repositories.

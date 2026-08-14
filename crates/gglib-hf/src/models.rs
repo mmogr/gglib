@@ -195,12 +195,7 @@ pub struct HfModelSummary {
     pub tags: Vec<String>,
 }
 
-impl HfModelSummary {
-    /// Get a reference to this model's repository.
-    pub fn repo_ref(&self) -> Option<HfRepoRef> {
-        HfRepoRef::parse(&self.id)
-    }
-}
+impl HfModelSummary {}
 
 // ============================================================================
 // Search Types

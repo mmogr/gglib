@@ -59,11 +59,11 @@ fn main() {
 }
 
 fn emit_vergen_fallbacks(sha_short: Option<&str>) {
-    // These are the env vars the crate uses via `env!()`.
-    // They MUST always be set, or compilation will fail.
+    // The env vars the crate uses via `env!()`. They MUST always be set, or
+    // compilation will fail. `VERGEN_GIT_DIRTY` used to be emitted here too and
+    // no longer is: `GIT_DIRTY` was the only reader and nothing read that.
     let sha = sha_short.unwrap_or("unknown");
     println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
-    println!("cargo:rustc-env=VERGEN_GIT_DIRTY=false");
 }
 
 fn normalize_sha_short(raw: &str) -> Option<String> {

@@ -53,13 +53,6 @@ pub(super) struct LogBuffer {
 }
 
 impl LogBuffer {
-    /// Create a new empty log buffer
-    pub(super) fn new() -> Self {
-        Self {
-            lines: VecDeque::with_capacity(MAX_LOG_LINES),
-        }
-    }
-
     /// Add a log entry, removing oldest if at capacity
     pub(super) fn push(&mut self, entry: ServerLogEntry) {
         if self.lines.len() >= MAX_LOG_LINES {
@@ -122,12 +115,6 @@ impl ServerLogManager {
     pub fn clear_logs(&self, port: u16) {
         let mut buffers = self.buffers.write().unwrap();
         buffers.remove(&port);
-    }
-
-    /// Initialize a new buffer for a server (call when server starts)
-    pub fn init_server(&self, port: u16) {
-        let mut buffers = self.buffers.write().unwrap();
-        buffers.insert(port, LogBuffer::new());
     }
 }
 

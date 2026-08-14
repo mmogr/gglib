@@ -43,12 +43,6 @@ impl DefaultHfClient {
         }
     }
 
-    /// Create a new client with default configuration.
-    #[must_use]
-    pub fn default_client() -> Self {
-        Self::new(&HfClientConfig::default())
-    }
-
     fn to_internal_config(config: &HfClientConfig) -> HfConfig {
         HfConfig {
             base_url: Url::parse(&config.base_url).unwrap_or_else(|_| {

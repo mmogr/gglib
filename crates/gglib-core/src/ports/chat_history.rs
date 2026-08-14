@@ -6,9 +6,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::domain::chat::{
-    Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
-};
+use crate::domain::chat::{Conversation, ConversationUpdate, Message, NewConversation, NewMessage};
 
 /// Errors that can occur in chat history operations.
 #[derive(Debug, Error)]
@@ -75,9 +73,4 @@ pub trait ChatHistoryRepository: Send + Sync {
 
     /// Get message count for a conversation.
     async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError>;
-}
-
-/// Validate a message role string.
-pub fn validate_role(role: &str) -> Result<MessageRole, ChatHistoryError> {
-    MessageRole::parse(role).ok_or_else(|| ChatHistoryError::InvalidRole(role.to_string()))
 }

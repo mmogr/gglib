@@ -646,7 +646,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 - `GET /v1/proxy/status/stream` is a Server-Sent Events stream: the first
   event is always the current snapshot (hydration), followed by a fresh
   snapshot roughly once per second for as long as the client stays
-  connected (via [`gglib_sse::Broadcaster::subscribe_with_hydration`],
+  connected (via [`gglib_sse::Broadcaster::subscribe_with_hydration_until`],
   see `crates/gglib-sse`). Keepalive comments (`: ping`) are sent every 30s
   on idle connections; native `EventSource` clients (browsers, and this is
   what the web GUI uses) ignore these transparently.

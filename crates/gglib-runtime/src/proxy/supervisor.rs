@@ -500,18 +500,6 @@ impl ProxySupervisor {
             }
         }
     }
-
-    /// Get the bound address if running.
-    pub async fn bound_address(&self) -> Option<SocketAddr> {
-        let guard = self.handle.lock().await;
-        guard.as_ref().and_then(|h| {
-            if h.join_handle.is_finished() {
-                None
-            } else {
-                Some(h.bound_addr)
-            }
-        })
-    }
 }
 
 impl fmt::Debug for ProxySupervisor {

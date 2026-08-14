@@ -396,17 +396,6 @@ impl DownloadManagerImpl {
         &self.model_registrar
     }
 
-    /// Subscribe to progress updates for an active download.
-    ///
-    /// Returns `None` if the download is not active.
-    pub async fn subscribe_progress(
-        &self,
-        id: &DownloadId,
-    ) -> Option<watch::Receiver<ProgressUpdate>> {
-        let active = self.active.lock().await;
-        active.get(id).map(|job| job.progress_tx.subscribe())
-    }
-
     /// Ensure the runner is started.
     ///
     /// This method is idempotent: calling it multiple times has no effect
@@ -1898,26 +1887,6 @@ impl DownloadManagerImpl {
             queued,
             group_id,
         })
-    }
-
-    /// Shutdown cleanup for process termination.
-    pub fn shutdown_cleanup(&self) -> usize {
-        // Cancel all tokens synchronously
-        // We can't block_read() on tokio::sync::Mutex, so use try_lock
-        self.active.try_lock().map_or_else(
-            |_| {
-                tracing::warn!("Shutdown cleanup: couldn't acquire lock");
-                0
-            },
-            |active| {
-                let count = active.len();
-                for job in active.values() {
-                    job.cancel.cancel();
-                }
-                tracing::info!(count = count, "Shutdown cleanup: cancelled download tokens");
-                count
-            },
-        )
     }
 }
 

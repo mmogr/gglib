@@ -25,16 +25,7 @@ pub struct ServerSummary {
     pub healthy: Option<bool>,
 }
 
-impl ServerSummary {
-    /// Parse the `model_id` string as a u32.
-    ///
-    /// Returns `None` if parsing fails.
-    ///
-    /// Pure helper: adapters decide how to handle/log parse failures.
-    pub fn parsed_model_id(&self) -> Option<u32> {
-        self.model_id.parse::<u32>().ok()
-    }
-}
+impl ServerSummary {}
 
 /// Port for emitting server lifecycle events.
 ///
