@@ -26,7 +26,7 @@ use tauri::AppHandle;
 /// Call only once the window is hidden. The policy change is what makes the app
 /// menu bar disappear too, which would be visible as a flicker if a window were
 /// still on screen.
-pub fn hide(app: &AppHandle) {
+pub(crate) fn hide(app: &AppHandle) {
     set_policy(app, Policy::Accessory);
 }
 
@@ -35,7 +35,7 @@ pub fn hide(app: &AppHandle) {
 /// Call *before* showing and focusing the window: an `Accessory` app cannot
 /// become frontmost, so a window shown first would appear behind whatever the
 /// user was using.
-pub fn show(app: &AppHandle) {
+pub(crate) fn show(app: &AppHandle) {
     set_policy(app, Policy::Regular);
 }
 

@@ -6,8 +6,8 @@
 mod snapshot;
 mod watch;
 
-pub use snapshot::DaemonSnapshot;
-pub use watch::{Refresh, spawn as watch};
+pub(crate) use snapshot::DaemonSnapshot;
+pub(crate) use watch::{Refresh, spawn as watch};
 
 use std::time::Duration;
 
@@ -28,7 +28,7 @@ const LAUNCH_WAIT: Duration = Duration::from_secs(15);
 /// into a single "hosted" bool, which could not tell a daemon we started from
 /// one that was already serving somebody else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ownership {
+pub(crate) enum Ownership {
     /// Already answering when we probed. Someone else's — a CLI session's, or
     /// an earlier app instance's — so this app does not get to end it.
     Adopted,
@@ -50,13 +50,13 @@ impl Ownership {
     /// session, an earlier instance — and quitting a dashboard is no reason to
     /// take their endpoint away.
     #[must_use]
-    pub const fn ends_with_the_app(self) -> bool {
+    pub(crate) const fn ends_with_the_app(self) -> bool {
         matches!(self, Self::Launched | Self::Hosted)
     }
 }
 
 /// A connected daemon.
-pub struct Daemon {
+pub(crate) struct Daemon {
     /// Shared HTTP client for daemon calls.
     pub client: reqwest::Client,
     /// How this app came by it — see [`Ownership`].
@@ -64,7 +64,7 @@ pub struct Daemon {
 }
 
 /// The daemon's base URL — fixed loopback port by design.
-pub fn base_url() -> String {
+pub(crate) fn base_url() -> String {
     format!("http://127.0.0.1:{DAEMON_PORT}")
 }
 
@@ -102,7 +102,7 @@ impl Daemon {
     /// Every call made through this fails until a daemon answers, which is
     /// exactly what the watcher reports as unreachable.
     #[must_use]
-    pub fn disconnected() -> Self {
+    pub(crate) fn disconnected() -> Self {
         Self {
             client: reqwest::Client::new(),
             ownership: Ownership::Unresolved,
@@ -115,7 +115,7 @@ impl Daemon {
     ///
     /// Fails when the port is held by a foreign program, or when neither an
     /// external launch nor the in-process fallback becomes healthy in time.
-    pub async fn connect_or_launch() -> Result<Self, String> {
+    pub(crate) async fn connect_or_launch() -> Result<Self, String> {
         let client = reqwest::Client::new();
 
         match probe(&client).await {
@@ -177,7 +177,7 @@ impl Daemon {
     /// Fails when one is already running, when the port is held by a foreign
     /// program, when no `gglib` binary can be found, or when the launched
     /// daemon does not become healthy in time.
-    pub async fn restart(&self) -> Result<(), String> {
+    pub(crate) async fn restart(&self) -> Result<(), String> {
         match probe(&self.client).await {
             Probe::Running => return Err("the gglib daemon is already running".to_owned()),
             Probe::Foreign => {
@@ -195,7 +195,7 @@ impl Daemon {
     }
 
     /// GET a JSON value from the daemon.
-    pub async fn get_json(&self, path: &str) -> Result<serde_json::Value, String> {
+    pub(crate) async fn get_json(&self, path: &str) -> Result<serde_json::Value, String> {
         let response = self
             .client
             .get(format!("{}{path}", base_url()))
@@ -207,7 +207,7 @@ impl Daemon {
     }
 
     /// POST to the daemon, returning the JSON response.
-    pub async fn post_json(
+    pub(crate) async fn post_json(
         &self,
         path: &str,
         body: &serde_json::Value,
@@ -233,7 +233,7 @@ impl Daemon {
     }
 
     /// Read the stored settings through the daemon.
-    pub async fn settings(&self) -> Result<AppSettings, String> {
+    pub(crate) async fn settings(&self) -> Result<AppSettings, String> {
         let value = self.get_json("/api/config/settings").await?;
         serde_json::from_value(value).map_err(|e| e.to_string())
     }
@@ -244,7 +244,7 @@ impl Daemon {
     /// teardown — proxy drained, every llama-server stopped gracefully,
     /// downloads cancelled — runs after. Pair with [`Self::wait_for_exit`]
     /// when the caller needs it finished.
-    pub async fn request_shutdown(&self) {
+    pub(crate) async fn request_shutdown(&self) {
         let _ = self
             .client
             .post(format!("{}/api/daemon/shutdown", base_url()))
@@ -254,7 +254,7 @@ impl Daemon {
     }
 
     /// Wait (bounded) for the daemon to stop answering.
-    pub async fn wait_for_exit(&self, budget: Duration) {
+    pub(crate) async fn wait_for_exit(&self, budget: Duration) {
         let deadline = tokio::time::Instant::now() + budget;
         while tokio::time::Instant::now() < deadline {
             if matches!(probe(&self.client).await, Probe::NotRunning) {

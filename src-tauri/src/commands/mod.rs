@@ -1,4 +1,4 @@
 #![doc = include_str!("README.md")]
-pub mod app_logs;
-pub mod llama;
-pub mod util;
+pub(crate) mod app_logs;
+pub(crate) mod llama;
+pub(crate) mod util;

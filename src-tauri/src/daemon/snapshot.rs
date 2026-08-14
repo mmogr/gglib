@@ -16,7 +16,7 @@ use serde_json::Value;
 /// Linux, so the watcher compares before it paints and does nothing at all when
 /// nothing has changed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DaemonSnapshot {
+pub(crate) struct DaemonSnapshot {
     /// Whether the daemon answered at all. Everything below is meaningless
     /// when this is false.
     pub reachable: bool,
@@ -41,7 +41,7 @@ impl DaemonSnapshot {
     /// A snapshot that cannot be built is indistinguishable from an
     /// unreachable daemon, and the tray has to show something either way.
     #[must_use]
-    pub fn from_responses(proxy: &Value, servers: &Value) -> Self {
+    pub(crate) fn from_responses(proxy: &Value, servers: &Value) -> Self {
         let proxy_running = proxy
             .get("running")
             .and_then(Value::as_bool)
@@ -72,7 +72,7 @@ impl DaemonSnapshot {
     /// The question a menu bar icon is actually asked. A resident model holds
     /// VRAM whether or not the proxy is listening, so both count.
     #[must_use]
-    pub fn is_active(&self) -> bool {
+    pub(crate) fn is_active(&self) -> bool {
         self.proxy_running || !self.resident.is_empty()
     }
 
@@ -83,7 +83,7 @@ impl DaemonSnapshot {
     /// back to — and a guessed default port would hand out a dead URL, which
     /// is worse than the button doing nothing.
     #[must_use]
-    pub fn endpoint_url(&self) -> Option<String> {
+    pub(crate) fn endpoint_url(&self) -> Option<String> {
         self.proxy_port
             .map(|port| format!("http://127.0.0.1:{port}/v1"))
     }
@@ -99,7 +99,7 @@ impl DaemonSnapshot {
     /// true, so a caller disappearing on macOS still fails the build.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     #[must_use]
-    pub fn serves(&self, model_id: i64) -> bool {
+    pub(crate) fn serves(&self, model_id: i64) -> bool {
         self.resident.binary_search(&model_id).is_ok()
     }
 }

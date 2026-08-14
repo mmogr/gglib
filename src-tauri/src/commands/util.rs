@@ -13,7 +13,7 @@ use tauri::AppHandle;
 /// daemon's fixed loopback port, which is unauthenticated — the token field
 /// went with the embedded server, having been an empty string ever since.
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct ApiInfo {
+pub(crate) struct ApiInfo {
     /// Port of the daemon's management API.
     pub port: u16,
 }
@@ -22,7 +22,7 @@ pub struct ApiInfo {
 ///
 /// The frontend calls this once at startup to discover where the API lives.
 #[tauri::command]
-pub fn get_embedded_api_info() -> ApiInfo {
+pub(crate) fn get_embedded_api_info() -> ApiInfo {
     ApiInfo {
         port: gglib_core::DAEMON_PORT,
     }
@@ -32,7 +32,7 @@ pub fn get_embedded_api_info() -> ApiInfo {
 ///
 /// Used by the frontend to open external links (e.g., HuggingFace model pages).
 #[tauri::command]
-pub async fn open_url(url: String) -> Result<(), String> {
+pub(crate) async fn open_url(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
 }
 
@@ -42,7 +42,7 @@ pub async fn open_url(url: String) -> Result<(), String> {
 /// the snapshot already in hand is correct here — nothing about the daemon
 /// changed.
 #[tauri::command]
-pub async fn set_selected_model(
+pub(crate) async fn set_selected_model(
     model_id: Option<i64>,
     app: AppHandle,
     state: tauri::State<'_, AppState>,
@@ -76,7 +76,7 @@ pub async fn set_selected_model(
 /// So: the immediate paint catches the local state, and the poll it just asked
 /// for catches the daemon's, a moment later.
 #[tauri::command]
-pub async fn sync_menu_state(
+pub(crate) async fn sync_menu_state(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {

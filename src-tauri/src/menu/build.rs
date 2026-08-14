@@ -10,7 +10,7 @@ use tauri::{
 ///
 /// Returns both the Menu to attach to the app and the AppMenu struct
 /// containing references to stateful items for later updates.
-pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Error> {
+pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Error> {
     // =========================================================================
     // App Menu (GGLib) - First submenu becomes app menu on macOS
     // =========================================================================

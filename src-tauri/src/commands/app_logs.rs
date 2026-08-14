@@ -9,7 +9,7 @@ use serde::Deserialize;
 /// Matches the LogEntry interface in TypeScript.
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)] // timestamp is required for deserialization but not used in logging
-pub struct FrontendLogEntry {
+pub(crate) struct FrontendLogEntry {
     pub timestamp: String,
     pub level: String,
     pub category: String,
@@ -41,7 +41,7 @@ pub struct FrontendLogEntry {
 /// RUST_LOG=gglib=debug,gglib_frontend=debug
 /// ```
 #[tauri::command]
-pub fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
+pub(crate) fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
     let message = &entry.message;
     let category = &entry.category;
 

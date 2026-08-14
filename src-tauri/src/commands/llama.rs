@@ -13,14 +13,14 @@ use tauri::AppHandle;
 
 /// Response for check_llama_status command.
 #[derive(serde::Serialize)]
-pub struct LlamaStatus {
+pub(crate) struct LlamaStatus {
     pub installed: bool,
     pub can_download: bool,
 }
 
 /// Progress event for llama installation.
 #[derive(Clone, serde::Serialize)]
-pub struct LlamaInstallEvent {
+pub(crate) struct LlamaInstallEvent {
     pub status: String,
     pub downloaded: u64,
     pub total: u64,
@@ -30,7 +30,7 @@ pub struct LlamaInstallEvent {
 
 /// Check if llama.cpp is installed.
 #[tauri::command]
-pub fn check_llama_status() -> Result<LlamaStatus, String> {
+pub(crate) fn check_llama_status() -> Result<LlamaStatus, String> {
     let installed = check_llama_installed();
     let can_download = matches!(
         check_prebuilt_availability(),
@@ -45,7 +45,7 @@ pub fn check_llama_status() -> Result<LlamaStatus, String> {
 
 /// Install llama.cpp by downloading pre-built binaries.
 #[tauri::command]
-pub async fn install_llama(app: AppHandle) -> Result<String, String> {
+pub(crate) async fn install_llama(app: AppHandle) -> Result<String, String> {
     // Check if pre-built binaries are available
     match check_prebuilt_availability() {
         PrebuiltAvailability::Available { description, .. } => {

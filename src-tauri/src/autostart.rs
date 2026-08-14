@@ -22,7 +22,7 @@ use crate::{dock, tray};
 /// `std::env::args`. macOS's `LaunchAgent` writes it into the plist's
 /// `ProgramArguments` alongside the executable path, and the equivalent happens
 /// on Windows and Linux.
-pub const LOGIN_ITEM_FLAG: &str = "--from-autostart";
+pub(crate) const LOGIN_ITEM_FLAG: &str = "--from-autostart";
 
 /// Whether this process was started by the OS login item rather than by hand.
 fn launched_by_login_item() -> bool {
@@ -40,7 +40,7 @@ fn launched_by_login_item() -> bool {
 /// app with no window, no Dock icon and nothing to click: unreachable short of
 /// killing it from a terminal. Requiring a tray means the worst outcome is a
 /// window someone did not want, which they can close.
-pub const fn should_start_hidden(
+pub(crate) const fn should_start_hidden(
     launched_by_login_item: bool,
     close_to_tray: Option<bool>,
     tray_available: bool,
@@ -61,7 +61,7 @@ pub const fn should_start_hidden(
 /// immediately before calling this hook, both inside `build()`, and GTK only
 /// completes a queued map once `run()` pumps the event loop. So the window is
 /// still unmapped at this point and hiding it cancels the map outright.
-pub async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
+pub(crate) async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
     let state = app.state::<AppState>();
 
     let close_to_tray = match state.daemon.settings().await {
@@ -100,7 +100,7 @@ pub async fn apply_initial_visibility(app: &AppHandle, tray_available: bool) {
 /// Runs after the window exists so a slow settings read delays nothing the
 /// user is waiting on. Proxy autostart is deliberately absent: the daemon
 /// honours `proxy_autostart` itself when it starts.
-pub async fn apply(app: &AppHandle) {
+pub(crate) async fn apply(app: &AppHandle) {
     let state = app.state::<AppState>();
 
     let settings = match state.daemon.settings().await {

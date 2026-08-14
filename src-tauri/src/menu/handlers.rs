@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use tracing::debug;
 
 /// Handle menu item click events.
-pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+pub(crate) fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().as_ref();
 
     debug!(menu_id = %id, "Menu event received");

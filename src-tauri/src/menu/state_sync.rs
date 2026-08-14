@@ -23,7 +23,7 @@ use tracing::warn;
 ///
 /// The snapshot is cloned out of its lock rather than read through it: both
 /// surfaces below await, and the tray's await is a D-Bus round trip on Linux.
-pub async fn sync_all_state(
+pub(crate) async fn sync_all_state(
     app: &AppHandle,
     state: &tauri::State<'_, AppState>,
 ) -> Result<(), String> {
@@ -81,7 +81,7 @@ async fn sync_app_menu(
 /// Sync every surface, logging rather than returning any failure.
 ///
 /// For fire-and-forget callers with nowhere useful to send an error.
-pub async fn sync_all_state_logged(app: &AppHandle, state: &tauri::State<'_, AppState>) {
+pub(crate) async fn sync_all_state_logged(app: &AppHandle, state: &tauri::State<'_, AppState>) {
     if let Err(e) = sync_all_state(app, state).await {
         warn!("Failed to sync menu and tray state: {e}");
     }

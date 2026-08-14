@@ -42,14 +42,14 @@ const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// A handle for asking the watcher to poll now rather than on the next tick.
 #[derive(Clone, Default)]
-pub struct Refresh(Arc<Notify>);
+pub(crate) struct Refresh(Arc<Notify>);
 
 impl Refresh {
     /// Wake the watcher immediately.
     ///
     /// Called after this app changes something, so the tray does not sit out
     /// the poll interval showing what the user just stopped doing.
-    pub fn now(&self) {
+    pub(crate) fn now(&self) {
         self.0.notify_one();
     }
 
@@ -67,7 +67,7 @@ impl Refresh {
 /// Polls once immediately so the first paint shows the daemon's real state
 /// rather than the struct defaults — which is what used to leave a launch with
 /// `proxy_autostart` on reading "proxy stopped".
-pub fn spawn(app: &AppHandle) {
+pub(crate) fn spawn(app: &AppHandle) {
     let app = app.clone();
 
     tauri::async_runtime::spawn(async move {

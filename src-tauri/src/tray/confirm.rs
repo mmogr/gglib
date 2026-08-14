@@ -18,7 +18,7 @@ use crate::daemon::DaemonSnapshot;
 /// signal not to ask at all: interrupting someone to confirm the shutdown of a
 /// daemon that is serving nothing and holding nothing is noise.
 #[must_use]
-pub fn at_stake(snap: &DaemonSnapshot) -> Option<String> {
+pub(super) fn at_stake(snap: &DaemonSnapshot) -> Option<String> {
     let proxy = snap
         .proxy_port
         .map(|port| format!("the proxy on :{port}"))
@@ -43,7 +43,7 @@ pub fn at_stake(snap: &DaemonSnapshot) -> Option<String> {
 /// Only asks when this app's exit actually takes the daemon with it. Against
 /// an adopted daemon there is nothing to warn about: it keeps serving, which
 /// is the whole reason it is left alone.
-pub fn quit(app: &AppHandle, snap: &DaemonSnapshot, ends_with_the_app: bool) -> bool {
+pub(super) fn quit(app: &AppHandle, snap: &DaemonSnapshot, ends_with_the_app: bool) -> bool {
     if !ends_with_the_app {
         return true;
     }
@@ -61,7 +61,7 @@ pub fn quit(app: &AppHandle, snap: &DaemonSnapshot, ends_with_the_app: bool) -> 
 }
 
 /// Ask before stopping the daemon from the tray.
-pub fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
+pub(super) fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
     let Some(at_stake) = at_stake(snap) else {
         return true;
     };
@@ -85,7 +85,7 @@ pub fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
 /// Spawns rather than blocking, so it is safe to call from the setup hook —
 /// which runs before the event loop is pumping and would otherwise deadlock on
 /// a modal.
-pub fn report_failure(app: &AppHandle, title: &str, detail: &str) {
+pub(crate) fn report_failure(app: &AppHandle, title: &str, detail: &str) {
     let (app, title, detail) = (app.clone(), title.to_owned(), detail.to_owned());
 
     tauri::async_runtime::spawn(async move {

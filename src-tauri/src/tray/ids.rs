@@ -2,27 +2,27 @@
 
 /// Endpoint status header. Disabled, so it never raises a menu event — it has
 /// an ID only because `MenuItem` requires one and `tray::sync` looks it up.
-pub const STATUS: &str = "tray_status";
+pub(super) const STATUS: &str = "tray_status";
 
 /// Show the live proxy panel. Also the left-click action where the platform
 /// reports one — see the module README on Linux's AppIndicator.
-pub const OPEN_PANEL: &str = "tray_open_panel";
+pub(super) const OPEN_PANEL: &str = "tray_open_panel";
 
-pub const START_PROXY: &str = "tray_start_proxy";
-pub const STOP_PROXY: &str = "tray_stop_proxy";
-pub const COPY_PROXY_URL: &str = "tray_copy_proxy_url";
+pub(super) const START_PROXY: &str = "tray_start_proxy";
+pub(super) const STOP_PROXY: &str = "tray_stop_proxy";
+pub(super) const COPY_PROXY_URL: &str = "tray_copy_proxy_url";
 
 /// Start the gglib daemon, when nothing is running.
-pub const START_SERVICE: &str = "tray_start_service";
+pub(super) const START_SERVICE: &str = "tray_start_service";
 /// Stop the gglib daemon: the proxy, every llama-server, the lot.
-pub const STOP_SERVICE: &str = "tray_stop_service";
+pub(super) const STOP_SERVICE: &str = "tray_stop_service";
 
 /// Show the main window.
-pub const OPEN_MAIN: &str = "tray_open_main";
-pub const PREFERENCES: &str = "tray_preferences";
+pub(super) const OPEN_MAIN: &str = "tray_open_main";
+pub(super) const PREFERENCES: &str = "tray_preferences";
 
 /// Quit the application.
-pub const QUIT: &str = "tray_quit";
+pub(super) const QUIT: &str = "tray_quit";
 
 #[cfg(test)]
 mod tests {

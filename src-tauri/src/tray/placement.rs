@@ -12,7 +12,7 @@ use tauri::{PhysicalPosition, Rect};
 
 /// What the caller knows about where the tray icon is.
 #[derive(Debug, Clone, Copy)]
-pub enum Anchor {
+pub(crate) enum Anchor {
     /// The icon's rectangle, from a click event that carried one.
     ///
     /// Only the `muda` backend reports these; Linux's tray fires no click
@@ -54,7 +54,7 @@ pub fn prepare(panel: &WebviewWindow) -> bool {
 /// nothing to set up ahead of time.
 #[cfg(not(target_os = "linux"))]
 #[must_use]
-pub fn prepare(_panel: &WebviewWindow) -> bool {
+pub(crate) fn prepare(_panel: &WebviewWindow) -> bool {
     true
 }
 
@@ -63,7 +63,7 @@ pub fn prepare(_panel: &WebviewWindow) -> bool {
 /// On Linux the anchoring was already applied by [`prepare`] and the panel is
 /// pinned beside the tray, so there is nothing per-toggle to do. Elsewhere a
 /// known rectangle is used to drop the panel directly beneath the icon.
-pub fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
+pub(crate) fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
     match anchor {
         #[cfg(not(target_os = "linux"))]
         Anchor::Rect(rect) => position_near(panel, rect),
