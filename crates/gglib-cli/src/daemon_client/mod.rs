@@ -8,6 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
 use gglib_core::DAEMON_PORT;
+use gglib_core::download::QueueSnapshot;
 use gglib_core::ports::PinnedSpec;
 
 /// How long one identity probe may take. The daemon answers `/health` from
@@ -25,6 +26,10 @@ pub fn base_url() -> String {
     format!("http://127.0.0.1:{DAEMON_PORT}")
 }
 
+/// Every daemon path this CLI calls, defined in shared vocabulary so the
+/// daemon's own suite can pin them — see `gglib_core::contracts::http::daemon`.
+pub use gglib_core::contracts::http::daemon as paths;
+
 /// What answered (or didn't) on the daemon port.
 #[derive(Debug)]
 pub enum DaemonProbe {
@@ -38,7 +43,7 @@ pub enum DaemonProbe {
 
 /// Identity-check the daemon port.
 pub async fn probe(client: &reqwest::Client) -> DaemonProbe {
-    let url = format!("{}/health", base_url());
+    let url = format!("{}{}", base_url(), paths::HEALTH_PATH);
     let response = match client.get(&url).timeout(PROBE_TIMEOUT).send().await {
         Ok(r) => r,
         Err(_) => return DaemonProbe::NotRunning,
@@ -223,6 +228,23 @@ pub struct StartServerDto {
     pub port: u16,
 }
 
+/// `POST /api/models/downloads/queue` request body.
+#[derive(Debug, Clone, Serialize)]
+pub struct QueueDownloadBody {
+    pub model_id: String,
+    /// `None` leaves the quantization choice to the daemon.
+    pub quant: Option<String>,
+}
+
+/// `POST /api/models/downloads/queue` response.
+#[derive(Debug, Clone, Deserialize)]
+pub struct QueueDownloadDto {
+    /// Position in the queue; 0 means it started immediately.
+    pub position: usize,
+    /// Shards queued: 1 for a single file, N for a sharded model.
+    pub shard_count: usize,
+}
+
 impl DaemonHandle {
     /// One absolute URL on the daemon.
     fn url(&self, path: &str) -> String {
@@ -249,7 +271,7 @@ impl DaemonHandle {
     pub async fn start_proxy(&self, body: &StartProxyBody) -> Result<ProxyStatusDto> {
         let response = self
             .client
-            .post(self.url("/api/proxy/start"))
+            .post(self.url(paths::PROXY_START_PATH))
             .json(body)
             .timeout(Duration::from_secs(30))
             .send()
@@ -261,7 +283,7 @@ impl DaemonHandle {
     pub async fn stop_proxy(&self) -> Result<ProxyStatusDto> {
         let response = self
             .client
-            .post(self.url("/api/proxy/stop"))
+            .post(self.url(paths::PROXY_STOP_PATH))
             .json(&serde_json::json!({}))
             .timeout(Duration::from_secs(30))
             .send()
@@ -273,7 +295,7 @@ impl DaemonHandle {
     pub async fn proxy_status(&self) -> Result<ProxyStatusDto> {
         let response = self
             .client
-            .get(self.url("/api/proxy/status"))
+            .get(self.url(paths::PROXY_STATUS_PATH))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
@@ -290,9 +312,41 @@ impl DaemonHandle {
     ) -> Result<StartServerDto> {
         let response = self
             .client
-            .post(self.url("/api/servers/start"))
+            .post(self.url(paths::SERVERS_START_PATH))
             .json(&serde_json::json!({ "id": model_id, "context_length": context_length }))
             .timeout(Duration::from_secs(180))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Queue a model download on the daemon.
+    ///
+    /// Long timeout: the daemon resolves the repo and its shard list against
+    /// HuggingFace before answering.
+    pub async fn queue_download(&self, body: &QueueDownloadBody) -> Result<QueueDownloadDto> {
+        let response = self
+            .client
+            .post(self.url(paths::DOWNLOADS_QUEUE_PATH))
+            .json(body)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// The daemon's download queue snapshot — what the dashboard renders.
+    ///
+    /// `GET` and `POST` share one path by design. The snapshot handler was once
+    /// double-mounted at `/api/models/downloads` as well, and when that second
+    /// mount was retired as unused (#834) the CLI was still polling it. The bare
+    /// path then fell through to `/api/models/{id}`, whose `i64` extractor
+    /// answers `400 text/plain` — which the poller tried to parse as JSON.
+    pub async fn download_queue(&self) -> Result<QueueSnapshot> {
+        let response = self
+            .client
+            .get(self.url(paths::DOWNLOADS_QUEUE_PATH))
+            .timeout(Duration::from_secs(5))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
@@ -303,7 +357,7 @@ impl DaemonHandle {
     pub async fn shutdown_daemon(&self) -> Result<bool> {
         let response = self
             .client
-            .post(self.url("/api/daemon/shutdown"))
+            .post(self.url(paths::DAEMON_SHUTDOWN_PATH))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;

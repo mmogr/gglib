@@ -44,6 +44,11 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     }
 
     let handle = daemon_client::ensure_daemon().await?;
-    remote::queue(&handle, args.model_id, args.quantization.map(String::from)).await?;
+    handle
+        .queue_download(&daemon_client::QueueDownloadBody {
+            model_id: args.model_id.to_string(),
+            quant: args.quantization.map(String::from),
+        })
+        .await?;
     remote::monitor(&handle).await
 }

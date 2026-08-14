@@ -102,7 +102,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
 | `POST` | `/api/models/hf/search` | Search HuggingFace |
 | `POST` | `/api/models/downloads/queue` | Queue a download |
-| `GET` | `/api/models/downloads` | Get download status |
+| `GET` | `/api/models/downloads/queue` | Download queue snapshot |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |
 | `GET` | `/api/mcp/servers` | List MCP servers |

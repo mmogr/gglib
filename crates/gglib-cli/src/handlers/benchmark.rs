@@ -196,7 +196,12 @@ async fn cmd_compare(
     eprintln!("  Models : {}", models.join(", "));
     style::print_banner_close();
 
-    run_on_daemon("/api/benchmark/compare", &config, render_event).await
+    run_on_daemon(
+        daemon_client::paths::BENCHMARK_COMPARE_PATH,
+        &config,
+        render_event,
+    )
+    .await
 }
 
 // ─── benchmark perf ───────────────────────────────────────────────────────────
@@ -224,7 +229,12 @@ async fn cmd_perf(
     );
     style::print_banner_close();
 
-    run_on_daemon("/api/benchmark/perf", &config, render_event).await
+    run_on_daemon(
+        daemon_client::paths::BENCHMARK_PERF_PATH,
+        &config,
+        render_event,
+    )
+    .await
 }
 
 // ─── benchmark tune ───────────────────────────────────────────────────────────
@@ -279,12 +289,16 @@ async fn cmd_tune(
     style::print_banner_close();
 
     let mut completed_run: Option<i64> = None;
-    run_on_daemon("/api/benchmark/tune", &config, |event| {
-        if let BenchmarkEvent::RunComplete { run_id } = event {
-            completed_run = Some(*run_id);
-        }
-        render_event(event);
-    })
+    run_on_daemon(
+        daemon_client::paths::BENCHMARK_TUNE_PATH,
+        &config,
+        |event| {
+            if let BenchmarkEvent::RunComplete { run_id } = event {
+                completed_run = Some(*run_id);
+            }
+            render_event(event);
+        },
+    )
     .await?;
 
     if apply {
@@ -309,8 +323,9 @@ async fn apply_gated(run_id: i64) -> Result<()> {
 
     let handle = daemon_client::ensure_daemon().await?;
     let url = format!(
-        "{}/api/benchmark/tune/{run_id}/apply",
-        daemon_client::base_url()
+        "{}{}",
+        daemon_client::base_url(),
+        daemon_client::paths::benchmark_tune_apply_path(run_id)
     );
     let outcome: ApplyOutcome = handle
         .client
@@ -420,12 +435,16 @@ async fn cmd_agentic(
     style::print_banner_close();
 
     let mut report: Option<AgenticEvalReport> = None;
-    run_on_daemon("/api/benchmark/agentic", &config, |event| {
-        if let BenchmarkEvent::AgenticEvalComplete { report: r } = event {
-            report = Some((**r).clone());
-        }
-        render_event(event);
-    })
+    run_on_daemon(
+        daemon_client::paths::BENCHMARK_AGENTIC_PATH,
+        &config,
+        |event| {
+            if let BenchmarkEvent::AgenticEvalComplete { report: r } = event {
+                report = Some((**r).clone());
+            }
+            render_event(event);
+        },
+    )
     .await?;
 
     let report = report.ok_or_else(|| {
@@ -1005,8 +1024,9 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// valid, just unpinned to a machine.
 async fn fetch_hardware_snapshot() -> serde_json::Value {
     let url = format!(
-        "{}/api/config/system/setup-status",
-        daemon_client::base_url()
+        "{}{}",
+        daemon_client::base_url(),
+        daemon_client::paths::SETUP_STATUS_PATH
     );
     match reqwest::Client::new().get(&url).send().await {
         Ok(resp) => resp

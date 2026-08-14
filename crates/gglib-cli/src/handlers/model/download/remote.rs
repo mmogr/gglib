@@ -1,10 +1,10 @@
 //! Progress monitor for downloads running on the gglib daemon.
 //!
-//! `gglib model download` queues on the daemon and watches the queue by
-//! polling `GET /api/models/downloads` — the same snapshot the dashboard
-//! renders. The download itself belongs to the daemon: Ctrl-C here (or a
-//! closed terminal) detaches the monitor and the download keeps going,
-//! which is the point of daemon ownership.
+//! Presentation only: the queue snapshot arrives from
+//! [`DaemonHandle::download_queue`], and this module turns it into progress
+//! bars. The download itself belongs to the daemon — Ctrl-C here (or a closed
+//! terminal) detaches the monitor and the download keeps going, which is the
+//! point of daemon ownership.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use gglib_core::download::{DownloadStatus, QueueSnapshot, QueuedDownload};
+use gglib_core::download::{DownloadStatus, QueuedDownload};
 use gglib_download::{rate_suffix, total_bytes_key};
 
 use crate::daemon_client::DaemonHandle;
@@ -21,29 +21,6 @@ use crate::daemon_client::DaemonHandle;
 /// sampling tick (250ms), so the bars are at most one tick behind without
 /// hammering the loopback API.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
-
-/// Queue a download on the daemon.
-pub async fn queue(handle: &DaemonHandle, model_id: &str, quant: Option<String>) -> Result<()> {
-    let url = format!(
-        "{}/api/models/downloads/queue",
-        crate::daemon_client::base_url()
-    );
-    let response = handle
-        .client
-        .post(&url)
-        .json(&serde_json::json!({ "model_id": model_id, "quant": quant }))
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await
-        .context("queueing download on the daemon")?;
-    anyhow::ensure!(
-        response.status().is_success(),
-        "daemon refused the download: {} {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    );
-    Ok(())
-}
 
 /// Watch the daemon's download queue until it drains, drawing progress bars.
 ///
@@ -64,7 +41,6 @@ pub async fn monitor(handle: &DaemonHandle) -> Result<()> {
 }
 
 async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
-    let url = format!("{}/api/models/downloads", crate::daemon_client::base_url());
     let multi = MultiProgress::new();
     // No `{bytes_per_sec}`: that's indicatif's own estimate, derived from our
     // `set_position` calls, and it disagrees with the rate the daemon's
@@ -81,16 +57,10 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
     let mut observed: Vec<String> = Vec::new();
 
     loop {
-        let snapshot: QueueSnapshot = handle
-            .client
-            .get(&url)
-            .timeout(Duration::from_secs(5))
-            .send()
+        let snapshot = handle
+            .download_queue()
             .await
-            .context("polling the daemon download queue")?
-            .json()
-            .await
-            .context("decoding the daemon download queue")?;
+            .context("polling the daemon download queue")?;
 
         for item in &snapshot.items {
             seen_items = true;
