@@ -36,3 +36,11 @@ pub const FORMAT_QWEN_XML: &str = "format:qwen-xml";
 /// built-in Qwen [`crate::domain::dialect::DialectSpec`] in
 /// [`super::registry::dialect_for_tags`].
 pub const FORMAT_HERMES: &str = "format:hermes";
+
+/// Bare `<think>...</think>` reasoning tags emitted in the text channel.
+///
+/// Models tagged with this string emit chain-of-thought reasoning inline in
+/// the text channel rather than via the dedicated `reasoning_content` field.
+/// V1 reserves this constant for forward compatibility; the corresponding
+/// parser is delivered in a follow-up PR.
+pub const FORMAT_THINK_TAG: &str = "format:think-tag";

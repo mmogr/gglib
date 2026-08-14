@@ -38,7 +38,6 @@ fn main() {
     let git = match GixBuilder::default()
         .repo_path(Some(repo_root))
         .sha(true) // short SHA
-        .dirty(false)
         .build()
     {
         Ok(git) => git,
@@ -60,8 +59,12 @@ fn main() {
 
 fn emit_vergen_fallbacks(sha_short: Option<&str>) {
     // The env vars the crate uses via `env!()`. They MUST always be set, or
-    // compilation will fail. `VERGEN_GIT_DIRTY` used to be emitted here too and
-    // no longer is: `GIT_DIRTY` was the only reader and nothing read that.
+    // compilation will fail.
+    //
+    // `VERGEN_GIT_DIRTY` is no longer among them. `GIT_DIRTY` was its only
+    // reader and nothing read that, so the builder no longer asks for it —
+    // note `GixBuilder::dirty` takes `include_untracked`, not an on/off
+    // switch, so `.dirty(false)` would have kept emitting it.
     let sha = sha_short.unwrap_or("unknown");
     println!("cargo:rustc-env=VERGEN_GIT_SHA={sha}");
 }

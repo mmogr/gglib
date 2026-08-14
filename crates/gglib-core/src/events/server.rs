@@ -25,8 +25,6 @@ pub struct ServerSummary {
     pub healthy: Option<bool>,
 }
 
-impl ServerSummary {}
-
 /// Port for emitting server lifecycle events.
 ///
 /// This trait decouples the core server lifecycle logic from transport-specific
