@@ -67,6 +67,19 @@ pub(crate) async fn post_mcp(
         }
     };
 
+    // JSON-RPC 2.0 §4: the member must be exactly "2.0". Serde already rejects a
+    // body that omits it, because the field is not optional; this is the other
+    // half — a body that carries the wrong version. Checked before the
+    // notification branch so it applies to those too.
+    if request.jsonrpc != "2.0" {
+        warn!(jsonrpc = %request.jsonrpc, "MCP: unsupported JSON-RPC version");
+        return json_rpc_error_response(
+            StatusCode::BAD_REQUEST,
+            Value::Null,
+            JsonRpcError::new(INVALID_REQUEST, "jsonrpc must be \"2.0\""),
+        );
+    }
+
     debug!(method = %request.method, id = ?request.id, "MCP request");
 
     // Notification (no id) — return 202 Accepted
@@ -489,6 +502,31 @@ mod tests {
         assert_eq!(parsed["error"]["code"], -32700);
         assert_eq!(parsed["error"]["message"], "bad input");
         assert!(parsed.get("result").is_none());
+    }
+
+    #[test]
+    fn a_request_without_jsonrpc_does_not_deserialise() {
+        // The other half of the version check, and the reason the field is not
+        // an `Option`: a body with no `jsonrpc` member never reaches `post_mcp`.
+        let err = serde_json::from_str::<JsonRpcRequest>(r#"{"id": 1, "method": "ping"}"#)
+            .expect_err("a request with no jsonrpc member must not parse");
+        assert!(err.to_string().contains("jsonrpc"), "{err}");
+    }
+
+    #[test]
+    fn a_request_carrying_the_wrong_version_parses_and_is_rejected() {
+        // Parsing is not the gate — "1.0" is a perfectly well-formed string, so
+        // only the explicit check in `post_mcp` refuses it.
+        let request: JsonRpcRequest =
+            serde_json::from_str(r#"{"jsonrpc": "1.0", "id": 1, "method": "ping"}"#).unwrap();
+        assert_ne!(request.jsonrpc, "2.0");
+
+        let resp = json_rpc_error_response(
+            StatusCode::BAD_REQUEST,
+            Value::Null,
+            JsonRpcError::new(INVALID_REQUEST, "jsonrpc must be \"2.0\""),
+        );
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

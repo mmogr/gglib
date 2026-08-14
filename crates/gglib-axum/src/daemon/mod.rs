@@ -16,13 +16,15 @@ use gglib_core::{CorsConfig, DAEMON_PORT, paths::data_root};
 use crate::bootstrap::{ServerConfig, bootstrap};
 use crate::state::AppState;
 
-// `pub` rather than `pub(crate)`: `lib.rs` re-exports `DaemonLock` for the CLI,
-// and a re-export chain has to stay public the whole way. `unreachable_pub`
-// does not see through the chain and suggests demoting this — the compiler then
-// rejects it (E0365), which is how the false positive surfaces.
+// Stays `pub` because `lib.rs` re-exports it — a re-export chain must be public
+// the whole way, and demoting this link is E0365. The lint tracks the chain
+// correctly; it only fires if the root re-export is missing.
 //
-// `LockError` and `LockInfo` used to ride along here and are named nowhere in
-// the workspace, so they no longer do.
+// It did fire here once, and rightly: the line used to read
+// `pub use lock::{DaemonLock, LockError, LockInfo}`, and the other two are named
+// nowhere in the workspace. The lint pointed at those; the `pub` it offers to
+// demote covers the whole statement, so applying that fix took `DaemonLock` with
+// them. They are gone now, and the line is honest.
 pub use lock::DaemonLock;
 
 /// CORS origins the daemon always allows.

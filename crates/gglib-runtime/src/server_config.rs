@@ -50,11 +50,14 @@
 use std::path::PathBuf;
 
 use gglib_core::ports::ServerConfig;
-// Split because the two have different reach. `lib.rs` re-exports
-// `ServerConfigOptions` onward, and a re-export chain has to stay public the
-// whole way — `unreachable_pub` does not see through the chain and suggests
-// demoting it, which the compiler then refuses with E0365. Nothing re-exports
-// or names `resolve_context_size` through this crate, so it stays internal.
+// `ServerConfigOptions` stays `pub` because `lib.rs` re-exports it — a re-export
+// chain must be public the whole way, and demoting this link is E0365. The lint
+// tracks the chain correctly; it only fires if the root re-export is missing.
+//
+// Split from `resolve_context_size` for that reason. The two shared one
+// statement, nothing re-exports or names the second through this crate, and the
+// `pub` the lint offers to demote covers the whole line — so the two names had
+// to part company before either could be right.
 pub use gglib_core::server_config::ServerConfigOptions;
 pub(crate) use gglib_core::server_config::resolve_context_size;
 use tracing::debug;

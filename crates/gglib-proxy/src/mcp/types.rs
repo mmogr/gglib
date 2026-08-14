@@ -34,13 +34,8 @@ pub(crate) const INVALID_PARAMS: i32 = -32602;
 /// When `id` is `Some`, the server must return a response with the same id.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcRequest {
-    /// Must be `"2.0"`.
-    ///
-    /// Never read, and deliberately kept: the field being required is what
-    /// makes serde reject a request that omits `jsonrpc` entirely. Deleting it
-    /// would widen what the gateway accepts. Note the value itself is *not*
-    /// checked against "2.0" anywhere — see the PR description.
-    #[allow(dead_code)]
+    /// Must be `"2.0"`, and now checked to be: serde rejects a body that omits
+    /// this field, and `post_mcp` rejects one that carries any other version.
     pub jsonrpc: String,
     /// Request identifier. Absent for notifications.
     pub id: Option<Value>,

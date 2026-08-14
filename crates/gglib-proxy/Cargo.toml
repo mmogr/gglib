@@ -9,6 +9,10 @@ build = "build.rs"
 
 [features]
 default = []
+# Exposes the two `cache_lifecycle` items this crate's own `tests/` need.
+# They link the crate as an external consumer, so `#[cfg(test)]` does not
+# reach them — mirrors `gglib-db`'s `test-utils`.
+test-support = []
 
 [dependencies]
 # Core domain types and ports (NO runtime, NO sqlx)
@@ -72,6 +76,9 @@ async-trait = "0.1"
 sysinfo = { workspace = true }
 
 [dev-dependencies]
+# Self-dependency purely to enable `test-support` for `tests/`; the
+# feature stays off for anyone who depends on this crate normally.
+gglib-proxy = { path = ".", features = ["test-support"] }
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is
 # deliberately not part of tokio's `full`. Declared explicitly rather than
 # inherited: it currently arrives only because `tokio-test` happens to enable
