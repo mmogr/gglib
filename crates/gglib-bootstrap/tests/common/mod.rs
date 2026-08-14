@@ -17,7 +17,7 @@ use gglib_core::ports::{AppEventEmitter, NoopEmitter};
 ///
 /// The caller must keep the returned [`TempDir`] alive for the duration of
 /// the test; dropping it deletes the directory and will break open DB handles.
-pub fn minimal_config(dir: &TempDir) -> BootstrapConfig {
+pub(crate) fn minimal_config(dir: &TempDir) -> BootstrapConfig {
     let models_dir = dir.path().join("models");
     fs::create_dir_all(&models_dir).expect("create models dir");
     BootstrapConfig {
@@ -29,7 +29,7 @@ pub fn minimal_config(dir: &TempDir) -> BootstrapConfig {
 }
 
 /// Return a no-op [`AppEventEmitter`] suitable for tests.
-pub fn noop_emitter() -> Arc<dyn AppEventEmitter> {
+pub(crate) fn noop_emitter() -> Arc<dyn AppEventEmitter> {
     Arc::new(NoopEmitter::new())
 }
 
@@ -37,7 +37,7 @@ pub fn noop_emitter() -> Arc<dyn AppEventEmitter> {
 ///
 /// This is the one-liner used by every happy-path and functional test.
 #[allow(dead_code)]
-pub async fn build_core(dir: &TempDir) -> BuiltCore {
+pub(crate) async fn build_core(dir: &TempDir) -> BuiltCore {
     CoreBootstrap::build(minimal_config(dir), noop_emitter())
         .await
         .expect("CoreBootstrap::build must succeed with valid config")

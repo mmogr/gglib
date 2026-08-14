@@ -8,7 +8,7 @@ use super::gguf::GgufMetadata;
 use std::path::Path;
 
 /// Stored when no naming signal is available at all.
-pub const UNKNOWN_MODEL_NAME: &str = "Unknown Model";
+pub(crate) const UNKNOWN_MODEL_NAME: &str = "Unknown Model";
 
 /// Which naming signals are available for a model being added.
 ///

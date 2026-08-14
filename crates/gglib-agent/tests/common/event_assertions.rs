@@ -24,7 +24,7 @@ use tokio::sync::mpsc;
 /// **Always** call this *after* `await`ing the agent run (which consumes and
 /// drops the `tx` passed to [`AgentLoopPort::run`]) and after joining any
 /// other tasks that hold `tx` clones.
-pub async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
+pub(crate) async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
     let mut events = Vec::new();
     while let Some(evt) = rx.recv().await {
         events.push(evt);
@@ -33,7 +33,7 @@ pub async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEven
 }
 
 /// Return `true` when `events` contains at least one [`AgentEvent::FinalAnswer`].
-pub fn has_final_answer(events: &[AgentEvent]) -> bool {
+pub(crate) fn has_final_answer(events: &[AgentEvent]) -> bool {
     events
         .iter()
         .any(|e| matches!(e, AgentEvent::FinalAnswer { .. }))
@@ -41,7 +41,7 @@ pub fn has_final_answer(events: &[AgentEvent]) -> bool {
 
 /// Return `true` when `events` contains at least one
 /// [`AgentEvent::ToolCallStart`] with the given tool name.
-pub fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
+pub(crate) fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
     events
         .iter()
         .any(|e| matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name))
@@ -49,13 +49,13 @@ pub fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
 
 /// Return `true` when `events` contains at least one
 /// [`AgentEvent::ToolCallComplete`] whose result has the given `success` value.
-pub fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> bool {
+pub(crate) fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> bool {
     events.iter().any(
         |e| matches!(e, AgentEvent::ToolCallComplete { result, .. } if result.success == success),
     )
 }
 
 /// Return `true` when `events` contains at least one [`AgentEvent::Error`].
-pub fn has_error_event(events: &[AgentEvent]) -> bool {
+pub(crate) fn has_error_event(events: &[AgentEvent]) -> bool {
     events.iter().any(|e| matches!(e, AgentEvent::Error { .. }))
 }

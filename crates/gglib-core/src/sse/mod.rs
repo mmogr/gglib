@@ -1,6 +1,6 @@
 #![doc = include_str!("README.md")]
-pub mod decoder;
-pub mod encoder;
+pub(crate) mod decoder;
+pub(crate) mod encoder;
 pub mod parser;
 
 pub use decoder::SseStreamDecoder;

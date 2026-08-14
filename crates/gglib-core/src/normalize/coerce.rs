@@ -43,7 +43,7 @@ const MAX_NESTING: usize = 64;
 /// Returns the repaired text only when it parses *and* is an object; `None`
 /// otherwise, leaving the caller to fail exactly as it would have.
 #[must_use]
-pub fn coerce_json_object(body: &str) -> Option<String> {
+pub(crate) fn coerce_json_object(body: &str) -> Option<String> {
     let candidate = strip_packaging(body);
     if candidate.is_empty() {
         return None;

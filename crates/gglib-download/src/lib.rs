@@ -1,4 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
+// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
+// denies it; this crate opts out until its module tree is closed.
+#![allow(unreachable_pub)]
 //! - `resolver` - `HuggingFace` file resolution
 
 // Re-export core types for convenience

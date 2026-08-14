@@ -1,13 +1,13 @@
 #![doc = include_str!("README.md")]
-pub mod coerce;
-pub mod error;
-pub mod history;
-pub mod oneshot;
-pub mod parser;
-pub mod parsers;
+pub(crate) mod coerce;
+pub(crate) mod error;
+pub(crate) mod history;
+pub(crate) mod oneshot;
+pub(crate) mod parser;
+pub(crate) mod parsers;
 pub mod registry;
 pub mod residue;
-pub mod stream;
+pub(crate) mod stream;
 pub mod tags;
 
 pub use error::{NormalizationError, NormalizationErrorKind};

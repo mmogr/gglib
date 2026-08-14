@@ -29,17 +29,21 @@ use std::borrow::Cow;
 /// down to the nearest boundary at or below `max_bytes`, so the result can be
 /// shorter than the budget but is never longer and never invalid.
 ///
-/// ```
-/// use gglib_core::utils::text::truncate_at_char_boundary;
+/// Illustrative rather than executable: this helper is crate-internal, and a
+/// doctest compiles as its own crate, so no import path reaches it. The cases
+/// below are asserted for real in this module's tests.
 ///
-/// assert_eq!(truncate_at_char_boundary("hello", 10), "hello");
-/// assert_eq!(truncate_at_char_boundary("hello", 3), "hel");
+/// ```text
+/// truncate_at_char_boundary:
+///
+/// truncate_at_char_boundary("hello", 10)  ==  "hello"
+/// truncate_at_char_boundary("hello", 3)  ==  "hel"
 ///
 /// // "α" is two bytes, so a budget of 3 fits one of them, not one and a half.
-/// assert_eq!(truncate_at_char_boundary("ααα", 3), "α");
+/// truncate_at_char_boundary("ααα", 3)  ==  "α"
 /// ```
 #[must_use]
-pub fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
+pub(crate) fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
     if s.len() <= max_bytes {
         s
     } else {
@@ -54,14 +58,18 @@ pub fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
 /// truncation — a caller can therefore tell "this is the whole value" from
 /// "there was more" by looking at the output, which is the point of printing it.
 ///
-/// ```
-/// use gglib_core::utils::text::truncate_with_ellipsis;
+/// Illustrative rather than executable: this helper is crate-internal, and a
+/// doctest compiles as its own crate, so no import path reaches it. The cases
+/// below are asserted for real in this module's tests.
 ///
-/// assert_eq!(truncate_with_ellipsis("hello", 10), "hello");
-/// assert_eq!(truncate_with_ellipsis("hello", 3), "hel…");
+/// ```text
+/// truncate_with_ellipsis:
+///
+/// truncate_with_ellipsis("hello", 10)  ==  "hello"
+/// truncate_with_ellipsis("hello", 3)  ==  "hel…"
 /// ```
 #[must_use]
-pub fn truncate_with_ellipsis(s: &str, max_bytes: usize) -> Cow<'_, str> {
+pub(crate) fn truncate_with_ellipsis(s: &str, max_bytes: usize) -> Cow<'_, str> {
     let head = truncate_at_char_boundary(s, max_bytes);
     if head.len() == s.len() {
         Cow::Borrowed(s)

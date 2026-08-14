@@ -56,7 +56,7 @@ pub const RESIDENCY_UTILISATION: f64 = 0.9;
 /// 2 GiB comfortably covers every embedding model, reranker, and small
 /// title/summary generator in common use, and excludes essentially every
 /// instruct model worth chatting with.
-pub const SECONDARY_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+pub(crate) const SECONDARY_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// What one resident model is expected to occupy in VRAM.
 ///

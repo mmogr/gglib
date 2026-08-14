@@ -1,3 +1,3 @@
 #![doc = include_str!("README.md")]
-pub mod delimited;
-pub mod standard;
+pub(crate) mod delimited;
+pub(crate) mod standard;

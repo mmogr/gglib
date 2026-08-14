@@ -20,7 +20,7 @@
 /// An unknown rate is deliberately not `0`: zero is a real reading that means
 /// "stalled", and conflating the two is what produced `ETA: 0s` on a download
 /// that was progressing perfectly well.
-pub const UNKNOWN: &str = "—";
+pub(crate) const UNKNOWN: &str = "—";
 
 const KB: f64 = 1_000.0;
 const MB: f64 = 1_000_000.0;

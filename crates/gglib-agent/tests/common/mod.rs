@@ -10,9 +10,9 @@
 //! - [`for_test`] — construct a customised [`AgentConfig`] from
 //!   [`AgentConfig::default`] without boilerplate mutation blocks.
 
-pub mod event_assertions;
-pub mod mock_llm;
-pub mod mock_tools;
+pub(crate) mod event_assertions;
+pub(crate) mod mock_llm;
+pub(crate) mod mock_tools;
 
 use gglib_core::domain::agent::AgentConfig;
 
@@ -30,7 +30,7 @@ use gglib_core::domain::agent::AgentConfig;
 ///     c.max_stagnation_steps = Some(2);
 /// });
 /// ```
-pub fn for_test(f: impl FnOnce(&mut AgentConfig)) -> AgentConfig {
+pub(crate) fn for_test(f: impl FnOnce(&mut AgentConfig)) -> AgentConfig {
     let mut c = AgentConfig::default();
     f(&mut c);
     c

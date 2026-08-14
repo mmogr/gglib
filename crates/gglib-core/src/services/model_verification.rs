@@ -151,7 +151,7 @@ pub struct ShardUpdate {
 
 /// Type of operation being performed on a model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperationType {
+pub(super) enum OperationType {
     /// Model is being verified.
     Verifying,
     /// Model is being downloaded/repaired.
@@ -163,7 +163,7 @@ pub enum OperationType {
 // ============================================================================
 
 /// RAII guard that automatically releases the operation lock when dropped.
-pub struct OperationGuard {
+pub(super) struct OperationGuard {
     model_id: i64,
     lock_map: Arc<RwLock<HashMap<i64, OperationType>>>,
 }
@@ -184,13 +184,13 @@ impl Drop for OperationGuard {
 /// Concurrency control for model operations.
 ///
 /// Ensures only one operation of each type can run on a model at a time.
-pub struct ModelOperationLock {
+pub(super) struct ModelOperationLock {
     locks: Arc<RwLock<HashMap<i64, OperationType>>>,
 }
 
 impl ModelOperationLock {
     /// Create a new operation lock manager.
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             locks: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -200,7 +200,7 @@ impl ModelOperationLock {
     ///
     /// Returns `Ok(guard)` if the lock was acquired, or `Err` if another
     /// operation is already in progress for this model.
-    pub async fn try_acquire(
+    pub(super) async fn try_acquire(
         &self,
         model_id: i64,
         operation: OperationType,

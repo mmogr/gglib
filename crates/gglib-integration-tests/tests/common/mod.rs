@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-pub use gglib_db::setup_test_database as setup_test_pool;
+pub(crate) use gglib_db::setup_test_database as setup_test_pool;
 
 /// Write a minimal valid GGUF file containing only the given string
 /// `general.*`-style metadata pairs (no tensors).
@@ -16,7 +16,7 @@ pub use gglib_db::setup_test_database as setup_test_pool;
 /// binary that includes it calls every helper -- allowed here rather than
 /// split into a per-consumer module.
 #[allow(dead_code)]
-pub fn write_gguf_fixture(path: &Path, pairs: &[(&str, &str)]) {
+pub(crate) fn write_gguf_fixture(path: &Path, pairs: &[(&str, &str)]) {
     let mut buf = Vec::new();
     buf.extend_from_slice(b"GGUF");
     buf.extend_from_slice(&3u32.to_le_bytes()); // version

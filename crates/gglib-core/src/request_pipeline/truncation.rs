@@ -78,7 +78,7 @@ use serde_json::Value;
 /// Maximum number of characters allowed in a single unprotected `role: "tool"`
 /// or `role: "assistant"` message `content` string before it is eligible for
 /// replacement with [`TRUNCATION_PLACEHOLDER`].
-pub const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
+pub(crate) const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 
 /// Character-to-token conversion factor used to translate a model's **token**
 /// context size into the **character** budget [`truncate_history`] measures.
@@ -97,7 +97,7 @@ pub const CHARS_PER_TOKEN_APPROX: usize = 4;
 /// These are the immediate conversational context the model needs to respond
 /// coherently — sized to span several recent tool-call/result pairs so a live
 /// tool exchange is never half-elided.
-pub const PROTECTED_TAIL_COUNT: usize = 8;
+pub(crate) const PROTECTED_TAIL_COUNT: usize = 8;
 
 /// Low watermark the trim aims for, as a percentage of the request budget.
 ///
@@ -106,10 +106,10 @@ pub const PROTECTED_TAIL_COUNT: usize = 8;
 /// headroom in which follow-up requests need no new elisions — the property
 /// that keeps the forwarded prompt prefix stable for llama.cpp's KV cache.
 /// See the module docs for why the savings target is also quantized.
-pub const LOW_WATERMARK_PCT: usize = 75;
+pub(crate) const LOW_WATERMARK_PCT: usize = 75;
 
 /// Replacement string inserted in place of truncated message content.
-pub const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
+pub(crate) const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
      Rely on your previous observations.]";
 
 // =============================================================================

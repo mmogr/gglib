@@ -1,7 +1,9 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
-
+// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
+// denies it; this crate opts out until its module tree is closed.
+#![allow(unreachable_pub)]
 // No consumer names a module of this crate — every use outside it goes through
 // the re-exports below. Keeping the modules crate-internal is what lets
 // `dead_code` audit their contents.
