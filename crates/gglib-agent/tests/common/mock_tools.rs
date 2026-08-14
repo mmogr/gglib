@@ -32,7 +32,7 @@ use tokio::sync::Mutex;
 
 /// Configurable response strategy for a single mock tool.
 #[derive(Clone)]
-pub enum MockToolBehavior {
+pub(crate) enum MockToolBehavior {
     /// Returns a successful result immediately.
     Immediate {
         /// Content returned to the LLM as the tool output.
@@ -78,7 +78,7 @@ pub enum MockToolBehavior {
 /// All invocations are recorded in the public `call_log` field — clone the
 /// inner `Arc` before wrapping the executor in `Arc<dyn ToolExecutorPort>` so
 /// you can inspect it after the agent has run.
-pub struct MockToolExecutorPort {
+pub(crate) struct MockToolExecutorPort {
     tools: Vec<ToolDefinition>,
     behaviors: HashMap<String, MockToolBehavior>,
     /// Shared call log — clone the `Arc` before wrapping in `Arc<dyn …>`.
@@ -87,7 +87,7 @@ pub struct MockToolExecutorPort {
 
 impl MockToolExecutorPort {
     /// Create an empty mock with no tools configured.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tools: Vec::new(),
             behaviors: HashMap::new(),
@@ -99,7 +99,11 @@ impl MockToolExecutorPort {
     ///
     /// Tools are advertised to the LLM in the order they are added.
     #[must_use]
-    pub fn with_tool(mut self, definition: ToolDefinition, behavior: MockToolBehavior) -> Self {
+    pub(crate) fn with_tool(
+        mut self,
+        definition: ToolDefinition,
+        behavior: MockToolBehavior,
+    ) -> Self {
         self.behaviors.insert(definition.name.clone(), behavior);
         self.tools.push(definition);
         self

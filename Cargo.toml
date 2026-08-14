@@ -134,6 +134,13 @@ gglib-build-info = { path = "crates/gglib-build-info" }
 # Workspace-wide lints for consistency
 [workspace.lints.rust]
 unsafe_code = "deny"
+# Every `pub` must be reachable from outside its crate. This is what lets
+# `dead_code` audit a crate at all: while an item is `pub` in a module nothing
+# can reach, the lint has to assume some other crate is the caller.
+#
+# Crates still to be swept carry `#![allow(unreachable_pub)]` in their lib.rs,
+# removed one at a time as each is cleaned.
+unreachable_pub = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

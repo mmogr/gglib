@@ -29,7 +29,7 @@ use tokio::sync::Mutex;
 ///
 /// Converts into the sequence of [`LlmStreamEvent`] values:
 /// `ReasoningDelta?` → `TextDelta?` → `ToolCallDelta*` → `Done`.
-pub struct MockLlmResponse {
+pub(crate) struct MockLlmResponse {
     /// Optional reasoning text emitted as [`LlmStreamEvent::ReasoningDelta`]
     /// before any text content.
     pub reasoning: Option<String>,
@@ -43,7 +43,7 @@ pub struct MockLlmResponse {
 
 impl MockLlmResponse {
     /// A plain-text response with `finish_reason = "stop"`.
-    pub fn text(content: impl Into<String>) -> Self {
+    pub(crate) fn text(content: impl Into<String>) -> Self {
         Self {
             reasoning: None,
             content: Some(content.into()),
@@ -56,7 +56,10 @@ impl MockLlmResponse {
     ///
     /// Emits [`LlmStreamEvent::ReasoningDelta`] followed by
     /// [`LlmStreamEvent::TextDelta`], then `Done`.
-    pub fn text_with_reasoning(reasoning: impl Into<String>, content: impl Into<String>) -> Self {
+    pub(crate) fn text_with_reasoning(
+        reasoning: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             reasoning: Some(reasoning.into()),
             content: Some(content.into()),
@@ -66,7 +69,7 @@ impl MockLlmResponse {
     }
 
     /// A single-tool-call response with `finish_reason = "tool_calls"`.
-    pub fn tool_call(
+    pub(crate) fn tool_call(
         id: impl Into<String>,
         name: impl Into<String>,
         args: serde_json::Value,
@@ -125,7 +128,7 @@ impl MockLlmResponse {
 /// an internal log accessible via [`MockLlmPort::messages_received`], letting
 /// tests assert on what the agent actually passed to the LLM (e.g. to verify
 /// that context pruning reduced the message count).
-pub struct MockLlmPort {
+pub(crate) struct MockLlmPort {
     responses: Mutex<VecDeque<Vec<LlmStreamEvent>>>,
     /// Snapshots of the `messages` slice passed to each `chat_stream` call,
     /// in call order.
@@ -134,7 +137,7 @@ pub struct MockLlmPort {
 
 impl MockLlmPort {
     /// Create an empty mock with no scripted responses.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             responses: Mutex::new(VecDeque::new()),
             messages_received: Mutex::new(Vec::new()),
@@ -146,7 +149,7 @@ impl MockLlmPort {
     ///
     /// Useful for asserting that context pruning reduced the number of messages
     /// the agent actually sent to the LLM.
-    pub async fn messages_received(&self) -> Vec<Vec<AgentMessage>> {
+    pub(crate) async fn messages_received(&self) -> Vec<Vec<AgentMessage>> {
         self.messages_received.lock().await.clone()
     }
 
@@ -156,7 +159,7 @@ impl MockLlmPort {
     ///
     /// Panics if called concurrently — this is a build-time helper.
     #[must_use]
-    pub fn push(self, response: MockLlmResponse) -> Self {
+    pub(crate) fn push(self, response: MockLlmResponse) -> Self {
         self.responses
             .try_lock()
             .expect("MockLlmPort::push called concurrently")
@@ -170,7 +173,7 @@ impl MockLlmPort {
     ///
     /// Panics if called concurrently — this is a build-time helper.
     #[must_use]
-    pub fn push_many(self, responses: impl IntoIterator<Item = MockLlmResponse>) -> Self {
+    pub(crate) fn push_many(self, responses: impl IntoIterator<Item = MockLlmResponse>) -> Self {
         let mut guard = self
             .responses
             .try_lock()

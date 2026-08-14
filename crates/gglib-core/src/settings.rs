@@ -486,7 +486,8 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
 /// Validate a set of inference profiles.
 ///
-/// Checks each profile's name against [`crate::domain::validate_name`], rejects
+/// Checks each profile's name against
+/// [`crate::domain::inference_profile::validate_name`], rejects
 /// duplicate names (they would make `{model}:{profile}` ambiguous), and reuses
 /// [`validate_inference_config`] for the numeric ranges so profile parameters
 /// and global defaults can never drift apart on what counts as valid.

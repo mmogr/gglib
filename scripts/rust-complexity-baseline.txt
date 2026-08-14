@@ -82,7 +82,7 @@ crates/gglib-core/src/services/model_import.rs 687
 crates/gglib-core/src/services/model_registrar.rs 305
 crates/gglib-core/src/services/model_service.rs 982
 crates/gglib-core/src/services/model_verification.rs 797
-crates/gglib-core/src/settings.rs 1011
+crates/gglib-core/src/settings.rs 1012
 crates/gglib-core/src/sse/decoder.rs 334
 crates/gglib-core/src/sse/encoder.rs 460
 crates/gglib-core/src/sse/parser.rs 781

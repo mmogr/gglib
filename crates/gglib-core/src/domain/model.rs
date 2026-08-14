@@ -23,7 +23,7 @@ use super::server_config::ServerConfig;
 /// one would silently break dialect handling for the affected model, so
 /// the standard tag-mutation API rejects deletions while admin/debug
 /// paths can opt in via the `_force` variants.
-pub const SYSTEM_TAG_PREFIX: &str = "format:";
+pub(super) const SYSTEM_TAG_PREFIX: &str = "format:";
 
 /// Returns `true` when `tag` is a system tag that callers must not
 /// remove through the standard tag-mutation API.

@@ -23,7 +23,7 @@ pub const CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 /// switching between them, so a resumed conversation will often re-prefill
 /// from scratch. Sits above [`CACHE_RAM_FLOOR_BYTES`], so it describes a cache
 /// that is working but tight — not one that was switched off.
-pub const CACHE_RAM_LOW_WATERMARK_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+pub(crate) const CACHE_RAM_LOW_WATERMARK_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 // The two thresholds must not overlap: if the watermark ever dropped to or
 // below the floor, `classify_cache_ram` could never return `Low`, silently

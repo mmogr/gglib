@@ -78,7 +78,7 @@ use serde::{Deserialize, Serialize};
 /// [`DelimitedToolCallParser`]: crate::normalize::parsers::delimited::DelimitedToolCallParser
 /// [#24807]: https://github.com/ggml-org/llama.cpp/issues/24807
 /// [#20260]: https://github.com/ggml-org/llama.cpp/issues/20260
-pub const MIN_BUILD_PEG_NATIVE_TOOL_CALLS: u32 = 9656;
+pub(crate) const MIN_BUILD_PEG_NATIVE_TOOL_CALLS: u32 = 9656;
 
 bitflags! {
     /// Capabilities of the llama-server binary gglib is running against.
@@ -110,7 +110,7 @@ bitflags! {
 /// Real release numbers have been in the thousands since 2023, so anything
 /// under this floor is an unnumbered build. Its identity is the commit sha,
 /// which [`RuntimeCapabilities::commit`] records instead.
-pub const MIN_PLAUSIBLE_BUILD: u32 = 1_000;
+pub(crate) const MIN_PLAUSIBLE_BUILD: u32 = 1_000;
 
 /// What the llama-server binary underneath gglib is, and what it can do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,7 +229,7 @@ impl RuntimeCapabilities {
 /// Returns `None` rather than a guess when neither appears — see the module
 /// docs on why an unparsed runtime must not look like a featureless one.
 #[must_use]
-pub fn parse_build_number(output: &str) -> Option<u32> {
+pub(crate) fn parse_build_number(output: &str) -> Option<u32> {
     if let Some(build) = output
         .split("version:")
         .skip(1)
@@ -254,7 +254,7 @@ pub fn parse_build_number(output: &str) -> Option<u32> {
 /// `version: 1 (69bf643)`. Read as the first parenthesised run of hex digits
 /// so a banner carrying other parenthesised text does not yield a false sha.
 #[must_use]
-pub fn parse_commit(output: &str) -> Option<String> {
+pub(crate) fn parse_commit(output: &str) -> Option<String> {
     let (_, after) = output.split_once('(')?;
     let (inner, _) = after.split_once(')')?;
     let sha = inner.trim();
