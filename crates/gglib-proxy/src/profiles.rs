@@ -40,7 +40,7 @@ use crate::models::ModelInfo;
 
 /// What a requested model id turned out to mean.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ModelRoute<'a> {
+pub(crate) enum ModelRoute<'a> {
     /// The id names a model directly; no profile applies.
     ///
     /// Also the outcome when neither the full id nor its base resolves — the
@@ -85,7 +85,7 @@ pub enum ModelRoute<'a> {
 /// Catalog errors are treated as "not found" and logged: a degraded catalog
 /// should not turn into a hard failure on a request that may not need a profile
 /// at all.
-pub async fn resolve_route<'a>(
+pub(crate) async fn resolve_route<'a>(
     requested: &'a str,
     profiles: &'a [InferenceProfile],
     catalog: &dyn ModelCatalogPort,
@@ -149,7 +149,10 @@ async fn model_exists(catalog: &dyn ModelCatalogPort, name: &str) -> bool {
 /// `models` must be the base catalog entries only. Passing entries that already
 /// include variants would compound them into `{model}:{a}:{b}`.
 #[must_use]
-pub fn variant_entries(models: &[ModelInfo], profiles: &[InferenceProfile]) -> Vec<ModelInfo> {
+pub(crate) fn variant_entries(
+    models: &[ModelInfo],
+    profiles: &[InferenceProfile],
+) -> Vec<ModelInfo> {
     let listed: Vec<&InferenceProfile> = profiles.iter().filter(|p| p.list_in_models).collect();
     if listed.is_empty() {
         return Vec::new();
@@ -181,7 +184,7 @@ pub fn variant_entries(models: &[ModelInfo], profiles: &[InferenceProfile]) -> V
 /// Returns `None` when no profiles are configured, so the caller can say so
 /// explicitly rather than printing an empty list.
 #[must_use]
-pub fn configured_names(profiles: &[InferenceProfile]) -> Option<String> {
+pub(crate) fn configured_names(profiles: &[InferenceProfile]) -> Option<String> {
     if profiles.is_empty() {
         return None;
     }

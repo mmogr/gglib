@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 /// Two is deliberately low: a single empty response can be a legitimate model
 /// artefact, but two in a row is a strong signal the upstream has degraded and
 /// is worth the cost of a recycle.
-pub const STRIKE_THRESHOLD: u32 = 2;
+pub(crate) const STRIKE_THRESHOLD: u32 = 2;
 
 /// What one streamed turn revealed about the upstream's health.
 ///

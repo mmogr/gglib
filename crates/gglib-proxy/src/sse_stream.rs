@@ -44,7 +44,7 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// [`stream_response_to_channel`] returns — before the semaphore `permit`
 /// drops at the end of this task.
 #[allow(clippy::too_many_arguments)]
-pub fn spawn_and_return(
+pub(crate) fn spawn_and_return(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,

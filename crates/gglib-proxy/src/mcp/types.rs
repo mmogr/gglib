@@ -15,19 +15,16 @@ use serde_json::Value;
 // ─── JSON-RPC 2.0 error codes ──────────────────────────────────────────────
 
 /// Parse error: invalid JSON was received.
-pub const PARSE_ERROR: i32 = -32700;
+pub(crate) const PARSE_ERROR: i32 = -32700;
 
 /// Invalid request: the JSON sent is not a valid request object.
-pub const INVALID_REQUEST: i32 = -32600;
+pub(crate) const INVALID_REQUEST: i32 = -32600;
 
 /// Method not found: the method does not exist or is not available.
-pub const METHOD_NOT_FOUND: i32 = -32601;
+pub(crate) const METHOD_NOT_FOUND: i32 = -32601;
 
 /// Invalid params: invalid method parameter(s).
-pub const INVALID_PARAMS: i32 = -32602;
-
-/// Internal error: internal JSON-RPC error.
-pub const INTERNAL_ERROR: i32 = -32603;
+pub(crate) const INVALID_PARAMS: i32 = -32602;
 
 // ─── JSON-RPC 2.0 request / response ───────────────────────────────────────
 
@@ -36,8 +33,14 @@ pub const INTERNAL_ERROR: i32 = -32603;
 /// When `id` is `None`, this is a notification (no response expected).
 /// When `id` is `Some`, the server must return a response with the same id.
 #[derive(Debug, Deserialize)]
-pub struct JsonRpcRequest {
-    /// Must be "2.0".
+pub(crate) struct JsonRpcRequest {
+    /// Must be `"2.0"`.
+    ///
+    /// Never read, and deliberately kept: the field being required is what
+    /// makes serde reject a request that omits `jsonrpc` entirely. Deleting it
+    /// would widen what the gateway accepts. Note the value itself is *not*
+    /// checked against "2.0" anywhere — see the PR description.
+    #[allow(dead_code)]
     pub jsonrpc: String,
     /// Request identifier. Absent for notifications.
     pub id: Option<Value>,
@@ -49,7 +52,7 @@ pub struct JsonRpcRequest {
 
 /// A JSON-RPC 2.0 success or error response.
 #[derive(Debug, Serialize)]
-pub struct JsonRpcResponse {
+pub(crate) struct JsonRpcResponse {
     /// Always "2.0".
     pub jsonrpc: &'static str,
     /// Echoed from the request.
@@ -64,7 +67,7 @@ pub struct JsonRpcResponse {
 
 impl JsonRpcResponse {
     /// Build a success response.
-    pub fn success(id: Value, result: Value) -> Self {
+    pub(crate) fn success(id: Value, result: Value) -> Self {
         Self {
             jsonrpc: "2.0",
             id,
@@ -74,7 +77,7 @@ impl JsonRpcResponse {
     }
 
     /// Build an error response.
-    pub fn error(id: Value, error: JsonRpcError) -> Self {
+    pub(crate) fn error(id: Value, error: JsonRpcError) -> Self {
         Self {
             jsonrpc: "2.0",
             id,
@@ -86,7 +89,7 @@ impl JsonRpcResponse {
 
 /// A JSON-RPC 2.0 error object.
 #[derive(Debug, Serialize)]
-pub struct JsonRpcError {
+pub(crate) struct JsonRpcError {
     /// Numeric error code.
     pub code: i32,
     /// Short description of the error.
@@ -98,7 +101,7 @@ pub struct JsonRpcError {
 
 impl JsonRpcError {
     /// Create a new error with just code and message.
-    pub fn new(code: i32, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: i32, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -109,33 +112,10 @@ impl JsonRpcError {
 
 // ─── MCP protocol types (2025-03-26) ───────────────────────────────────────
 
-/// Parameters for the `initialize` method.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InitializeParams {
-    /// Protocol version the client supports.
-    pub protocol_version: String,
-    /// Client capabilities.
-    #[serde(default)]
-    pub capabilities: Value,
-    /// Client info.
-    #[serde(default)]
-    pub client_info: Option<ClientInfo>,
-}
-
-/// Client identification.
-#[derive(Debug, Deserialize)]
-pub struct ClientInfo {
-    /// Client name.
-    pub name: String,
-    /// Client version.
-    pub version: Option<String>,
-}
-
 /// Result of the `initialize` method.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InitializeResult {
+pub(crate) struct InitializeResult {
     /// Protocol version the server supports.
     pub protocol_version: &'static str,
     /// Server capabilities.
@@ -146,7 +126,7 @@ pub struct InitializeResult {
 
 /// Server identification sent during initialization.
 #[derive(Debug, Serialize)]
-pub struct ServerInfo {
+pub(crate) struct ServerInfo {
     /// Server name.
     pub name: &'static str,
     /// Server version.
@@ -156,7 +136,7 @@ pub struct ServerInfo {
 /// Server capabilities advertised during initialization.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ServerCapabilities {
+pub(crate) struct ServerCapabilities {
     /// Tool-related capabilities.
     pub tools: Option<ToolCapabilities>,
 }
@@ -164,7 +144,7 @@ pub struct ServerCapabilities {
 /// Tool capabilities.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolCapabilities {
+pub(crate) struct ToolCapabilities {
     /// Whether the server will send `notifications/tools/list_changed`.
     pub list_changed: bool,
 }
@@ -172,7 +152,7 @@ pub struct ToolCapabilities {
 /// A single tool in `tools/list` response.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct McpToolSpec {
+pub(crate) struct McpToolSpec {
     /// Qualified tool name (e.g. "server_name__tool_name").
     pub name: String,
     /// Human-readable description.
@@ -188,25 +168,15 @@ pub struct McpToolSpec {
 
 /// Result of the `tools/list` method.
 #[derive(Debug, Serialize)]
-pub struct ToolsListResult {
+pub(crate) struct ToolsListResult {
     /// Available tools.
     pub tools: Vec<McpToolSpec>,
-}
-
-/// Parameters for the `tools/call` method.
-#[derive(Debug, Deserialize)]
-pub struct ToolsCallParams {
-    /// Qualified tool name.
-    pub name: String,
-    /// Tool arguments as key-value pairs.
-    #[serde(default)]
-    pub arguments: Option<Value>,
 }
 
 /// A single content item in a `tools/call` response.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolContent {
+pub(crate) struct ToolContent {
     /// Content type (usually "text").
     #[serde(rename = "type")]
     pub content_type: String,
@@ -217,7 +187,7 @@ pub struct ToolContent {
 /// Result of the `tools/call` method.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CallToolResult {
+pub(crate) struct CallToolResult {
     /// Content items returned by the tool.
     pub content: Vec<ToolContent>,
     /// Whether the tool call resulted in an error.
@@ -246,10 +216,6 @@ mod tests {
         let req: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.method, "initialize");
         assert!(req.id.is_some());
-
-        let params: InitializeParams = serde_json::from_value(req.params.unwrap()).unwrap();
-        assert_eq!(params.protocol_version, "2025-03-26");
-        assert_eq!(params.client_info.unwrap().name, "OpenWebUI");
     }
 
     #[test]
@@ -282,16 +248,5 @@ mod tests {
         let req: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert!(req.id.is_none());
         assert_eq!(req.method, "notifications/initialized");
-    }
-
-    #[test]
-    fn deserialize_tools_call_params() {
-        let json = r#"{
-            "name": "filesystem__read_file",
-            "arguments": { "path": "/tmp/test.txt" }
-        }"#;
-        let params: ToolsCallParams = serde_json::from_str(json).unwrap();
-        assert_eq!(params.name, "filesystem__read_file");
-        assert!(params.arguments.is_some());
     }
 }

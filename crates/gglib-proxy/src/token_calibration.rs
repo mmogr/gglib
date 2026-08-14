@@ -98,7 +98,7 @@ fn session_key(session_id: &str, model: &str) -> String {
 ///
 /// Wrap in `Arc` and share across handler tasks.
 #[derive(Debug, Default)]
-pub struct TokenCalibration {
+pub(crate) struct TokenCalibration {
     ratios: Mutex<HashMap<String, f64>>,
     session_snapshots: Mutex<SessionSnapshots>,
 }
@@ -107,7 +107,7 @@ impl TokenCalibration {
     /// Create an empty calibrator (every model falls back to the static
     /// default until it sees its first observation).
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -116,7 +116,7 @@ impl TokenCalibration {
     /// `payload_chars` is the size of the body actually forwarded upstream;
     /// `prompt_tokens` is the count llama.cpp reported for it. A zero token
     /// count (or an out-of-range ratio) is ignored.
-    pub fn record(&self, model: &str, payload_chars: usize, prompt_tokens: u32) {
+    pub(crate) fn record(&self, model: &str, payload_chars: usize, prompt_tokens: u32) {
         if prompt_tokens == 0 {
             return;
         }
@@ -135,7 +135,7 @@ impl TokenCalibration {
     /// The chars-per-token factor to use for `model`, or the static default
     /// ([`CHARS_PER_TOKEN_APPROX`]) if the model has no observations yet.
     #[must_use]
-    pub fn chars_per_token(&self, model: &str) -> f64 {
+    pub(crate) fn chars_per_token(&self, model: &str) -> f64 {
         let guard = self.ratios.lock().unwrap_or_else(|e| e.into_inner());
         guard
             .get(model)
@@ -155,7 +155,12 @@ impl TokenCalibration {
     /// but a session that's already snapshotted doesn't see that drift again
     /// until its snapshot expires or is explicitly cleared.
     #[must_use]
-    pub fn session_chars_per_token(&self, model: &str, session_id: &str, now: Instant) -> f64 {
+    pub(crate) fn session_chars_per_token(
+        &self,
+        model: &str,
+        session_id: &str,
+        now: Instant,
+    ) -> f64 {
         let key = session_key(session_id, model);
         let mut guard = self
             .session_snapshots
@@ -184,7 +189,7 @@ impl TokenCalibration {
     /// Drop the frozen snapshot(s) for `session_id` (all models), so the next
     /// request for it re-baselines from the current live ratio. Called when
     /// that session's cache is explicitly cleared.
-    pub fn clear_session(&self, session_id: &str) {
+    pub(crate) fn clear_session(&self, session_id: &str) {
         self.session_snapshots
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -192,7 +197,7 @@ impl TokenCalibration {
     }
 
     /// Drop every frozen snapshot. Called on a wholesale cache clear.
-    pub fn clear_all_sessions(&self) {
+    pub(crate) fn clear_all_sessions(&self) {
         *self
             .session_snapshots
             .lock()

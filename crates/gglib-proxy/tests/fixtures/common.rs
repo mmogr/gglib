@@ -28,7 +28,7 @@ use gglib_mcp::McpService;
 
 /// Runtime port that never actually launches anything.
 #[derive(Debug)]
-pub struct NoopRuntime;
+pub(crate) struct NoopRuntime;
 
 #[async_trait]
 impl ModelRuntimePort for NoopRuntime {
@@ -64,7 +64,7 @@ impl ModelRuntimePort for NoopRuntime {
 /// that guard lives in `gglib-runtime` and is tested there — so a test can
 /// tell the difference between "not advertised" and "refused".
 #[derive(Debug)]
-pub struct PinnedRuntime(pub &'static str);
+pub(crate) struct PinnedRuntime(pub &'static str);
 
 #[async_trait]
 impl ModelRuntimePort for PinnedRuntime {
@@ -107,7 +107,7 @@ impl ModelRuntimePort for PinnedRuntime {
 /// unit level (`gglib-runtime`'s `manager.rs`, `gglib-proxy`'s
 /// `models_tests.rs`).
 #[derive(Debug)]
-pub struct EnforcingPinnedRuntime(pub &'static str);
+pub(crate) struct EnforcingPinnedRuntime(pub &'static str);
 
 #[async_trait]
 impl ModelRuntimePort for EnforcingPinnedRuntime {
@@ -150,7 +150,7 @@ impl ModelRuntimePort for EnforcingPinnedRuntime {
 
 /// Catalog port with no models.
 #[derive(Debug)]
-pub struct EmptyCatalog;
+pub(crate) struct EmptyCatalog;
 
 #[async_trait]
 impl ModelCatalogPort for EmptyCatalog {
@@ -175,11 +175,11 @@ impl ModelCatalogPort for EmptyCatalog {
 /// Names are all `/v1/models` filtering cares about, so everything else is
 /// filled with plausible constants rather than made configurable.
 #[derive(Debug)]
-pub struct StaticCatalog(pub Vec<String>);
+pub(crate) struct StaticCatalog(pub Vec<String>);
 
 impl StaticCatalog {
     /// Build a catalog listing the given model names.
-    pub fn new(names: &[&str]) -> Self {
+    pub(crate) fn new(names: &[&str]) -> Self {
         Self(names.iter().map(|n| (*n).to_string()).collect())
     }
 
@@ -233,7 +233,7 @@ impl ModelCatalogPort for StaticCatalog {
 // ─── SettingsRepository mock ──────────────────────────────────────────────
 
 /// Returns default settings; save is a no-op.
-pub struct MockSettingsRepo;
+pub(crate) struct MockSettingsRepo;
 
 #[async_trait]
 impl SettingsRepository for MockSettingsRepo {
@@ -249,7 +249,7 @@ impl SettingsRepository for MockSettingsRepo {
 /// Settings repository returning a caller-supplied [`Settings`] verbatim —
 /// for tests exercising settings-gated proxy behaviour (e.g. the
 /// `proxy_loop_detection` off switch).
-pub struct StaticSettingsRepo(pub Settings);
+pub(crate) struct StaticSettingsRepo(pub Settings);
 
 #[async_trait]
 impl SettingsRepository for StaticSettingsRepo {
@@ -264,7 +264,7 @@ impl SettingsRepository for StaticSettingsRepo {
 
 /// Settings carrying one listed inference profile, so `/v1/models` emits
 /// `{model}:{name}` variant entries.
-pub struct ProfileSettingsRepo(pub &'static str);
+pub(crate) struct ProfileSettingsRepo(pub &'static str);
 
 #[async_trait]
 impl SettingsRepository for ProfileSettingsRepo {
@@ -288,7 +288,7 @@ impl SettingsRepository for ProfileSettingsRepo {
 // ─── McpServerRepository mock (includes update_last_connected) ────────────
 
 /// Empty MCP repository — list returns empty, lookups return NotFound.
-pub struct EmptyMcpRepo;
+pub(crate) struct EmptyMcpRepo;
 
 #[async_trait]
 impl McpServerRepository for EmptyMcpRepo {
@@ -324,7 +324,7 @@ impl McpServerRepository for EmptyMcpRepo {
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /// Build an `McpService` backed by an empty repository and no-op emitter.
-pub fn make_mcp_service() -> Arc<McpService> {
+pub(crate) fn make_mcp_service() -> Arc<McpService> {
     Arc::new(McpService::new(
         Arc::new(EmptyMcpRepo),
         Arc::new(NoopEmitter::new()),
@@ -347,7 +347,7 @@ pub fn make_mcp_service() -> Arc<McpService> {
 /// [`ModelRuntimePort::pinned_model`] — enforcement lives in `gglib-runtime`'s
 /// the resident set and is out of scope here.
 #[derive(Debug)]
-pub struct FixedUpstream {
+pub(crate) struct FixedUpstream {
     pub port: u16,
     pub model_name: String,
     pub slot_restore_supported: bool,
@@ -389,14 +389,14 @@ impl ModelRuntimePort for FixedUpstream {
 /// had already unloaded a model to discover the request was hopeless. This
 /// makes the distinction assertable.
 #[derive(Debug)]
-pub struct CountingRuntime {
+pub(crate) struct CountingRuntime {
     pub port: u16,
     pub model_name: String,
     pub admit_calls: Arc<AtomicU64>,
 }
 
 impl CountingRuntime {
-    pub fn new(port: u16, model_name: &str) -> (Arc<Self>, Arc<AtomicU64>) {
+    pub(crate) fn new(port: u16, model_name: &str) -> (Arc<Self>, Arc<AtomicU64>) {
         let admit_calls = Arc::new(AtomicU64::new(0));
         let runtime = Arc::new(Self {
             port,
@@ -438,7 +438,7 @@ impl ModelRuntimePort for CountingRuntime {
 /// Catalog port that always resolves the requested model with the given tags
 /// and (optionally) a persisted dialect spec.
 #[derive(Debug)]
-pub struct TaggedCatalog {
+pub(crate) struct TaggedCatalog {
     pub name: String,
     pub tags: Vec<String>,
     pub dialect: Option<gglib_core::domain::DialectSpec>,
@@ -493,7 +493,7 @@ impl ModelCatalogPort for TaggedCatalog {
 /// tests about a single request but useless for anything involving a swap —
 /// there has to be something to swap *to*.
 #[derive(Debug)]
-pub struct MultiModelCatalog(pub Vec<(String, Vec<String>)>);
+pub(crate) struct MultiModelCatalog(pub Vec<(String, Vec<String>)>);
 
 impl MultiModelCatalog {
     fn summary_for(&self, name: &str) -> Option<ModelSummary> {
@@ -555,7 +555,7 @@ impl ModelCatalogPort for MultiModelCatalog {
 /// a panic, not a silent reordering, so a leaked or early-dropped lease fails
 /// loudly at the point of the bug.
 #[derive(Debug)]
-pub struct ResidentSimRuntime {
+pub(crate) struct ResidentSimRuntime {
     /// Port each model's upstream listens on.
     pub ports: HashMap<String, u16>,
     slot: Arc<ResidentSimSlot>,
@@ -567,7 +567,7 @@ pub struct ResidentSimRuntime {
 /// and `ModelRuntimePort::admit` takes `&self` rather than `&Arc<Self>` — so
 /// the runtime cannot hand out an `Arc` of itself.
 #[derive(Debug, Default)]
-pub struct ResidentSimSlot(StdMutex<ResidentSimState>);
+pub(crate) struct ResidentSimSlot(StdMutex<ResidentSimState>);
 
 #[derive(Debug, Default)]
 struct ResidentSimState {
@@ -588,7 +588,7 @@ impl gglib_core::ports::AdmissionRelease for ResidentSimSlot {
 
 impl ResidentSimRuntime {
     #[must_use]
-    pub fn new(ports: HashMap<String, u16>) -> Self {
+    pub(crate) fn new(ports: HashMap<String, u16>) -> Self {
         Self {
             ports,
             slot: Arc::new(ResidentSimSlot::default()),
@@ -596,17 +596,17 @@ impl ResidentSimRuntime {
     }
 
     /// How many model swaps this runtime has performed.
-    pub fn swaps(&self) -> u64 {
+    pub(crate) fn swaps(&self) -> u64 {
         self.slot.0.lock().unwrap().swaps
     }
 
     /// How many requests are currently holding a lease.
-    pub fn inflight(&self) -> u32 {
+    pub(crate) fn inflight(&self) -> u32 {
         self.slot.0.lock().unwrap().inflight
     }
 
     /// The most requests that were ever in flight at once.
-    pub fn peak_inflight(&self) -> u32 {
+    pub(crate) fn peak_inflight(&self) -> u32 {
         self.slot.0.lock().unwrap().peak_inflight
     }
 }
@@ -670,7 +670,10 @@ impl ModelRuntimePort for ResidentSimRuntime {
 ///
 /// Each chunk is sent as a separate body frame so tests can deliberately
 /// split SSE frames across byte boundaries.
-pub async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: CancellationToken) -> u16 {
+pub(crate) async fn spawn_mock_upstream(
+    chunks: Vec<&'static [u8]>,
+    cancel: CancellationToken,
+) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let port = listener.local_addr().unwrap().port();
 
@@ -721,7 +724,7 @@ pub async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: Cancellatio
 /// the most recent request — the proxy is a pass-through for this endpoint, so
 /// asserting on what actually arrived upstream is the only way to prove the
 /// client's `input` was not reshaped on the way.
-pub async fn spawn_mock_embeddings_upstream(
+pub(crate) async fn spawn_mock_embeddings_upstream(
     cancel: CancellationToken,
     failure: Option<(u16, &'static str)>,
 ) -> (u16, Arc<Mutex<Option<Bytes>>>) {
@@ -792,7 +795,7 @@ pub async fn spawn_mock_embeddings_upstream(
 /// `--slot-save-path`. Without this, gglib's post-save `rename(tmp, final)`
 /// would always fail (nothing was ever written), turning every "successful"
 /// save into a `Transient` failure and retry storm.
-pub async fn spawn_mock_upstream_with_slots(
+pub(crate) async fn spawn_mock_upstream_with_slots(
     cancel: CancellationToken,
     slot_dir: PathBuf,
 ) -> (
@@ -810,7 +813,7 @@ pub async fn spawn_mock_upstream_with_slots(
 /// [`super::sse::BASIC_TEXT`] fixture) instead of a single JSON object — for
 /// exercising the streaming+cache code path (`sse_stream::spawn_and_return`)
 /// rather than the non-streaming one (`cache_lifecycle::run_with_cache`).
-pub async fn spawn_mock_upstream_with_slots_streaming(
+pub(crate) async fn spawn_mock_upstream_with_slots_streaming(
     cancel: CancellationToken,
     slot_dir: PathBuf,
 ) -> (
@@ -966,7 +969,7 @@ async fn spawn_mock_upstream_with_slots_impl(
 
 /// Spawn a proxy server with cache disabled, pointing at the given upstream
 /// port. Returns `(proxy_base_url, cancel)`.
-pub async fn spawn_proxy(
+pub(crate) async fn spawn_proxy(
     upstream_port: u16,
     model_name: &str,
     tags: Vec<String>,
@@ -983,7 +986,7 @@ pub async fn spawn_proxy(
 /// [`spawn_proxy`] with the runtime port supplied by the caller — for tests
 /// that need to observe what the proxy asked the runtime to do (see
 /// [`CountingRuntime`]).
-pub async fn spawn_proxy_with_runtime(
+pub(crate) async fn spawn_proxy_with_runtime(
     runtime: Arc<dyn ModelRuntimePort>,
     model_name: &str,
     tags: Vec<String>,
@@ -998,7 +1001,7 @@ pub async fn spawn_proxy_with_runtime(
 
 /// [`spawn_proxy`] whose catalog row carries a persisted dialect spec —
 /// the template-derived path, where no `format:*` tag is involved.
-pub async fn spawn_proxy_with_dialect(
+pub(crate) async fn spawn_proxy_with_dialect(
     upstream_port: u16,
     model_name: &str,
     dialect: gglib_core::domain::DialectSpec,
@@ -1019,7 +1022,7 @@ pub async fn spawn_proxy_with_dialect(
 
 /// [`spawn_proxy_with_runtime`] with the catalog supplied too — for tests that
 /// need more than one model to exist, which is the only way to exercise a swap.
-pub async fn spawn_proxy_with_catalog(
+pub(crate) async fn spawn_proxy_with_catalog(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
 ) -> (String, CancellationToken) {
@@ -1028,7 +1031,7 @@ pub async fn spawn_proxy_with_catalog(
 
 /// [`spawn_proxy_with_catalog`] with the settings repository supplied too —
 /// for tests exercising settings-gated behaviour (see [`StaticSettingsRepo`]).
-pub async fn spawn_proxy_with_settings(
+pub(crate) async fn spawn_proxy_with_settings(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
     settings_repo: Arc<dyn SettingsRepository>,
@@ -1068,7 +1071,7 @@ pub async fn spawn_proxy_with_settings(
 /// Spawn a proxy server with cache enabled, pointing at the given upstream
 /// port, with control over whether the upstream model supports disk slot
 /// restore, and whether the runtime reports itself pinned.
-pub async fn spawn_proxy_with_cache_for_model(
+pub(crate) async fn spawn_proxy_with_cache_for_model(
     upstream_port: u16,
     model_name: &str,
     slot_dir: PathBuf,
@@ -1121,7 +1124,7 @@ pub async fn spawn_proxy_with_cache_for_model(
 
 /// [`spawn_proxy_with_cache_for_model`] with defaults matching the common
 /// case: slot restore supported, not pinned (the `gglib proxy` shape).
-pub async fn spawn_proxy_with_cache(
+pub(crate) async fn spawn_proxy_with_cache(
     upstream_port: u16,
     model_name: &str,
     slot_dir: PathBuf,
@@ -1131,7 +1134,7 @@ pub async fn spawn_proxy_with_cache(
 
 /// [`spawn_proxy_with_cache`], pinned to `model_name` — the `gglib serve`
 /// shape, as opposed to the default which models `gglib proxy`.
-pub async fn spawn_pinned_proxy_with_cache(
+pub(crate) async fn spawn_pinned_proxy_with_cache(
     upstream_port: u16,
     model_name: &str,
     slot_dir: PathBuf,
@@ -1143,7 +1146,7 @@ pub async fn spawn_pinned_proxy_with_cache(
 
 /// Parse `data:` payloads from the SSE-encoded body. Returns one entry per
 /// frame; `[DONE]` is tracked separately via the returned bool.
-pub fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
+pub(crate) fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
     let mut frames = Vec::new();
     let mut saw_done = false;
     for raw in body.split("\n\n") {
@@ -1165,7 +1168,7 @@ pub fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
 
 /// Assert that every frame has the OpenAI canonical envelope and a stable
 /// `id` / `model` / `created` triple. Returns the (id, model, created).
-pub fn assert_sse_canonical_envelope(
+pub(crate) fn assert_sse_canonical_envelope(
     frames: &[Value],
     expected_model: &str,
 ) -> (String, String, u64) {

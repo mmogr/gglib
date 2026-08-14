@@ -48,7 +48,7 @@ use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 /// the shared persisted `max_stagnation_steps` setting, so the two paths
 /// cannot drift.
 #[derive(Debug, Clone)]
-pub struct LoopGuardConfig {
+pub(crate) struct LoopGuardConfig {
     max_repeated_batch_steps: usize,
     max_stagnation_steps: usize,
     observation_tools: Vec<String>,
@@ -61,7 +61,7 @@ impl LoopGuardConfig {
     /// Returns `None` when the guard is disabled — either explicitly
     /// (`proxy_loop_detection = Some(false)`) or because the shared agent
     /// defaults disable loop detection entirely.
-    pub fn from_settings(settings: &Settings) -> Option<Self> {
+    pub(crate) fn from_settings(settings: &Settings) -> Option<Self> {
         if settings.proxy_loop_detection == Some(false) {
             return None;
         }
@@ -83,7 +83,7 @@ impl LoopGuardConfig {
 
 /// Outcome of scanning one request's replayed history.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LoopGuardVerdict {
+pub(crate) enum LoopGuardVerdict {
     /// No guard tripped — forward the request.
     Pass,
     /// The same tool-call batch signature repeats beyond the threshold.
@@ -154,7 +154,7 @@ struct WireFunction {
 /// text), and the loop detector only sees non-empty tool-call batches.
 ///
 /// Fail-open: an unparseable body returns [`LoopGuardVerdict::Pass`].
-pub fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> LoopGuardVerdict {
+pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> LoopGuardVerdict {
     let Ok(envelope) = serde_json::from_slice::<HistoryEnvelope>(body) else {
         return LoopGuardVerdict::Pass;
     };

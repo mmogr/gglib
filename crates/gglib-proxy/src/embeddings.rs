@@ -48,7 +48,7 @@ use crate::server::{AppState, handle_runtime_error};
 /// `gglib_runtime`'s `resolve_embeddings_flag`. Read here so the proxy can
 /// refuse a request the upstream would only 501 on, without paying for the
 /// swap first.
-pub const EMBEDDING_TAG: &str = "embedding";
+pub(crate) const EMBEDDING_TAG: &str = "embedding";
 
 /// Handle an embeddings request — ensure the model is running, then proxy.
 pub(crate) async fn embeddings(

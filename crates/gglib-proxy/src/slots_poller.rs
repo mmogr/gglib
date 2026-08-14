@@ -339,7 +339,7 @@ impl BaselineLatch {
 /// still starting when the first poll landed gets read on the next tick
 /// instead of going without a baseline for the rest of its run. See
 /// [`BaselineLatch`].
-pub fn spawn_slots_poller(
+pub(crate) fn spawn_slots_poller(
     runtime_port: Arc<dyn ModelRuntimePort>,
     client: Client,
     cache: Arc<SlotsCache>,

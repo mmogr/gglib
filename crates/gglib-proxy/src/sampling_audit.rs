@@ -299,7 +299,7 @@ impl AuditState {
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 #[must_use]
-pub fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<Divergence> {
+pub(crate) fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<Divergence> {
     // Nothing reached the wire, so nothing can have diverged from it.
     if !intent.applied {
         return Vec::new();
@@ -452,7 +452,7 @@ pub struct PollOutcome {
 /// subset and the false positive would merely become less frequent and no less
 /// wrong.
 #[must_use]
-pub fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> PollOutcome {
+pub(crate) fn compare_poll(intents: &[SamplingDecision], observed: &[SlotParams]) -> PollOutcome {
     let mut out = PollOutcome {
         comparisons: 0,
         divergences: 0,

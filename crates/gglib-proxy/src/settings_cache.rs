@@ -42,10 +42,10 @@ use tracing::warn;
 /// Short enough that a settings change from the GUI or CLI shows up quickly
 /// enough to feel immediate, long enough that a burst of requests collapses to
 /// a single query.
-pub const DEFAULT_TTL: Duration = Duration::from_secs(5);
+pub(crate) const DEFAULT_TTL: Duration = Duration::from_secs(5);
 
 /// A settings snapshot refreshed at most once per TTL window.
-pub struct SettingsCache {
+pub(crate) struct SettingsCache {
     repo: Arc<dyn SettingsRepository>,
     /// The current snapshot and the instant it expires. `None` until the first
     /// successful load.
@@ -66,13 +66,13 @@ impl std::fmt::Debug for SettingsCache {
 impl SettingsCache {
     /// Wrap a repository with the default TTL.
     #[must_use]
-    pub fn new(repo: Arc<dyn SettingsRepository>) -> Self {
+    pub(crate) fn new(repo: Arc<dyn SettingsRepository>) -> Self {
         Self::with_ttl(repo, DEFAULT_TTL)
     }
 
     /// Wrap a repository with an explicit TTL.
     #[must_use]
-    pub fn with_ttl(repo: Arc<dyn SettingsRepository>, ttl: Duration) -> Self {
+    pub(crate) fn with_ttl(repo: Arc<dyn SettingsRepository>, ttl: Duration) -> Self {
         Self {
             repo,
             snapshot: RwLock::new(None),
@@ -84,7 +84,7 @@ impl SettingsCache {
     ///
     /// Never fails: see the module docs for what happens when the repository
     /// errors.
-    pub async fn get(&self) -> Arc<Settings> {
+    pub(crate) async fn get(&self) -> Arc<Settings> {
         // Fast path: a live snapshot, taken under a read lock so concurrent
         // requests do not serialise on each other.
         if let Some((settings, expires_at)) = self.snapshot.read().await.as_ref()
