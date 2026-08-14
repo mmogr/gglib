@@ -158,22 +158,6 @@ pub trait DownloadManagerPort: Send + Sync {
     /// The download will be processed according to the manager's concurrency settings.
     async fn queue_download(&self, request: DownloadRequest) -> Result<DownloadId, DownloadError>;
 
-    /// Queue a download and ensure the queue processor is running.
-    ///
-    /// This is the recommended method for GUI adapters. It combines queuing
-    /// with worker lifecycle management, hiding the internal details of
-    /// how downloads are processed.
-    ///
-    /// The `self: Arc<Self>` receiver allows implementations to clone the
-    /// Arc and spawn worker tasks. This is object-safe and works with
-    /// `Arc<dyn DownloadManagerPort>`.
-    ///
-    /// Returns the download ID on success.
-    async fn queue_and_process(
-        self: Arc<Self>,
-        request: DownloadRequest,
-    ) -> Result<DownloadId, DownloadError>;
-
     /// Queue a download with smart quantization selection.
     ///
     /// This is the recommended method for GUI adapters when the quantization
@@ -222,14 +206,8 @@ pub trait DownloadManagerPort: Send + Sync {
     /// wants to clear the queue.
     async fn cancel_all(&self) -> Result<(), DownloadError>;
 
-    /// Check if a download with the given ID exists in the queue.
-    async fn has_download(&self, id: &DownloadId) -> Result<bool, DownloadError>;
-
     /// Get the number of active downloads.
     async fn active_count(&self) -> Result<u32, DownloadError>;
-
-    /// Get the number of pending (queued) downloads.
-    async fn pending_count(&self) -> Result<u32, DownloadError>;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Queue management operations
@@ -254,12 +232,6 @@ pub trait DownloadManagerPort: Send + Sync {
     /// queued together. The `group_id` matches `QueuedDownload.group_id`.
     async fn cancel_group(&self, group_id: &str) -> Result<(), DownloadError>;
 
-    /// Retry a failed download.
-    ///
-    /// Moves the download from the failures list back to the queue.
-    /// Returns the position in queue where it was added.
-    async fn retry(&self, id: &DownloadId) -> Result<u32, DownloadError>;
-
     /// Clear all failed downloads from the failures list.
     async fn clear_failed(&self) -> Result<(), DownloadError>;
 
@@ -268,7 +240,4 @@ pub trait DownloadManagerPort: Send + Sync {
     /// Downloads already in queue are not affected, but new downloads
     /// may be rejected if the queue is at capacity.
     async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError>;
-
-    /// Get the maximum queue size.
-    async fn get_max_queue_size(&self) -> Result<u32, DownloadError>;
 }

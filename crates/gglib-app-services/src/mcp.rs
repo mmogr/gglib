@@ -326,7 +326,6 @@ mod tests {
     use std::sync::Arc;
 
     use gglib_core::McpLifecycle;
-    use gglib_core::ports::NoopEmitter;
     use gglib_db::CoreFactory;
 
     use super::*;
@@ -335,7 +334,7 @@ mod tests {
     async fn make_ops() -> McpOps {
         let pool = setup_test_database().await.expect("in-memory DB");
         let repo = CoreFactory::mcp_repository(pool);
-        let mcp = Arc::new(McpService::new(repo, Arc::new(NoopEmitter::new())));
+        let mcp = Arc::new(McpService::new(repo));
         McpOps::new(McpDeps { mcp })
     }
 

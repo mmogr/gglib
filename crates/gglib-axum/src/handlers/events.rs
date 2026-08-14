@@ -15,7 +15,7 @@ use crate::state::AppState;
 /// Clients connect to this endpoint to receive real-time updates about:
 /// - Download progress and completion
 /// - Server start/stop events
-/// - MCP server events
+/// - Model lifecycle, verification, and proxy events
 pub(crate) async fn stream(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {

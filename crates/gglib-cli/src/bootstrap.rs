@@ -3,8 +3,8 @@
 //! Shared infrastructure (DB, download manager, model registrar,
 //! verification service, …) is wired by [`gglib_bootstrap::CoreBootstrap`].
 //! This module is the only place where CLI-specific concerns are added on
-//! top: the indicatif-based download emitter, the MCP service (with a
-//! `NoopEmitter` since there is no UI surface), and the shared HTTP client.
+//! top: the indicatif-based download emitter, the MCP service, and the
+//! shared HTTP client.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
-    ModelRepository, NoopEmitter, SettingsRepository,
+    ModelRepository, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
@@ -130,12 +130,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
 
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool));
 
-    // CLI uses NoopEmitter for the MCP service since there's no frontend
-    // to broadcast lifecycle events to.
-    let mcp = Arc::new(McpService::new(
-        repos.mcp_servers.clone(),
-        Arc::new(NoopEmitter),
-    ));
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));
 
     Ok(CliContext {
         app,

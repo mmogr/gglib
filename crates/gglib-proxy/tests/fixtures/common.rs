@@ -21,7 +21,7 @@ use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
 };
-use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
+use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer};
 use gglib_mcp::McpService;
 
 // ─── ModelRuntimePort mock ────────────────────────────────────────────────
@@ -323,12 +323,9 @@ impl McpServerRepository for EmptyMcpRepo {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-/// Build an `McpService` backed by an empty repository and no-op emitter.
+/// Build an `McpService` backed by an empty repository.
 pub(crate) fn make_mcp_service() -> Arc<McpService> {
-    Arc::new(McpService::new(
-        Arc::new(EmptyMcpRepo),
-        Arc::new(NoopEmitter::new()),
-    ))
+    Arc::new(McpService::new(Arc::new(EmptyMcpRepo)))
 }
 
 // ─── Mock upstream (chat-completions + optional slots) ────────────────────

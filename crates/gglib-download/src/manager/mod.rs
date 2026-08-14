@@ -1548,15 +1548,6 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(id)
     }
 
-    async fn queue_and_process(
-        self: Arc<Self>,
-        request: DownloadRequest,
-    ) -> Result<DownloadId, DownloadError> {
-        let id = self.queue_download(request).await?;
-        self.ensure_runner();
-        Ok(id)
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         repo_id: String,
@@ -1668,26 +1659,9 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(())
     }
 
-    async fn has_download(&self, id: &DownloadId) -> Result<bool, DownloadError> {
-        // Check active
-        if self.active.lock().await.contains_key(id) {
-            return Ok(true);
-        }
-
-        // Check queue
-        let queue = self.queue.read().await;
-        Ok(queue.is_queued(id) || queue.is_failed(id))
-    }
-
     async fn active_count(&self) -> Result<u32, DownloadError> {
         #[allow(clippy::cast_possible_truncation)]
         Ok(self.active.lock().await.len() as u32)
-    }
-
-    async fn pending_count(&self) -> Result<u32, DownloadError> {
-        let queue = self.queue.read().await;
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(queue.pending_len() as u32)
     }
 
     async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError> {
@@ -1722,15 +1696,6 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(())
     }
 
-    async fn retry(&self, id: &DownloadId) -> Result<u32, DownloadError> {
-        let has_active = self.has_active().await;
-        let position = self.queue.write().await.retry_failed(id, has_active)?;
-        tracing::info!(id = %id, position = position, "Retried failed download");
-        self.emit_queue_snapshot().await;
-        self.queue_notify.notify_one();
-        Ok(position)
-    }
-
     async fn clear_failed(&self) -> Result<(), DownloadError> {
         self.queue.write().await.clear_failed();
         tracing::info!("Cleared failed downloads");
@@ -1741,11 +1706,6 @@ impl DownloadManagerPort for DownloadManagerImpl {
         self.queue.write().await.set_max_size(size);
         tracing::info!(size = size, "Set max queue size");
         Ok(())
-    }
-
-    async fn get_max_queue_size(&self) -> Result<u32, DownloadError> {
-        let queue = self.queue.read().await;
-        Ok(queue.max_size())
     }
 }
 
@@ -1806,9 +1766,10 @@ impl DownloadManagerImpl {
         // matching — which is how a retried `gglib model download` left two
         // entries for one model, the second wedged behind the first.
         //
-        // Deliberately not `has_download`: that also answers `true` for a
-        // *failed* download, and a failure has to stay re-queueable — hence the
-        // `remove_from_failed` inside `queue_sharded`.
+        // Deliberately narrower than "does the queue know this id": a check
+        // that also matched a *failed* download would make failures
+        // permanently un-retryable — hence the `remove_from_failed` inside
+        // `queue_sharded`.
         //
         // Two statements, not one `||` expression: each guard drops at the end
         // of its own statement, so the two locks are never held at once. They

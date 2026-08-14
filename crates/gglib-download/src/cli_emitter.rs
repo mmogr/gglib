@@ -385,8 +385,9 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 /// `DownloadEvent` → `AppEvent::Download { event }`. Here we unwrap that
 /// variant and forward the inner `DownloadEvent` to the indicatif renderer.
 ///
-/// Non-download `AppEvent` variants (server lifecycle, model lifecycle, MCP,
-/// proxy) are deliberately ignored — the CLI has no UI surface for them.
+/// Non-download `AppEvent` variants (server lifecycle, model lifecycle,
+/// verification, proxy) are deliberately ignored — the CLI has no UI surface
+/// for them.
 impl AppEventEmitter for CliDownloadEventEmitter {
     fn emit(&self, event: AppEvent) {
         if let AppEvent::Download { event } = event {

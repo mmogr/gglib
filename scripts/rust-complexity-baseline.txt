@@ -9,16 +9,15 @@ crates/gglib-app-services/src/benchmark/tune/mod.rs 1183
 crates/gglib-app-services/src/benchmark/tune/scoring.rs 352
 crates/gglib-app-services/src/downloads.rs 375
 crates/gglib-app-services/src/launch_options.rs 326
-crates/gglib-app-services/src/mcp.rs 397
+crates/gglib-app-services/src/mcp.rs 396
 crates/gglib-app-services/src/models.rs 1110
 crates/gglib-app-services/src/proxy.rs 455
 crates/gglib-app-services/src/sampling_explain.rs 924
 crates/gglib-app-services/src/servers.rs 970
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
-crates/gglib-app-services/src/test_support.rs 311
 crates/gglib-app-services/src/types.rs 911
-crates/gglib-axum/src/bootstrap.rs 324
+crates/gglib-axum/src/bootstrap.rs 321
 crates/gglib-axum/src/chat_api.rs 761
 crates/gglib-axum/src/handlers/config/setup.rs 309
 crates/gglib-axum/src/routes.rs 472
@@ -65,7 +64,6 @@ crates/gglib-core/src/download/events.rs 467
 crates/gglib-core/src/download/queue.rs 548
 crates/gglib-core/src/download/rate.rs 378
 crates/gglib-core/src/download/types.rs 745
-crates/gglib-core/src/events/mod.rs 303
 crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 651
 crates/gglib-core/src/ports/model_runtime.rs 817
@@ -94,7 +92,7 @@ crates/gglib-db/src/repositories/sqlite_download_state_repository.rs 361
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 995
 crates/gglib-db/src/setup.rs 913
-crates/gglib-download/src/cli_emitter.rs 528
+crates/gglib-download/src/cli_emitter.rs 529
 crates/gglib-download/src/cli_exec/api.rs 369
 crates/gglib-download/src/cli_exec/exec/progress.rs 330
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 379
@@ -103,11 +101,11 @@ crates/gglib-download/src/cli_exec/exec/python_protocol.rs 350
 crates/gglib-download/src/cli_exec/exec/xet_poller.rs 433
 crates/gglib-download/src/executor/native_tests.rs 859
 crates/gglib-download/src/executor/native.rs 576
-crates/gglib-download/src/manager/mod.rs 2084
+crates/gglib-download/src/manager/mod.rs 2045
 crates/gglib-download/src/manager/shard_group_tracker.rs 405
 crates/gglib-download/src/manager/worker.rs 313
 crates/gglib-download/src/quant_selector.rs 340
-crates/gglib-download/src/queue/mod.rs 1250
+crates/gglib-download/src/queue/mod.rs 1175
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 424
 crates/gglib-hf/src/http.rs 384
@@ -120,7 +118,7 @@ crates/gglib-mcp/src/builtin/mod.rs 337
 crates/gglib-mcp/src/client.rs 519
 crates/gglib-mcp/src/manager.rs 320
 crates/gglib-mcp/src/resolver/search.rs 388
-crates/gglib-mcp/src/service.rs 927
+crates/gglib-mcp/src/service.rs 878
 crates/gglib-proxy/src/cache_lifecycle.rs 589
 crates/gglib-proxy/src/canonicalization.rs 829
 crates/gglib-proxy/src/connections.rs 739
@@ -141,7 +139,7 @@ crates/gglib-proxy/src/slots.rs 1234
 crates/gglib-proxy/src/sse_stream.rs 385
 crates/gglib-proxy/src/token_calibration.rs 370
 crates/gglib-proxy/src/upstream_health.rs 370
-crates/gglib-proxy/tests/fixtures/common.rs 1205
+crates/gglib-proxy/tests/fixtures/common.rs 1202
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 415
 crates/gglib-proxy/tests/integration_inference_profiles.rs 592
@@ -164,7 +162,7 @@ crates/gglib-runtime/src/process/admission/state.rs 736
 crates/gglib-runtime/src/process/manager.rs 441
 crates/gglib-runtime/src/process/residency/launch.rs 394
 crates/gglib-runtime/src/process/residency/mod.rs 520
-crates/gglib-runtime/src/proxy/supervisor.rs 730
+crates/gglib-runtime/src/proxy/supervisor.rs 726
 crates/gglib-runtime/src/server_config.rs 493
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 486

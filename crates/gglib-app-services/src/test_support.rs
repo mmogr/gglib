@@ -58,13 +58,6 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(DownloadId::from_model("mock-model"))
     }
 
-    async fn queue_and_process(
-        self: Arc<Self>,
-        _request: DownloadRequest,
-    ) -> Result<DownloadId, DownloadError> {
-        Ok(DownloadId::from_model("mock-model"))
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         _repo_id: String,
@@ -91,15 +84,7 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(())
     }
 
-    async fn has_download(&self, _id: &DownloadId) -> Result<bool, DownloadError> {
-        Ok(false)
-    }
-
     async fn active_count(&self) -> Result<u32, DownloadError> {
-        Ok(0)
-    }
-
-    async fn pending_count(&self) -> Result<u32, DownloadError> {
         Ok(0)
     }
 
@@ -119,20 +104,12 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(())
     }
 
-    async fn retry(&self, _id: &DownloadId) -> Result<u32, DownloadError> {
-        Ok(1)
-    }
-
     async fn clear_failed(&self) -> Result<(), DownloadError> {
         Ok(())
     }
 
     async fn set_max_queue_size(&self, _size: u32) -> Result<(), DownloadError> {
         Ok(())
-    }
-
-    async fn get_max_queue_size(&self) -> Result<u32, DownloadError> {
-        Ok(10)
     }
 }
 
@@ -299,10 +276,7 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
     let proxy = Arc::new(crate::ProxyOps::new(crate::ProxyDeps {
         supervisor: Arc::new(ProxySupervisor::new()),
         model_repo: repos.models.clone(),
-        mcp: Arc::new(McpService::new(
-            repos.mcp_servers.clone(),
-            Arc::new(gglib_core::ports::NoopEmitter::new()),
-        )),
+        mcp: Arc::new(McpService::new(repos.mcp_servers.clone())),
         core: Arc::clone(&core),
         runtime,
     }));
