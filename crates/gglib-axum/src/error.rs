@@ -177,3 +177,39 @@ impl From<ChatHistoryError> for HttpError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The last link of the duplicate-model chain. `AlreadyExists` is now
+    /// raised by `ModelService::import_from_file`; this pins the other end, so
+    /// that a future rearrangement of these `From` impls cannot quietly send a
+    /// duplicate back as a 500 again.
+    ///
+    /// Both routes in, because the GUI path arrives wrapped in `CoreError` and
+    /// the repository path does not.
+    #[test]
+    fn already_exists_reaches_the_client_as_409() {
+        let direct: HttpError = RepositoryError::AlreadyExists("dup".to_string()).into();
+        assert_eq!(direct.into_response().status(), StatusCode::CONFLICT);
+
+        let wrapped: HttpError =
+            CoreError::Repository(RepositoryError::AlreadyExists("dup".to_string())).into();
+        assert_eq!(wrapped.into_response().status(), StatusCode::CONFLICT);
+    }
+
+    /// The neighbouring repository errors must not also become 409 — a
+    /// conflict has to mean something.
+    #[test]
+    fn other_repository_errors_keep_their_own_status() {
+        let not_found: HttpError = RepositoryError::NotFound("gone".to_string()).into();
+        assert_eq!(not_found.into_response().status(), StatusCode::NOT_FOUND);
+
+        let storage: HttpError = RepositoryError::Storage("disk".to_string()).into();
+        assert_eq!(
+            storage.into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+}
