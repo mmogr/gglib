@@ -13,7 +13,11 @@ use crate::bootstrap::CliContext;
 ///
 /// Verifies model integrity by computing SHA256 hashes and comparing against
 /// stored OIDs from HuggingFace.
-pub(crate) async fn execute_verify(ctx: &CliContext, identifier: &str, verbose: bool) -> Result<()> {
+pub(crate) async fn execute_verify(
+    ctx: &CliContext,
+    identifier: &str,
+    verbose: bool,
+) -> Result<()> {
     // Get verification service
     let verification = ctx
         .app

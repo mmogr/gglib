@@ -153,4 +153,3 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         download_emitter,
     })
 }
-

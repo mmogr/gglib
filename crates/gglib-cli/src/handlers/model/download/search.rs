@@ -10,7 +10,12 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 ///
 /// Searches HuggingFace Hub for models matching the query.
 /// No database access required.
-pub(crate) async fn execute(query: String, limit: u32, sort: String, gguf_only: bool) -> Result<()> {
+pub(crate) async fn execute(
+    query: String,
+    limit: u32,
+    sort: String,
+    gguf_only: bool,
+) -> Result<()> {
     println!("🔍 Searching HuggingFace Hub for: '{}'...", query);
 
     let client = DefaultHfClient::new(&HfClientConfig::default());
