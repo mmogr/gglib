@@ -84,12 +84,6 @@ pub fn build_model_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
     url
 }
 
-/// Build a URL for downloading a file from a repository.
-pub fn build_download_url(repo: &HfRepoRef, file_path: &str, revision: Option<&str>) -> Url {
-    Url::parse(&build_file_url(&repo.id(), file_path, revision))
-        .expect("download URL construction should not fail")
-}
-
 /// Build the URL that serves a file's bytes, from a bare `owner/name` repo ID.
 ///
 /// This is the resolve endpoint: `HuggingFace` answers it with a redirect to the
@@ -238,19 +232,17 @@ mod tests {
         );
     }
 
+    /// The resolve-endpoint shape the native downloader depends on: `None`
+    /// revision means `main`, and an explicit one is substituted verbatim.
     #[test]
-    fn test_build_download_url() {
-        let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
-
-        let url = build_download_url(&repo, "llama-2-7b.Q4_K_M.gguf", None);
+    fn test_build_file_url() {
         assert_eq!(
-            url.as_str(),
+            build_file_url("TheBloke/Llama-2-7B-GGUF", "llama-2-7b.Q4_K_M.gguf", None),
             "https://huggingface.co/TheBloke/Llama-2-7B-GGUF/resolve/main/llama-2-7b.Q4_K_M.gguf"
         );
 
-        let url = build_download_url(&repo, "model.gguf", Some("abc123"));
         assert_eq!(
-            url.as_str(),
+            build_file_url("TheBloke/Llama-2-7B-GGUF", "model.gguf", Some("abc123")),
             "https://huggingface.co/TheBloke/Llama-2-7B-GGUF/resolve/abc123/model.gguf"
         );
     }

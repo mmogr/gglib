@@ -5,7 +5,6 @@
 //! frontends via SSE, Tauri events, or CLI output.
 
 use super::events::DownloadStatus;
-use super::format::{format_duration, format_rate};
 use super::types::{Quantization, ShardInfo};
 use serde::{Deserialize, Serialize};
 
@@ -207,18 +206,6 @@ impl QueuedDownload {
             DownloadStatus::Completed | DownloadStatus::Cancelled | DownloadStatus::Failed
         )
     }
-
-    /// Get formatted speed string (e.g., `5.2 MB/s`, or a placeholder).
-    #[must_use]
-    pub fn speed_display(&self) -> String {
-        format_rate(self.speed_bps)
-    }
-
-    /// Get formatted ETA string (e.g., `2m 30s`, or a placeholder).
-    #[must_use]
-    pub fn eta_display(&self) -> String {
-        format_duration(self.eta_seconds)
-    }
 }
 
 /// A failed download kept for display purposes.
@@ -304,27 +291,6 @@ mod tests {
         assert!((download.progress_percent - 50.0).abs() < 0.01);
         // Stored, not derived — the manager's estimator owns this number.
         assert!((download.eta_seconds.unwrap() - 5.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_speed_display() {
-        // Unit selection and thresholds are covered in `super::format`; this
-        // only checks that the DTO delegates there rather than formatting
-        // its own way.
-        let mut download = QueuedDownload::new("id", "model", "Display", 1, 0);
-
-        download.speed_bps = Some(5_000_000.0);
-        assert_eq!(download.speed_display(), "5.0 MB/s");
-
-        download.speed_bps = Some(1_500_000_000.0);
-        assert_eq!(download.speed_display(), "1.50 GB/s");
-    }
-
-    #[test]
-    fn display_helpers_show_a_placeholder_when_unknown() {
-        let download = QueuedDownload::new("id", "model", "Display", 1, 0);
-        assert_eq!(download.speed_display(), crate::download::format::UNKNOWN);
-        assert_eq!(download.eta_display(), crate::download::format::UNKNOWN);
     }
 
     #[test]

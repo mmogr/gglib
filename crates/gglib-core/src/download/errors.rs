@@ -111,18 +111,6 @@ impl DownloadError {
         }
     }
 
-    /// Create an I/O error from a `std::io::Error`.
-    ///
-    /// This captures the error kind name and message for serialization.
-    #[must_use]
-    pub fn from_io_error(err: &std::io::Error) -> Self {
-        let kind = err.kind();
-        Self::Io {
-            kind: format!("{kind:?}"),
-            message: err.to_string(),
-        }
-    }
-
     /// Create a network error.
     pub fn network(message: impl Into<String>) -> Self {
         Self::Network {
@@ -143,13 +131,6 @@ impl DownloadError {
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::NotFound {
             message: message.into(),
-        }
-    }
-
-    /// Create an invalid quantization error.
-    pub fn invalid_quantization(value: impl Into<String>) -> Self {
-        Self::InvalidQuantization {
-            value: value.into(),
         }
     }
 
@@ -254,20 +235,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_io_error_from_std() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-        let err = DownloadError::from_io_error(&io_err);
-
-        match err {
-            DownloadError::Io { kind, message } => {
-                assert_eq!(kind, "NotFound");
-                assert!(message.contains("file not found"));
-            }
-            _ => panic!("Expected Io variant"),
-        }
-    }
-
-    #[test]
     fn test_error_serialization() {
         let err = DownloadError::network_with_status("timeout", 408);
         let json = serde_json::to_string(&err).unwrap();
@@ -288,7 +255,12 @@ mod tests {
             .is_recoverable()
         );
         assert!(!DownloadError::Cancelled.is_recoverable());
-        assert!(!DownloadError::invalid_quantization("bad").is_recoverable());
+        assert!(
+            !DownloadError::InvalidQuantization {
+                value: "bad".to_string(),
+            }
+            .is_recoverable()
+        );
     }
 
     #[test]

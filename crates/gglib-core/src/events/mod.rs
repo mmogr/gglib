@@ -1,6 +1,5 @@
 #![doc = include_str!("README.md")]
 mod app;
-mod download;
 mod mcp;
 mod server;
 
@@ -269,7 +268,10 @@ mod tests {
             "server:started"
         );
         assert_eq!(
-            AppEvent::download_started("id", "name").event_name(),
+            AppEvent::Download {
+                event: DownloadEvent::started("id"),
+            }
+            .event_name(),
             "download:started"
         );
         assert_eq!(AppEvent::model_removed(1).event_name(), "model:removed");
@@ -285,18 +287,28 @@ mod tests {
     /// because frontend listened to wrong event names.
     #[test]
     fn download_event_names_are_stable() {
+        let wrap = |event| AppEvent::Download { event };
         let cases = vec![
-            (AppEvent::download_started("id", "name"), "download:started"),
+            (wrap(DownloadEvent::started("id")), "download:started"),
             (
-                AppEvent::download_progress("id", 50, 100, Some(1024.0), Some(10.0)),
+                wrap(DownloadEvent::progress(
+                    "id",
+                    50,
+                    100,
+                    Some(1024.0),
+                    Some(10.0),
+                )),
                 "download:progress",
             ),
             (
-                AppEvent::download_completed("id", None),
+                wrap(DownloadEvent::completed("id", None::<String>)),
                 "download:completed",
             ),
-            (AppEvent::download_failed("id", "error"), "download:failed"),
-            (AppEvent::download_cancelled("id"), "download:cancelled"),
+            (
+                wrap(DownloadEvent::failed("id", "error")),
+                "download:failed",
+            ),
+            (wrap(DownloadEvent::cancelled("id")), "download:cancelled"),
         ];
 
         for (event, expected_name) in cases {

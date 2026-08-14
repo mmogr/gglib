@@ -72,13 +72,6 @@ impl HfQuantInfo {
     pub fn size_mb(&self) -> f64 {
         self.total_size as f64 / 1_048_576.0
     }
-
-    /// Get size in gigabytes.
-    #[must_use]
-    #[allow(clippy::cast_precision_loss)]
-    pub fn size_gb(&self) -> f64 {
-        self.total_size as f64 / 1_073_741_824.0
-    }
 }
 
 /// Options for searching `HuggingFace` models.
@@ -192,7 +185,6 @@ mod tests {
             file_paths: vec!["model.gguf".to_string()],
         };
         assert!(!single.is_sharded());
-        assert!((single.size_gb() - 3.72).abs() < 0.1);
 
         let sharded = HfQuantInfo {
             name: "Q8_0".to_string(),

@@ -327,25 +327,6 @@ impl DownloadQueue {
         initial - self.pending.len()
     }
 
-    /// Move all pending items in a shard group to the failed list.
-    #[cfg(test)]
-    pub fn fail_group(&mut self, group_id: &ShardGroupId, error: &str) -> usize {
-        let mut removed = Vec::new();
-        self.pending.retain(|item| {
-            if item.group_id.as_ref() == Some(group_id) {
-                removed.push(item.clone());
-                false
-            } else {
-                true
-            }
-        });
-        let count = removed.len();
-        for item in removed {
-            self.failed.push(FailedItem::new(item, error));
-        }
-        count
-    }
-
     // --- Private helpers ---
 
     fn check_not_queued(&self, id: &DownloadId) -> Result<(), DownloadError> {
@@ -593,23 +574,6 @@ mod tests {
 
         assert_eq!(removed, 2);
         assert!(queue.pending.is_empty());
-    }
-
-    #[test]
-    fn test_fail_group() {
-        let mut queue = DownloadQueue::new(10);
-        let id = test_id("model/x", Some("Q4_K_M"));
-        let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
-        let key = test_completion_key(&id);
-        queue.queue_sharded(&id, &key, shards, false).unwrap();
-
-        let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
-        let failed_count = queue.fail_group(&group_id, "Network error");
-
-        assert_eq!(failed_count, 2);
-        assert!(queue.pending.is_empty());
-        assert_eq!(queue.failed.len(), 2);
-        assert_eq!(queue.failed[0].error, "Network error");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

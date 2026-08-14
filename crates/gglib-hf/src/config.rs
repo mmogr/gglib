@@ -17,14 +17,12 @@ use std::time::Duration;
 ///
 /// let config = HfClientConfig::new()
 ///     .with_timeout(Duration::from_secs(60))
-///     .with_user_agent("my-app/1.0");
+///     .with_token("hf_...");
 /// ```
 #[derive(Debug, Clone)]
 pub struct HfClientConfig {
     /// Base URL for the `HuggingFace` API
     pub(crate) base_url: String,
-    /// User agent string for HTTP requests
-    pub(crate) user_agent: String,
     /// Request timeout
     pub(crate) timeout: Duration,
     /// Optional authentication token for private models
@@ -39,7 +37,6 @@ impl Default for HfClientConfig {
     fn default() -> Self {
         Self {
             base_url: "https://huggingface.co/api/models".to_string(),
-            user_agent: concat!("gglib-hf/", env!("CARGO_PKG_VERSION")).to_string(),
             timeout: Duration::from_secs(30),
             token: None,
             max_retries: 3,
@@ -53,22 +50,6 @@ impl HfClientConfig {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Set the base URL for the `HuggingFace` API.
-    ///
-    /// Defaults to `https://huggingface.co/api/models`.
-    #[must_use]
-    pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
-        self.base_url = url.into();
-        self
-    }
-
-    /// Set the user agent string for HTTP requests.
-    #[must_use]
-    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
-        self.user_agent = user_agent.into();
-        self
     }
 
     /// Set the request timeout.
@@ -121,7 +102,6 @@ mod tests {
     fn test_default_config() {
         let config = HfClientConfig::new();
         assert_eq!(config.base_url, "https://huggingface.co/api/models");
-        assert!(config.user_agent.contains("gglib-hf"));
         assert_eq!(config.timeout, Duration::from_secs(30));
         assert!(config.token.is_none());
         assert_eq!(config.max_retries, 3);
@@ -130,14 +110,10 @@ mod tests {
     #[test]
     fn test_builder_pattern() {
         let config = HfClientConfig::new()
-            .with_base_url("https://custom.api/")
-            .with_user_agent("test-agent")
             .with_timeout(Duration::from_mins(1))
             .with_token("secret")
             .with_max_retries(5);
 
-        assert_eq!(config.base_url, "https://custom.api/");
-        assert_eq!(config.user_agent, "test-agent");
         assert_eq!(config.timeout, Duration::from_mins(1));
         assert_eq!(config.token, Some("secret".to_string()));
         assert_eq!(config.max_retries, 5);

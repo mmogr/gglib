@@ -7,9 +7,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
-#[cfg(test)]
-use std::time::Duration;
-
 use gglib_core::download::Quantization;
 use gglib_core::ports::ResolvedFile;
 
@@ -190,18 +187,6 @@ impl ShardGroupTracker {
     pub fn active_count(&self) -> usize {
         self.groups.len()
     }
-
-    /// Remove expired shard groups (for testing).
-    #[cfg(test)]
-    pub fn gc_expired(&mut self, ttl: Duration) -> usize {
-        let now = Instant::now();
-        let before_count = self.groups.len();
-
-        self.groups
-            .retain(|_, state| now.duration_since(state.last_updated) < ttl);
-
-        before_count - self.groups.len()
-    }
 }
 
 #[cfg(test)]
@@ -330,34 +315,6 @@ mod tests {
         // Mark as failed
         tracker.on_group_failed(&group_id);
 
-        assert_eq!(tracker.active_count(), 0);
-    }
-
-    #[test]
-    fn test_gc_expired() {
-        let mut tracker = ShardGroupTracker::new();
-        let group_id = ShardGroupId::new("test-group");
-        let metadata = test_metadata();
-
-        // Add a shard
-        tracker.on_shard_done(
-            &group_id,
-            0,
-            PathBuf::from("/path/shard-0.gguf"),
-            3,
-            &metadata,
-        );
-
-        assert_eq!(tracker.active_count(), 1);
-
-        // GC with large TTL - should not remove
-        let removed = tracker.gc_expired(Duration::from_hours(1));
-        assert_eq!(removed, 0);
-        assert_eq!(tracker.active_count(), 1);
-
-        // GC with zero TTL - should remove
-        let removed = tracker.gc_expired(Duration::from_secs(0));
-        assert_eq!(removed, 1);
         assert_eq!(tracker.active_count(), 0);
     }
 

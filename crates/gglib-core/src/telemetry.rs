@@ -45,6 +45,12 @@ pub fn set_console_hook(hook: ConsoleHook) {
 }
 
 /// Remove a previously installed hook, reverting to plain stderr.
+///
+/// No production caller: the CLI installs a hook for the life of the process
+/// and exits without clearing it. Kept, and gated, because `CONSOLE_HOOK` is
+/// process-global — a test that installs one has to be able to put it back,
+/// or it leaks into every test that runs after it in the same binary.
+#[cfg(test)]
 pub fn clear_console_hook() {
     *CONSOLE_HOOK.write().unwrap() = None;
 }

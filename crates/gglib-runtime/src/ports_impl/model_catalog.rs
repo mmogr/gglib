@@ -143,7 +143,7 @@ impl ModelCatalogPort for CatalogPortImpl {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use gglib_core::domain::{ModelCapabilities, NewModel};
+    use gglib_core::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel};
     use gglib_core::ports::RepositoryError;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -273,6 +273,6 @@ mod tests {
     #[test]
     fn a_model_with_no_sampling_metadata_declares_nothing() {
         let spec = model_to_launch_spec(OneModelRepo::model());
-        assert!(!spec.model_sampling.declares_anything());
+        assert_eq!(spec.model_sampling, ModelSamplingDefaults::default());
     }
 }

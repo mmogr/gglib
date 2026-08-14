@@ -24,20 +24,10 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    /// Get filenames as a simple list.
-    pub fn filenames(&self) -> Vec<String> {
-        self.files.iter().map(|f| f.path.clone()).collect()
-    }
-
     /// Get total size if all file sizes are known.
     pub fn total_size(&self) -> Option<u64> {
         let sizes: Option<Vec<u64>> = self.files.iter().map(|f| f.size).collect();
         sizes.map(|s| s.iter().sum())
-    }
-
-    /// Get the first file path (used for database registration of sharded models).
-    pub fn first_file(&self) -> Option<&str> {
-        self.files.first().map(|f| f.path.as_str())
     }
 
     /// Get the number of files.
@@ -137,11 +127,6 @@ mod tests {
 
         assert_eq!(resolution.file_count(), 2);
         assert_eq!(resolution.total_size(), Some(1500));
-        assert_eq!(resolution.first_file(), Some("model.gguf"));
-        assert_eq!(
-            resolution.filenames(),
-            vec!["model.gguf", "model-00001-of-00002.gguf"]
-        );
     }
 
     #[test]
