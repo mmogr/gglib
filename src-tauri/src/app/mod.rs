@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-pub mod events;
-pub mod state;
+pub(crate) mod events;
+pub(crate) mod state;
 
-pub use state::AppState;
+pub(crate) use state::AppState;

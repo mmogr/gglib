@@ -17,7 +17,7 @@ use crate::tray::Tray;
 ///
 /// This struct is managed by Tauri and accessible to all commands
 /// via `tauri::State<'_, AppState>`.
-pub struct AppState {
+pub(crate) struct AppState {
     /// The connection to the gglib daemon (external or hosted in-process).
     pub daemon: Arc<Daemon>,
     /// Menu state for dynamic updates (macOS application menu only)
@@ -41,7 +41,7 @@ pub struct AppState {
 
 impl AppState {
     /// Create a new application state around a connected daemon.
-    pub fn new(daemon: Arc<Daemon>) -> Self {
+    pub(crate) fn new(daemon: Arc<Daemon>) -> Self {
         Self {
             daemon,
             #[cfg(target_os = "macos")]

@@ -26,7 +26,7 @@ const LABEL_WIDTH: usize = 8;
 
 /// Parsed `gglib up` flags.
 #[derive(Debug, Clone)]
-pub struct UpArgs {
+pub(crate) struct UpArgs {
     /// Proceed with the model download without asking.
     pub yes: bool,
     /// Load this model rather than the recommended (or most recent) one.
@@ -39,7 +39,7 @@ pub struct UpArgs {
 ///
 /// Blocks until Ctrl-C, like `gglib proxy` — the endpoint it just built is the
 /// point, so the command stays in the foreground serving it.
-pub async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     println!();
     println!(
         "  {}gglib up{} \u{2014} from nothing to a working endpoint",

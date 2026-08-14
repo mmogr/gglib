@@ -10,30 +10,30 @@ use indicatif::{ProgressBar, ProgressStyle};
 use termimad::{ListItemsIndentationMode, MadSkin, StyledChar};
 
 /// Green — success states, installed dependencies, GPU detected.
-pub const SUCCESS: &str = "\x1b[32m";
+pub(crate) const SUCCESS: &str = "\x1b[32m";
 /// Red — error states, missing required dependencies. Reserved for actual
 /// failure; an idle/stopped state is not a failure — use MUTED.
-pub const DANGER: &str = "\x1b[31m";
+pub(crate) const DANGER: &str = "\x1b[31m";
 /// Yellow — warnings, optional missing items.
-pub const WARNING: &str = "\x1b[33m";
+pub(crate) const WARNING: &str = "\x1b[33m";
 /// Blue — informational labels, commands, headings.
-pub const INFO: &str = "\x1b[34m";
+pub(crate) const INFO: &str = "\x1b[34m";
 /// Grey — idle/stopped states. Mirrors --color-offline in the GUI's
 /// variables.css. Before this constant existed, idle states had nowhere
 /// to go but DANGER, which is why a stopped proxy used to print red.
-pub const MUTED: &str = "\x1b[90m";
+pub(crate) const MUTED: &str = "\x1b[90m";
 /// Bold — emphasis, table headers.
-pub const BOLD: &str = "\x1b[1m";
+pub(crate) const BOLD: &str = "\x1b[1m";
 /// Dim — reduced intensity (thinking blocks).
-pub const DIM: &str = "\x1b[2m";
+pub(crate) const DIM: &str = "\x1b[2m";
 /// Resets all attributes.
-pub const RESET: &str = "\x1b[0m";
+pub(crate) const RESET: &str = "\x1b[0m";
 
 /// Build a [`MadSkin`] tuned for dark terminal backgrounds.
 ///
 /// Headings are bold cyan, inline code is yellow, and code blocks use green
 /// foreground with a 2-column left margin.
-pub fn get_markdown_skin() -> MadSkin {
+pub(crate) fn get_markdown_skin() -> MadSkin {
     let mut skin = MadSkin::default_dark();
     skin.set_headers_fg(Color::Cyan);
     for h in &mut skin.headers {
@@ -72,7 +72,7 @@ pub fn get_markdown_skin() -> MadSkin {
 ///
 /// All output goes to **stderr** so that stdout remains clean for piped
 /// command output.
-pub fn print_info_banner(label: &str, emoji: &str) {
+pub(crate) fn print_info_banner(label: &str, emoji: &str) {
     // "  ╭─ {emoji} {label} " = fixed prefix; fill the rest with ─ up to
     // column 42 (banner width), then close with ╮.
     let prefix = format!("  \u{256d}\u{2500} {emoji} {label} ");
@@ -87,7 +87,7 @@ pub fn print_info_banner(label: &str, emoji: &str) {
 /// ```text
 ///   ╰───────────────────────────────────────╯
 /// ```
-pub fn print_banner_close() {
+pub(crate) fn print_banner_close() {
     // 39 = banner width (42) minus the 3-char "  ╰" prefix.
     let fill = "\u{2500}".repeat(39);
     eprintln!("{RESET}\n{INFO}  \u{2570}{fill}\u{256f}{RESET}");
@@ -96,7 +96,7 @@ pub fn print_banner_close() {
 /// Print the thinking-block banner and enter DIM mode on stderr.
 ///
 /// Equivalent to [`print_info_banner`] with label "Thinking" and 💭 emoji.
-pub fn print_thinking_banner() {
+pub(crate) fn print_thinking_banner() {
     print_info_banner("Thinking", "\u{1f4ad}");
 }
 
@@ -108,7 +108,7 @@ pub fn print_thinking_banner() {
 ///
 /// Used by the Rich-mode rendering path to show progress while tokens are
 /// being received.
-pub fn make_spinner() -> ProgressBar {
+pub(crate) fn make_spinner() -> ProgressBar {
     let sp = ProgressBar::new_spinner();
     sp.set_style(
         ProgressStyle::default_spinner()

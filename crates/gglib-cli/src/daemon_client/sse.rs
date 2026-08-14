@@ -16,7 +16,7 @@ use futures_util::StreamExt as _;
 /// lines (leading `:`, used for SSE keep-alives) and events with no `data:`
 /// line are silently skipped. Any trailing partial event is left in `buffer`
 /// for the next call once more bytes arrive.
-pub fn drain_events(buffer: &mut String) -> Vec<String> {
+pub(crate) fn drain_events(buffer: &mut String) -> Vec<String> {
     let mut payloads = Vec::new();
     while let Some(idx) = buffer.find("\n\n") {
         let event: String = buffer.drain(..idx + 2).collect();
@@ -38,7 +38,7 @@ pub fn drain_events(buffer: &mut String) -> Vec<String> {
 /// Runs until the server closes the stream. Dropping the future (Ctrl-C on
 /// the caller) drops the response, which is exactly the disconnect signal
 /// the daemon's benchmark guard cancels on.
-pub async fn stream_json<T, B>(
+pub(crate) async fn stream_json<T, B>(
     client: &reqwest::Client,
     url: &str,
     body: &B,

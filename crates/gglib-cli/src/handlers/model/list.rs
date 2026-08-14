@@ -28,7 +28,7 @@ use crate::presentation::{print_separator, truncate_string};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Arguments forwarded from the `List` CLI variant.
-pub struct ListArgs {
+pub(crate) struct ListArgs {
     pub sort: CliModelSortBy,
     pub order: CliSortOrder,
     pub min_params: Option<f64>,
@@ -39,7 +39,7 @@ pub struct ListArgs {
 }
 
 /// Execute the list command.
-pub async fn execute(ctx: &CliContext, args: ListArgs) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: ListArgs) -> Result<()> {
     let models = fetch_models(ctx, &args).await?;
 
     if models.is_empty() {

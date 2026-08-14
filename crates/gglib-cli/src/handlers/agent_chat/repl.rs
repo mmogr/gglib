@@ -16,7 +16,7 @@
 //! ## Ctrl+C cancellation
 //!
 //! A Ctrl+C **during an agent response** is handled via a `tokio::select!` in
-//! `run_repl`: the agent-loop task is aborted, the event channel is drained,
+//! `run_repl_with_history`: the agent-loop task is aborted, the channel drained,
 //! and the REPL returns to the prompt — the `handle.abort()` side effect is
 //! explicit at the call site, not hidden inside `collect_events`.
 //!
@@ -57,26 +57,17 @@ const REPL_HELP: &str = "\
 // Public entry point
 // =============================================================================
 
-/// Run the interactive agent REPL until the user quits or reaches EOF.
+/// Run the interactive agent REPL until the user quits or reaches EOF, with
+/// optional prior messages from a resumed conversation.
 ///
 /// Takes the agent loop as `Arc<dyn AgentLoopPort>` so the REPL can cheaply
 /// clone the reference for each spawned per-turn task without requiring
 /// [`AgentLoop`] to implement [`Clone`].
-pub async fn run_repl(
-    agent_loop: Arc<dyn AgentLoopPort>,
-    args: &ChatArgs,
-    persistence: Option<Conversation<'_>>,
-) -> Result<()> {
-    run_repl_with_prior(agent_loop, args, persistence, Vec::new()).await
-}
-
-/// Run the interactive agent REPL with optional prior messages from a resumed
-/// conversation.
 ///
 /// When `prior_messages` is non-empty, the REPL begins with those messages
 /// already in the history (no system prompt is prepended — it is already
-/// in the prior messages). When empty, behaves identically to [`run_repl`].
-pub async fn run_repl_with_prior(
+/// in the prior messages). Pass an empty vector to start fresh.
+pub(crate) async fn run_repl_with_prior(
     agent_loop: Arc<dyn AgentLoopPort>,
     args: &ChatArgs,
     persistence: Option<Conversation<'_>>,
@@ -114,12 +105,12 @@ pub async fn run_repl_with_prior(
 
 /// Run the interactive agent REPL with a pre-populated conversation history.
 ///
-/// This is the core REPL implementation.  [`run_repl`] delegates here after
-/// building the initial message list and config from [`ChatArgs`].  It is
+/// This is the core REPL implementation.  [`run_repl_with_prior`] delegates
+/// here after building the message list and config from [`ChatArgs`].  It is
 /// also called directly by `gglib q --agent` to transition from a single-turn
 /// question into an interactive session, carrying the full conversation
 /// history forward.
-pub async fn run_repl_with_history(
+pub(crate) async fn run_repl_with_history(
     agent_loop: Arc<dyn AgentLoopPort>,
     mut messages: Vec<AgentMessage>,
     config: AgentConfig,

@@ -52,3 +52,10 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
 default = []
+
+# This crate had no `[lints]` section at all, so it inherited nothing and
+# enforced nothing. `gglib-app` is a single binary target with no lib and no
+# workspace consumer, which makes every `pub` in it reachable by nobody — the
+# state this PR just cleared. Denying the lint keeps it cleared.
+[lints.rust]
+unreachable_pub = "deny"

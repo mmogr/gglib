@@ -9,14 +9,14 @@ use tauri::image::Image;
 use crate::daemon::DaemonSnapshot;
 
 /// Identifier the tray registers under.
-pub const TRAY_ID: &str = "gglib";
+pub(super) const TRAY_ID: &str = "gglib";
 
 /// How much of the idle icon's opacity the offline icon keeps.
 const OFFLINE_OPACITY_PERCENT: u16 = 35;
 
 /// What the tray icon is saying.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrayState {
+pub(super) enum TrayState {
     /// No daemon answering: gglib is not running on this machine.
     Offline,
     /// A daemon is up but consuming nothing — no proxy, no resident models.
@@ -26,12 +26,12 @@ pub enum TrayState {
 }
 
 /// Decoded idle icon: a daemon that is up and doing nothing.
-pub fn idle_icon() -> tauri::Result<Image<'static>> {
+pub(super) fn idle_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-idle.png"))
 }
 
 /// Decoded active icon: something is being served or resident.
-pub fn active_icon() -> tauri::Result<Image<'static>> {
+pub(super) fn active_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../../icons/tray-active.png"))
 }
 
@@ -43,7 +43,7 @@ pub fn active_icon() -> tauri::Result<Image<'static>> {
 /// [`super::linux`]. Both icons carry their glyph entirely in the alpha
 /// channel, which is what macOS template mode requires, so scaling alpha is
 /// exactly "draw the same thing fainter" on every backend.
-pub fn offline_icon() -> tauri::Result<Image<'static>> {
+pub(super) fn offline_icon() -> tauri::Result<Image<'static>> {
     let idle = idle_icon()?;
     let (width, height) = (idle.width(), idle.height());
 
@@ -70,7 +70,7 @@ const fn fade(alpha: u8) -> u8 {
 }
 
 /// The icon for a state, already decoded.
-pub fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
+pub(super) fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
     match state {
         TrayState::Offline => offline_icon(),
         TrayState::Idle => idle_icon(),
@@ -80,7 +80,7 @@ pub fn for_state(state: TrayState) -> tauri::Result<Image<'static>> {
 
 /// How the tray should look for a given daemon state.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrayVisual {
+pub(super) struct TrayVisual {
     /// Which icon to show.
     pub state: TrayState,
     /// Hover text, and the label of the menu's status item.
@@ -101,7 +101,7 @@ pub struct TrayVisual {
 /// What it reports is whether gglib is doing something to this machine right
 /// now, which is true of a resident model whether or not the proxy is up.
 #[must_use]
-pub fn derive(snap: &DaemonSnapshot) -> TrayVisual {
+pub(super) fn derive(snap: &DaemonSnapshot) -> TrayVisual {
     TrayVisual {
         state: state_of(snap),
         status: status_of(snap),

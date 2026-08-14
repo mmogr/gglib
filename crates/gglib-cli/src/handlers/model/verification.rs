@@ -13,7 +13,11 @@ use crate::bootstrap::CliContext;
 ///
 /// Verifies model integrity by computing SHA256 hashes and comparing against
 /// stored OIDs from HuggingFace.
-pub async fn execute_verify(ctx: &CliContext, identifier: &str, verbose: bool) -> Result<()> {
+pub(crate) async fn execute_verify(
+    ctx: &CliContext,
+    identifier: &str,
+    verbose: bool,
+) -> Result<()> {
     // Get verification service
     let verification = ctx
         .app
@@ -146,7 +150,7 @@ pub async fn execute_verify(ctx: &CliContext, identifier: &str, verbose: bool) -
 /// Execute the repair command.
 ///
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
-pub async fn execute_repair(
+pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,
     shards: Option<String>,

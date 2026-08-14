@@ -8,7 +8,7 @@ use chrono::{NaiveDateTime, Utc};
 /// or the original date if more than 30 days old.
 ///
 /// Falls back to the raw string on parse failure.
-pub fn format_relative_time(datetime_str: &str) -> String {
+pub(crate) fn format_relative_time(datetime_str: &str) -> String {
     let Ok(dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S") else {
         return datetime_str.to_string();
     };
@@ -54,13 +54,17 @@ pub fn format_relative_time(datetime_str: &str) -> String {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use gglib_cli::presentation::truncate_string;
+/// Illustrative rather than executable: this function is crate-internal, and a
+/// doctest compiles as its own crate, so no import path can name it. Fenced as
+/// `text` rather than `ignore` so rustdoc renders it as prose instead of an
+/// untested example. The two cases below are asserted for real in this
+/// module's tests.
 ///
-/// assert_eq!(truncate_string("Hello", 10), "Hello");
-/// assert_eq!(truncate_string("Hello World", 8), "Hello W\u{2026}");
+/// ```text
+/// truncate_string("Hello", 10)       == "Hello"
+/// truncate_string("Hello World", 8)  == "Hello W…"
 /// ```
-pub fn truncate_string(s: &str, max_len: usize) -> String {
+pub(crate) fn truncate_string(s: &str, max_len: usize) -> String {
     if s.chars().count() <= max_len {
         // String fits — return as-is (no allocation needed beyond this clone).
         s.to_string()
@@ -73,16 +77,8 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 }
 
 /// Print a horizontal separator line.
-pub fn print_separator(width: usize) {
+pub(crate) fn print_separator(width: usize) {
     println!("{}", "-".repeat(width));
-}
-
-/// Format an optional value for table display, returning a default if None.
-pub fn format_optional<T: std::fmt::Display>(value: &Option<T>, default: &str) -> String {
-    match value {
-        Some(v) => v.to_string(),
-        None => default.to_string(),
-    }
 }
 
 // =============================================================================

@@ -10,10 +10,10 @@ mod items;
 mod layer_shell;
 #[cfg(target_os = "linux")]
 mod linux;
-pub mod placement;
-pub mod window;
+pub(crate) mod placement;
+pub(crate) mod window;
 
-pub use confirm::report_failure;
+pub(crate) use confirm::report_failure;
 
 use tauri::{AppHandle, Manager};
 
@@ -34,7 +34,7 @@ use linux as backend;
 ///
 /// Dropping this removes the icon, so it is owned by [`AppState`] rather than
 /// left to fall out of scope at the end of setup.
-pub struct Tray(backend::Handle);
+pub(crate) struct Tray(backend::Handle);
 
 impl Tray {
     /// Build the tray and register it with the desktop.
@@ -44,7 +44,7 @@ impl Tray {
     /// When the platform refuses to give us one — no tray host on Linux, or a
     /// failed icon decode anywhere. Callers treat that as a degraded app, not
     /// a broken one.
-    pub fn build(app: &AppHandle) -> Result<Self, String> {
+    pub(crate) fn build(app: &AppHandle) -> Result<Self, String> {
         backend::build(app).map(Self)
     }
 
@@ -53,7 +53,7 @@ impl Tray {
     /// # Errors
     ///
     /// When the backend cannot update the icon, tooltip or menu.
-    pub async fn sync(&self, snapshot: &DaemonSnapshot) -> Result<(), String> {
+    pub(crate) async fn sync(&self, snapshot: &DaemonSnapshot) -> Result<(), String> {
         backend::sync(&self.0, snapshot).await
     }
 }
@@ -67,7 +67,7 @@ impl Tray {
 /// # Errors
 ///
 /// Propagates whatever the backend reports.
-pub async fn sync(app: &AppHandle, snapshot: &DaemonSnapshot) -> Result<(), String> {
+pub(crate) async fn sync(app: &AppHandle, snapshot: &DaemonSnapshot) -> Result<(), String> {
     let state = app.state::<AppState>();
     let guard = state.tray.read().await;
 

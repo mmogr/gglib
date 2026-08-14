@@ -1,15 +1,15 @@
 #![doc = include_str!("README.md")]
-pub mod add;
-pub mod capabilities;
-pub mod download;
-pub mod explain;
-pub mod inspect;
-pub mod list;
-pub mod remove;
-pub mod resolver;
-pub mod retag;
-pub mod update;
-pub mod verification;
+pub(crate) mod add;
+pub(crate) mod capabilities;
+pub(crate) mod download;
+pub(crate) mod explain;
+pub(crate) mod inspect;
+pub(crate) mod list;
+pub(crate) mod remove;
+pub(crate) mod resolver;
+pub(crate) mod retag;
+pub(crate) mod update;
+pub(crate) mod verification;
 
 use anyhow::Result;
 
@@ -17,7 +17,7 @@ use crate::bootstrap::CliContext;
 use crate::model_commands::ModelCommand;
 
 /// Dispatch a `model` subcommand to its handler.
-pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
     match command {
         ModelCommand::Add { file_path } => {
             add::execute(ctx, &file_path).await?;
@@ -134,7 +134,12 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
             list_quants,
             skip_db,
             token,
-            force,
+            // `--force` skips a confirmation prompt, and this path has none to
+            // skip: the daemon owns the download and `exec` never asks. The
+            // flag is inert, like `--skip-db` above it but without the notice.
+            // Bound and dropped here rather than threaded into `DownloadArgs`,
+            // where it was carried three layers and read by nobody.
+            force: _,
         } => {
             // Registration happens daemon-side as a queue lifecycle phase, so
             // honouring this flag needs a protocol change. Say so rather than
@@ -153,7 +158,6 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
                 model_id: &model_id,
                 quantization: quantization.as_deref(),
                 list_quants,
-                force,
                 token: token.as_deref(),
             };
             download::download(ctx, args).await?;

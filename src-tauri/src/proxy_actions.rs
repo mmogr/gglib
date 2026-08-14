@@ -22,7 +22,7 @@ use crate::app::events::{emit_or_log, names};
 ///
 /// Idempotent: the daemon's start route treats an already-running proxy as
 /// success, and honours the saved `proxy_port` setting.
-pub async fn start(app: &AppHandle) -> Result<u16, String> {
+pub(crate) async fn start(app: &AppHandle) -> Result<u16, String> {
     let state = app.state::<AppState>();
 
     let status = state
@@ -42,7 +42,7 @@ pub async fn start(app: &AppHandle) -> Result<u16, String> {
 
 /// Stop the proxy, treating an already-stopped proxy as success (the
 /// daemon's stop route is idempotent).
-pub async fn stop(app: &AppHandle) -> Result<(), String> {
+pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
 
     state
@@ -63,7 +63,7 @@ pub async fn stop(app: &AppHandle) -> Result<(), String> {
 /// to fall back to and the snapshot is the only source of the port.
 ///
 /// Goes through the frontend because clipboard access is a webview capability.
-pub async fn copy_endpoint_url(app: &AppHandle) {
+pub(crate) async fn copy_endpoint_url(app: &AppHandle) {
     let state = app.state::<AppState>();
     let url = state.snapshot.read().await.endpoint_url();
 

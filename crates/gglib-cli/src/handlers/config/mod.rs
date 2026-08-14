@@ -1,11 +1,11 @@
 #![doc = include_str!("README.md")]
-pub mod check_deps;
-pub mod fast_downloads;
-pub mod llama;
-pub mod llama_detect;
-pub mod llama_install;
-pub mod paths;
-pub mod settings;
+pub(crate) mod check_deps;
+pub(crate) mod fast_downloads;
+pub(crate) mod llama;
+pub(crate) mod llama_detect;
+pub(crate) mod llama_install;
+pub(crate) mod paths;
+pub(crate) mod settings;
 
 use anyhow::Result;
 
@@ -13,7 +13,7 @@ use crate::bootstrap::CliContext;
 use crate::config_commands::ConfigCommand;
 
 /// Dispatch a `config` subcommand to its handler.
-pub async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::Default { identifier, clear } => {
             settings::handle_default_model(ctx, identifier, clear).await

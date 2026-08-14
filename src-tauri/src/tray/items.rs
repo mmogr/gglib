@@ -13,7 +13,7 @@ use crate::tray::ids;
 
 /// One entry on the tray menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Item {
+pub(super) enum Item {
     /// The status header. Always disabled — a label, not a command — and the
     /// only entry whose text changes, from `icon::derive`.
     Status,
@@ -29,7 +29,7 @@ pub enum Item {
 ///
 /// Every action appears here, including the ones that also have a click
 /// gesture: the gesture is a shortcut, never the only route to a feature.
-pub const ITEMS: &[Item] = &[
+pub(super) const ITEMS: &[Item] = &[
     Item::Status,
     Item::Separator,
     Item::Action {
@@ -79,7 +79,7 @@ pub const ITEMS: &[Item] = &[
 /// The single rule both backends apply, so the two menus cannot disagree about
 /// what is greyed out. Pure, so the table below is testable without a tray.
 #[must_use]
-pub fn is_enabled(id: &str, snap: &DaemonSnapshot) -> bool {
+pub(super) fn is_enabled(id: &str, snap: &DaemonSnapshot) -> bool {
     match id {
         // A label, not a command — never clickable on any backend.
         ids::STATUS => false,

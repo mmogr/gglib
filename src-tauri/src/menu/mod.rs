@@ -3,14 +3,14 @@
 mod build;
 
 #[cfg(target_os = "macos")]
-pub mod handlers;
+pub(crate) mod handlers;
 
 #[cfg(target_os = "macos")]
-pub mod ids;
-pub mod state_sync;
+pub(crate) mod ids;
+pub(crate) mod state_sync;
 
 #[cfg(target_os = "macos")]
-pub use build::build_app_menu;
+pub(crate) use build::build_app_menu;
 
 #[cfg(target_os = "macos")]
 use tauri::{Wry, menu::MenuItem};
@@ -23,7 +23,7 @@ use tauri::{Wry, menu::MenuItem};
 /// This struct is stored in the application state and used to
 /// enable/disable or check/uncheck menu items based on app state.
 #[cfg(target_os = "macos")]
-pub struct AppMenu {
+pub(crate) struct AppMenu {
     // Model menu items (enabled based on selection/server state)
     pub start_server: MenuItem<Wry>,
     pub stop_server: MenuItem<Wry>,
@@ -41,7 +41,7 @@ pub struct AppMenu {
 /// State used to synchronize menu item enabled/checked status
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Default)]
-pub struct MenuState {
+pub(crate) struct MenuState {
     pub llama_installed: bool,
     pub proxy_running: bool,
     pub model_selected: bool,
@@ -57,7 +57,7 @@ impl AppMenu {
     /// - Server starts/stops
     /// - Proxy starts/stops
     /// - llama.cpp is installed
-    pub fn sync_state(&self, state: &MenuState) -> Result<(), tauri::Error> {
+    pub(crate) fn sync_state(&self, state: &MenuState) -> Result<(), tauri::Error> {
         // Model menu items
         // Start Server: enabled if model selected AND not already running
         self.start_server

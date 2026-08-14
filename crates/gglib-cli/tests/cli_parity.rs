@@ -257,7 +257,7 @@ fn omitted_flags_express_no_opinion() {
 /// positional.
 #[test]
 fn model_explain_parses_the_identifier_and_profile() {
-    use gglib_cli::model_commands::ModelCommand;
+    use gglib_cli::ModelCommand;
 
     let cli = Cli::try_parse_from(["gglib", "model", "explain", "3", "--profile", "coding"])
         .expect("model explain should parse");
@@ -280,7 +280,7 @@ fn model_explain_parses_the_identifier_and_profile() {
 /// must stay `None` rather than defaulting to some named profile.
 #[test]
 fn model_explain_leaves_the_profile_unset_when_omitted() {
-    use gglib_cli::model_commands::ModelCommand;
+    use gglib_cli::ModelCommand;
 
     let cli = Cli::try_parse_from(["gglib", "model", "explain", "Qwen3-30B"])
         .expect("bare model explain should parse");

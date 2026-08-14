@@ -60,3 +60,15 @@ tokio-test = { workspace = true }
 
 [lints.rust]
 unsafe_code = "deny"
+# Locks in the visibility this crate was just given: every `pub` here must be
+# reachable from outside, and the only things outside are `main.rs` and
+# `tests/`, so in practice it must be in `lib.rs`'s re-export list.
+#
+# Declared per-crate rather than switching this section to `[lints] workspace
+# = true`, which is the usual way to pick up `[workspace.lints]`. Cargo does
+# not let a manifest do both: `workspace = true` must be the only key in
+# `[lints]`, so adopting it here would also switch on the workspace's clippy
+# `pedantic` and `nursery` sets, which this crate has never been held to —
+# 559 warnings, which is its own piece of work rather than a line in a
+# visibility PR.
+unreachable_pub = "deny"

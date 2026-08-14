@@ -25,7 +25,7 @@ use crate::presentation::style;
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 /// Route a `BenchmarkCommand` to its handler.
-pub async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<()> {
     match cmd {
         BenchmarkCommand::Compare {
             prompt,

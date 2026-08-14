@@ -17,7 +17,7 @@ use crate::bootstrap::CliContext;
 /// Accepts either a numeric model ID or a model name.  If no model matches,
 /// returns an error with a helpful message rather than `Ok(None)`, ensuring
 /// consistent non-zero exit codes across all callers.
-pub async fn resolve_model_identifier(ctx: &CliContext, identifier: &str) -> Result<Model> {
+pub(crate) async fn resolve_model_identifier(ctx: &CliContext, identifier: &str) -> Result<Model> {
     ctx.app.models().get(identifier).await?.ok_or_else(|| {
         anyhow!(
             "No model found matching: '{identifier}'\n\

@@ -54,15 +54,14 @@ Formats model information for terminal output.
 
 **Key Functions:**
 - `display_model_summary()` - Renders model details with metadata
-- `DisplayStyle` enum - Controls verbosity (compact, detailed)
-- `ModelSummaryOpts` - Configuration for display options
+- `ModelSummaryOpts` - Which fields to include, built by `with_title()` or `for_removal()`
 
 **Example:**
 ```rust,ignore
-use gglib_cli::presentation::model_display::{display_model_summary, DisplayStyle};
+use crate::presentation::model_display::{display_model_summary, ModelSummaryOpts};
 
 let model = /* ... */;
-display_model_summary(&model, DisplayStyle::Detailed)?;
+display_model_summary(&model, ModelSummaryOpts::with_title("Model created:"));
 ```
 
 **Output:**
@@ -82,23 +81,19 @@ Context Length: 4096
 Provides table formatting utilities and helper functions.
 
 **Key Functions:**
-- `format_optional(value: Option<T>)` - Formats optional values as "N/A" or actual value
+- `format_relative_time(datetime_str: &str)` - Renders a SQLite timestamp as "5 min ago"
 - `truncate_string(s: &str, max_len: usize)` - Safely truncates with ellipsis
-- `print_separator(char: char, width: usize)` - Prints horizontal separators
+- `print_separator(width: usize)` - Prints a horizontal separator
 
 **Example:**
 ```rust,ignore
-use gglib_cli::presentation::tables::{format_optional, print_separator};
+use crate::presentation::tables::{print_separator, truncate_string};
 
-// Optional value formatting
-let name = Some("model.gguf");
-println!("Name: {}", format_optional(name)); // "Name: model.gguf"
-
-let missing = None::<String>;
-println!("Tags: {}", format_optional(missing)); // "Tags: N/A"
+// Column-safe truncation
+println!("Name: {}", truncate_string("a-very-long-model-name.gguf", 12));
 
 // Separators
-print_separator('=', 80);
+print_separator(80);
 // ================================================================================
 ```
 
@@ -108,8 +103,8 @@ Most commands use a consistent table pattern:
 
 ```rust,ignore
 // Header
-println!("{:<15} {:<20} {:<10}", "ID", "Name", "Size");
-print_separator('-', 45);
+println!("{:<15} {:<20} {:<10}", "ID", "Name", "Added");
+print_separator(45);
 
 // Rows
 for model in models {
@@ -117,7 +112,7 @@ for model in models {
         "{:<15} {:<20} {:<10}",
         model.id,
         truncate_string(&model.name, 20),
-        format_optional(model.size_gb)
+        format_relative_time(&model.added_at)
     );
 }
 ```
@@ -178,15 +173,14 @@ Tests focus on:
 
 ```rust,ignore
 #[test]
-fn test_format_optional() {
-    assert_eq!(format_optional(Some(42)), "42");
-    assert_eq!(format_optional(None::<i32>), "N/A");
+fn relative_time_bad_parse_returns_raw() {
+    assert_eq!(format_relative_time("not-a-date"), "not-a-date");
 }
 
 #[test]
-fn test_truncate_string() {
-    let long = "This is a very long string";
-    assert_eq!(truncate_string(long, 10), "This is...");
+fn truncate_long_string_gets_ellipsis() {
+    // max_len=5: 4 chars of content + ellipsis = 5 chars total
+    assert_eq!(truncate_string("hello world", 5), "hell\u{2026}");
 }
 ```
 

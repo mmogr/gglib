@@ -2,4 +2,4 @@
 
 //! CLI utility modules.
 
-pub mod input;
+pub(crate) mod input;

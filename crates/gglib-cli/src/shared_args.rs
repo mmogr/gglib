@@ -256,13 +256,13 @@ pub struct ServeOptions {
 /// from CLI argument groups.
 ///
 /// A single conversion point used by both `chat` and `q` handlers (DRY).
-pub struct ConversationSettingsBuilder {
+pub(crate) struct ConversationSettingsBuilder {
     settings: gglib_core::domain::chat::ConversationSettings,
 }
 
 impl ConversationSettingsBuilder {
     /// Start building settings from sampling and context args.
-    pub fn new(sampling: &SamplingArgs, context: &ContextArgs) -> Self {
+    pub(crate) fn new(sampling: &SamplingArgs, context: &ContextArgs) -> Self {
         Self {
             settings: gglib_core::domain::chat::ConversationSettings {
                 temperature: sampling.temperature,
@@ -278,13 +278,13 @@ impl ConversationSettingsBuilder {
     }
 
     /// Set the model name used for this session.
-    pub fn model_name(mut self, name: impl Into<String>) -> Self {
+    pub(crate) fn model_name(mut self, name: impl Into<String>) -> Self {
         self.settings.model_name = Some(name.into());
         self
     }
 
     /// Set tool-related configuration.
-    pub fn tools(mut self, tools: Vec<String>, no_tools: bool) -> Self {
+    pub(crate) fn tools(mut self, tools: Vec<String>, no_tools: bool) -> Self {
         self.settings.tools = tools;
         if no_tools {
             self.settings.no_tools = Some(true);
@@ -293,7 +293,7 @@ impl ConversationSettingsBuilder {
     }
 
     /// Set agent loop parameters.
-    pub fn agent_params(
+    pub(crate) fn agent_params(
         mut self,
         max_iterations: Option<usize>,
         tool_timeout_ms: Option<u64>,
@@ -306,7 +306,7 @@ impl ConversationSettingsBuilder {
     }
 
     /// Consume the builder and return the finished settings.
-    pub fn build(self) -> gglib_core::domain::chat::ConversationSettings {
+    pub(crate) fn build(self) -> gglib_core::domain::chat::ConversationSettings {
         self.settings
     }
 }

@@ -32,7 +32,7 @@ thoroughly. Be direct and concise.";
 
 /// Run a single-turn agentic question, with optional continuation into chat.
 #[allow(clippy::too_many_arguments)]
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     question: String,
     model_arg: Option<String>,

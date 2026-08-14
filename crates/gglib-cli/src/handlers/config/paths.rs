@@ -16,7 +16,7 @@ use gglib_core::paths::ResolvedPaths;
 /// # Returns
 ///
 /// Returns `Result<()>` indicating the success or failure of the operation.
-pub fn execute() -> Result<()> {
+pub(crate) fn execute() -> Result<()> {
     let paths = ResolvedPaths::resolve()?;
     println!("{paths}");
     Ok(())

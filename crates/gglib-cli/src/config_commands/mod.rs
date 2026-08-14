@@ -8,7 +8,7 @@ use clap::Subcommand;
 
 mod settings_args;
 
-pub use settings_args::SettingsSetArgs;
+pub(crate) use settings_args::SettingsSetArgs;
 
 use crate::llama_commands::LlamaCommand;
 

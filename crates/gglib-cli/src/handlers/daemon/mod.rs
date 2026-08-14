@@ -10,7 +10,7 @@ use gglib_axum::daemon::{DaemonLock, DaemonOptions, run_daemon};
 use gglib_core::{CorsConfig, DAEMON_PORT};
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.
-pub async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
+pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
     let opts = if share_lan {
         print_share_lan_warning();
         // The mDNS name is advertised below, so it is plainly a name this
@@ -48,7 +48,7 @@ pub async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
 }
 
 /// Execute `gglib daemon status`.
-pub async fn status() -> Result<()> {
+pub(crate) async fn status() -> Result<()> {
     let client = reqwest::Client::new();
 
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
@@ -90,7 +90,7 @@ pub async fn status() -> Result<()> {
 }
 
 /// Execute `gglib daemon stop`: request shutdown and wait for it to land.
-pub async fn stop() -> Result<()> {
+pub(crate) async fn stop() -> Result<()> {
     let client = reqwest::Client::new();
 
     match daemon_client::probe(&client).await {

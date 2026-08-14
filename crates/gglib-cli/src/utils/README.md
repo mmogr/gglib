@@ -47,7 +47,7 @@ Provides functions for prompting users and reading responses from the terminal.
 Displays a yes/no prompt and returns the user's choice.
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 if input::confirm("Delete this model?")? {
     // User said yes
@@ -73,7 +73,7 @@ Deleting model...
 Displays a text prompt and returns the user's input.
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 let name = input::prompt("Enter model name:")?;
 println!("You entered: {}", name);
@@ -94,7 +94,7 @@ You entered: Llama 2 7B Chat
 Prompts with a default value shown in brackets.
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 let port = input::prompt_with_default("Server port", "8080")?;
 // If user presses Enter without typing, returns "8080"
@@ -110,7 +110,7 @@ Using default: 8080
 Presents a numbered list and returns the selected index.
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 let models = vec!["Llama 2 7B", "Mistral 7B", "GPT-J 6B"];
 let choice = input::select_from_list("Select a model:", &models)?;
@@ -133,7 +133,7 @@ You selected: Mistral 7B
 Always confirm before destructive operations:
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 pub async fn execute_remove(ctx: &CliContext, id: i64, force: bool) -> Result<()> {
     if !force && !input::confirm("Remove model? This cannot be undone.")? {
@@ -151,7 +151,7 @@ pub async fn execute_remove(ctx: &CliContext, id: i64, force: bool) -> Result<()
 Use defaults for common settings:
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 let host = input::prompt_with_default("Server host", "127.0.0.1")?;
 let port = input::prompt_with_default("Server port", "8080")?;
@@ -163,7 +163,7 @@ let port_num: u16 = port.parse()
 Present choices when multiple options exist:
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 let quantizations = vec!["Q4_K_M", "Q5_K_M", "Q8_0"];
 if quantizations.len() > 1 {
@@ -184,7 +184,7 @@ All input functions return `anyhow::Result` and handle:
 - **Invalid input** - Out of range selections, malformed input
 
 ```rust,ignore
-use gglib_cli::utils::input;
+use crate::utils::input;
 
 match input::confirm("Continue?") {
     Ok(true) => { /* proceed */ },

@@ -6,7 +6,7 @@ use gglib_core::utils::system::{Dependency, DependencyStatus};
 use crate::presentation::style::{BOLD, DANGER, RESET, SUCCESS, WARNING};
 
 /// Print a single dependency row in the status table.
-pub fn print_dependency(dep: &Dependency) {
+pub(super) fn print_dependency(dep: &Dependency) {
     let status_str = match &dep.status {
         DependencyStatus::Present { version } => {
             if version.is_empty() {
@@ -40,7 +40,7 @@ pub fn print_dependency(dep: &Dependency) {
 }
 
 /// Print GPU detection status and recommendations.
-pub fn print_gpu_status(probe: &dyn SystemProbePort) {
+pub(super) fn print_gpu_status(probe: &dyn SystemProbePort) {
     let gpu_info = probe.detect_gpu_info();
 
     println!("\n{}GPU Detection:{}", BOLD, RESET);

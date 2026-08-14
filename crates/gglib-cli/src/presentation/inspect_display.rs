@@ -17,7 +17,7 @@ const SEP_WIDTH: usize = 60;
 /// The `show_metadata` flag gates the raw GGUF key-value section.  Pass
 /// `true` only when the user supplies `--metadata` — the dictionary can be
 /// several hundred lines for large models.
-pub fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
+pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     // ── Overview ──────────────────────────────────────────────────────────────
     print_separator(SEP_WIDTH);
     println!("  Model: {}", dto.name);

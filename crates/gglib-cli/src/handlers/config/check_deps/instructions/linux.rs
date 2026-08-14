@@ -4,7 +4,7 @@ use super::common::{BOLD, RESET, print_command, print_header, print_subsection};
 use gglib_core::utils::system::{Dependency, LinuxDistro, packages_for};
 
 /// Print Linux-specific installation instructions.
-pub fn print_instructions(missing: &[&Dependency], distro: LinuxDistro) {
+pub(super) fn print_instructions(missing: &[&Dependency], distro: LinuxDistro) {
     print_header(distro.label());
 
     print_package_instructions(missing, distro);

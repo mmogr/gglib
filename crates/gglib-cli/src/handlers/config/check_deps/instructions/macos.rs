@@ -4,7 +4,7 @@ use super::common::{print_command, print_header, print_subsection};
 use gglib_core::utils::system::Dependency;
 
 /// Print macOS-specific installation instructions.
-pub fn print_instructions(missing: &[&Dependency]) {
+pub(super) fn print_instructions(missing: &[&Dependency]) {
     print_header("macOS");
 
     // Check if Homebrew is needed

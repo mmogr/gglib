@@ -19,7 +19,7 @@ use crate::bootstrap::CliContext;
 use crate::config_commands::ProfileCommand;
 
 /// Dispatch a `config profile` subcommand.
-pub async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result<()> {
+pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result<()> {
     match command {
         ProfileCommand::List => list(ctx).await,
         ProfileCommand::Show { name } => show(ctx, &name).await,

@@ -33,7 +33,7 @@ use crate::presentation::style;
 /// single-turn question) can compose the agent loop without constructing a
 /// full `ChatArgs`.
 #[derive(Debug, Clone)]
-pub struct AgentSessionParams {
+pub(crate) struct AgentSessionParams {
     /// Model name or ID used to start llama-server.
     pub model_identifier: String,
     /// Optional context-size override (numeric string or `"max"`).
@@ -54,7 +54,7 @@ pub struct AgentSessionParams {
 /// Callers populate this with whatever session context they have so that
 /// `resolve_port` can render a richer startup message.
 #[derive(Debug, Clone, Default)]
-pub struct BannerInfo {
+pub(crate) struct BannerInfo {
     /// Suppress the banner entirely (e.g. `gglib q -Q`).
     pub quiet: bool,
     /// Sampling overrides to display (only non-default values are shown).
@@ -95,7 +95,7 @@ impl From<&ChatArgs> for AgentSessionParams {
 ///
 /// When `sandbox_root` is `Some`, filesystem tools are restricted to that
 /// directory.  Pass `None` for an unsandboxed session.
-pub async fn compose(
+pub(crate) async fn compose(
     ctx: &CliContext,
     params: &AgentSessionParams,
     sandbox_root: Option<PathBuf>,

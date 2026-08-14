@@ -38,7 +38,7 @@ static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 /// prevent the exit: preventing it once is how the cleanup gets to run at all,
 /// but preventing the second one — the exit this module itself requested —
 /// would strand the process.
-pub fn is_shutting_down() -> bool {
+pub(crate) fn is_shutting_down() -> bool {
     SHUTTING_DOWN.load(Ordering::SeqCst)
 }
 
@@ -48,7 +48,7 @@ pub fn is_shutting_down() -> bool {
 /// goes away. Allow any later one: that is [`request_shutdown`]'s own
 /// `exit(0)` coming back around, and preventing it is precisely what left the
 /// app running with a dead embedded API server.
-pub const fn should_prevent_exit(shutting_down: bool) -> bool {
+pub(crate) const fn should_prevent_exit(shutting_down: bool) -> bool {
     !shutting_down
 }
 
@@ -62,7 +62,7 @@ pub const fn should_prevent_exit(shutting_down: bool) -> bool {
 ///
 /// Spawns rather than blocks: it is called from event-loop handlers that must
 /// not stall while llama-server processes are stopped.
-pub fn request_shutdown(app: &AppHandle) {
+pub(crate) fn request_shutdown(app: &AppHandle) {
     if SHUTTING_DOWN.swap(true, Ordering::SeqCst) {
         info!("Shutdown already in progress - ignoring duplicate request");
         return;

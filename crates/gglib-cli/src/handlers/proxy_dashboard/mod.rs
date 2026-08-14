@@ -112,7 +112,7 @@ impl Drop for TerminalGuard {
 /// Connects to `http://{host}:{port}/v1/proxy/status/stream`, prints the
 /// hydration snapshot immediately, then redraws in place on every subsequent
 /// tick until `Ctrl+C` is pressed or the connection is closed by the server.
-pub async fn execute(host: String, port: u16, api_key: Option<&str>) -> Result<()> {
+pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> Result<()> {
     let url = format!("http://{host}:{port}/v1/proxy/status/stream");
 
     let mut request = reqwest::Client::new().get(&url);

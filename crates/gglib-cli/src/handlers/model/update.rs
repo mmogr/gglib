@@ -15,7 +15,7 @@ use crate::bootstrap::CliContext;
 
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     pub identifier: String,
     pub name: Option<String>,
     pub param_count: Option<f64>,
@@ -58,7 +58,7 @@ pub struct UpdateArgs {
 /// # Returns
 ///
 /// Returns `Result<()>` indicating the success or failure of the operation.
-pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     // Get the existing model by name or ID
     let existing_model = ctx
         .app
@@ -125,7 +125,7 @@ pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
 }
 
 /// Parse metadata updates from command line arguments.
-pub fn parse_metadata_updates(metadata_args: &[String]) -> Result<HashMap<String, String>> {
+pub(crate) fn parse_metadata_updates(metadata_args: &[String]) -> Result<HashMap<String, String>> {
     let mut metadata = HashMap::new();
 
     for arg in metadata_args {
@@ -143,7 +143,7 @@ pub fn parse_metadata_updates(metadata_args: &[String]) -> Result<HashMap<String
 }
 
 /// Parse metadata keys to remove.
-pub fn parse_metadata_removals(remove_arg: &Option<String>) -> Result<Vec<String>> {
+pub(crate) fn parse_metadata_removals(remove_arg: &Option<String>) -> Result<Vec<String>> {
     match remove_arg {
         Some(keys_str) => Ok(keys_str.split(',').map(|s| s.trim().to_string()).collect()),
         None => Ok(Vec::new()),
@@ -151,7 +151,7 @@ pub fn parse_metadata_removals(remove_arg: &Option<String>) -> Result<Vec<String
 }
 
 /// Create updated model with new values.
-pub fn create_updated_model(
+pub(crate) fn create_updated_model(
     existing: &Model,
     args: &UpdateArgs,
     metadata_updates: &HashMap<String, String>,

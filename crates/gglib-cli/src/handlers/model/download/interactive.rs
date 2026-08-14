@@ -72,7 +72,7 @@ use gglib_download::CliDownloadEventEmitter;
 ///
 /// The calling `execute()` handler simply awaits this future — all queue
 /// interaction and progress rendering is encapsulated here.
-pub async fn run_interactive_monitor(
+pub(crate) async fn run_interactive_monitor(
     downloads: Arc<dyn DownloadManagerPort>,
     emitter: Arc<CliDownloadEventEmitter>,
 ) -> Result<()> {

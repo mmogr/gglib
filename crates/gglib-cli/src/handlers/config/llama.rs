@@ -12,7 +12,7 @@ use super::llama_detect;
 use super::llama_install;
 
 /// Dispatch a `llama` sub-command to the appropriate `gglib_runtime` handler.
-pub async fn dispatch(command: LlamaCommand) -> Result<()> {
+pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
     use gglib_runtime::llama::{
         handle_check_updates, handle_status, handle_uninstall, handle_update,
     };

@@ -10,7 +10,7 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 ///
 /// Browses popular/recent/trending GGUF models on HuggingFace Hub.
 /// No database access required.
-pub async fn execute(category: String, limit: u32, size: Option<String>) -> Result<()> {
+pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) -> Result<()> {
     let sort_param = match category.as_str() {
         "popular" => "downloads",
         "recent" => "created",

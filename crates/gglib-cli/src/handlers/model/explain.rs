@@ -19,7 +19,11 @@ use crate::handlers::config::settings::profiles::not_found_message;
 use crate::presentation::explain_display::{self, ExplainContext};
 
 /// Execute `gglib model explain <id> [--profile NAME]`.
-pub async fn execute(ctx: &CliContext, identifier: &str, profile: Option<&str>) -> Result<()> {
+pub(crate) async fn execute(
+    ctx: &CliContext,
+    identifier: &str,
+    profile: Option<&str>,
+) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
     let settings = ctx.app.settings().get().await?;
 

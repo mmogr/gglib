@@ -20,7 +20,7 @@ use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
 ///
 /// `gglib model explain <id>` prints the outcome of this resolution for any
 /// model, naming the layer each parameter came from.
-pub async fn resolve_inference_config(
+pub(crate) async fn resolve_inference_config(
     ctx: &CliContext,
     config: InferenceConfig,
     model: &gglib_core::Model,
@@ -38,21 +38,21 @@ pub async fn resolve_inference_config(
 ///
 /// Merge order: CLI flag → persisted `Settings.max_tool_iterations` → `DEFAULT_MAX_ITERATIONS`.
 /// This mirrors the pattern in [`resolve_inference_config`] and keeps handler code clean.
-pub fn resolve_max_iterations(cli_override: Option<usize>, settings: &Settings) -> usize {
+pub(crate) fn resolve_max_iterations(cli_override: Option<usize>, settings: &Settings) -> usize {
     cli_override
         .or_else(|| settings.max_tool_iterations.map(|v| v as usize))
         .unwrap_or(DEFAULT_MAX_ITERATIONS)
 }
 
 /// Log mlock status to stderr.
-pub fn log_mlock_info(mlock: bool) {
+pub(crate) fn log_mlock_info(mlock: bool) {
     if mlock {
         eprintln!("  Memory lock: enabled");
     }
 }
 
 /// Log resolved inference parameters to stderr.
-pub fn log_inference_info(config: &InferenceConfig) {
+pub(crate) fn log_inference_info(config: &InferenceConfig) {
     eprintln!("  Inference parameters:");
     if let Some(temp) = config.temperature {
         eprintln!("    Temperature: {}", temp);

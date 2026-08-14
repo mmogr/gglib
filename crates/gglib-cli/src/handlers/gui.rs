@@ -10,7 +10,7 @@ use anyhow::Result;
 /// In development mode, prints instructions for running `cargo tauri dev`.
 /// Otherwise, locates and launches the built application bundle for the
 /// current platform.
-pub fn execute(dev: bool) -> Result<()> {
+pub(crate) fn execute(dev: bool) -> Result<()> {
     if dev {
         println!("Development mode requires running 'cargo tauri dev' directly");
         return Ok(());

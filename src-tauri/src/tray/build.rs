@@ -23,7 +23,7 @@ use crate::tray::{handlers, ids, window};
 ///
 /// A map rather than named fields because the item list lives in `items` now;
 /// naming them here would be a second copy of the same structure.
-pub struct TrayMenu {
+pub(super) struct TrayMenu {
     items: HashMap<&'static str, MenuItem<Wry>>,
 }
 
@@ -43,13 +43,13 @@ impl TrayMenu {
 
 /// Build the tray icon, its menu, and its click behaviour.
 /// A built tray, kept alive for as long as the icon should exist.
-pub struct Handle {
+pub(super) struct Handle {
     tray: TrayIcon,
     menu: TrayMenu,
 }
 
 /// Apply the daemon's state to the icon, tooltip and menu.
-pub async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
+pub(super) async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
     let visual = icon::derive(snapshot);
     let image =
         icon::for_state(visual.state).map_err(|e| format!("Failed to decode tray icon: {e}"))?;
@@ -70,7 +70,7 @@ pub async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), Stri
 }
 
 /// Build the tray icon, its menu, and its click behaviour.
-pub fn build(app: &AppHandle) -> Result<Handle, String> {
+pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
     build_inner(app).map_err(|e| format!("Failed to build system tray: {e}"))
 }
 
