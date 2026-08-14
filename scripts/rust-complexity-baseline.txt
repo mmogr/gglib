@@ -20,7 +20,7 @@ crates/gglib-app-services/src/test_support.rs 311
 crates/gglib-app-services/src/types.rs 911
 crates/gglib-axum/src/bootstrap.rs 345
 crates/gglib-axum/src/chat_api.rs 761
-crates/gglib-axum/src/handlers/config/setup.rs 306
+crates/gglib-axum/src/handlers/config/setup.rs 309
 crates/gglib-axum/src/routes.rs 472
 crates/gglib-axum/tests/integration_routes.rs 1280
 crates/gglib-cli/src/commands.rs 413
@@ -122,7 +122,7 @@ crates/gglib-mcp/src/client.rs 519
 crates/gglib-mcp/src/manager.rs 320
 crates/gglib-mcp/src/resolver/search.rs 388
 crates/gglib-mcp/src/service.rs 927
-crates/gglib-proxy/src/cache_lifecycle.rs 586
+crates/gglib-proxy/src/cache_lifecycle.rs 589
 crates/gglib-proxy/src/canonicalization.rs 829
 crates/gglib-proxy/src/connections.rs 739
 crates/gglib-proxy/src/dashboard.rs 1111
@@ -132,7 +132,7 @@ crates/gglib-proxy/src/mcp/handlers.rs 526
 crates/gglib-proxy/src/metrics.rs 592
 crates/gglib-proxy/src/models_tests.rs 853
 crates/gglib-proxy/src/models.rs 600
-crates/gglib-proxy/src/profiles.rs 495
+crates/gglib-proxy/src/profiles.rs 498
 crates/gglib-proxy/src/props.rs 995
 crates/gglib-proxy/src/repair.rs 667
 crates/gglib-proxy/src/sampling_audit.rs 1487
@@ -140,9 +140,9 @@ crates/gglib-proxy/src/server.rs 1322
 crates/gglib-proxy/src/slots_poller.rs 795
 crates/gglib-proxy/src/slots.rs 1234
 crates/gglib-proxy/src/sse_stream.rs 385
-crates/gglib-proxy/src/token_calibration.rs 365
+crates/gglib-proxy/src/token_calibration.rs 370
 crates/gglib-proxy/src/upstream_health.rs 370
-crates/gglib-proxy/tests/fixtures/common.rs 1202
+crates/gglib-proxy/tests/fixtures/common.rs 1205
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 415
 crates/gglib-proxy/tests/integration_inference_profiles.rs 592
@@ -166,9 +166,9 @@ crates/gglib-runtime/src/process/manager.rs 441
 crates/gglib-runtime/src/process/residency/launch.rs 394
 crates/gglib-runtime/src/process/residency/mod.rs 520
 crates/gglib-runtime/src/proxy/supervisor.rs 742
-crates/gglib-runtime/src/server_config.rs 484
+crates/gglib-runtime/src/server_config.rs 490
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 486
 crates/gglib-sse/src/lib.rs 342
-src-tauri/src/daemon/mod.rs 342
+src-tauri/src/daemon/mod.rs 341
 src-tauri/src/main.rs 303
