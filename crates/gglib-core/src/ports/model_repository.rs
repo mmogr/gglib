@@ -58,30 +58,29 @@ pub trait ModelRepository: Send + Sync {
 
     /// Find the model registered under `path`, if there is one.
     ///
-    /// Both sides are canonicalised before comparing, falling back to the
-    /// literal path when canonicalisation fails (a deleted file, a broken
-    /// symlink). Doing it on both sides rather than trusting the stored form
-    /// is what makes this agree with every implementation: the `SQLite`
-    /// repository canonicalises on write, test doubles store what they are
-    /// given, and on macOS a `tempfile` directory differs from its resolved
-    /// path by a `/private` prefix — so a one-sided comparison finds nothing
-    /// and reports "no duplicate" for a file that is plainly already there.
+    /// `path` is matched against the form the implementation stores.
     ///
-    /// Provided rather than required so implementors and test doubles inherit
-    /// it automatically. The scan is over the whole library, which is a table
-    /// of tens to hundreds of rows and is read once per explicit add.
-    async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
-        fn resolved(path: &Path) -> std::path::PathBuf {
-            std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-        }
-
-        let target = resolved(path);
-        Ok(self
-            .list()
-            .await?
-            .into_iter()
-            .find(|model| resolved(&model.file_path) == target))
-    }
+    /// An implementation that also stores a model's sibling shard paths must
+    /// match those too: adding shard 2 of a group already in the library is
+    /// the same duplicate as adding shard 1, and only shard 1's path lives in
+    /// the primary path field. `SqliteModelRepository` in `gglib-db` does
+    /// this; the test doubles in this workspace store no siblings and so match
+    /// on the single path alone, which means a sharded duplicate is only
+    /// observable in tests that use the real repository.
+    ///
+    /// Callers pass a path already resolved by
+    /// [`canonical_model_path`](crate::paths::canonical_model_path); this
+    /// method does not resolve it for them. That is the whole point of the
+    /// split: resolution can fail, and a failure has to reach the caller as
+    /// an error rather than decay into `Ok(None)`, which reads as "no
+    /// duplicate" and silently reinstates the overwrite this lookup exists to
+    /// prevent.
+    ///
+    /// Required rather than provided. A default body here would have to touch
+    /// the filesystem, which `ports/` does not do (see the design rules in
+    /// this module's README), and would scan the entire table per call in a
+    /// trait that every test double inherits.
+    async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError>;
 
     /// Update an existing model.
     ///
@@ -193,6 +192,14 @@ mod tests {
             } else {
                 Err(RepositoryError::NotFound(format!("name={name}")))
             }
+        }
+
+        async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
+            Ok(self
+                .list()
+                .await?
+                .into_iter()
+                .find(|m| m.file_path.as_path() == path))
         }
 
         async fn insert(&self, _model: &NewModel) -> Result<Model, RepositoryError> {

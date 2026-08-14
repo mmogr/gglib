@@ -6,6 +6,44 @@ use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
 use std::path::Path;
 use std::sync::Arc;
 
+/// Whether an explicit import may overwrite a model already in the library.
+///
+/// Named rather than a bare `bool` because the call sites read very
+/// differently — `ImportMode::Refresh` says what it does, `true` does not,
+/// and the wrong value here silently rewrites a row's tags and capabilities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImportMode {
+    /// Refuse when the file is already registered, reporting
+    /// [`RepositoryError::AlreadyExists`].
+    ///
+    /// The default, and what an "add this file to my library" means: a
+    /// duplicate is a conflict the caller should hear about, not an
+    /// overwrite performed on their behalf.
+    #[default]
+    Fresh,
+    /// Re-derive the model's *detected* metadata from the file, updating the
+    /// stored row in place and keeping its database id.
+    ///
+    /// This is what `gglib model add --force` asks for, and what re-importing
+    /// did unconditionally before [`ModelService::import_from_file`] began
+    /// guarding it. It refreshes tags, capabilities, quantization, context
+    /// length, the expert counts and the dialect spec — wider than `model
+    /// retag`, which rebuilds only tags and the dialect spec.
+    ///
+    /// It is narrower than "overwrite the row", and the six columns do not all
+    /// behave alike:
+    ///
+    /// - `tags`, `capabilities` and `dialect_spec` are **assigned**. A refresh
+    ///   replaces them with whatever was just derived, including with nothing
+    ///   — these can be cleared.
+    /// - `quantization`, `context_length` and the expert counts are
+    ///   **coalesced**. A detector that now reads no value leaves the stored
+    ///   one standing rather than emptying it.
+    /// - `name`, `param_count_b` and `architecture` are **absent** from the
+    ///   upsert entirely, so a name the user chose survives untouched.
+    Refresh,
+}
+
 /// The diff produced by [`ModelService::retag_model`] when at least one tag
 /// or the dialect spec changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +121,14 @@ impl ModelService {
             .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
     }
 
-    /// Add a new model.
+    /// Add a new model from an already-built row.
+    ///
+    /// This is the raw registration door: it inherits
+    /// [`ModelRepository::insert`]'s upsert, so a row whose key already exists
+    /// is overwritten rather than reported. That is right for
+    /// registration-after-download, which has to be safe to retry, and wrong
+    /// for "add this file to my library" — which is
+    /// [`Self::import_from_file`], the door that checks first.
     pub async fn add(&self, model: NewModel) -> Result<Model, CoreError> {
         self.repo.insert(&model).await.map_err(CoreError::from)
     }
@@ -98,10 +143,20 @@ impl ModelService {
     /// * `file_path` - Absolute path to the GGUF file
     /// * `gguf_parser` - Parser implementation for metadata extraction
     /// * `param_count_override` - Optional user override for parameter count
+    /// * `mode` - Whether a file already in the library is a conflict
+    ///   ([`ImportMode::Fresh`]) or should be re-derived in place
+    ///   ([`ImportMode::Refresh`])
     ///
     /// # Returns
     ///
     /// Returns the registered `Model` with full metadata, or validation error.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Validation`] if the file is missing, is not a readable
+    /// GGUF, or cannot be resolved to a canonical path;
+    /// [`RepositoryError::AlreadyExists`] under [`ImportMode::Fresh`] when the
+    /// file is already registered.
     ///
     /// # Design
     ///
@@ -109,11 +164,31 @@ impl ModelService {
     /// naming, capability detection, and tag generation to
     /// [`build_new_model`] — the construction path shared with the
     /// `HuggingFace` download path — before persisting the result.
+    ///
+    /// The path is resolved once here, immediately after validation has
+    /// established that the file exists, and the resolved form is what every
+    /// later step sees: the duplicate lookup, the row that gets built, and
+    /// the `model_key` derived from it. Normalising at the entry point rather
+    /// than at each consumer is what keeps those three from disagreeing about
+    /// which file is which.
+    ///
+    /// # Concurrency
+    ///
+    /// The duplicate check and the insert are separate statements with no
+    /// transaction around them, and `file_path` carries no unique index — only
+    /// `model_key` does. Two simultaneous adds of one file can therefore both
+    /// pass the check; the `ON CONFLICT(model_key)` clause still collapses
+    /// them onto a single row, so the library stays correct, but the loser is
+    /// told it added a model that in fact already existed rather than
+    /// receiving a conflict. Closing that would take a unique index on the
+    /// path or a transaction spanning both statements, and is not something
+    /// this guard attempts.
     pub async fn import_from_file(
         &self,
         file_path: &Path,
         gguf_parser: &dyn GgufParserPort,
         param_count_override: Option<f64>,
+        mode: ImportMode,
     ) -> Result<Model, CoreError> {
         // 1. Validate and parse GGUF file
         let gguf_metadata = crate::utils::validation::validate_and_parse_gguf(
@@ -124,18 +199,36 @@ impl ModelService {
         )
         .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {e}")))?;
 
-        // 2. A file already in the library is a conflict, not a silent
+        // 2. Resolve the path exactly once, now that validation has
+        //    established the file is there. Everything downstream uses the
+        //    resolved form, so no later step has to re-resolve — and none can
+        //    quietly disagree about what "the same file" means.
+        let resolved = crate::paths::canonical_model_path(file_path).map_err(|e| {
+            CoreError::Validation(format!(
+                "Cannot resolve '{}' to a canonical path: {e}",
+                file_path.display()
+            ))
+        })?;
+
+        // 3. A file already in the library is a conflict, not a silent
         //    overwrite. `insert` upserts so that registration after a download
         //    can be retried; an explicit "add this file" is the opposite
         //    intent, and without this check the caller gets a success response
         //    for a model it did not add, with the existing row's tags and
         //    capabilities rewritten underneath it.
         //
-        if let Some(existing) = self
+        //    `ImportMode::Refresh` is the caller stating that the overwrite is
+        //    what they came for — re-deriving a model's spec from the file
+        //    with newer detection logic. It is opt-in because it is
+        //    destructive, and unreachable by accident.
+        let existing = self
             .repo
-            .find_by_path(file_path)
+            .find_by_path(&resolved)
             .await
-            .map_err(CoreError::from)?
+            .map_err(CoreError::from)?;
+
+        if mode == ImportMode::Fresh
+            && let Some(existing) = &existing
         {
             return Err(CoreError::Repository(RepositoryError::AlreadyExists(
                 format!(
@@ -146,12 +239,52 @@ impl ModelService {
             )));
         }
 
-        // 3. Build the model row via the naming/capability/tag policy shared
+        // A refresh has to be asked for by the model's *own* primary file.
+        //
+        // `find_by_path` also matches a sharded model through its sibling
+        // paths, and the row it hands back is the one keyed to shard 1. Left
+        // unchecked, refreshing from shard 2 would land on that row and
+        // `file_path = excluded.file_path` would repoint it at the shard-2
+        // file — which llama.cpp cannot open a split GGUF from, so the model
+        // would stop launching. Appending a stray row (the old behaviour) was
+        // survivable; destroying the good row is not.
+        //
+        // Both sides are resolved before comparing. Comparing the stored
+        // column directly would make this guard assume the column is already
+        // canonical — the very assumption that produced the bug this change
+        // exists to fix. A row still holding an unresolved path would then
+        // refuse a refresh of its *own* first shard, and say so by printing
+        // the same path twice.
+        if let Some(existing) = &existing {
+            let existing_primary = crate::paths::canonical_model_path_string(&existing.file_path);
+            if existing_primary != resolved.to_string_lossy() {
+                return Err(CoreError::Validation(format!(
+                    "'{}' belongs to \"{}\", which is registered under '{}'. \
+                     Re-import that path instead — refreshing a sharded model from \
+                     anything but its first shard would repoint it at a file it \
+                     cannot be loaded from.",
+                    file_path.display(),
+                    existing.name,
+                    existing_primary
+                )));
+            }
+        }
+
+        // 4. Build the model row via the naming/capability/tag policy shared
         //    with the HuggingFace download path.
+        //
+        //    Built from the path the caller gave, not the resolved one. The
+        //    derived name falls back to the file stem, so building from the
+        //    resolved path would silently rename a symlinked model to its
+        //    target's stem — `current.gguf -> Qwen3-8B.gguf` would stop being
+        //    "current" — and would disagree with the preview the CLI printed
+        //    from the path the user typed. Only the *stored* path is
+        //    canonical; the *derived* name still comes from what was asked
+        //    for.
         let origin = ModelOrigin::LocalFile {
             param_count_override,
         };
-        let new_model = build_new_model(
+        let mut new_model = build_new_model(
             file_path,
             Some(&gguf_metadata),
             gguf_parser,
@@ -159,8 +292,54 @@ impl ModelService {
             chrono::Utc::now(),
         );
 
-        // 4. Persist to repository
+        // 5. Store and key the row by the resolved path, whatever spelling
+        //    was used to reach it.
+        new_model.file_path = resolved;
+
+        // 6. A refresh has to land on the row it is refreshing.
+        //
+        //    `build_new_model` was handed `ModelOrigin::LocalFile`, so it
+        //    carries no HuggingFace metadata and the row would be keyed
+        //    `local:<hash>`. A downloaded model is keyed `hf:<repo>@<sha>#<file>`.
+        //    Nothing would conflict, `file_path` carries no unique index, and
+        //    `--force` on a downloaded model would append a *second* row for
+        //    one file — the precise outcome this whole change exists to
+        //    prevent, reintroduced by the flag added to serve it.
+        //
+        //    Carrying the stored provenance forward keeps the computed key
+        //    equal to the existing row's, so the upsert updates it.
+        if let Some(existing) = &existing {
+            new_model.hf_repo_id.clone_from(&existing.hf_repo_id);
+            new_model.hf_commit_sha.clone_from(&existing.hf_commit_sha);
+            new_model.hf_filename.clone_from(&existing.hf_filename);
+        }
+
+        // 7. Persist to repository
         self.repo.insert(&new_model).await.map_err(CoreError::from)
+    }
+
+    /// Look up the model registered under `file_path`, if any.
+    ///
+    /// Resolves the path the same way [`Self::import_from_file`] does, so a
+    /// caller can ask "is this already here?" before doing expensive or
+    /// interactive work and get the same answer the import would.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Validation`] if the path cannot be resolved, and
+    /// [`CoreError::Repository`] if the lookup itself fails. Neither is
+    /// reported as "no duplicate".
+    pub async fn find_by_path(&self, file_path: &Path) -> Result<Option<Model>, CoreError> {
+        let resolved = crate::paths::canonical_model_path(file_path).map_err(|e| {
+            CoreError::Validation(format!(
+                "Cannot resolve '{}' to a canonical path: {e}",
+                file_path.display()
+            ))
+        })?;
+        self.repo
+            .find_by_path(&resolved)
+            .await
+            .map_err(CoreError::from)
     }
 
     /// Update a model.
@@ -513,10 +692,36 @@ mod tests {
                 .ok_or_else(|| RepositoryError::NotFound(format!("name={name}")))
         }
 
+        async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
+            Ok(self
+                .models
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|m| m.file_path.as_path() == path)
+                .cloned())
+        }
+
         #[allow(clippy::cast_possible_wrap, clippy::significant_drop_tightening)]
         async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
             let mut models = self.models.lock().unwrap();
-            let id = models.len() as i64 + 1;
+            // NOTE: this double keys on `file_path`; `SqliteModelRepository`
+            // keys on `model_key`. They agree for a plain local add and
+            // diverge whenever the key is derived from something else — a
+            // downloaded model keyed `hf:<repo>@<sha>#<file>`, most of all. A
+            // test written here will therefore report "one row, id kept" for
+            // input the real repository would have duplicated, so anything
+            // turning on key identity belongs in a test against the real
+            // repository (see `gglib-app-services`'s
+            // `forcing_a_downloaded_model_refreshes_it_rather_than_duplicating_it`).
+            //
+            // Mirror the `SQLite` repository: registering the same file twice
+            // updates that row and keeps its id rather than appending a second
+            // one. A double that appends contradicts the trait doc and makes
+            // the silent-overwrite bug this guard exists for invisible to
+            // every test written against it.
+            let existing = models.iter().position(|m| m.file_path == model.file_path);
+            let id = existing.map_or(models.len() as i64 + 1, |i| models[i].id);
             let created = Model {
                 dialect_spec: model.dialect_spec.clone(),
                 id,
@@ -544,7 +749,11 @@ mod tests {
                 server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };
-            models.push(created.clone());
+            if let Some(index) = existing {
+                models[index] = created.clone();
+            } else {
+                models.push(created.clone());
+            }
             Ok(created)
         }
 
@@ -581,7 +790,12 @@ mod tests {
         std::fs::File::create(&path).unwrap();
 
         let model = service
-            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
             .await
             .unwrap();
 
@@ -605,12 +819,22 @@ mod tests {
         std::fs::File::create(&path).unwrap();
 
         service
-            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
             .await
             .expect("first add succeeds");
 
         let err = service
-            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
             .await
             .expect_err("second add is a conflict");
 
@@ -621,6 +845,217 @@ mod tests {
             ),
             "expected AlreadyExists, got {err:?}"
         );
+    }
+
+    /// `--force` is the documented way to refresh a model's derived columns
+    /// from the file. The guard above blocks the workflow `docs/tags.md`
+    /// describes, so `Refresh` has to restore it: same file, same row, no
+    /// conflict.
+    #[tokio::test]
+    async fn refresh_re_imports_a_file_already_in_the_library() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        let first = service
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
+            .await
+            .expect("first add succeeds");
+
+        let refreshed = service
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Refresh,
+            )
+            .await
+            .expect("--force re-imports rather than refusing");
+
+        assert_eq!(
+            refreshed.id, first.id,
+            "a refresh updates the row in place; it does not create a second"
+        );
+        assert_eq!(service.list().await.unwrap().len(), 1);
+    }
+
+    /// The lookup a caller can run before doing expensive or interactive work
+    /// has to agree with the guard inside the import, or the CLI would refuse
+    /// files the import would accept and vice versa.
+    #[tokio::test]
+    async fn find_by_path_agrees_with_the_import_guard() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        std::fs::File::create(&path).unwrap();
+
+        assert!(
+            service.find_by_path(&path).await.unwrap().is_none(),
+            "nothing is registered yet"
+        );
+
+        service
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            service.find_by_path(&path).await.unwrap().is_some(),
+            "the file the import just refused to duplicate must be findable"
+        );
+    }
+
+    /// An unresolvable path is an error, never `Ok(None)`. `Ok(None)` reads
+    /// as "no duplicate" and silently reinstates the overwrite the guard
+    /// exists to prevent.
+    #[tokio::test]
+    async fn find_by_path_reports_an_unresolvable_path_instead_of_no_duplicate() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let dir = tempfile::tempdir().unwrap();
+        let err = service
+            .find_by_path(&dir.path().join("Absent.gguf"))
+            .await
+            .expect_err("a path that does not resolve is not 'no duplicate'");
+
+        assert!(matches!(err, CoreError::Validation(_)), "got {err:?}");
+    }
+
+    /// A repository that matches any path, standing in for the sibling-shard
+    /// arm of the real `find_by_path` — the one case where the row handed back
+    /// is *not* the row the queried path is the primary file of.
+    struct SiblingMatchRepo(MockRepo);
+
+    #[async_trait]
+    impl ModelRepository for SiblingMatchRepo {
+        async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+            self.0.list().await
+        }
+        async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
+            self.0.get_by_id(id).await
+        }
+        async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
+            self.0.get_by_name(name).await
+        }
+        async fn find_by_path(&self, _path: &Path) -> Result<Option<Model>, RepositoryError> {
+            Ok(self.0.list().await?.into_iter().next())
+        }
+        async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
+            self.0.insert(model).await
+        }
+        async fn update(&self, model: &Model) -> Result<(), RepositoryError> {
+            self.0.update(model).await
+        }
+        async fn delete(&self, id: i64) -> Result<(), RepositoryError> {
+            self.0.delete(id).await
+        }
+    }
+
+    /// The refusal resolves both sides, so a row whose stored path is spelled
+    /// differently from the caller's — while naming the same file — is still
+    /// recognised as that caller's own model and refreshed.
+    ///
+    /// That state is reachable: `canonical_model_path_string` falls back to
+    /// the literal path when the file cannot be resolved, so a row registered
+    /// while its file was missing keeps whatever spelling it was given.
+    /// Comparing the stored column directly would refuse a refresh of the
+    /// model's own file and print the same path on both sides of the error.
+    #[tokio::test]
+    async fn a_refresh_is_accepted_when_the_stored_path_is_only_spelled_differently() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Solo.gguf");
+        std::fs::File::create(&file).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let respelled = dir.path().join("sub").join("..").join("Solo.gguf");
+
+        // Seed the row under the indirect spelling, as a registration made
+        // while the file was unresolvable would have.
+        let inner = MockRepo::new();
+        inner
+            .insert(&NewModel::new(
+                "Solo".to_string(),
+                respelled,
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        let service = ModelService::new(Arc::new(SiblingMatchRepo(inner)));
+        let outcome = service
+            .import_from_file(
+                &file,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Refresh,
+            )
+            .await;
+
+        // Only that the guard *lets it through* is asserted here. Which row it
+        // then lands on turns on key identity, and `MockRepo` upserts on
+        // `file_path` while the real repository upserts on `model_key` — the
+        // divergence noted above. Under this double the two spellings look
+        // like two rows; under the real repository both resolve to one key.
+        // The landing is covered against the real repository by
+        // gglib-app-services' `forcing_from_a_sibling_shard_refuses_rather_than_repointing`.
+        assert!(
+            outcome.is_ok(),
+            "the row names this very file, however it was spelled: {:?}",
+            outcome.err()
+        );
+    }
+
+    /// The other side of the same guard: when the located row names a
+    /// genuinely different file — the sharded case, where the sibling arm
+    /// returns the shard-1 row — the refresh is refused rather than
+    /// repointing it.
+    #[tokio::test]
+    async fn a_refresh_is_refused_when_the_located_row_names_another_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("m-00001-of-00002.gguf");
+        let second = dir.path().join("m-00002-of-00002.gguf");
+        std::fs::File::create(&first).unwrap();
+        std::fs::File::create(&second).unwrap();
+
+        let inner = MockRepo::new();
+        inner
+            .insert(&NewModel::new(
+                "Sharded".to_string(),
+                first,
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        let service = ModelService::new(Arc::new(SiblingMatchRepo(inner)));
+        let err = service
+            .import_from_file(
+                &second,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Refresh,
+            )
+            .await
+            .expect_err("shard 2 must not repoint the shard-1 row");
+
+        assert!(matches!(err, CoreError::Validation(_)), "got {err:?}");
     }
 
     /// A second *different* file must still go in — the check keys on the
@@ -635,7 +1070,12 @@ mod tests {
             let path = dir.path().join(name);
             std::fs::File::create(&path).unwrap();
             service
-                .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+                .import_from_file(
+                    &path,
+                    &crate::ports::NoopGgufParser,
+                    None,
+                    ImportMode::Fresh,
+                )
                 .await
                 .unwrap_or_else(|e| panic!("{name} should import: {e:?}"));
         }
@@ -651,6 +1091,7 @@ mod tests {
                 Path::new("/nonexistent/model.gguf"),
                 &crate::ports::NoopGgufParser,
                 None,
+                ImportMode::Fresh,
             )
             .await
             .unwrap_err();
@@ -667,7 +1108,12 @@ mod tests {
         std::fs::File::create(&path).unwrap();
 
         let err = service
-            .import_from_file(&path, &crate::ports::NoopGgufParser, None)
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                None,
+                ImportMode::Fresh,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation(_)));
@@ -683,7 +1129,12 @@ mod tests {
         std::fs::File::create(&path).unwrap();
 
         let model = service
-            .import_from_file(&path, &crate::ports::NoopGgufParser, Some(13.0))
+            .import_from_file(
+                &path,
+                &crate::ports::NoopGgufParser,
+                Some(13.0),
+                ImportMode::Fresh,
+            )
             .await
             .unwrap();
 

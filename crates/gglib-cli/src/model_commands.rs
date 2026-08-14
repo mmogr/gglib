@@ -96,6 +96,21 @@ pub enum ModelCommand {
     Add {
         /// Path to GGUF file to add
         file_path: String,
+
+        /// Re-import a file already in the library, re-deriving its detected
+        /// metadata from the file
+        ///
+        /// Replaces tags, capabilities and the dialect spec — including with
+        /// nothing, so these can be cleared. Updates quantization, context
+        /// length and the expert counts only where a value is newly detected;
+        /// a stored one is never emptied. `gglib model retag` rebuilds only
+        /// tags and the dialect spec, so this is the wider of the two.
+        ///
+        /// The model keeps its id, and its name, parameter count and
+        /// architecture are left exactly as stored — those columns are not
+        /// part of the upsert at all.
+        #[arg(long)]
+        force: bool,
     },
 
     /// List GGUF models in the database

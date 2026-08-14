@@ -200,6 +200,19 @@ mod tests {
                 .ok_or_else(|| RepositoryError::NotFound(format!("name={name}")))
         }
 
+        async fn find_by_path(
+            &self,
+            path: &std::path::Path,
+        ) -> Result<Option<Model>, RepositoryError> {
+            Ok(self
+                .models
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|m| m.file_path.as_path() == path)
+                .cloned())
+        }
+
         async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
             let mut id = self.next_id.lock().unwrap();
             let persisted = Model {
@@ -229,9 +242,26 @@ mod tests {
                 server_defaults: model.server_defaults.clone(),
                 benchmark_summary: None,
             };
+            // Mirror the `SQLite` repository: a repeat registration of the
+            // same file updates that row and keeps its id. This double models
+            // registration-after-download, which is the very path the trait
+            // doc cites as the reason `insert` upserts — a double that appends
+            // contradicts the contract it exists to stand in for.
+            let mut models = self.models.lock().unwrap();
+            if let Some(index) = models
+                .iter()
+                .position(|m| m.file_path == persisted.file_path)
+            {
+                let mut updated = persisted.clone();
+                updated.id = models[index].id;
+                models[index] = updated.clone();
+                drop(models);
+                return Ok(updated);
+            }
             *id += 1;
             drop(id);
-            self.models.lock().unwrap().push(persisted.clone());
+            models.push(persisted.clone());
+            drop(models);
             Ok(persisted)
         }
 

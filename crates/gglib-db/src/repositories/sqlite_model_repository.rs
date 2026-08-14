@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use sqlx::SqlitePool;
+use std::path::Path;
 
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
@@ -17,21 +18,59 @@ use super::row_mappers::{
 ///
 /// The filename is normalized to remove shard suffixes, ensuring all shards
 /// in a group compute the same model_key for proper UPSERT deduplication.
-fn compute_model_key(model: &NewModel) -> String {
+///
+/// The local key hashes the *canonical* path — the very value bound to the
+/// `file_path` column a few lines below — rather than the raw path it was
+/// handed. Hashing the raw path made the key disagree with the column:
+/// `gglib model add model.gguf`, run in two different directories over two
+/// genuinely different files, produced one key and two stored paths. The
+/// `ON CONFLICT(model_key)` clause then merged them, and because `name`,
+/// `param_count_b` and `architecture` are absent from its `DO UPDATE SET`
+/// list while `file_path` is present, the surviving row wore the first
+/// model's identity over the second model's file.
+///
+/// It hashes a [`Path`], not the `String`, and that is load-bearing rather
+/// than stylistic. `Path`'s `Hash` is defined over components while `str`'s
+/// is defined over bytes, so the two disagree for a path they both consider
+/// identical. Hashing the string would therefore have moved the key of *every*
+/// local row already in a user's library, rather than only the rows this rule
+/// genuinely re-keys — the ones registered under a spelling that was not
+/// already canonical.
+///
+/// Those rows do move, and they are migrated rather than stranded:
+/// `setup::backfill_local_model_keys` recomputes each `local:` key from the
+/// stored `file_path` column on open. That column has been canonical on every
+/// build that ever wrote it, so it is a sound source. The migration matters
+/// most on Windows, where `canonicalize` returns an extended-length `\\?\`
+/// path that no pre-change caller ever produced — so *no* Windows row was
+/// "already canonical" and every one of them needs re-keying.
+///
+/// `canonical_path` is the already-resolved string the caller is about to bind
+/// to `file_path`, passed in rather than recomputed. Resolving is a blocking
+/// syscall and this runs inside an async `insert`; taking it as an argument
+/// also makes it impossible for the key and the column to be derived from two
+/// different resolutions of the same path.
+fn compute_model_key(model: &NewModel, canonical_path: &str) -> String {
     match (&model.hf_repo_id, &model.hf_commit_sha, &model.hf_filename) {
         (Some(repo), Some(sha), Some(filename)) => {
             let base = base_shard_filename(filename);
             format!("hf:{}@{}#{}", repo, sha, base)
         }
-        _ => {
-            // For local models without HF metadata, use file path
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            model.file_path.hash(&mut hasher);
-            format!("local:{:x}", hasher.finish())
-        }
+        _ => local_model_key_for(canonical_path),
     }
+}
+
+/// The `local:` key for an already-canonical path string.
+///
+/// Split out so the startup backfill in `setup.rs` can recompute a stored
+/// row's key from its `file_path` column using exactly this function, rather
+/// than a second copy of the rule that could drift from it.
+pub(crate) fn local_model_key_for(canonical_path: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    Path::new(canonical_path).hash(&mut hasher);
+    format!("local:{:x}", hasher.finish())
 }
 
 /// `SQLite` implementation of the `ModelRepository` trait.
@@ -107,6 +146,40 @@ impl ModelRepository for SqliteModelRepository {
         row_to_model(&row)
     }
 
+    async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
+        // `path` arrives already resolved, and `file_path` was normalised
+        // through the same function on write, so this is a plain equality
+        // test rather than a scan that re-resolves every row. That matters
+        // twice over: it keeps a blocking `canonicalize` syscall per library
+        // row out of an async fn, and it removes the fallback that used to
+        // turn an unresolvable path into "no duplicate found".
+        //
+        // The `json_each` arm catches sharded models: shard 2 of a group
+        // already registered is the same duplicate as shard 1, but only
+        // shard 1's path lives in `file_path` — the rest are in
+        // `file_paths_json`. `json_valid` guards a column written before that
+        // serialisation existed, since `json_each` errors on malformed input
+        // rather than returning no rows.
+        let query = format!(
+            "SELECT {} FROM models \
+             WHERE models.file_path = ?1 \
+                OR (models.file_paths_json IS NOT NULL \
+                    AND json_valid(models.file_paths_json) \
+                    AND EXISTS (SELECT 1 FROM json_each(models.file_paths_json) \
+                                WHERE json_each.value = ?1)) \
+             ORDER BY models.id LIMIT 1",
+            MODEL_SELECT_COLUMNS
+        );
+
+        let row = sqlx::query(&query)
+            .bind(path.to_string_lossy().as_ref())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        row.as_ref().map(row_to_model).transpose()
+    }
+
     async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
         let metadata_json = serde_json::to_string(&model.metadata)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
@@ -137,13 +210,20 @@ impl ModelRepository for SqliteModelRepository {
             .and_then(|spec| serde_json::to_string(spec).ok());
 
         // Compute model key for deduplication
-        let model_key = compute_model_key(model);
+        let model_key = compute_model_key(model, &file_path_string);
 
-        // Serialize file_paths if present
-        let file_paths_json = model
-            .file_paths
-            .as_ref()
-            .and_then(|paths| serde_json::to_string(paths).ok());
+        // Serialize file_paths if present, normalised the same way as
+        // `file_path` above. `find_by_path`'s sibling arm compares a resolved
+        // query path against these entries, so storing them as handed in
+        // would make that arm match only when the caller happened to pass
+        // already-resolved siblings — which the download path does not.
+        let file_paths_json = model.file_paths.as_ref().and_then(|paths| {
+            let normalized: Vec<String> = paths
+                .iter()
+                .map(|path| normalized_file_path_string(path))
+                .collect();
+            serde_json::to_string(&normalized).ok()
+        });
 
         // Use UPSERT to make registration idempotent
         let _result = sqlx::query(
@@ -155,14 +235,24 @@ impl ModelRepository for SqliteModelRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
-                file_paths_json = excluded.file_paths_json,
+                -- Coalesced, not assigned. A re-registration that carries no
+                -- shard list is a local re-import, which never populates one;
+                -- assigning would erase the sibling paths a download recorded
+                -- and silently disable the sharded-duplicate lookup for that
+                -- model. A download always supplies the list, so it still
+                -- wins when there is one.
+                file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
                 quantization = COALESCE(excluded.quantization, models.quantization),
                 context_length = COALESCE(excluded.context_length, models.context_length),
                 expert_count = COALESCE(excluded.expert_count, models.expert_count),
                 expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
                 expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
-                download_date = excluded.download_date,
-                last_update_check = excluded.last_update_check,
+                -- Coalesced for the same reason: a local re-import sets
+                -- neither, and erasing them would make a downloaded model
+                -- read as never-downloaded and never-update-checked, which
+                -- the update-check workflow keys on.
+                download_date = COALESCE(excluded.download_date, models.download_date),
+                last_update_check = COALESCE(excluded.last_update_check, models.last_update_check),
                 tags = excluded.tags,
                 capabilities = excluded.capabilities,
                 dialect_spec = excluded.dialect_spec,
@@ -239,7 +329,12 @@ impl ModelRepository for SqliteModelRepository {
             "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ? WHERE id = ?"
         )
             .bind(&model.name)
-            .bind(model.file_path.to_string_lossy().as_ref())
+            // Normalised exactly as `insert` does. `find_by_path` is a plain
+            // equality test against this column, so a writer that stores an
+            // unresolved path here silently makes the row unfindable — and
+            // `PATCH /api/models/{id}` reaches this with a caller-supplied
+            // `file_path`.
+            .bind(normalized_file_path_string(&model.file_path))
             .bind(model.param_count_b)
             .bind(&model.architecture)
             .bind(&model.quantization)
@@ -365,12 +460,12 @@ mod tests {
         );
     }
 
-    /// The repository canonicalises on write, so a caller holding the path it
-    /// was handed must still match. On macOS a `tempfile` path resolves
-    /// through `/private`, which is exactly the mismatch that would make a
-    /// duplicate look like a new model.
+    /// The repository canonicalises on write, and callers resolve before
+    /// asking, so a real file on disk round-trips. On macOS a `tempfile`
+    /// directory resolves through `/private`, which is exactly the mismatch
+    /// that would make a duplicate look like a new model.
     #[tokio::test]
-    async fn find_by_path_matches_across_canonicalisation() {
+    async fn find_by_path_matches_the_stored_canonical_path() {
         let repo = repo().await;
 
         let dir = tempfile::tempdir().unwrap();
@@ -387,11 +482,285 @@ mod tests {
             .await
             .unwrap();
 
+        let resolved = std::fs::canonicalize(&path).expect("the file exists");
         let found = repo
-            .find_by_path(&path)
+            .find_by_path(&resolved)
             .await
             .unwrap()
-            .expect("the uncanonicalised path must still find it");
+            .expect("the resolved path must find the row stored under it");
+        assert_eq!(found.id, inserted.id);
+    }
+
+    /// **Upgrade safety.** The key a previous build computed for an
+    /// already-canonical path must not move.
+    ///
+    /// Nothing backfills `model_key` — it appears in `setup.rs` only as a
+    /// column and a unique index. If this value shifts, every local row in
+    /// every existing library becomes unreachable by `ON CONFLICT(model_key)`
+    /// and the next registration of that file silently appends a second row,
+    /// which is the exact failure this PR exists to prevent.
+    ///
+    /// The expectation is recomputed the old way rather than hardcoded,
+    /// because `DefaultHasher`'s output is explicitly not guaranteed stable
+    /// across Rust releases. What is pinned is the relationship: hashing the
+    /// canonical path must agree with hashing the `PathBuf` a previous build
+    /// hashed.
+    #[test]
+    fn the_local_key_for_a_canonical_path_survives_the_upgrade() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        // A real file, resolved: the point is that a genuine canonicalisation
+        // runs and still lands on the previous value. A path that does not
+        // exist would take the literal fallback, so no canonicalisation would
+        // happen and the assertion would prove nothing about it — and would
+        // break on any machine where that path did exist behind a symlink.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        std::fs::File::create(&file).unwrap();
+        let path = std::fs::canonicalize(&file).expect("the file exists");
+        assert_eq!(
+            std::fs::canonicalize(&path).unwrap(),
+            path,
+            "the fixture must already be canonical"
+        );
+
+        // What builds up to and including c825c69d computed.
+        let previous = {
+            let mut hasher = DefaultHasher::new();
+            path.hash(&mut hasher);
+            format!("local:{:x}", hasher.finish())
+        };
+
+        let model = NewModel::new("Qwen3-8B-Q4_K_M".to_string(), path, 7.0, Utc::now());
+        assert_eq!(
+            compute_model_key(&model, &normalized_file_path_string(&model.file_path)),
+            previous,
+            "changing the local key strands every existing local row"
+        );
+    }
+
+    /// **The asymmetry this follow-up exists for.** One file is one model,
+    /// however its path was spelled on the way in.
+    ///
+    /// The local `model_key` hashes the path. While it hashed the *raw* path
+    /// and the `file_path` column stored the *resolved* one, the two
+    /// disagreed about identity: two spellings of a single file produced two
+    /// keys and therefore two rows for one model on disk, and — the
+    /// destructive direction — one raw spelling reaching two different files
+    /// produced a single key, so `ON CONFLICT(model_key)` merged them. Because
+    /// `name`, `param_count_b` and `architecture` are absent from the
+    /// `DO UPDATE SET` list while `file_path` is present, that survivor wore
+    /// the first model's identity over the second model's file.
+    ///
+    /// Hashing the stored string closes both directions at once. This test
+    /// pins the spelling direction, which is the one reachable without
+    /// changing the process working directory; it fails if the key goes back
+    /// to hashing the path it was handed.
+    ///
+    /// The respelling uses `..` deliberately. `Path`'s `Eq` and `Hash` are
+    /// defined over *components*, so a `.` or a doubled separator is already
+    /// normalised away before any hashing happens and cannot demonstrate the
+    /// difference. `..` survives as a real component — the filesystem is the
+    /// only thing that can resolve it — which is exactly the gap between
+    /// "the path as written" and "the file it names".
+    #[tokio::test]
+    async fn two_spellings_of_one_path_are_one_model() {
+        let repo = repo().await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Solo.gguf");
+        std::fs::File::create(&path).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        // Same file, a path only the filesystem can equate: `dir/sub/../Solo.gguf`.
+        let respelled = dir.path().join("sub").join("..").join("Solo.gguf");
+        assert_ne!(path, respelled, "the two spellings must differ literally");
+
+        let first = repo
+            .insert(&NewModel::new("Solo".to_string(), path, 7.0, Utc::now()))
+            .await
+            .unwrap();
+        let second = repo
+            .insert(&NewModel::new(
+                "Solo".to_string(),
+                respelled,
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            first.id, second.id,
+            "one file must be one model whichever way its path was written"
+        );
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+
+    /// Two genuinely different files that share a basename are two models.
+    ///
+    /// Companion to the test above, pinning the opposite direction: this one
+    /// holds under either key rule, and exists so that a future "fix" which
+    /// over-normalises — hashing only the filename, say — is caught.
+    #[tokio::test]
+    async fn two_files_sharing_a_basename_stay_two_models() {
+        let repo = repo().await;
+
+        let root = tempfile::tempdir().unwrap();
+        let alpha_path = root.path().join("projA").join("model.gguf");
+        let beta_path = root.path().join("projB").join("model.gguf");
+        for path in [&alpha_path, &beta_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::File::create(path).unwrap();
+        }
+
+        let alpha = repo
+            .insert(&NewModel::new(
+                "ALPHA".to_string(),
+                alpha_path.clone(),
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+        let beta = repo
+            .insert(&NewModel::new(
+                "BETA".to_string(),
+                beta_path.clone(),
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        assert_ne!(
+            alpha.id, beta.id,
+            "two different files must not collapse into one row"
+        );
+        assert_eq!(repo.list().await.unwrap().len(), 2);
+
+        let at_beta = repo
+            .find_by_path(&std::fs::canonicalize(&beta_path).unwrap())
+            .await
+            .unwrap()
+            .expect("a row at B's path");
+        assert_eq!(
+            at_beta.name, "BETA",
+            "the row standing at B's path must be B's model, not A's identity"
+        );
+    }
+
+    /// A refresh must not erase what only a download knows.
+    ///
+    /// `file_paths_json`, `download_date` and `last_update_check` were plain
+    /// assignments in `DO UPDATE SET`, and a local re-import populates none of
+    /// them — so `--force` on a downloaded model wiped its shard list (taking
+    /// the sibling lookup with it) and made it read as never-downloaded and
+    /// never-update-checked, which the update-check workflow keys on.
+    #[tokio::test]
+    async fn a_refresh_keeps_the_shard_list_and_download_provenance() {
+        let repo = repo().await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("m-00001-of-00002.gguf");
+        let second = dir.path().join("m-00002-of-00002.gguf");
+        std::fs::File::create(&first).unwrap();
+        std::fs::File::create(&second).unwrap();
+
+        let mut downloaded = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        downloaded.file_paths = Some(vec![first.clone(), second.clone()]);
+        downloaded.download_date = Some(Utc::now());
+        downloaded.last_update_check = Some(Utc::now());
+        let original = repo.insert(&downloaded).await.unwrap();
+
+        // A local re-import of the same file: no shard list, no dates.
+        let reimport = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        let refreshed = repo.insert(&reimport).await.unwrap();
+
+        assert_eq!(refreshed.id, original.id, "same row");
+        assert!(
+            refreshed.download_date.is_some(),
+            "a refresh must not erase download_date"
+        );
+        assert!(
+            refreshed.last_update_check.is_some(),
+            "a refresh must not erase last_update_check"
+        );
+        assert!(
+            repo.find_by_path(&std::fs::canonicalize(&second).unwrap())
+                .await
+                .unwrap()
+                .is_some(),
+            "the shard list must survive a refresh, or the sibling lookup dies with it"
+        );
+    }
+
+    /// Adding shard 2 of a group already registered is the same duplicate as
+    /// adding shard 1. Only the first shard's path reaches `file_path`; the
+    /// siblings live in `file_paths_json`, so a lookup that reads only the
+    /// column would wave the rest through.
+    #[tokio::test]
+    async fn find_by_path_matches_a_sharded_sibling() {
+        let repo = repo().await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("model-00001-of-00002.gguf");
+        let second = dir.path().join("model-00002-of-00002.gguf");
+        std::fs::File::create(&first).unwrap();
+        std::fs::File::create(&second).unwrap();
+
+        // Handed in exactly as the download path hands them in: unresolved.
+        // Canonicalising these here would have the test normalise on the
+        // repository's behalf and pass whether or not `insert` does its job —
+        // on macOS a tempdir sits behind `/private`, so raw and resolved
+        // genuinely differ and the sibling arm would never match in
+        // production.
+        let mut model = NewModel::new("Sharded".to_string(), first.clone(), 7.0, Utc::now());
+        model.file_paths = Some(vec![first.clone(), second.clone()]);
+        let inserted = repo.insert(&model).await.unwrap();
+
+        let found = repo
+            .find_by_path(&std::fs::canonicalize(&second).unwrap())
+            .await
+            .unwrap()
+            .expect("the sibling shard belongs to a model already present");
+        assert_eq!(found.id, inserted.id);
+    }
+
+    /// `update` writes `file_path` too, and `find_by_path` is a plain equality
+    /// test against that column. A writer that stores an unresolved path makes
+    /// the row unfindable — and `PATCH /api/models/{id}` reaches this with a
+    /// caller-supplied path.
+    #[tokio::test]
+    async fn update_stores_a_canonical_path_so_the_row_stays_findable() {
+        let repo = repo().await;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Updatable.gguf");
+        std::fs::File::create(&path).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+
+        let inserted = repo
+            .insert(&NewModel::new(
+                "Updatable".to_string(),
+                path.clone(),
+                7.0,
+                Utc::now(),
+            ))
+            .await
+            .unwrap();
+
+        // Write the same file back under a spelling only the filesystem can
+        // equate, as an API caller might.
+        let mut edited = inserted.clone();
+        edited.file_path = dir.path().join("sub").join("..").join("Updatable.gguf");
+        repo.update(&edited).await.unwrap();
+
+        let found = repo
+            .find_by_path(&std::fs::canonicalize(&path).unwrap())
+            .await
+            .unwrap()
+            .expect("an updated row must still be findable by its real path");
         assert_eq!(found.id, inserted.id);
     }
 

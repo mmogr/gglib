@@ -13,7 +13,7 @@ pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };
 pub use model_registrar::{ModelFilesRepositoryPort, ModelRegistrar};
-pub use model_service::{ModelService, RetagDiff};
+pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
     DownloadTriggerPort, ModelFilesReaderPort, ModelVerificationService, OverallHealth,
     ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,
