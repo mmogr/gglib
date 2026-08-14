@@ -13,7 +13,7 @@ use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
-    ModelRepository, NoopEmitter, Repos, SettingsRepository,
+    ModelRepository, NoopEmitter, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteBenchmarkRepository;
@@ -154,46 +154,3 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     })
 }
 
-/// Bootstrap with custom repos (for testing).
-///
-/// Note: callers provide their own download manager (typically a stub that
-/// does nothing). This path bypasses [`CoreBootstrap::build`] entirely.
-pub fn bootstrap_with(
-    repos: Repos,
-    downloads: Arc<dyn DownloadManagerPort>,
-    gguf_parser: Arc<dyn GgufParserPort>,
-    model_registrar: Arc<dyn ModelRegistrarPort>,
-    llama_server_path: PathBuf,
-) -> CliContext {
-    let model_repo = repos.models.clone();
-    let app = Arc::new(AppCore::new(repos.clone()));
-    let mcp = Arc::new(McpService::new(
-        repos.mcp_servers.clone(),
-        Arc::new(NoopEmitter),
-    ));
-    CliContext {
-        app,
-        mcp,
-        downloads,
-        gguf_parser,
-        catalog: Arc::new(CatalogPortImpl::new(Arc::clone(&model_repo))),
-        model_repo,
-        model_registrar,
-        llama_server_path,
-        base_port: 9000,
-        http_client: reqwest::Client::new(),
-        bench_repo: Arc::new(SqliteBenchmarkRepository::new_in_memory_blocking()),
-        settings_repo: repos.settings.clone(),
-        download_emitter: Arc::new(CliDownloadEventEmitter::new()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_config_with_defaults() {
-        // with_defaults can fail if paths don't exist, so just test the method exists
-        // In real tests, we'd use bootstrap_with() with mocks
-    }
-}

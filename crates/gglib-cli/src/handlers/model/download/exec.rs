@@ -15,11 +15,10 @@ use gglib_core::paths::resolve_models_dir;
 use super::remote;
 
 /// Download command arguments passed from CLI.
-pub struct DownloadArgs<'a> {
+pub(crate) struct DownloadArgs<'a> {
     pub model_id: &'a str,
     pub quantization: Option<&'a str>,
     pub list_quants: bool,
-    pub force: bool,
     /// HuggingFace token for private models.
     ///
     /// Used only for `--list-quants`. For downloads, prefer the `HF_TOKEN`
@@ -33,7 +32,7 @@ pub struct DownloadArgs<'a> {
 /// Queues `model_id` on the daemon and watches the queue until it drains.
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
-pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     let _ = ctx;
     let models_dir = resolve_models_dir(None)?.path;
 
