@@ -66,7 +66,7 @@ pub use retry_observer::RetryObserver;
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
 pub use settings_repository::SettingsRepository;
-pub use system_probe::{SystemProbeError, SystemProbePort, SystemProbeResult};
+pub use system_probe::SystemProbePort;
 pub use tool_support::{
     ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,
     ToolSupportDetectorPort,

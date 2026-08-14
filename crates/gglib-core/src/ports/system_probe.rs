@@ -10,30 +10,6 @@
 //! - CLI injects the probe via main.rs
 
 use crate::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
-use thiserror::Error;
-
-/// Errors that can occur during system probing.
-#[derive(Debug, Error)]
-pub enum SystemProbeError {
-    /// Failed to execute a command for dependency checking.
-    #[error("Command execution failed: {0}")]
-    CommandFailed(String),
-
-    /// Failed to parse version output.
-    #[error("Version parse failed for {command}: {reason}")]
-    VersionParseFailed { command: String, reason: String },
-
-    /// GPU detection failed.
-    #[error("GPU detection failed: {0}")]
-    GpuDetectionFailed(String),
-
-    /// System memory query failed.
-    #[error("Memory query failed: {0}")]
-    MemoryQueryFailed(String),
-}
-
-/// Result type for system probe operations.
-pub type SystemProbeResult<T> = Result<T, SystemProbeError>;
 
 /// Port for probing system dependencies and hardware.
 ///
