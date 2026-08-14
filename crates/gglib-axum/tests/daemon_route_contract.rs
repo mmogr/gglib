@@ -48,8 +48,8 @@ use tower::ServiceExt;
 
 use common::ports::TEST_BASE_PORT;
 use gglib_axum::DaemonAccess;
-use gglib_axum::bootstrap::{ServerConfig, bootstrap};
-use gglib_axum::routes::create_router;
+use gglib_axum::create_router;
+use gglib_axum::{ServerConfig, bootstrap};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon;
 

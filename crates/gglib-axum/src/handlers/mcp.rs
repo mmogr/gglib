@@ -12,12 +12,14 @@ use gglib_app_services::types::{
 };
 
 /// List all MCP servers.
-pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<McpServerInfo>>, HttpError> {
+pub(crate) async fn list(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<McpServerInfo>>, HttpError> {
     Ok(Json(state.mcp_ops.list().await?))
 }
 
 /// Add a new MCP server.
-pub async fn add(
+pub(crate) async fn add(
     State(state): State<AppState>,
     Json(req): Json<CreateMcpServerRequest>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
@@ -25,7 +27,7 @@ pub async fn add(
 }
 
 /// Update an MCP server.
-pub async fn update(
+pub(crate) async fn update(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateMcpServerRequest>,
@@ -34,13 +36,16 @@ pub async fn update(
 }
 
 /// Remove an MCP server.
-pub async fn remove(State(state): State<AppState>, Path(id): Path<i64>) -> Result<(), HttpError> {
+pub(crate) async fn remove(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(), HttpError> {
     state.mcp_ops.remove(id).await?;
     Ok(())
 }
 
 /// Start an MCP server.
-pub async fn start(
+pub(crate) async fn start(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
@@ -48,7 +53,7 @@ pub async fn start(
 }
 
 /// Stop an MCP server.
-pub async fn stop(
+pub(crate) async fn stop(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
@@ -61,7 +66,7 @@ pub async fn stop(
 /// connection returns 200 with `ok: false` and the reason: a bad command is
 /// the ordinary case this exists to diagnose, and the caller wants to render
 /// it beside the config rather than handle an error.
-pub async fn test_connection(
+pub(crate) async fn test_connection(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<McpTestResult>, HttpError> {
@@ -70,14 +75,14 @@ pub async fn test_connection(
 
 /// Request body for calling an MCP tool (includes server ID).
 #[derive(Debug, Deserialize)]
-pub struct CallToolRequest {
+pub(crate) struct CallToolRequest {
     pub server_id: i64,
     #[serde(flatten)]
     pub call: McpToolCallRequest,
 }
 
 /// Call a tool on an MCP server.
-pub async fn call_tool(
+pub(crate) async fn call_tool(
     State(state): State<AppState>,
     Json(req): Json<CallToolRequest>,
 ) -> Result<Json<McpToolCallResponse>, HttpError> {
@@ -89,7 +94,7 @@ pub async fn call_tool(
 /// Resolve MCP server executable path (for diagnostics/auto-fix).
 ///
 /// Returns 200 with success:false for resolution failures (not a 404/500).
-pub async fn resolve_path(
+pub(crate) async fn resolve_path(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_core::ports::ResolutionStatus>, HttpError> {

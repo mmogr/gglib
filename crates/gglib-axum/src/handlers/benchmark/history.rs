@@ -19,7 +19,7 @@ use crate::state::AppState;
 
 /// Query parameters for `GET /api/benchmark/runs`.
 #[derive(Debug, serde::Deserialize)]
-pub struct ListRunsQuery {
+pub(crate) struct ListRunsQuery {
     /// Maximum number of runs to return (default: 20, max: 100).
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -34,19 +34,19 @@ fn default_limit() -> i64 {
 
 /// Response body for `GET /api/benchmark/runs`.
 #[derive(Debug, serde::Serialize)]
-pub struct ListRunsResponse {
+pub(crate) struct ListRunsResponse {
     pub runs: Vec<BenchmarkRun>,
 }
 
 /// Response body for `GET /api/benchmark/runs/{id}`.
 #[derive(Debug, serde::Serialize)]
-pub struct GetRunResponse {
+pub(crate) struct GetRunResponse {
     pub run: BenchmarkRun,
 }
 
 /// Query parameters for `GET /api/models/{id}/benchmark`.
 #[derive(Debug, serde::Deserialize)]
-pub struct ModelBenchmarkQuery {
+pub(crate) struct ModelBenchmarkQuery {
     /// Maximum number of compare results to return (default: 20).
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -54,7 +54,7 @@ pub struct ModelBenchmarkQuery {
 
 /// Response body for `GET /api/models/{id}/benchmark`.
 #[derive(Debug, serde::Serialize)]
-pub struct ModelBenchmarkResponse {
+pub(crate) struct ModelBenchmarkResponse {
     pub summary: Option<ModelBenchmarkSummary>,
     pub compare_history: Vec<ModelCompareResult>,
     pub perf_history: Vec<ModelPerfResult>,
@@ -62,7 +62,7 @@ pub struct ModelBenchmarkResponse {
 
 /// Query parameters for `GET /api/models/{id}/tune-history`.
 #[derive(Debug, serde::Deserialize)]
-pub struct ModelTuneHistoryQuery {
+pub(crate) struct ModelTuneHistoryQuery {
     /// Maximum number of tune candidate results to return (default: 20).
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -70,13 +70,13 @@ pub struct ModelTuneHistoryQuery {
 
 /// Response body for `GET /api/models/{id}/tune-history`.
 #[derive(Debug, serde::Serialize)]
-pub struct ModelTuneHistoryResponse {
+pub(crate) struct ModelTuneHistoryResponse {
     pub results: Vec<TuneCandidateResult>,
 }
 
 /// Query parameters for `GET /api/models/{id}/agentic-history`.
 #[derive(Debug, serde::Deserialize)]
-pub struct ModelAgenticHistoryQuery {
+pub(crate) struct ModelAgenticHistoryQuery {
     /// Maximum number of A/B reports to return (default: 20).
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -84,14 +84,14 @@ pub struct ModelAgenticHistoryQuery {
 
 /// Response body for `GET /api/models/{id}/agentic-history`.
 #[derive(Debug, serde::Serialize)]
-pub struct ModelAgenticHistoryResponse {
+pub(crate) struct ModelAgenticHistoryResponse {
     pub reports: Vec<AgenticEvalReport>,
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 /// `GET /api/benchmark/runs` — list recent benchmark runs.
-pub async fn list_runs(
+pub(crate) async fn list_runs(
     State(state): State<AppState>,
     Query(params): Query<ListRunsQuery>,
 ) -> Result<Json<ListRunsResponse>, HttpError> {
@@ -101,7 +101,7 @@ pub async fn list_runs(
 }
 
 /// `GET /api/benchmark/runs/{id}` — get a single benchmark run by ID.
-pub async fn get_run(
+pub(crate) async fn get_run(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<GetRunResponse>, HttpError> {
@@ -114,7 +114,7 @@ pub async fn get_run(
 }
 
 /// `GET /api/models/{id}/benchmark` — get the full benchmark history for one model.
-pub async fn model_benchmark(
+pub(crate) async fn model_benchmark(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Query(params): Query<ModelBenchmarkQuery>,
@@ -135,7 +135,7 @@ pub async fn model_benchmark(
 }
 
 /// `GET /api/models/{id}/tune-history` — get past tune candidate results for one model.
-pub async fn model_tune_history(
+pub(crate) async fn model_tune_history(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Query(params): Query<ModelTuneHistoryQuery>,
@@ -147,7 +147,7 @@ pub async fn model_tune_history(
 
 /// `GET /api/models/{id}/agentic-history` — past raw-vs-gglib A/B reports for
 /// one model, most recent first.
-pub async fn model_agentic_history(
+pub(crate) async fn model_agentic_history(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Query(params): Query<ModelAgenticHistoryQuery>,

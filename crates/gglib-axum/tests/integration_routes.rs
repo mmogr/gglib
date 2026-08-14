@@ -11,8 +11,8 @@ use tower::ServiceExt;
 
 use common::ports::{TEST_BASE_PORT, TEST_MODEL_PORT};
 use gglib_axum::DaemonAccess;
-use gglib_axum::bootstrap::{ServerConfig, bootstrap};
-use gglib_axum::routes::create_router;
+use gglib_axum::create_router;
+use gglib_axum::{ServerConfig, bootstrap};
 use gglib_core::CorsConfig;
 
 /// Access policy for tests: loopback, no token — the daemon's default.
@@ -205,7 +205,7 @@ async fn events_endpoint_returns_sse_stream() {
 /// This catches the bug where /api/events returns HTML instead of event-stream.
 #[tokio::test]
 async fn events_endpoint_not_intercepted_by_spa_fallback() {
-    use gglib_axum::routes::create_spa_router;
+    use gglib_axum::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -290,7 +290,7 @@ async fn nonexistent_route_returns_not_found() {
 
 #[tokio::test]
 async fn spa_fallback_returns_index_html() {
-    use gglib_axum::routes::create_spa_router;
+    use gglib_axum::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -759,7 +759,7 @@ async fn downloads_queue_accepts_get() {
 
 #[tokio::test]
 async fn model_get_by_id_returns_json_not_html() {
-    use gglib_axum::routes::create_spa_router;
+    use gglib_axum::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -808,7 +808,7 @@ async fn model_get_by_id_returns_json_not_html() {
 
 #[tokio::test]
 async fn model_tags_by_id_returns_json_not_html() {
-    use gglib_axum::routes::create_spa_router;
+    use gglib_axum::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -855,7 +855,7 @@ async fn model_tags_by_id_returns_json_not_html() {
 
 #[tokio::test]
 async fn a_path_param_route_returns_json_not_html() {
-    use gglib_axum::routes::create_spa_router;
+    use gglib_axum::create_spa_router;
     use std::io::Write;
     use tempfile::TempDir;
 

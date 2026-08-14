@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Uses the memory field most useful for model fit calculations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SystemMemoryInfoDto {
+pub(crate) struct SystemMemoryInfoDto {
     /// Total system RAM in bytes.
     pub total_ram_bytes: u64,
     /// GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon).

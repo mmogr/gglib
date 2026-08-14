@@ -10,7 +10,7 @@ use gglib_app_services::types::{
 };
 
 /// Search HuggingFace for GGUF models.
-pub async fn search(
+pub(crate) async fn search(
     State(state): State<AppState>,
     Json(req): Json<HfSearchRequest>,
 ) -> Result<Json<HfSearchResponse>, HttpError> {
@@ -18,7 +18,7 @@ pub async fn search(
 }
 
 /// Get available quantizations for a model.
-pub async fn quantizations(
+pub(crate) async fn quantizations(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
 ) -> Result<Json<HfQuantizationsResponse>, HttpError> {
@@ -28,7 +28,7 @@ pub async fn quantizations(
 }
 
 /// Check if a model supports tool/function calling.
-pub async fn tool_support(
+pub(crate) async fn tool_support(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
 ) -> Result<Json<ToolSupportResponse>, HttpError> {
@@ -38,7 +38,7 @@ pub async fn tool_support(
 /// Get model summary by exact repo ID (direct API lookup).
 ///
 /// Uses wildcard path to capture the full `owner/repo` format including slashes.
-pub async fn model_summary(
+pub(crate) async fn model_summary(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
 ) -> Result<Json<HfModelSummary>, HttpError> {

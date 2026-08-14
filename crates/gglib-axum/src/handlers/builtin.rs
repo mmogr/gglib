@@ -9,6 +9,6 @@ use gglib_mcp::BuiltinToolExecutorAdapter;
 /// The frontend uses this endpoint to register built-in tools into the
 /// `ToolRegistry` under the `"builtin"` source, replacing the stale
 /// TypeScript-defined list.  No state is needed — built-ins are static.
-pub async fn list_builtin_tools() -> Json<Vec<McpTool>> {
+pub(crate) async fn list_builtin_tools() -> Json<Vec<McpTool>> {
     Json(BuiltinToolExecutorAdapter::bare_definitions())
 }

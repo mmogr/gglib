@@ -10,7 +10,7 @@ use gglib_core::download::QueueSnapshot;
 
 /// Request to queue a download.
 #[derive(Debug, Deserialize)]
-pub struct QueueDownloadRequest {
+pub(crate) struct QueueDownloadRequest {
     pub model_id: String,
     /// Quantization to download. Accepts both "quant" and "quantization" field names
     /// for compatibility with different frontends (Tauri uses "quantization", legacy uses "quant").
@@ -21,7 +21,7 @@ pub struct QueueDownloadRequest {
 /// Response from queue_download.
 /// Canonical shape returned to all clients - never a tuple.
 #[derive(Debug, Serialize)]
-pub struct QueueDownloadResponse {
+pub(crate) struct QueueDownloadResponse {
     /// Position in the queue (0 = downloading now).
     pub position: usize,
     /// Number of shards queued (1 for single file, N for sharded models).
@@ -30,19 +30,19 @@ pub struct QueueDownloadResponse {
 
 /// Request to reorder a single download.
 #[derive(Debug, Deserialize)]
-pub struct ReorderRequest {
+pub(crate) struct ReorderRequest {
     pub model_id: String,
     pub position: usize,
 }
 
 /// Request to reorder the entire queue.
 #[derive(Debug, Deserialize)]
-pub struct ReorderFullRequest {
+pub(crate) struct ReorderFullRequest {
     pub ids: Vec<String>,
 }
 
 /// Get the current download queue.
-pub async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
+pub(crate) async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
     let snapshot = state.downloads.get_queue_snapshot().await;
 
     tracing::debug!(
@@ -58,7 +58,7 @@ pub async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
 }
 
 /// Queue a new download.
-pub async fn queue(
+pub(crate) async fn queue(
     State(state): State<AppState>,
     Json(req): Json<QueueDownloadRequest>,
 ) -> Result<Json<QueueDownloadResponse>, HttpError> {
@@ -73,7 +73,7 @@ pub async fn queue(
 }
 
 /// Remove a pending download from the queue.
-pub async fn remove(
+pub(crate) async fn remove(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
@@ -86,7 +86,7 @@ pub async fn remove(
 /// This endpoint is idempotent: returns 204 No Content whether or not
 /// the download exists. This prevents client-side errors during race
 /// conditions (e.g., SSE removes download while cancel is in-flight).
-pub async fn cancel(
+pub(crate) async fn cancel(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
@@ -99,7 +99,7 @@ pub async fn cancel(
 }
 
 /// Reorder a single download in the queue.
-pub async fn reorder(
+pub(crate) async fn reorder(
     State(state): State<AppState>,
     Json(req): Json<ReorderRequest>,
 ) -> Result<Json<usize>, HttpError> {
@@ -112,7 +112,7 @@ pub async fn reorder(
 }
 
 /// Reorder the entire download queue.
-pub async fn reorder_full(
+pub(crate) async fn reorder_full(
     State(state): State<AppState>,
     Json(req): Json<ReorderFullRequest>,
 ) -> Result<(), HttpError> {
@@ -121,7 +121,7 @@ pub async fn reorder_full(
 }
 
 /// Cancel all shards in a shard group.
-pub async fn cancel_shard_group(
+pub(crate) async fn cancel_shard_group(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
@@ -130,7 +130,7 @@ pub async fn cancel_shard_group(
 }
 
 /// Clear all failed downloads.
-pub async fn clear_failed(State(state): State<AppState>) {
+pub(crate) async fn clear_failed(State(state): State<AppState>) {
     state.downloads.clear_failed().await;
 }
 

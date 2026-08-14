@@ -26,7 +26,7 @@ use gglib_core::domain::chat::{Conversation, Message, MessageRole, NewMessage};
 
 /// Request body for creating a new conversation.
 #[derive(Debug, Deserialize)]
-pub struct CreateConversationRequest {
+pub(crate) struct CreateConversationRequest {
     pub title: Option<String>,
     pub model_id: Option<i64>,
     pub system_prompt: Option<String>,
@@ -39,7 +39,7 @@ pub struct CreateConversationRequest {
 /// key (leave unchanged) — without it, `PUT /api/conversations/:id` with
 /// `{"system_prompt": null}` silently no-ops instead of clearing the prompt.
 #[derive(Debug, Deserialize)]
-pub struct UpdateConversationRequest {
+pub(crate) struct UpdateConversationRequest {
     pub title: Option<String>,
     #[serde(default, with = "serde_with::rust::double_option")]
     pub system_prompt: Option<Option<String>>,
@@ -47,7 +47,7 @@ pub struct UpdateConversationRequest {
 
 /// Request body for saving a new message.
 #[derive(Debug, Deserialize)]
-pub struct SaveMessageRequest {
+pub(crate) struct SaveMessageRequest {
     pub conversation_id: i64,
     pub role: String,
     pub content: String,
@@ -56,7 +56,7 @@ pub struct SaveMessageRequest {
 
 /// Request body for updating a message.
 #[derive(Debug, Deserialize)]
-pub struct UpdateMessageRequest {
+pub(crate) struct UpdateMessageRequest {
     pub content: String,
     pub metadata: Option<serde_json::Value>,
 }
@@ -64,7 +64,7 @@ pub struct UpdateMessageRequest {
 /// Request body for chat completion proxy.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatProxyRequest {
+pub(crate) struct ChatProxyRequest {
     /// The port of the llama-server to forward to.
     pub port: u16,
     /// The model identifier (not used for routing, just forwarded).
@@ -99,7 +99,7 @@ pub struct ChatProxyRequest {
 
 /// A chat message in the request/response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
+pub(crate) struct ChatMessage {
     pub role: String,
     /// Content is optional when tool_calls are present (OpenAI API spec)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -114,7 +114,7 @@ pub struct ChatMessage {
 
 /// Response from llama-server chat completion (non-streaming).
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatCompletionResponse {
+pub(crate) struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
     pub created: u64,
@@ -125,7 +125,7 @@ pub struct ChatCompletionResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatChoice {
+pub(crate) struct ChatChoice {
     pub index: u32,
     pub message: ChatMessage,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,7 +133,7 @@ pub struct ChatChoice {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChatUsage {
+pub(crate) struct ChatUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
@@ -198,7 +198,7 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
 
 /// List all conversations.
 /// GET /api/conversations
-pub async fn list_conversations(
+pub(crate) async fn list_conversations(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Conversation>>, HttpError> {
     let conversations = state.core.chat_history().list_conversations().await?;
@@ -207,7 +207,7 @@ pub async fn list_conversations(
 
 /// Create a new conversation.
 /// POST /api/conversations
-pub async fn create_conversation(
+pub(crate) async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
 ) -> Result<Json<i64>, HttpError> {
@@ -222,7 +222,7 @@ pub async fn create_conversation(
 
 /// Get a single conversation by ID.
 /// GET /api/conversations/:id
-pub async fn get_conversation(
+pub(crate) async fn get_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Conversation>, HttpError> {
@@ -237,7 +237,7 @@ pub async fn get_conversation(
 
 /// Update a conversation.
 /// PUT /api/conversations/:id
-pub async fn update_conversation(
+pub(crate) async fn update_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateConversationRequest>,
@@ -252,7 +252,7 @@ pub async fn update_conversation(
 
 /// Delete a conversation and all its messages.
 /// DELETE /api/conversations/:id
-pub async fn delete_conversation(
+pub(crate) async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<(), HttpError> {
@@ -266,7 +266,7 @@ pub async fn delete_conversation(
 
 /// Get all messages for a conversation.
 /// GET /api/conversations/:id/messages
-pub async fn get_messages(
+pub(crate) async fn get_messages(
     State(state): State<AppState>,
     Path(conversation_id): Path<i64>,
 ) -> Result<Json<Vec<Message>>, HttpError> {
@@ -280,7 +280,7 @@ pub async fn get_messages(
 
 /// Save a new message.
 /// POST /api/messages
-pub async fn save_message(
+pub(crate) async fn save_message(
     State(state): State<AppState>,
     Json(req): Json<SaveMessageRequest>,
 ) -> Result<Json<i64>, HttpError> {
@@ -302,7 +302,7 @@ pub async fn save_message(
 
 /// Update a message's content.
 /// PUT /api/messages/:id
-pub async fn update_message(
+pub(crate) async fn update_message(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateMessageRequest>,
@@ -317,7 +317,7 @@ pub async fn update_message(
 
 /// Delete a message and all subsequent messages in the conversation.
 /// DELETE /api/messages/:id
-pub async fn delete_message(
+pub(crate) async fn delete_message(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<i64>, HttpError> {
@@ -381,7 +381,7 @@ fn apply_tools_to_body(
 ///
 /// - Port must be within allowed range (1024-65535)
 /// - Port must correspond to a currently running server
-pub async fn proxy_chat(
+pub(crate) async fn proxy_chat(
     State(state): State<AppState>,
     Json(request): Json<ChatProxyRequest>,
 ) -> Result<Response, HttpError> {

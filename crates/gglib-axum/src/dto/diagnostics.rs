@@ -19,7 +19,7 @@ use serde::Serialize;
 /// nesting buys nothing.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DependencyDto {
+pub(crate) struct DependencyDto {
     pub name: String,
     /// `"present" | "missing" | "optional"`.
     pub status: String,
@@ -53,7 +53,7 @@ impl From<&Dependency> for DependencyDto {
 /// for "which directory is it actually using?".
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedPathsDto {
+pub(crate) struct ResolvedPathsDto {
     pub data_root: String,
     pub resource_root: String,
     pub database_path: String,
@@ -88,7 +88,7 @@ impl From<ResolvedPaths> for ResolvedPathsDto {
 /// rather than failing the whole diagnostics request.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AccelerationDto {
+pub(crate) struct AccelerationDto {
     pub detected: Option<String>,
     pub detection_error: Option<String>,
 }
@@ -96,7 +96,7 @@ pub struct AccelerationDto {
 /// The optional `hf_xet` download accelerator.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FastDownloadsDto {
+pub(crate) struct FastDownloadsDto {
     /// Whether a usable environment is present — the same question, and the
     /// same answer, that selects the backend for a download.
     pub provisioned: bool,
@@ -118,7 +118,7 @@ pub struct FastDownloadsDto {
 /// against a resolved path should not be watching four spinners.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DiagnosticsDto {
+pub(crate) struct DiagnosticsDto {
     pub dependencies: Vec<DependencyDto>,
     pub paths: ResolvedPathsDto,
     pub acceleration: AccelerationDto,
@@ -132,7 +132,7 @@ pub struct DiagnosticsDto {
 /// to say so, not show a recommendation card with blanks in it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RecommendationDto {
+pub(crate) struct RecommendationDto {
     pub repo: String,
     pub quantization: String,
     /// Why this model, in the user's terms.

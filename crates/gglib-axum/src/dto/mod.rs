@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-pub mod diagnostics;
-pub mod system;
+pub(crate) mod diagnostics;
+pub(crate) mod system;
 
-pub use system::SystemMemoryInfoDto;
+pub(crate) use system::SystemMemoryInfoDto;
