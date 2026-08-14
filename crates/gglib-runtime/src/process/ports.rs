@@ -6,7 +6,7 @@ use tracing::debug;
 
 /// Check if a port is available by attempting to bind to it.
 /// This method binds and immediately drops the listener, which releases the port.
-pub fn is_port_available(port: u16) -> bool {
+pub(super) fn is_port_available(port: u16) -> bool {
     match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => {
             // Get the actual bound address to ensure it worked
@@ -17,7 +17,7 @@ pub fn is_port_available(port: u16) -> bool {
 }
 
 /// Allocate an available port from a range, avoiding ports already in use.
-pub fn allocate_port(base_port: u16, used_ports: &[u16]) -> Result<u16> {
+pub(super) fn allocate_port(base_port: u16, used_ports: &[u16]) -> Result<u16> {
     // Try multiple times with small delays to handle race conditions
     for attempt in 0..3 {
         for offset in 0..100 {

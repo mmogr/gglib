@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::daemon_client::{self, DaemonProbe};
 use crate::presentation::style;
-use gglib_axum::daemon::{DaemonLock, DaemonOptions, run_daemon};
+use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
 use gglib_core::{CorsConfig, DAEMON_PORT};
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.

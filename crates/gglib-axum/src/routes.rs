@@ -419,10 +419,10 @@ pub fn create_router(
 /// # Example
 /// ```no_run
 /// # use std::sync::Arc;
-/// # use gglib_axum::{CorsConfig, DaemonAccess, state::AppState};
+/// # use gglib_axum::{AppState, CorsConfig, DaemonAccess};
 /// # async fn example(state: AppState) {
 /// let access = Arc::new(DaemonAccess::loopback());
-/// let router = gglib_axum::routes::create_spa_router(state, "./dist", &CorsConfig::AllowAll, access);
+/// let router = gglib_axum::create_spa_router(state, "./dist", &CorsConfig::AllowAll, access);
 /// # }
 /// ```
 pub fn create_spa_router<P: AsRef<Path>>(

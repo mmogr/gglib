@@ -5,12 +5,9 @@ mod resolve;
 mod search;
 mod types;
 
-pub use env::{EnvProvider, SystemEnv};
-pub use fs::{FsProvider, SystemFs};
-pub use resolve::{resolve_executable, resolve_executable_with_deps};
-pub use types::{Attempt, AttemptOutcome, ResolveError, ResolveResult};
-
-#[cfg(test)]
-pub use env::MockEnv;
-#[cfg(test)]
-pub use fs::MockFs;
+// Trimmed to what is actually reached through `resolver::`. The rest of this
+// module's types are used inside `resolver/` via their defining modules, so the
+// re-exports were carrying names nobody imported by this path — invisible while
+// the module was `pub`, an unused-import error once it was not.
+pub use resolve::resolve_executable;
+pub use types::{ResolveError, ResolveResult};

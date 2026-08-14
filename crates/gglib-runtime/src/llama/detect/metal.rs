@@ -14,7 +14,7 @@ use gglib_core::utils::process::cmd;
 ///
 /// Returns `true` on Apple Silicon or on Intel Macs running macOS 10.13+.
 /// Always returns `false` on non-macOS platforms.
-pub fn has_metal_support() -> bool {
+pub(super) fn has_metal_support() -> bool {
     #[cfg(target_os = "macos")]
     {
         // Apple Silicon always has Metal

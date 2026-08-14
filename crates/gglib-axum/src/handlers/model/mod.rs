@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-pub mod downloads;
-pub mod hf;
-pub mod models;
-pub mod verification;
+pub(crate) mod downloads;
+pub(crate) mod hf;
+pub(crate) mod models;
+pub(crate) mod verification;

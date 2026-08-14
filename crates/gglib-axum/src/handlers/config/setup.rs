@@ -22,7 +22,7 @@ use gglib_runtime::llama::{
 };
 
 /// Get the full system setup status for the first-run wizard.
-pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
+pub(crate) async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
     Ok(Json(state.setup.get_status().await?))
 }
 
@@ -32,7 +32,7 @@ pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, 
 /// - `progress`: `{ "downloaded": <bytes>, "total": <bytes> }`
 /// - `complete`: `{}`
 /// - `error`: `{ "message": "<error>" }`
-pub async fn install_llama(
+pub(crate) async fn install_llama(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<LlamaProgressEvent>(64);
@@ -78,14 +78,14 @@ pub async fn install_llama(
 }
 
 /// Set up the Python fast-download helper environment.
-pub async fn setup_python(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
+pub(crate) async fn setup_python(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.setup.setup_python_env().await?;
     Ok(Json(()))
 }
 
 /// Remove the fast-download helper environment — downloads revert to native
 /// HTTP, which is a speed change, not a loss of capability.
-pub async fn disable_fast_downloads(
+pub(crate) async fn disable_fast_downloads(
     State(state): State<AppState>,
 ) -> Result<Json<DisableFastDownloadsResponse>, HttpError> {
     Ok(Json(DisableFastDownloadsResponse {
@@ -97,14 +97,16 @@ pub async fn disable_fast_downloads(
 /// "disabled" rather than claiming a change that did not happen.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DisableFastDownloadsResponse {
+pub(crate) struct DisableFastDownloadsResponse {
     pub removed: bool,
 }
 
 /// System diagnostics: dependency matrix, resolved paths, detected
 /// acceleration and accelerator state — `gglib config check-deps`, `paths`
 /// and `fast-downloads status` in one response.
-pub async fn diagnostics(State(state): State<AppState>) -> Result<Json<DiagnosticsDto>, HttpError> {
+pub(crate) async fn diagnostics(
+    State(state): State<AppState>,
+) -> Result<Json<DiagnosticsDto>, HttpError> {
     let d = state.setup.diagnostics()?;
 
     Ok(Json(DiagnosticsDto {
@@ -145,7 +147,7 @@ enum LlamaProgressEvent {
 /// `gglib config llama status`.
 ///
 /// Local and cheap (no network), unlike [`check_llama_updates`].
-pub async fn llama_status_handler() -> Result<Json<LlamaStatus>, HttpError> {
+pub(crate) async fn llama_status_handler() -> Result<Json<LlamaStatus>, HttpError> {
     // Probing spawns `llama-server --version` on a cold cache — blocking work
     // that does not belong on an async worker.
     tokio::task::spawn_blocking(llama_status)
@@ -161,7 +163,7 @@ pub async fn llama_status_handler() -> Result<Json<LlamaStatus>, HttpError> {
 /// POST rather than GET because it runs `git fetch`: it mutates the local
 /// checkout's remote refs and takes network time, so it belongs behind an
 /// explicit action rather than something a page can issue on load.
-pub async fn check_llama_updates() -> Result<Json<LlamaUpdateCheck>, HttpError> {
+pub(crate) async fn check_llama_updates() -> Result<Json<LlamaUpdateCheck>, HttpError> {
     llama_update_check()
         .await
         .map(Json)
@@ -173,7 +175,7 @@ pub async fn check_llama_updates() -> Result<Json<LlamaUpdateCheck>, HttpError> 
 ///
 /// The confirmation is the GUI's to run; by the time this is called the
 /// decision is made.
-pub async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpError> {
+pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpError> {
     if UPDATE_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst) {
         return Err(HttpError::Conflict(
             "A llama.cpp build is running — uninstalling now would delete the checkout out \
@@ -202,7 +204,8 @@ pub async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpErr
 /// nothing about a second browser tab or a second client.
 static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-pub async fn update_llama() -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
+pub(crate) async fn update_llama()
+-> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
 
     // Claim the slot before spawning; release it when the task ends whatever
@@ -299,7 +302,7 @@ fn build_event_to_sse(event: BuildEvent) -> Result<Event, Infallible> {
 /// Returns `null` when nothing in the shortlist fits. That is a real answer,
 /// not an error: a machine too small for the smallest candidate needs to be
 /// told so, not handed a recommendation it cannot run.
-pub async fn recommend_model(
+pub(crate) async fn recommend_model(
     State(state): State<AppState>,
 ) -> Result<Json<Option<RecommendationDto>>, HttpError> {
     Ok(Json(state.setup.recommend_model().map(Into::into)))

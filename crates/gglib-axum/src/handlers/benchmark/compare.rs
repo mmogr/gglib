@@ -57,7 +57,7 @@ use crate::state::AppState;
 ///
 /// data: {"type":"run_complete","run_id":42}
 /// ```
-pub async fn compare_sse(
+pub(crate) async fn compare_sse(
     State(state): State<AppState>,
     Json(config): Json<CompareConfig>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {

@@ -10,7 +10,7 @@ use gglib_app_services::types::{
 };
 
 /// List all running servers.
-pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
+pub(crate) async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
     Json(state.servers.list_servers().await)
 }
 
@@ -20,32 +20,11 @@ pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
 /// bitflag in the database. `confidence` and `detected_format` are
 /// derived from the chat template stored in model metadata — no GGUF
 /// file parsing required.
-pub async fn tool_support(
+pub(crate) async fn tool_support(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<ToolSupportResponse>, HttpError> {
     Ok(Json(state.servers.get_server_tool_support(id).await?))
-}
-
-// ============================================================================
-// Path-based handlers (legacy: /api/servers/{id}/start, /api/servers/{id}/stop)
-// ============================================================================
-
-/// Start a model server (path-based: model ID in URL).
-pub async fn start(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Json(req): Json<StartServerRequest>,
-) -> Result<Json<StartServerResponse>, HttpError> {
-    Ok(Json(state.servers.start(id, req).await?))
-}
-
-/// Stop a model server (path-based: model ID in URL).
-pub async fn stop(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> Result<Json<String>, HttpError> {
-    Ok(Json(state.servers.stop(id).await?))
 }
 
 // ============================================================================
@@ -56,7 +35,7 @@ pub async fn stop(
 /// Request body for starting a server via collection route.
 /// Maps frontend's `id` field to backend's `model_id`.
 #[derive(Debug, serde::Deserialize)]
-pub struct StartServerBody {
+pub(crate) struct StartServerBody {
     /// Model ID - frontend sends as `id`
     #[serde(alias = "id")]
     pub model_id: Option<i64>,
@@ -65,7 +44,7 @@ pub struct StartServerBody {
 }
 
 /// Start a model server (body-based: model ID in request body).
-pub async fn start_body(
+pub(crate) async fn start_body(
     State(state): State<AppState>,
     Json(body): Json<StartServerBody>,
 ) -> Result<Json<StartServerResponse>, HttpError> {
@@ -77,12 +56,12 @@ pub async fn start_body(
 
 /// Request body for stopping a server via collection route.
 #[derive(Debug, serde::Deserialize)]
-pub struct StopServerBody {
+pub(crate) struct StopServerBody {
     pub model_id: i64,
 }
 
 /// Stop a model server (body-based: model ID in request body).
-pub async fn stop_body(
+pub(crate) async fn stop_body(
     State(state): State<AppState>,
     Json(body): Json<StopServerBody>,
 ) -> Result<Json<String>, HttpError> {
@@ -100,7 +79,7 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 
 /// Get initial server logs for a specific port (REST endpoint).
-pub async fn get_logs(
+pub(crate) async fn get_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
 ) -> Json<Vec<gglib_app_services::types::ServerLogEntry>> {
@@ -111,7 +90,7 @@ pub async fn get_logs(
 ///
 /// Subscribes to the global log broadcast and filters by port.
 /// Includes keep-alive pings every 30 seconds to prevent proxy timeouts.
-pub async fn stream_logs(
+pub(crate) async fn stream_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
@@ -149,7 +128,10 @@ pub async fn stream_logs(
 }
 
 /// Clear logs for a specific server port (DELETE endpoint).
-pub async fn clear_logs(State(state): State<AppState>, Path(port): Path<u16>) -> Json<String> {
+pub(crate) async fn clear_logs(
+    State(state): State<AppState>,
+    Path(port): Path<u16>,
+) -> Json<String> {
     state.servers.clear_logs(port);
     Json(format!("Logs cleared for port {}", port))
 }

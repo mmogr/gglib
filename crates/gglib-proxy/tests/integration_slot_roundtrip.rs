@@ -22,8 +22,8 @@ use fixtures::common::{
     spawn_mock_upstream_with_slots, spawn_pinned_proxy_with_cache, spawn_proxy_with_cache,
     spawn_proxy_with_cache_for_model,
 };
-use gglib_proxy::cache_lifecycle::{StreamConfig, restore_with_retry};
 use gglib_proxy::slots::{SlotIoResult, attempt_save, slot_bin_path};
+use gglib_proxy::{StreamConfig, restore_with_retry};
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 

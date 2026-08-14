@@ -63,7 +63,7 @@ pub fn check_llama_installed() -> bool {
 /// introducing it changed nothing for anyone installing that day — it only
 /// stops the drift from here on.
 #[cfg(feature = "prebuilt")]
-pub const PINNED_LLAMA_RELEASE: &str = "b10327";
+pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
 ///
@@ -75,7 +75,7 @@ pub const PINNED_LLAMA_RELEASE: &str = "b10327";
 /// to rebuild gglib to get it, and because it is how the pin bump itself is
 /// tested before the constant moves.
 #[cfg(feature = "prebuilt")]
-pub const LLAMA_RELEASE_ENV: &str = "GGLIB_LLAMA_RELEASE";
+pub(super) const LLAMA_RELEASE_ENV: &str = "GGLIB_LLAMA_RELEASE";
 
 /// Which llama.cpp release an install should fetch.
 #[cfg(feature = "prebuilt")]

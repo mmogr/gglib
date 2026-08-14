@@ -1,6 +1,6 @@
 #![doc = include_str!("README.md")]
-pub mod agentic;
-pub mod compare;
-pub mod history;
-pub mod perf;
-pub mod tune;
+pub(crate) mod agentic;
+pub(crate) mod compare;
+pub(crate) mod history;
+pub(crate) mod perf;
+pub(crate) mod tune;

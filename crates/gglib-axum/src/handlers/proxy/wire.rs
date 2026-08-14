@@ -14,7 +14,7 @@ use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 /// Proxy status response.
 /// Matches Tauri's `ProxyStatus` for frontend compatibility.
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct ProxyStatus {
+pub(crate) struct ProxyStatus {
     pub running: bool,
     pub port: Option<u16>,
     pub current_model: Option<String>,
@@ -26,7 +26,7 @@ pub struct ProxyStatus {
 
 /// Optional configuration for starting the proxy.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct StartProxyConfig {
+pub(crate) struct StartProxyConfig {
     pub host: Option<String>,
     pub port: Option<u16>,
     pub llama_base_port: Option<u16>,
@@ -71,7 +71,7 @@ pub struct StartProxyConfig {
 /// bare `/api/servers/start` body; `proxy` the snake_case form of
 /// `/api/proxy/start`.
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct StartPinnedBody {
+pub(crate) struct StartPinnedBody {
     pub model_id: i64,
     #[serde(default)]
     pub options: gglib_app_services::types::StartServerRequest,
@@ -80,7 +80,7 @@ pub struct StartPinnedBody {
 }
 
 /// Convert runtime `ProxyStatus` to API `ProxyStatus`.
-pub fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
+pub(super) fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {
             running: true,
@@ -110,7 +110,10 @@ pub fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> Pro
 /// `ProxyOps::ensure_running`. Going straight to `DEFAULT_PROXY_PORT` here
 /// would silently ignore a changed `proxy_port` for every client of this
 /// endpoint.
-pub fn to_runtime_config(cfg: &StartProxyConfig, settings: &AppSettings) -> RuntimeProxyConfig {
+pub(super) fn to_runtime_config(
+    cfg: &StartProxyConfig,
+    settings: &AppSettings,
+) -> RuntimeProxyConfig {
     let default_context = resolve_context_size(&ServerConfigOptions {
         context_size: cfg.default_context,
         global_default_ctx: settings.default_context_size,

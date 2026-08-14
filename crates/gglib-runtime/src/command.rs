@@ -22,7 +22,7 @@ use tracing::{debug, info, warn};
 /// where the scheduler cannot see it and where it holds the slot's in-flight
 /// count off zero for as long as it sits there — which is exactly what stops a
 /// model under overlapping load from ever being swapped out.
-pub const SERVER_PARALLEL: u32 = 1;
+pub(crate) const SERVER_PARALLEL: u32 = 1;
 
 /// Whether the `GGLIB_DISABLE_MTP` environment variable requests that MTP
 /// speculative-decoding flags be suppressed.
@@ -105,7 +105,7 @@ fn select_llama_path(bootstrap_path: Option<&Path>) -> Result<PathBuf, LlamaServ
 /// Returns an error if:
 /// - The llama-server binary is not found, not executable, or inaccessible
 /// - The process fails to spawn for other reasons
-pub fn build_and_spawn(
+pub(crate) fn build_and_spawn(
     llama_server_path: Option<&Path>,
     config: &ServerConfig,
     port: u16,
@@ -313,7 +313,7 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
 /// The tasks read lines from the process output and log them
 /// via tracing. If a log sink is provided, lines are also forwarded there.
 /// They exit when the streams close.
-pub fn spawn_log_readers(
+pub(crate) fn spawn_log_readers(
     child: &mut Child,
     port: u16,
     log_sink: Option<Arc<dyn ServerLogSinkPort>>,

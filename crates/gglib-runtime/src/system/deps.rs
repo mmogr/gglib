@@ -5,25 +5,25 @@
 use gglib_core::utils::process::cmd;
 
 /// Check if libssl-dev is installed by checking for OpenSSL with pkg-config.
-pub fn check_libssl() -> Option<String> {
+pub(super) fn check_libssl() -> Option<String> {
     check_pkg_config_lib("openssl")
 }
 
 /// Check if libsqlite3-dev is installed
 #[cfg(target_os = "linux")]
-pub fn check_libsqlite3() -> Option<String> {
+pub(super) fn check_libsqlite3() -> Option<String> {
     check_pkg_config_lib("sqlite3")
 }
 
 /// Check if libasound2-dev is installed (ALSA for audio support)
 #[cfg(target_os = "linux")]
-pub fn check_libasound() -> Option<String> {
+pub(super) fn check_libasound() -> Option<String> {
     check_pkg_config_lib("alsa")
 }
 
 /// Check if libcurl-dev is installed
 #[cfg(target_os = "linux")]
-pub fn check_libcurl() -> Option<String> {
+pub(super) fn check_libcurl() -> Option<String> {
     check_pkg_config_lib("libcurl")
 }
 
@@ -32,7 +32,7 @@ pub fn check_libcurl() -> Option<String> {
 /// libclang doesn't have a pkg-config file, so we check for the shared library
 /// directly in standard paths or via llvm-config.
 #[cfg(target_os = "linux")]
-pub fn check_libclang() -> Option<String> {
+pub(super) fn check_libclang() -> Option<String> {
     // Method 1: Try llvm-config
     if let Ok(output) = cmd("llvm-config").arg("--libdir").output()
         && output.status.success()
@@ -101,7 +101,7 @@ pub fn check_libclang() -> Option<String> {
 }
 
 /// Check for a library using pkg-config.
-pub fn check_pkg_config_lib(lib_name: &str) -> Option<String> {
+pub(super) fn check_pkg_config_lib(lib_name: &str) -> Option<String> {
     let output = cmd("pkg-config")
         .args(["--modversion", lib_name])
         .output()
@@ -119,7 +119,7 @@ pub fn check_pkg_config_lib(lib_name: &str) -> Option<String> {
 
 /// Check if webkit2gtk is installed (tries 4.1 then falls back to 4.0).
 #[cfg(target_os = "linux")]
-pub fn check_webkit2gtk() -> Option<String> {
+pub(super) fn check_webkit2gtk() -> Option<String> {
     // Try webkit2gtk-4.1 first (Ubuntu 24.04+)
     if let Some(version) = check_pkg_config_lib("webkit2gtk-4.1") {
         return Some(version);
@@ -130,13 +130,13 @@ pub fn check_webkit2gtk() -> Option<String> {
 
 /// Check if librsvg is installed.
 #[cfg(target_os = "linux")]
-pub fn check_librsvg() -> Option<String> {
+pub(super) fn check_librsvg() -> Option<String> {
     check_pkg_config_lib("librsvg-2.0")
 }
 
 /// Check if libappindicator-gtk3 is installed.
 #[cfg(target_os = "linux")]
-pub fn check_libappindicator() -> Option<String> {
+pub(super) fn check_libappindicator() -> Option<String> {
     // Try ayatana-appindicator first (newer Ubuntu/Debian)
     if let Some(version) = check_pkg_config_lib("ayatana-appindicator3-0.1") {
         return Some(version);
@@ -151,7 +151,7 @@ pub fn check_libappindicator() -> Option<String> {
 /// wherever the compositor puts it instead of beside the system tray, which is
 /// a worse panel rather than a broken build.
 #[cfg(target_os = "linux")]
-pub fn check_gtk_layer_shell() -> Option<String> {
+pub(super) fn check_gtk_layer_shell() -> Option<String> {
     check_pkg_config_lib("gtk-layer-shell-0")
 }
 

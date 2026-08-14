@@ -16,7 +16,7 @@ use crate::state::AppState;
 /// - Download progress and completion
 /// - Server start/stop events
 /// - MCP server events
-pub async fn stream(
+pub(crate) async fn stream(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     state.sse.clone().subscribe()

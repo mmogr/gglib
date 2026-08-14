@@ -82,12 +82,6 @@ impl AppEventEmitter for SseBroadcaster {
     }
 }
 
-/// Create a shared SSE broadcaster wrapped in Arc.
-#[must_use]
-pub fn create_broadcaster() -> Arc<SseBroadcaster> {
-    Arc::new(SseBroadcaster::with_defaults())
-}
-
 /// Axum adapter for server lifecycle events via SSE.
 ///
 /// This adapter implements the `ServerEvents` trait by converting
@@ -95,14 +89,14 @@ pub fn create_broadcaster() -> Arc<SseBroadcaster> {
 /// via the SSE broadcaster. This keeps the core lifecycle logic
 /// transport-agnostic while allowing Axum-specific event delivery.
 #[derive(Debug, Clone)]
-pub struct AxumServerEvents {
+pub(crate) struct AxumServerEvents {
     broadcaster: SseBroadcaster,
 }
 
 impl AxumServerEvents {
     /// Create a new Axum server events adapter.
     #[must_use]
-    pub fn new(broadcaster: SseBroadcaster) -> Self {
+    pub(crate) fn new(broadcaster: SseBroadcaster) -> Self {
         Self { broadcaster }
     }
 }

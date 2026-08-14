@@ -16,15 +16,23 @@ use gglib_core::{CorsConfig, DAEMON_PORT, paths::data_root};
 use crate::bootstrap::{ServerConfig, bootstrap};
 use crate::state::AppState;
 
-pub use lock::{DaemonLock, LockError, LockInfo};
-pub use shutdown::shutdown_signal;
+// Stays `pub` because `lib.rs` re-exports it — a re-export chain must be public
+// the whole way, and demoting this link is E0365. The lint tracks the chain
+// correctly; it only fires if the root re-export is missing.
+//
+// It did fire here once, and rightly: the line used to read
+// `pub use lock::{DaemonLock, LockError, LockInfo}`, and the other two are named
+// nowhere in the workspace. The lint pointed at those; the `pub` it offers to
+// demote covers the whole statement, so applying that fix took `DaemonLock` with
+// them. They are gone now, and the line is honest.
+pub use lock::DaemonLock;
 
 /// CORS origins the daemon always allows.
 ///
 /// The desktop WebView origins plus the Vite dev server — the browser-facing
 /// clients that reach the daemon cross-origin. Same-origin requests (the SPA
 /// the daemon itself serves) need no CORS at all.
-pub fn daemon_cors_origins() -> Vec<String> {
+pub(crate) fn daemon_cors_origins() -> Vec<String> {
     vec![
         "tauri://localhost".into(),
         "http://tauri.localhost".into(),
@@ -67,7 +75,7 @@ impl Default for DaemonOptions {
 /// containing an `index.html` wins. `None` means the daemon serves the API
 /// only — every route still works, there is just no dashboard page.
 #[must_use]
-pub fn discover_static_dir() -> Option<PathBuf> {
+pub(crate) fn discover_static_dir() -> Option<PathBuf> {
     let candidates = ["./web_ui/dist", "./dist", "./web_ui/assets", "./web_ui"];
     candidates
         .iter()

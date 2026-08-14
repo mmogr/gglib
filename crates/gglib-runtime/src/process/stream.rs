@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tracing::debug;
 
-pub fn spawn_stream_reader(
+pub(crate) fn spawn_stream_reader(
     stream: impl AsyncRead + Unpin + Send + 'static,
     port: u16,
     stream_type: &'static str,

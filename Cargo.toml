@@ -145,6 +145,12 @@ must_use_candidate = "allow"
 collapsible_if = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
+# Irreconcilable with `unreachable_pub`, which this workspace is adopting so the
+# compiler can see dead code. For an item in a private module the two lints ask
+# for opposite things: `pub` trips `unreachable_pub`, `pub(crate)` trips this.
+# One of them has to be off, and this is the nursery one — and the one whose
+# advice hides dead code, since `pub` is exactly what stops `dead_code` looking.
+redundant_pub_crate = "allow"
 
 # Profile settings apply to all workspace members
 [profile.release]

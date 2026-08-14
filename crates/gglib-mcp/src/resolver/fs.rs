@@ -54,7 +54,6 @@ impl FsProvider for SystemFs {
 #[derive(Default)]
 pub struct MockFs {
     executables: std::collections::HashSet<std::path::PathBuf>,
-    non_executables: std::collections::HashSet<std::path::PathBuf>,
 }
 
 #[cfg(test)]
@@ -68,12 +67,6 @@ impl MockFs {
         self.executables.insert(path.into());
         self
     }
-
-    #[must_use]
-    pub fn with_non_executable(mut self, path: impl Into<std::path::PathBuf>) -> Self {
-        self.non_executables.insert(path.into());
-        self
-    }
 }
 
 #[cfg(test)]
@@ -81,8 +74,6 @@ impl FsProvider for MockFs {
     fn check_executable(&self, path: &Path) -> AttemptOutcome {
         if self.executables.contains(path) {
             AttemptOutcome::Ok
-        } else if self.non_executables.contains(path) {
-            AttemptOutcome::NotExecutable
         } else {
             AttemptOutcome::NotFound
         }

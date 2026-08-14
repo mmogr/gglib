@@ -11,27 +11,27 @@ use gglib_core::services::{UpdateCheckResult, VerificationReport};
 
 /// Response from verify endpoint.
 #[derive(Debug, Serialize)]
-pub struct VerifyResponse {
+pub(crate) struct VerifyResponse {
     pub report: VerificationReport,
 }
 
 /// Response from check updates endpoint.
 #[derive(Debug, Serialize)]
-pub struct CheckUpdatesResponse {
+pub(crate) struct CheckUpdatesResponse {
     pub result: UpdateCheckResult,
     pub message: String,
 }
 
 /// Request body for repair endpoint.
 #[derive(Debug, Deserialize)]
-pub struct RepairRequest {
+pub(crate) struct RepairRequest {
     /// Optional list of shard indices to repair. If None, repairs all corrupt shards.
     pub shards: Option<Vec<usize>>,
 }
 
 /// Response from repair endpoint.
 #[derive(Debug, Serialize)]
-pub struct RepairResponse {
+pub(crate) struct RepairResponse {
     pub message: String,
 }
 
@@ -41,7 +41,7 @@ pub struct RepairResponse {
 ///
 /// This endpoint streams progress via SSE and returns a verification report.
 /// Clients should subscribe to SSE events to receive real-time progress updates.
-pub async fn verify(
+pub(crate) async fn verify(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<VerifyResponse>, HttpError> {
@@ -137,7 +137,7 @@ pub async fn verify(
 /// Check for model updates on HuggingFace.
 ///
 /// GET /api/models/{id}/updates
-pub async fn check_updates(
+pub(crate) async fn check_updates(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<CheckUpdatesResponse>, HttpError> {
@@ -195,7 +195,7 @@ pub async fn check_updates(
 /// Repair model by re-downloading corrupt shards.
 ///
 /// POST /api/models/{id}/repair
-pub async fn repair(
+pub(crate) async fn repair(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<RepairRequest>,

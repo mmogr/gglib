@@ -2339,6 +2339,7 @@ dependencies = [
  "futures-util",
  "gglib-core",
  "gglib-mcp",
+ "gglib-proxy",
  "gglib-sse",
  "http-body-util",
  "regex",

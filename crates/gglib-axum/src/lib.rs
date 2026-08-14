@@ -28,20 +28,25 @@ use tokio_stream as _;
 use tracing as _;
 use tracing_subscriber as _; // Used by main.rs binary
 
-pub mod access;
-pub mod bootstrap;
-pub mod chat_api;
-pub mod daemon;
-pub mod dto;
-pub mod error;
-pub mod handlers;
-pub mod routes;
-pub mod sse;
-pub mod state;
+// Crate-internal: the re-export list below is the whole public surface. Only
+// `daemon` had consumers naming it by module path, and the three items they
+// wanted are re-exported instead — which keeps the 35 `pub mod` under
+// `handlers` auditable rather than reachable from anywhere in the workspace.
+pub(crate) mod access;
+pub(crate) mod bootstrap;
+pub(crate) mod chat_api;
+pub(crate) mod daemon;
+pub(crate) mod dto;
+pub(crate) mod error;
+pub(crate) mod handlers;
+pub(crate) mod routes;
+pub(crate) mod sse;
+pub(crate) mod state;
 
 // Re-export primary types
 pub use access::DaemonAccess;
 pub use bootstrap::{AxumContext, ServerConfig, bootstrap, start_server};
+pub use daemon::{DaemonLock, DaemonOptions, run_daemon};
 pub use error::HttpError;
 pub use gglib_core::CorsConfig;
 pub use routes::{create_router, create_spa_router};

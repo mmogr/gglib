@@ -16,7 +16,7 @@ use crate::state::AppState;
 /// shutdown, pidfile audit) runs after the HTTP server stops accepting.
 /// `409 Conflict` when this server is not hosted by `run_daemon` — an
 /// embedded or test instance has no daemon lifecycle to end.
-pub async fn shutdown(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
+pub(crate) async fn shutdown(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     match &state.daemon_shutdown {
         Some(token) => {
             tracing::info!("shutdown requested via POST /api/daemon/shutdown");

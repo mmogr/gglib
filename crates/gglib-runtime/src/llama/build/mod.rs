@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 /// Callers supply a sender so that progress can be rendered by any surface
 /// (CLI progress bar, Axum SSE, Tauri event) without this function knowing
 /// which interface is consuming the stream.
-pub fn build_llama_cpp(
+pub(super) fn build_llama_cpp(
     llama_dir: &Path,
     acceleration: Acceleration,
     tx: &mpsc::Sender<BuildEvent>,

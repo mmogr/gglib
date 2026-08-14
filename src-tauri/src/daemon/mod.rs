@@ -145,8 +145,7 @@ impl Daemon {
                 warn!("no external gglib binary ({e}); hosting the daemon in-process");
                 tauri::async_runtime::spawn(async {
                     if let Err(e) =
-                        gglib_axum::daemon::run_daemon(gglib_axum::daemon::DaemonOptions::default())
-                            .await
+                        gglib_axum::run_daemon(gglib_axum::DaemonOptions::default()).await
                     {
                         error!("in-process daemon exited with error: {e}");
                     }

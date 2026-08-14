@@ -113,7 +113,7 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub const fn search_in_etc_paths(&self, _command: &str) -> Vec<Attempt> {
+    pub(super) const fn search_in_etc_paths(&self, _command: &str) -> Vec<Attempt> {
         let _ = self; // Silence unused self warning - needed for API consistency with macOS impl
         Vec::new() // No-op on non-macOS
     }

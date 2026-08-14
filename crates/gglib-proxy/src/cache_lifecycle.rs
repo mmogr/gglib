@@ -157,7 +157,7 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
 ///
 /// Takes the already-sanitized session ID — both calling paths (streaming and
 /// non-streaming) sanitize once at cycle start, so this avoids redundant work.
-pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: &str) {
+pub(crate) async fn save_after_generation(config: &StreamConfig, sanitized_session_id: &str) {
     slots::attempt_save(
         &config.client,
         &config.base_url,
@@ -181,7 +181,7 @@ pub async fn save_after_generation(config: &StreamConfig, sanitized_session_id: 
 ///
 /// The semaphore permit is held across the ENTIRE cycle (Design Directive 1).
 /// Sanitization happens BEFORE acquire so bad session IDs never enter the gate.
-pub async fn run_with_cache<F, Fut, T>(
+pub(crate) async fn run_with_cache<F, Fut, T>(
     config: &StreamConfig,
     slot_gate: &Semaphore,
     session_id: &str,
@@ -250,7 +250,7 @@ where
 /// held across generation→save→drop.
 ///
 /// Returns `Err` immediately on sanitization failure — no semaphore touched.
-pub async fn prepare_streaming_cycle(
+pub(crate) async fn prepare_streaming_cycle(
     config: &StreamConfig,
     slot_gate: Arc<Semaphore>,
     session_id: &str,
@@ -290,7 +290,7 @@ pub async fn prepare_streaming_cycle(
 /// attempt, or a fresh disk-cache retry after `UpstreamDead`. Fails open:
 /// any [`prepare_streaming_cycle`] error degrades to `(None, None, None)` —
 /// the caller proceeds without disk cache participation for this cycle.
-pub async fn resolve_cache_triple(
+pub(crate) async fn resolve_cache_triple(
     cfg: &StreamConfig,
     slot_gate: Arc<Semaphore>,
     session_id: &str,
@@ -317,7 +317,10 @@ pub async fn resolve_cache_triple(
 /// this call just deleted. Setting `clear_all_pending` for the global case
 /// closes that race: `attempt_save` checks it before writing, and the next
 /// cycle's `restore_with_retry` clears it again once it's no longer needed.
-pub async fn clear_cache(config: &StreamConfig, session_id: Option<&str>) -> std::io::Result<()> {
+pub(crate) async fn clear_cache(
+    config: &StreamConfig,
+    session_id: Option<&str>,
+) -> std::io::Result<()> {
     // NO semaphore acquire — Design A: instant clear
     let result = slots::clear_slot_files(&config.slot_dir, session_id).await;
 

@@ -1,4 +1,4 @@
 //! Test fixtures shared by proxy integration tests.
 #![allow(dead_code)]
-pub mod common;
-pub mod sse;
+pub(crate) mod common;
+pub(crate) mod sse;

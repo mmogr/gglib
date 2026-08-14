@@ -50,7 +50,16 @@
 use std::path::PathBuf;
 
 use gglib_core::ports::ServerConfig;
-pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+// `ServerConfigOptions` stays `pub` because `lib.rs` re-exports it — a re-export
+// chain must be public the whole way, and demoting this link is E0365. The lint
+// tracks the chain correctly; it only fires if the root re-export is missing.
+//
+// Split from `resolve_context_size` for that reason. The two shared one
+// statement, nothing re-exports or names the second through this crate, and the
+// `pub` the lint offers to demote covers the whole line — so the two names had
+// to part company before either could be right.
+pub use gglib_core::server_config::ServerConfigOptions;
+pub(crate) use gglib_core::server_config::resolve_context_size;
 use tracing::debug;
 
 use crate::llama::args::{
@@ -67,7 +76,7 @@ use crate::llama::args::{
 /// rather than re-resolving at the call site is deliberate: a second
 /// resolution that drifted would narrate a launch that never happened.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedCapabilities {
+pub(crate) struct ResolvedCapabilities {
     /// Whether `--jinja` was emitted, and why.
     pub jinja: JinjaResolution,
     /// The `--reasoning-format` decision, and why.
@@ -119,7 +128,7 @@ pub fn build_server_config(
 ///
 /// Same translation, same single source of truth — `build_server_config` is a
 /// projection of this function that drops the explanation.
-pub fn build_server_config_narrated(
+pub(crate) fn build_server_config_narrated(
     model_id: i64,
     model_name: String,
     model_path: PathBuf,

@@ -40,7 +40,7 @@ use tracing::{debug, warn};
 /// first statement of the request handler, before the settings snapshot is
 /// read, and the session-id derivation downstream depends on it having already
 /// happened.
-pub const DISABLE_CANONICALIZATION_ENV: &str = "GGLIB_DISABLE_PROMPT_CANONICALIZATION";
+pub(crate) const DISABLE_CANONICALIZATION_ENV: &str = "GGLIB_DISABLE_PROMPT_CANONICALIZATION";
 
 /// Whether [`DISABLE_CANONICALIZATION_ENV`] is set to a truthy value.
 fn canonicalization_disabled_via_env() -> bool {
@@ -138,7 +138,7 @@ fn stabilise_dynamic_lines(text: &str) -> Option<String> {
 ///
 /// On any parse or serialisation failure the original `Bytes` are returned
 /// unchanged — zero blast radius for unexpected request shapes.
-pub fn canonicalize_system_prompt(body: Bytes) -> Bytes {
+pub(crate) fn canonicalize_system_prompt(body: Bytes) -> Bytes {
     canonicalize_system_prompt_with(body, canonicalization_disabled_via_env())
 }
 
@@ -234,7 +234,7 @@ fn canonicalize_system_prompt_with(body: Bytes, disabled: bool) -> Bytes {
 ///
 /// No `tools` array, fewer than two entries, or a re-serialization failure
 /// all return the original `Bytes` unchanged.
-pub fn canonicalize_tool_order(body: Bytes) -> Bytes {
+pub(crate) fn canonicalize_tool_order(body: Bytes) -> Bytes {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return body;
     };
@@ -313,7 +313,7 @@ const FALLBACK_ID_DIGEST_BYTES: usize = 16;
 /// other's cache; llama-server still re-syncs against whatever prefix
 /// actually matches the incoming prompt, so the worst case is a wasted
 /// restore/save, never a wrong answer.
-pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
+pub(crate) fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
     let mut value: serde_json::Value = serde_json::from_slice(body).ok()?;
     let messages_raw = value.get_mut("messages")?.take();
     let messages: Vec<ChatMessage> = serde_json::from_value(messages_raw).ok()?;
@@ -379,7 +379,7 @@ pub fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
 /// actually enabled, so this costs nothing outside `-v` investigations.
 /// Fail-open: any parse failure or missing `tools` field is simply not
 /// logged, never an error.
-pub fn log_tool_names_for_diagnostics(body: &Bytes, session_id: &str) {
+pub(crate) fn log_tool_names_for_diagnostics(body: &Bytes, session_id: &str) {
     if !tracing::enabled!(tracing::Level::DEBUG) {
         return;
     }

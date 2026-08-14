@@ -44,7 +44,7 @@ use crate::state::AppState;
 /// `Content-Type: text/event-stream`. Frames carry [`BenchmarkEvent`]s
 /// (`agentic_arm_started`, `agentic_task_complete`,
 /// `agentic_eval_complete`, `run_failed`).
-pub async fn agentic_sse(
+pub(crate) async fn agentic_sse(
     State(state): State<AppState>,
     Json(config): Json<AgenticEvalConfig>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {

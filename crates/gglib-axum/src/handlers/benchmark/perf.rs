@@ -51,7 +51,7 @@ use crate::state::AppState;
 ///
 /// data: {"type":"run_complete","run_id":17}
 /// ```
-pub async fn perf_sse(
+pub(crate) async fn perf_sse(
     State(state): State<AppState>,
     Json(config): Json<PerfConfig>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {

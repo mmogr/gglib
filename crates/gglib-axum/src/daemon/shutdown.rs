@@ -19,7 +19,7 @@ const SHUTDOWN_WATCHDOG: Duration = Duration::from_secs(10);
 ///
 /// Completes on SIGINT (Ctrl-C) on every platform, and additionally on
 /// SIGTERM on Unix, which is what a service manager sends.
-pub async fn shutdown_signal() {
+pub(crate) async fn shutdown_signal() {
     let interrupt = async {
         if let Err(e) = tokio::signal::ctrl_c().await {
             warn!("could not listen for Ctrl-C ({e}); shutdown will not be graceful");
@@ -57,7 +57,7 @@ pub async fn shutdown_signal() {
 /// Every step is best-effort: a failing step is logged and the next one
 /// still runs, because each protects a different resource (proxy clients,
 /// llama-server children, download partials, pidfiles).
-pub async fn perform_shutdown(state: &AppState) {
+pub(super) async fn perform_shutdown(state: &AppState) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 

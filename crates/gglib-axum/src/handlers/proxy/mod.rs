@@ -2,7 +2,7 @@
 
 mod wire;
 
-pub use wire::{ProxyStatus, StartPinnedBody, StartProxyConfig};
+pub(crate) use wire::{ProxyStatus, StartPinnedBody, StartProxyConfig};
 
 use axum::{Json, extract::State};
 
@@ -19,7 +19,7 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
 
 /// Start the proxy pinned to one model, resolving the launch cascade
 /// server-side — the GUI counterpart of `gglib serve`.
-pub async fn start_pinned(
+pub(crate) async fn start_pinned(
     State(state): State<AppState>,
     Json(body): Json<StartPinnedBody>,
 ) -> Result<Json<ProxyStatus>, HttpError> {
@@ -56,12 +56,12 @@ pub async fn start_pinned(
 }
 
 /// Get current proxy status.
-pub async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
+pub(crate) async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
     Json(fetch_status(&state).await)
 }
 
 /// Start the proxy (idempotent).
-pub async fn start(
+pub(crate) async fn start(
     State(state): State<AppState>,
     Json(cfg): Json<Option<StartProxyConfig>>,
 ) -> Result<Json<ProxyStatus>, HttpError> {
@@ -123,7 +123,7 @@ pub async fn start(
 }
 
 /// Stop the proxy (idempotent).
-pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, HttpError> {
+pub(crate) async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, HttpError> {
     // Idempotent: if not running (Conflict), treat as success
     match state.proxy.stop().await {
         Ok(()) => {

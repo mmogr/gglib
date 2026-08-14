@@ -72,7 +72,7 @@ impl From<ModelListQueryParams> for ModelListQuery {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// List models, optionally filtered and sorted via query parameters.
-pub async fn list(
+pub(crate) async fn list(
     State(state): State<AppState>,
     Query(params): Query<ModelListQueryParams>,
 ) -> Result<Json<Vec<GuiModel>>, HttpError> {
@@ -80,7 +80,7 @@ pub async fn list(
 }
 
 /// Get a single model by ID.
-pub async fn get(
+pub(crate) async fn get(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<GuiModel>, HttpError> {
@@ -88,7 +88,7 @@ pub async fn get(
 }
 
 /// Add a new model from a local file.
-pub async fn add(
+pub(crate) async fn add(
     State(state): State<AppState>,
     Json(req): Json<AddModelRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
@@ -102,7 +102,7 @@ pub async fn add(
 /// `server_defaults` additionally supports explicit-`null` clearing via
 /// double-`Option` semantics — i.e. this handler already behaves like a
 /// partial update regardless of which verb the caller uses.
-pub async fn update(
+pub(crate) async fn update(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateModelRequest>,
@@ -111,7 +111,7 @@ pub async fn update(
 }
 
 /// Remove a model.
-pub async fn remove(
+pub(crate) async fn remove(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<RemoveModelRequest>,
@@ -120,12 +120,14 @@ pub async fn remove(
 }
 
 /// Get all unique tags.
-pub async fn list_tags(State(state): State<AppState>) -> Result<Json<Vec<String>>, HttpError> {
+pub(crate) async fn list_tags(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<String>>, HttpError> {
     Ok(Json(state.models.list_tags().await?))
 }
 
 /// Get tags for a specific model.
-pub async fn get_model_tags(
+pub(crate) async fn get_model_tags(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<String>>, HttpError> {
@@ -133,7 +135,7 @@ pub async fn get_model_tags(
 }
 
 /// Add a tag to a model.
-pub async fn add_tag(
+pub(crate) async fn add_tag(
     State(state): State<AppState>,
     Path((id, tag)): Path<(i64, String)>,
 ) -> Result<(), HttpError> {
@@ -143,12 +145,12 @@ pub async fn add_tag(
 
 /// Request body for adding a tag via POST to /api/models/{id}/tags
 #[derive(serde::Deserialize)]
-pub struct AddTagRequest {
+pub(crate) struct AddTagRequest {
     pub tag: String,
 }
 
 /// Add a tag to a model (body-based version for frontend transport).
-pub async fn add_tag_body(
+pub(crate) async fn add_tag_body(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(request): Json<AddTagRequest>,
@@ -158,7 +160,7 @@ pub async fn add_tag_body(
 }
 
 /// Remove a tag from a model.
-pub async fn remove_tag(
+pub(crate) async fn remove_tag(
     State(state): State<AppState>,
     Path((id, tag)): Path<(i64, String)>,
 ) -> Result<(), HttpError> {
@@ -167,7 +169,7 @@ pub async fn remove_tag(
 }
 
 /// Get filter options for the model list UI.
-pub async fn filter_options(
+pub(crate) async fn filter_options(
     State(state): State<AppState>,
 ) -> Result<Json<ModelFilterOptions>, HttpError> {
     Ok(Json(state.models.get_filter_options().await?))
@@ -175,14 +177,14 @@ pub async fn filter_options(
 
 /// Request body for `POST /api/models/{id}/retag`.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct RetagBody {
+pub(crate) struct RetagBody {
     #[serde(default)]
     pub full: bool,
 }
 
 /// Re-run capability detection over a model's stored metadata —
 /// `gglib model retag` for one model.
-pub async fn retag(
+pub(crate) async fn retag(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(body): Json<RetagBody>,
@@ -192,7 +194,7 @@ pub async fn retag(
 
 /// Commit-SHA update check — `gglib model check-updates` for one model,
 /// distinct from the shard-level diff on `/{id}/updates`.
-pub async fn check_upgrade(
+pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_app_services::types::UpgradeCheck>, HttpError> {
@@ -201,14 +203,14 @@ pub async fn check_upgrade(
 
 /// Re-download at the latest HuggingFace revision and rewrite the row —
 /// `gglib model upgrade`. Blocking for the download's duration, like the CLI.
-pub async fn apply_upgrade(
+pub(crate) async fn apply_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_app_services::types::UpgradeOutcome>, HttpError> {
     Ok(Json(state.models.apply_upgrade(id).await?))
 }
 
-pub async fn set_capabilities(
+pub(crate) async fn set_capabilities(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<SetCapabilitiesRequest>,
@@ -222,7 +224,7 @@ pub async fn set_capabilities(
 /// the [`GuiModel`] returned by `GET /api/models/{id}`.  Includes raw GGUF
 /// metadata, MoE topology, full HuggingFace provenance, capability flags,
 /// inference defaults, and timestamps.
-pub async fn detail(
+pub(crate) async fn detail(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<ModelDetailDto>, HttpError> {
@@ -231,7 +233,7 @@ pub async fn detail(
 
 /// Query parameters for `GET /api/models/{id}/explain`.
 #[derive(Debug, Default, serde::Deserialize)]
-pub struct ExplainQueryParams {
+pub(crate) struct ExplainQueryParams {
     /// Name of a configured inference profile to apply on top of the model's
     /// own defaults. An unknown name is a 400 listing the configured ones,
     /// not a silent fall back to the unprofiled resolution.
@@ -243,7 +245,7 @@ pub struct ExplainQueryParams {
 /// The HTTP equivalent of `gglib model explain`. Both surfaces call
 /// `ModelOps::explain_sampling`, so neither can describe a hierarchy that
 /// differs from the one the proxy actually resolves.
-pub async fn explain(
+pub(crate) async fn explain(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Query(params): Query<ExplainQueryParams>,

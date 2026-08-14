@@ -3,7 +3,7 @@ mod dto;
 mod guard;
 mod retry_notice;
 
-pub use dto::{AgentChatRequest, AgentRequestConfig};
+pub(crate) use dto::AgentChatRequest;
 
 use std::collections::HashSet;
 use std::convert::Infallible;
@@ -64,7 +64,7 @@ use retry_notice::RetryNotice;
 /// Closing the connection (e.g. `ctrl-C` in curl) aborts the background task
 /// immediately — no further LLM tokens are generated and no further tools are
 /// called.
-pub async fn chat(
+pub(crate) async fn chat(
     State(state): State<AppState>,
     Json(req): Json<AgentChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {

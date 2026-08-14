@@ -24,7 +24,7 @@ use gglib_core::domain::agent::{AgentConfig, AgentMessage};
 /// higher repetition threshold) should pass its name fragment here.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
-pub struct AgentRequestConfig {
+pub(crate) struct AgentRequestConfig {
     /// Maximum number of LLM→tool→LLM iterations.
     /// Clamped to [`MAX_ITERATIONS_CEILING`] server-side.
     pub max_iterations: Option<usize>,
@@ -78,7 +78,7 @@ impl AgentRequestConfig {
 
 /// Request body for `POST /api/agent/chat`.
 #[derive(Debug, Deserialize)]
-pub struct AgentChatRequest {
+pub(crate) struct AgentChatRequest {
     /// Port of the llama-server instance to drive.
     ///
     /// Must match a currently-running server (the same constraint as the chat

@@ -64,7 +64,7 @@ use crate::state::AppState;
 /// `Content-Type: text/event-stream`. Each frame carries one [`BenchmarkEvent`]
 /// serialised as JSON (`tune_candidate_started`, `tune_task_complete`,
 /// `tune_pruned`, `tune_candidate_complete`, `run_complete`/`run_failed`).
-pub async fn tune_sse(
+pub(crate) async fn tune_sse(
     State(state): State<AppState>,
     Json(config): Json<TuneConfig>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
@@ -107,7 +107,7 @@ pub async fn tune_sse(
 /// [`ApplyOutcome`]: a refusal is a first-class verdict naming its evidence,
 /// not an error. Errors are reserved for a run that does not exist, is not a
 /// tune run, or storage failing.
-pub async fn tune_apply(
+pub(crate) async fn tune_apply(
     State(state): State<AppState>,
     Path(run_id): Path<i64>,
 ) -> Result<Json<ApplyOutcome>, HttpError> {

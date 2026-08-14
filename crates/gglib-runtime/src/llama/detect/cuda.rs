@@ -40,13 +40,13 @@ use super::tools::{command_stdout, parse_version_tuple};
 /// Returns `true` if `nvcc` is available in `$PATH`. This is the
 /// definitive check — if `nvcc` isn't reachable the build will fail
 /// regardless.
-pub fn has_cuda_toolkit() -> bool {
+pub(super) fn has_cuda_toolkit() -> bool {
     command_exists("nvcc")
 }
 
 /// Get the CUDA version as a `(major, minor)` tuple.
 #[cfg(target_os = "linux")]
-pub fn get_cuda_version_tuple() -> Option<(u32, u32)> {
+pub(crate) fn get_cuda_version_tuple() -> Option<(u32, u32)> {
     let stdout = command_stdout("nvcc", &["--version"])?;
     // Parse "Cuda compilation tools, release X.Y, ..." format
     for line in stdout.lines() {
@@ -85,7 +85,7 @@ fn get_gcc_version_tuple() -> Option<(u32, u32)> {
 /// 4. `/usr/local/cuda` (generic symlink)
 /// 5. Windows standard locations
 #[cfg(feature = "cli")]
-pub fn get_cuda_path() -> Option<String> {
+pub(crate) fn get_cuda_path() -> Option<String> {
     if let Ok(cuda_path) = std::env::var("CUDA_PATH")
         && std::path::Path::new(&cuda_path).exists()
     {
@@ -150,7 +150,7 @@ pub fn get_cuda_path() -> Option<String> {
 /// 3. `gcc-12` / `gcc-11` (known CUDA-compatible versions)
 /// 4. System `gcc` (fallback)
 #[cfg(target_os = "linux")]
-pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> {
+pub(crate) fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> {
     // Check user override
     if let Ok(cc) = std::env::var("CC") {
         if cc.contains("clang") {
@@ -211,7 +211,7 @@ fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
 /// a detailed message including remediation steps. Validation is only
 /// performed on Linux; other platforms return `Ok(())` unconditionally.
 #[cfg(feature = "cli")]
-pub fn validate_cuda_gcc_compatibility() -> Result<()> {
+pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         Ok(())
