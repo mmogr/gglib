@@ -113,9 +113,6 @@ impl From<CoreError> for HttpError {
             CoreError::Repository(repo_err) => repo_err.into(),
             CoreError::Settings(settings_err) => HttpError::BadRequest(settings_err.to_string()),
             CoreError::Validation(msg) => HttpError::BadRequest(msg),
-            CoreError::Configuration(msg) => HttpError::Internal(format!("Config: {}", msg)),
-            CoreError::ExternalService(msg) => HttpError::ServiceUnavailable(msg),
-            CoreError::Internal(msg) => HttpError::Internal(msg),
         }
     }
 }

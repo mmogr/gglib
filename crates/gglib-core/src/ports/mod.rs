@@ -163,16 +163,4 @@ pub enum CoreError {
     /// Validation error (invalid input).
     #[error("Validation error: {0}")]
     Validation(String),
-
-    /// Configuration error.
-    #[error("Configuration error: {0}")]
-    Configuration(String),
-
-    /// External service error.
-    #[error("External service error: {0}")]
-    ExternalService(String),
-
-    /// Internal error (unexpected condition).
-    #[error("Internal error: {0}")]
-    Internal(String),
 }
