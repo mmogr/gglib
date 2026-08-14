@@ -129,7 +129,7 @@ fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::domain::agent::{AssistantContent, tool_types::ToolCall};
+    use gglib_core::domain::agent::{AssistantContent, ToolCall};
 
     use super::*;
 

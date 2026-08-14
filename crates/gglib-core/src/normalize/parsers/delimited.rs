@@ -80,7 +80,7 @@ enum Channel {
 /// Parser for delimited tool-call dialects, configured by a
 /// [`DialectSpec`].  See module docs.
 #[derive(Debug)]
-pub struct DelimitedToolCallParser {
+pub(crate) struct DelimitedToolCallParser {
     /// The dialect being parsed: markers, body codecs, and ID prefix.
     spec: DialectSpec,
     text: ChannelState,
@@ -93,7 +93,7 @@ pub struct DelimitedToolCallParser {
 impl DelimitedToolCallParser {
     /// Construct a fresh parser for `spec` with empty per-channel buffers.
     #[must_use]
-    pub fn new(spec: DialectSpec) -> Self {
+    pub(crate) fn new(spec: DialectSpec) -> Self {
         Self {
             spec,
             text: ChannelState::default(),

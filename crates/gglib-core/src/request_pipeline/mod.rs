@@ -1,13 +1,13 @@
 #![doc = include_str!("README.md")]
 pub mod apply;
-pub mod constrain;
-pub mod messages;
-pub mod model_context;
-pub mod request_shape;
+pub(crate) mod constrain;
+pub(crate) mod messages;
+pub(crate) mod model_context;
+pub(crate) mod request_shape;
 pub mod resolve;
-pub mod sampling;
-pub mod tools;
-pub mod truncation;
+pub(crate) mod sampling;
+pub(crate) mod tools;
+pub(crate) mod truncation;
 pub mod validate;
 
 pub use apply::{PipelineReport, apply};
@@ -30,7 +30,7 @@ mod tests_support {
 
     /// A minimal, inert [`ModelSummary`]. Tests set only the fields they care
     /// about, so adding a field to `ModelSummary` doesn't touch every test.
-    pub fn summary() -> ModelSummary {
+    pub(super) fn summary() -> ModelSummary {
         ModelSummary {
             dialect: None,
             id: 7,

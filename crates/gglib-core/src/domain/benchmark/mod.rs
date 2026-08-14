@@ -1,11 +1,11 @@
 #![doc = include_str!("README.md")]
 
 pub mod agentic;
-pub mod compare;
-pub mod events;
-pub mod perf;
+pub(crate) mod compare;
+pub(crate) mod events;
+pub(crate) mod perf;
 pub mod run;
-pub mod summary;
+pub(crate) mod summary;
 pub mod tune;
 
 pub use agentic::{

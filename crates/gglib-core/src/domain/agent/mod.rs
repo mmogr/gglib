@@ -1,13 +1,13 @@
 #![doc = include_str!("README.md")]
 pub mod config;
-pub mod events;
-pub mod fnv1a;
-pub mod loop_detection;
-pub mod messages;
+pub(crate) mod events;
+pub(crate) mod fnv1a;
+pub(crate) mod loop_detection;
+pub(crate) mod messages;
 mod messages_serde;
-pub mod stagnation;
+pub(crate) mod stagnation;
 pub mod tool_display;
-pub mod tool_types;
+pub(crate) mod tool_types;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{

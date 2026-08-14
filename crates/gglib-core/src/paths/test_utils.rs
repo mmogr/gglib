@@ -11,7 +11,7 @@ use std::sync::Mutex;
 /// All tests that read or write environment variables (especially `GGLIB_DATA_DIR`)
 /// must acquire this lock to prevent race conditions. Without this, concurrent
 /// tests can interfere with each other's environment state.
-pub static ENV_LOCK: Mutex<()> = Mutex::new(());
+pub(super) static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 /// RAII guard that restores an environment variable to its original value on drop.
 ///
@@ -23,7 +23,7 @@ pub static ENV_LOCK: Mutex<()> = Mutex::new(());
 /// // ... test code that uses GGLIB_DATA_DIR ...
 /// // Original value restored when _env is dropped
 /// ```
-pub struct EnvVarGuard {
+pub(super) struct EnvVarGuard {
     key: String,
     previous: Option<String>,
 }
@@ -31,7 +31,7 @@ pub struct EnvVarGuard {
 impl EnvVarGuard {
     /// Set an environment variable and return a guard that will restore it.
     #[allow(unsafe_code)]
-    pub fn set(key: &str, value: &str) -> Self {
+    pub(super) fn set(key: &str, value: &str) -> Self {
         let previous = env::var(key).ok();
         unsafe {
             env::set_var(key, value);

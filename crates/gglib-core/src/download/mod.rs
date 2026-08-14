@@ -1,11 +1,11 @@
 #![doc = include_str!("README.md")]
-pub mod completion;
-pub mod errors;
-pub mod events;
-pub mod format;
+pub(crate) mod completion;
+pub(crate) mod errors;
+pub(crate) mod events;
+pub(crate) mod format;
 pub mod queue;
-pub mod rate;
-pub mod types;
+pub(crate) mod rate;
+pub(crate) mod types;
 
 // Re-export commonly used types
 pub use completion::{

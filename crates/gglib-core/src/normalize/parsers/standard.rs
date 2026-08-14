@@ -12,12 +12,12 @@ use super::super::parser::{ParserOutput, ToolCallParser};
 
 /// Identity-passthrough parser.  See module docs.
 #[derive(Default, Debug)]
-pub struct StandardJsonParser;
+pub(crate) struct StandardJsonParser;
 
 impl StandardJsonParser {
     /// Construct a fresh parser.  No state, so this is just `Default::default`.
     #[must_use]
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self
     }
 }
