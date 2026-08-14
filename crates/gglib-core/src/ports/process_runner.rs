@@ -1,13 +1,14 @@
-//! Process runner trait definition.
+//! The two value types a model-server launch is described and tracked by.
 //!
-//! This port defines the interface for managing model server processes.
-//! Implementations handle all process lifecycle details internally.
+//! [`ServerConfig`] is what a caller asks for; [`ProcessHandle`] is what it
+//! gets back. The `ProcessRunner` trait this file is named after is gone —
+//! nothing ever implemented it, and `ModelRuntimePort` is the port that
+//! actually carries launches. The file keeps its name only because these two
+//! types are reached as `ports::{ServerConfig, ProcessHandle}` regardless.
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use super::ProcessError;
 use crate::domain::InferenceConfig;
 
 /// Configuration for starting a model server.
@@ -296,27 +297,4 @@ impl ProcessHandle {
             started_at,
         }
     }
-}
-
-/// Process runner for managing model server processes.
-///
-/// This trait abstracts process management for testability and
-/// potential alternative backends (local, remote, containerized).
-///
-/// # Design Rules
-///
-/// - Express **intent**, not implementation detail
-/// - No CLI/Tauri/Axum concerns in signatures
-/// - Must support: mock runner, remote runner, alternative inference backends
-#[async_trait]
-pub trait ProcessRunner: Send + Sync {
-    /// Start a model server with the given configuration.
-    ///
-    /// Returns a handle that can be used to manage the process.
-    async fn start(&self, config: ServerConfig) -> Result<ProcessHandle, ProcessError>;
-
-    /// Stop a running server.
-    ///
-    /// Returns `Err(ProcessError::NotRunning)` if the process isn't running.
-    async fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError>;
 }

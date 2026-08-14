@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
 use gglib_core::ports::chat_history::ChatHistoryError;
-use gglib_core::{CoreError, ProcessError, RepositoryError};
+use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -111,7 +111,6 @@ impl From<CoreError> for HttpError {
     fn from(err: CoreError) -> Self {
         match err {
             CoreError::Repository(repo_err) => repo_err.into(),
-            CoreError::Process(proc_err) => proc_err.into(),
             CoreError::Settings(settings_err) => HttpError::BadRequest(settings_err.to_string()),
             CoreError::Validation(msg) => HttpError::BadRequest(msg),
             CoreError::Configuration(msg) => HttpError::Internal(format!("Config: {}", msg)),
@@ -131,20 +130,6 @@ impl From<RepositoryError> for HttpError {
                 HttpError::Internal(format!("Serialization: {}", msg))
             }
             RepositoryError::Constraint(msg) => HttpError::BadRequest(msg),
-        }
-    }
-}
-
-impl From<ProcessError> for HttpError {
-    fn from(err: ProcessError) -> Self {
-        match err {
-            ProcessError::NotRunning(msg) => HttpError::NotFound(msg),
-            ProcessError::StartFailed(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::StopFailed(msg) => HttpError::Internal(format!("Stop failed: {}", msg)),
-            ProcessError::HealthCheckFailed(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::Configuration(msg) => HttpError::BadRequest(msg),
-            ProcessError::ResourceExhausted(msg) => HttpError::ServiceUnavailable(msg),
-            ProcessError::Internal(msg) => HttpError::Internal(msg),
         }
     }
 }

@@ -51,9 +51,8 @@ pub use ports::{
     GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
     HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorInfo, McpRepositoryError,
     McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter,
-    NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver,
-    Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig, SettingsRepository,
-    ToolExecutorPort, UsageSink,
+    NoopEmitter, NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError,
+    Resolution, ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{

@@ -61,7 +61,7 @@ pub use model_runtime::{
     Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
     ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
 };
-pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig};
+pub use process_runner::{ProcessHandle, ServerConfig};
 pub use retry_observer::RetryObserver;
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
@@ -145,41 +145,6 @@ pub enum RepositoryError {
     Constraint(String),
 }
 
-/// Domain-specific errors for process runner operations.
-///
-/// This error type abstracts away process management implementation details
-/// and provides a clean interface for services to handle process failures.
-#[derive(Debug, Error)]
-pub enum ProcessError {
-    /// Failed to start the process.
-    #[error("Failed to start: {0}")]
-    StartFailed(String),
-
-    /// Failed to stop the process.
-    #[error("Failed to stop: {0}")]
-    StopFailed(String),
-
-    /// The process is not running.
-    #[error("Process not running: {0}")]
-    NotRunning(String),
-
-    /// Health check failed.
-    #[error("Health check failed: {0}")]
-    HealthCheckFailed(String),
-
-    /// Configuration error.
-    #[error("Configuration error: {0}")]
-    Configuration(String),
-
-    /// Resource exhaustion (e.g., no available ports).
-    #[error("Resource exhaustion: {0}")]
-    ResourceExhausted(String),
-
-    /// Internal process error.
-    #[error("Internal error: {0}")]
-    Internal(String),
-}
-
 /// Core error type for semantic domain errors.
 ///
 /// This is the canonical error type used across the core domain.
@@ -190,10 +155,6 @@ pub enum CoreError {
     /// Repository operation failed.
     #[error(transparent)]
     Repository(#[from] RepositoryError),
-
-    /// Process operation failed.
-    #[error(transparent)]
-    Process(#[from] ProcessError),
 
     /// Settings validation error.
     #[error(transparent)]

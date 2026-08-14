@@ -28,19 +28,12 @@ pub enum CliError {
     /// Database error.
     #[error("Database error: {0}")]
     Database(String),
-
-    /// Process execution error.
-    #[error("Process error: {0}")]
-    Process(String),
 }
-
-impl CliError {}
 
 impl From<CoreError> for CliError {
     fn from(err: CoreError) -> Self {
         match err {
             CoreError::Repository(repo_err) => CliError::Database(repo_err.to_string()),
-            CoreError::Process(proc_err) => CliError::Process(proc_err.to_string()),
             CoreError::Settings(settings_err) => CliError::Config(settings_err.to_string()),
             CoreError::Validation(msg) => CliError::Arguments(msg),
             CoreError::Configuration(msg) => CliError::Config(msg),
