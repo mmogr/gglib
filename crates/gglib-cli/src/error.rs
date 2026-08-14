@@ -34,25 +34,7 @@ pub enum CliError {
     Process(String),
 }
 
-impl CliError {
-    /// Map error to appropriate exit code.
-    ///
-    /// Exit codes follow Unix conventions:
-    /// - 0: Success
-    /// - 1: General error
-    /// - 2: Misuse of shell command (invalid arguments)
-    /// - 64-78: Reserved for specific error categories (see sysexits.h)
-    pub fn exit_code(&self) -> i32 {
-        match self {
-            CliError::Core(_) => 1,
-            CliError::Arguments(_) => 2, // EX_USAGE
-            CliError::Io(_) => 74,       // EX_IOERR
-            CliError::Config(_) => 78,   // EX_CONFIG
-            CliError::Database(_) => 73, // EX_CANTCREAT (closest fit)
-            CliError::Process(_) => 71,  // EX_OSERR
-        }
-    }
-}
+impl CliError {}
 
 impl From<CoreError> for CliError {
     fn from(err: CoreError) -> Self {

@@ -211,13 +211,6 @@ impl ServerConfig {
         self
     }
 
-    /// Add extra arguments to pass to the server.
-    #[must_use]
-    pub fn with_extra_args(mut self, args: Vec<String>) -> Self {
-        self.extra_args = args;
-        self
-    }
-
     /// Set the KV cache slot-save directory (`--slot-save-path`).
     ///
     /// `None` disables the disk slot-persistence feature (no

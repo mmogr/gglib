@@ -24,7 +24,7 @@ This is a **utility crate** — it has no layer dependencies and can be used by 
 │                                                                                     │
 │  Constants (populated at compile time):                                             │
 │  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐         │
-│  │      `SEMVER`       │  │   GIT_SHA_SHORT     │  │     GIT_DIRTY       │         │
+│  │      `SEMVER`       │  │   GIT_SHA_SHORT     │  │    HAS_GIT_SHA      │         │
 │  │   "0.2.9"           │  │     "a1b2c3d"       │  │    true/false       │         │
 │  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘         │
 │                                                                                     │
@@ -42,7 +42,6 @@ This is a **utility crate** — it has no layer dependencies and can be used by 
 |----------|------|-------------|---------|
 | `SEMVER` | `&str` | `SemVer` version from Cargo.toml | `"0.2.9"` |
 | `GIT_SHA_SHORT` | `&str` | Short git commit hash (7 chars) | `"a1b2c3d"` |
-| `GIT_DIRTY` | `bool` | Whether repo has uncommitted changes | `true` |
 | `HAS_GIT_SHA` | `bool` | Whether git SHA is valid (not "unknown") | `true` |
 | `LONG_VERSION` | `&str` | Version with SHA if available | `"0.2.9 (a1b2c3d)"` |
 | `LONG_VERSION_WITH_SHA` | `&str` | Always includes SHA placeholder | `"0.2.9 (a1b2c3d)"` |
@@ -81,7 +80,6 @@ The `build.rs` script uses `vergen-gix` to extract git information at compile ti
 
 When git is unavailable (e.g., downloaded tarball), constants fall back to safe defaults:
 - `GIT_SHA_SHORT` → `"unknown"`
-- `GIT_DIRTY` → `false`
 - `LONG_VERSION` → just `SEMVER`
 
 ## Internal Structure

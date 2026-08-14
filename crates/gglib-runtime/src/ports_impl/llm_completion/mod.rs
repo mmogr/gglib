@@ -188,14 +188,6 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Override the send-phase timeout (connect through first response
-    /// headers).  The default is [`DEFAULT_SEND_TIMEOUT_SECS`].
-    #[must_use]
-    pub fn with_send_timeout(mut self, secs: u64) -> Self {
-        self.send_timeout_secs = secs;
-        self
-    }
-
     /// Set the resolved per-model context, from
     /// [`gglib_core::request_pipeline::resolve`].
     ///

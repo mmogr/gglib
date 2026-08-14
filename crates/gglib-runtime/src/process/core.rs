@@ -157,11 +157,6 @@ impl GuiProcessCore {
         self.processes.get(&model_id).map(|p| &p.info)
     }
 
-    /// Get mutable information about a running process
-    pub fn get_info_mut(&mut self, model_id: u32) -> Option<&mut ServerInfo> {
-        self.processes.get_mut(&model_id).map(|p| &mut p.info)
-    }
-
     /// List all running processes
     pub fn list_all(&self) -> Vec<&ServerInfo> {
         debug!(process_count = %self.processes.len(), "ProcessCore: list_all called");

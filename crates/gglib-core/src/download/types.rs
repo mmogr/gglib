@@ -50,12 +50,6 @@ impl DownloadId {
     pub const fn has_quantization(&self) -> bool {
         self.quantization.is_some()
     }
-
-    /// Convert to the canonical string format.
-    #[must_use]
-    pub fn as_canonical(&self) -> String {
-        self.to_string()
-    }
 }
 
 impl fmt::Display for DownloadId {

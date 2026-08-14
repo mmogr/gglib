@@ -68,27 +68,6 @@ impl ServerConfig {
             cors: CorsConfig::default(),
         })
     }
-
-    /// Set the static directory for SPA serving.
-    #[must_use]
-    pub fn with_static_dir(mut self, path: impl Into<PathBuf>) -> Self {
-        self.static_dir = Some(path.into());
-        self
-    }
-
-    /// Set the bind host (e.g. `127.0.0.1` for localhost-only).
-    #[must_use]
-    pub fn with_host(mut self, host: impl Into<String>) -> Self {
-        self.host = host.into();
-        self
-    }
-
-    /// Set CORS to allow specific origins.
-    #[must_use]
-    pub fn with_allowed_origins(mut self, origins: Vec<String>) -> Self {
-        self.cors = CorsConfig::AllowOrigins(origins);
-        self
-    }
 }
 
 /// Application context for the Axum adapter.

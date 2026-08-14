@@ -10,9 +10,6 @@ pub const SEMVER: &str = env!("CARGO_PKG_VERSION");
 /// is set to `"unknown"`.
 pub const GIT_SHA_SHORT: &str = env!("VERGEN_GIT_SHA");
 
-/// Whether the build script reported the repo as dirty.
-pub const GIT_DIRTY: bool = str_eq(env!("VERGEN_GIT_DIRTY"), "true");
-
 /// True if the git SHA looks like a short hex hash.
 pub const HAS_GIT_SHA: bool = is_short_hex(GIT_SHA_SHORT);
 
@@ -52,23 +49,5 @@ const fn is_short_hex(value: &str) -> bool {
         }
         i += 1;
     }
-    true
-}
-
-const fn str_eq(a: &str, b: &str) -> bool {
-    let a_bytes = a.as_bytes();
-    let b_bytes = b.as_bytes();
-    if a_bytes.len() != b_bytes.len() {
-        return false;
-    }
-
-    let mut i = 0;
-    while i < a_bytes.len() {
-        if a_bytes[i] != b_bytes[i] {
-            return false;
-        }
-        i += 1;
-    }
-
     true
 }

@@ -107,23 +107,6 @@ where
         self.subscribe_until(opts, std::future::pending())
     }
 
-    /// Subscribe, first emitting one synthetic `initial` event (e.g. a full
-    /// current-state snapshot) before streaming live events.
-    ///
-    /// This gives new subscribers the current state immediately, instead of
-    /// waiting for the next broadcast - the "subscribe-first-then-hydrate"
-    /// pattern used by this codebase's SSE consumers.
-    ///
-    /// Unbounded, with the same shutdown caveat as [`Self::subscribe`]; see
-    /// [`Self::subscribe_with_hydration_until`].
-    pub fn subscribe_with_hydration(
-        self: Arc<Self>,
-        initial: T,
-        opts: SseOptions,
-    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-        self.subscribe_with_hydration_until(initial, opts, std::future::pending())
-    }
-
     /// Subscribe to live events, ending the stream when `shutdown` resolves.
     ///
     /// An SSE stream is a connection that never closes by itself, so a server
