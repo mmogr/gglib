@@ -25,7 +25,7 @@ const MACOS_DEFAULT_PATHS: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bi
 /// - Path is absolute
 /// - File exists
 /// - File is executable (Unix) or spawnable
-pub(crate) fn validate_exe_path(exe_path: &str) -> Result<(), String> {
+pub fn validate_exe_path(exe_path: &str) -> Result<(), String> {
     let path = Path::new(exe_path);
 
     // Must be absolute
@@ -64,7 +64,7 @@ pub(crate) fn validate_exe_path(exe_path: &str) -> Result<(), String> {
 /// Validate a working directory.
 ///
 /// Returns Ok(()) if the directory exists and is actually a directory.
-pub(crate) fn validate_working_dir(cwd: &str) -> Result<(), String> {
+pub fn validate_working_dir(cwd: &str) -> Result<(), String> {
     let path = Path::new(cwd);
 
     if !path.exists() {
@@ -87,7 +87,7 @@ pub(crate) fn validate_working_dir(cwd: &str) -> Result<(), String> {
 /// 4. Optional user-provided `path_extra`
 ///
 /// Entries are deduplicated.
-pub(crate) fn build_effective_path(exe_path: &str, path_extra: Option<&str>) -> OsString {
+pub fn build_effective_path(exe_path: &str, path_extra: Option<&str>) -> OsString {
     let mut path_entries = Vec::new();
 
     // 1. Add directory containing the executable

@@ -15,7 +15,7 @@ use gglib_core::{McpTool, ToolCall, ToolDefinition, ToolResult};
 use serde_json::{Value, json};
 
 /// Prefix applied to all tool names produced by this executor.
-pub(crate) const BUILTIN_PREFIX: &str = "builtin:";
+pub const BUILTIN_PREFIX: &str = "builtin:";
 
 // =============================================================================
 // Adapter

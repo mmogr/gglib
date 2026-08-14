@@ -13,10 +13,7 @@ use super::sandboxing::{is_binary, resolve_sandboxed_path};
 /// Does a case-insensitive substring search across all text files under
 /// the given path (default: sandbox root).  Returns matching lines with
 /// file paths and line numbers.
-pub(super) fn grep_search(
-    args: &HashMap<String, Value>,
-    sandbox_root: &Path,
-) -> Result<String, String> {
+pub fn grep_search(args: &HashMap<String, Value>, sandbox_root: &Path) -> Result<String, String> {
     const MAX_MATCHES: usize = 200;
 
     let pattern = args

@@ -15,7 +15,7 @@ use std::path::Path;
 /// 4. Search in platform-specific default directories
 /// 5. Search in Node.js version manager shims (for npm/npx/node)
 /// 6. Search in user-provided additional paths
-pub(crate) fn resolve_executable(
+pub fn resolve_executable(
     command: &str,
     user_search_paths: &[String],
 ) -> Result<ResolveResult, ResolveError> {
@@ -23,7 +23,7 @@ pub(crate) fn resolve_executable(
 }
 
 /// Resolve with injected dependencies (for testing).
-pub(crate) fn resolve_executable_with_deps(
+pub fn resolve_executable_with_deps(
     command: &str,
     user_search_paths: &[String],
     env: &dyn EnvProvider,

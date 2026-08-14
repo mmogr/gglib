@@ -4,14 +4,14 @@ use super::types::AttemptOutcome;
 use std::path::Path;
 
 /// Trait for filesystem operations (injectable for testing).
-pub(crate) trait FsProvider {
+pub trait FsProvider {
     /// Check if a path exists and is a valid executable.
     /// Returns Ok if the file is executable, or a specific outcome otherwise.
     fn check_executable(&self, path: &Path) -> AttemptOutcome;
 }
 
 /// Production filesystem provider that uses real filesystem operations.
-pub(crate) struct SystemFs;
+pub struct SystemFs;
 
 impl FsProvider for SystemFs {
     fn check_executable(&self, path: &Path) -> AttemptOutcome {
@@ -52,18 +52,18 @@ impl FsProvider for SystemFs {
 /// Test/mock filesystem provider with predefined responses.
 #[cfg(test)]
 #[derive(Default)]
-pub(crate) struct MockFs {
+pub struct MockFs {
     executables: std::collections::HashSet<std::path::PathBuf>,
 }
 
 #[cfg(test)]
 impl MockFs {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
     #[must_use]
-    pub(crate) fn with_executable(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+    pub fn with_executable(mut self, path: impl Into<std::path::PathBuf>) -> Self {
         self.executables.insert(path.into());
         self
     }

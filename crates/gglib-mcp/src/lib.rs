@@ -4,7 +4,12 @@
 
 // No consumer names a module of this crate — every use outside it goes through
 // the re-exports below. Keeping the modules crate-internal is what lets
-// `unreachable_pub` and then `dead_code` audit their contents.
+// `dead_code` audit their contents.
+//
+// The items *inside* stay `pub`. This crate inherits `[workspace.lints]`, which
+// includes clippy's nursery set, and `redundant_pub_crate` rejects `pub(crate)`
+// inside a private module — the exact opposite of what `unreachable_pub` asks
+// for. See the PR description; the two lints cannot both be satisfied.
 pub(crate) mod builtin;
 pub(crate) mod client;
 pub(crate) mod combined;

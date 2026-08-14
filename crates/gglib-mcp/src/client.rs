@@ -20,7 +20,7 @@ use tokio::time::timeout;
 
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
-pub(crate) enum McpClientError {
+pub enum McpClientError {
     #[error("Failed to spawn MCP server process: {0}")]
     SpawnFailed(String),
 
@@ -74,7 +74,7 @@ struct JsonRpcError {
 
 /// MCP initialize result.
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct InitializeResult {
+pub struct InitializeResult {
     #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
     #[serde(rename = "serverInfo")]
@@ -84,7 +84,7 @@ pub(crate) struct InitializeResult {
 
 /// Server information from initialize.
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ServerInfo {
+pub struct ServerInfo {
     pub name: String,
     #[serde(default)]
     pub version: Option<String>,
@@ -92,7 +92,7 @@ pub(crate) struct ServerInfo {
 
 /// Server capabilities.
 #[derive(Debug, Clone, Deserialize, Default)]
-pub(crate) struct ServerCapabilities {
+pub struct ServerCapabilities {
     #[serde(default)]
     pub tools: Option<ToolsCapability>,
     #[serde(default)]
@@ -103,7 +103,7 @@ pub(crate) struct ServerCapabilities {
 
 /// Tools capability.
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ToolsCapability {
+pub struct ToolsCapability {
     #[serde(default)]
     pub list_changed: Option<bool>,
 }
@@ -123,7 +123,7 @@ struct McpToolSchema {
 }
 
 /// Client for communicating with an MCP server via stdio.
-pub(crate) struct McpClient {
+pub struct McpClient {
     /// Child process (for stdio servers)
     process: Option<Child>,
     /// Stdin for sending requests (wrapped for async access)
@@ -142,7 +142,7 @@ pub(crate) struct McpClient {
 
 impl McpClient {
     /// Create a new MCP client (not yet connected).
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             process: None,
             stdin: None,
@@ -155,7 +155,7 @@ impl McpClient {
     }
 
     /// Connect to an MCP server by spawning a stdio process.
-    pub(crate) async fn connect_stdio(
+    pub async fn connect_stdio(
         &mut self,
         exe_path: &str,
         args: &[String],
@@ -241,7 +241,7 @@ impl McpClient {
     }
 
     /// List available tools from the MCP server.
-    pub(crate) async fn list_tools(&self) -> Result<Vec<McpTool>, McpClientError> {
+    pub async fn list_tools(&self) -> Result<Vec<McpTool>, McpClientError> {
         // Check if server supports tools
         if self
             .capabilities
@@ -277,7 +277,7 @@ impl McpClient {
     }
 
     /// Call a tool on the MCP server.
-    pub(crate) async fn call_tool(
+    pub async fn call_tool(
         &self,
         name: &str,
         arguments: HashMap<String, Value>,
@@ -435,17 +435,17 @@ impl McpClient {
     }
 
     /// Check if the client is connected.
-    pub(crate) const fn is_connected(&self) -> bool {
+    pub const fn is_connected(&self) -> bool {
         self.stdin.is_some() && self.process.is_some()
     }
 
     /// Get server info (available after initialize).
-    pub(crate) const fn server_info(&self) -> Option<&ServerInfo> {
+    pub const fn server_info(&self) -> Option<&ServerInfo> {
         self.server_info.as_ref()
     }
 
     /// Disconnect from the MCP server.
-    pub(crate) fn disconnect(&mut self) {
+    pub fn disconnect(&mut self) {
         // Drop stdin to signal EOF to the child process.
         self.stdin = None;
         self.stdout_reader = None;

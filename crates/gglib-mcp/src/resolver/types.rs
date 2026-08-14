@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Result of attempting to resolve a command to an executable path.
 #[derive(Debug, Clone)]
-pub(crate) struct ResolveResult {
+pub struct ResolveResult {
     /// The successfully resolved absolute path to the executable.
     pub resolved_path: PathBuf,
     /// All locations that were checked during resolution (for diagnostics).
@@ -15,7 +15,7 @@ pub(crate) struct ResolveResult {
 
 /// A single attempt to locate an executable at a candidate path.
 #[derive(Debug, Clone)]
-pub(crate) struct Attempt {
+pub struct Attempt {
     /// The path that was checked.
     pub candidate: PathBuf,
     /// The outcome of checking this candidate.
@@ -24,7 +24,7 @@ pub(crate) struct Attempt {
 
 /// Possible outcomes when checking if a candidate path is a valid executable.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum AttemptOutcome {
+pub enum AttemptOutcome {
     /// File was found and is executable (success case).
     Ok,
     /// Path does not exist.
@@ -54,7 +54,7 @@ impl std::fmt::Display for AttemptOutcome {
 
 /// Error returned when executable resolution fails completely.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ResolveError {
+pub enum ResolveError {
     #[error("Command is empty")]
     EmptyCommand,
 
@@ -64,7 +64,7 @@ pub(crate) enum ResolveError {
 
 impl ResolveError {
     /// Create a `NotResolved` error with formatted attempt details.
-    pub(crate) fn not_resolved(command: impl Into<String>, attempts: &[Attempt]) -> Self {
+    pub fn not_resolved(command: impl Into<String>, attempts: &[Attempt]) -> Self {
         let command = command.into();
         let attempts_str = attempts
             .iter()

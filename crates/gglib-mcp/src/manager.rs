@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 
 /// Errors that can occur during MCP manager operations.
 #[derive(Debug, Error)]
-pub(crate) enum McpManagerError {
+pub enum McpManagerError {
     #[error("Server already running: {0}")]
     AlreadyRunning(String),
 
@@ -47,7 +47,7 @@ struct RunningServer {
 /// This manager handles starting, stopping, and querying MCP server processes.
 /// It uses the `McpClient` for protocol communication but does not directly
 /// interact with the database - that's the service's responsibility.
-pub(crate) struct McpManager {
+pub struct McpManager {
     /// Running servers indexed by server ID
     servers: Arc<RwLock<HashMap<i64, RunningServer>>>,
     /// Per-server start locks: serialise concurrent lazy starts for the same server.
@@ -57,7 +57,7 @@ pub(crate) struct McpManager {
 
 impl McpManager {
     /// Create a new MCP manager.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             servers: Arc::new(RwLock::new(HashMap::new())),
             start_locks: Arc::new(RwLock::new(HashMap::new())),
@@ -70,10 +70,7 @@ impl McpManager {
     /// The per-server mutex ensures only one spawn happens regardless of concurrency.
     /// If the server is already running when the lock is acquired, returns its current
     /// tools without spawning a new process.
-    pub(crate) async fn ensure_started(
-        &self,
-        server: McpServer,
-    ) -> Result<Vec<McpTool>, McpManagerError> {
+    pub async fn ensure_started(&self, server: McpServer) -> Result<Vec<McpTool>, McpManagerError> {
         let server_id = server.id;
 
         // Get or create the per-server start lock (fast read path first).
@@ -107,10 +104,7 @@ impl McpManager {
     ///
     /// For stdio servers, spawns the process and initializes the MCP session.
     /// For SSE servers, establishes the HTTP connection.
-    pub(crate) async fn start_server(
-        &self,
-        server: McpServer,
-    ) -> Result<Vec<McpTool>, McpManagerError> {
+    pub async fn start_server(&self, server: McpServer) -> Result<Vec<McpTool>, McpManagerError> {
         let server_id = server.id;
 
         // Check if already running
@@ -207,7 +201,7 @@ impl McpManager {
     }
 
     /// Stop an MCP server.
-    pub(crate) async fn stop_server(&self, server_id: i64) -> Result<(), McpManagerError> {
+    pub async fn stop_server(&self, server_id: i64) -> Result<(), McpManagerError> {
         let mut server = {
             let mut servers = self.servers.write().await;
             servers
@@ -225,7 +219,7 @@ impl McpManager {
     }
 
     /// Get the status of a server.
-    pub(crate) async fn get_status(&self, server_id: i64) -> McpServerStatus {
+    pub async fn get_status(&self, server_id: i64) -> McpServerStatus {
         let servers = self.servers.read().await;
 
         servers
@@ -234,7 +228,7 @@ impl McpManager {
     }
 
     /// Get tools for a running server.
-    pub(crate) async fn get_tools(&self, server_id: i64) -> Result<Vec<McpTool>, McpManagerError> {
+    pub async fn get_tools(&self, server_id: i64) -> Result<Vec<McpTool>, McpManagerError> {
         let servers = self.servers.read().await;
         let server = servers
             .get(&server_id)
@@ -245,7 +239,7 @@ impl McpManager {
     }
 
     /// Get all tools from all running servers.
-    pub(crate) async fn get_all_tools(&self) -> Vec<(i64, Vec<McpTool>)> {
+    pub async fn get_all_tools(&self) -> Vec<(i64, Vec<McpTool>)> {
         let servers = self.servers.read().await;
 
         servers
@@ -255,7 +249,7 @@ impl McpManager {
     }
 
     /// Call a tool on a running server.
-    pub(crate) async fn call_tool(
+    pub async fn call_tool(
         &self,
         server_id: i64,
         tool_name: &str,
@@ -272,13 +266,13 @@ impl McpManager {
     }
 
     /// Check if a server is running.
-    pub(crate) async fn is_running(&self, server_id: i64) -> bool {
+    pub async fn is_running(&self, server_id: i64) -> bool {
         let servers = self.servers.read().await;
         servers.contains_key(&server_id)
     }
 
     /// Stop all running servers.
-    pub(crate) async fn stop_all(&self) {
+    pub async fn stop_all(&self) {
         let server_ids: Vec<i64> = {
             let servers = self.servers.read().await;
             servers.keys().copied().collect()

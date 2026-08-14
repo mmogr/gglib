@@ -5,5 +5,9 @@ mod resolve;
 mod search;
 mod types;
 
-pub(crate) use resolve::resolve_executable;
-pub(crate) use types::{ResolveError, ResolveResult};
+// Trimmed to what is actually reached through `resolver::`. The rest of this
+// module's types are used inside `resolver/` via their defining modules, so the
+// re-exports were carrying names nobody imported by this path — invisible while
+// the module was `pub`, an unused-import error once it was not.
+pub use resolve::resolve_executable;
+pub use types::{ResolveError, ResolveResult};
