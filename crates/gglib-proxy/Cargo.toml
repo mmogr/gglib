@@ -79,6 +79,9 @@ sysinfo = { workspace = true }
 # Self-dependency purely to enable `test-support` for `tests/`; the
 # feature stays off for anyone who depends on this crate normally.
 gglib-proxy = { path = ".", features = ["test-support"] }
+# Same arrangement for the SSE broadcaster's raw-stream door, which the
+# dashboard publisher test observes through.
+gglib-sse = { workspace = true, features = ["test-support"] }
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is
 # deliberately not part of tokio's `full`. Declared explicitly rather than
 # inherited: it currently arrives only because `tokio-test` happens to enable

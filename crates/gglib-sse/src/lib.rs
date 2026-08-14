@@ -87,8 +87,15 @@ where
     }
 
     /// Subscribe to the raw (un-encoded) event stream, with no Axum/SSE
-    /// wrapping. Useful for unit tests and for any non-HTTP consumer that
-    /// just wants the plain `T` values.
+    /// wrapping.
+    ///
+    /// The only public door to [`Self::raw_stream`], and it exists for tests:
+    /// `gglib-axum` asserts a subscriber actually receives what is emitted,
+    /// and `gglib-proxy` waits on the dashboard publisher's first snapshot.
+    /// Both need the plain `T`, not an [`Sse`] response. They live in other
+    /// crates, so `#[cfg(test)]` cannot reach them — hence a feature, the same
+    /// arrangement `gglib-db` uses for `test-utils`.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn subscribe_events(&self) -> impl Stream<Item = T> + Send + 'static {
         self.raw_stream(None)
     }
