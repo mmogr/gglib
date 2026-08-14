@@ -12,7 +12,7 @@ They contain no implementation details and use only domain types.
 - No `sqlx` types in any signature
 - No process/filesystem implementation details
 - Traits are minimal and CRUD-focused for repositories
-- Intent-based methods for process runner (not implementation-leaking)
+- Intent-based methods throughout (not implementation-leaking)
 
 <!-- module-docs:end -->
 

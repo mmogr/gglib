@@ -100,6 +100,15 @@ mod tests {
         async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
             Err(RepositoryError::NotFound(format!("name={name}")))
         }
+        async fn find_by_path(
+            &self,
+            _path: &std::path::Path,
+        ) -> Result<Option<Model>, RepositoryError> {
+            // `unimplemented!()` like its siblings, not `Ok(None)`. `Ok(None)`
+            // reads as "no duplicate found", which is a specific and wrong
+            // answer for a double that stores nothing.
+            unimplemented!()
+        }
         async fn insert(&self, _model: &NewModel) -> Result<Model, RepositoryError> {
             unimplemented!()
         }

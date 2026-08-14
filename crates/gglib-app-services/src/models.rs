@@ -147,12 +147,21 @@ impl ModelOps {
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
 
-        // Delegate to shared core logic for model import with full metadata extraction
+        // Delegate to shared core logic for model import with full metadata
+        // extraction. Always `Fresh`: the HTTP surface has no way to ask for
+        // the destructive re-import, so a duplicate is always a 409 here. The
+        // refresh workflow is `gglib model add --force`, which is explicit
+        // about overwriting a row the caller already has.
         let model = self
             .deps
             .core
             .models()
-            .import_from_file(&path, self.deps.gguf_parser.as_ref(), None)
+            .import_from_file(
+                &path,
+                self.deps.gguf_parser.as_ref(),
+                None,
+                gglib_core::services::ImportMode::Fresh,
+            )
             .await
             .map_err(|e| match e {
                 gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
@@ -203,7 +212,11 @@ impl ModelOps {
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to update model: {e}")))?;
 
-        Ok(GuiModel::from_domain(model))
+        // Answer with the row as stored, not as sent. `update` canonicalises
+        // `file_path` on write, so echoing the in-memory copy would hand back
+        // the caller's spelling and disagree with the very next GET.
+        let stored = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        Ok(GuiModel::from_domain(stored))
     }
 
     /// Remove a model from the database.
@@ -549,6 +562,175 @@ mod tests {
         let models = ops.list().await.unwrap();
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, added.id);
+    }
+
+    /// **The link production actually crosses.** The duplicate leaves the core
+    /// as `CoreError::Repository(AlreadyExists)`, and `add` intercepts it here
+    /// before the blanket `CoreError -> HttpError` conversion ever sees it. A
+    /// test that exercises only that blanket conversion leaves this arm
+    /// unpinned: reverting it to `GuiError::Internal` turns the duplicate back
+    /// into a 500 with every error-mapping test still green.
+    #[tokio::test]
+    async fn adding_a_file_already_in_the_library_is_a_conflict() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+
+        let dir = tempdir().unwrap();
+        let gguf_path = dir.path().join("model.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+        let file_path = gguf_path.to_str().unwrap().to_string();
+
+        ops.add(AddModelRequest {
+            file_path: file_path.clone(),
+        })
+        .await
+        .expect("first add should succeed");
+
+        let result = ops.add(AddModelRequest { file_path }).await;
+        assert!(
+            matches!(result, Err(GuiError::Conflict(_))),
+            "expected Conflict, got {result:?}"
+        );
+    }
+
+    /// **The duplicate `--force` used to create.** A downloaded model is keyed
+    /// `hf:<repo>@<sha>#<file>`, but re-importing its file computes a
+    /// `local:<hash>` key. Nothing conflicted, `file_path` carries no unique
+    /// index, and the refresh appended a *second* row for one file — the exact
+    /// failure this change exists to prevent, reintroduced by the flag added
+    /// to serve it.
+    ///
+    /// This has to run against the real repository. `MockRepo` upserts on
+    /// `file_path` while `SqliteModelRepository` upserts on `model_key`, so the
+    /// core-level double reports "one row, id kept" for input the product
+    /// duplicates — it cannot observe this bug at all.
+    #[tokio::test]
+    async fn forcing_a_downloaded_model_refreshes_it_rather_than_duplicating_it() {
+        use gglib_core::domain::NewModel;
+        use gglib_core::ports::NoopGgufParser;
+        use gglib_core::services::ImportMode;
+
+        let core = test_core().await;
+
+        let dir = tempdir().unwrap();
+        let gguf_path = dir.path().join("Qwen3-8B-Q4_K_M.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+
+        // Registered the way a completed download registers it: with HF
+        // provenance, and therefore an `hf:` model key.
+        let mut downloaded = NewModel::new(
+            "Qwen3-8B".to_string(),
+            gguf_path.clone(),
+            8.0,
+            chrono::Utc::now(),
+        );
+        downloaded.hf_repo_id = Some("Qwen/Qwen3-8B-GGUF".to_string());
+        downloaded.hf_commit_sha = Some("abc123".to_string());
+        downloaded.hf_filename = Some("Qwen3-8B-Q4_K_M.gguf".to_string());
+        let original = core
+            .models()
+            .add(downloaded)
+            .await
+            .expect("registering a download should succeed");
+
+        let refreshed = core
+            .models()
+            .import_from_file(&gguf_path, &NoopGgufParser, None, ImportMode::Refresh)
+            .await
+            .expect("--force must refresh rather than fail");
+
+        assert_eq!(
+            refreshed.id, original.id,
+            "the refresh must land on the downloaded row, not create a new one"
+        );
+        assert_eq!(
+            core.models().list().await.unwrap().len(),
+            1,
+            "one file is one model"
+        );
+    }
+
+    /// **A refresh must not repoint a sharded model at the wrong file.**
+    ///
+    /// `find_by_path` matches a sharded model through its sibling paths, so
+    /// `--force` on shard 2 finds the row keyed to shard 1. Landing on it and
+    /// assigning `file_path = excluded.file_path` would repoint the model at
+    /// the shard-2 file — which llama.cpp cannot open a split GGUF from, so
+    /// the model would stop launching. Appending a stray row (the behaviour
+    /// before the refresh landed on the right row) was survivable; destroying
+    /// the good row is not.
+    #[tokio::test]
+    async fn forcing_from_a_sibling_shard_refuses_rather_than_repointing() {
+        use gglib_core::domain::NewModel;
+        use gglib_core::ports::NoopGgufParser;
+        use gglib_core::services::ImportMode;
+
+        let core = test_core().await;
+
+        let dir = tempdir().unwrap();
+        let first = dir.path().join("Qwen3-30B-00001-of-00002.gguf");
+        let second = dir.path().join("Qwen3-30B-00002-of-00002.gguf");
+        fs::write(&first, b"placeholder").await.unwrap();
+        fs::write(&second, b"placeholder").await.unwrap();
+
+        // Seeded with HuggingFace provenance, because that is the only way the
+        // product ever produces a sharded row — `file_paths` is set by the
+        // download path alone. A local sharded model would give the mutation a
+        // `local:` key to collide with and demonstrate a duplicate rather than
+        // the repoint this guard exists to prevent.
+        let mut sharded = NewModel::new(
+            "Qwen3-30B".to_string(),
+            first.clone(),
+            30.0,
+            chrono::Utc::now(),
+        );
+        sharded.file_paths = Some(vec![first.clone(), second.clone()]);
+        sharded.hf_repo_id = Some("Qwen/Qwen3-30B-GGUF".to_string());
+        sharded.hf_commit_sha = Some("abc123".to_string());
+        sharded.hf_filename = Some("Qwen3-30B-00001-of-00002.gguf".to_string());
+        let original = core.models().add(sharded).await.expect("register");
+
+        let err = core
+            .models()
+            .import_from_file(&second, &NoopGgufParser, None, ImportMode::Refresh)
+            .await
+            .expect_err("refreshing from shard 2 must be refused");
+        assert!(
+            matches!(err, gglib_core::ports::CoreError::Validation(_)),
+            "got {err:?}"
+        );
+
+        let still = core
+            .models()
+            .get_by_id(original.id)
+            .await
+            .unwrap()
+            .expect("the row must still be there");
+        assert_eq!(
+            still.file_path,
+            std::fs::canonicalize(&first).unwrap(),
+            "the model must still point at its first shard"
+        );
+        assert_eq!(core.models().list().await.unwrap().len(), 1);
+
+        // The other half of the guard: refreshing the model by its *own*
+        // first shard is the documented workflow and must be accepted —
+        // including when the caller spells that path indirectly. A guard that
+        // compared the stored column without resolving it would refuse this
+        // and print the same path on both sides of the message.
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let respelled = dir
+            .path()
+            .join("sub")
+            .join("..")
+            .join(first.file_name().expect("the shard has a file name"));
+        let refreshed = core
+            .models()
+            .import_from_file(&respelled, &NoopGgufParser, None, ImportMode::Refresh)
+            .await
+            .expect("refreshing by the model's own first shard must be accepted");
+        assert_eq!(refreshed.id, original.id);
+        assert_eq!(core.models().list().await.unwrap().len(), 1);
     }
 
     #[tokio::test]

@@ -7,8 +7,8 @@
 //! adapter (CLI, Axum, Tauri) needs:
 //!
 //! 1. Database pool + repository set
-//! 2. Process runner (`LlamaServerRunner`)
-//! 3. GGUF parser + model-files repository + model registrar
+//! 2. GGUF parser + model-files repository + model registrar
+//! 3. `HuggingFace` HTTP client
 //! 4. Download manager (accepting an injected event emitter)
 //! 5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
 //! 6. `ModelVerificationService` + fully wired `AppCore`

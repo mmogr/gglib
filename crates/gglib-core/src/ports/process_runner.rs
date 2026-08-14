@@ -1,10 +1,17 @@
 //! The two value types a model-server launch is described and tracked by.
 //!
 //! [`ServerConfig`] is what a caller asks for; [`ProcessHandle`] is what it
-//! gets back. The `ProcessRunner` trait this file is named after is gone —
-//! nothing ever implemented it, and `ModelRuntimePort` is the port that
-//! actually carries launches. The file keeps its name only because these two
-//! types are reached as `ports::{ServerConfig, ProcessHandle}` regardless.
+//! gets back. The `ProcessRunner` trait this file is named after is gone, and
+//! `ModelRuntimePort` is the port that actually carries launches. The file
+//! keeps its name only because these two types are reached as
+//! `ports::{ServerConfig, ProcessHandle}` regardless.
+//!
+//! It had implementors, contrary to what this comment said until now: four at
+//! `4a6fcf4b^`, including the production `LlamaServerRunner` in
+//! `gglib-runtime/src/runner.rs`. That runner went in #708 and the other three
+//! were test doubles, which is what left the trait with nothing implementing
+//! it by the time #849 removed it — a different and much less interesting
+//! claim than "nothing ever did".
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

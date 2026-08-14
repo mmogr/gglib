@@ -49,8 +49,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## What it wires
 
 1. `SQLite` database pool + repository set
-2. `LlamaServerRunner` (process runner)
-3. `GgufParser` + `ModelFilesRepository` + `ModelRegistrar`
+2. `GgufParser` + `ModelFilesRepository` + `ModelRegistrar`
+3. `HfClient` (`HuggingFace` HTTP client)
 4. Download manager (using the injected `AppEventEmitter`)
 5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
 6. `ModelVerificationService` + fully configured `AppCore`

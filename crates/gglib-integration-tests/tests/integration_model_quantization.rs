@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use common::{setup_test_pool, write_gguf_fixture};
 
-use gglib_core::services::ModelService;
+use gglib_core::services::{ImportMode, ModelService};
 use gglib_db::SqliteModelRepository;
 use gglib_gguf::GgufParser;
 
@@ -28,7 +28,7 @@ async fn local_import_resolves_unsloth_dynamic_quantization_from_filename() {
     write_gguf_fixture(&path, &[("general.architecture", "qwen3")]);
 
     let model = service
-        .import_from_file(&path, &GgufParser::new(), None)
+        .import_from_file(&path, &GgufParser::new(), None, ImportMode::Fresh)
         .await
         .unwrap();
 

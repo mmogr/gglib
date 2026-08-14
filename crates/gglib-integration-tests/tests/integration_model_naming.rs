@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use common::{setup_test_pool, write_gguf_fixture};
 
-use gglib_core::services::ModelService;
+use gglib_core::services::{ImportMode, ModelService};
 use gglib_core::{CompletedDownload, ModelRegistrarPort, ModelRepository, Quantization};
 use gglib_db::{CoreFactory, SqliteModelRepository};
 use gglib_gguf::GgufParser;
@@ -24,7 +24,7 @@ async fn import_locally(file_path: &Path) -> gglib_core::Model {
     let repo = Arc::new(SqliteModelRepository::new(pool));
     let service = ModelService::new(repo);
     service
-        .import_from_file(file_path, &GgufParser::new(), None)
+        .import_from_file(file_path, &GgufParser::new(), None, ImportMode::Fresh)
         .await
         .unwrap()
 }

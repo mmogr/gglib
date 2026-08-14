@@ -5,7 +5,7 @@ mod sqlite_benchmark_repository;
 mod sqlite_chat_history_repository;
 mod sqlite_download_state_repository;
 mod sqlite_mcp_repository;
-mod sqlite_model_repository;
+pub(crate) mod sqlite_model_repository;
 mod sqlite_settings_repository;
 
 pub use model_files_repository::ModelFilesRepository;

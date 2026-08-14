@@ -205,6 +205,17 @@ mod tests {
             }
         }
 
+        async fn find_by_path(
+            &self,
+            path: &std::path::Path,
+        ) -> Result<Option<Model>, RepositoryError> {
+            Ok(self
+                .list()
+                .await?
+                .into_iter()
+                .find(|m| m.file_path.as_path() == path))
+        }
+
         async fn insert(&self, _m: &NewModel) -> Result<Model, RepositoryError> {
             unimplemented!("not exercised by these tests")
         }

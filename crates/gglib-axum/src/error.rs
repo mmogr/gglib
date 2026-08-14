@@ -187,8 +187,11 @@ mod tests {
     /// that a future rearrangement of these `From` impls cannot quietly send a
     /// duplicate back as a 500 again.
     ///
-    /// Both routes in, because the GUI path arrives wrapped in `CoreError` and
-    /// the repository path does not.
+    /// All three routes in. The `POST /api/models` path is the `GuiError` one
+    /// — `ModelOps::add` catches the duplicate and re-raises it as
+    /// `GuiError::Conflict`, so the blanket `CoreError` conversion below never
+    /// sees it on that route. Pinning only the other two left the arm the
+    /// product actually uses untested.
     #[test]
     fn already_exists_reaches_the_client_as_409() {
         let direct: HttpError = RepositoryError::AlreadyExists("dup".to_string()).into();
@@ -197,6 +200,9 @@ mod tests {
         let wrapped: HttpError =
             CoreError::Repository(RepositoryError::AlreadyExists("dup".to_string())).into();
         assert_eq!(wrapped.into_response().status(), StatusCode::CONFLICT);
+
+        let from_gui: HttpError = GuiError::Conflict("dup".to_string()).into();
+        assert_eq!(from_gui.into_response().status(), StatusCode::CONFLICT);
     }
 
     /// The neighbouring repository errors must not also become 409 — a

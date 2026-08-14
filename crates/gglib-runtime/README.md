@@ -17,12 +17,16 @@ the runtime feel smarter than llama.cpp on its own.
 This crate is in the **Infrastructure Layer** — it manages external processes and provides system information.
 
 ```text
-gglib-core (ports)          gglib-runtime                   External
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│  ProcessManager  │◄───────│  LlamaRunner     │───────►│  llama-server    │
-│  SystemProbe     │        │  ProxyManager    │        │  llama-cli       │
-│  HealthCheck     │        │  HealthChecker   │        └──────────────────┘
-└──────────────────┘        └──────────────────┘
+gglib-core (ports)          gglib-runtime                       External
+┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
+│ ModelRuntimePort     │◄───│ RuntimePortImpl      │───►│  llama-server    │
+│ ModelCatalogPort     │    │ CatalogPortImpl      │    │  llama-cli       │
+│ LlmCompletionPort    │    │ LlmCompletionAdapter │    └──────────────────┘
+│ SystemProbePort      │    │ DefaultSystemProbe   │
+│ ServerLogSinkPort    │    │ NoopLogSink,         │
+│                      │    │ LogManagerSink       │
+│ AdmissionRelease     │    │ AdmissionQueue       │
+└──────────────────────┘    └──────────────────────┘
                                      │
                                      ▼
                             ┌──────────────────┐
@@ -41,9 +45,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │  runner.rs  │     │   llama/    │     │   proxy/    │     │  process/   │        │
-│  │ High-level  │ ──► │ llama-server│     │  OpenAI API │     │  Lifecycle  │        │
-│  │   facade    │     │  llama-cli  │     │   routing   │     │  management │        │
+│  │ ports_impl/ │     │   llama/    │     │   proxy/    │     │  process/   │        │
+│  │ Port trait  │ ──► │ llama-server│     │  OpenAI API │     │  Lifecycle  │        │
+│  │   impls     │     │  llama-cli  │     │   routing   │     │  management │        │
 │  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -53,8 +57,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │ command.rs  │     │process_core │     │ compose.rs  │                            │
-│  │ Cmd builder │     │ Core types  │     │ Agent loop  │                            │
+│  │ command.rs  │     │server_config│     │ compose.rs  │                            │
+│  │ Cmd builder │     │ Launch args │     │ Agent loop  │                            │
 │  └─────────────┘     └─────────────┘     │ composition │                            │
 │                                          └─────────────┘                            │
 │                                                                                     │
@@ -95,9 +99,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`command.rs`** — Command builder for llama processes
 - **`health_monitor.rs`** — Continuous health monitoring for processes
 - **`health.rs`** — Health check endpoint polling
-- **`process_core.rs`** — Core process types and abstractions
 - **`compose.rs`** — Agent loop composition root (wires LLM adapter + tool executors)
-- **`runner.rs`** — High-level runner facade for llama operations
+- **`launch_narration.rs`** — Human-readable account of how a launch was configured
+- **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution
+- **`pidfile/`** — PID file writing and cleanup for spawned servers
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`process/`** — Generic process lifecycle (start, stop, signal)
@@ -203,24 +208,20 @@ while still allowing runtime flags to win when explicitly provided.
 ## Usage
 
 ```rust,ignore
-use gglib_runtime::LlamaServerRunner;
-use gglib_core::ports::ProcessRunner;
-use gglib_core::domain::ServerConfig;
+use gglib_runtime::GuiProcessCore;
+use gglib_core::ports::ServerConfig;
 
-// Create a runner
-let runner = LlamaServerRunner::new(8080, "/path/to/llama-server", 4);
+// Create a process core, given a base port to allocate from
+let mut core = GuiProcessCore::new(8080, "/path/to/llama-server");
 
-// Start a server for a model
-let handle = runner.start(ServerConfig {
-    model_id: 1,
-    model_name: "llama-3.2".to_string(),
-    model_path: "/path/to/model.gguf".into(),
-    context_size: Some(4096),
-    ..Default::default()
-}).await?;
+// Start a server for a model; the allocated port comes back
+let port = core.spawn(
+    ServerConfig::new(1, "llama-3.2".to_string(), "/path/to/model.gguf".into(), 8080)
+        .with_context_size(4096),
+).await?;
 
-// Stop the server
-runner.stop(&handle).await?;
+// Stop the server, by model id
+core.kill(1).await?;
 ```
 
 ## Design Decisions

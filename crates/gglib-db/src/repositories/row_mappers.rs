@@ -209,10 +209,12 @@ fn try_read_summary(row: &sqlx::sqlite::SqliteRow) -> Option<ModelBenchmarkSumma
 }
 
 /// Normalizes a file path to a canonical string representation.
+///
+/// Delegates so that the stored column, the `model_key` derived from it and
+/// the duplicate lookup that reads it all share one definition of "the same
+/// file"; see [`gglib_core::paths::canonical_model_path`].
 pub fn normalized_file_path_string(path: &Path) -> String {
-    std::fs::canonicalize(path)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| path.to_string_lossy().to_string())
+    gglib_core::paths::canonical_model_path_string(path)
 }
 
 /// Parse a database row into a ModelFile.

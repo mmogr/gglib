@@ -296,6 +296,10 @@ gglib config default 1
 # Add a local model
 gglib model add ~/models/llama-2-7b.Q4_K_M.gguf
 
+# Re-import one already in the library, refreshing its derived metadata
+# (capabilities, quantization, context length, expert counts, tags, spec)
+gglib model add --force ~/models/llama-2-7b.Q4_K_M.gguf
+
 # List all models
 gglib model list
 

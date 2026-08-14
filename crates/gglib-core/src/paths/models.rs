@@ -1,10 +1,12 @@
-//! Models directory resolution.
+//! Models directory resolution, and the canonical form of a model file path.
 //!
 //! Provides utilities for resolving the models directory from explicit paths,
-//! environment variables, or platform defaults.
+//! environment variables, or platform defaults, plus the single definition of
+//! what makes two paths "the same model file" — see
+//! [`canonical_model_path`].
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::error::PathError;
 use super::platform::normalize_user_path;
@@ -80,6 +82,50 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
     })
 }
 
+/// Resolve `path` to the one form the library identifies a model file by.
+///
+/// Three separate places have to agree about what "the same file" means: the
+/// `file_path` column a model is stored under, the `model_key` that decides
+/// whether an insert is really an update, and the duplicate lookup an
+/// explicit add performs before inserting. While they disagreed, the failure
+/// was silent and destructive — two *different* files sharing a relative name
+/// (`model.gguf` in two directories) hashed to one key, the duplicate check
+/// compared resolved paths and saw no match, and the UPSERT merged them into
+/// a single row carrying the first file's name and the second file's path.
+///
+/// Everything that needs that answer resolves it here, so the three cannot
+/// drift apart again.
+///
+/// # Errors
+///
+/// Returns the underlying [`std::io::Error`] when the path cannot be
+/// resolved — most often because no file exists there.
+///
+/// Fallible on purpose. The infallible "canonicalise, or keep the literal
+/// path" shape reads as the convenient one and is precisely the shape of the
+/// bug: a caller asking *is this file already in the library?* gets a literal
+/// path back, compares it against a stored canonical one, matches nothing,
+/// and reports "no duplicate" for a file that is plainly there. Callers for
+/// which this genuinely cannot fail have already established that the file
+/// exists; they should say so by propagating rather than by swallowing.
+pub fn canonical_model_path(path: &Path) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path)
+}
+
+/// The canonical path as the string the `file_path` column stores.
+///
+/// Falls back to the literal path when the file cannot be resolved, because a
+/// row whose file has since been deleted still has to round-trip through the
+/// database. Reach for [`canonical_model_path`] anywhere a failure to resolve
+/// should be visible to the caller rather than papered over.
+#[must_use]
+pub fn canonical_model_path_string(path: &Path) -> String {
+    canonical_model_path(path).map_or_else(
+        |_| path.to_string_lossy().into_owned(),
+        |resolved| resolved.to_string_lossy().into_owned(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +172,44 @@ mod tests {
         let resolved = resolve_models_dir(None).unwrap();
         assert_eq!(resolved.source, ModelsDirSource::EnvVar);
         assert!(resolved.path.ends_with("from-env"));
+    }
+
+    /// Two spellings of one file resolve to one answer. This is the property
+    /// the model key, the stored column and the duplicate lookup all lean on;
+    /// if it stops holding, a re-add silently merges two models into one row.
+    #[test]
+    fn canonical_model_path_agrees_across_spellings_of_one_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Model.gguf");
+        std::fs::File::create(&file).unwrap();
+
+        let direct = canonical_model_path(&file).unwrap();
+        let indirect = canonical_model_path(&dir.path().join(".").join("Model.gguf")).unwrap();
+
+        assert_eq!(direct, indirect);
+    }
+
+    /// The fallible form reports a path it cannot resolve instead of handing
+    /// back the literal one. A caller that treats "cannot resolve" as "not a
+    /// duplicate" reinstates the silent overwrite, so the error has to be
+    /// reachable.
+    #[test]
+    fn canonical_model_path_reports_a_path_that_does_not_resolve() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(canonical_model_path(&dir.path().join("Absent.gguf")).is_err());
+    }
+
+    /// The string form is the one the database column stores, and it keeps
+    /// the literal path when the file is gone so an existing row still
+    /// round-trips.
+    #[test]
+    fn canonical_model_path_string_falls_back_to_the_literal_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let absent = dir.path().join("Absent.gguf");
+
+        assert_eq!(
+            canonical_model_path_string(&absent),
+            absent.to_string_lossy()
+        );
     }
 }
