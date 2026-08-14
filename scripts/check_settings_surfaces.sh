@@ -17,7 +17,8 @@
 # A field is reachable if it is settable from the CLI, or from the GUI:
 #
 #   CLI — a `--kebab-case` flag on `gglib config settings set`, which means the
-#         field appears in the `Set` variant in `config_commands.rs`.
+#         field appears in `SettingsSetArgs`, in
+#         `config_commands/settings_args.rs`.
 #   GUI — the camelCase name appears in `src/`, which is where the TypeScript
 #         mirror and the settings modal both live.
 #
@@ -41,7 +42,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 SETTINGS_RS="crates/gglib-core/src/settings.rs"
-CLI_COMMANDS="crates/gglib-cli/src/config_commands.rs"
+CLI_SET_ARGS="crates/gglib-cli/src/config_commands/settings_args.rs"
 
 # Fields nothing settable is expected for, and why.
 declare -A EXEMPT=(
@@ -102,8 +103,10 @@ for field in $fields; do
   in_cli=false
   in_gui=false
 
-  # CLI: the field name appears in the `Set` variant's argument list.
-  if grep -qE "^[[:space:]]+${field}: Option<" "$CLI_COMMANDS"; then
+  # CLI: the field name appears in `SettingsSetArgs`. The `pub ` is optional
+  # because the fields moved from a clap variant's inline list (no `pub`) to a
+  # named `Args` struct (`pub`); a pattern assuming either one matches nothing.
+  if grep -qE "^[[:space:]]+(pub )?${field}: Option<" "$CLI_SET_ARGS"; then
     in_cli=true
   fi
 
@@ -136,8 +139,8 @@ if [ ${#unreachable[@]} -gt 0 ]; then
 Each of these is stored, plumbed and read, and settable from no surface a
 person has. Pick one:
 
-  1. Give it a CLI flag: add it to the `Set` variant in
-     `crates/gglib-cli/src/config_commands.rs` and map it in
+  1. Give it a CLI flag: add it to `SettingsSetArgs` in
+     `crates/gglib-cli/src/config_commands/settings_args.rs` and map it in
      `crates/gglib-cli/src/handlers/config/settings/mod.rs` — all four places
      (the destructure, the `changed` set, the `SettingsUpdate`, the
      pre-validate merge).
