@@ -31,7 +31,7 @@ use crate::utils::input::prompt_confirmation_default_yes;
 const PRESEED_ENV: &str = "GGLIB_FAST_DOWNLOADS";
 
 /// Dispatch a `config fast-downloads` subcommand.
-pub async fn dispatch(command: Option<FastDownloadsCommand>) -> Result<()> {
+pub(crate) async fn dispatch(command: Option<FastDownloadsCommand>) -> Result<()> {
     match command.unwrap_or(FastDownloadsCommand::Status) {
         FastDownloadsCommand::Status => status(),
         FastDownloadsCommand::Enable { python } => enable(python.as_deref()).await,

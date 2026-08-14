@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use crate::bootstrap::CliContext;
 
 /// Execute the retag command.
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     identifier: Option<String>,
     all: bool,

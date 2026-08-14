@@ -31,7 +31,7 @@ use crate::utils::input;
 /// - Model not found
 /// - User input fails
 /// - Database removal operation fails
-pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     // First, try to find the model to show it to the user
     let model = match ctx.app.models().get(identifier).await? {
         Some(m) => m,

@@ -2,14 +2,14 @@
 
 /// Operating system detection result.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Os {
+pub(super) enum Os {
     MacOS,
     Windows,
     Linux,
 }
 
 /// Detect the current operating system.
-pub fn detect_os() -> Os {
+pub(super) fn detect_os() -> Os {
     if cfg!(target_os = "macos") {
         Os::MacOS
     } else if cfg!(target_os = "windows") {
@@ -26,7 +26,7 @@ pub fn detect_os() -> Os {
 /// distribution names — which meant a `HOME_URL` containing "research" was read
 /// as Arch Linux, and the CLI could recommend different packages than the
 /// dependency check did on the very same machine.
-pub use gglib_runtime::system::detect_linux_distro;
+pub(super) use gglib_runtime::system::detect_linux_distro;
 
 #[cfg(test)]
 mod tests {

@@ -9,7 +9,7 @@ use crate::shared_args::{ContextArgs, SamplingArgs};
 
 /// Arguments for the chat command.
 #[derive(Debug, Clone)]
-pub struct ChatArgs {
+pub(crate) struct ChatArgs {
     pub identifier: String,
     pub context: ContextArgs,
     pub system_prompt: Option<String>,
@@ -42,7 +42,7 @@ pub struct ChatArgs {
 }
 
 /// Execute the chat command — always routes to the agentic REPL.
-pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     crate::handlers::agent_chat::run(ctx, &args).await
 }
 

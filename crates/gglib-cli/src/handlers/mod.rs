@@ -15,17 +15,17 @@
 //! - [`web`]       — Axum web-server GUI launcher
 //! - [`proxy_dashboard`] — live terminal view of a running proxy's dashboard stream
 
-pub mod agent_chat;
-pub mod benchmark;
-pub mod completions;
-pub mod config;
-pub mod daemon;
-pub mod gui;
-pub mod history;
-pub mod inference;
-pub mod mcp_cli;
-pub mod model;
-pub mod proxy_cache_clear;
-pub mod proxy_dashboard;
-pub mod up;
-pub mod web;
+pub(crate) mod agent_chat;
+pub(crate) mod benchmark;
+pub(crate) mod completions;
+pub(crate) mod config;
+pub(crate) mod daemon;
+pub(crate) mod gui;
+pub(crate) mod history;
+pub(crate) mod inference;
+pub(crate) mod mcp_cli;
+pub(crate) mod model;
+pub(crate) mod proxy_cache_clear;
+pub(crate) mod proxy_dashboard;
+pub(crate) mod up;
+pub(crate) mod web;

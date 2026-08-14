@@ -38,7 +38,7 @@ use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 ///
 /// Returns `Ok(())` if all required dependencies are present.
 /// Returns an error if any required dependencies are missing.
-pub async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: bool) -> Result<()> {
+pub(crate) async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: bool) -> Result<()> {
     println!("{}{}Checking system dependencies...{}\n", BOLD, INFO, RESET);
 
     let dependencies = probe.check_all_dependencies();

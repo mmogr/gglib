@@ -16,7 +16,7 @@ use gglib_core::{Settings, SettingsUpdate};
 
 use settings_display::{print_sections, settings_display_rows, settings_to_sections};
 
-pub use profiles::handle_profile;
+pub(crate) use profiles::handle_profile;
 
 /// Resolve the display string for `default-model-id`, performing a DB lookup when set.
 ///
@@ -36,7 +36,7 @@ async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<
 /// - No args: show current default
 /// - With identifier: set as default
 /// - With --clear: remove default
-pub async fn handle_default_model(
+pub(crate) async fn handle_default_model(
     ctx: &CliContext,
     identifier: Option<String>,
     clear: bool,
@@ -85,7 +85,7 @@ pub async fn handle_default_model(
     Ok(())
 }
 
-pub fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
+pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     match command {
         ModelsDirCommand::Show => {
             let resolved = resolve_models_dir(None)?;
@@ -129,7 +129,7 @@ pub fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     }
 }
 
-pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
+pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
             let settings = ctx.app.settings().get().await?;

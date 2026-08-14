@@ -12,7 +12,7 @@ use gglib_core::services::ChatHistoryService;
 
 /// Tracks a persisted conversation and the number of messages already saved,
 /// so subsequent calls to [`Conversation::save_new`] only write the delta.
-pub struct Conversation<'a> {
+pub(crate) struct Conversation<'a> {
     service: &'a ChatHistoryService,
     pub id: i64,
     saved: usize,
@@ -20,7 +20,7 @@ pub struct Conversation<'a> {
 
 impl<'a> Conversation<'a> {
     /// Create a new conversation with a timestamp-based title.
-    pub async fn create(
+    pub(crate) async fn create(
         service: &'a ChatHistoryService,
         system_prompt: Option<String>,
         model_id: Option<i64>,
@@ -45,7 +45,7 @@ impl<'a> Conversation<'a> {
     /// Resume an existing conversation for continued persistence.
     ///
     /// Loads the existing message count so [`save_new`] only persists the delta.
-    pub async fn resume(
+    pub(crate) async fn resume(
         service: &'a ChatHistoryService,
         id: i64,
         existing_message_count: usize,
@@ -66,7 +66,7 @@ impl<'a> Conversation<'a> {
     ///
     /// Errors are logged as warnings and swallowed — persistence must never
     /// break the interactive session.
-    pub async fn save_new(&mut self, messages: &[AgentMessage]) {
+    pub(crate) async fn save_new(&mut self, messages: &[AgentMessage]) {
         for msg in messages.iter().skip(self.saved) {
             if matches!(msg, AgentMessage::System { .. }) {
                 continue;

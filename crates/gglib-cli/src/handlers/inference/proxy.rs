@@ -18,7 +18,7 @@ use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 /// Ensures the daemon is running, starts the proxy on it (idempotent), and
 /// attaches the dashboard until Ctrl-C.
 #[allow(clippy::too_many_arguments)]
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     host: String,
     port: u16,
@@ -98,7 +98,7 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-pub async fn stop() -> Result<()> {
+pub(crate) async fn stop() -> Result<()> {
     let client = reqwest::Client::new();
     match daemon_client::probe(&client).await {
         daemon_client::DaemonProbe::Running => {}

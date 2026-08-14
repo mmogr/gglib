@@ -11,7 +11,7 @@ use crate::presentation::{format_relative_time, print_separator, truncate_string
 ///
 /// Retrieves and displays past conversations with message counts
 /// and relative timestamps for quick browsing.
-pub async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
     let conversations = ctx.app.chat_history().list_conversations().await?;
 
     if conversations.is_empty() {

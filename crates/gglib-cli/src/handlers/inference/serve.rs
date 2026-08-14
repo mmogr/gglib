@@ -27,7 +27,7 @@ use super::shared::{log_inference_info, log_mlock_info};
 /// Resolves the model's launch options locally (the full cascade), asks the
 /// daemon to start the proxy pinned to it, and attaches the dashboard.
 #[allow(clippy::too_many_arguments)]
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     id: u32,
     context: ContextArgs,

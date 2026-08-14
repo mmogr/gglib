@@ -33,7 +33,7 @@ use gglib_core::utils::validation;
 /// - File validation fails
 /// - GGUF metadata extraction fails
 /// - Database operations fail
-pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     let path = PathBuf::from(file_path);
 
     // Validate the GGUF file and extract metadata for CLI preview

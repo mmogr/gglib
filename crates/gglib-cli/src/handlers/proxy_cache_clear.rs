@@ -7,7 +7,7 @@
 use anyhow::{Context, Result};
 
 /// Clear KV cache via the proxy's `/v1/proxy/cache/clear` endpoint.
-pub async fn execute(
+pub(crate) async fn execute(
     host: &str,
     port: u16,
     session_id: Option<&str>,

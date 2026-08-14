@@ -69,7 +69,7 @@ const MARK_UNKNOWN: char = '?';
 /// The wording matches `inspect_display`'s, so the two commands describe the
 /// same stored fact the same way.
 #[derive(Debug, Clone, Copy)]
-pub struct ExplainContext<'a> {
+pub(crate) struct ExplainContext<'a> {
     /// The profile that was selected, if any.
     pub profile: Option<&'a str>,
     /// Whether the model carries the `reasoning` tag, which selects the floor.
@@ -99,7 +99,7 @@ pub struct ExplainContext<'a> {
 }
 
 /// Print the resolved parameters and their provenance.
-pub fn print_explanation(
+pub(crate) fn print_explanation(
     model_name: &str,
     model_id: i64,
     resolved: &InferenceConfig,
@@ -129,7 +129,7 @@ pub fn print_explanation(
 /// Split from the printing so it can be asserted on directly — this is the
 /// part with the logic in it.
 #[must_use]
-pub fn explanation_lines(
+pub(crate) fn explanation_lines(
     resolved: &InferenceConfig,
     sources: &FieldSources,
     ctx: ExplainContext<'_>,

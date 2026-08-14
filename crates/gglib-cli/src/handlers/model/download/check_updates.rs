@@ -10,7 +10,7 @@ use crate::handlers::model::resolver;
 /// Execute the check-updates command.
 ///
 /// Checks if locally downloaded models have updates available on HuggingFace.
-pub async fn execute(ctx: &CliContext, identifier: Option<&str>, all: bool) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: bool) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
         let models = ctx.app.models().list().await?;

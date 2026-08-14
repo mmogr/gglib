@@ -27,7 +27,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// Exits successfully once at least one item has been observed and the queue
 /// is empty again; a failure recorded for anything observed is reported as
 /// an error. Ctrl-C detaches — the daemon keeps downloading.
-pub async fn monitor(handle: &DaemonHandle) -> Result<()> {
+pub(super) async fn monitor(handle: &DaemonHandle) -> Result<()> {
     let watch = watch_queue(handle);
     tokio::select! {
         result = watch => result,

@@ -40,7 +40,7 @@ use super::thinking_dispatch::{
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
-pub async fn drain_event_stream(
+pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::Receiver<AgentEvent>,
     verbose: bool,
     quiet: bool,

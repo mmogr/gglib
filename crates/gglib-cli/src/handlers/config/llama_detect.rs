@@ -14,7 +14,7 @@ use gglib_runtime::llama::{Acceleration, detect_optimal_acceleration, vulkan_sta
 /// Returns `Ok(())` when all build dependencies for the detected
 /// acceleration are present. Returns `Err` (non-zero exit) when
 /// dependencies are missing.
-pub fn execute(json: bool) -> Result<()> {
+pub(crate) fn execute(json: bool) -> Result<()> {
     let accel = detect_optimal_acceleration();
     let vk = vulkan_status();
 

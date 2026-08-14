@@ -22,7 +22,7 @@ use std::io;
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
-pub fn prompt_string(prompt: &str) -> Result<String> {
+pub(crate) fn prompt_string(prompt: &str) -> Result<String> {
     println!("{prompt}: ");
 
     let mut input: String = String::new();
@@ -46,7 +46,7 @@ pub fn prompt_string(prompt: &str) -> Result<String> {
 /// # Returns
 ///
 /// * `Result<String>` - The user's input or default value
-pub fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result<String> {
+pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result<String> {
     if let Some(default_val) = default {
         println!("{prompt} [{default_val}]: ");
     } else {
@@ -86,7 +86,7 @@ pub fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
-pub fn prompt_confirmation(prompt: &str) -> Result<bool> {
+pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
     loop {
         let input = prompt_string(&format!("{prompt} (y/N)"))?;
         match input.to_lowercase().as_str() {
@@ -115,7 +115,7 @@ pub fn prompt_confirmation(prompt: &str) -> Result<bool> {
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
-pub fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
+pub(crate) fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
     loop {
         let input = prompt_string(&format!("{prompt} (Y/n)"))?;
         match input.to_lowercase().as_str() {
@@ -141,7 +141,7 @@ pub fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input as a positive float
-pub fn prompt_float(prompt: &str) -> Result<f64> {
+pub(crate) fn prompt_float(prompt: &str) -> Result<f64> {
     loop {
         let input: String = prompt_string(prompt)?;
 
@@ -172,7 +172,7 @@ pub fn prompt_float(prompt: &str) -> Result<f64> {
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input or default value as a positive float
-pub fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> Result<f64> {
+pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> Result<f64> {
     loop {
         let input: String = if let Some(default_val) = default {
             prompt_string(&format!("{prompt} [{default_val:.1}]"))?

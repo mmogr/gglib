@@ -12,7 +12,7 @@ use crate::presentation::{print_separator, truncate_string};
 use crate::utils::input;
 
 /// Dispatch an MCP subcommand to its handler.
-pub async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
     match cmd {
         McpCommand::List => list(ctx).await,
         McpCommand::Add {

@@ -35,7 +35,7 @@ pub(super) struct RenderContext {
 }
 
 impl RenderContext {
-    pub fn new(rich: bool, stderr_tty: bool, quiet: bool) -> Self {
+    pub(super) fn new(rich: bool, stderr_tty: bool, quiet: bool) -> Self {
         Self {
             buf: String::new(),
             in_thinking: false,

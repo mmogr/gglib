@@ -23,7 +23,7 @@ use crate::parser::Cli;
 /// The script is buffered in memory before writing so that a broken pipe
 /// (e.g. the caller piping to `head`) is handled gracefully rather than
 /// causing a panic from within `clap_complete`.
-pub fn execute(shell: Shell) -> Result<()> {
+pub(crate) fn execute(shell: Shell) -> Result<()> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     let mut buf: Vec<u8> = Vec::new();

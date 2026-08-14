@@ -105,7 +105,7 @@ Missing dependencies trigger platform-specific installation instructions.
 ## Usage Pattern
 
 ```rust,ignore
-use gglib_cli::handlers::check_deps;
+use crate::handlers::check_deps;
 use gglib_core::ports::SystemProbePort;
 
 pub async fn handle_check_deps_command(

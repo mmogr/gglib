@@ -40,7 +40,7 @@ const HOSTNAME: &str = "gglib.local.";
 pub(crate) const LAN_HOSTNAME: &str = "gglib.local";
 
 /// An active mDNS registration, unregistered on [`shutdown`](Self::shutdown).
-pub struct MdnsAdvertiser {
+pub(super) struct MdnsAdvertiser {
     daemon: ServiceDaemon,
     fullname: String,
 }
@@ -55,7 +55,7 @@ impl MdnsAdvertiser {
     /// discover the machine's interface addresses and keep the record current
     /// as they change. A specific `host` is advertised verbatim, so a server
     /// narrowed to one interface does not advertise the others.
-    pub fn start(host: &str, port: u16) -> Option<Self> {
+    pub(super) fn start(host: &str, port: u16) -> Option<Self> {
         let daemon = match ServiceDaemon::new() {
             Ok(daemon) => daemon,
             Err(e) => {
@@ -101,7 +101,7 @@ impl MdnsAdvertiser {
     /// Awaits the unregister acknowledgement before shutting the daemon down —
     /// dropping it immediately would leave the goodbye packet unsent and the
     /// stale record cached by every resolver on the network.
-    pub async fn shutdown(self) {
+    pub(super) async fn shutdown(self) {
         match self.daemon.unregister(&self.fullname) {
             Ok(rx) => {
                 if let Err(e) = rx.recv_async().await {

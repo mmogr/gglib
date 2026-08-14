@@ -22,7 +22,7 @@ use crate::bootstrap::CliContext;
 /// Without `--set` or `--unset` flags the command is read-only and prints the
 /// current capability state.  With flags it applies the requested overrides
 /// via [`ModelOps::set_capabilities`] and prints the updated state.
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     identifier: &str,
     set: Vec<String>,

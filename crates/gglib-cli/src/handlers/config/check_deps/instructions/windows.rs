@@ -4,7 +4,7 @@ use super::common::{BOLD, RESET, print_command, print_header, print_subsection};
 use gglib_core::utils::system::Dependency;
 
 /// Print Windows-specific installation instructions.
-pub fn print_instructions(missing: &[&Dependency]) {
+pub(super) fn print_instructions(missing: &[&Dependency]) {
     print_header("Windows");
 
     // Check for winget/choco packages

@@ -21,7 +21,7 @@ use crate::bootstrap::CliContext;
 use crate::presentation::inspect_display;
 
 /// Execute `gglib model inspect <identifier> [--metadata] [--json]`.
-pub async fn execute(
+pub(crate) async fn execute(
     ctx: &CliContext,
     identifier: &str,
     show_metadata: bool,

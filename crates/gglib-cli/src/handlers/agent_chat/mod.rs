@@ -1,10 +1,10 @@
 #![doc = include_str!("README.md")]
-pub mod config;
-pub mod drain;
+pub(crate) mod config;
+pub(crate) mod drain;
 mod markdown;
-pub mod persistence;
-pub mod renderer;
-pub mod repl;
+pub(crate) mod persistence;
+pub(crate) mod renderer;
+pub(crate) mod repl;
 mod thinking_dispatch;
 mod tool_format;
 
@@ -26,7 +26,7 @@ use self::persistence::Conversation;
 /// When `args.continue_id` is set, loads a previous conversation and resumes
 /// with the original session parameters (saved settings fill in any CLI args
 /// the user didn't explicitly provide).
-pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
+pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // 1. If resuming, load the conversation first and merge saved settings
     //    into args so the agent is composed with the correct parameters.
     let mut args = args.clone();

@@ -12,7 +12,7 @@ use crate::daemon_client;
 use crate::presentation::style;
 
 /// Execute the `web` command.
-pub async fn execute(share_lan: bool) -> Result<()> {
+pub(crate) async fn execute(share_lan: bool) -> Result<()> {
     if share_lan {
         // Foreground, eyes-open LAN mode — identical to `daemon run --share-lan`.
         return super::daemon::run(true, Vec::new()).await;

@@ -50,7 +50,7 @@ use super::tool_format::format_tool_result;
 /// was rendered before this call.  When `false`, [`AgentEvent::FinalAnswer`]
 /// will print `content` to stdout — a defensive fallback for non-streaming
 /// invocations where the model returns its answer in a single chunk.
-pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_delta: bool) {
+pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_delta: bool) {
     match event {
         AgentEvent::ReasoningDelta { content } => {
             if !quiet {

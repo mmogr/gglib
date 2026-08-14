@@ -14,7 +14,7 @@ use crate::handlers::config::check_deps::platform::{Os, detect_linux_distro, det
 use gglib_core::utils::system::Dependency;
 
 /// Print installation instructions for missing dependencies.
-pub fn print_installation_instructions(missing: &[&Dependency]) {
+pub(super) fn print_installation_instructions(missing: &[&Dependency]) {
     match detect_os() {
         Os::MacOS => macos::print_instructions(missing),
         Os::Windows => windows::print_instructions(missing),

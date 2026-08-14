@@ -28,7 +28,7 @@ fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
 /// - Running from source repo: Build from source (existing behavior)
 /// - Pre-built binary + macOS/Windows: Download pre-built binaries
 /// - Pre-built binary + Linux: Build from source (CUDA requires compilation)
-pub async fn handle_install(
+pub(crate) async fn handle_install(
     cuda: bool,
     metal: bool,
     vulkan: bool,
