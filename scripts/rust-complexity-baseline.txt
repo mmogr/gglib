@@ -93,7 +93,7 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 438
 crates/gglib-db/src/repositories/sqlite_download_state_repository.rs 361
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 995
-crates/gglib-db/src/setup.rs 907
+crates/gglib-db/src/setup.rs 913
 crates/gglib-download/src/cli_emitter.rs 528
 crates/gglib-download/src/cli_exec/api.rs 369
 crates/gglib-download/src/cli_exec/exec/progress.rs 330

@@ -754,10 +754,13 @@ mod tests {
     /// `ON CONFLICT(model_key)` and the next registration of that file
     /// silently appends a second row.
     ///
-    /// The tempdir path is the realistic case rather than a contrived one: on
-    /// macOS it sits under `/var`, which resolves through `/private/var`, so
-    /// the spelling the user passes and the column the row stores genuinely
-    /// differ.
+    /// The non-canonical spelling is built with `..` rather than borrowed from
+    /// the platform. A `tempfile` directory is non-canonical on macOS, where
+    /// `/var` resolves through `/private/var`, and already canonical on Linux
+    /// — so leaning on it wrote a test that passed on the machine it was
+    /// written on and failed in CI. `..` survives as a real path component
+    /// everywhere, which is what makes the two spellings differ on every
+    /// platform.
     #[tokio::test]
     async fn backfill_rekeys_a_row_stored_under_a_non_canonical_spelling() {
         use crate::repositories::sqlite_model_repository::local_model_key_for;
@@ -767,9 +770,12 @@ mod tests {
         let pool = setup_test_database().await.unwrap();
 
         let dir = tempfile::tempdir().unwrap();
-        let spelled = dir.path().join("Legacy.gguf");
-        std::fs::File::create(&spelled).unwrap();
-        let canonical = std::fs::canonicalize(&spelled).unwrap();
+        let file = dir.path().join("Legacy.gguf");
+        std::fs::File::create(&file).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+
+        let spelled = dir.path().join("sub").join("..").join("Legacy.gguf");
+        let canonical = std::fs::canonicalize(&file).unwrap();
         assert_ne!(
             spelled, canonical,
             "this test needs the two spellings to differ"
