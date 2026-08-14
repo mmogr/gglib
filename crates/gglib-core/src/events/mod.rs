@@ -267,14 +267,9 @@ mod tests {
             AppEvent::server_started(1, "test", 8080).event_name(),
             "server:started"
         );
-        assert_eq!(
-            AppEvent::Download {
-                event: DownloadEvent::started("id"),
-            }
-            .event_name(),
-            "download:started"
-        );
         assert_eq!(AppEvent::model_removed(1).event_name(), "model:removed");
+        // The download names are covered exhaustively by
+        // `download_event_names_are_stable` below.
     }
 
     /// Lock down download event names to prevent frontend subscription mismatches.
@@ -287,32 +282,22 @@ mod tests {
     /// because frontend listened to wrong event names.
     #[test]
     fn download_event_names_are_stable() {
-        let wrap = |event| AppEvent::Download { event };
-        let cases = vec![
-            (wrap(DownloadEvent::started("id")), "download:started"),
+        let cases = [
+            (DownloadEvent::started("id"), "download:started"),
             (
-                wrap(DownloadEvent::progress(
-                    "id",
-                    50,
-                    100,
-                    Some(1024.0),
-                    Some(10.0),
-                )),
+                DownloadEvent::progress("id", 50, 100, Some(1024.0), Some(10.0)),
                 "download:progress",
             ),
             (
-                wrap(DownloadEvent::completed("id", None::<String>)),
+                DownloadEvent::completed("id", None::<String>),
                 "download:completed",
             ),
-            (
-                wrap(DownloadEvent::failed("id", "error")),
-                "download:failed",
-            ),
-            (wrap(DownloadEvent::cancelled("id")), "download:cancelled"),
+            (DownloadEvent::failed("id", "error"), "download:failed"),
+            (DownloadEvent::cancelled("id"), "download:cancelled"),
         ];
 
         for (event, expected_name) in cases {
-            assert_eq!(event.event_name(), expected_name);
+            assert_eq!(AppEvent::Download { event }.event_name(), expected_name);
         }
     }
 }

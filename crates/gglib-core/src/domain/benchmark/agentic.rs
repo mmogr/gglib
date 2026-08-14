@@ -1220,11 +1220,8 @@ mod tests {
     /// run proved nothing about its own sensitivity.
     #[test]
     fn a_control_that_scored_well_below_gglib_demonstrates_sensitivity() {
-        let report = report_with(Some(scores(0.2, None, 0.30)), 0.90);
-        assert!(matches!(
-            report.control_verdict(),
-            Some(ControlVerdict::Moved { .. })
-        ));
+        let verdict = report_with(Some(scores(0.2, None, 0.30)), 0.90).control_verdict();
+        assert!(matches!(verdict, Some(ControlVerdict::Moved { .. })));
     }
 
     /// **The failure this exists to catch.** Forcing temperature 2.0 barely
@@ -1232,11 +1229,8 @@ mod tests {
     /// and therefore cannot support any other delta in the report.
     #[test]
     fn a_control_that_barely_moved_reports_failure() {
-        let report = report_with(Some(scores(0.88, None, 0.89)), 0.90);
-        assert!(matches!(
-            report.control_verdict(),
-            Some(ControlVerdict::TooSmall { .. })
-        ));
+        let verdict = report_with(Some(scores(0.88, None, 0.89)), 0.90).control_verdict();
+        assert!(matches!(verdict, Some(ControlVerdict::TooSmall { .. })));
     }
 
     /// **The failure that was measured, and that the old bool hid.** A control
@@ -1245,19 +1239,15 @@ mod tests {
     #[test]
     fn a_control_that_scored_higher_is_its_own_verdict() {
         let report = report_with(Some(scores(0.95, None, 0.99)), 0.90);
+        let verdict = report.control_verdict().expect("a verdict");
+        assert!(!verdict.demonstrated_sensitivity());
 
-        match report.control_verdict() {
-            Some(ControlVerdict::WrongDirection { gap }) => {
+        match verdict {
+            ControlVerdict::WrongDirection { gap } => {
                 assert!((gap - 0.09).abs() < 1e-9, "gap is reported positive: {gap}");
             }
             other => panic!("expected WrongDirection, got {other:?}"),
         }
-        assert!(
-            !report
-                .control_verdict()
-                .expect("a verdict")
-                .demonstrated_sensitivity()
-        );
     }
 
     /// The two failures are distinct states: one says the suite is too small
@@ -1548,11 +1538,9 @@ mod tests {
             Some(scores(0.5, None, 0.90 - CONTROL_MIN_COMPOSITE_GAP)),
             0.90,
         );
+        let verdict = exactly_at.control_verdict();
         assert!(
-            matches!(
-                exactly_at.control_verdict(),
-                Some(ControlVerdict::Moved { .. })
-            ),
+            matches!(verdict, Some(ControlVerdict::Moved { .. })),
             "the bound is inclusive"
         );
     }
