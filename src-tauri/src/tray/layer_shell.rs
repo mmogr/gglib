@@ -99,7 +99,7 @@ fn api() -> Option<&'static Api> {
 ///
 /// Bottom-right matches the default panel position on KDE and most desktops.
 #[must_use]
-pub fn prepare(panel: &WebviewWindow) -> bool {
+pub(super) fn prepare(panel: &WebviewWindow) -> bool {
     let Some(api) = api() else {
         debug!("gtk-layer-shell unavailable; leaving panel placement to the compositor");
         return false;
@@ -170,7 +170,7 @@ fn margins_for(
 /// Unlike [`prepare`] this runs per activation, because it is the only moment
 /// the icon's position is known. The anchors themselves do not change — only
 /// the margins — so the surface is not re-initialised.
-pub fn anchor_at(panel: &WebviewWindow, x: i32, y: i32) {
+pub(super) fn anchor_at(panel: &WebviewWindow, x: i32, y: i32) {
     let Some(api) = api() else { return };
 
     let Ok(window) = panel.gtk_window() else {

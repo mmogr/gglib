@@ -44,7 +44,7 @@ pub(crate) enum Anchor {
 /// for why the timing is not incidental.
 #[cfg(target_os = "linux")]
 #[must_use]
-pub fn prepare(panel: &WebviewWindow) -> bool {
+pub(crate) fn prepare(panel: &WebviewWindow) -> bool {
     super::layer_shell::prepare(panel)
 }
 

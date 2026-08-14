@@ -134,14 +134,14 @@ fn pixmap(state: TrayState) -> Vec<Icon> {
 }
 
 /// A registered tray, kept alive for as long as the item should exist.
-pub struct Handle(ServiceHandle<GglibTray>);
+pub(super) struct Handle(ServiceHandle<GglibTray>);
 
 /// Register the tray with the desktop's `StatusNotifierWatcher`.
 ///
 /// Fails when nothing is watching — a bare window manager with no tray host —
 /// which the caller treats exactly as it treats a failed Tauri tray: the app
 /// runs, and `autostart::should_start_hidden` refuses to hide the window.
-pub fn build(app: &AppHandle) -> Result<Handle, String> {
+pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
     let tray = GglibTray {
         app: app.clone(),
         // Nothing has been polled yet, and the default says so: the tray
@@ -163,7 +163,7 @@ pub fn build(app: &AppHandle) -> Result<Handle, String> {
 ///
 /// One `update` for all three: `ksni` rebuilds the menu from the tray's state
 /// after the closure returns, so there is nothing to keep in step by hand.
-pub async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
+pub(super) async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
     handle
         .0
         .update(|tray| tray.snapshot.clone_from(snapshot))
