@@ -1,79 +1,33 @@
-//! Error types for llama.cpp management.
+//! Error type for the llama.cpp install prompt.
 //!
-//! This module provides a unified error type for all llama-related operations,
-//! keeping error plumbing out of orchestration modules.
+//! This was once "a unified error type for all llama-related operations", with
+//! variant groups for installation, download and build. That design lost to
+//! `anyhow`: every orchestration module in this directory — `download`,
+//! `build`, `install`, `deps`, `detect`, `update`, `uninstall`, `validate`,
+//! `status`, `config`, `ensure` — returns `anyhow::Result`, and had for long
+//! enough that thirteen of the fifteen variants were never constructed once.
+//!
+//! What is left is the one place that wants a *typed* error: [`InstallPrompt`]
+//! is a trait, and a trait in a library should not make its implementors
+//! depend on `anyhow`.
+//!
+//! [`InstallPrompt`]: super::prompt::InstallPrompt
 
-use std::path::PathBuf;
 use thiserror::Error;
 
-/// Errors that can occur during llama.cpp management operations.
+/// Errors that can occur while asking the user to confirm an install.
 #[derive(Debug, Error)]
 pub enum LlamaError {
-    // === Installation & Detection ===
-    /// Llama binaries are not installed
-    #[error("llama.cpp is not installed. Run 'gglib config llama install' to install it.")]
-    NotInstalled,
-
-    /// Binary exists but is not functional
-    #[error("llama.cpp binary is corrupted or not executable: {path}")]
-    BinaryCorrupted { path: PathBuf },
-
-    /// Required build dependencies are missing
-    #[error("Missing build dependencies: {missing}")]
-    MissingDependencies { missing: String },
-
-    // === Download ===
-    /// Pre-built binaries not available for this platform
-    #[error("Pre-built binaries not available: {reason}")]
-    PrebuiltNotAvailable { reason: String },
-
-    /// Failed to fetch release information from GitHub
-    #[error("Failed to fetch release from GitHub: {0}")]
-    ReleaseFetchFailed(String),
-
-    /// Failed to download file
-    #[error("Download failed: {0}")]
-    DownloadFailed(String),
-
-    /// Failed to extract archive
-    #[error("Failed to extract archive: {0}")]
-    ExtractionFailed(String),
-
-    // === Build ===
-    /// `CMake` configuration failed
-    #[error("CMake configuration failed: {0}")]
-    CmakeFailed(String),
-
-    /// Build/compilation failed
-    #[error("Build failed: {0}")]
-    BuildFailed(String),
-
-    /// CUDA/compiler compatibility issue
-    #[error("CUDA/compiler compatibility issue: {0}")]
-    CudaCompatibility(String),
-
-    // === Prompt ===
-    /// User confirmation was required but not available (non-interactive mode)
+    /// User confirmation was required but not available (non-interactive mode).
     #[error("User confirmation required: {message}")]
     PromptRequired { message: String },
 
-    /// User cancelled the operation
-    #[error("Operation cancelled by user")]
-    Cancelled,
-
-    // === Path & IO ===
-    /// Path resolution failed
-    #[error("Path error: {0}")]
-    PathError(#[from] gglib_core::paths::PathError),
-
-    /// IO operation failed
+    /// Reading the answer from the terminal failed.
+    ///
+    /// Constructed only by `?` inside `CliPrompt::confirm`, which exists under
+    /// the `cli` feature — hence no explicit `LlamaError::IoError` anywhere.
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-
-    // === Other ===
-    /// Generic error with context
-    #[error("{0}")]
-    Other(String),
 }
 
 impl LlamaError {
@@ -82,11 +36,6 @@ impl LlamaError {
         Self::PromptRequired {
             message: message.into(),
         }
-    }
-
-    /// Create an Other error from any error type
-    pub fn other(err: impl std::fmt::Display) -> Self {
-        Self::Other(err.to_string())
     }
 }
 
