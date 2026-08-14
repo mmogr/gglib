@@ -14,7 +14,7 @@ pub fn elapsed_ms(start: Instant) -> u64 {
 /// Format a millisecond duration into a compact human-readable string.
 ///
 /// ```
-/// use gglib_core::utils::timing::format_duration_human;
+/// use gglib_core::format_duration_human;
 ///
 /// assert_eq!(format_duration_human(0), "0ms");
 /// assert_eq!(format_duration_human(125), "125ms");
