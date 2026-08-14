@@ -44,6 +44,17 @@ cd "$ROOT_DIR"
 SETTINGS_RS="crates/gglib-core/src/settings.rs"
 CLI_SET_ARGS="crates/gglib-cli/src/config_commands/settings_args.rs"
 
+if [ ! -f "$CLI_SET_ARGS" ]; then
+  echo -e "${RED}❌ ${CLI_SET_ARGS} does not exist${NC}"
+  echo
+  echo "The CLI half of this guard reads that file. When the path is wrong the"
+  echo "grep below fails per field, and because it sits inside an \`if\` it does"
+  echo "not trip \`set -e\` — every field then passes on the GUI check alone."
+  echo "That is exactly how this guard ran half-blind after 333682f3 moved"
+  echo "\`config_commands.rs\` into a directory."
+  exit 1
+fi
+
 # Fields nothing settable is expected for, and why.
 declare -A EXEMPT=(
   [setup_completed]="written by the setup wizard when it finishes, not chosen"
@@ -89,8 +100,27 @@ to_camel() {
   }'
 }
 
+# CLI detection, factored into a function so the self-test below exercises the
+# same code path the real scan uses. The `pub ` is optional because the fields
+# moved from a clap variant's inline list (no `pub`) to a named `Args` struct
+# (`pub`) — a pattern that assumes either one silently matches nothing.
+cli_has_field() {
+  grep -qE "^[[:space:]]+(pub )?$1: Option<" "$CLI_SET_ARGS"
+}
+
+# A name that is not a field must not match. This catches the opposite failure
+# from the one above: a pattern loose enough to match everything reports every
+# field as CLI-reachable and is just as useless as one that matches nothing.
+if cli_has_field "definitely_not_a_settings_field"; then
+  echo -e "${RED}❌ self-test: the CLI detector matches a field that does not exist${NC}"
+  echo
+  echo "The pattern is too loose, so every field will look CLI-reachable."
+  exit 1
+fi
+
 unreachable=()
 checked=0
+cli_reachable=0
 
 for field in $fields; do
   checked=$((checked + 1))
@@ -103,11 +133,10 @@ for field in $fields; do
   in_cli=false
   in_gui=false
 
-  # CLI: the field name appears in `SettingsSetArgs`. The `pub ` is optional
-  # because the fields moved from a clap variant's inline list (no `pub`) to a
-  # named `Args` struct (`pub`); a pattern assuming either one matches nothing.
-  if grep -qE "^[[:space:]]+(pub )?${field}: Option<" "$CLI_SET_ARGS"; then
+  # CLI: the field name appears in `SettingsSetArgs`.
+  if cli_has_field "$field"; then
     in_cli=true
+    cli_reachable=$((cli_reachable + 1))
   fi
 
   # GUI: the camelCase name appears anywhere the frontend can act on it.
@@ -128,6 +157,21 @@ for field in $fields; do
 done
 
 echo
+
+# Several settings are deliberately CLI-only, so a run in which *nothing* is
+# CLI-reachable is not a real state — it is the detector having stopped
+# working. Reporting "all clear" on that is what this guard did between
+# 333682f3 and the fix, and it is indistinguishable from a healthy run unless
+# the count is asserted.
+if [ "$cli_reachable" -eq 0 ]; then
+  echo -e "${RED}❌ no Settings field was found on the CLI surface${NC}"
+  echo
+  echo "Either every flag was deleted from ${CLI_SET_ARGS}, or the detector no"
+  echo "longer matches it. The second is far more likely — check the pattern in"
+  echo "\`cli_has_field\` against the current shape of \`SettingsSetArgs\`."
+  exit 1
+fi
+
 if [ ${#unreachable[@]} -gt 0 ]; then
   echo -e "${RED}❌ ${#unreachable[@]} setting(s) nobody can change${NC}"
   echo
@@ -153,4 +197,4 @@ MSG
   exit 1
 fi
 
-echo -e "${GREEN}✅ every Settings field is reachable${NC} (${checked} checked)"
+echo -e "${GREEN}✅ every Settings field is reachable${NC} (${checked} checked, ${cli_reachable} on the CLI)"
