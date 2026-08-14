@@ -11,7 +11,7 @@ use sysinfo::System;
 use crate::llama::vulkan_status;
 
 /// Detect GPU hardware and acceleration software.
-pub fn detect_gpu_info() -> GpuInfo {
+pub(crate) fn detect_gpu_info() -> GpuInfo {
     let has_metal = cfg!(target_os = "macos");
     let has_nvidia_gpu = detect_nvidia_hardware();
     let cuda_version = check_cuda();
@@ -77,7 +77,7 @@ fn detect_nvidia_hardware() -> bool {
 }
 
 /// Check if NVIDIA CUDA toolkit is installed.
-pub fn check_cuda() -> Option<String> {
+pub(crate) fn check_cuda() -> Option<String> {
     // Try nvcc first (CUDA compiler)
     if let Ok(output) = cmd("nvcc").arg("--version").output()
         && output.status.success()
@@ -98,7 +98,7 @@ pub fn check_cuda() -> Option<String> {
 }
 
 /// Get NVIDIA GPU VRAM in bytes using nvidia-smi.
-pub fn get_nvidia_vram_bytes() -> Option<u64> {
+pub(crate) fn get_nvidia_vram_bytes() -> Option<u64> {
     query_nvidia_memory("memory.total")
 }
 
@@ -113,7 +113,7 @@ pub fn get_nvidia_vram_bytes() -> Option<u64> {
 /// can take memory between this call and the spawn that follows it. Callers
 /// leave a margin for that (see
 /// [`RESIDENCY_UTILISATION`](gglib_core::domain::RESIDENCY_UTILISATION)).
-pub fn get_nvidia_free_vram_bytes() -> Option<u64> {
+pub(crate) fn get_nvidia_free_vram_bytes() -> Option<u64> {
     query_nvidia_memory("memory.free")
 }
 
@@ -147,14 +147,14 @@ fn query_nvidia_memory(field: &str) -> Option<u64> {
 /// which is many milliseconds of work to answer a question about memory. This
 /// is on the admission path (via `free_gpu_memory_bytes` on unified-memory
 /// Macs), so the difference matters.
-pub fn get_available_ram_bytes() -> u64 {
+pub(crate) fn get_available_ram_bytes() -> u64 {
     let mut sys = System::new();
     sys.refresh_memory();
     sys.available_memory()
 }
 
 /// Get system memory information for model fit calculations.
-pub fn get_system_memory_info() -> SystemMemoryInfo {
+pub(crate) fn get_system_memory_info() -> SystemMemoryInfo {
     let sys = System::new_all();
     let total_ram_bytes = sys.total_memory();
     let gpu_info = detect_gpu_info();

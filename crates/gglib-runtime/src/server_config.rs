@@ -50,7 +50,13 @@
 use std::path::PathBuf;
 
 use gglib_core::ports::ServerConfig;
-pub use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+// Split because the two have different reach. `lib.rs` re-exports
+// `ServerConfigOptions` onward, and a re-export chain has to stay public the
+// whole way — `unreachable_pub` does not see through the chain and suggests
+// demoting it, which the compiler then refuses with E0365. Nothing re-exports
+// or names `resolve_context_size` through this crate, so it stays internal.
+pub use gglib_core::server_config::ServerConfigOptions;
+pub(crate) use gglib_core::server_config::resolve_context_size;
 use tracing::debug;
 
 use crate::llama::args::{
@@ -67,7 +73,7 @@ use crate::llama::args::{
 /// rather than re-resolving at the call site is deliberate: a second
 /// resolution that drifted would narrate a launch that never happened.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedCapabilities {
+pub(crate) struct ResolvedCapabilities {
     /// Whether `--jinja` was emitted, and why.
     pub jinja: JinjaResolution,
     /// The `--reasoning-format` decision, and why.
@@ -119,7 +125,7 @@ pub fn build_server_config(
 ///
 /// Same translation, same single source of truth — `build_server_config` is a
 /// projection of this function that drops the explanation.
-pub fn build_server_config_narrated(
+pub(crate) fn build_server_config_narrated(
     model_id: i64,
     model_name: String,
     model_path: PathBuf,

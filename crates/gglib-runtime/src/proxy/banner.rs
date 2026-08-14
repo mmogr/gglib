@@ -30,7 +30,7 @@ fn use_color() -> bool {
 /// auto-sizes the RAM cache, quantizes the KV cache, enables MTP, picks a
 /// dialect parser and resolves the context through a four-level chain, and
 /// before this existed it did all of that in silence.
-pub fn print_launch_narration(narration: &LaunchNarration) {
+pub(crate) fn print_launch_narration(narration: &LaunchNarration) {
     for line in render_launch_narration(narration, use_color()) {
         println!("{line}");
     }

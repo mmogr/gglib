@@ -25,7 +25,7 @@ use gglib_core::utils::process::cmd;
 ///
 /// Returns `false` if the command cannot be found or exits with a non-zero
 /// status.
-pub fn command_succeeds(program: &str, args: &[&str]) -> bool {
+pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
     cmd(program)
         .args(args)
         .output()
@@ -38,7 +38,7 @@ pub fn command_succeeds(program: &str, args: &[&str]) -> bool {
 /// Returns `None` if the command cannot be found, exits with a non-zero
 /// status, or produces non-UTF-8 output.
 #[cfg(any(target_os = "linux", target_os = "windows", feature = "cli", test))]
-pub fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
+pub(crate) fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
     let output = cmd(program).args(args).output().ok()?;
     if !output.status.success() {
         return None;
@@ -51,7 +51,7 @@ pub fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
 ///
 /// A thin wrapper around [`command_succeeds`] using `--version` as a
 /// probe argument.
-pub fn command_exists(program: &str) -> bool {
+pub(crate) fn command_exists(program: &str) -> bool {
     command_succeeds(program, &["--version"])
 }
 
@@ -64,7 +64,7 @@ pub fn command_exists(program: &str) -> bool {
 /// Extracts only the leading numeric portion of each component, so
 /// `"12.0-rc1"` successfully parses as `(12, 0)`.
 #[cfg(any(target_os = "linux", test))]
-pub fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
+pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version_str.split('.').collect();
     if parts.len() >= 2 {
         let parse_numeric = |part: &str| -> Option<u32> {
@@ -85,7 +85,7 @@ pub fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 
 /// Check if git is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
-pub fn has_git() -> Result<Option<String>> {
+pub(crate) fn has_git() -> Result<Option<String>> {
     match command_stdout("git", &["--version"]) {
         Some(v) => {
             let version = v.strip_prefix("git version ").unwrap_or(&v).to_string();
@@ -97,7 +97,7 @@ pub fn has_git() -> Result<Option<String>> {
 
 /// Check if cmake is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
-pub fn has_cmake() -> Result<Option<String>> {
+pub(crate) fn has_cmake() -> Result<Option<String>> {
     match command_stdout("cmake", &["--version"]) {
         Some(v) => {
             let version = v
@@ -119,7 +119,7 @@ pub fn has_cmake() -> Result<Option<String>> {
 /// - **macOS**: `clang++`, `g++`
 /// - **Linux**: `g++`, `clang++`
 #[cfg(any(feature = "cli", test))]
-pub fn has_cpp_compiler() -> Result<Option<String>> {
+pub(crate) fn has_cpp_compiler() -> Result<Option<String>> {
     let compilers = if cfg!(target_os = "windows") {
         vec!["cl", "g++", "clang++"]
     } else if cfg!(target_os = "macos") {
@@ -140,7 +140,7 @@ pub fn has_cpp_compiler() -> Result<Option<String>> {
 
 /// Get the number of CPU cores available for parallel compilation.
 #[cfg(any(feature = "cli", test))]
-pub fn get_num_cores() -> usize {
+pub(crate) fn get_num_cores() -> usize {
     num_cpus::get()
 }
 

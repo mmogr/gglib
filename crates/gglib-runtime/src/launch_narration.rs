@@ -32,7 +32,7 @@ use crate::server_config::ResolvedCapabilities;
 /// A parameter object rather than a twelve-argument function: the spawn site
 /// holds each of these in a local already, and a positional list of that
 /// length is a standing invitation to transpose two of them.
-pub struct NarrationInputs<'a> {
+pub(crate) struct NarrationInputs<'a> {
     /// The model being launched.
     pub spec: &'a ModelLaunchSpec,
     /// Resolved context size and the rung of the chain that supplied it.
@@ -51,7 +51,7 @@ pub struct NarrationInputs<'a> {
 
 /// Build the narration for one launch.
 #[must_use]
-pub fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
+pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
     let mut n = LaunchNarration::new(
         inputs.spec.name.clone(),
         inputs.spec.quantization.clone(),

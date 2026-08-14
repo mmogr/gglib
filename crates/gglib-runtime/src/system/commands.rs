@@ -15,7 +15,7 @@ fn command_exists(program: &str) -> bool {
 }
 
 /// Get the version of a command by running it with --version.
-pub fn get_command_version(program: &str, version_flag: &str) -> Option<String> {
+pub(super) fn get_command_version(program: &str, version_flag: &str) -> Option<String> {
     let output = cmd(program).arg(version_flag).output().ok()?;
 
     if !output.status.success() {
@@ -37,56 +37,56 @@ pub fn get_command_version(program: &str, version_flag: &str) -> Option<String> 
 }
 
 /// Get cargo version.
-pub fn get_cargo_version() -> Option<String> {
+pub(super) fn get_cargo_version() -> Option<String> {
     let output = get_command_version("cargo", "--version")?;
     // "cargo 1.75.0 (1d8b05cdd 2023-11-20)" -> "1.75.0"
     output.split_whitespace().nth(1).map(|s| s.to_string())
 }
 
 /// Get rustc version.
-pub fn get_rustc_version() -> Option<String> {
+pub(super) fn get_rustc_version() -> Option<String> {
     let output = get_command_version("rustc", "--version")?;
     // "rustc 1.75.0 (82e1608df 2023-12-21)" -> "1.75.0"
     output.split_whitespace().nth(1).map(|s| s.to_string())
 }
 
 /// Get node version.
-pub fn get_node_version() -> Option<String> {
+pub(super) fn get_node_version() -> Option<String> {
     let output = get_command_version("node", "--version")?;
     // "v20.10.0" -> "20.10.0"
     output.trim_start_matches('v').to_string().into()
 }
 
 /// Get npm version.
-pub fn get_npm_version() -> Option<String> {
+pub(super) fn get_npm_version() -> Option<String> {
     let output = get_command_version("npm", "--version")?;
     // "10.2.3"
     Some(output.trim().to_string())
 }
 
 /// Get git version.
-pub fn get_git_version() -> Option<String> {
+pub(super) fn get_git_version() -> Option<String> {
     let output = get_command_version("git", "--version")?;
     // "git version 2.43.0" -> "2.43.0"
     output.split_whitespace().nth(2).map(|s| s.to_string())
 }
 
 /// Get cmake version.
-pub fn get_cmake_version() -> Option<String> {
+pub(super) fn get_cmake_version() -> Option<String> {
     let output = get_command_version("cmake", "--version")?;
     // "cmake version 3.28.1" -> "3.28.1"
     output.split_whitespace().nth(2).map(|s| s.to_string())
 }
 
 /// Get make version.
-pub fn get_make_version() -> Option<String> {
+pub(super) fn get_make_version() -> Option<String> {
     let output = get_command_version("make", "--version")?;
     // "GNU Make 4.4.1" or "make: unknown option -- version" on BSD
     output.split_whitespace().nth(2).map(|s| s.to_string())
 }
 
 /// Get gcc version.
-pub fn get_gcc_version() -> Option<String> {
+pub(super) fn get_gcc_version() -> Option<String> {
     let output = get_command_version("gcc", "--version")?;
     // Extract version from first line, usually "gcc (Ubuntu 13.2.0-4ubuntu3) 13.2.0"
     // or on macOS: "Apple clang version 15.0.0 (clang-1500.1.0.2.5)"
@@ -114,7 +114,7 @@ pub fn get_gcc_version() -> Option<String> {
 }
 
 /// Get g++ version.
-pub fn get_gxx_version() -> Option<String> {
+pub(super) fn get_gxx_version() -> Option<String> {
     let output = get_command_version("g++", "--version")?;
     let line = output.lines().next()?;
 
@@ -137,14 +137,14 @@ pub fn get_gxx_version() -> Option<String> {
 }
 
 /// Get pkg-config version.
-pub fn get_pkgconfig_version() -> Option<String> {
+pub(super) fn get_pkgconfig_version() -> Option<String> {
     let output = get_command_version("pkg-config", "--version")?;
     Some(output.trim().to_string())
 }
 
 /// Get python3 version.
 /// Tries `python3` first, then `python` (checking it's Python 3).
-pub fn get_python3_version() -> Option<String> {
+pub(super) fn get_python3_version() -> Option<String> {
     // Try python3 first
     if let Some(output) = get_command_version("python3", "--version")
         // "Python 3.12.1" -> "3.12.1"
@@ -165,7 +165,7 @@ pub fn get_python3_version() -> Option<String> {
 
 /// Get patchelf version (Linux only).
 #[cfg(target_os = "linux")]
-pub fn get_patchelf_version() -> Option<String> {
+pub(super) fn get_patchelf_version() -> Option<String> {
     let output = get_command_version("patchelf", "--version")?;
     // "patchelf 0.18.0" -> "0.18.0"
     output.split_whitespace().nth(1).map(|s| s.to_string())

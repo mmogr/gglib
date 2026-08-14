@@ -25,7 +25,7 @@ use crate::process::admission::Resident;
 /// estimate the KV cache. That is a refusal rather than an optimistic zero —
 /// see [`SecondarySlotDecision::RefuseUnknownFootprint`].
 #[must_use]
-pub fn footprint_of(
+pub(super) fn footprint_of(
     spec: &ModelLaunchSpec,
     kv_types: KvCacheTypeResolution,
     context_size: u64,
@@ -46,7 +46,7 @@ pub fn footprint_of(
 /// decision made against the earlier figure would be a decision about a machine
 /// that no longer exists.
 #[must_use]
-pub fn secondary_slot_decision(
+pub(super) fn secondary_slot_decision(
     spec: &ModelLaunchSpec,
     kv_types: KvCacheTypeResolution,
     context_size: u64,
@@ -98,7 +98,7 @@ fn resident_ram_bytes(resident: &Resident) -> u64 {
 /// is the difference between a fast follow-up turn and a full re-prefill, and
 /// give it to a workload that cannot benefit.
 #[must_use]
-pub const fn secondary_cache_ram() -> CacheRamSetting {
+pub(super) const fn secondary_cache_ram() -> CacheRamSetting {
     CacheRamSetting::ExplicitMb(0)
 }
 

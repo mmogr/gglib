@@ -48,20 +48,20 @@ impl ServerLogEntry {
 
 /// Ring buffer storing recent log lines for a server
 #[derive(Debug, Default)]
-pub struct LogBuffer {
+pub(super) struct LogBuffer {
     lines: VecDeque<ServerLogEntry>,
 }
 
 impl LogBuffer {
     /// Create a new empty log buffer
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             lines: VecDeque::with_capacity(MAX_LOG_LINES),
         }
     }
 
     /// Add a log entry, removing oldest if at capacity
-    pub fn push(&mut self, entry: ServerLogEntry) {
+    pub(super) fn push(&mut self, entry: ServerLogEntry) {
         if self.lines.len() >= MAX_LOG_LINES {
             self.lines.pop_front();
         }
@@ -69,7 +69,7 @@ impl LogBuffer {
     }
 
     /// Get all log entries
-    pub fn get_all(&self) -> Vec<ServerLogEntry> {
+    pub(super) fn get_all(&self) -> Vec<ServerLogEntry> {
         self.lines.iter().cloned().collect()
     }
 }

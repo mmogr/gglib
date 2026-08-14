@@ -6,16 +6,19 @@
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
 mod command;
-pub mod compose;
+// Crate-internal: no consumer names these four by path — `compose`,
+// `health_monitor` and `server_config` are reached through the re-exports
+// below, and nothing outside this crate touches `launch_narration` at all.
+pub(crate) mod compose;
 mod health;
-pub mod health_monitor;
-pub mod launch_narration;
+pub(crate) mod health_monitor;
+pub(crate) mod launch_narration;
 pub mod llama;
 pub mod pidfile;
 pub mod ports_impl;
 pub mod process;
 pub mod proxy;
-pub mod server_config;
+pub(crate) mod server_config;
 pub mod system;
 pub mod unified_server_config;
 
