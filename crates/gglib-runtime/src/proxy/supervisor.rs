@@ -512,7 +512,6 @@ impl fmt::Debug for ProxySupervisor {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use gglib_core::NoopEmitter;
     use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
@@ -603,10 +602,7 @@ mod tests {
     }
 
     fn make_mcp() -> Arc<McpService> {
-        Arc::new(McpService::new(
-            Arc::new(EmptyMcpRepo),
-            Arc::new(NoopEmitter::new()),
-        ))
+        Arc::new(McpService::new(Arc::new(EmptyMcpRepo)))
     }
 
     struct MockSettingsRepo;

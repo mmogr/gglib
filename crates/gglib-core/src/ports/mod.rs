@@ -52,7 +52,7 @@ pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
-pub use mcp_error::{McpErrorCategory, McpErrorInfo, McpServiceError};
+pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};

@@ -33,7 +33,6 @@ This crate provides MCP server lifecycle management, including:
 ├─────────────────────────────────────────────────────────────┤
 │  McpService (facade)                                        │
 │    ├── repo: Arc<dyn McpServerRepository>                   │
-│    ├── emitter: Arc<dyn AppEventEmitter>                    │
 │    └── manager: McpManager                                  │
 │                                                             │
 │  McpManager (lifecycle)                                     │
@@ -68,7 +67,6 @@ This crate provides MCP server lifecycle management, including:
 ┌─────────────────────────────────────────────────────────────┐
 │                      gglib-core                             │
 │  domain/mcp/types.rs  │  ports/mcp_repository.rs            │
-│  events/mcp.rs        │  ports/event_emitter.rs             │
 │  ports/mcp_dto.rs     │  (DTOs for Tauri/Axum/TypeScript)   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -91,19 +89,15 @@ The `SQLite` implementation lives in `gglib-db` (`SqliteMcpRepository`).
 ```rust,no_run
 use std::sync::Arc;
 use gglib_mcp::McpService;
-use gglib_core::ports::{McpServerRepository, AppEventEmitter, NoopEmitter};
+use gglib_core::ports::McpServerRepository;
 
 async fn example(sqlite_mcp_repo: impl McpServerRepository + 'static) {
-    let service = McpService::new(
-        Arc::new(sqlite_mcp_repo),  // McpServerRepository
-        Arc::new(NoopEmitter),      // AppEventEmitter (or TauriEmitter)
-    );
+    let service = McpService::new(Arc::new(sqlite_mcp_repo));
 }
 ```
 
 This enables:
 - Easy testing with mock repositories
-- Different event emitters per adapter (Tauri events vs CLI noop)
 - Clean separation of concerns
 
 ## Components
@@ -181,12 +175,12 @@ Path validation and environment utilities:
 ```rust,no_run
 use std::sync::Arc;
 use gglib_mcp::McpService;
-use gglib_core::ports::{McpServerRepository, AppEventEmitter, NoopEmitter};
+use gglib_core::ports::McpServerRepository;
 use gglib_core::domain::mcp::{NewMcpServer, McpLifecycle, McpServerType, McpServerConfig};
 
 async fn example(repo: impl McpServerRepository + 'static) {
-    // Create service with injected dependencies
-    let service = McpService::new(Arc::new(repo), Arc::new(NoopEmitter));
+    // Create service with the repository it needs
+    let service = McpService::new(Arc::new(repo));
 
     // Add a server configuration
     let server = service.add_server(NewMcpServer {

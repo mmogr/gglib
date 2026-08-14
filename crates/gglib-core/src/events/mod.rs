@@ -1,15 +1,13 @@
 #![doc = include_str!("README.md")]
 mod app;
-mod mcp;
 mod server;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ports::{McpErrorInfo, RuntimeErrorEnvelope};
+use crate::ports::RuntimeErrorEnvelope;
 
 // Re-export event types
 pub use app::ModelSummary;
-pub use mcp::McpServerSummary;
 pub use server::{NoopServerEvents, ServerEvents, ServerSnapshotEntry, ServerSummary};
 
 // Import download types for AppEvent::Download wrapper
@@ -148,46 +146,6 @@ pub enum AppEvent {
         timestamp: u64,
     },
 
-    // ========== MCP Server Events ==========
-    /// An MCP server was added to the configuration.
-    McpServerAdded {
-        /// Summary of the added server.
-        server: McpServerSummary,
-    },
-
-    /// An MCP server was removed from the configuration.
-    McpServerRemoved {
-        /// ID of the removed server.
-        #[serde(rename = "serverId")]
-        server_id: i64,
-    },
-
-    /// An MCP server has started and is ready.
-    McpServerStarted {
-        /// ID of the server.
-        #[serde(rename = "serverId")]
-        server_id: i64,
-        /// Name of the server.
-        #[serde(rename = "serverName")]
-        server_name: String,
-    },
-
-    /// An MCP server has been stopped.
-    McpServerStopped {
-        /// ID of the server.
-        #[serde(rename = "serverId")]
-        server_id: i64,
-        /// Name of the server.
-        #[serde(rename = "serverName")]
-        server_name: String,
-    },
-
-    /// An MCP server encountered an error.
-    McpServerError {
-        /// User-safe error information.
-        error: McpErrorInfo,
-    },
-
     // ========== Proxy Events ==========
     /// The OpenAI-compatible proxy has started.
     ProxyStarted {
@@ -219,11 +177,6 @@ impl AppEvent {
             Self::ModelUpdated { .. } => "model:updated",
             Self::VerificationProgress { .. } => "verification:progress",
             Self::VerificationComplete { .. } => "verification:complete",
-            Self::McpServerAdded { .. } => "mcp:added",
-            Self::McpServerRemoved { .. } => "mcp:removed",
-            Self::McpServerStarted { .. } => "mcp:started",
-            Self::McpServerStopped { .. } => "mcp:stopped",
-            Self::McpServerError { .. } => "mcp:error",
             Self::ProxyStarted { .. } => "proxy:started",
             Self::ProxyStopped => "proxy:stopped",
             Self::ProxyCrashed => "proxy:crashed",

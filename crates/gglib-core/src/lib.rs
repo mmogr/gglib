@@ -42,17 +42,17 @@ pub use download::{
     DownloadId, DownloadStatus, DownloadSummary, FailedDownload, Quantization, QueueRunSummary,
     QueueSnapshot, QueuedDownload, ShardInfo,
 };
-pub use events::{AppEvent, McpServerSummary, ModelSummary};
+pub use events::{AppEvent, ModelSummary};
 pub use ports::{
     AgentError, AgentLoopPort, AgentRunOutput, AppEventBridge, AppEventEmitter, ChatHistoryError,
     ChatHistoryRepository, CompletedDownload, CoreError, DownloadEventEmitterPort,
     DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
     EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata, GgufParseError,
     GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
-    HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorInfo, McpRepositoryError,
-    McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter,
-    NoopEmitter, NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError,
-    Resolution, ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
+    HfSearchOptions, HfSearchResult, LlmCompletionPort, McpRepositoryError, McpServerRepository,
+    McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter, NoopEmitter,
+    NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError, Resolution,
+    ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{

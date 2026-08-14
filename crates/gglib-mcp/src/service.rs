@@ -1,13 +1,13 @@
 //! High-level MCP service for managing MCP servers.
 //!
 //! This service provides the main API used by Tauri commands and REST endpoints.
-//! It uses dependency injection for the repository and event emitter.
+//! It uses dependency injection for the repository.
 
 use crate::manager::McpManager;
 use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 use gglib_core::{
-    AppEvent, AppEventEmitter, McpErrorInfo, McpLifecycle, McpServer, McpServerRepository,
-    McpServerStatus, McpServiceError, McpTool, McpToolResult, NewMcpServer,
+    McpLifecycle, McpServer, McpServerRepository, McpServerStatus, McpServiceError, McpTool,
+    McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,19 +31,14 @@ pub struct McpServerInfo {
 pub struct McpService {
     repository: Arc<dyn McpServerRepository>,
     manager: Arc<McpManager>,
-    emitter: Arc<dyn AppEventEmitter>,
 }
 
 impl McpService {
     /// Create a new MCP service with injected dependencies.
-    pub fn new(
-        repository: Arc<dyn McpServerRepository>,
-        emitter: Arc<dyn AppEventEmitter>,
-    ) -> Self {
+    pub fn new(repository: Arc<dyn McpServerRepository>) -> Self {
         Self {
             repository,
             manager: Arc::new(McpManager::new()),
-            emitter,
         }
     }
 
@@ -432,15 +427,6 @@ impl McpService {
             );
         }
 
-        // Emit event
-        self.emitter.emit(AppEvent::mcp_server_added(
-            gglib_core::McpServerSummary::new(
-                saved.id,
-                saved.name.clone(),
-                format!("{:?}", saved.server_type).to_lowercase(),
-            ),
-        ));
-
         tracing::info!(
             server_name = %saved.name,
             is_valid = is_valid,
@@ -505,9 +491,6 @@ impl McpService {
 
         self.repository.delete(id).await?;
 
-        // Emit event
-        self.emitter.emit(AppEvent::mcp_server_removed(id));
-
         tracing::info!(server_id = %id, "Removed MCP server configuration");
         Ok(())
     }
@@ -519,7 +502,6 @@ impl McpService {
     /// Start an MCP server.
     pub async fn start_server(&self, id: i64) -> Result<Vec<McpTool>, McpServiceError> {
         let mut server = self.repository.get_by_id(id).await?;
-        let server_name = server.name.clone();
 
         // For stdio servers, ensure command is resolved before starting
         if server.server_type == gglib_core::McpServerType::Stdio {
@@ -529,19 +511,10 @@ impl McpService {
                 let error_msg = status.error_message_with_suggestions();
                 tracing::error!(
                     server_id = id,
-                    server_name = %server_name,
+                    server_name = %server.name,
                     "Failed to resolve command before starting: {}",
                     error_msg
                 );
-                self.emitter
-                    .emit(AppEvent::mcp_server_error(McpErrorInfo::process(
-                        Some(id),
-                        &server_name,
-                        format!(
-                            "Path resolution failed: {}",
-                            status.error_message.unwrap_or_default()
-                        ),
-                    )));
                 return Err(McpServiceError::InvalidConfig(error_msg));
             }
 
@@ -550,50 +523,31 @@ impl McpService {
                 server.config.resolved_path_cache = Some(resolved_path.clone());
                 tracing::debug!(
                     server_id = id,
-                    server_name = %server_name,
+                    server_name = %server.name,
                     resolved_path = %resolved_path,
                     "Resolved path before starting server"
                 );
             }
         }
 
-        let tools = self.manager.start_server(server).await.map_err(|e| {
-            // Emit error event
-            self.emitter
-                .emit(AppEvent::mcp_server_error(McpErrorInfo::process(
-                    Some(id),
-                    &server_name,
-                    e.to_string(),
-                )));
-            McpServiceError::StartFailed(e.to_string())
-        })?;
+        let tools = self
+            .manager
+            .start_server(server)
+            .await
+            .map_err(|e| McpServiceError::StartFailed(e.to_string()))?;
 
         // Update last connected timestamp
         let _ = self.repository.update_last_connected(id).await;
-
-        // Emit started event
-        self.emitter
-            .emit(AppEvent::mcp_server_started(id, &server_name));
 
         Ok(tools)
     }
 
     /// Stop an MCP server.
     pub async fn stop_server(&self, id: i64) -> Result<(), McpServiceError> {
-        // Get server name for event before stopping
-        let server_name = match self.repository.get_by_id(id).await {
-            Ok(s) => s.name,
-            Err(_) => format!("server-{id}"),
-        };
-
         self.manager
             .stop_server(id)
             .await
             .map_err(|e| McpServiceError::StopFailed(e.to_string()))?;
-
-        // Emit stopped event
-        self.emitter
-            .emit(AppEvent::mcp_server_stopped(id, server_name));
 
         Ok(())
     }
@@ -780,7 +734,7 @@ impl McpService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use gglib_core::{McpRepositoryError, NoopEmitter};
+    use gglib_core::McpRepositoryError;
     use std::sync::Mutex;
 
     /// Mock repository for testing
@@ -885,8 +839,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_and_list_servers() {
         let repo = Arc::new(MockMcpRepository::new());
-        let emitter = Arc::new(NoopEmitter::new());
-        let service = McpService::new(repo, emitter);
+        let service = McpService::new(repo);
 
         let new_server = NewMcpServer::new_stdio("Test", "echo", vec!["hello".to_string()], None);
         let saved = service.add_server(new_server).await.unwrap();
@@ -900,8 +853,7 @@ mod tests {
     #[tokio::test]
     async fn test_remove_server() {
         let repo = Arc::new(MockMcpRepository::new());
-        let emitter = Arc::new(NoopEmitter::new());
-        let service = McpService::new(repo, emitter);
+        let service = McpService::new(repo);
 
         let new_server = NewMcpServer::new_stdio("Test", "echo", vec![], None);
         let saved = service.add_server(new_server).await.unwrap();
@@ -915,8 +867,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_status_when_not_running() {
         let repo = Arc::new(MockMcpRepository::new());
-        let emitter = Arc::new(NoopEmitter::new());
-        let service = McpService::new(repo, emitter);
+        let service = McpService::new(repo);
 
         let new_server = NewMcpServer::new_stdio("Test", "echo", vec![], None);
         let saved = service.add_server(new_server).await.unwrap();

@@ -1,8 +1,8 @@
 //! SSE event broadcaster for real-time event streaming.
 //!
 //! This module provides an SSE broadcaster that implements the core event
-//! emitter ports, allowing the download manager and MCP service to emit
-//! events that are streamed to connected web clients.
+//! emitter ports, allowing the download manager to emit events that are
+//! streamed to connected web clients.
 //!
 //! The actual broadcast-channel + SSE-encoding plumbing lives in the shared
 //! `gglib-sse` crate (a dependency-free leaf); this module just wraps it to

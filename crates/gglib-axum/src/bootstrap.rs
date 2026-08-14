@@ -4,8 +4,8 @@
 //! HF client, download manager, model verification, AppCore-with-verification)
 //! is wired by [`gglib_bootstrap::CoreBootstrap`]. This module adds the
 //! Axum-specific layer on top: the SSE broadcaster (which doubles as the
-//! `AppEventEmitter` for the shared bootstrap), the MCP service with SSE
-//! emission, the seven domain ops, and the proxy crash watcher.
+//! `AppEventEmitter` for the shared bootstrap), the MCP service, the seven
+//! domain ops, and the proxy crash watcher.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -189,11 +189,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tracing::warn!("Failed to clean up zombie benchmark runs on startup: {e}");
     }
 
-    // 4. MCP service with SSE emitter.
-    let mcp = Arc::new(McpService::new(
-        repos.mcp_servers.clone(),
-        sse.clone() as Arc<dyn AppEventEmitter>,
-    ));
+    // 4. MCP service.
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));
     if let Err(e) = mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }

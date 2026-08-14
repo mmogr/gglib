@@ -325,6 +325,6 @@ gglib model download unsloth/Qwen3-Coder-Next-GGUF --quantization UD-Q6_K
 1. **Composition Root** — `bootstrap.rs` wires all dependencies (DI without framework)
 2. **Clap Derive** — Uses clap's derive macros for type-safe argument parsing
 3. **Handler Pattern** — Each command has a dedicated handler for testability
-4. **No Event Emitter** — Uses `NoopEmitter` since CLI has direct stdout
+4. **No Event Emitter** — Renders download progress straight to stdout via `CliDownloadEventEmitter`, with no broadcast bus
 
 <!-- module-docs:end -->

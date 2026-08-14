@@ -12,7 +12,6 @@ SSE handlers, and backend emitters.
 - `app` - Application-level events (model added/removed/updated)
 - `download` - Download progress and completion events
 - `server` - Model server lifecycle events
-- `mcp` - MCP server lifecycle events
 
 # Wire Format
 
@@ -44,8 +43,6 @@ layer's `ErrorResponse` shape so Tauri and HTTP clients agree on meaning:
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`app.rs`](app.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-app-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-app-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-app-coverage.json) |
-| [`download.rs`](download.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-download-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-download-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-download-coverage.json) |
-| [`mcp.rs`](mcp.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-mcp-coverage.json) |
 | [`server.rs`](server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-events-server-coverage.json) |
 <!-- module-table:end -->
 

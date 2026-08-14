@@ -101,13 +101,6 @@ mod tests {
             Ok(id)
         }
 
-        async fn queue_and_process(
-            self: Arc<Self>,
-            _request: DownloadRequest,
-        ) -> Result<DownloadId, DownloadError> {
-            unimplemented!()
-        }
-
         async fn queue_smart(
             self: Arc<Self>,
             _repo_id: String,
@@ -128,15 +121,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn has_download(&self, _id: &DownloadId) -> Result<bool, DownloadError> {
-            unimplemented!()
-        }
-
         async fn active_count(&self) -> Result<u32, DownloadError> {
-            unimplemented!()
-        }
-
-        async fn pending_count(&self) -> Result<u32, DownloadError> {
             unimplemented!()
         }
 
@@ -156,19 +141,11 @@ mod tests {
             unimplemented!()
         }
 
-        async fn retry(&self, _id: &DownloadId) -> Result<u32, DownloadError> {
-            unimplemented!()
-        }
-
         async fn clear_failed(&self) -> Result<(), DownloadError> {
             unimplemented!()
         }
 
         async fn set_max_queue_size(&self, _size: u32) -> Result<(), DownloadError> {
-            unimplemented!()
-        }
-
-        async fn get_max_queue_size(&self) -> Result<u32, DownloadError> {
             unimplemented!()
         }
     }

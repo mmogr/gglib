@@ -38,6 +38,7 @@ impl DownloadQueue {
     }
 
     /// Get the maximum queue size.
+    #[cfg(test)]
     pub const fn max_size(&self) -> u32 {
         self.max_size
     }
@@ -48,6 +49,7 @@ impl DownloadQueue {
     }
 
     /// Get the number of pending items.
+    #[cfg(test)]
     pub fn pending_len(&self) -> usize {
         self.pending.len()
     }
@@ -68,6 +70,7 @@ impl DownloadQueue {
     }
 
     /// Check if a download ID is in the failed list.
+    #[cfg(test)]
     pub fn is_failed(&self, id: &DownloadId) -> bool {
         self.failed.iter().any(|item| &item.item.id == id)
     }
@@ -285,36 +288,6 @@ impl DownloadQueue {
     /// Clear all failed downloads.
     pub fn clear_failed(&mut self) {
         self.failed.clear();
-    }
-
-    /// Retry a failed download by moving it back to the pending queue.
-    ///
-    /// Returns the 1-based position in the queue on success.
-    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
-    pub fn retry_failed(
-        &mut self,
-        id: &DownloadId,
-        has_active: bool,
-    ) -> Result<u32, DownloadError> {
-        // Find and remove from failed list
-        let pos = self.failed.iter().position(|f| &f.item.id == id);
-        let failed = match pos {
-            Some(idx) => self.failed.remove(idx),
-            None => return Err(DownloadError::not_in_queue(id.to_string())),
-        };
-
-        // Add back to pending queue with fresh timestamp, reusing completion_key
-        let item = QueuedItem::new(failed.item.id, failed.item.completion_key);
-        self.pending.push_back(item);
-
-        // Return 1-based position
-        let position = if has_active {
-            usize_to_u32_saturating(self.pending.len()).saturating_add(1)
-        } else {
-            usize_to_u32_saturating(self.pending.len())
-        };
-
-        Ok(position)
     }
 
     // --- Shard group helpers ---
@@ -736,54 +709,6 @@ mod tests {
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();
         // Both shards at front, then a, then b
         assert_eq!(ids, vec!["sharded", "sharded", "a", "b"]);
-    }
-
-    #[test]
-    fn test_retry_failed() {
-        let mut queue = DownloadQueue::new(10);
-        let id = test_id("failed-model", None);
-        let item = QueuedItem::new(id.clone(), test_completion_key(&id));
-        queue.mark_failed(item, "temporary error");
-
-        assert!(queue.is_failed(&id));
-        assert!(!queue.is_queued(&id));
-
-        let position = queue.retry_failed(&id, false).unwrap();
-
-        assert_eq!(position, 1);
-        assert!(!queue.is_failed(&id));
-        assert!(queue.is_queued(&id));
-    }
-
-    #[test]
-    fn test_retry_failed_with_existing_queue() {
-        let mut queue = DownloadQueue::new(10);
-        let id_existing = test_id("existing", None);
-        queue
-            .queue(
-                id_existing.clone(),
-                test_completion_key(&id_existing),
-                false,
-            )
-            .unwrap();
-
-        let id = test_id("failed-model", None);
-        let item = QueuedItem::new(id.clone(), test_completion_key(&id));
-        queue.mark_failed(item, "error");
-
-        let position = queue.retry_failed(&id, false).unwrap();
-
-        // Should be at end of queue
-        assert_eq!(position, 2);
-        assert_eq!(queue.pending_len(), 2);
-    }
-
-    #[test]
-    fn test_retry_failed_not_found() {
-        let mut queue = DownloadQueue::new(10);
-
-        let result = queue.retry_failed(&test_id("nonexistent", None), false);
-        assert!(matches!(result, Err(DownloadError::NotInQueue { .. })));
     }
 
     #[test]

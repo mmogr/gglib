@@ -188,9 +188,9 @@ async fn repeat_request_while_pending_attaches_instead_of_duplicating() {
     );
 }
 
-/// Why the guard checks `active` and `pending` by hand instead of calling
-/// `has_download`: that also answers `true` for a *failed* download, which
-/// would make a failure permanently un-retryable.
+/// Why the guard checks `active` and `pending` by hand rather than asking
+/// whether the queue knows the id at all: a check that also matched *failed*
+/// downloads would make a failure permanently un-retryable.
 #[tokio::test]
 async fn a_failed_download_can_still_be_requeued() {
     let manager = test_manager();

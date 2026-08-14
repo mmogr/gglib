@@ -21,7 +21,7 @@ use crate::events::AppEvent;
 /// // In a service
 /// fn start_server(&self, emitter: Arc<dyn AppEventEmitter>) {
 ///     // ... start server logic ...
-///     emitter.emit(AppEvent::McpServerStarted { ... });
+///     emitter.emit(AppEvent::server_started(model_id, model_name, port));
 /// }
 /// ```
 pub trait AppEventEmitter: Send + Sync {
