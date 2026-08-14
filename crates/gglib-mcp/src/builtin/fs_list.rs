@@ -12,7 +12,7 @@ use super::sandboxing::resolve_sandboxed_path;
 /// Returns one entry per line: directories end with `/`, files are plain.
 /// Hidden files (starting with `.`) are excluded by default unless
 /// `include_hidden` is true.
-pub fn list_directory(
+pub(super) fn list_directory(
     args: &HashMap<String, Value>,
     sandbox_root: &Path,
 ) -> Result<String, String> {

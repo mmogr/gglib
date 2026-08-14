@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 ///
 /// The JSON shape matches `TimeResult` in `TimeRenderer.tsx` so the frontend
 /// renderer can display it without any extra parsing conventions.
-pub fn get_current_time(args: &HashMap<String, Value>) -> Value {
+pub(super) fn get_current_time(args: &HashMap<String, Value>) -> Value {
     let tz_name = args
         .get("timezone")
         .and_then(Value::as_str)

@@ -19,8 +19,12 @@ The resolver is split into small, focused modules:
 
 ## Usage
 
-```rust,no_run
-use gglib_mcp::resolver::resolve_executable;
+This module is crate-internal, so the example below is illustrative rather than
+executable — a doctest compiles as its own crate and cannot name a `pub(crate)`
+module. Callers outside `gglib-mcp` reach resolution through `McpService`.
+
+```text
+use crate::resolver::resolve_executable;
 
 // Resolve "npx" to absolute path
 let result = resolve_executable("npx", &[]).unwrap();
