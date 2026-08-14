@@ -2,7 +2,7 @@
 //!
 //! ## Why this exists
 //!
-//! [`InferenceConfig::resolve_layers`](crate::domain::InferenceConfig::resolve_layers)
+//! [`InferenceConfig::resolve_layers_with_sources`](crate::domain::InferenceConfig::resolve_layers_with_sources)
 //! folds an ordered ladder of sampling layers into one config under two rules
 //! that are individually defensible and jointly opaque: the coupled trio
 //! (`presence_penalty`, `repeat_penalty`, `min_p`) travels with the
