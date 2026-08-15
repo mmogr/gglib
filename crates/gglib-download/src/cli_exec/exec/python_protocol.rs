@@ -45,7 +45,7 @@ pub enum ProtocolError {
 ///
 /// Maps 1:1 to the JSON protocol schema.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PythonEvent {
+pub(crate) enum PythonEvent {
     /// Download progress update.
     Progress {
         /// The file being downloaded (may be None for aggregate progress).
@@ -107,7 +107,7 @@ struct RawEnvelope {
 /// let event = parse_line(r#"{"status": "progress", "downloaded": 100, "total": 200}"#)?;
 /// assert!(matches!(event, PythonEvent::Progress { .. }));
 /// ```
-pub fn parse_line(line: &str) -> Result<PythonEvent, ProtocolError> {
+pub(crate) fn parse_line(line: &str) -> Result<PythonEvent, ProtocolError> {
     let envelope: RawEnvelope = serde_json::from_str(line)?;
 
     let status = envelope.status.ok_or(ProtocolError::InvalidStatus)?;

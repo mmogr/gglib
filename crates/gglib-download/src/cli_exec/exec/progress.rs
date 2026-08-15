@@ -25,7 +25,7 @@ const PLAIN_MIN_INTERVAL: Duration = Duration::from_millis(250);
 // ============================================================================
 
 /// CLI progress display that automatically selects terminal or plain output.
-pub struct CliProgressPrinter {
+pub(crate) struct CliProgressPrinter {
     inner: ProgressRender,
     /// Shared across both renderers — the rate is a property of the transfer,
     /// not of how it happens to be drawn.
@@ -46,7 +46,7 @@ impl CliProgressPrinter {
     /// redirected stdout (`gglib model upgrade ... > file.txt`) should not
     /// silently downgrade the bar when stderr is still an attended terminal.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let inner = if io::stderr().is_terminal() {
             ProgressRender::Fancy(FancyProgress::new())
         } else {
@@ -59,7 +59,7 @@ impl CliProgressPrinter {
     }
 
     /// Update progress display with current download state.
-    pub fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+    pub(crate) fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
         self.estimator.record(downloaded, total, Instant::now());
         let rate = Rate {
             speed_bps: self.estimator.rate_bps(),
@@ -73,7 +73,7 @@ impl CliProgressPrinter {
     }
 
     /// Finish and clear the progress display.
-    pub fn finish(&mut self) {
+    pub(crate) fn finish(&mut self) {
         match &mut self.inner {
             ProgressRender::Fancy(inner) => inner.finish(),
             ProgressRender::Plain(inner) => inner.finish(),

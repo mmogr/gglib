@@ -9,7 +9,7 @@ use gglib_core::download::{
 };
 
 pub use shard_group::ShardGroupId;
-pub use types::{FailedItem, QueuedItem};
+pub(crate) use types::{FailedItem, QueuedItem};
 
 /// Saturating conversion from usize to u32 for queue positions.
 /// Returns `u32::MAX` if the value exceeds `u32::MAX`.
@@ -21,7 +21,7 @@ fn usize_to_u32_saturating(n: usize) -> u32 {
 ///
 /// This is a sync type with no internal locking — the caller
 /// (`DownloadManager`) is responsible for synchronization.
-pub struct DownloadQueue {
+pub(crate) struct DownloadQueue {
     pending: VecDeque<QueuedItem>,
     failed: Vec<FailedItem>,
     max_size: u32,
@@ -29,7 +29,7 @@ pub struct DownloadQueue {
 
 impl DownloadQueue {
     /// Create a new download queue with the specified max size.
-    pub const fn new(max_size: u32) -> Self {
+    pub(crate) const fn new(max_size: u32) -> Self {
         Self {
             pending: VecDeque::new(),
             failed: Vec::new(),
@@ -39,24 +39,24 @@ impl DownloadQueue {
 
     /// Get the maximum queue size.
     #[cfg(test)]
-    pub const fn max_size(&self) -> u32 {
+    pub(crate) const fn max_size(&self) -> u32 {
         self.max_size
     }
 
     /// Set the maximum queue size.
-    pub const fn set_max_size(&mut self, size: u32) {
+    pub(crate) const fn set_max_size(&mut self, size: u32) {
         self.max_size = size;
     }
 
     /// Get the number of pending items.
     #[cfg(test)]
-    pub fn pending_len(&self) -> usize {
+    pub(crate) fn pending_len(&self) -> usize {
         self.pending.len()
     }
 
     /// Get the number of failed items.
     #[cfg(test)]
-    pub const fn failed_len(&self) -> usize {
+    pub(crate) const fn failed_len(&self) -> usize {
         self.failed.len()
     }
 
@@ -65,13 +65,13 @@ impl DownloadQueue {
     /// Pending only — an item that has started downloading has left this queue
     /// for the manager's `active` map and will not be found here. Callers
     /// guarding against duplicate work need to check both.
-    pub fn is_queued(&self, id: &DownloadId) -> bool {
+    pub(crate) fn is_queued(&self, id: &DownloadId) -> bool {
         self.pending.iter().any(|item| &item.id == id)
     }
 
     /// Check if a download ID is in the failed list.
     #[cfg(test)]
-    pub fn is_failed(&self, id: &DownloadId) -> bool {
+    pub(crate) fn is_failed(&self, id: &DownloadId) -> bool {
         self.failed.iter().any(|item| &item.item.id == id)
     }
 
@@ -82,7 +82,7 @@ impl DownloadQueue {
     /// Note: Production code uses `queue_sharded` for all downloads.
     /// This method is primarily for testing single-item queue behavior.
     #[cfg(test)]
-    pub fn queue(
+    pub(crate) fn queue(
         &mut self,
         id: DownloadId,
         completion_key: CompletionKey,
@@ -108,7 +108,7 @@ impl DownloadQueue {
     /// Queue a sharded download (multiple files with shared `group_id`).
     ///
     /// Returns the 1-based queue position of the first shard.
-    pub fn queue_sharded(
+    pub(crate) fn queue_sharded(
         &mut self,
         id: &DownloadId,
         completion_key: &CompletionKey,
@@ -136,18 +136,18 @@ impl DownloadQueue {
     }
 
     /// Pop the next item from the front of the queue.
-    pub fn dequeue(&mut self) -> Option<QueuedItem> {
+    pub(crate) fn dequeue(&mut self) -> Option<QueuedItem> {
         self.pending.pop_front()
     }
 
     /// Clear all items from the queue (pending and failed).
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.pending.clear();
         self.failed.clear();
     }
 
     /// Remove an item from the pending queue or failed list.
-    pub fn remove(&mut self, id: &DownloadId) -> Result<(), DownloadError> {
+    pub(crate) fn remove(&mut self, id: &DownloadId) -> Result<(), DownloadError> {
         let initial_pending = self.pending.len();
         self.pending.retain(|item| &item.id != id);
 
@@ -168,7 +168,7 @@ impl DownloadQueue {
     /// Reorder a queued item (or shard group) to a new position.
     ///
     /// Returns the actual 1-based position where the item(s) were placed.
-    pub fn reorder(
+    pub(crate) fn reorder(
         &mut self,
         id: &DownloadId,
         new_position: u32,
@@ -242,7 +242,7 @@ impl DownloadQueue {
     /// Get a snapshot of the current queue state for API responses.
     ///
     /// The `current_item` is the download currently being processed (if any).
-    pub fn snapshot(
+    pub(crate) fn snapshot(
         &self,
         current_item: Option<gglib_core::download::QueuedDownload>,
     ) -> QueueSnapshot {
@@ -281,19 +281,19 @@ impl DownloadQueue {
     }
 
     /// Mark a download as failed and add to the failed list.
-    pub fn mark_failed(&mut self, item: QueuedItem, error: impl Into<String>) {
+    pub(crate) fn mark_failed(&mut self, item: QueuedItem, error: impl Into<String>) {
         self.failed.push(FailedItem::new(item, error));
     }
 
     /// Clear all failed downloads.
-    pub fn clear_failed(&mut self) {
+    pub(crate) fn clear_failed(&mut self) {
         self.failed.clear();
     }
 
     // --- Shard group helpers ---
 
     /// Remove all pending items belonging to a shard group.
-    pub fn remove_group(&mut self, group_id: &ShardGroupId) -> usize {
+    pub(crate) fn remove_group(&mut self, group_id: &ShardGroupId) -> usize {
         let initial = self.pending.len();
         self.pending
             .retain(|item| item.group_id.as_ref() != Some(group_id));

@@ -100,10 +100,10 @@ crates/gglib-download/src/cli_exec/exec/python_env.rs 1625
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 350
 crates/gglib-download/src/cli_exec/exec/xet_poller.rs 433
 crates/gglib-download/src/executor/native_tests.rs 859
-crates/gglib-download/src/executor/native.rs 576
+crates/gglib-download/src/executor/native.rs 579
 crates/gglib-download/src/manager/mod.rs 2045
 crates/gglib-download/src/manager/shard_group_tracker.rs 405
-crates/gglib-download/src/manager/worker.rs 313
+crates/gglib-download/src/manager/worker.rs 316
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1175
 crates/gglib-gguf/src/capabilities/template_probe.rs 501

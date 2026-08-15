@@ -1,7 +1,7 @@
 #![doc = include_str!("README.md")]
 mod progress;
-pub mod python_bridge;
-pub mod python_env;
+pub(crate) mod python_bridge;
+pub(crate) mod python_env;
 mod python_protocol;
 mod xet_poller;
 

@@ -27,7 +27,7 @@ fn http_client() -> &'static Client {
 }
 
 /// A set of files to fetch into one directory.
-pub struct DownloadPlan<'a> {
+pub(crate) struct DownloadPlan<'a> {
     /// `owner/name` on `HuggingFace`.
     pub repo_id: &'a str,
     /// Branch, tag, or commit SHA.
@@ -57,7 +57,7 @@ pub struct DownloadPlan<'a> {
 /// built implicitly, because that put a Python toolchain in the way of a new
 /// user's first download. If the accelerator is present but fails, this falls
 /// back to the native path rather than failing the download.
-pub async fn download_files(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
+pub(crate) async fn download_files(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
     if plan.files.is_empty() {
         return Ok(());
     }
