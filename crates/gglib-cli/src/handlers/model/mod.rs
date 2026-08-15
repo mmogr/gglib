@@ -134,12 +134,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<
             list_quants,
             skip_db,
             token,
-            // `--force` skips a confirmation prompt, and this path has none to
-            // skip: the daemon owns the download and `exec` never asks. The
-            // flag is inert, like `--skip-db` above it but without the notice.
-            // Bound and dropped here rather than threaded into `DownloadArgs`,
-            // where it was carried three layers and read by nobody.
-            force: _,
         } => {
             // Registration happens daemon-side as a queue lifecycle phase, so
             // honouring this flag needs a protocol change. Say so rather than
