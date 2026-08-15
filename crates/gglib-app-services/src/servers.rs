@@ -486,11 +486,6 @@ impl ServerOps {
         gglib_runtime::get_log_manager().subscribe()
     }
 
-    /// Clear logs for a specific server port.
-    pub fn clear_logs(&self, port: u16) {
-        gglib_runtime::get_log_manager().clear_logs(port);
-    }
-
     /// Get tool support detection for a running server's model.
     ///
     /// Sources `supports_tool_calls` from the model's `ModelCapabilities` bitflags
