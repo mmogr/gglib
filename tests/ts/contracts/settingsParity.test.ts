@@ -17,6 +17,12 @@ const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
 describe('starter profiles mirror builtin_templates()', () => {
   const FILE = rust('crates/gglib-core/src/domain/inference_profile.rs');
   const start = FILE.indexOf('pub fn builtin_templates()');
+  if (start < 0) {
+    // Throw, never default: this directory's rule. Without it a renamed
+    // function yields an empty slice and the failure reads "expected 0 to be
+    // greater than 0" rather than naming the symbol that moved.
+    throw new Error('builtin_templates() not found in inference_profile.rs');
+  }
   const SOURCE = FILE.slice(start, FILE.indexOf('\n}', start));
 
   /** Extract one template's literal block from the function body by name. */

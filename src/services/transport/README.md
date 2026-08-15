@@ -5,26 +5,27 @@
 
 <!-- module-docs:start -->
 
-The core platform abstraction layer. Defines the unified `Transport` interface that composes all domain sub-interfaces and provides `getTransport()` — a factory that composes the HTTP API client with the SSE event bus into one instance, memoised after the first call. There is no platform branch: desktop and web both talk to the gglib daemon over HTTP+SSE, the desktop WebView having discovered its base URL through `get_embedded_api_info`. All code outside this directory is completely platform-agnostic.
+The core platform abstraction layer. Defines the unified `Transport` interface that composes all domain sub-interfaces and provides `getTransport()` — a factory that composes the HTTP API client with the SSE event bus into one instance, memoised after the first call.
+
+There is no branch **between transports**: desktop and web both talk to the gglib daemon over HTTP+SSE. Platform does still matter inside `api/client.ts`, which uses its own local `isTauri()` to resolve the daemon's base URL through the `get_embedded_api_info` IPC command and to pick the retry path. That is the layer's job — absorbing the difference so callers never see it.
 
 ## Architecture
 
 ```
-             getTransport()   ← singleton, cached after first call
-                   ▼
-          ┌──────────────────┐   ┌──────────────────┐
-          │ createApiTransport() │ createEventBus() │
-          │   HTTP fetch     │   │       SSE        │
-          └────────┬─────────┘   └────────┬─────────┘
-                   │                      │
-                   └──────────┬───────────┘
-                              ▼
-                   Unified Transport object
-                   (satisfies all *Transport interfaces)
+            getTransport()   ← singleton, cached after first call
+                  ▼
+   ┌──────────────────────┐   ┌──────────────────────┐
+   │ createApiTransport() │   │   createEventBus()   │
+   │      HTTP fetch      │   │         SSE          │
+   └──────────┬───────────┘   └──────────┬───────────┘
+              │                          │
+              └────────────┬─────────────┘
+                           ▼
+                Unified Transport object
+                (satisfies all *Transport interfaces)
 ```
 
-Both halves talk to the same gglib daemon, on desktop and on the web. There
-is no platform branch to pick between.
+Both halves reach the same gglib daemon, on desktop and on the web.
 
 ## Subdirectories
 
@@ -38,8 +39,9 @@ is no platform branch to pick between.
 
 | File | Role |
 |------|------|
-| `index.ts` | `getTransport()` factory; composes the API client and event bus, then memoises |
+| `index.ts` | `getTransport()` factory; composes the API client and event bus, checks for key collisions, then memoises |
 | `errors.ts` | `TransportError` with typed error codes (`NOT_SUPPORTED`, `NETWORK_ERROR`, etc.) |
+| `utils.ts` | `checkCollisions()` — dev-mode guard against two modules exporting the same key |
 | `mappers.ts` | Maps frontend types to backend request DTOs (`toStartServerRequest()`, etc.) |
 | `sanitizeMessages.ts` | Strips `<think>` tags and unsupported fields before sending to llama-server |
 | `parseTitleResponse.ts` | Parses LLM title generation responses |

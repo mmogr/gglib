@@ -227,11 +227,15 @@ mod tests {
 
     /// Lock down download event names to prevent frontend subscription mismatches.
     ///
-    /// This test protects the contract between backend event emission and frontend
-    /// Tauri event subscription. If this test fails, update the `DOWNLOAD_EVENT_NAMES`
-    /// constant in src/services/transport/events/eventNames.ts to match.
+    /// This test protects the contract between backend event emission and the
+    /// frontend's SSE subscription. If it fails, update `getEventCategory` in
+    /// src/services/transport/events/sse.ts to match: an event whose name it
+    /// does not recognise is categorised `null` and dropped by `validateEvent`.
     ///
-    /// Context: Issue where Tauri GUI downloads started but progress UI never appeared
+    /// (It used to name `eventNames.ts`, deleted in #833 along with the
+    /// Tauri-event branch these names were once subscribed through.)
+    ///
+    /// Context: Issue where GUI downloads started but progress UI never appeared
     /// because frontend listened to wrong event names.
     #[test]
     fn download_event_names_are_stable() {

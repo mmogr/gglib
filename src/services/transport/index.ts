@@ -1,8 +1,13 @@
 /**
  * Transport factory and singleton accessor.
- * 
- * Composes API, platform, and event modules into a unified Transport object.
- * This is the ONLY place platform detection happens.
+ *
+ * Composes the HTTP API client with the SSE event bus into a unified
+ * Transport object, checks the two for key collisions, and memoises the
+ * result. There is no transport to choose between: desktop and web both
+ * reach the daemon the same way, and what platform difference remains —
+ * resolving the base URL, picking a retry path — is absorbed inside
+ * `api/client.ts`.
+ *
  * All clients should use getTransport() to access the transport instance.
  */
 
@@ -17,10 +22,10 @@ let _transport: Transport | null = null;
 /**
  * Get the transport singleton.
  * 
- * Creates the unified transport by composing API, platform, and events modules.
+ * Creates the unified transport by composing the API and events modules.
  * Subsequent calls return the same instance.
- * 
- * @returns The transport instance for the current platform
+ *
+ * @returns The process-wide transport instance
  */
 export function getTransport(): Transport {
   if (_transport) {

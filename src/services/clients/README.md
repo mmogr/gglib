@@ -23,7 +23,7 @@ Clients that own real request logic of their own. Each one exists because it doe
                 ▼                     │
 ┌─────────────────────────────────────▼───────────────┐
 │              transport/  (Platform Layer)           │
-│         Tauri IPC  ──or──  HTTP + SSE               │
+│              HTTP  +  SSE                           │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -40,6 +40,6 @@ Clients that own real request logic of their own. Each one exists because it doe
 
 A module belongs here only if it needs streaming or a non-backend origin. If a new operation is a plain call against the app's backend, add it to the `Transport` interface and call `getTransport()` from the consumer — do not add a wrapper module here.
 
-No client may import from `platform/` — platform exceptions are handled inside `transport/platform/`.
+No client may import from `platform/` — what platform difference remains is absorbed inside `transport/api/client.ts`.
 
 <!-- module-docs:end -->
