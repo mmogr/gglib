@@ -1,9 +1,6 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
-// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
-// denies it; this crate opts out until its module tree is closed.
-#![allow(unreachable_pub)]
 // Allow dev-only crates (gglib-runtime, reqwest) used exclusively in
 // integration-test files under `tests/`.
 #![cfg_attr(test, allow(unused_crate_dependencies))]
