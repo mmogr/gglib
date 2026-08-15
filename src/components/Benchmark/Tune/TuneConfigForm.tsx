@@ -1,7 +1,7 @@
 /**
  * Tune-mode configuration form: model select, sampling-parameter sweep
  * inputs, task-suite selector (built-in default vs. custom file upload),
- * seeding toggles, pruning/weight overrides, and Apply-best checkbox.
+ * seeding toggles, pruning, and Apply-best checkbox.
  *
  * Emits a fully-built `TuneConfig` via `onSubmit` — this component owns no
  * SSE/run state, only the form values.
@@ -106,12 +106,9 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
         top_n_sigma: parseNumberList(topNSigma),
       },
       seed_from_family_presets: seedFromFamilyPresets,
-      weights: {
-        tool_accuracy: 0.4,
-        loop_avoidance: 0.3,
-        task_completion: 0.2,
-        speed: 0.1,
-      },
+      // No weights: the form has no UI for them, so sending a copy of the
+      // server's defaults would only let the two drift apart. `weights` is
+      // `#[serde(default)]` server-side, and AgenticConfigForm omits it too.
       prune_fraction: parseFloat(pruneFraction) || 0.5,
       ctx_size: ctxSize.trim() ? parseInt(ctxSize, 10) : null,
     };

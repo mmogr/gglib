@@ -204,7 +204,6 @@ export interface ScoreWeights {
   tool_accuracy: number;
   loop_avoidance: number;
   task_completion: number;
-  speed: number;
 }
 
 export interface TuneConfig {
@@ -212,7 +211,8 @@ export interface TuneConfig {
   task_suite: TaskSuite;
   sweep: SweepSpec;
   seed_from_family_presets: boolean;
-  weights: ScoreWeights;
+  /** Omit to accept the server's default; see {@link AgenticEvalConfig.weights}. */
+  weights?: ScoreWeights;
   prune_fraction: number;
   ctx_size?: number | null;
 }
@@ -316,7 +316,13 @@ export type EvalArm = 'raw' | 'gglib' | 'raw_replicate' | 'control';
 export interface AgenticEvalConfig {
   model_id: number;
   task_suite: TaskSuite;
-  /** Server default: { tool_accuracy: 0.4, loop_avoidance: 0.3, task_completion: 0.2, speed: 0.1 }. */
+  /**
+   * Omit to accept the server's default. `ScoreWeights::default()` is the
+   * source of truth; it currently reads
+   * `{ tool_accuracy: 0.4, loop_avoidance: 0.3, task_completion: 0.2 }`.
+   * Sending a copy of those numbers pins them, which is the drift that
+   * removing the `speed` weight was about.
+   */
   weights?: ScoreWeights;
   ctx_size?: number | null;
   /**

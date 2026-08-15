@@ -23,8 +23,19 @@ pub struct TuneConfig {
     #[serde(default = "SweepSpec::default_true")]
     pub seed_from_family_presets: bool,
     /// Weights used to combine per-candidate metrics into a composite score.
-    #[serde(default)]
-    pub weights: ScoreWeights,
+    ///
+    /// `None` means "the server decides", and is what a client sends when the
+    /// user named no weights. It is not the same as sending the defaults: a
+    /// client that spells them out pins its own copy, and an older server
+    /// receiving a weights object it cannot parse rejects the whole request.
+    ///
+    /// `skip_serializing_if` is load-bearing, not tidiness. `None` would
+    /// otherwise go out as `"weights": null`, and to a server where this
+    /// field is still a plain `ScoreWeights` that is a type error rather than
+    /// an absent key — the one spelling that is compatible in both directions
+    /// is no key at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weights: Option<ScoreWeights>,
     /// Fraction of candidates dropped after the cheap pre-screen round.
     ///
     /// `0.5` drops the bottom half of candidates before running the full
@@ -100,7 +111,7 @@ impl SweepSpec {
 /// Weights used to combine per-candidate metrics into one composite score.
 ///
 /// Each weight should be non-negative; the service normalizes the weighted
-/// sum by the total weight, so the four values do not need to sum to `1.0`.
+/// sum by the total weight, so the three values do not need to sum to `1.0`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreWeights {
     /// Weight applied to the average tool-call match score (AST-style,
@@ -111,21 +122,49 @@ pub struct ScoreWeights {
     /// Weight applied to the fraction of tasks the agent completed
     /// (produced a final answer instead of erroring out).
     pub task_completion: f32,
-    /// Weight applied to token-generation throughput, normalized against
-    /// the fastest candidate in the same run.
-    pub speed: f32,
 }
 
 impl Default for ScoreWeights {
-    /// Prioritizes tool-call correctness and loop-avoidance over raw speed,
-    /// reflecting that an agentic backend which loops or mis-calls tools is
-    /// unusable regardless of how fast it streams tokens.
+    /// Prioritizes tool-call correctness over loop-avoidance and completion,
+    /// reflecting that an agentic backend which mis-calls tools is unusable
+    /// regardless of how it scores elsewhere.
     fn default() -> Self {
         Self {
             tool_accuracy: 0.4,
             loop_avoidance: 0.3,
             task_completion: 0.2,
-            speed: 0.1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `None` must leave the key out of the request body, not write `null`
+    /// into it. The two are the same to this server — `#[serde(default)]`
+    /// fires for an absent key, and `Option` accepts an explicit `null` — but
+    /// they are not the same to an older one, where this field is a plain
+    /// `ScoreWeights` rather than an `Option`. There too an absent key is
+    /// legal and gets that server's own default; a present `null` is a type
+    /// error that rejects the whole request.
+    ///
+    /// `Option<T>` serializes as `null` by default, so nothing but
+    /// `skip_serializing_if` produces the absent spelling, and no type check
+    /// notices the difference. The GUI's equivalent guarantee is asserted in
+    /// `tests/ts/components/TuneConfigForm.test.tsx`.
+    #[test]
+    fn a_config_with_no_weights_omits_the_key_rather_than_nulling_it() {
+        let config: TuneConfig = serde_json::from_str(
+            r#"{"model_id": 1, "task_suite": {"source": "default"}, "sweep": {}}"#,
+        )
+        .expect("minimal body deserializes");
+        assert!(config.weights.is_none());
+
+        let body = serde_json::to_value(&config).expect("serializes");
+        assert!(
+            !body.as_object().expect("object").contains_key("weights"),
+            "serialized body must not carry a `weights` key: {body}"
+        );
     }
 }

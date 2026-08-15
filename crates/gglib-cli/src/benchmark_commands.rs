@@ -134,14 +134,6 @@ pub enum BenchmarkCommand {
         #[arg(long)]
         weight_task_completion: Option<f32>,
 
-        /// Composite-score weight for token-generation throughput.
-        /// `tg_tps` is measured and reported per candidate, but this weight
-        /// does not yet enter the composite (its definition is relative to
-        /// the fastest candidate, which is unknowable mid-stream — see the
-        /// tune service's module docs)
-        #[arg(long)]
-        weight_speed: Option<f32>,
-
         /// Context size override (number of tokens)
         #[arg(long)]
         ctx_size: Option<u64>,
