@@ -59,13 +59,18 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     name.push(format!("-{}", std::process::id()));
 
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let dir = root.join(name);
+    let dir = root.join(&name);
 
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create isolated data dir");
-    // `dir` by argument, not through `SCRATCH_DIR`: we are inside its
-    // initialiser, and touching it here would deadlock on itself.
-    sweep_stale(&root, &dir);
+    // `dir` and `prefix` by argument, not through `SCRATCH_DIR`: we are inside
+    // its initialiser, and touching it here would deadlock on itself.
+    let prefix = exe
+        .file_name()
+        .expect("test executable has a file name")
+        .to_string_lossy()
+        .into_owned();
+    sweep_stale(&root, &prefix, &dir);
     dir
 });
 
@@ -75,18 +80,31 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 /// so a directory older than this cannot belong to a process still using it.
 const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
-/// Drop scratch directories left by runs that are certainly finished.
+/// Drop scratch directories left by earlier runs of *this* binary.
 ///
 /// Without this they accumulate forever — a full suite leaves roughly 10 MiB
 /// across six directories, and `cargo clean -p gglib-axum` does not reclaim
-/// them, so only a whole-target clean ever did. Best-effort throughout: a
-/// directory that resists removal is a directory the next run will try again.
-fn sweep_stale(root: &std::path::Path, ours: &std::path::Path) {
+/// them, so only a whole-target clean ever did.
+///
+/// Restricted to our own `<binary>-<pid>` prefix on purpose.
+/// `CARGO_TARGET_TMPDIR` is one directory for the whole target dir, not one
+/// per crate, so sweeping everything in it would make this harness the owner
+/// of scratch space it does not own the moment another crate's tests want
+/// some.
+///
+/// Best-effort throughout, and deliberately biased towards keeping: an entry
+/// whose age cannot be read is left alone, since the cost of keeping a stale
+/// directory is disk and the cost of removing a live one is a corrupted run.
+fn sweep_stale(root: &std::path::Path, prefix: &str, ours: &std::path::Path) {
     let Ok(entries) = std::fs::read_dir(root) else {
         return;
     };
 
     for entry in entries.flatten() {
+        if !entry.file_name().to_string_lossy().starts_with(prefix) {
+            continue;
+        }
+
         let stale = entry
             .metadata()
             .and_then(|meta| meta.modified())
