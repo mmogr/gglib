@@ -85,3 +85,15 @@ tarpaulin-report.html
 boundary-status.json
 .vscode/settings.json
 logs/
+
+# Local AI/assistant tooling — never tracked.
+# These directories are scratch space for coding assistants (session state,
+# worktrees, handoff notes). They are machine-local and must not enter history.
+.claude/
+.cursor/
+.aider*
+.continue/
+.codeium/
+.github/copilot-instructions.md
+CLAUDE.md
+AGENTS.md
