@@ -1,6 +1,6 @@
 {
   "name": "gglib-gui",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Dashboard and control surface for the GGLib local model runtime",
   "author": "mmogr",
   "license": "AGPL-3.0",
