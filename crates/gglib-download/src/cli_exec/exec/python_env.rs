@@ -256,7 +256,7 @@ impl Builder {
 /// The environment includes:
 /// - A dedicated virtualenv with required packages
 /// - The helper script deployed to a known location
-pub struct PythonEnvironment {
+pub(crate) struct PythonEnvironment {
     env_dir: PathBuf,
     script_path: PathBuf,
 }
@@ -276,7 +276,7 @@ impl PythonEnvironment {
     /// [`gglib_core::telemetry::console_println`].
     ///
     /// Returns `Err` if Python is not found or setup fails.
-    pub async fn prepare(notice: Option<&NoticeCallback>) -> Result<Self, EnvSetupError> {
+    pub(crate) async fn prepare(notice: Option<&NoticeCallback>) -> Result<Self, EnvSetupError> {
         Self::prepare_with(notice, None).await
     }
 
@@ -286,7 +286,7 @@ impl PythonEnvironment {
     /// who names an interpreter on the command line has answered the question
     /// the search exists to guess at, so it gets used or reported, never
     /// silently passed over for something the search liked better.
-    pub async fn prepare_with(
+    pub(crate) async fn prepare_with(
         notice: Option<&NoticeCallback>,
         python: Option<&Path>,
     ) -> Result<Self, EnvSetupError> {
@@ -318,18 +318,18 @@ impl PythonEnvironment {
     /// interpreter can import the standard library (including `encodings`).
     ///
     /// Returns the resolved interpreter path string (as reported by Python).
-    pub async fn preflight() -> Result<String, EnvSetupError> {
+    pub(crate) async fn preflight() -> Result<String, EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated(None).await?;
         validate_python_interpreter(&bootstrap).await
     }
 
     /// Get the path to the Python interpreter in this environment.
-    pub fn python_path(&self) -> PathBuf {
+    pub(crate) fn python_path(&self) -> PathBuf {
         venv_python_path(&self.env_dir)
     }
 
     /// Get the path to the helper script.
-    pub fn script_path(&self) -> &Path {
+    pub(crate) fn script_path(&self) -> &Path {
         &self.script_path
     }
 

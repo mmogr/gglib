@@ -112,7 +112,7 @@ async fn execute_single_tool(
 ///
 /// Returns one [`ToolResult`] per call in the same order as `calls`.
 /// Results for timed-out or errored calls have `success: false`.
-pub async fn execute_tools_parallel(
+pub(crate) async fn execute_tools_parallel(
     calls: &[ToolCall],
     executor: &Arc<dyn ToolExecutorPort>,
     config: &AgentConfig,

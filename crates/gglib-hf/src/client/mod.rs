@@ -1,6 +1,4 @@
 #![doc = include_str!("README.md")]
-// Constructor is used via port.rs which compiler doesn't detect
-#![allow(dead_code)]
 
 mod repo_files;
 mod search;
@@ -72,11 +70,11 @@ mod tests {
     use crate::http::testing::{CannedResponse, FakeBackend};
     use serde_json::json;
 
-    pub fn test_config() -> HfConfig {
+    pub(crate) fn test_config() -> HfConfig {
         HfConfig::default()
     }
 
-    pub fn fake_model_json(id: &str, downloads: u64) -> serde_json::Value {
+    pub(crate) fn fake_model_json(id: &str, downloads: u64) -> serde_json::Value {
         json!({
             "id": id,
             "downloads": downloads,

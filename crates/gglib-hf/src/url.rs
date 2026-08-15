@@ -3,9 +3,6 @@
 //! This module provides pure functions for building `HuggingFace` API URLs,
 //! ensuring consistent URL construction across all API calls.
 
-// Some URL builders are not yet used but will be useful for future features
-#![allow(dead_code)]
-
 use crate::models::{HfConfig, HfRepoRef, HfSearchQuery};
 use url::Url;
 
@@ -22,7 +19,7 @@ fn build_expand_params() -> String {
 }
 
 /// Build a search URL with all required parameters.
-pub fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url {
+pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url {
     let direction = if query.sort_ascending { "1" } else { "-1" };
 
     let mut url = config.base_url.clone();
@@ -60,7 +57,7 @@ pub fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url {
 }
 
 /// Build a URL for the model tree endpoint.
-pub fn build_tree_url(config: &HfConfig, repo: &HfRepoRef, path: Option<&str>) -> Url {
+pub(crate) fn build_tree_url(config: &HfConfig, repo: &HfRepoRef, path: Option<&str>) -> Url {
     let mut url = config.base_url.clone();
 
     let tree_path = path.map_or_else(
@@ -75,7 +72,7 @@ pub fn build_tree_url(config: &HfConfig, repo: &HfRepoRef, path: Option<&str>) -
 }
 
 /// Build a URL for the model info endpoint.
-pub fn build_model_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
+pub(crate) fn build_model_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
     let mut url = config.base_url.clone();
 
     let base_path = url.path().trim_end_matches('/');

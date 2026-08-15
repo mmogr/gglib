@@ -44,7 +44,7 @@ use super::BenchmarkDeps;
 use super::tune::{axis_scores, run_task_with_llm, throughput_tps};
 
 /// Entry point called by [`super::BenchmarkOps::run_agentic`].
-pub async fn run_agentic_eval(
+pub(crate) async fn run_agentic_eval(
     deps: &BenchmarkDeps,
     config: AgenticEvalConfig,
     tx: Sender<BenchmarkEvent>,

@@ -8,7 +8,7 @@ use super::patterns::{
 
 /// Result of reasoning capability detection.
 #[derive(Debug, Clone, Default)]
-pub struct ReasoningDetection {
+pub(crate) struct ReasoningDetection {
     /// Whether the model appears to support reasoning/thinking.
     pub supports_reasoning: bool,
     /// Confidence level of the detection (0.0 to 1.0).
@@ -24,7 +24,7 @@ pub struct ReasoningDetection {
 /// Analyzes the chat template and model name to determine if the model
 /// is a reasoning model that outputs `<think>` or similar tags.
 #[must_use]
-pub fn detect_reasoning_support(metadata: &HashMap<String, String>) -> ReasoningDetection {
+pub(crate) fn detect_reasoning_support(metadata: &HashMap<String, String>) -> ReasoningDetection {
     let mut detection = ReasoningDetection::default();
     let mut score = 0.0f32;
 

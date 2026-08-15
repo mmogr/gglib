@@ -51,7 +51,7 @@ const MAX_REDIRECTS: usize = 10;
 
 /// Errors from the native download path.
 #[derive(Error, Debug)]
-pub enum NativeError {
+pub(crate) enum NativeError {
     /// The remote returned 404.
     #[error("Not found: {0}")]
     NotFound(String),
@@ -115,7 +115,7 @@ impl NativeError {
 }
 
 /// One file to fetch.
-pub struct NativeDownload<'a> {
+pub(crate) struct NativeDownload<'a> {
     /// Fully-qualified URL of the file's bytes.
     pub url: &'a str,
     /// Final path. Bytes land at `<dest>.part` until they are verified.
@@ -136,7 +136,10 @@ pub struct NativeDownload<'a> {
 /// On success the file exists at `req.dest` and no `.part` file remains. On a
 /// verification failure the `.part` file is removed, because resuming onto
 /// corrupt bytes would fail the same way forever.
-pub async fn download_file(client: &Client, req: &NativeDownload<'_>) -> Result<(), NativeError> {
+pub(crate) async fn download_file(
+    client: &Client,
+    req: &NativeDownload<'_>,
+) -> Result<(), NativeError> {
     let part_path = part_path_for(req.dest);
 
     if let Some(parent) = req.dest.parent() {

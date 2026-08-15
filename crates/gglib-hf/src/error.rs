@@ -6,7 +6,7 @@
 use thiserror::Error;
 
 /// Result type alias for `HuggingFace` operations.
-pub type HfResult<T> = Result<T, HfError>;
+pub(crate) type HfResult<T> = Result<T, HfError>;
 
 /// Errors related to `HuggingFace` API operations.
 #[derive(Debug, Error)]

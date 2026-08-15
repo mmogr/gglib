@@ -42,7 +42,7 @@ const STALE_AFTER: Duration = Duration::from_secs(1);
 
 /// Background file-stat fallback that emits synthetic progress events when
 /// the Python helper goes silent (typical of the hf-xet fast path).
-pub struct XetPoller {
+pub(crate) struct XetPoller {
     /// Last time a real Python `Progress` event was observed.
     last_real_event_at: Arc<Mutex<Instant>>,
     /// Last synthetic byte count we reported. Used to suppress no-change emits.
@@ -63,7 +63,7 @@ impl XetPoller {
     /// The poller invokes `on_progress(downloaded_sum, expected_total)`
     /// whenever the on-disk size changes **and** no real event has been
     /// reported for at least [`STALE_AFTER`].
-    pub fn spawn(
+    pub(crate) fn spawn(
         targets: Vec<PathBuf>,
         expected_total: Option<u64>,
         on_progress: ProgressCallback,
@@ -115,7 +115,7 @@ impl XetPoller {
     /// This bumps the staleness timer back to "now", causing the poller to
     /// stay dormant for as long as real events keep arriving regularly. Safe
     /// to call from synchronous code that is already inside a Tokio runtime.
-    pub fn note_real_event(&self) {
+    pub(crate) fn note_real_event(&self) {
         // Optimistic non-blocking update. If the lock is contended (the
         // poller task is holding it for a stale-check) the next call will
         // pick up the slack — at worst we miss one staleness reset, which
@@ -126,7 +126,7 @@ impl XetPoller {
     }
 
     /// Stop the background poller. Idempotent; consumes the handle.
-    pub fn shutdown(self) {
+    pub(crate) fn shutdown(self) {
         self.handle.abort();
         // Reset counters so the type behaves as a one-shot resource.
         self.last_synthetic_bytes.store(0, Ordering::Relaxed);

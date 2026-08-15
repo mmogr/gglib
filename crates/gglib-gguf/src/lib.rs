@@ -1,8 +1,5 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
-// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
-// denies it; this crate opts out until its module tree is closed.
-#![allow(unreachable_pub)]
 // Silence unused dependency warnings for optional/future use
 #[cfg(feature = "mmap")]
 use memmap2 as _;

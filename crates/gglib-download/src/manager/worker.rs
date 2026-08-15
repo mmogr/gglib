@@ -147,7 +147,10 @@ fn percent_encode_revision(revision: &str) -> String {
 ///
 /// The job can be cancelled via `job.cancel`. When cancelled, this returns
 /// `Err(DownloadError::Cancelled)`.
-pub async fn run_job(job: DownloadJob, deps: &WorkerDeps) -> Result<CompletedJob, DownloadError> {
+pub(crate) async fn run_job(
+    job: DownloadJob,
+    deps: &WorkerDeps,
+) -> Result<CompletedJob, DownloadError> {
     // Step 1: Ensure destination directory exists
     job.destination.ensure_dir()?;
 

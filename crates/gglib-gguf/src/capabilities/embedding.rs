@@ -50,7 +50,7 @@ const ENCODER_ONLY_ARCHITECTURES: &[&str] = &[
 ///
 /// Returns `true` when the model should be launched with `--embeddings`.
 #[must_use]
-pub fn detect_embedding_support(metadata: &HashMap<String, String>) -> bool {
+pub(crate) fn detect_embedding_support(metadata: &HashMap<String, String>) -> bool {
     let pooled = metadata.iter().any(|(key, value)| {
         key.ends_with(".pooling_type") && value.parse::<u32>().is_ok_and(|t| t > 0)
     });

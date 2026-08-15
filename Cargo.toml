@@ -134,12 +134,42 @@ gglib-build-info = { path = "crates/gglib-build-info" }
 # Workspace-wide lints for consistency
 [workspace.lints.rust]
 unsafe_code = "deny"
-# Every `pub` must be reachable from outside its crate. This is what lets
-# `dead_code` audit a crate at all: while an item is `pub` in a module nothing
-# can reach, the lint has to assume some other crate is the caller.
+# Every `pub` must be reachable from outside its crate, so the keyword on an
+# item means what it says rather than overstating the item's reach.
 #
-# Crates still to be swept carry `#![allow(unreachable_pub)]` in their lib.rs,
-# removed one at a time as each is cleaned.
+# It does *not* unlock `dead_code`, and the comment here used to claim it did.
+# `dead_code` works off effective visibility, not the keyword: it already fires
+# on a `pub fn` sitting in a private module, with or without this lint. The
+# bound that carries this is **reachability**, not which kinds of item
+# `dead_code` analyzes. `unreachable_pub` fires only on items already
+# effectively non-public; of those, the ones `dead_code` examines at all are
+# already inside its scope — so satisfying this lint can never widen what
+# `dead_code` sees.
+#
+# Reachability is the right bound and item-kind is the wrong one, which is
+# worth spelling out because both errors have been made in this comment.
+# Narrowing a genuinely *reachable* function does widen `dead_code`'s view:
+# `pub fn` in a `pub mod` is silent, and the same function as `pub(crate)` is
+# reported. That is a real effect — it is simply not one this lint ever asks
+# for, since it does not fire on reachable items at all.
+#
+# `unreachable_pub` also flags `pub mod` declarations and `pub use` re-exports,
+# which `dead_code` does not examine at all (an unused re-export is
+# `unused_imports`' business). Those are outside its scope rather than already
+# inside it.
+#
+# What hides dead code here, none of which this lint can help with: an item
+# genuinely reachable from the crate root through a `pub` path or `pub use`; an
+# `allow(dead_code)` at any enclosing scope; a trait impl method, which
+# `dead_code` never reports; and a `#[used]` static, which stays live at any
+# visibility — so one already spelled `pub(crate)` satisfies this lint and is
+# still hidden. Nothing in this workspace carries `#[used]` today, but nothing
+# stops it: it never became an unsafe attribute and compiles cleanly under the
+# `unsafe_code = "deny"` in this table.
+#
+# `#[no_mangle]` and `#[export_name]` anchor items the same way and are left off
+# deliberately, because they cannot occur here at all: edition 2024 requires the
+# `#[unsafe(...)]` spelling for both, and that same deny rejects it outright.
 unreachable_pub = "deny"
 
 [workspace.lints.clippy]
@@ -152,11 +182,15 @@ must_use_candidate = "allow"
 collapsible_if = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
-# Irreconcilable with `unreachable_pub`, which this workspace is adopting so the
-# compiler can see dead code. For an item in a private module the two lints ask
-# for opposite things: `pub` trips `unreachable_pub`, `pub(crate)` trips this.
-# One of them has to be off, and this is the nursery one — and the one whose
-# advice hides dead code, since `pub` is exactly what stops `dead_code` looking.
+# Irreconcilable with `unreachable_pub`. For an item in a private module the two
+# ask for opposite things: `pub` trips `unreachable_pub`, `pub(crate)` trips
+# this. One of them has to be off, and this is the nursery one.
+#
+# The earlier version of this comment also claimed `redundant_pub_crate`'s
+# advice "hides dead code, since `pub` is exactly what stops `dead_code`
+# looking". That is false — see the note on `unreachable_pub` above. The reason
+# to prefer `unreachable_pub` is only that a keyword should describe the reach
+# the item actually has.
 redundant_pub_crate = "allow"
 
 # Profile settings apply to all workspace members

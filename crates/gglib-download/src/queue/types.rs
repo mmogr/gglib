@@ -14,7 +14,7 @@ use super::shard_group::ShardGroupId;
 /// This is an internal type for the queue state machine.
 /// For serialization to APIs, convert to `gglib_core::download::QueuedDownload`.
 #[derive(Clone, Debug)]
-pub struct QueuedItem {
+pub(crate) struct QueuedItem {
     /// The download identifier.
     pub id: DownloadId,
     /// Links shards of the same model together for group operations.
@@ -32,7 +32,7 @@ pub struct QueuedItem {
 
 impl QueuedItem {
     /// Create a new simple (non-sharded) queued download.
-    pub fn new(id: DownloadId, completion_key: CompletionKey) -> Self {
+    pub(crate) fn new(id: DownloadId, completion_key: CompletionKey) -> Self {
         Self {
             id,
             group_id: None,
@@ -44,7 +44,7 @@ impl QueuedItem {
     }
 
     /// Create a new sharded download item.
-    pub fn new_shard(
+    pub(crate) fn new_shard(
         id: DownloadId,
         group_id: ShardGroupId,
         shard_info: ShardInfo,
@@ -61,12 +61,12 @@ impl QueuedItem {
     }
 
     /// Get the canonical ID string.
-    pub fn canonical_id(&self) -> String {
+    pub(crate) fn canonical_id(&self) -> String {
         self.id.to_string()
     }
 
     /// Convert to a core DTO for API responses.
-    pub fn to_dto(
+    pub(crate) fn to_dto(
         &self,
         position: u32,
         status: DownloadStatus,
@@ -93,7 +93,7 @@ impl QueuedItem {
 
 /// A failed download with error information.
 #[derive(Clone, Debug)]
-pub struct FailedItem {
+pub(crate) struct FailedItem {
     /// The original queued download item.
     pub item: QueuedItem,
     /// Human-readable error message.
@@ -104,7 +104,7 @@ pub struct FailedItem {
 
 impl FailedItem {
     /// Create a new failed download entry.
-    pub fn new(item: QueuedItem, error: impl Into<String>) -> Self {
+    pub(crate) fn new(item: QueuedItem, error: impl Into<String>) -> Self {
         Self {
             item,
             error: error.into(),
@@ -113,7 +113,7 @@ impl FailedItem {
     }
 
     /// Convert to a core DTO for API responses.
-    pub fn to_dto(&self) -> gglib_core::download::FailedDownload {
+    pub(crate) fn to_dto(&self) -> gglib_core::download::FailedDownload {
         let display_name = self.item.shard_info.as_ref().map_or_else(
             || self.item.id.to_string(),
             |shard| format!("{} ({})", self.item.id, shard.display()),

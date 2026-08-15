@@ -43,7 +43,7 @@ use super::mapper::{
 };
 
 /// Entry point called by [`super::BenchmarkOps::run_compare`].
-pub async fn run_compare(
+pub(crate) async fn run_compare(
     deps: &BenchmarkDeps,
     config: CompareConfig,
     tx: Sender<BenchmarkEvent>,

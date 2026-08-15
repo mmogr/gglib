@@ -35,7 +35,10 @@ fn total_chars(messages: &[AgentMessage]) -> usize {
 /// context, so this is intentional — but callers should be aware that
 /// interleaved system prompts will no longer appear at their original
 /// positions within the non-system flow after Pass 2 runs.
-pub fn prune_for_budget(messages: Vec<AgentMessage>, config: &AgentConfig) -> Vec<AgentMessage> {
+pub(crate) fn prune_for_budget(
+    messages: Vec<AgentMessage>,
+    config: &AgentConfig,
+) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
 
     if total_chars(&messages) <= budget {

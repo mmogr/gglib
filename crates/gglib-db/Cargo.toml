@@ -37,3 +37,9 @@ tokio-test = { workspace = true }
 
 [lints.rust]
 unsafe_code = "deny"
+# Declared per-crate rather than via `[lints] workspace = true`: Cargo will
+# not let a manifest combine that key with its own, and adopting it would
+# also switch on the workspace's clippy pedantic/nursery sets this crate has
+# never been held to. The five other crates in that position already carry
+# this line; these three were the ones still missing it.
+unreachable_pub = "deny"

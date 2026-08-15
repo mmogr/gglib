@@ -1,17 +1,18 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
-// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
-// denies it; this crate opts out until its module tree is closed.
-#![allow(unreachable_pub)]
 // No consumer names a module of this crate — every use outside it goes through
-// the re-exports below. Keeping the modules crate-internal is what lets
-// `dead_code` audit their contents.
+// the re-exports below.
 //
-// The items *inside* stay `pub`. This crate inherits `[workspace.lints]`, which
-// includes clippy's nursery set, and `redundant_pub_crate` rejects `pub(crate)`
-// inside a private module — the exact opposite of what `unreachable_pub` asks
-// for. See the PR description; the two lints cannot both be satisfied.
+// The items inside are `pub(crate)` too, as of the visibility sweep. This
+// comment used to say they stayed `pub` because the two lints "cannot both be
+// satisfied". That much is true — for an item in a private module they demand
+// opposite spellings, and no spelling satisfies both — but it is not a reason
+// to keep `pub`: `redundant_pub_crate` is `allow` in `[workspace.lints.clippy]`
+// and was before this sweep, so it is the one that need not be satisfied. The
+// same comment also claimed crate-internal modules are "what lets `dead_code`
+// audit their contents" — see the note on `unreachable_pub` in the workspace
+// manifest for why that is not how `dead_code` works either.
 pub(crate) mod builtin;
 pub(crate) mod client;
 pub(crate) mod combined;

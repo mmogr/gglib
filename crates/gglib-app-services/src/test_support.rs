@@ -39,12 +39,12 @@ impl Default for MockDownloadManager {
 }
 
 impl MockDownloadManager {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// A variant whose `cancel_download` always returns `NotFound`.
-    pub fn failing_cancel() -> Self {
+    pub(crate) fn failing_cancel() -> Self {
         Self {
             fail_cancel: true,
             reorder_position: 1,

@@ -4,9 +4,6 @@
 //! dependency injection and easy testing. The production implementation
 //! uses reqwest with automatic retry logic for transient errors.
 
-// Constructor used by client::mod but compiler doesn't track cross-module usage well
-#![allow(dead_code)]
-
 use crate::error::{HfError, HfResult};
 use crate::models::HfConfig;
 use async_trait::async_trait;
@@ -180,27 +177,27 @@ impl HttpBackend for ReqwestBackend {
 // ============================================================================
 
 #[cfg(test)]
-pub mod testing {
+pub(crate) mod testing {
     use super::*;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     /// Canned response for the fake backend.
     #[derive(Clone)]
-    pub struct CannedResponse {
+    pub(crate) struct CannedResponse {
         pub json: serde_json::Value,
         pub has_more: bool,
     }
 
     /// A fake HTTP backend that returns canned responses.
-    pub struct FakeBackend {
+    pub(crate) struct FakeBackend {
         responses: Arc<Mutex<HashMap<String, CannedResponse>>>,
         default_response: Option<CannedResponse>,
     }
 
     impl FakeBackend {
         /// Create a new fake backend.
-        pub fn new() -> Self {
+        pub(crate) fn new() -> Self {
             Self {
                 responses: Arc::new(Mutex::new(HashMap::new())),
                 default_response: None,
@@ -208,7 +205,7 @@ pub mod testing {
         }
 
         /// Add a canned response for a URL pattern.
-        pub fn with_response(self, url_contains: &str, response: CannedResponse) -> Self {
+        pub(crate) fn with_response(self, url_contains: &str, response: CannedResponse) -> Self {
             self.responses
                 .lock()
                 .unwrap()
@@ -217,7 +214,7 @@ pub mod testing {
         }
 
         /// Set a default response for URLs that don't match any pattern.
-        pub fn with_default(mut self, response: CannedResponse) -> Self {
+        pub(crate) fn with_default(mut self, response: CannedResponse) -> Self {
             self.default_response = Some(response);
             self
         }

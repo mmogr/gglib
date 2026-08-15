@@ -14,7 +14,7 @@ use crate::queue::ShardGroupId;
 
 /// Metadata needed to register a completed model.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GroupMetadata {
+pub(crate) struct GroupMetadata {
     /// Repository ID (e.g., "unsloth/Llama-3-GGUF").
     pub repo_id: String,
     /// Commit SHA at time of download.
@@ -83,7 +83,7 @@ impl ShardGroupState {
 
 /// Complete shard group ready for registration.
 #[derive(Debug)]
-pub struct GroupComplete {
+pub(crate) struct GroupComplete {
     /// All shard paths in order.
     pub ordered_paths: Vec<PathBuf>,
     /// Metadata for model registration.
@@ -95,7 +95,7 @@ pub struct GroupComplete {
 /// This is a pure state machine that accumulates shard completions
 /// and signals when groups are complete. No I/O or locking happens here.
 #[derive(Debug, Default)]
-pub struct ShardGroupTracker {
+pub(crate) struct ShardGroupTracker {
     /// Active shard groups being tracked.
     ///
     /// INVARIANT: `groups` contains ONLY in-progress groups.
@@ -105,7 +105,7 @@ pub struct ShardGroupTracker {
 
 impl ShardGroupTracker {
     /// Create a new empty tracker.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -127,7 +127,7 @@ impl ShardGroupTracker {
     ///
     /// In debug builds, panics if metadata for this group doesn't match previously recorded
     /// metadata. This catches bugs where shards compute different identities.
-    pub fn on_shard_done(
+    pub(crate) fn on_shard_done(
         &mut self,
         group_id: &ShardGroupId,
         index: u32,
@@ -167,7 +167,7 @@ impl ShardGroupTracker {
     /// Remove a shard group that was cancelled or failed.
     ///
     /// This prevents memory leaks from incomplete downloads.
-    pub fn on_group_failed(&mut self, group_id: &ShardGroupId) {
+    pub(crate) fn on_group_failed(&mut self, group_id: &ShardGroupId) {
         self.groups.remove(group_id);
     }
 
@@ -178,13 +178,13 @@ impl ShardGroupTracker {
     /// the pending queue is empty AND `has_open_groups()` returns `false`.
     ///
     /// INVARIANT: This relies on terminal paths removing groups from `self.groups`.
-    pub fn has_open_groups(&self) -> bool {
+    pub(crate) fn has_open_groups(&self) -> bool {
         !self.groups.is_empty()
     }
 
     /// Get the number of active shard groups.
     #[cfg(test)]
-    pub fn active_count(&self) -> usize {
+    pub(crate) fn active_count(&self) -> usize {
         self.groups.len()
     }
 }

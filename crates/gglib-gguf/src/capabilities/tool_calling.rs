@@ -12,7 +12,7 @@ use super::patterns::{
 
 /// Result of tool calling capability detection.
 #[derive(Debug, Clone, Default)]
-pub struct ToolCallingDetection {
+pub(crate) struct ToolCallingDetection {
     /// Whether the model appears to support tool/function calling.
     pub supports_tool_calling: bool,
     /// Confidence level of the detection (0.0 to 1.0).
@@ -28,7 +28,7 @@ pub struct ToolCallingDetection {
 /// Analyzes the chat template and model name to determine if the model
 /// supports tool calling via the OpenAI-compatible API.
 #[must_use]
-pub fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDetection {
+pub(crate) fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDetection {
     let mut detection = ToolCallingDetection::default();
     let mut score = 0.0f32;
     let mut detected_formats: Vec<&str> = Vec::new();
