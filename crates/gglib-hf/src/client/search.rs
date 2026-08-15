@@ -1,11 +1,8 @@
 //! Search functionality for the `HuggingFace` client.
 
-// Some search methods are for future use (CLI raw search, paginated all models)
-#![allow(dead_code)]
-
 use crate::error::HfResult;
 use crate::http::HttpBackend;
-use crate::models::{HfModelSummary, HfSearchQuery, HfSearchResponse, HfSortField};
+use crate::models::{HfSearchQuery, HfSearchResponse};
 use crate::parsing::parse_search_response;
 use crate::url::build_search_url;
 
@@ -58,63 +55,6 @@ impl<B: HttpBackend> HfClient<B> {
             .collect();
 
         Ok(response)
-    }
-
-    /// Search for all models matching a query.
-    ///
-    /// Fetches all pages and returns a combined list.
-    /// Use with caution for broad queries as this may make many API calls.
-    pub(crate) async fn search_all_models(
-        &self,
-        query: HfSearchQuery,
-    ) -> HfResult<Vec<HfModelSummary>> {
-        let mut results = Vec::new();
-        let mut current_query = HfSearchQuery { page: 0, ..query };
-
-        loop {
-            let response = self.search_models_page(&current_query).await?;
-            results.extend(response.items);
-
-            if !response.has_more {
-                break;
-            }
-
-            current_query.page += 1;
-
-            // Safety limit to prevent infinite loops
-            if current_query.page > 100 {
-                break;
-            }
-        }
-
-        Ok(results)
-    }
-
-    /// Search for models (simple interface for CLI).
-    ///
-    /// Returns raw JSON values for flexible output formatting.
-    pub(crate) async fn search_models_raw(
-        &self,
-        search_query: &str,
-        limit: u32,
-        sort: &str,
-    ) -> HfResult<Vec<serde_json::Value>> {
-        let sort_field = match sort {
-            "likes" => HfSortField::Likes,
-            "created" | "createdAt" => HfSortField::Created,
-            "modified" | "lastModified" => HfSortField::Modified,
-            "id" | "alphabetical" => HfSortField::Alphabetical,
-            _ => HfSortField::Downloads,
-        };
-
-        let query = HfSearchQuery::new()
-            .with_query(search_query)
-            .with_limit(limit)
-            .with_sort(sort_field, false);
-
-        let url = build_search_url(&self.config, &query);
-        let result: Vec<serde_json::Value> = self.backend.get_json(&url).await?;
-        Ok(result)
     }
 }
 

@@ -3,9 +3,6 @@
 //! These types are internal to `gglib-hf` and are not exposed to consumers.
 //! External consumers should use the port DTOs defined in `gglib-core`.
 
-// Some helper methods are not yet used but will be useful for future features
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -53,6 +50,10 @@ pub(crate) struct HfRepoRef {
 
 impl HfRepoRef {
     /// Create a new repository reference.
+    ///
+    /// Test-only: production builds every `HfRepoRef` through [`Self::parse`],
+    /// from a `owner/name` string off the wire or the CLI.
+    #[cfg(test)]
     pub(crate) fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             owner: owner.into(),
@@ -125,11 +126,6 @@ impl HfFileEntry {
     pub(crate) fn is_directory(&self) -> bool {
         self.entry_type == HfEntryType::Directory
     }
-
-    /// Get the filename without path.
-    pub(crate) fn filename(&self) -> &str {
-        self.path.rsplit('/').next().unwrap_or(&self.path)
-    }
 }
 
 // ============================================================================
@@ -149,15 +145,25 @@ pub(crate) struct HfQuantization {
     pub total_size: u64,
 }
 
+/// Test-only, and necessarily so: this type never leaves gglib-hf. `port.rs`'s
+/// `to_quant_info` converts it into the `HfQuantInfo` DTO, and that is what
+/// every other crate reads — so nothing outside could call this even if it
+/// wanted to.
+///
+/// Do not use a workspace grep for `is_sharded` or `shard_count` as evidence
+/// either way. Those names sit on several other types across the workspace —
+/// `HfQuantInfo` carries an `is_sharded()` method with this one's exact body,
+/// and gglib-app-services has a second struct also called `HfQuantization`,
+/// with an `is_sharded` field — so a hit tells you nothing about *this* method
+/// until you have resolved the receiver's type. Resolving the type is the
+/// point; counting the surfaces is not. An earlier version of this comment
+/// attributed other crates' behaviour to this method, and the version after it
+/// closed the accounting at a number that was wrong.
+#[cfg(test)]
 impl HfQuantization {
     /// Check if this quantization is sharded (multiple files).
     pub(crate) const fn is_sharded(&self) -> bool {
         self.shard_count > 1
-    }
-
-    /// Get the primary file path (first shard or single file).
-    pub(crate) fn primary_path(&self) -> Option<&str> {
-        self.paths.first().map(String::as_str)
     }
 }
 
@@ -243,6 +249,11 @@ pub(crate) struct HfSearchQuery {
     pub sort_ascending: bool,
 }
 
+/// Test-only builder chain. `port::to_search_query` — the only production code
+/// that builds an `HfSearchQuery` — maps an `HfSearchOptions` straight into a
+/// struct literal, so every call to these six lives in a `#[cfg(test)]` module:
+/// the one below, `url.rs`'s, and `client/search.rs`'s.
+#[cfg(test)]
 impl HfSearchQuery {
     /// Create a new search query with defaults.
     pub(crate) fn new() -> Self {

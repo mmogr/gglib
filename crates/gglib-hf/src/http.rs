@@ -4,9 +4,6 @@
 //! dependency injection and easy testing. The production implementation
 //! uses reqwest with automatic retry logic for transient errors.
 
-// Constructor used by client::mod but compiler doesn't track cross-module usage well
-#![allow(dead_code)]
-
 use crate::error::{HfError, HfResult};
 use crate::models::HfConfig;
 use async_trait::async_trait;

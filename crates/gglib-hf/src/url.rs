@@ -3,9 +3,6 @@
 //! This module provides pure functions for building `HuggingFace` API URLs,
 //! ensuring consistent URL construction across all API calls.
 
-// Some URL builders are not yet used but will be useful for future features
-#![allow(dead_code)]
-
 use crate::models::{HfConfig, HfRepoRef, HfSearchQuery};
 use url::Url;
 

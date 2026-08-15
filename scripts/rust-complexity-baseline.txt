@@ -108,8 +108,8 @@ crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1175
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 424
-crates/gglib-hf/src/http.rs 384
-crates/gglib-hf/src/models.rs 403
+crates/gglib-hf/src/http.rs 381
+crates/gglib-hf/src/models.rs 414
 crates/gglib-hf/src/parsing.rs 523
 crates/gglib-hf/src/port.rs 401
 crates/gglib-integration-tests/tests/integration_huggingface.rs 339
