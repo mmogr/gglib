@@ -11,8 +11,8 @@
 //!    form was `Err(_) => return`, which turns a contract test into a no-op
 //!    that reports success — the failure mode a contract test exists to catch.
 //!
-//! [`harness`](self::harness) is the only way to build a context here, so both
-//! properties hold by construction rather than by everyone remembering.
+//! [`test_state`] is the only way to build a context here, so both properties
+//! hold by construction rather than by everyone remembering.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -68,28 +68,44 @@ fn test_config(cors: CorsConfig) -> ServerConfig {
     }
 }
 
-/// Bootstrap an isolated context and a router over it.
+/// Bootstrap a context against a database of its own.
 ///
 /// # Panics
 ///
 /// If bootstrap fails. That is the point: a test that skips itself when its
 /// fixture will not build reports success for a surface it never reached.
-pub(crate) async fn harness(cors: CorsConfig) -> (Arc<AxumContext>, Router) {
-    let ctx = bootstrap(test_config(cors.clone()))
+#[allow(dead_code)] // each test binary uses a different subset
+pub(crate) async fn test_state(cors: CorsConfig) -> Arc<AxumContext> {
+    let ctx = bootstrap(test_config(cors))
         .await
         .expect("bootstrap an isolated test context");
 
-    let state = Arc::new(ctx);
-    let router = create_router(
-        Arc::clone(&state),
-        &cors,
-        Arc::new(DaemonAccess::loopback()),
-    );
+    Arc::new(ctx)
+}
 
+/// The access policy most tests here run under: loopback, no token.
+#[allow(dead_code)] // each test binary uses a different subset
+pub(crate) fn test_access() -> Arc<DaemonAccess> {
+    Arc::new(DaemonAccess::loopback())
+}
+
+/// [`test_state`] plus the router over it, for tests that assert on both.
+#[allow(dead_code)] // each test binary uses a different subset
+pub(crate) async fn test_state_and_app(cors: CorsConfig) -> (Arc<AxumContext>, Router) {
+    let state = test_state(cors.clone()).await;
+    let router = create_router(Arc::clone(&state), &cors, test_access());
     (state, router)
 }
 
-/// [`harness`] for the tests that never touch the context.
+/// [`test_state_and_app`] for the tests that never touch the context.
+#[allow(dead_code)] // each test binary uses a different subset
 pub(crate) async fn test_app(cors: CorsConfig) -> Router {
-    harness(cors).await.1
+    test_state_and_app(cors).await.1
+}
+
+/// [`test_app`] under an access policy other than plain loopback.
+#[allow(dead_code)] // each test binary uses a different subset
+pub(crate) async fn test_app_with_access(cors: CorsConfig, access: DaemonAccess) -> Router {
+    let state = test_state(cors.clone()).await;
+    create_router(state, &cors, Arc::new(access))
 }

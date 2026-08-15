@@ -8,31 +8,12 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use common::ports::TEST_BASE_PORT;
+use common::harness::test_app_with_access;
 use gglib_axum::DaemonAccess;
-use gglib_axum::create_router;
-use gglib_axum::{ServerConfig, bootstrap};
 use gglib_core::CorsConfig;
 
-fn test_config() -> ServerConfig {
-    ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
-        base_port: TEST_BASE_PORT,
-        llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: CorsConfig::AllowAll,
-    }
-}
-
-async fn build_app(access: DaemonAccess) -> Option<axum::Router> {
-    let ctx = bootstrap(test_config()).await.ok()?;
-    Some(create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        std::sync::Arc::new(access),
-    ))
+async fn build_app(access: DaemonAccess) -> axum::Router {
+    test_app_with_access(CorsConfig::AllowAll, access).await
 }
 
 fn get(uri: &str, host: &str) -> Request<Body> {
@@ -47,9 +28,7 @@ fn get(uri: &str, host: &str) -> Request<Body> {
 /// but the Host names a hostname this daemon never agreed to answer to.
 #[tokio::test]
 async fn foreign_host_is_rejected_on_every_route() {
-    let Some(app) = build_app(DaemonAccess::loopback()).await else {
-        return;
-    };
+    let app = build_app(DaemonAccess::loopback()).await;
 
     for uri in ["/api/servers", "/health", "/no/such/path"] {
         let response = app
@@ -68,9 +47,7 @@ async fn foreign_host_is_rejected_on_every_route() {
 /// A request that omits Host entirely has no claim to check.
 #[tokio::test]
 async fn missing_host_is_rejected() {
-    let Some(app) = build_app(DaemonAccess::loopback()).await else {
-        return;
-    };
+    let app = build_app(DaemonAccess::loopback()).await;
 
     let response = app
         .oneshot(
@@ -88,9 +65,7 @@ async fn missing_host_is_rejected() {
 /// no configuration.
 #[tokio::test]
 async fn loopback_stays_open_by_default() {
-    let Some(app) = build_app(DaemonAccess::loopback()).await else {
-        return;
-    };
+    let app = build_app(DaemonAccess::loopback()).await;
 
     for host in ["127.0.0.1:9887", "localhost:9887", "[::1]:9887"] {
         let response = app.clone().oneshot(get("/health", host)).await.unwrap();
@@ -112,15 +87,12 @@ async fn loopback_stays_open_by_default() {
 /// probes and health checks keep working.
 #[tokio::test]
 async fn configured_token_gates_api_but_not_health() {
-    let Some(app) = build_app(DaemonAccess::new(
+    let app = build_app(DaemonAccess::new(
         Some("s3cret".into()),
         "0.0.0.0",
         Vec::new(),
     ))
-    .await
-    else {
-        return;
-    };
+    .await;
 
     let response = app
         .clone()
@@ -159,15 +131,12 @@ async fn configured_token_gates_api_but_not_health() {
 /// mDNS name, while still refusing foreign hostnames.
 #[tokio::test]
 async fn share_lan_policy_accepts_ip_literals_and_named_hosts() {
-    let Some(app) = build_app(DaemonAccess::new(
+    let app = build_app(DaemonAccess::new(
         None,
         "0.0.0.0",
         vec!["gglib.local".into()],
     ))
-    .await
-    else {
-        return;
-    };
+    .await;
 
     for host in ["192.168.1.7:9887", "gglib.local:9887", "127.0.0.1:9887"] {
         let response = app.clone().oneshot(get("/health", host)).await.unwrap();

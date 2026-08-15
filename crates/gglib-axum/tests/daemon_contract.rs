@@ -12,23 +12,8 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use common::ports::TEST_BASE_PORT;
-use gglib_axum::DaemonAccess;
-use gglib_axum::create_router;
-use gglib_axum::{ServerConfig, bootstrap};
+use common::harness::{test_app, test_state_and_app};
 use gglib_core::CorsConfig;
-
-fn test_config() -> ServerConfig {
-    ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
-        base_port: TEST_BASE_PORT,
-        llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: CorsConfig::AllowAll,
-    }
-}
 
 async fn body_json(response: axum::response::Response) -> serde_json::Value {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
@@ -40,16 +25,7 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
 /// stop — the full `gglib serve` round trip minus the terminal.
 #[tokio::test]
 async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return, // Skip if the environment has no DB path
-    };
-    let state = std::sync::Arc::new(ctx);
-    let app = create_router(
-        std::sync::Arc::clone(&state),
-        &CorsConfig::AllowAll,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
 
     // Start pinned, on an ephemeral port so nothing on the machine is hit.
     let response = app
@@ -138,15 +114,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
 /// lifecycle to end.
 #[tokio::test]
 async fn shutdown_route_refuses_when_not_a_daemon() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
