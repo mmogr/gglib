@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 /// Result of MTP capability detection.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MtpDetection {
+pub(crate) struct MtpDetection {
     /// Whether the model contains embedded MTP draft heads.
     pub supported: bool,
     /// Number of MTP prediction layers present (`nextn_predict_layers` value).
@@ -36,7 +36,7 @@ pub struct MtpDetection {
 /// Returns [`MtpDetection`] with `supported = false` and `layer_count = 0`
 /// when no such key exists or the value is zero.
 #[must_use]
-pub fn detect_mtp_support(metadata: &HashMap<String, String>) -> MtpDetection {
+pub(crate) fn detect_mtp_support(metadata: &HashMap<String, String>) -> MtpDetection {
     for (key, value) in metadata {
         if key.ends_with(".nextn_predict_layers") {
             if let Ok(n) = value.parse::<u32>() {

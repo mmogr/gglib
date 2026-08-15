@@ -4,7 +4,7 @@ mod mtp;
 mod patterns;
 mod reasoning;
 mod template_probe;
-pub mod tool_calling;
+pub(crate) mod tool_calling;
 
 use std::collections::HashMap;
 
@@ -22,7 +22,7 @@ use tool_calling::detect_tool_support;
 /// This is the main entry point for capability detection, combining
 /// reasoning and tool calling detection into a single `GgufCapabilities`.
 #[must_use]
-pub fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
+pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
     let mut flags = CapabilityFlags::empty();
 
     // Detect reasoning support

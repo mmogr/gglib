@@ -93,4 +93,4 @@ impl From<GgufInternalError> for GgufParseError {
 }
 
 /// Result type for internal GGUF operations.
-pub type GgufResult<T> = Result<T, GgufInternalError>;
+pub(crate) type GgufResult<T> = Result<T, GgufInternalError>;

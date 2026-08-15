@@ -4,7 +4,7 @@
 //! chat templates and model names.
 
 /// Known thinking/reasoning tag patterns used by various models.
-pub const THINKING_TAG_PATTERNS: &[&str] = &[
+pub(crate) const THINKING_TAG_PATTERNS: &[&str] = &[
     // Standard patterns (DeepSeek R1, Qwen3, most reasoning models)
     "<think>",
     "<think ",
@@ -28,14 +28,14 @@ pub const THINKING_TAG_PATTERNS: &[&str] = &[
 ];
 
 /// High-confidence reasoning model name patterns.
-pub const REASONING_NAME_HIGH_CONFIDENCE: &[&str] = &["deepseek-r1", "qwq", "o1", "o3"];
+pub(crate) const REASONING_NAME_HIGH_CONFIDENCE: &[&str] = &["deepseek-r1", "qwq", "o1", "o3"];
 
 /// Medium-confidence reasoning model name patterns.
-pub const REASONING_NAME_MEDIUM_CONFIDENCE: &[&str] =
+pub(crate) const REASONING_NAME_MEDIUM_CONFIDENCE: &[&str] =
     &["deepseek-v3", "qwen3", "thinking", "reasoning", "cot"];
 
 /// Tool calling model name patterns.
-pub const TOOL_CALLING_NAME_PATTERNS: &[&str] = &[
+pub(crate) const TOOL_CALLING_NAME_PATTERNS: &[&str] = &[
     "hermes",
     "functionary",
     "firefunction",
@@ -46,7 +46,7 @@ pub const TOOL_CALLING_NAME_PATTERNS: &[&str] = &[
 
 /// High-confidence tool calling patterns with format hints.
 /// Format: (pattern, `format_name`, score)
-pub const TOOL_PATTERNS_HIGH_CONFIDENCE: &[(&str, &str, f32)] = &[
+pub(crate) const TOOL_PATTERNS_HIGH_CONFIDENCE: &[(&str, &str, f32)] = &[
     ("<tool_call>", "hermes", 0.5),
     ("</tool_call>", "hermes", 0.3),
     ("<tool_response>", "hermes", 0.3),
@@ -61,7 +61,7 @@ pub const TOOL_PATTERNS_HIGH_CONFIDENCE: &[(&str, &str, f32)] = &[
 ];
 
 /// Medium-confidence tool calling patterns (Jinja conditionals).
-pub const TOOL_PATTERNS_MEDIUM_CONFIDENCE: &[&str] = &[
+pub(crate) const TOOL_PATTERNS_MEDIUM_CONFIDENCE: &[&str] = &[
     "if tools",
     "tools is defined",
     "tools | length",

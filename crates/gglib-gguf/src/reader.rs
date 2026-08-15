@@ -15,7 +15,7 @@ use crate::format::GGUF_MAGIC;
 /// A reader for GGUF files.
 ///
 /// Abstracts file I/O, potentially using memory mapping for better performance.
-pub struct GgufReader<R: Read> {
+pub(crate) struct GgufReader<R: Read> {
     reader: R,
 }
 
@@ -24,7 +24,7 @@ impl GgufReader<BufReader<File>> {
     ///
     /// Uses buffered I/O for standard reading. Memory mapping is handled
     /// separately when the `mmap` feature is enabled.
-    pub fn open(path: &Path) -> GgufResult<Self> {
+    pub(crate) fn open(path: &Path) -> GgufResult<Self> {
         let file = File::open(path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 GgufInternalError::FileNotFound(path.display().to_string())
@@ -45,7 +45,7 @@ impl<R: Read> GgufReader<R> {
     }
 
     /// Read and validate the GGUF magic number.
-    pub fn read_magic(&mut self) -> GgufResult<()> {
+    pub(crate) fn read_magic(&mut self) -> GgufResult<()> {
         let mut magic = [0u8; 4];
         self.reader.read_exact(&mut magic)?;
         if magic != GGUF_MAGIC {
@@ -55,7 +55,7 @@ impl<R: Read> GgufReader<R> {
     }
 
     /// Read and validate the GGUF version.
-    pub fn read_version(&mut self) -> GgufResult<u32> {
+    pub(crate) fn read_version(&mut self) -> GgufResult<u32> {
         let version = self.read_u32()?;
         if !(1..=3).contains(&version) {
             return Err(GgufInternalError::UnsupportedVersion(version));
@@ -64,7 +64,7 @@ impl<R: Read> GgufReader<R> {
     }
 
     /// Read a u8 value.
-    pub fn read_u8(&mut self) -> GgufResult<u8> {
+    pub(crate) fn read_u8(&mut self) -> GgufResult<u8> {
         let mut buf = [0u8; 1];
         self.reader.read_exact(&mut buf)?;
         Ok(buf[0])
@@ -72,12 +72,12 @@ impl<R: Read> GgufReader<R> {
 
     /// Read an i8 value.
     #[allow(clippy::cast_possible_wrap)]
-    pub fn read_i8(&mut self) -> GgufResult<i8> {
+    pub(crate) fn read_i8(&mut self) -> GgufResult<i8> {
         Ok(self.read_u8()? as i8)
     }
 
     /// Read a u16 value (little-endian).
-    pub fn read_u16(&mut self) -> GgufResult<u16> {
+    pub(crate) fn read_u16(&mut self) -> GgufResult<u16> {
         let mut buf = [0u8; 2];
         self.reader.read_exact(&mut buf)?;
         Ok(u16::from_le_bytes(buf))
@@ -85,12 +85,12 @@ impl<R: Read> GgufReader<R> {
 
     /// Read an i16 value (little-endian).
     #[allow(clippy::cast_possible_wrap)]
-    pub fn read_i16(&mut self) -> GgufResult<i16> {
+    pub(crate) fn read_i16(&mut self) -> GgufResult<i16> {
         Ok(self.read_u16()? as i16)
     }
 
     /// Read a u32 value (little-endian).
-    pub fn read_u32(&mut self) -> GgufResult<u32> {
+    pub(crate) fn read_u32(&mut self) -> GgufResult<u32> {
         let mut buf = [0u8; 4];
         self.reader.read_exact(&mut buf)?;
         Ok(u32::from_le_bytes(buf))
@@ -98,12 +98,12 @@ impl<R: Read> GgufReader<R> {
 
     /// Read an i32 value (little-endian).
     #[allow(clippy::cast_possible_wrap)]
-    pub fn read_i32(&mut self) -> GgufResult<i32> {
+    pub(crate) fn read_i32(&mut self) -> GgufResult<i32> {
         Ok(self.read_u32()? as i32)
     }
 
     /// Read a u64 value (little-endian).
-    pub fn read_u64(&mut self) -> GgufResult<u64> {
+    pub(crate) fn read_u64(&mut self) -> GgufResult<u64> {
         let mut buf = [0u8; 8];
         self.reader.read_exact(&mut buf)?;
         Ok(u64::from_le_bytes(buf))
@@ -111,32 +111,32 @@ impl<R: Read> GgufReader<R> {
 
     /// Read an i64 value (little-endian).
     #[allow(clippy::cast_possible_wrap)]
-    pub fn read_i64(&mut self) -> GgufResult<i64> {
+    pub(crate) fn read_i64(&mut self) -> GgufResult<i64> {
         Ok(self.read_u64()? as i64)
     }
 
     /// Read an f32 value (little-endian).
-    pub fn read_f32(&mut self) -> GgufResult<f32> {
+    pub(crate) fn read_f32(&mut self) -> GgufResult<f32> {
         let mut buf = [0u8; 4];
         self.reader.read_exact(&mut buf)?;
         Ok(f32::from_le_bytes(buf))
     }
 
     /// Read an f64 value (little-endian).
-    pub fn read_f64(&mut self) -> GgufResult<f64> {
+    pub(crate) fn read_f64(&mut self) -> GgufResult<f64> {
         let mut buf = [0u8; 8];
         self.reader.read_exact(&mut buf)?;
         Ok(f64::from_le_bytes(buf))
     }
 
     /// Read a bool value.
-    pub fn read_bool(&mut self) -> GgufResult<bool> {
+    pub(crate) fn read_bool(&mut self) -> GgufResult<bool> {
         Ok(self.read_u8()? != 0)
     }
 
     /// Read a string (u64 length prefix followed by UTF-8 bytes).
     #[allow(clippy::cast_possible_truncation)]
-    pub fn read_string(&mut self) -> GgufResult<String> {
+    pub(crate) fn read_string(&mut self) -> GgufResult<String> {
         let len = self.read_u64()? as usize;
         let mut buf = vec![0u8; len];
         self.reader.read_exact(&mut buf)?;
@@ -145,7 +145,7 @@ impl<R: Read> GgufReader<R> {
 
     /// Read a GGUF value based on its type code.
     #[allow(clippy::cast_possible_truncation)]
-    pub fn read_value(&mut self, value_type: u32) -> GgufResult<GgufValue> {
+    pub(crate) fn read_value(&mut self, value_type: u32) -> GgufResult<GgufValue> {
         match value_type {
             0 => Ok(GgufValue::U8(self.read_u8()?)),
             1 => Ok(GgufValue::I8(self.read_i8()?)),
