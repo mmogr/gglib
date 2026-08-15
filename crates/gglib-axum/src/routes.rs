@@ -69,10 +69,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/servers/{id}/tool-support",
             get(handlers::servers::tool_support),
         )
-        .route(
-            "/servers/{port}/logs",
-            get(handlers::servers::get_logs).delete(handlers::servers::clear_logs),
-        )
+        .route("/servers/{port}/logs", get(handlers::servers::get_logs))
         .route(
             "/servers/{port}/logs/stream",
             get(handlers::servers::stream_logs),

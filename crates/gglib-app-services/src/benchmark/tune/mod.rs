@@ -183,9 +183,13 @@ pub async fn run_tune(
         prescreen_results.push(results);
     }
 
+    // Resolved once: an absent `weights` means the client left the choice to
+    // us, so the server's own defaults apply to every candidate in the run.
+    let weights = config.weights.clone().unwrap_or_default();
+
     let prescreen_scores: Vec<f64> = prescreen_results
         .iter()
-        .map(|results| compute_composite_score(results, &config.weights))
+        .map(|results| compute_composite_score(results, &weights))
         .collect();
     let survivors = select_survivors(&prescreen_scores, config.prune_fraction);
 
@@ -241,7 +245,7 @@ pub async fn run_tune(
                 .await;
         }
 
-        let composite_score = compute_composite_score(&task_results, &config.weights);
+        let composite_score = compute_composite_score(&task_results, &weights);
         let tg_tps = throughput_tps(&task_results);
         let result = TuneCandidateResult {
             config: candidate_config,
@@ -730,12 +734,14 @@ pub(crate) fn throughput_tps(results: &[TuneTaskResult]) -> Option<f64> {
 
 /// Combine per-task results into one composite score using [`ScoreWeights`].
 ///
-/// The `speed` weight is still excluded from the denominator: `tg_tps` is
-/// now *measured* per candidate ([`TuneCandidateResult::tg_tps`]), but its
-/// scoring definition is relative-to-fastest-in-run, which cannot be
-/// computed while candidates stream out one at a time. The three
-/// self-contained components (tool accuracy, loop avoidance, task
-/// completion) are renormalized to sum to `1.0` of the available weight.
+/// There is no speed component. `tg_tps` is *measured* per candidate
+/// ([`TuneCandidateResult::tg_tps`]) and reported, but scoring it would mean
+/// ranking each candidate against the fastest in the run, which cannot be
+/// computed while candidates stream out one at a time. A `speed` weight
+/// existed for a while and was never read; it is gone, along with the
+/// `--weight-speed` flag that set it. The three self-contained components
+/// (tool accuracy, loop avoidance, task completion) are renormalized to sum
+/// to `1.0` of the available weight.
 ///
 /// An unmeasured loop-avoidance axis ([`AxisScores::loop_avoidance`] of
 /// `None`) drops out of both the numerator and the denominator rather than

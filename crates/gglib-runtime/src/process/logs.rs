@@ -110,12 +110,6 @@ impl ServerLogManager {
     pub fn subscribe(&self) -> broadcast::Receiver<ServerLogEntry> {
         self.broadcast_tx.subscribe()
     }
-
-    /// Clear logs for a server
-    pub fn clear_logs(&self, port: u16) {
-        let mut buffers = self.buffers.write().unwrap();
-        buffers.remove(&port);
-    }
 }
 
 impl Default for ServerLogManager {

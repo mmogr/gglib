@@ -133,7 +133,7 @@ Download a model from HuggingFace Hub with interactive queue support.
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "Q4_K_M")
 - `--list-quants` - List available quantizations (uses `--token` if provided)
 - `--token <TOKEN>` - HuggingFace token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
-- `--force` / `-f` - Skip confirmation prompt
+- `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 
 **Interactive mode (TTY):**
 - `[a]` — add another model to the queue while a download is running

@@ -18,6 +18,6 @@ src/services/tools/registry.ts 432
 src/services/transport/api/client.ts 361
 src/services/transport/events/sse.ts 353
 src/services/transport/types/dashboard.ts 447
-src/styles/tailwind.css 423
-src/types/benchmark.ts 533
+src/styles/tailwind.css 402
+src/types/benchmark.ts 539
 src/types/index.ts 765

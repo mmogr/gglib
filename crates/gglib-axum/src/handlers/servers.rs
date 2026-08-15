@@ -126,12 +126,3 @@ pub(crate) async fn stream_logs(
             .text("ping"),
     )
 }
-
-/// Clear logs for a specific server port (DELETE endpoint).
-pub(crate) async fn clear_logs(
-    State(state): State<AppState>,
-    Path(port): Path<u16>,
-) -> Json<String> {
-    state.servers.clear_logs(port);
-    Json(format!("Logs cleared for port {}", port))
-}

@@ -34,7 +34,7 @@ use crate::state::AppState;
 /// {
 ///   "model_id": 1,
 ///   "task_suite": { "source": "default" },
-///   "weights": { "tool_accuracy": 0.4, "loop_avoidance": 0.3, "task_completion": 0.2, "speed": 0.1 },
+///   "weights": { "tool_accuracy": 0.4, "loop_avoidance": 0.3, "task_completion": 0.2 },
 ///   "ctx_size": null
 /// }
 /// ```

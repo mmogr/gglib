@@ -49,8 +49,14 @@ pub struct AgenticEvalConfig {
     /// Task suite both arms run — the same schema the tune sweep uses.
     pub task_suite: TaskSuite,
     /// Weights for each arm's composite score.
-    #[serde(default)]
-    pub weights: ScoreWeights,
+    ///
+    /// `None` means "the server decides"; see [`TuneConfig::weights`], which
+    /// also explains why `skip_serializing_if` is required rather than
+    /// cosmetic.
+    ///
+    /// [`TuneConfig::weights`]: super::tune::config::TuneConfig::weights
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weights: Option<ScoreWeights>,
     /// Context size override (tokens). `None` resolves through the normal
     /// chain (model server defaults → global setting → hardcoded default).
     #[serde(default)]
@@ -1051,6 +1057,27 @@ const fn as_f64(value: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sibling of the `TuneConfig` assertion in `tune::config` — see there
+    /// for why an absent `weights` key and a `null` one are not interchangeable
+    /// on the wire. `gglib benchmark agentic` has no weight flags at all, so
+    /// every config the CLI builds carries `weights: None`; if `null` were the
+    /// spelling serde produced, every agentic run would be the broken case.
+    /// (The server re-serializes this same type into `benchmark_runs`, where
+    /// `weights` is `Some` for any client that sent one.)
+    #[test]
+    fn a_config_with_no_weights_omits_the_key_rather_than_nulling_it() {
+        let config: AgenticEvalConfig =
+            serde_json::from_str(r#"{"model_id": 1, "task_suite": {"source": "default"}}"#)
+                .expect("minimal body deserializes");
+        assert!(config.weights.is_none());
+
+        let body = serde_json::to_value(&config).expect("serializes");
+        assert!(
+            !body.as_object().expect("object").contains_key("weights"),
+            "serialized body must not carry a `weights` key: {body}"
+        );
+    }
 
     fn scores(tool_accuracy: f64, loop_avoidance: Option<f64>, composite: f64) -> ArmScores {
         ArmScores {

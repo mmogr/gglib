@@ -48,7 +48,7 @@ use crate::state::AppState;
 ///   "task_suite": { "source": "default" },
 ///   "sweep": { "temperature": [0.2, 0.5, 0.8], "top_p": [0.9, 0.95], "top_k": [], "min_p": [], "repeat_penalty": [], "dry_multiplier": [0.0, 0.8] },
 ///   "seed_from_family_presets": true,
-///   "weights": { "tool_accuracy": 0.4, "loop_avoidance": 0.3, "task_completion": 0.2, "speed": 0.1 },
+///   "weights": { "tool_accuracy": 0.4, "loop_avoidance": 0.3, "task_completion": 0.2 },
 ///   "prune_fraction": 0.5,
 ///   "ctx_size": null
 /// }

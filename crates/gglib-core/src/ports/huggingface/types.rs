@@ -65,13 +65,6 @@ impl HfQuantInfo {
     pub const fn is_sharded(&self) -> bool {
         self.shard_count > 1
     }
-
-    /// Get size in megabytes.
-    #[must_use]
-    #[allow(clippy::cast_precision_loss)]
-    pub fn size_mb(&self) -> f64 {
-        self.total_size as f64 / 1_048_576.0
-    }
 }
 
 /// Options for searching `HuggingFace` models.

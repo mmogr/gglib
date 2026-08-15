@@ -27,6 +27,7 @@ use gglib_core::domain::benchmark::agentic::{
     CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
     PairedEffect, control_sampling, replicate_seed_set, replicate_seeds,
 };
+use gglib_core::domain::benchmark::tune::config::ScoreWeights;
 use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
@@ -212,6 +213,11 @@ pub async fn run_agentic_eval(
     let replicate_results = replicate_runs.first().cloned();
     let control_results = take_arm(&mut arm_results, EvalArm::Control);
 
+    // Resolved once for the whole run, not per arm: an absent `weights` means
+    // the client left the choice to us, and every arm must be scored on the
+    // same scale or the delta between them measures the scale instead.
+    let weights = config.weights.clone().unwrap_or_default();
+
     // Each arm is scored against *its own* seed count, not the run's: the
     // control repeats fewer seeds than the arms it is compared with, and
     // dividing its totals by the wrong denominator would misreport it.
@@ -221,12 +227,12 @@ pub async fn run_agentic_eval(
                 .iter()
                 .find(|p| p.arm == arm)
                 .map_or(1, |p| p.seeds.len());
-            arm_scores(&flatten(r), &config, seeds, tasks.len())
+            arm_scores(&flatten(r), &weights, seeds, tasks.len())
         })
     };
 
-    let raw = score_arm(&raw_results, EvalArm::Raw).unwrap_or_else(|| empty_scores(&config));
-    let gglib = score_arm(&gglib_results, EvalArm::Gglib).unwrap_or_else(|| empty_scores(&config));
+    let raw = score_arm(&raw_results, EvalArm::Raw).unwrap_or_else(|| empty_scores(&weights));
+    let gglib = score_arm(&gglib_results, EvalArm::Gglib).unwrap_or_else(|| empty_scores(&weights));
     let raw_replicate = score_arm(&replicate_results, EvalArm::RawReplicate);
     let raw_replicates: Vec<_> = replicate_runs
         .iter()
@@ -450,8 +456,8 @@ fn take_arm(
 
 /// Scores for an arm that produced nothing, so a cancelled run still yields a
 /// well-formed report rather than a panic.
-fn empty_scores(config: &AgenticEvalConfig) -> ArmScores {
-    arm_scores(&[], config, 0, 0)
+fn empty_scores(weights: &ScoreWeights) -> ArmScores {
+    arm_scores(&[], weights, 0, 0)
 }
 
 /// Build the LLM port for one arm and one task.
@@ -625,12 +631,12 @@ fn flatten(per_task: &[Vec<TuneTaskResult>]) -> Vec<TuneTaskResult> {
 /// Aggregate one arm's task results into [`ArmScores`].
 fn arm_scores(
     results: &[TuneTaskResult],
-    config: &AgenticEvalConfig,
+    weights: &ScoreWeights,
     seeds: usize,
     tasks: usize,
 ) -> ArmScores {
     let axes = axis_scores(results);
-    let composite = super::tune::compute_composite_score(results, &config.weights);
+    let composite = super::tune::compute_composite_score(results, weights);
     ArmScores {
         seeds,
         runs: tasks * seeds,

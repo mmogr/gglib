@@ -63,7 +63,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
             weight_tool_accuracy,
             weight_loop_avoidance,
             weight_task_completion,
-            weight_speed,
             ctx_size,
             apply,
         } => {
@@ -77,7 +76,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
                 weight_tool_accuracy,
                 weight_loop_avoidance,
                 weight_task_completion,
-                weight_speed,
                 ctx_size,
                 apply,
             )
@@ -250,7 +248,6 @@ async fn cmd_tune(
     weight_tool_accuracy: Option<f32>,
     weight_loop_avoidance: Option<f32>,
     weight_task_completion: Option<f32>,
-    weight_speed: Option<f32>,
     ctx_size: Option<u64>,
     apply: bool,
 ) -> Result<()> {
@@ -263,13 +260,28 @@ async fn cmd_tune(
     let sweep_spec = parse_sweep_args(&sweep)?;
     let resolved_task_suite = load_task_suite(&task_suite)?;
 
-    let defaults = ScoreWeights::default();
-    let weights = ScoreWeights {
-        tool_accuracy: weight_tool_accuracy.unwrap_or(defaults.tool_accuracy),
-        loop_avoidance: weight_loop_avoidance.unwrap_or(defaults.loop_avoidance),
-        task_completion: weight_task_completion.unwrap_or(defaults.task_completion),
-        speed: weight_speed.unwrap_or(defaults.speed),
-    };
+    // Send weights only when the user actually named one. Spelling out the
+    // defaults would pin a copy of them into the request, which is both a
+    // second source of truth and a compatibility hazard: a daemon from an
+    // older build rejects a weights object whose shape it does not know,
+    // while an absent field it fills in itself. `TuneConfig::weights` carries
+    // `skip_serializing_if`, so `None` here really is an absent key and not a
+    // `null` — which that older daemon would reject just as hard.
+    //
+    // Naming a flag still sends the whole object, and so still trips such a
+    // daemon. That is unavoidable: the request has to carry the value the
+    // user asked for. What this avoids is tripping it by default.
+    let weights = (weight_tool_accuracy.is_some()
+        || weight_loop_avoidance.is_some()
+        || weight_task_completion.is_some())
+    .then(|| {
+        let defaults = ScoreWeights::default();
+        ScoreWeights {
+            tool_accuracy: weight_tool_accuracy.unwrap_or(defaults.tool_accuracy),
+            loop_avoidance: weight_loop_avoidance.unwrap_or(defaults.loop_avoidance),
+            task_completion: weight_task_completion.unwrap_or(defaults.task_completion),
+        }
+    });
 
     let config = TuneConfig {
         model_id,
@@ -387,7 +399,7 @@ async fn cmd_agentic(
     let config = AgenticEvalConfig {
         model_id,
         task_suite: load_task_suite(&task_suite)?,
-        weights: ScoreWeights::default(),
+        weights: None,
         ctx_size,
         seeds: seeds.clone(),
         include_control,
