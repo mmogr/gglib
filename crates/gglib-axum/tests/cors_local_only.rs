@@ -9,36 +9,13 @@ use axum::body::Body;
 use axum::http::Request;
 use tower::ServiceExt;
 
-use common::ports::TEST_BASE_PORT;
-use gglib_axum::DaemonAccess;
-use gglib_axum::create_router;
-use gglib_axum::{ServerConfig, bootstrap};
+use common::harness::test_app;
+use gglib_axum::ServerConfig;
 use gglib_core::CorsConfig;
-
-fn test_config() -> ServerConfig {
-    ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
-        base_port: TEST_BASE_PORT,
-        llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: CorsConfig::LocalOnly,
-    }
-}
 
 #[tokio::test]
 async fn local_only_rejects_remote_origin() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::LocalOnly,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::LocalOnly).await;
 
     let response = app
         .oneshot(
@@ -64,16 +41,7 @@ async fn local_only_rejects_remote_origin() {
 
 #[tokio::test]
 async fn local_only_allows_localhost_origin() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::LocalOnly,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::LocalOnly).await;
 
     let response = app
         .oneshot(
@@ -100,16 +68,7 @@ async fn local_only_allows_localhost_origin() {
 
 #[tokio::test]
 async fn local_only_allows_127_0_0_1_origin() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::LocalOnly,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::LocalOnly).await;
 
     let response = app
         .oneshot(
@@ -131,16 +90,7 @@ async fn local_only_allows_127_0_0_1_origin() {
 
 #[tokio::test]
 async fn local_only_allows_ipv6_localhost() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::LocalOnly,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::LocalOnly).await;
 
     let response = app
         .oneshot(
@@ -166,20 +116,21 @@ async fn server_config_defaults_are_local_only() {
 
     assert_eq!(config.host, "127.0.0.1", "Default host should be 127.0.0.1");
     assert!(matches!(config.cors, CorsConfig::LocalOnly));
+
+    // The production arm of `db_path`. Every other test in this crate passes
+    // `Some`, so without this nothing asserts that the daemon — which builds
+    // its config by spreading `with_defaults()` — still resolves through
+    // `database_path()` rather than somewhere a test chose.
+    assert!(
+        config.db_path.is_none(),
+        "defaults must resolve the database through database_path(), got {:?}",
+        config.db_path
+    );
 }
 
 #[tokio::test]
 async fn local_only_allows_tauri_localhost_origin() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::LocalOnly,
-        std::sync::Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::LocalOnly).await;
 
     let response = app
         .oneshot(

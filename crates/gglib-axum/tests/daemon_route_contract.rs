@@ -39,31 +39,14 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use common::ports::TEST_BASE_PORT;
-use gglib_axum::DaemonAccess;
-use gglib_axum::create_router;
-use gglib_axum::{ServerConfig, bootstrap};
+use common::harness::test_app;
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon;
-
-fn test_config() -> ServerConfig {
-    ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
-        base_port: TEST_BASE_PORT,
-        llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: CorsConfig::AllowAll,
-    }
-}
 
 /// Send one request and return `(status, allow header, body)`.
 async fn probe(app: &axum::Router, method: Method, path: &str) -> (StatusCode, String, String) {
@@ -129,18 +112,7 @@ async fn check(app: &axum::Router, methods: &[&str], path: &str) -> Option<Strin
 
 #[tokio::test]
 async fn every_daemon_path_the_cli_calls_is_routed() {
-    // Unlike the sibling suites, bootstrap failure fails rather than returning:
-    // a route-contract test that passes silently is the failure mode it exists
-    // to prevent, since #834 shipped through a fully green suite.
-    let ctx = bootstrap(test_config())
-        .await
-        .expect("bootstrap must succeed; this test cannot verify anything without a router");
-
-    let app = create_router(
-        Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        Arc::new(DaemonAccess::loopback()),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Collect every failure before asserting, so a broken sweep names them all.
     let mut broken = Vec::new();

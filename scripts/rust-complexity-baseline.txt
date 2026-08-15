@@ -17,11 +17,11 @@ crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
 crates/gglib-app-services/src/types.rs 911
-crates/gglib-axum/src/bootstrap.rs 321
+crates/gglib-axum/src/bootstrap.rs 332
 crates/gglib-axum/src/chat_api.rs 761
 crates/gglib-axum/src/handlers/config/setup.rs 309
 crates/gglib-axum/src/routes.rs 469
-crates/gglib-axum/tests/integration_routes.rs 1280
+crates/gglib-axum/tests/integration_routes.rs 1023
 crates/gglib-cli/src/commands.rs 413
 crates/gglib-cli/src/daemon_client/mod.rs 362
 crates/gglib-cli/src/handlers/benchmark.rs 1511

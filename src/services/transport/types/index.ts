@@ -38,10 +38,10 @@ import type { BuiltinTransport } from './builtin';
 /**
  * Unified transport interface.
  * 
- * This is the primary abstraction between frontend domain logic and
- * platform-specific communication (Tauri IPC vs HTTP).
- * 
- * Transport selection happens once at composition root via `getTransport()`.
+ * This is the primary abstraction between frontend domain logic and the
+ * daemon it talks to over HTTP and SSE.
+ *
+ * Composition happens once at the root via `getTransport()`.
  * Domain clients and hooks should never import transport implementations directly.
  */
 export interface Transport

@@ -1,13 +1,13 @@
 /**
  * Proxy dashboard client.
  *
- * Unlike every other client in `services/clients/`, this one talks directly
- * to an already-running proxy's own HTTP port — it does **not** go through
- * `getTransport()`/Tauri IPC. The proxy is always a plain HTTP/axum server
- * (see `services/proxyEvents.ts`'s doc comment: "Proxy always uses HTTP/axum
- * (no Tauri commands)"), and its dashboard SSE endpoint lives on the proxy's
- * own port, not the app's own backend API port — the same relationship the
- * CLI's `gglib proxy dashboard` command has to it
+ * Alone among this directory's two clients, this one talks to a different
+ * origin: an already-running proxy's own HTTP port, rather than the app's
+ * backend. `benchmark.ts` still reaches the backend, through
+ * `transport/api/client`'s authenticated fetch helpers; this one cannot,
+ * because the proxy carries its own credential (the `proxyApiKey` setting)
+ * and serves its dashboard stream on its own port — the same relationship
+ * the CLI's `gglib proxy dashboard` command has to it
  * (`crates/gglib-cli/src/handlers/proxy_dashboard.rs`).
  *
  * Because the port is the proxy's, so is the credential: the `apiKey`

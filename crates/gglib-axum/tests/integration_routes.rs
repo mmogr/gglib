@@ -9,43 +9,15 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-use common::ports::{TEST_BASE_PORT, TEST_MODEL_PORT};
-use gglib_axum::DaemonAccess;
-use gglib_axum::create_router;
-use gglib_axum::{ServerConfig, bootstrap};
+use std::sync::Arc;
+
+use common::harness::{test_access, test_app, test_state};
+use common::ports::TEST_MODEL_PORT;
 use gglib_core::CorsConfig;
-
-/// Access policy for tests: loopback, no token — the daemon's default.
-fn test_access() -> std::sync::Arc<DaemonAccess> {
-    std::sync::Arc::new(DaemonAccess::loopback())
-}
-
-/// Helper to create a test config that doesn't require llama-server.
-fn test_config() -> ServerConfig {
-    ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0, // Not used in tests
-        base_port: TEST_BASE_PORT,
-        llama_server_path: "/nonexistent/llama-server".into(),
-        max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: CorsConfig::AllowAll,
-    }
-}
 
 #[tokio::test]
 async fn health_endpoint_returns_ok() {
-    // Skip if bootstrap fails (e.g., no DB path available in CI)
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return, // Skip test if bootstrap fails
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -69,16 +41,7 @@ async fn health_endpoint_returns_ok() {
 
 #[tokio::test]
 async fn models_endpoint_returns_json() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -105,16 +68,7 @@ async fn models_endpoint_returns_json() {
 
 #[tokio::test]
 async fn servers_endpoint_returns_json_array() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -135,16 +89,7 @@ async fn servers_endpoint_returns_json_array() {
 
 #[tokio::test]
 async fn downloads_endpoint_returns_queue_snapshot() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -168,16 +113,7 @@ async fn downloads_endpoint_returns_queue_snapshot() {
 
 #[tokio::test]
 async fn events_endpoint_returns_sse_stream() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -209,10 +145,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
+    let state = test_state(CorsConfig::AllowAll).await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -222,7 +155,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
 
     // Use create_spa_router which includes the SPA fallback
     let app = create_spa_router(
-        std::sync::Arc::new(ctx),
+        Arc::clone(&state),
         temp_dir.path(),
         &CorsConfig::AllowAll,
         test_access(),
@@ -263,16 +196,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
 
 #[tokio::test]
 async fn nonexistent_route_returns_not_found() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -294,10 +218,7 @@ async fn spa_fallback_returns_index_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
+    let state = test_state(CorsConfig::AllowAll).await;
 
     // Create a temp directory with an index.html
     let temp_dir = TempDir::new().unwrap();
@@ -306,7 +227,7 @@ async fn spa_fallback_returns_index_html() {
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
     let app = create_spa_router(
-        std::sync::Arc::new(ctx),
+        Arc::clone(&state),
         temp_dir.path(),
         &CorsConfig::AllowAll,
         test_access(),
@@ -341,16 +262,7 @@ async fn spa_fallback_returns_index_html() {
 
 #[tokio::test]
 async fn hf_search_endpoint_accepts_post_and_returns_valid_response() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Minimal valid request body for HF search
     let request_body = r#"{"query": "test", "page": 1}"#;
@@ -388,16 +300,7 @@ async fn hf_search_endpoint_accepts_post_and_returns_valid_response() {
 
 #[tokio::test]
 async fn settings_endpoint_accepts_get() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -416,16 +319,7 @@ async fn settings_endpoint_accepts_get() {
 
 #[tokio::test]
 async fn settings_endpoint_accepts_put() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Empty update request (no changes)
     let request_body = r#"{}"#;
@@ -453,16 +347,7 @@ async fn settings_endpoint_accepts_put() {
 
 #[tokio::test]
 async fn settings_endpoint_accepts_patch() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Empty update request (no changes)
     let request_body = r#"{}"#;
@@ -494,16 +379,7 @@ async fn settings_endpoint_accepts_patch() {
 
 #[tokio::test]
 async fn servers_start_collection_route_accepts_post() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Request with model_id in body (matches frontend transport contract)
     let request_body = format!(r#"{{"model_id": 999, "port": {}}}"#, TEST_MODEL_PORT);
@@ -541,16 +417,7 @@ async fn servers_start_collection_route_accepts_post() {
 
 #[tokio::test]
 async fn servers_stop_collection_route_accepts_post() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Request with model_id in body (matches frontend transport contract)
     let request_body = r#"{"model_id": 999}"#;
@@ -592,16 +459,7 @@ async fn servers_stop_collection_route_accepts_post() {
 
 #[tokio::test]
 async fn proxy_status_returns_stopped_when_not_running() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -637,16 +495,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
 
 #[tokio::test]
 async fn proxy_start_accepts_json_config() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let request_body = r#"null"#;
 
@@ -677,16 +526,7 @@ async fn proxy_start_accepts_json_config() {
 
 #[tokio::test]
 async fn proxy_stop_is_idempotent() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -718,16 +558,7 @@ async fn proxy_stop_is_idempotent() {
 
 #[tokio::test]
 async fn downloads_queue_accepts_get() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -763,10 +594,7 @@ async fn model_get_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
+    let state = test_state(CorsConfig::AllowAll).await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -775,7 +603,7 @@ async fn model_get_by_id_returns_json_not_html() {
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
     let app = create_spa_router(
-        std::sync::Arc::new(ctx),
+        Arc::clone(&state),
         temp_dir.path(),
         &CorsConfig::AllowAll,
         test_access(),
@@ -812,10 +640,7 @@ async fn model_tags_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
+    let state = test_state(CorsConfig::AllowAll).await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");
@@ -823,7 +648,7 @@ async fn model_tags_by_id_returns_json_not_html() {
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
     let app = create_spa_router(
-        std::sync::Arc::new(ctx),
+        Arc::clone(&state),
         temp_dir.path(),
         &CorsConfig::AllowAll,
         test_access(),
@@ -859,10 +684,7 @@ async fn a_path_param_route_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
+    let state = test_state(CorsConfig::AllowAll).await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");
@@ -870,7 +692,7 @@ async fn a_path_param_route_returns_json_not_html() {
     write!(file, "<!DOCTYPE html><html><body>SPA</body></html>").unwrap();
 
     let app = create_spa_router(
-        std::sync::Arc::new(ctx),
+        Arc::clone(&state),
         temp_dir.path(),
         &CorsConfig::AllowAll,
         test_access(),
@@ -906,16 +728,7 @@ async fn a_path_param_route_returns_json_not_html() {
 
 #[tokio::test]
 async fn model_tags_accepts_post_with_body() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Frontend POSTs to /api/models/{id}/tags with { tag: "..." } in body
     let response = app
@@ -943,16 +756,7 @@ async fn model_tags_accepts_post_with_body() {
 /// sends no explicit override (body is `null`).
 #[tokio::test]
 async fn proxy_start_uses_settings_default_context_when_not_overridden() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // First, set a non-default context size in settings (8192 instead of 4096)
     let settings_response = app
@@ -1001,16 +805,7 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
 /// settings default is configured and no explicit override is provided.
 #[tokio::test]
 async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     // Clear any settings default by explicitly setting null
     let settings_response = app
@@ -1061,16 +856,7 @@ async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
 /// a 404 — the GUI's stale-list race — rather than a serde 400/422.
 #[tokio::test]
 async fn proxy_start_pinned_resolves_the_model_or_404s() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let request_body = serde_json::json!({
         "model_id": 999_999,
@@ -1115,16 +901,7 @@ async fn proxy_start_pinned_resolves_the_model_or_404s() {
 /// `model_id` is optional, mirroring `Partial<ProxyConfig>` on the GUI side.
 #[tokio::test]
 async fn proxy_start_pinned_accepts_a_minimal_body() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -1146,15 +923,7 @@ async fn proxy_start_pinned_accepts_a_minimal_body() {
 /// deserialization (the GUI's stale-list race, not a serde 400).
 #[tokio::test]
 async fn model_retag_is_wired_and_404s_on_unknown_id() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -1175,15 +944,7 @@ async fn model_retag_is_wired_and_404s_on_unknown_id() {
 /// Same contract for the upgrade pair.
 #[tokio::test]
 async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let check = app
         .clone()
@@ -1216,16 +977,7 @@ async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
 /// would surface as an empty panel rather than a loud failure.
 #[tokio::test]
 async fn llama_status_route_returns_json() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
@@ -1254,16 +1006,7 @@ async fn llama_status_route_returns_json() {
 /// route is POST. A GET must not quietly work.
 #[tokio::test]
 async fn llama_check_updates_route_rejects_get() {
-    let ctx = match bootstrap(test_config()).await {
-        Ok(ctx) => ctx,
-        Err(_) => return,
-    };
-
-    let app = create_router(
-        std::sync::Arc::new(ctx),
-        &CorsConfig::AllowAll,
-        test_access(),
-    );
+    let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(

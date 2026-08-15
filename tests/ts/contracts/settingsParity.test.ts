@@ -5,17 +5,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { MAX_STAGNATION_STEPS } from '../../../src/constants/settingsDefaults';
 import { STARTER_PROFILES } from '../../../src/components/SettingsModal/InferenceProfiles';
 
-const rust = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+import { fnSource, rust } from './rustSource';
 
 describe('starter profiles mirror builtin_templates()', () => {
   const FILE = rust('crates/gglib-core/src/domain/inference_profile.rs');
-  const start = FILE.indexOf('pub fn builtin_templates()');
-  const SOURCE = FILE.slice(start, FILE.indexOf('\n}', start));
+  // Anchored and uniqueness-checked, per this directory's rule: an unanchored
+  // `indexOf` takes the first match, so a same-named decoy declared earlier
+  // satisfies the guard for a function that has drifted.
+  const SOURCE = fnSource(FILE, 'builtin_templates');
 
   /** Extract one template's literal block from the function body by name. */
   const templateBlock = (name: string): string => {

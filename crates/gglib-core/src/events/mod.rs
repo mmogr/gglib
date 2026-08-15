@@ -161,9 +161,16 @@ pub enum AppEvent {
 }
 
 impl AppEvent {
-    /// Get the event name for wire protocols.
+    /// Colon-separated event names.
     ///
-    /// This provides consistent event naming across Tauri and SSE transports.
+    /// **Not what goes on the wire.** `AppEvent` is `#[serde(tag = "type",
+    /// rename_all = "snake_case")]`, so SSE carries `download`/`model_added`;
+    /// these `download:started` spellings are the Tauri-bus vocabulary from
+    /// before the GUI backend moved into the daemon, and the Tauri event
+    /// branch that subscribed to them is gone.
+    ///
+    /// Nothing outside this module's tests calls it. Retiring it belongs with
+    /// the rest of the residual-Rust sweep, not here.
     pub const fn event_name(&self) -> &'static str {
         match self {
             Self::ServerStarted { .. } => "server:started",
@@ -225,14 +232,21 @@ mod tests {
         // `download_event_names_are_stable` below.
     }
 
-    /// Lock down download event names to prevent frontend subscription mismatches.
+    /// Lock down the colon-separated download event names.
     ///
-    /// This test protects the contract between backend event emission and frontend
-    /// Tauri event subscription. If this test fails, update the `DOWNLOAD_EVENT_NAMES`
-    /// constant in src/services/transport/events/eventNames.ts to match.
+    /// This guards [`AppEvent::event_name`] against silent renames, and that
+    /// is all it guards: none of these five strings appears anywhere in the
+    /// frontend. The names the GUI actually validates are the `snake_case`
+    /// serde variants, in `src/services/decoders/downloadEvent.ts`.
     ///
-    /// Context: Issue where Tauri GUI downloads started but progress UI never appeared
-    /// because frontend listened to wrong event names.
+    /// It was written when the frontend did subscribe to these, over the
+    /// Tauri bus, and its doc pointed at `eventNames.ts` until #833 deleted
+    /// that file. Pointing it at `getEventCategory` instead — as an earlier
+    /// pass here did — is no better: that allowlist matches the serde tag, so
+    /// updating it in response to this test failing would be a no-op.
+    ///
+    /// Context: downloads started but the progress UI never appeared, because
+    /// the frontend listened for the wrong event names.
     #[test]
     fn download_event_names_are_stable() {
         let cases = [
