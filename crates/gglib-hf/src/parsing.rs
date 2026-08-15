@@ -17,7 +17,7 @@ use std::collections::HashMap;
 ///
 /// Returns None if the model doesn't have the required fields or
 /// doesn't contain actual GGUF files.
-pub fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
+pub(crate) fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
     // Check if the model actually contains .gguf files
     let has_gguf_files = json
         .get("siblings")
@@ -106,12 +106,16 @@ pub fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
 }
 
 /// Parse a list of model JSON objects into `HfModelSummary` items.
-pub fn parse_model_list(json_array: &[Value]) -> Vec<HfModelSummary> {
+pub(crate) fn parse_model_list(json_array: &[Value]) -> Vec<HfModelSummary> {
     json_array.iter().filter_map(parse_model_summary).collect()
 }
 
 /// Parse a search response including pagination info.
-pub fn parse_search_response(json_array: &[Value], has_more: bool, page: u32) -> HfSearchResponse {
+pub(crate) fn parse_search_response(
+    json_array: &[Value],
+    has_more: bool,
+    page: u32,
+) -> HfSearchResponse {
     HfSearchResponse {
         items: parse_model_list(json_array),
         has_more,
@@ -124,7 +128,7 @@ pub fn parse_search_response(json_array: &[Value], has_more: bool, page: u32) ->
 // ============================================================================
 
 /// Parse a tree/file listing response into `HfFileEntry` items.
-pub fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
+pub(crate) fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
     let array = json.as_array().ok_or_else(|| HfError::InvalidResponse {
         message: "Expected array for tree response".to_string(),
     })?;
@@ -170,7 +174,7 @@ pub fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
 ///
 /// Groups GGUF files by their quantization type, handling both single files
 /// and sharded models (multiple files per quantization).
-pub fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantization> {
+pub(crate) fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantization> {
     let mut quant_map: HashMap<String, HfQuantization> = HashMap::new();
 
     for file in files {
@@ -221,7 +225,10 @@ pub fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantization> {
 }
 
 /// Filter files to only GGUF files matching a specific quantization.
-pub fn filter_files_by_quantization(files: &[HfFileEntry], quantization: &str) -> Vec<HfFileEntry> {
+pub(crate) fn filter_files_by_quantization(
+    files: &[HfFileEntry],
+    quantization: &str,
+) -> Vec<HfFileEntry> {
     let quant_upper = quantization.to_uppercase();
 
     let mut matching: Vec<HfFileEntry> = files

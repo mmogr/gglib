@@ -110,7 +110,7 @@ crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 424
 crates/gglib-hf/src/http.rs 384
 crates/gglib-hf/src/models.rs 403
-crates/gglib-hf/src/parsing.rs 516
+crates/gglib-hf/src/parsing.rs 523
 crates/gglib-hf/src/port.rs 401
 crates/gglib-integration-tests/tests/integration_huggingface.rs 339
 crates/gglib-integration-tests/tests/integration_models.rs 309

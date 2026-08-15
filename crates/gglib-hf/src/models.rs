@@ -44,7 +44,7 @@ impl Default for HfConfig {
 
 /// Reference to a `HuggingFace` repository.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HfRepoRef {
+pub(crate) struct HfRepoRef {
     /// Repository owner (user or organization)
     pub owner: String,
     /// Repository name
@@ -53,7 +53,7 @@ pub struct HfRepoRef {
 
 impl HfRepoRef {
     /// Create a new repository reference.
-    pub fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
+    pub(crate) fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             owner: owner.into(),
             name: name.into(),
@@ -61,7 +61,7 @@ impl HfRepoRef {
     }
 
     /// Parse a repository reference from a model ID string.
-    pub fn parse(model_id: &str) -> Option<Self> {
+    pub(crate) fn parse(model_id: &str) -> Option<Self> {
         let parts: Vec<&str> = model_id.splitn(2, '/').collect();
         if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
             Some(Self {
@@ -74,7 +74,7 @@ impl HfRepoRef {
     }
 
     /// Get the full model ID (owner/name).
-    pub fn id(&self) -> String {
+    pub(crate) fn id(&self) -> String {
         format!("{}/{}", self.owner, self.name)
     }
 }
@@ -92,7 +92,7 @@ impl std::fmt::Display for HfRepoRef {
 /// Type of entry in a repository tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum HfEntryType {
+pub(crate) enum HfEntryType {
     /// Regular file
     File,
     /// Directory
@@ -101,7 +101,7 @@ pub enum HfEntryType {
 
 /// Entry in a `HuggingFace` repository file tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfFileEntry {
+pub(crate) struct HfFileEntry {
     /// Path relative to repository root
     pub path: String,
     /// Entry type (file or directory)
@@ -114,7 +114,7 @@ pub struct HfFileEntry {
 
 impl HfFileEntry {
     /// Check if this is a GGUF file.
-    pub fn is_gguf(&self) -> bool {
+    pub(crate) fn is_gguf(&self) -> bool {
         self.entry_type == HfEntryType::File
             && std::path::Path::new(&self.path)
                 .extension()
@@ -122,12 +122,12 @@ impl HfFileEntry {
     }
 
     /// Check if this is a directory.
-    pub fn is_directory(&self) -> bool {
+    pub(crate) fn is_directory(&self) -> bool {
         self.entry_type == HfEntryType::Directory
     }
 
     /// Get the filename without path.
-    pub fn filename(&self) -> &str {
+    pub(crate) fn filename(&self) -> &str {
         self.path.rsplit('/').next().unwrap_or(&self.path)
     }
 }
@@ -138,7 +138,7 @@ impl HfFileEntry {
 
 /// Information about a quantization variant in a repository.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfQuantization {
+pub(crate) struct HfQuantization {
     /// Quantization name (e.g., `Q4_K_M`, `Q8_0`)
     pub name: String,
     /// Number of files (1 for single file, >1 for sharded)
@@ -151,12 +151,12 @@ pub struct HfQuantization {
 
 impl HfQuantization {
     /// Check if this quantization is sharded (multiple files).
-    pub const fn is_sharded(&self) -> bool {
+    pub(crate) const fn is_sharded(&self) -> bool {
         self.shard_count > 1
     }
 
     /// Get the primary file path (first shard or single file).
-    pub fn primary_path(&self) -> Option<&str> {
+    pub(crate) fn primary_path(&self) -> Option<&str> {
         self.paths.first().map(String::as_str)
     }
 }
@@ -167,7 +167,7 @@ impl HfQuantization {
 
 /// Summary of a `HuggingFace` model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfModelSummary {
+pub(crate) struct HfModelSummary {
     /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
     pub id: String,
     /// Human-readable model name (derived from id)
@@ -196,7 +196,7 @@ pub struct HfModelSummary {
 /// Sort field options for `HuggingFace` model search.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum HfSortField {
+pub(crate) enum HfSortField {
     /// Sort by download count (default)
     #[default]
     Downloads,
@@ -213,7 +213,7 @@ pub enum HfSortField {
 
 impl HfSortField {
     /// Get the API parameter value for this sort field.
-    pub const fn as_api_param(self) -> &'static str {
+    pub(crate) const fn as_api_param(self) -> &'static str {
         match self {
             Self::Downloads => "downloads",
             Self::Likes => "likes",
@@ -226,7 +226,7 @@ impl HfSortField {
 
 /// Query parameters for searching `HuggingFace` models.
 #[derive(Debug, Clone, Default)]
-pub struct HfSearchQuery {
+pub(crate) struct HfSearchQuery {
     /// Search query (model name)
     pub query: Option<String>,
     /// Minimum parameters in billions
@@ -245,7 +245,7 @@ pub struct HfSearchQuery {
 
 impl HfSearchQuery {
     /// Create a new search query with defaults.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             limit: 30,
             ..Default::default()
@@ -253,32 +253,32 @@ impl HfSearchQuery {
     }
 
     /// Set the search query string.
-    pub fn with_query(mut self, query: impl Into<String>) -> Self {
+    pub(crate) fn with_query(mut self, query: impl Into<String>) -> Self {
         self.query = Some(query.into());
         self
     }
 
     /// Set the page number.
-    pub const fn with_page(mut self, page: u32) -> Self {
+    pub(crate) const fn with_page(mut self, page: u32) -> Self {
         self.page = page;
         self
     }
 
     /// Set the results limit.
-    pub const fn with_limit(mut self, limit: u32) -> Self {
+    pub(crate) const fn with_limit(mut self, limit: u32) -> Self {
         self.limit = limit;
         self
     }
 
     /// Set the sort field and direction.
-    pub const fn with_sort(mut self, field: HfSortField, ascending: bool) -> Self {
+    pub(crate) const fn with_sort(mut self, field: HfSortField, ascending: bool) -> Self {
         self.sort_by = field;
         self.sort_ascending = ascending;
         self
     }
 
     /// Set parameter size filters.
-    pub const fn with_params_filter(mut self, min: Option<f64>, max: Option<f64>) -> Self {
+    pub(crate) const fn with_params_filter(mut self, min: Option<f64>, max: Option<f64>) -> Self {
         self.min_params_b = min;
         self.max_params_b = max;
         self
@@ -287,7 +287,7 @@ impl HfSearchQuery {
 
 /// Response from `HuggingFace` model search.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfSearchResponse {
+pub(crate) struct HfSearchResponse {
     /// Models matching the search criteria
     pub items: Vec<HfModelSummary>,
     /// Whether more results are available
