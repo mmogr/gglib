@@ -6,18 +6,18 @@ use super::types::{Attempt, AttemptOutcome};
 use std::path::PathBuf;
 
 /// Search for an executable in various platform-specific locations.
-pub struct ExecutableSearcher<'a> {
+pub(crate) struct ExecutableSearcher<'a> {
     env: &'a dyn EnvProvider,
     fs: &'a dyn FsProvider,
 }
 
 impl<'a> ExecutableSearcher<'a> {
-    pub fn new(env: &'a dyn EnvProvider, fs: &'a dyn FsProvider) -> Self {
+    pub(crate) fn new(env: &'a dyn EnvProvider, fs: &'a dyn FsProvider) -> Self {
         Self { env, fs }
     }
 
     /// Search for a command in PATH environment variable.
-    pub fn search_in_path(&self, command: &str) -> Vec<Attempt> {
+    pub(crate) fn search_in_path(&self, command: &str) -> Vec<Attempt> {
         let mut attempts = Vec::new();
 
         if let Some(path_var) = self.env.get("PATH") {
@@ -67,7 +67,7 @@ impl<'a> ExecutableSearcher<'a> {
 
     /// Search in /etc/paths and /etc/paths.d/* (macOS-specific).
     #[cfg(target_os = "macos")]
-    pub fn search_in_etc_paths(&self, command: &str) -> Vec<Attempt> {
+    pub(crate) fn search_in_etc_paths(&self, command: &str) -> Vec<Attempt> {
         let mut attempts = Vec::new();
         let mut dirs = Vec::new();
 
@@ -119,7 +119,7 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     /// Search in platform-specific default locations.
-    pub fn search_platform_defaults(&self, command: &str) -> Vec<Attempt> {
+    pub(crate) fn search_platform_defaults(&self, command: &str) -> Vec<Attempt> {
         let mut attempts = Vec::new();
         let candidates = Self::platform_default_dirs();
 
@@ -160,7 +160,7 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     /// Search in Node.js version manager shims.
-    pub fn search_node_managers(&self, command: &str) -> Vec<Attempt> {
+    pub(crate) fn search_node_managers(&self, command: &str) -> Vec<Attempt> {
         let mut attempts = Vec::new();
 
         // Only search for npm/npx/node commands
@@ -243,7 +243,7 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     /// Search in user-provided additional paths.
-    pub fn search_user_paths(&self, command: &str, user_paths: &[String]) -> Vec<Attempt> {
+    pub(crate) fn search_user_paths(&self, command: &str, user_paths: &[String]) -> Vec<Attempt> {
         let mut attempts = Vec::new();
 
         for dir in user_paths {

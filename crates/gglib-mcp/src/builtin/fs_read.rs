@@ -12,7 +12,10 @@ use super::sandboxing::{is_binary, resolve_sandboxed_path};
 ///
 /// Returns a human-readable error string on failure (not anyhow) so the
 /// agent loop receives a graceful tool-error message.
-pub fn read_file(args: &HashMap<String, Value>, sandbox_root: &Path) -> Result<String, String> {
+pub(crate) fn read_file(
+    args: &HashMap<String, Value>,
+    sandbox_root: &Path,
+) -> Result<String, String> {
     const MAX_CHARS: usize = 100_000;
 
     let path = args

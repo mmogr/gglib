@@ -116,7 +116,7 @@ crates/gglib-integration-tests/tests/integration_huggingface.rs 339
 crates/gglib-integration-tests/tests/integration_models.rs 309
 crates/gglib-mcp/src/builtin/mod.rs 337
 crates/gglib-mcp/src/client.rs 519
-crates/gglib-mcp/src/manager.rs 320
+crates/gglib-mcp/src/manager.rs 326
 crates/gglib-mcp/src/resolver/search.rs 388
 crates/gglib-mcp/src/service.rs 878
 crates/gglib-proxy/src/cache_lifecycle.rs 589

@@ -15,7 +15,10 @@ use std::path::{Path, PathBuf};
 ///
 /// Returns the canonical path on success. The `Err` variant is a
 /// human-readable message intended for the LLM (not `anyhow::Error`).
-pub fn resolve_sandboxed_path(sandbox_root: &Path, user_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_sandboxed_path(
+    sandbox_root: &Path,
+    user_path: &str,
+) -> Result<PathBuf, String> {
     let user_path = user_path.trim();
     if user_path.is_empty() {
         return Err("path must not be empty".to_string());
@@ -56,7 +59,7 @@ pub fn resolve_sandboxed_path(sandbox_root: &Path, user_path: &str) -> Result<Pa
 /// Check whether a file appears to be binary by scanning for null bytes.
 ///
 /// Reads at most the first 8 KiB.
-pub fn is_binary(path: &Path) -> bool {
+pub(crate) fn is_binary(path: &Path) -> bool {
     use std::io::Read;
     let Ok(mut f) = std::fs::File::open(path) else {
         return false;
