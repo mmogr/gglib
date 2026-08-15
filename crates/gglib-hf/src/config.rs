@@ -83,15 +83,6 @@ impl HfClientConfig {
         self.max_retries = retries;
         self
     }
-
-    /// Set the base delay for exponential backoff retries.
-    ///
-    /// Defaults to 500ms.
-    #[must_use]
-    pub const fn with_retry_delay(mut self, delay: Duration) -> Self {
-        self.retry_base_delay = delay;
-        self
-    }
 }
 
 #[cfg(test)]

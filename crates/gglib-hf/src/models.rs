@@ -155,12 +155,6 @@ impl HfQuantization {
         self.shard_count > 1
     }
 
-    /// Get size in megabytes.
-    #[allow(clippy::cast_precision_loss)] // Precision loss acceptable for display purposes
-    pub fn size_mb(&self) -> f64 {
-        self.total_size as f64 / 1_048_576.0
-    }
-
     /// Get the primary file path (first shard or single file).
     pub fn primary_path(&self) -> Option<&str> {
         self.paths.first().map(String::as_str)
