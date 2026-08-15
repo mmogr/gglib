@@ -6,8 +6,9 @@ They exist because this class of drift is silent. Nothing fails to compile when 
 
 | File | Pins |
 |------|------|
-| `tauri-serve-model.test.ts` | The `serve_model` IPC payload shape (`{ id, request }`) against the Rust command signature |
+| `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list and `StartServerBody`'s `alias`/`flatten` |
 | `settingsBounds.test.ts` | `src/constants/settingsDefaults.ts` and `inferenceDefaults.ts` against `validate_settings`, `validate_inference_config`, `Settings::with_defaults` and `InferenceConfig::with_hardcoded_defaults` |
+| `settingsParity.test.ts` | `STARTER_PROFILES` against `builtin_templates()`, and `MAX_STAGNATION_STEPS` against the agent default |
 
 ## Reading Rust from a TypeScript test
 

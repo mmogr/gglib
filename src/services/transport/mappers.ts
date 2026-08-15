@@ -34,11 +34,13 @@ export interface StartServerRequest {
 }
 
 /**
- * Convert ServeConfig to StartServerRequest for Tauri IPC.
- * 
- * Extracts only the fields needed by StartServerRequest, omitting `id` 
- * (which is passed separately) and legacy `ctx_size` (replaced by context_length).
- * 
+ * Convert ServeConfig to StartServerRequest.
+ *
+ * Both callers spread the result into a flat body — `POST /api/servers/start`
+ * beside an `id`, and `POST /api/proxy/start-pinned` under `options` — which
+ * is why `id` is not included here. Rust reads the flattened form through
+ * `StartServerBody`'s `#[serde(flatten)]`.
+ *
  * @param config - Frontend serve configuration
  * @returns StartServerRequest matching Rust type
  */
