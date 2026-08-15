@@ -391,11 +391,11 @@ impl DownloadEvent {
         }
     }
 
-    /// Get the event name for wire protocols.
-    ///
-    /// This provides consistent event naming for Tauri and SSE transports.
-    /// Note: Both `ShardProgress` and `DownloadProgress` use "download:progress"
-    /// as the channel name; differentiation happens via the type discriminator.
+    /// Colon-separated names, and the source of the five `AppEvent` returns
+    /// for downloads. **Not the wire format** — `AppEvent`'s `type` tag is
+    /// `download`; these are retired Tauri-bus spellings, read by nothing.
+    /// `ShardProgress` and `DownloadProgress` share `download:progress`,
+    /// differentiated by the type discriminator.
     #[must_use]
     pub const fn event_name(&self) -> &'static str {
         match self {

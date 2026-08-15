@@ -89,7 +89,7 @@ Concrete examples of established patterns:
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
 | llama install | `LlamaProgressEvent` | progress bar | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
-| llama build | `BuildEvent` | spinner + progress bar | SSE at `/api/config/system/build-llama-from-source` | `llama-build-progress` |
+| llama build | `BuildEvent` | spinner + progress bar | none — #834 removed the route as dead | none — removed with it |
 
 When adding a new long-running operation:
 

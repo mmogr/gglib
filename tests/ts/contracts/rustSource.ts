@@ -35,22 +35,74 @@ export const rust = (path: string): string => readFileSync(resolve(REPO_ROOT, pa
  * Order matters, and getting it wrong is not theoretical: blanking strings
  * first pairs the lone `"` in `InferenceConfig`'s DRY doc comment — which
  * documents llama.cpp's sequence breakers as `` `\n`, `:`, `"`, `*` `` — with
- * the next quote 34 lines below, blanking every field in between and hiding
- * four of them from the override scan entirely.
+ * the next quote 34 lines below, blanking every field in between. Four are
+ * hidden by that span directly, and the parity error then cascades into the
+ * next one, taking `seed` with it — five in total.
  */
 export const scannable = (source: string): string =>
   withoutComments(source).replace(/"(?:[^"\\]|\\.)*"/g, '""');
 
 /**
- * Rust with comment lines removed, strings left intact.
+ * Rust with comments removed, strings left intact.
  *
  * For guards that need to read a string's *contents* — `rename_all =
  * "camelCase"` — where [`scannable`] would blank the very value being looked
- * for, while a doc comment quoting the attribute must still not stand in for
- * the real one.
+ * for, while a comment quoting the attribute must still not stand in for the
+ * real one.
+ *
+ * Scanned rather than regexed, because the regex form only removed *whole-line*
+ * comments and the hole that left was the one the blanking exists to close: a
+ * single unbalanced quote in a trailing `// comment "` pairs with the quote in
+ * the attribute below it, blanking `#[serde(rename = ` out of existence. A
+ * live per-field rename then passed the guard that exists to catch it.
+ *
+ * Not a Rust lexer: raw strings (`r#"…"#`) and byte strings are not modelled.
+ * Neither appears in the declarations these tests read, and the failure
+ * direction is a spurious throw naming the struct, not a silent pass.
  */
-export const withoutComments = (source: string): string =>
-  source.replace(/^[^\S\n]*\/\/.*$/gm, '');
+export function withoutComments(source: string): string {
+  let out = '';
+  let i = 0;
+
+  while (i < source.length) {
+    const pair = source.slice(i, i + 2);
+
+    if (pair === '//') {
+      while (i < source.length && source[i] !== '\n') i += 1;
+      continue;
+    }
+
+    if (pair === '/*') {
+      i += 2;
+      while (i < source.length && source.slice(i, i + 2) !== '*/') i += 1;
+      i += 2;
+      continue;
+    }
+
+    // Copy string literals through untouched, so a `//` or `/*` inside one is
+    // not mistaken for a comment.
+    if (source[i] === '"') {
+      out += source[i];
+      i += 1;
+      while (i < source.length) {
+        if (source[i] === '\\') {
+          out += source.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += source[i];
+        i += 1;
+        if (source[i - 1] === '"') break;
+      }
+      continue;
+    }
+
+    out += source[i];
+    i += 1;
+  }
+
+  return out;
+}
 
 /**
  * The one and only match of `pattern`, or a throw naming what went wrong.
@@ -62,7 +114,7 @@ function only(source: string, pattern: RegExp, what: string): RegExpMatchArray {
   const matches = [...source.matchAll(pattern)];
   if (matches.length !== 1) {
     throw new Error(
-      `expected exactly one top-level ${what}, found ${matches.length} — renamed, ` +
+      `expected exactly one ${what}, found ${matches.length} — renamed, ` +
         'restructured, or shadowed by a same-named declaration',
     );
   }
@@ -80,15 +132,18 @@ export function declaration(source: string, struct: string): { attrs: string; bo
   // previous blank line. A blank line is a formatting convention — rustfmt
   // neither requires nor inserts one between items — so slicing reached back
   // over a whole preceding declaration, and a neighbour's `rename_all` then
-  // satisfied the guard for a struct that had lost it. Capturing only the
-  // contiguous run of column-zero attribute and comment lines cannot.
-  // Each attribute or comment line is bounded to one line. `[\s\S]*?` inside
-  // `#[...]` looks lazier than it is: it will cross any number of newlines to
-  // let the rest of the pattern match, and did — the capture ran from an
-  // unrelated struct hundreds of lines above, dragging four other structs'
-  // `rename_all` attributes in with it. A genuinely multi-line attribute is
-  // therefore not captured, which fails loud (the guard throws) rather than
-  // quiet (a neighbour's attribute standing in).
+  // satisfied the guard for a struct that had lost it.
+  //
+  // Attribute and comment lines are matched one at a time, also deliberately.
+  // An earlier draft allowed `[\s\S]*?` between `#[` and `]`, which is far
+  // less lazy than it looks — it crosses as many newlines as the rest of the
+  // pattern needs, and did, capturing from an unrelated struct hundreds of
+  // lines above and dragging four other structs' `rename_all` in with it.
+  //
+  // The cost is that a multi-line attribute (rustfmt produces them past the
+  // width limit) is not captured at all: `attrs` comes back empty. Callers
+  // that read it therefore throw — the safe direction — but `structBody` does
+  // not read it, so for that path a multi-line attribute is simply invisible.
   const match = only(
     source,
     new RegExp(
@@ -106,8 +161,12 @@ export const structBody = (source: string, struct: string): string =>
   declaration(source, struct).body;
 
 /**
- * Exactly one top-level function's source, from its signature to the closing
- * brace at the given indent.
+ * Exactly one function's source, from its signature to the closing brace at
+ * the given indent.
+ *
+ * Unlike [`declaration`] this is not anchored at column zero, and must not be:
+ * three of its callers want an `impl` method. Its guarantee is uniqueness —
+ * the name resolves once in the file, or it throws.
  *
  * @param closeAt - the dedent that ends the body: `'\n}'` for a free function,
  *   `'\n    }'` for one inside an `impl`.

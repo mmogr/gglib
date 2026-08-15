@@ -357,8 +357,8 @@ impl ModelRuntimeError {
 /// Canonical `error.type` discriminants, shared by every surface.
 ///
 /// `gglib_proxy::models::ErrorResponse` carries one of these over HTTP and
-/// [`RuntimeErrorEnvelope`] carries the same vocabulary over Tauri IPC and SSE,
-/// so a client that learns it once understands both.
+/// [`RuntimeErrorEnvelope`] carries the same vocabulary over SSE, so a client
+/// that learns it once understands both.
 pub mod error_type {
     /// Transient unavailability — the same request may succeed if retried.
     pub const SERVICE_UNAVAILABLE: &str = "service_unavailable";
@@ -381,7 +381,7 @@ pub fn is_retryable_error_type(discriminant: &str) -> bool {
 
 /// Structured, serializable view of a [`ModelRuntimeError`].
 ///
-/// For IPC boundaries (Tauri events, SSE) that need machine-readable type +
+/// For event boundaries (SSE) that need machine-readable type +
 /// retry hints alongside the human-readable message, mirroring the shape
 /// `gglib_proxy::models::ErrorResponse` already sends over HTTP.
 #[derive(Clone, Debug, Serialize, Deserialize)]

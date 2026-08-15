@@ -883,4 +883,4 @@ curl -N http://localhost:8080/v1/proxy/status/stream
 - **Web GUI**: click "View Dashboard" in the Proxy control's dropdown
   (`src/components/ProxyControl.tsx`), which opens `ProxyDashboardModal` —
   a native browser `EventSource` connected directly to the proxy's own
-  port, independent of the app's own backend/Tauri IPC.
+  port, independent of the app's own backend.

@@ -4,14 +4,17 @@
 
 Canonical event union for all cross-adapter events.
 
-This module is the single source of truth for events used by Tauri listeners,
-SSE handlers, and backend emitters.
+This module is the single source of truth for events used by SSE handlers and
+backend emitters. There is no Tauri-event branch: the desktop app consumes the
+same `/api/events` stream a browser tab does.
 
 # Structure
 
 - `app` - Application-level events (model added/removed/updated)
-- `download` - Download progress and completion events
 - `server` - Model server lifecycle events
+
+Download events are not a submodule here: `AppEvent::Download` wraps
+`crate::download::DownloadEvent` verbatim.
 
 # Wire Format
 
@@ -23,7 +26,7 @@ Events are serialized with a `type` tag for TypeScript compatibility:
 
 `server_error` carries a structured error envelope (message, stable `type`
 discriminant, `retryable` flag) rather than a bare string, mirroring the HTTP
-layer's `ErrorResponse` shape so Tauri and HTTP clients agree on meaning:
+layer's `ErrorResponse` shape so SSE and HTTP clients agree on meaning:
 
 ```json
 {

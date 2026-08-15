@@ -38,9 +38,15 @@ The services module contains the TypeScript client layer for the gglib GUI front
             └──────────────┘                      └──────────────┘
 ```
 
-`platform/` still reaches the OS through Tauri `invoke()`/`listen()` — file
-dialogs, menu sync, llama installation. That is OS integration, not a
-transport: product data travels the two paths above on every platform.
+`platform/` mostly reaches the OS through Tauri `invoke()`/`listen()` — file
+dialogs, menu sync, llama installation, the frontend log bridge. That is OS
+integration, not a transport.
+
+`serverLogs.ts` is the exception and is misfiled: logs live on the daemon in
+every mode, so it uses `fetch` and a raw `EventSource` against the same HTTP
+API as everything else, bypassing the pooled SSE connection in
+`transport/events/`. It is listed below because it is here, not because it
+belongs here.
 
 ## Directory Structure
 

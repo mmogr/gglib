@@ -14,8 +14,11 @@ The primary streaming entry point is [`run_llama_source_build`], which emits
 | Consumer | Crate        | Output                                                          |
 |----------|--------------|-----------------------------------------------------------------|
 | CLI      | `gglib-cli`  | `indicatif` spinner + progress bar in `handlers::llama_install` |
-| Axum     | `gglib-axum` | SSE stream at `POST /api/system/build-llama-from-source`        |
-| Tauri    | `gglib-tauri`| `llama-build-progress` event to WebView                         |
+
+There were two more. #834 removed both as dead end to end — the SSE route at
+`POST /api/system/build-llama-from-source` and the Tauri command behind it,
+neither of which had a caller — taking the `llama-build-progress` event the
+WebView listened for with them. See `llama/build_events.rs`.
 
 ## Threading model
 
