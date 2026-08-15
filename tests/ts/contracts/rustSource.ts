@@ -23,7 +23,7 @@ import { resolve } from 'node:path';
  * pointed back here from a subdirectory — turns a contract test into an
  * ENOENT rather than a failure it can explain.
  */
-export const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 
 /** Read a Rust source file, by path from the repo root. */
 export const rust = (path: string): string => readFileSync(resolve(REPO_ROOT, path), 'utf8');
@@ -105,6 +105,20 @@ export function withoutComments(source: string): string {
 }
 
 /**
+ * Block comments blanked to spaces, newlines kept.
+ *
+ * A `//` comment cannot hide a declaration from a column-zero anchor — the
+ * `//` occupies column zero itself. A block comment can, so the structural
+ * matchers run over this rather than the raw source. Length and line offsets
+ * are preserved so the captures still line up with the original.
+ */
+function withoutBlockComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+    comment.replace(/[^\n]/g, ' '),
+  );
+}
+
+/**
  * The one and only match of `pattern`, or a throw naming what went wrong.
  *
  * Uniqueness is the point: "first match wins" is what lets a decoy stand in
@@ -112,10 +126,16 @@ export function withoutComments(source: string): string {
  */
 function only(source: string, pattern: RegExp, what: string): RegExpMatchArray {
   const matches = [...source.matchAll(pattern)];
-  if (matches.length !== 1) {
+  if (matches.length === 0) {
     throw new Error(
-      `expected exactly one ${what}, found ${matches.length} — renamed, ` +
-        'restructured, or shadowed by a same-named declaration',
+      `no ${what} — renamed, moved, or written in a form this extractor does ` +
+        'not parse (`unsafe`, `extern "C"`, generics on the name)',
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `expected exactly one ${what}, found ${matches.length} — shadowed by a ` +
+        'same-named declaration, which is how a decoy defeats a first-match reader',
     );
   }
   return matches[0];
@@ -145,9 +165,9 @@ export function declaration(source: string, struct: string): { attrs: string; bo
   // that read it therefore throw — the safe direction — but `structBody` does
   // not read it, so for that path a multi-line attribute is simply invisible.
   const match = only(
-    source,
+    withoutBlockComments(source),
     new RegExp(
-      String.raw`^((?:(?:#\[[^\n]*\]|\/\/[^\n]*)\n)*)pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`,
+      String.raw`^((?:(?:#\[[^\n]*\]|\/\/[^\n]*)\r?\n)*)pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\r?\n\}`,
       'gm',
     ),
     `struct ${struct}`,
@@ -173,11 +193,12 @@ export const structBody = (source: string, struct: string): string =>
  */
 export function fnSource(source: string, fnName: string, closeAt = '\n}'): string {
   const match = only(
-    source,
+    withoutBlockComments(source),
     new RegExp(String.raw`^\s*(?:pub(?:\([^)]*\))? )?(?:const |async )?fn ${fnName}\(`, 'gm'),
     `fn ${fnName}`,
   );
 
+  // Offsets are preserved by the blanking, so slice the original.
   const start = match.index;
   const end = source.indexOf(closeAt, start);
   return source.slice(start, end === -1 ? undefined : end);

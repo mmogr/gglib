@@ -103,13 +103,13 @@ function fnBody(source: string, fnName: string): string {
  * early draft of this test declared the Repeat Penalty bug clean, by picking up
  * Presence Penalty's inclusive range out of the block below it.
  */
-function acceptedRange(fnSource: string, field: string): Range {
-  const subject = fnSource.search(new RegExp(`(?:config|settings)\\.${field}\\b`));
+function acceptedRange(source: string, field: string): Range {
+  const subject = source.search(new RegExp(`(?:config|settings)\\.${field}\\b`));
   if (subject === -1) {
     throw new Error(`No validation guard found for ${field} — has it stopped being validated?`);
   }
 
-  const rest = fnSource.slice(subject);
+  const rest = source.slice(subject);
   const blockEnd = rest.indexOf('\n    }');
   const guard = rest.slice(0, blockEnd === -1 ? undefined : blockEnd);
 
