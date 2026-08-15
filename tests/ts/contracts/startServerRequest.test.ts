@@ -46,9 +46,9 @@
  * throw naming the symbol they could not find rather than returning a default.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { declaration, rust, scannable, structBody, withoutComments } from './rustSource';
 
 import type { ServeConfig } from '../../../src/types';
 import { toStartServerRequest } from '../../../src/services/transport/mappers';
@@ -60,55 +60,12 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   get: vi.fn(),
 }));
 
-// Relative to this file, not the cwd. These paths resolve against wherever
-// vitest was invoked from, so running it anywhere but the repo root — an
-// IDE runner, or `--root` pointed back here from a subdirectory — turns a
-// contract test into an ENOENT rather than a failure it can explain.
-const REPO_ROOT = resolve(import.meta.dirname, '../../..');
-const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
-
 const TYPES_RS = rust('crates/gglib-app-services/src/types.rs');
 const SERVERS_RS = rust('crates/gglib-axum/src/handlers/servers.rs');
 const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
 
 const camel = (field: string) =>
   field.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
-
-/** Rust with every string literal blanked, so a `]` or `)` inside one cannot
- * terminate an attribute pattern early. */
-const withoutStrings = (rust: string) => rust.replace(/"(?:[^"\\]|\\.)*"/g, '""');
-
-/**
- * Exactly one top-level struct: its attribute block and its body.
- *
- * Both anchoring rules live here so both callers get them. Anchored at column
- * zero and required to be unique — unanchored, a same-named decoy (nested in a
- * `mod`, or `#[cfg(any())]`-gated above the real one) wins the match and can
- * supply an attribute the real struct has lost, which is a total silent wire
- * break that every assertion downstream would report as healthy.
- */
-function declaration(source: string, struct: string): { attrs: string; body: string } {
-  const matches = [
-    ...source.matchAll(
-      new RegExp(String.raw`^pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`, 'gm'),
-    ),
-  ];
-  if (matches.length !== 1) {
-    throw new Error(
-      `expected exactly one top-level struct ${struct}, found ${matches.length} — ` +
-        'renamed, restructured, or shadowed by a same-named declaration',
-    );
-  }
-
-  const [match] = matches;
-  const start = match.index;
-  // Attributes and doc comments are contiguous with the declaration, back to
-  // the blank line that separates it from whatever precedes it.
-  const attrs = source.slice(source.lastIndexOf('\n\n', start) + 2, start);
-  return { attrs, body: match[1] };
-}
-
-const structBody = (source: string, struct: string) => declaration(source, struct).body;
 
 /**
  * Wire field names of a `#[serde(rename_all = "camelCase")]` struct.
@@ -120,16 +77,11 @@ const structBody = (source: string, struct: string) => declaration(source, struc
 function camelCaseWireFields(source: string, struct: string): string[] {
   const { attrs, body } = declaration(source, struct);
 
-  // Read from the attribute block belonging to *this* declaration, with
-  // comment lines dropped so a doc comment quoting the attribute cannot stand
-  // in for it. `[^)]*` on both sides so a second option in the same attribute
+  // Read from the attribute block belonging to *this* declaration, comments
+  // stripped so a doc comment quoting the attribute cannot stand in for it.
+  // `[^)]*` on both sides so a second option in the same attribute
   // (`deny_unknown_fields`) is not read as the attribute having been removed.
-  const attrLines = attrs
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('//'))
-    .join('\n');
-
-  if (!/#\[serde\([^)]*rename_all = "camelCase"[^)]*\)\]/.test(attrLines)) {
+  if (!/#\[serde\([^)]*rename_all = "camelCase"[^)]*\)\]/.test(withoutComments(attrs))) {
     throw new Error(
       `no #[serde(rename_all = "camelCase")] on struct ${struct} — it was renamed, ` +
         'restructured, or lost the attribute, and this test no longer describes the wire',
@@ -149,7 +101,7 @@ function camelCaseWireFields(source: string, struct: string): string[] {
   // rather than name, and only when serialising, which is not the direction
   // this body travels. The `\b` is what excludes it, since `_` is a word
   // character.
-  const override_ = withoutStrings(body).match(
+  const override_ = scannable(body).match(
     /#\[(?:serde|cfg_attr)\([^\]]*(?:\b(?:rename|flatten)\b|\bskip(?:_serializing|_deserializing)?\b)[^\]]*\]/,
   );
   if (override_) {

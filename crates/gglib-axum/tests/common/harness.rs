@@ -44,8 +44,14 @@ use super::ports::TEST_BASE_PORT;
 /// old shared wipe was not: if this pid is live it is us, and if it was
 /// recycled the previous owner is gone.
 ///
-/// Nothing else collects these, so [`sweep_stale`] takes the siblings whose
-/// runs are long over.
+/// They are not collected automatically. Three review rounds found three
+/// different defects in a janitor that tried to — an unowned blast radius
+/// across a directory that is shared workspace-wide, a window so wide it
+/// never fired, and an ownership prefix carrying cargo's metadata hash, so
+/// each build configuration only ever swept its own litter. Deleting a live
+/// run's database to reclaim ~12 MiB is a bad trade, and mtime is the wrong
+/// question when the exact one (is that pid alive?) needs a dependency this
+/// crate does not have. `cargo clean` collects them; nothing else does.
 ///
 /// (Cargo runs this crate's test binaries one at a time; it is the tests
 /// *within* a binary that share a process. The binary name is in the path
@@ -58,8 +64,7 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         .to_os_string();
     name.push(format!("-{}", std::process::id()));
 
-    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let dir = root.join(&name);
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
 
     // Not `let _ =`. `create_dir_all` returns `Ok` for a directory that
     // already exists, so a wipe that failed would be invisible and this
@@ -74,77 +79,8 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         );
     }
     std::fs::create_dir_all(&dir).expect("create isolated data dir");
-    // `dir` and `prefix` by argument, not through `SCRATCH_DIR`: we are inside
-    // its initialiser, and touching it here would deadlock on itself.
-    let prefix = exe
-        .file_name()
-        .expect("test executable has a file name")
-        .to_string_lossy()
-        .into_owned();
-    sweep_stale(&root, &prefix, &dir);
     dir
 });
-
-/// How long a scratch directory is assumed to belong to a live run.
-///
-/// These suites finish in seconds, so a day is enormously more than any run
-/// needs. The margin is deliberate: mtime is a proxy for liveness, and the
-/// cheap ways it can lie all lie by making a directory look *older* than it
-/// is — a forward clock step from NTP correcting a bad RTC, most plausibly on
-/// a freshly booted CI runner. An hour is within the range of such a step; a
-/// day is not, for any machine that will then run a test suite against the
-/// same target directory.
-///
-/// The exact test would be to read the pid out of the directory name and ask
-/// whether it is alive. That needs `libc::kill`, which is not a dependency of
-/// this crate, and pids are only unique within a namespace anyway — two
-/// containers sharing a bind-mounted `target/` can present the same one.
-const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
-
-/// Drop scratch directories left by earlier runs of *this* binary.
-///
-/// Without this they accumulate forever — a full suite leaves roughly 10 MiB
-/// across six directories, and `cargo clean -p gglib-axum` does not reclaim
-/// them, so only a whole-target clean ever did.
-///
-/// Restricted to our own `<binary>-<pid>` prefix on purpose.
-/// `CARGO_TARGET_TMPDIR` is one directory for the whole target dir, not one
-/// per crate, so sweeping everything in it would make this harness the owner
-/// of scratch space it does not own the moment another crate's tests want
-/// some.
-///
-/// Best-effort throughout, and deliberately biased towards keeping: an entry
-/// whose age cannot be read is left alone, since the cost of keeping a stale
-/// directory is disk and the cost of removing a live one is a corrupted run.
-fn sweep_stale(root: &std::path::Path, prefix: &str, ours: &std::path::Path) {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        // `<binary>-<pid>` exactly: a prefix test alone would also claim a
-        // directory some other tool happened to name after this binary.
-        let name = entry.file_name();
-        let is_scratch = name
-            .to_string_lossy()
-            .strip_prefix(prefix)
-            .and_then(|rest| rest.strip_prefix('-'))
-            .is_some_and(|pid| !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()));
-        if !is_scratch {
-            continue;
-        }
-
-        let stale = entry
-            .metadata()
-            .and_then(|meta| meta.modified())
-            .and_then(|modified| modified.elapsed().map_err(std::io::Error::other))
-            .is_ok_and(|age| age > STALE_AFTER);
-
-        if stale && entry.path() != ours {
-            let _ = std::fs::remove_dir_all(entry.path());
-        }
-    }
-}
 
 /// A database of its own for each context.
 ///

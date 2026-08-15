@@ -24,23 +24,13 @@
  * red instead of silently retiring the guarantee.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
 import type { SamplingParamKey } from '../../../src/types';
 
-// Relative to this file, not the cwd. These paths resolve against wherever
-// vitest was invoked from, so running it anywhere but the repo root — an
-// IDE runner, or `--root` pointed back here from a subdirectory — turns a
-// contract test into an ENOENT rather than a failure it can explain.
-const REPO_ROOT = resolve(import.meta.dirname, '../../..');
-
-function rust(relativePath: string): string {
-  return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8');
-}
+import { fnSource, rust } from './rustSource';
 
 const SETTINGS_RS = rust('crates/gglib-core/src/settings.rs');
 const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
@@ -70,11 +60,8 @@ const CONSTANTS: Map<string, number> = new Map(
  * field added to the struct is picked up instead of silently falling outside.
  */
 function structLiteral(source: string, fnName: string): Map<string, string> {
-  const start = source.indexOf(`fn ${fnName}(`);
-  if (start === -1) throw new Error(`Rust fn ${fnName} not found — did it move or get renamed?`);
-
-  const end = source.indexOf('\n    }', start);
-  const body = source.slice(start, end === -1 ? undefined : end);
+  // `\n    }` closes a body nested inside an `impl`.
+  const body = fnSource(source, fnName, '\n    }');
 
   const fields = new Map<string, string>();
   for (const match of body.matchAll(/^\s{12}(\w+):\s*(Some\((.*?)\)|None),$/gm)) {
@@ -104,11 +91,7 @@ function value(fnName: string, fields: Map<string, string>, field: string): numb
  * or into the test module at the bottom of the file.
  */
 function fnBody(source: string, fnName: string): string {
-  const start = source.indexOf(`fn ${fnName}(`);
-  if (start === -1) throw new Error(`Rust fn ${fnName} not found — did it move or get renamed?`);
-
-  const end = source.indexOf('\n}', start);
-  return source.slice(start, end === -1 ? undefined : end);
+  return fnSource(source, fnName);
 }
 
 /**

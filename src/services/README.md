@@ -110,6 +110,8 @@ The `platform/` directory provides OS-specific functionality:
 | `menuSync.ts` | Menu state synchronization |
 | `openUrl.ts` | External URL opening |
 | `serverLogs.ts` | Server log streaming |
+| `index.ts` | The directory's public surface — what the rest of `src/` imports |
+| `logging/` | Frontend log transports, bridged to Rust tracing via `log_from_frontend` |
 
 ## Transport Layer
 

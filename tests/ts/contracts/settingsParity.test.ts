@@ -5,28 +5,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { MAX_STAGNATION_STEPS } from '../../../src/constants/settingsDefaults';
 import { STARTER_PROFILES } from '../../../src/components/SettingsModal/InferenceProfiles';
 
-// Relative to this file, not the cwd. These paths resolve against wherever
-// vitest was invoked from, so running it anywhere but the repo root — an
-// IDE runner, or `--root` pointed back here from a subdirectory — turns a
-// contract test into an ENOENT rather than a failure it can explain.
-const REPO_ROOT = resolve(import.meta.dirname, '../../..');
-const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
+import { fnSource, rust } from './rustSource';
 
 describe('starter profiles mirror builtin_templates()', () => {
   const FILE = rust('crates/gglib-core/src/domain/inference_profile.rs');
-  const start = FILE.indexOf('pub fn builtin_templates()');
-  if (start < 0) {
-    // Throw, never default: this directory's rule. Without it a renamed
-    // function yields an empty slice and the failure reads "expected 0 to be
-    // greater than 0" rather than naming the symbol that moved.
-    throw new Error('builtin_templates() not found in inference_profile.rs');
-  }
-  const SOURCE = FILE.slice(start, FILE.indexOf('\n}', start));
+  // Anchored and uniqueness-checked, per this directory's rule: an unanchored
+  // `indexOf` takes the first match, so a same-named decoy declared earlier
+  // satisfies the guard for a function that has drifted.
+  const SOURCE = fnSource(FILE, 'builtin_templates');
 
   /** Extract one template's literal block from the function body by name. */
   const templateBlock = (name: string): string => {
