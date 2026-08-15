@@ -112,9 +112,8 @@ The `platform/` directory provides OS-specific functionality:
 
 The `transport/` directory provides a unified interface for backend communication:
 
-- **Tauri mode**: Uses `@tauri-apps/api/core.invoke()` for IPC
-- **Web mode**: Uses standard HTTP fetch with the Axum API
+- **Every mode**: HTTP fetch against the Axum API, plus SSE for events
 
-This abstraction ensures identical behavior across platforms while allowing each to use its optimal transport mechanism.
+Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no per-platform branch to keep in step. `invoke()` survives only for the seven OS-integration commands allowlisted in `scripts/check-frontend-ipc.sh`.
 
 <!-- module-docs:end -->

@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-The core platform abstraction layer. Defines the unified `Transport` interface that composes all domain sub-interfaces and provides `getTransport()` — a factory that detects the platform at startup and returns either a Tauri IPC or HTTP+SSE implementation. All code outside this directory is completely platform-agnostic.
+The core platform abstraction layer. Defines the unified `Transport` interface that composes all domain sub-interfaces and provides `getTransport()` — a factory that composes the HTTP API client with the SSE event bus into one instance, memoised after the first call. There is no platform branch: desktop and web both talk to the gglib daemon over HTTP+SSE, the desktop WebView having discovered its base URL through `get_embedded_api_info`. All code outside this directory is completely platform-agnostic.
 
 ## Architecture
 

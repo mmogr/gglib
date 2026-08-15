@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Real-time event subscription layer supporting both Tauri IPC events and web SSE (Server-Sent Events). Presents a unified `subscribe(eventType, handler)` interface regardless of platform. The SSE implementation uses a single pooled connection to avoid exhausting browser HTTP/2 connection limits.
+Real-time event subscription layer over SSE (Server-Sent Events), the one implementation for every mode — there is no Tauri-event branch left to maintain. Presents a unified `subscribe(eventType, handler)` interface. The SSE implementation uses a single pooled connection to avoid exhausting browser HTTP/2 connection limits.
 
 ## Architecture
 

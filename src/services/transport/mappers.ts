@@ -36,10 +36,10 @@ export interface StartServerRequest {
 /**
  * Convert ServeConfig to StartServerRequest.
  *
- * Both callers spread the result into a flat body — `POST /api/servers/start`
- * beside an `id`, and `POST /api/proxy/start-pinned` under `options` — which
- * is why `id` is not included here. Rust reads the flattened form through
- * `StartServerBody`'s `#[serde(flatten)]`.
+ * Neither caller sends `id` inside the object, which is why it is not here:
+ * `POST /api/servers/start` spreads the result flat beside an `id`, read back
+ * through `StartServerBody`'s `#[serde(flatten)]`, and
+ * `POST /api/proxy/start-pinned` nests it under `options`.
  *
  * @param config - Frontend serve configuration
  * @returns StartServerRequest matching Rust type

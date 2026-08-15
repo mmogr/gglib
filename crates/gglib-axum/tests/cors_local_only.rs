@@ -116,6 +116,16 @@ async fn server_config_defaults_are_local_only() {
 
     assert_eq!(config.host, "127.0.0.1", "Default host should be 127.0.0.1");
     assert!(matches!(config.cors, CorsConfig::LocalOnly));
+
+    // The production arm of `db_path`. Every other test in this crate passes
+    // `Some`, so without this nothing asserts that the daemon — which builds
+    // its config by spreading `with_defaults()` — still resolves through
+    // `database_path()` rather than somewhere a test chose.
+    assert!(
+        config.db_path.is_none(),
+        "defaults must resolve the database through database_path(), got {:?}",
+        config.db_path
+    );
 }
 
 #[tokio::test]

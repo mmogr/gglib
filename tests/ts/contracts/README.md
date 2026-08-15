@@ -6,13 +6,13 @@ They exist because this class of drift is silent. Nothing fails to compile when 
 
 | File | Pins |
 |------|------|
-| `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list and `StartServerBody`'s `alias`/`flatten` |
+| `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list, `StartServerBody`'s `alias`/`flatten`, and `InferenceConfig`'s accepted keys |
 | `settingsBounds.test.ts` | `src/constants/settingsDefaults.ts` and `inferenceDefaults.ts` against `validate_settings`, `validate_inference_config`, `Settings::with_defaults` and `InferenceConfig::with_hardcoded_defaults` |
 | `settingsParity.test.ts` | `STARTER_PROFILES` against `builtin_templates()`, and `MAX_STAGNATION_STEPS` against the agent default |
 
 ## Reading Rust from a TypeScript test
 
-`settingsBounds.test.ts` parses the Rust source at run time. That is unusual enough to say why: the alternative is a comment asking the next person to keep two files in step, which is what was there before, and both values it guarded had already drifted — the GUI offered a Max Tokens default the backend deliberately does not have, and a Repeat Penalty of 0 that validation rejects.
+Every test here parses the Rust source at run time. That is unusual enough to say why: the alternative is a comment asking the next person to keep two files in step, which is what was there before, and in each case the thing it guarded had already drifted — `settingsBounds.test.ts` found a Max Tokens default the backend deliberately does not have and a Repeat Penalty of 0 that validation rejects, and `startServerRequest.test.ts` replaced a test that pinned an IPC command which had never existed.
 
 Two rules keep the parsing honest:
 

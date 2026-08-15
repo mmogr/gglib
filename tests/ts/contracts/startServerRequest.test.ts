@@ -3,14 +3,14 @@
  * Rust structs that deserialise it.
  *
  * This replaces a test that pinned a Tauri `serve_model` IPC command. There
- * is no such command — the Tauri surface is seven OS-integration commands
- * (`scripts/check-tauri-commands.sh` refuses any product command), and
- * `git log -S serve_model` finds it in no `.rs` file in this repository's
- * history. The old test also asserted a nested `{ id, request }` envelope
- * that nothing sends, against a literal it constructed itself, so it could
- * only ever confirm its own arithmetic.
+ * is no such command — the Tauri surface is seven commands, allowlisted by
+ * name in `scripts/check-frontend-ipc.sh`, and `git log -S serve_model` finds
+ * it in no `.rs` file in this repository's history. The old test asserted a
+ * nested `{ id, request }` envelope that nothing sends, and asserted it
+ * against a literal it constructed two lines earlier, so it could not have
+ * caught drift on the Rust side at all.
  *
- * Two things are pinned here, both of which that test missed:
+ * Three things are pinned here, all of which that test missed:
  *
  *   1. **Every field, not the convenient ones.** `toStartServerRequest`
  *      returns eight keys; the old assertions named five. Vitest's `toEqual`
@@ -22,11 +22,21 @@
  *
  *   2. **The body is flat.** `StartServerBody` takes the model id as
  *      `#[serde(alias = "id")]` and the rest through `#[serde(flatten)]`, so
- *      `id` sits beside the config keys rather than wrapping them.
+ *      `id` sits beside the config keys rather than wrapping them. Both
+ *      attributes are pinned: dropping either makes every start-server call
+ *      fail deserialisation, and nothing else here would notice.
  *
- * Following this directory's rules: the extractor anchors on the
- * `rename_all` attribute rather than the struct name alone, and throws with
- * the symbol it could not find rather than returning a default.
+ *   3. **No `inferenceParams` key the backend would reject.**
+ *
+ * What is deliberately *not* pinned: that the GUI sends every
+ * `InferenceConfig` field. It sends 7 of 16 — `frequency_penalty`,
+ * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` have no GUI
+ * control — and each is `Option`, so omitting them is well-formed. Only the
+ * direction that breaks something is guarded: a key Rust would not accept.
+ *
+ * Following this directory's rules: the extractors anchor on the guard —
+ * `rename_all` for a wire-name list, the struct body for an attribute — and
+ * throw naming the symbol they could not find rather than returning a default.
  */
 
 import { readFileSync } from 'node:fs';
@@ -43,18 +53,28 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   get: vi.fn(),
 }));
 
-// vitest runs with the project root as cwd, and the crates live beside it.
-const TYPES_RS = readFileSync(
-  resolve(process.cwd(), 'crates/gglib-app-services/src/types.rs'),
-  'utf8',
-);
-const SERVERS_RS = readFileSync(
-  resolve(process.cwd(), 'crates/gglib-axum/src/handlers/servers.rs'),
-  'utf8',
-);
+// Relative to this file, not to the cwd: `vitest --root` moves the cwd and
+// would turn a contract test into an ENOENT.
+const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
+
+const TYPES_RS = rust('crates/gglib-app-services/src/types.rs');
+const SERVERS_RS = rust('crates/gglib-axum/src/handlers/servers.rs');
+const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
 
 const camel = (field: string) =>
   field.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+/** A named struct's body, so a pattern cannot match the wrong declaration. */
+function structBody(source: string, struct: string): string {
+  const body = source.match(
+    new RegExp(String.raw`pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`),
+  )?.[1];
+  if (!body) {
+    throw new Error(`no struct ${struct} — renamed or restructured`);
+  }
+  return body;
+}
 
 /**
  * Wire field names of a `#[serde(rename_all = "camelCase")]` struct.
@@ -64,8 +84,14 @@ const camel = (field: string) =>
  * report the camelCase names it never sends again.
  */
 function camelCaseWireFields(source: string, struct: string): string[] {
+  // Anchored at line start, with only whole attribute lines allowed between
+  // the attribute and the struct. A bare `\s*` would let a doc comment
+  // mentioning `#[serde(rename_all = "camelCase")]` stand in for the real one.
+  // `[^)]*` on both sides so a second option in the same attribute
+  // (`deny_unknown_fields`) is not read as the attribute having been removed.
   const declaration = new RegExp(
-    String.raw`#\[serde\(rename_all = "camelCase"\)\]\s*pub struct ${struct} \{([\s\S]*?)\n\}`,
+    String.raw`^#\[serde\([^)]*rename_all = "camelCase"[^)]*\)\]\n(?:#\[[^\n]*\]\n)*pub struct ${struct} \{([\s\S]*?)\n\}`,
+    'm',
   );
   const body = source.match(declaration)?.[1];
   if (!body) {
@@ -75,7 +101,20 @@ function camelCaseWireFields(source: string, struct: string): string[] {
     );
   }
 
-  const fields = [...body.matchAll(/^\s{4}pub (\w+):/gm)].map((match) => camel(match[1]));
+  // A per-field `rename`/`skip`/`flatten` overrides the struct-level rule, so
+  // reading names alone would report a wire field that is not on the wire.
+  // Refuse rather than guess. (`skip_serializing_if` has no word boundary
+  // after "skip" and is deliberately not caught: it affects presence, not name,
+  // and only in the response direction.)
+  const override_ = body.match(/#\[serde\([^)]*\b(?:rename|skip|flatten)\b[^)]*\)\]/);
+  if (override_) {
+    throw new Error(
+      `${struct} carries a per-field serde override (${override_[0]}) that this ` +
+        'extractor cannot model — teach it the rule or pin the field explicitly',
+    );
+  }
+
+  const fields = [...body.matchAll(/^\s{4}pub (?:r#)?(\w+):/gm)].map((match) => camel(match[1]));
   if (fields.length === 0) {
     throw new Error(`struct ${struct} parsed but yielded no fields`);
   }
@@ -116,8 +155,17 @@ describe('POST /api/servers/start request body', () => {
     expect(Object.keys(toStartServerRequest(FULL_CONFIG)).sort()).toEqual(expected.sort());
   });
 
-  it('names the model id `id`, the alias StartServerBody accepts', () => {
-    expect(SERVERS_RS).toMatch(/#\[serde\(alias = "id"\)\]\s*pub model_id:/);
+  it('is read by a StartServerBody that aliases `id` and flattens the rest', () => {
+    // Scoped to the struct rather than the file: `servers.rs` may grow another
+    // body type, and an alias on that one would satisfy a bare pattern while
+    // this contract quietly broke.
+    const body = structBody(SERVERS_RS, 'StartServerBody');
+
+    expect(body).toMatch(/#\[serde\(alias = "id"\)\]\s*pub model_id:/);
+
+    // Without `flatten`, Rust demands a nested `config` object and every
+    // start-server call 422s — a break no other assertion here would see.
+    expect(body).toMatch(/#\[serde\(flatten\)\]\s*pub config: StartServerRequest/);
   });
 
   it('flattens the config beside the id rather than nesting it', async () => {
@@ -132,6 +180,15 @@ describe('POST /api/servers/start request body', () => {
     expect(body.id).toBe(123);
     expect(body.contextLength).toBe(4096);
     expect(body.inferenceParams).toMatchObject({ temperature: 0.7 });
+  });
+
+  it('sends no inferenceParams key InferenceConfig would reject', () => {
+    const accepted = camelCaseWireFields(INFERENCE_RS, 'InferenceConfig');
+    expect(accepted).toContain('topP'); // extractor sanity check
+
+    const sent = Object.keys(toStartServerRequest(FULL_CONFIG).inferenceParams ?? {});
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.filter((key) => !accepted.includes(key))).toEqual([]);
   });
 
   it('omits id from the mapper output, which supplies it separately', () => {

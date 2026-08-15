@@ -1,18 +1,20 @@
 //! Bootstrap harness for the integration tests in this crate.
 //!
-//! Every test here needs the same two properties, and got neither by writing
-//! them out by hand:
+//! Every test here needs the same two properties, and wrote them out by hand:
 //!
 //! 1. **Isolation.** [`bootstrap`] without a `db_path` resolves through
 //!    `gglib_core::paths::database_path()`, which in a debug build is the
-//!    developer's own checkout. Tests were reading rows they did not create
-//!    and leaving rows behind for the next run.
-//! 2. **Honesty.** A bootstrap failure has to fail the test. The hand-written
-//!    form was `Err(_) => return`, which turns a contract test into a no-op
-//!    that reports success — the failure mode a contract test exists to catch.
+//!    developer's own checkout. No suite had this. Tests were reading rows
+//!    they did not create and leaving rows behind for the next run.
+//! 2. **Honesty.** A bootstrap failure has to fail the test. Every suite but
+//!    `daemon_route_contract` skipped instead — `Err(_) => return` in three
+//!    of them, `bootstrap(..).ok()?` behind a let-else in `daemon_access` —
+//!    which turns a contract test into a no-op that reports success.
 //!
-//! [`test_state`] is the only way to build a context here, so both properties
-//! hold by construction rather than by everyone remembering.
+//! Routing every suite through [`test_state`] leaves one place to get both
+//! right. Nothing enforces that: `gglib_axum::bootstrap` is `pub` and no CI
+//! check covers this directory, so a new test can still open the developer's
+//! database by writing the four lines out again.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,22 +26,31 @@ use gglib_core::CorsConfig;
 
 use super::ports::TEST_BASE_PORT;
 
-/// Scratch directory for this test binary, emptied once per run.
+/// Scratch directory for this test process.
 ///
 /// Under Cargo's own scratch directory so `cargo clean` collects it, and
-/// keyed by the running executable's file name because Cargo runs this
-/// crate's test binaries concurrently. `LazyLock` is what makes the wipe
-/// safe: it runs the initialiser exactly once, with every other test
-/// blocked until it finishes, so no test can be emptying the directory
-/// while a sibling holds a database open inside it.
+/// keyed by both the executable's file name and the process id.
+///
+/// The pid is what makes it correct, not decoration. An earlier version
+/// keyed on the binary alone and emptied the directory on first use, which
+/// two concurrent `cargo test` runs of the same binary defeat exactly: both
+/// wipe the shared directory, both restart the counter at zero, and both
+/// open `gglib-0.db` — reproduced as `SQLITE_BUSY: database is locked`. A
+/// per-process directory cannot be shared, so nothing needs emptying and
+/// there is no destructive step left to order against anything.
+///
+/// (Cargo runs this crate's test binaries one at a time; it is the tests
+/// *within* a binary that share a process. The binary name is in the path
+/// for legibility, not for exclusion.)
 static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    let binary = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.file_name().map(std::ffi::OsStr::to_os_string))
-        .expect("test executable has a file name");
+    let exe = std::env::current_exe().expect("locate the test executable");
+    let binary = exe
+        .file_name()
+        .expect("test executable has a file name")
+        .to_string_lossy();
 
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(binary);
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{binary}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create isolated data dir");
     dir
 });
@@ -72,9 +83,9 @@ fn test_config(cors: CorsConfig) -> ServerConfig {
 ///
 /// # Panics
 ///
-/// If bootstrap fails. That is the point: a test that skips itself when its
-/// fixture will not build reports success for a surface it never reached.
-#[allow(dead_code)] // each test binary uses a different subset
+/// If bootstrap fails. That is the point, and it is #842's convention: a
+/// route-contract test that passes silently is the failure mode it exists to
+/// prevent, since #834 shipped a deleted route through a fully green suite.
 pub(crate) async fn test_state(cors: CorsConfig) -> Arc<AxumContext> {
     let ctx = bootstrap(test_config(cors))
         .await

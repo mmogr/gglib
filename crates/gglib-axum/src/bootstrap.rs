@@ -57,9 +57,8 @@ pub struct ServerConfig {
     ///
     /// Naming a path lets a caller run against a database of its own, which
     /// is what keeps the integration tests off the developer's: in a debug
-    /// build [`database_path`] resolves into the checkout itself. The parent
-    /// directory must exist — unlike [`database_path`], this path is taken
-    /// as given.
+    /// build [`database_path`] resolves into the checkout itself. Either way
+    /// the parent directory is created if missing, by the database layer.
     pub db_path: Option<PathBuf>,
 }
 
