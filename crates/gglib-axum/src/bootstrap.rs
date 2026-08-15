@@ -53,6 +53,14 @@ pub struct ServerConfig {
     pub static_dir: Option<PathBuf>,
     /// CORS configuration.
     pub cors: CorsConfig,
+    /// Database file to open. `None` resolves through [`database_path`].
+    ///
+    /// Naming a path lets a caller run against a database of its own, which
+    /// is what keeps the integration tests off the developer's: in a debug
+    /// build [`database_path`] resolves into the checkout itself. The parent
+    /// directory must exist — unlike [`database_path`], this path is taken
+    /// as given.
+    pub db_path: Option<PathBuf>,
 }
 
 impl ServerConfig {
@@ -66,6 +74,7 @@ impl ServerConfig {
             max_concurrent_agent_loops: 4,
             static_dir: None,
             cors: CorsConfig::default(),
+            db_path: None,
         })
     }
 }
@@ -133,7 +142,10 @@ pub struct AxumContext {
 /// Bootstrap the Axum server with all services.
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Log resolved paths at startup for diagnostics
-    let db_path = database_path()?;
+    let db_path = match &config.db_path {
+        Some(path) => path.clone(),
+        None => database_path()?,
+    };
     let data_root_path = data_root()?;
     let resource_root_path = resource_root()?;
     let models_resolution = resolve_models_dir(None)?;
