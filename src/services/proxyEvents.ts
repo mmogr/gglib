@@ -5,7 +5,7 @@
  * Proxy always uses HTTP/axum (no Tauri commands), so events are
  * SSE-only on both web and desktop — no platform branching needed.
  *
- * Uses subscribeSseEvent directly (not subscribeToEvent). That began as a way
+ * Uses subscribeSseEvent directly. That began as a way
  * around a platform-selected transport that routed to Tauri IPC on desktop
  * and never received proxy events; that branch is gone — `createEventBus()`
  * returns the SSE bus unconditionally — so the two now reach the same stream.
