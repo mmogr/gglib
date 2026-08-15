@@ -84,6 +84,14 @@ generate_table_for_dir() {
         if [[ -f "$RS_FILE" ]]; then
             local BASENAME="$(basename "$RS_FILE")"
             local MODNAME="${BASENAME%.rs}"
+            # Skip files that are not modules of this directory. A
+            # `#[cfg(test)] #[path = "x_tests.rs"] mod tests;` include has no
+            # `mod x_tests;` anywhere, so listing it advertises a test file as
+            # a module — and in a crate-root README, whose links build.rs
+            # rewrites into intra-doc links, rustdoc then fails to resolve it.
+            if ! grep -rqs "^\s*\(pub(crate) \|pub \)\?mod $MODNAME;" "$DIR"/*.rs; then
+                continue
+            fi
             if [[ "$MODNAME" != "mod" && "$MODNAME" != "lib" && "$MODNAME" != "main" ]]; then
                 generate_row "$BASENAME" "$BADGE_PREFIX_BASE-$MODNAME" "$LINK_PREFIX$BASENAME"
             fi

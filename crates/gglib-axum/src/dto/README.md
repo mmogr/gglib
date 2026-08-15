@@ -15,6 +15,7 @@ control. They decouple internal domain types from external API representation.
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`diagnostics.rs`](diagnostics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-diagnostics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-diagnostics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-diagnostics-coverage.json) |
 | [`system.rs`](system.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-system-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-system-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-dto-system-coverage.json) |
 <!-- module-table:end -->
 
