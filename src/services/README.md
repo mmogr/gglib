@@ -43,7 +43,7 @@ The services module contains the TypeScript client layer for the gglib GUI front
 | Directory | Description |
 |-----------|-------------|
 | [`clients/`](clients/) | API client functions for each domain (models, servers, chat, downloads, etc.) |
-| [`transport/`](transport/) | Platform-agnostic transport layer (Tauri IPC vs HTTP) with type mappers |
+| [`transport/`](transport/) | Transport layer — HTTP for requests, SSE for events — with type mappers |
 | [`platform/`](platform/) | Platform-specific utilities (file dialogs, URL opening, menu sync) |
 | [`tools/`](tools/) | MCP tool integration and builtin tool registry |
 | [`server/`](server/) | Safe action wrappers for server operations |
@@ -54,8 +54,8 @@ The services module contains the TypeScript client layer for the gglib GUI front
 | File | Description |
 |------|-------------|
 | `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. |
-| `serverEvents.ts` | Platform adapter that initializes Tauri events (desktop). Web uses unified SSE transport. |
-| `serverEvents.tauri.ts` | Listens to Tauri `server:*` events and ingests them into the registry |
+| `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry |
+| `serverEvents.normalize.ts` | Normalises the wire's mixed-casing event payloads before ingestion |
 
 ## Clients
 

@@ -22,17 +22,24 @@
  *
  *   2. **The body is flat.** `StartServerBody` takes the model id as
  *      `#[serde(alias = "id")]` and the rest through `#[serde(flatten)]`, so
- *      `id` sits beside the config keys rather than wrapping them. Both
- *      attributes are pinned: dropping either makes every start-server call
- *      fail deserialisation, and nothing else here would notice.
+ *      `id` sits beside the config keys rather than wrapping them. Both are
+ *      pinned, and they fail differently: without `flatten` the body will not
+ *      deserialise at all (`missing field 'config'`), while without the alias
+ *      it deserialises fine and the handler answers 400 on a missing model
+ *      id. Nothing else here would notice either.
  *
- *   3. **No `inferenceParams` key the backend would reject.**
+ *   3. **No `inferenceParams` key the backend would silently drop.**
  *
  * What is deliberately *not* pinned: that the GUI sends every
  * `InferenceConfig` field. It sends 7 of 16 — `frequency_penalty`,
  * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` have no GUI
- * control — and each is `Option`, so omitting them is well-formed. Only the
- * direction that breaks something is guarded: a key Rust would not accept.
+ * control — and each is `Option`, so omitting them is well-formed.
+ *
+ * Note the asymmetry, because it sets what this guard is worth: nothing on
+ * this path sets `deny_unknown_fields`, so an unknown key is *ignored*, not
+ * rejected. The failure it catches is therefore a GUI control that silently
+ * stops reaching the backend — no error, no 422, just a setting that stops
+ * working.
  *
  * Following this directory's rules: the extractors anchor on the guard —
  * `rename_all` for a wire-name list, the struct body for an attribute — and
@@ -65,15 +72,26 @@ const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
 const camel = (field: string) =>
   field.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 
-/** A named struct's body, so a pattern cannot match the wrong declaration. */
+/**
+ * A named struct's body, so a pattern cannot match the wrong declaration.
+ *
+ * Anchored at column zero and required to be unique: unanchored, a same-named
+ * decoy nested in a `mod` earlier in the file wins the match, and would
+ * satisfy both attribute guards while the real struct had lost them.
+ */
 function structBody(source: string, struct: string): string {
-  const body = source.match(
-    new RegExp(String.raw`pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`),
-  )?.[1];
-  if (!body) {
-    throw new Error(`no struct ${struct} — renamed or restructured`);
+  const matches = [
+    ...source.matchAll(
+      new RegExp(String.raw`^pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`, 'gm'),
+    ),
+  ];
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly one top-level struct ${struct}, found ${matches.length} — ` +
+        'renamed, restructured, or shadowed by a same-named declaration',
+    );
   }
-  return body;
+  return matches[0][1];
 }
 
 /**
@@ -103,10 +121,17 @@ function camelCaseWireFields(source: string, struct: string): string[] {
 
   // A per-field `rename`/`skip`/`flatten` overrides the struct-level rule, so
   // reading names alone would report a wire field that is not on the wire.
-  // Refuse rather than guess. (`skip_serializing_if` has no word boundary
-  // after "skip" and is deliberately not caught: it affects presence, not name,
-  // and only in the response direction.)
-  const override_ = body.match(/#\[serde\([^)]*\b(?:rename|skip|flatten)\b[^)]*\)\]/);
+  // Refuse rather than guess.
+  //
+  // Bounded on `]` rather than `)`, or serde's list form —
+  // `rename(serialize = "p", deserialize = "p")` — closes the group early and
+  // slips past. `skip_serializing_if` is the one deliberate exemption: it
+  // affects presence rather than name, and only when serialising, which is
+  // not the direction this body travels. The `\b` after each alternative is
+  // what excludes it, since `_` is a word character.
+  const override_ = body.match(
+    /#\[serde\([^\]]*(?:\b(?:rename|flatten)\b|\bskip(?:_serializing|_deserializing)?\b)[^\]]*\]/,
+  );
   if (override_) {
     throw new Error(
       `${struct} carries a per-field serde override (${override_[0]}) that this ` +
@@ -152,7 +177,18 @@ describe('POST /api/servers/start request body', () => {
     // regex that matched nothing would otherwise make this test vacuous.
     expect(expected).toContain('contextLength');
 
-    expect(Object.keys(toStartServerRequest(FULL_CONFIG)).sort()).toEqual(expected.sort());
+    const sent = toStartServerRequest(FULL_CONFIG);
+    expect(Object.keys(sent).sort()).toEqual(expected.sort());
+
+    // Keys are not enough. A key whose value is `undefined` is absent from
+    // the JSON body, so pinning the key set alone lets the mapper stop
+    // forwarding a control entirely — inert spec-draft inputs, say — while
+    // every assertion here still passes. `reasoningFormat` is the one
+    // deliberate omission: the backend auto-detects it from model tags.
+    const omitted = Object.entries(sent)
+      .filter(([, value]) => value === undefined)
+      .map(([key]) => key);
+    expect(omitted).toEqual(['reasoningFormat']);
   });
 
   it('is read by a StartServerBody that aliases `id` and flattens the rest', () => {
@@ -161,10 +197,13 @@ describe('POST /api/servers/start request body', () => {
     // this contract quietly broke.
     const body = structBody(SERVERS_RS, 'StartServerBody');
 
+    // Without the alias the body still deserialises; `start_body` then answers
+    // 400 on a missing model id, so every start-server call fails at the
+    // handler instead of the extractor.
     expect(body).toMatch(/#\[serde\(alias = "id"\)\]\s*pub model_id:/);
 
-    // Without `flatten`, Rust demands a nested `config` object and every
-    // start-server call 422s — a break no other assertion here would see.
+    // Without `flatten`, Rust demands a nested `config` object and the body
+    // fails to deserialise — a break no other assertion here would see.
     expect(body).toMatch(/#\[serde\(flatten\)\]\s*pub config: StartServerRequest/);
   });
 
@@ -182,7 +221,7 @@ describe('POST /api/servers/start request body', () => {
     expect(body.inferenceParams).toMatchObject({ temperature: 0.7 });
   });
 
-  it('sends no inferenceParams key InferenceConfig would reject', () => {
+  it('sends no inferenceParams key InferenceConfig would silently drop', () => {
     const accepted = camelCaseWireFields(INFERENCE_RS, 'InferenceConfig');
     expect(accepted).toContain('topP'); // extractor sanity check
 

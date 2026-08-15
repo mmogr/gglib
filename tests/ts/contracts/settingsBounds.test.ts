@@ -32,9 +32,11 @@ import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
 import type { SamplingParamKey } from '../../../src/types';
 
-// vitest runs with the project root as cwd, and the crates live beside it.
+// Relative to this file, not the cwd: `vitest --root` moves the cwd.
+const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+
 function rust(relativePath: string): string {
-  return readFileSync(resolve(process.cwd(), relativePath), 'utf8');
+  return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8');
 }
 
 const SETTINGS_RS = rust('crates/gglib-core/src/settings.rs');

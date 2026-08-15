@@ -10,7 +10,9 @@ import { resolve } from 'node:path';
 import { MAX_STAGNATION_STEPS } from '../../../src/constants/settingsDefaults';
 import { STARTER_PROFILES } from '../../../src/components/SettingsModal/InferenceProfiles';
 
-const rust = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+// Relative to this file, not the cwd: `vitest --root` moves the cwd.
+const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
 
 describe('starter profiles mirror builtin_templates()', () => {
   const FILE = rust('crates/gglib-core/src/domain/inference_profile.rs');
