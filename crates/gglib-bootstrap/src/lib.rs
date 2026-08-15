@@ -1,6 +1,3 @@
-// Not yet swept for `unreachable_pub` — see the dead-code arc. The workspace
-// denies it; this crate opts out until its module tree is closed.
-#![allow(unreachable_pub)]
 //! Shared composition root for gglib adapters.
 //!
 //! This crate consolidates the common infrastructure-wiring steps that every
