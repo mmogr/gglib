@@ -44,7 +44,7 @@ use super::BenchmarkDeps;
 use super::mapper::{PerfBenchOutput, parse_perf_output};
 
 /// Entry point called by [`super::BenchmarkOps::run_perf`].
-pub async fn run_perf(
+pub(crate) async fn run_perf(
     deps: &BenchmarkDeps,
     config: PerfConfig,
     tx: Sender<BenchmarkEvent>,

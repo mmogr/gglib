@@ -30,7 +30,7 @@ use crate::error::GuiError;
 /// Validates that the port is in the valid range (1024-65535).
 ///
 /// Returns (port, source_description) for logging.
-pub fn resolve_llama_base_port(
+pub(crate) fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,
 ) -> Result<(u16, &'static str), GuiError> {

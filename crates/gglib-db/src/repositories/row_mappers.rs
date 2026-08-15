@@ -8,12 +8,12 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
 /// prefix to avoid conflicts and allow defensive parsing in `row_to_model`.
-pub const BENCHMARK_SUMMARY_COLUMNS: &str = "s.model_id AS s_model_id, \
+pub(crate) const BENCHMARK_SUMMARY_COLUMNS: &str = "s.model_id AS s_model_id, \
      s.best_tg_tps AS s_best_tg_tps, \
      s.best_pp_tps AS s_best_pp_tps, \
      s.latest_tg_tps AS s_latest_tg_tps, \
@@ -25,7 +25,7 @@ pub const BENCHMARK_SUMMARY_COLUMNS: &str = "s.model_id AS s_model_id, \
      s.updated_at AS s_updated_at";
 
 /// Helper to parse datetime strings that may have "UTC" suffix.
-pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
+pub(crate) fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
     datetime_str.and_then(|s| {
         let trimmed = s.trim_end_matches(" UTC");
         NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S%.f")
@@ -35,7 +35,7 @@ pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
 }
 
 /// Parse a database row into a Model.
-pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryError> {
+pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryError> {
     let context_length: Option<u64> = row
         .try_get::<Option<i64>, _>("context_length")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?
@@ -213,12 +213,12 @@ fn try_read_summary(row: &sqlx::sqlite::SqliteRow) -> Option<ModelBenchmarkSumma
 /// Delegates so that the stored column, the `model_key` derived from it and
 /// the duplicate lookup that reads it all share one definition of "the same
 /// file"; see [`gglib_core::paths::canonical_model_path`].
-pub fn normalized_file_path_string(path: &Path) -> String {
+pub(crate) fn normalized_file_path_string(path: &Path) -> String {
     gglib_core::paths::canonical_model_path_string(path)
 }
 
 /// Parse a database row into a ModelFile.
-pub fn map_model_file_row(
+pub(crate) fn map_model_file_row(
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<gglib_core::domain::ModelFile, sqlx::Error> {
     Ok(gglib_core::domain::ModelFile {
