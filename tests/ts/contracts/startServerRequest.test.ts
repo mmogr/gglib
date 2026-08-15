@@ -60,8 +60,10 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   get: vi.fn(),
 }));
 
-// Relative to this file, not to the cwd: `vitest --root` moves the cwd and
-// would turn a contract test into an ENOENT.
+// Relative to this file, not the cwd. These paths resolve against wherever
+// vitest was invoked from, so running it anywhere but the repo root — an
+// IDE runner, or `--root` pointed back here from a subdirectory — turns a
+// contract test into an ENOENT rather than a failure it can explain.
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const rust = (path: string) => readFileSync(resolve(REPO_ROOT, path), 'utf8');
 

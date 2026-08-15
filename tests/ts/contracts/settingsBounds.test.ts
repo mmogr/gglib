@@ -32,7 +32,10 @@ import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
 import type { SamplingParamKey } from '../../../src/types';
 
-// Relative to this file, not the cwd: `vitest --root` moves the cwd.
+// Relative to this file, not the cwd. These paths resolve against wherever
+// vitest was invoked from, so running it anywhere but the repo root — an
+// IDE runner, or `--root` pointed back here from a subdirectory — turns a
+// contract test into an ENOENT rather than a failure it can explain.
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 
 function rust(relativePath: string): string {

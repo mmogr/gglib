@@ -61,7 +61,18 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let dir = root.join(&name);
 
-    let _ = std::fs::remove_dir_all(&dir);
+    // Not `let _ =`. `create_dir_all` returns `Ok` for a directory that
+    // already exists, so a wipe that failed would be invisible and this
+    // process would inherit a dead run's rows — the defect the wipe exists to
+    // prevent, arriving silently. Only "it was not there" is an acceptable
+    // failure to empty it.
+    if let Err(e) = std::fs::remove_dir_all(&dir) {
+        assert_eq!(
+            e.kind(),
+            std::io::ErrorKind::NotFound,
+            "could not empty the scratch directory {dir:?}: {e}"
+        );
+    }
     std::fs::create_dir_all(&dir).expect("create isolated data dir");
     // `dir` and `prefix` by argument, not through `SCRATCH_DIR`: we are inside
     // its initialiser, and touching it here would deadlock on itself.
@@ -101,7 +112,15 @@ fn sweep_stale(root: &std::path::Path, prefix: &str, ours: &std::path::Path) {
     };
 
     for entry in entries.flatten() {
-        if !entry.file_name().to_string_lossy().starts_with(prefix) {
+        // `<binary>-<pid>` exactly: a prefix test alone would also claim a
+        // directory some other tool happened to name after this binary.
+        let name = entry.file_name();
+        let is_scratch = name
+            .to_string_lossy()
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_prefix('-'))
+            .is_some_and(|pid| !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()));
+        if !is_scratch {
             continue;
         }
 
