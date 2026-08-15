@@ -74,14 +74,20 @@ const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
 const camel = (field: string) =>
   field.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 
+/** Rust with every string literal blanked, so a `]` or `)` inside one cannot
+ * terminate an attribute pattern early. */
+const withoutStrings = (rust: string) => rust.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+
 /**
- * A named struct's body, so a pattern cannot match the wrong declaration.
+ * Exactly one top-level struct: its attribute block and its body.
  *
- * Anchored at column zero and required to be unique: unanchored, a same-named
- * decoy nested in a `mod` earlier in the file wins the match, and would
- * satisfy both attribute guards while the real struct had lost them.
+ * Both anchoring rules live here so both callers get them. Anchored at column
+ * zero and required to be unique — unanchored, a same-named decoy (nested in a
+ * `mod`, or `#[cfg(any())]`-gated above the real one) wins the match and can
+ * supply an attribute the real struct has lost, which is a total silent wire
+ * break that every assertion downstream would report as healthy.
  */
-function structBody(source: string, struct: string): string {
+function declaration(source: string, struct: string): { attrs: string; body: string } {
   const matches = [
     ...source.matchAll(
       new RegExp(String.raw`^pub(?:\([^)]*\))? struct ${struct} \{([\s\S]*?)\n\}`, 'gm'),
@@ -93,8 +99,16 @@ function structBody(source: string, struct: string): string {
         'renamed, restructured, or shadowed by a same-named declaration',
     );
   }
-  return matches[0][1];
+
+  const [match] = matches;
+  const start = match.index;
+  // Attributes and doc comments are contiguous with the declaration, back to
+  // the blank line that separates it from whatever precedes it.
+  const attrs = source.slice(source.lastIndexOf('\n\n', start) + 2, start);
+  return { attrs, body: match[1] };
 }
+
+const structBody = (source: string, struct: string) => declaration(source, struct).body;
 
 /**
  * Wire field names of a `#[serde(rename_all = "camelCase")]` struct.
@@ -104,19 +118,20 @@ function structBody(source: string, struct: string): string {
  * report the camelCase names it never sends again.
  */
 function camelCaseWireFields(source: string, struct: string): string[] {
-  // Anchored at line start, with only whole attribute lines allowed between
-  // the attribute and the struct. A bare `\s*` would let a doc comment
-  // mentioning `#[serde(rename_all = "camelCase")]` stand in for the real one.
-  // `[^)]*` on both sides so a second option in the same attribute
+  const { attrs, body } = declaration(source, struct);
+
+  // Read from the attribute block belonging to *this* declaration, with
+  // comment lines dropped so a doc comment quoting the attribute cannot stand
+  // in for it. `[^)]*` on both sides so a second option in the same attribute
   // (`deny_unknown_fields`) is not read as the attribute having been removed.
-  const declaration = new RegExp(
-    String.raw`^#\[serde\([^)]*rename_all = "camelCase"[^)]*\)\]\n(?:#\[[^\n]*\]\n)*pub struct ${struct} \{([\s\S]*?)\n\}`,
-    'm',
-  );
-  const body = source.match(declaration)?.[1];
-  if (!body) {
+  const attrLines = attrs
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .join('\n');
+
+  if (!/#\[serde\([^)]*rename_all = "camelCase"[^)]*\)\]/.test(attrLines)) {
     throw new Error(
-      `no #[serde(rename_all = "camelCase")] struct ${struct} — it was renamed, ` +
+      `no #[serde(rename_all = "camelCase")] on struct ${struct} — it was renamed, ` +
         'restructured, or lost the attribute, and this test no longer describes the wire',
     );
   }
@@ -125,14 +140,17 @@ function camelCaseWireFields(source: string, struct: string): string[] {
   // reading names alone would report a wire field that is not on the wire.
   // Refuse rather than guess.
   //
-  // Bounded on `]` rather than `)`, or serde's list form —
-  // `rename(serialize = "p", deserialize = "p")` — closes the group early and
-  // slips past. `skip_serializing_if` is the one deliberate exemption: it
-  // affects presence rather than name, and only when serialising, which is
-  // not the direction this body travels. The `\b` after each alternative is
-  // what excludes it, since `_` is a word character.
-  const override_ = body.match(
-    /#\[serde\([^\]]*(?:\b(?:rename|flatten)\b|\bskip(?:_serializing|_deserializing)?\b)[^\]]*\]/,
+  // Scanned with strings blanked: bounding on `)` missed serde's list form,
+  // and bounding on `]` merely moved the blind spot to a `]` inside a string
+  // literal, which `rename` and `alias` both accept. `cfg_attr` counts too — a
+  // feature-gated rename changes the wire under exactly one build.
+  //
+  // `skip_serializing_if` is the one deliberate exemption: it affects presence
+  // rather than name, and only when serialising, which is not the direction
+  // this body travels. The `\b` is what excludes it, since `_` is a word
+  // character.
+  const override_ = withoutStrings(body).match(
+    /#\[(?:serde|cfg_attr)\([^\]]*(?:\b(?:rename|flatten)\b|\bskip(?:_serializing|_deserializing)?\b)[^\]]*\]/,
   );
   if (override_) {
     throw new Error(
@@ -182,15 +200,31 @@ describe('POST /api/servers/start request body', () => {
     const sent = toStartServerRequest(FULL_CONFIG);
     expect(Object.keys(sent).sort()).toEqual(expected.sort());
 
-    // Keys are not enough. A key whose value is `undefined` is absent from
-    // the JSON body, so pinning the key set alone lets the mapper stop
-    // forwarding a control entirely — inert spec-draft inputs, say — while
-    // every assertion here still passes. `reasoningFormat` is the one
-    // deliberate omission: the backend auto-detects it from model tags.
-    const omitted = Object.entries(sent)
-      .filter(([, value]) => value === undefined)
-      .map(([key]) => key);
-    expect(omitted).toEqual(['reasoningFormat']);
+    // Keys are not enough, and neither is "is it undefined". A key can carry
+    // `undefined` (absent from the JSON body), `null` (present, and read as
+    // `None` for every `Option` here — the user's value dropped just the
+    // same), a constant, or the wrong source field, and a presence-only check
+    // passes all four. Pin the values, sourced from the fixture so the
+    // wiring itself is what is asserted.
+    expect(sent).toEqual({
+      contextLength: FULL_CONFIG.contextLength,
+      port: FULL_CONFIG.port,
+      mlock: FULL_CONFIG.mlock,
+      jinja: FULL_CONFIG.jinja,
+      // Omitted on purpose: the backend auto-detects it from model tags.
+      reasoningFormat: undefined,
+      mtpDraftNMax: FULL_CONFIG.specDraftNMax,
+      mtpDraftPMin: FULL_CONFIG.specDraftPMin,
+      inferenceParams: {
+        temperature: FULL_CONFIG.temperature,
+        topP: FULL_CONFIG.topP,
+        topK: FULL_CONFIG.topK,
+        maxTokens: FULL_CONFIG.maxTokens,
+        repeatPenalty: FULL_CONFIG.repeatPenalty,
+        presencePenalty: FULL_CONFIG.presencePenalty,
+        minP: FULL_CONFIG.minP,
+      },
+    });
   });
 
   it('is read by a StartServerBody that aliases `id` and flattens the rest', () => {

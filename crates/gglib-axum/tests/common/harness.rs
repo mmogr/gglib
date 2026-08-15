@@ -87,9 +87,19 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 
 /// How long a scratch directory is assumed to belong to a live run.
 ///
-/// These suites finish in seconds; an hour is far outside any run's lifetime,
-/// so a directory older than this cannot belong to a process still using it.
-const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+/// These suites finish in seconds, so a day is enormously more than any run
+/// needs. The margin is deliberate: mtime is a proxy for liveness, and the
+/// cheap ways it can lie all lie by making a directory look *older* than it
+/// is — a forward clock step from NTP correcting a bad RTC, most plausibly on
+/// a freshly booted CI runner. An hour is within the range of such a step; a
+/// day is not, for any machine that will then run a test suite against the
+/// same target directory.
+///
+/// The exact test would be to read the pid out of the directory name and ask
+/// whether it is alive. That needs `libc::kill`, which is not a dependency of
+/// this crate, and pids are only unique within a namespace anyway — two
+/// containers sharing a bind-mounted `target/` can present the same one.
+const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
 
 /// Drop scratch directories left by earlier runs of *this* binary.
 ///
