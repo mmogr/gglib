@@ -17,6 +17,12 @@ infrastructure concerns (database, filesystem, etc.).
 - `gguf` - GGUF metadata and capability types
 - `capabilities` - Model capability detection and inference
 - `thinking` - Thinking/reasoning tag parsing and streaming accumulation
+- `kv_memory` - Shape of a model's KV memory from GGUF metadata: whether it
+  keeps only part of the token history (`kv_memory_is_partial`), and how many
+  layers hold a per-token cache at all (`kv_cache_layer_count`)
+- `kv_estimate` - Per-token KV cache size, which takes that layer count from
+  `kv_memory` rather than counting every block. The dependency runs one way
+  only: `kv_memory` reads metadata and knows nothing of the estimate
 
 <!-- module-docs:end -->
 
@@ -38,6 +44,7 @@ infrastructure concerns (database, filesystem, etc.).
 | [`inference_profile.rs`](inference_profile.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference_profile-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference_profile-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference_profile-coverage.json) |
 | [`inference.rs`](inference.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-inference-coverage.json) |
 | [`kv_estimate.rs`](kv_estimate.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_estimate-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_estimate-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_estimate-coverage.json) |
+| [`kv_memory_tests.rs`](kv_memory_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory_tests-coverage.json) |
 | [`kv_memory.rs`](kv_memory.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-kv_memory-coverage.json) |
 | [`launch_narration.rs`](launch_narration.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-launch_narration-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-launch_narration-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-launch_narration-coverage.json) |
 | [`model_naming.rs`](model_naming.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model_naming-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model_naming-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model_naming-coverage.json) |
