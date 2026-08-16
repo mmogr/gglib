@@ -58,7 +58,7 @@ pub use kv_estimate::{
 };
 
 // Re-export KV memory-shape detection at the domain level for convenience
-pub use kv_memory::kv_memory_is_partial;
+pub use kv_memory::{kv_cache_layer_count, kv_memory_is_partial};
 pub use model_sampling::{
     MODEL_SAMPLING_KEYS, ModelSamplingDefault, ModelSamplingDefaults, SamplingOverride,
 };

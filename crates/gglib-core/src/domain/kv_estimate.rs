@@ -13,16 +13,16 @@
 //! `.gguf` file is needed. Every key is architecture-prefixed
 //! (`qwen3.block_count`, `llama.attention.head_count_kv`, …).
 //!
-//! This is deliberately an *estimate*: it models the standard transformer
-//! KV-cache layout and ignores architecture-specific extras (sliding-window
-//! layers, MLA compression, per-layer overrides). It is used only for
-//! conservative memory budgeting, never for correctness, and returns `None`
-//! rather than guessing when the metadata doesn't carry what it needs.
+//! This is deliberately an *estimate*: it counts only the layers that hold a
+//! per-token cache (see [`crate::domain::kv_memory::kv_cache_layer_count`]) and
+//! models no other architecture-specific extras (MLA compression, per-layer
+//! overrides). It is for conservative memory budgeting, never for correctness.
 
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use crate::cache_config::KvCacheType;
+use crate::domain::kv_memory::kv_cache_layer_count;
 
 /// Per-token K and V element counts, type-agnostic.
 ///
@@ -51,11 +51,11 @@ fn lookup<S: BuildHasher>(
 
 /// Estimate K and V element counts consumed per token of context.
 ///
-/// Formula (standard transformer KV cache):
+/// Formula, over the layers that hold a cache ([`kv_cache_layer_count`]):
 ///
 /// ```text
-/// k_elems/token = block_count × head_count_kv × key_length
-/// v_elems/token = block_count × head_count_kv × value_length
+/// k_elems/token = kv_cache_layers × head_count_kv × key_length
+/// v_elems/token = kv_cache_layers × head_count_kv × value_length
 /// ```
 ///
 /// `key_length`/`value_length` are the per-head dimensions. When absent, both
@@ -85,7 +85,7 @@ pub fn estimate_kv_elems_per_token<S: BuildHasher>(
         .or_else(|| metadata.get("general.architecture").cloned())?;
     let arch = arch.trim().to_ascii_lowercase();
 
-    let block_count = lookup(metadata, &arch, "block_count")?;
+    let cache_layers = kv_cache_layer_count(metadata, Some(&arch))?;
     let head_count = lookup(metadata, &arch, "attention.head_count");
     // Grouped-query attention shrinks the KV cache: prefer head_count_kv.
     let head_count_kv = lookup(metadata, &arch, "attention.head_count_kv").or(head_count)?;
@@ -101,11 +101,11 @@ pub fn estimate_kv_elems_per_token<S: BuildHasher>(
     let value_length =
         lookup(metadata, &arch, "attention.value_length").or_else(derived_head_dim)?;
 
-    if block_count == 0 || head_count_kv == 0 {
+    if cache_layers == 0 || head_count_kv == 0 {
         return None;
     }
 
-    let per_head = block_count.saturating_mul(head_count_kv);
+    let per_head = cache_layers.saturating_mul(head_count_kv);
     Some(KvElemsPerToken {
         k: per_head.saturating_mul(key_length),
         v: per_head.saturating_mul(value_length),

@@ -1,4 +1,5 @@
-//! Detection of partial-KV-memory architectures from GGUF metadata.
+//! The shape of a model's KV memory, read from GGUF metadata: whether it
+//! retains the full token history, and how many layers hold a cache at all.
 //!
 //! Some model architectures do not retain the full token history in their KV
 //! memory: sliding-window attention (SWA) layers keep only a recent window,
@@ -28,6 +29,10 @@
 //! silently costs minutes of TTFT per restore. Some older GGUFs carry a
 //! `sliding_window` key the runtime ignores; treating them as partial is the
 //! safe direction.
+//!
+//! [`kv_cache_layer_count`] answers the quantitative half of the same
+//! question — how many layers hold a per-token cache — and is what
+//! [`crate::domain::estimate_kv_elems_per_token`] sizes its budget from.
 
 use std::collections::HashMap;
 use std::hash::BuildHasher;
@@ -52,6 +57,22 @@ fn lookup_u64<S: BuildHasher>(
     suffix: &str,
 ) -> Option<u64> {
     lookup_raw(metadata, arch, suffix).and_then(|v| v.parse::<u64>().ok())
+}
+
+/// Resolve the GGUF key prefix: the caller's architecture when it knows one,
+/// else the file's own `general.architecture`, normalised for lookup. Empty
+/// when neither is available, which is harmless — [`lookup_raw`]'s unprefixed
+/// fallback still runs.
+fn resolve_arch<S: BuildHasher>(
+    metadata: &HashMap<String, String, S>,
+    architecture: Option<&str>,
+) -> String {
+    architecture
+        .map(str::to_owned)
+        .or_else(|| metadata.get("general.architecture").cloned())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
 }
 
 /// Whether the model's KV memory retains only part of the token history
@@ -83,11 +104,7 @@ pub fn kv_memory_is_partial<S: BuildHasher>(
     metadata: &HashMap<String, String, S>,
     architecture: Option<&str>,
 ) -> bool {
-    let arch = architecture
-        .map(str::to_owned)
-        .or_else(|| metadata.get("general.architecture").cloned())
-        .unwrap_or_default();
-    let arch = arch.trim().to_ascii_lowercase();
+    let arch = resolve_arch(metadata, architecture);
 
     if lookup_u64(metadata, &arch, "full_attention_interval").is_some_and(|v| v > 1) {
         return true;
@@ -102,110 +119,56 @@ pub fn kv_memory_is_partial<S: BuildHasher>(
     false
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// How many of the model's layers hold a per-token KV cache.
+///
+/// On a plain transformer that is every layer, so this is `{arch}.block_count`
+/// unchanged. Hybrid-attention architectures interleave two kinds of layer:
+/// `{arch}.full_attention_interval = 4` means every 4th layer is full
+/// attention, so of Qwen3.8's 64 blocks only 16 keep a KV cache.
+///
+/// The other 48 are linear/SSM layers, and they contribute **zero** here on
+/// purpose. Their state is a fixed-size summary — constant in context length,
+/// not proportional to it — so its cost belongs in a weights-side allowance,
+/// not in a per-token figure. A per-token figure is a slope: whatever it
+/// carries gets multiplied by the context size. Folding those layers in
+/// therefore over-counts them by the entire context — 256 KiB/token instead of
+/// 64, i.e. 64 GiB rather than 16 GiB at Qwen3.8's 262144-token context.
+///
+/// Division rounds **up**. When the interval does not divide the block count
+/// evenly the metadata alone cannot say which side the remainder falls on, and
+/// counting one layer too many over-states the budget — the safe direction for
+/// a figure the launcher plans memory against.
+///
+/// # Arguments
+///
+/// * `metadata` — raw GGUF key/value map (see [`crate::domain::Model::metadata`]).
+/// * `architecture` — the model's architecture, used as the key prefix. When
+///   `None`, falls back to the `general.architecture` metadata key.
+///
+/// # Returns
+///
+/// `None` when `block_count` is absent or non-numeric, so the "we don't know"
+/// signal keeps travelling rather than collapsing into a zero that would read
+/// as "KV is free" — [`crate::domain::estimate_kv_elems_per_token`] propagates
+/// it with `?`. An absent, non-numeric, or `1` interval leaves `block_count`
+/// untouched, so every full-attention model is bit-identical to before this
+/// function existed.
+#[must_use]
+pub fn kv_cache_layer_count<S: BuildHasher>(
+    metadata: &HashMap<String, String, S>,
+    architecture: Option<&str>,
+) -> Option<u64> {
+    let arch = resolve_arch(metadata, architecture);
+    let block_count = lookup_u64(metadata, &arch, "block_count")?;
 
-    /// Qwen3.6-shaped metadata: hybrid attention, every 4th layer full.
-    fn qwen36_metadata() -> HashMap<String, String> {
-        HashMap::from([
-            ("general.architecture".to_string(), "qwen35".to_string()),
-            (
-                "qwen35.full_attention_interval".to_string(),
-                "4".to_string(),
-            ),
-            ("qwen35.attention.head_count".to_string(), "24".to_string()),
-        ])
-    }
-
-    #[test]
-    fn detects_hybrid_full_attention_interval() {
-        assert!(kv_memory_is_partial(&qwen36_metadata(), Some("qwen35")));
-    }
-
-    #[test]
-    fn architecture_falls_back_to_general_architecture_key() {
-        assert!(kv_memory_is_partial(&qwen36_metadata(), None));
-    }
-
-    #[test]
-    fn architecture_lookup_is_case_insensitive() {
-        assert!(kv_memory_is_partial(&qwen36_metadata(), Some("QWEN35")));
-    }
-
-    /// Interval of 1 means every layer is full attention — not partial.
-    #[test]
-    fn interval_of_one_is_full_attention() {
-        let mut md = qwen36_metadata();
-        md.insert(
-            "qwen35.full_attention_interval".to_string(),
-            "1".to_string(),
-        );
-        assert!(!kv_memory_is_partial(&md, Some("qwen35")));
-    }
-
-    #[test]
-    fn detects_sliding_window_attention() {
-        let md = HashMap::from([
-            ("general.architecture".to_string(), "gemma3".to_string()),
-            (
-                "gemma3.attention.sliding_window".to_string(),
-                "1024".to_string(),
-            ),
-        ]);
-        assert!(kv_memory_is_partial(&md, Some("gemma3")));
-    }
-
-    /// A zero-size window means SWA is effectively disabled.
-    #[test]
-    fn zero_sliding_window_is_full_attention() {
-        let md = HashMap::from([(
-            "gemma3.attention.sliding_window".to_string(),
-            "0".to_string(),
-        )]);
-        assert!(!kv_memory_is_partial(&md, Some("gemma3")));
-    }
-
-    #[test]
-    fn detects_recurrent_ssm_state() {
-        let md = HashMap::from([
-            ("general.architecture".to_string(), "mamba".to_string()),
-            ("mamba.ssm.conv_kernel".to_string(), "4".to_string()),
-        ]);
-        assert!(kv_memory_is_partial(&md, Some("mamba")));
-    }
-
-    /// Plain full-attention transformer metadata (the Qwen3 fixture shape
-    /// from `kv_estimate`) must not trip the detector.
-    #[test]
-    fn full_attention_model_is_not_partial() {
-        let md = HashMap::from([
-            ("general.architecture".to_string(), "qwen3".to_string()),
-            ("qwen3.block_count".to_string(), "64".to_string()),
-            ("qwen3.attention.head_count".to_string(), "40".to_string()),
-            ("qwen3.attention.head_count_kv".to_string(), "8".to_string()),
-        ]);
-        assert!(!kv_memory_is_partial(&md, Some("qwen3")));
-    }
-
-    #[test]
-    fn empty_metadata_is_not_partial() {
-        assert!(!kv_memory_is_partial(&HashMap::new(), Some("llama")));
-        assert!(!kv_memory_is_partial(&HashMap::new(), None));
-    }
-
-    #[test]
-    fn unprefixed_keys_are_accepted_as_a_fallback() {
-        let md = HashMap::from([("attention.sliding_window".to_string(), "512".to_string())]);
-        assert!(kv_memory_is_partial(&md, Some("gemma2")));
-    }
-
-    #[test]
-    fn non_numeric_marker_values_are_ignored() {
-        let md = HashMap::from([(
-            "qwen35.full_attention_interval".to_string(),
-            "four".to_string(),
-        )]);
-        assert!(!kv_memory_is_partial(&md, Some("qwen35")));
+    // An interval of 1 (or none at all) means every layer is full attention,
+    // so there is nothing to divide out.
+    match lookup_u64(metadata, &arch, "full_attention_interval") {
+        Some(interval) if interval > 1 => Some(block_count.div_ceil(interval)),
+        _ => Some(block_count),
     }
 }
+
+#[cfg(test)]
+#[path = "kv_memory_tests.rs"]
+mod kv_memory_tests;
