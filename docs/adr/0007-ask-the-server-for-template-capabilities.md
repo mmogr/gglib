@@ -153,9 +153,8 @@ through `/props`.
 
 Consequence, taken as a decision below: `"none"` is not offered as a level.
 "Stop thinking" is expressed as `reasoning_budget_tokens: 0`, which is
-sampler-enforced (`common/reasoning-budget.{h,cpp}`) rather than
-template-dependent, and observable in slot params
-(`tools/server/server-schema.cpp:383`).
+sampler-enforced (`common/reasoning-budget.{h,cpp}`) and range-validated
+upstream (finding 7) rather than template-dependent.
 
 ### 5. A build-number gate fails closed on the machine in front of it
 
@@ -193,6 +192,48 @@ through the untrusted path ungoverned — exactly the passthrough PR #779
 with a new name. **Modelling the field is what creates governance**: an
 unmodelled key is invisible to the trust gate, to provenance, and to every
 discard record.
+
+### 7. The wire, measured — and a correction to this ADR
+
+Findings 1–6 were read from source. Before implementing, the contract was
+measured against the running pinned binary with the tiny `stories15M` model
+and swapped `--chat-template-file` values, by
+`scripts/experiments/reasoning_controls_wire_semantics.py`. Most of the
+reading held. Three things did not, and one of them was this ADR's own claim.
+
+**7a — `reasoning_budget_tokens` is not slot-observable. This ADR said it
+was, twice, and was wrong.** `tools/server/server-schema.cpp:383` defines the
+request-*parse* table, not an echo. `task_params::to_json`
+(`tools/server/server-task.cpp:32-147`) serialises no `reasoning_budget_*`
+field in either branch, and none appears in `/slots` (49 params captured
+mid-generation under `LLAMA_SERVER_SLOTS_DEBUG=1`) or in
+`/props.default_generation_settings.params`. Corrected in the consequences
+above: **both** controls are permanently Blind at the sampling boundary. The
+budget/taste split survives on its other legs — the budget is a budget, it is
+sampler-enforced, and (7c) it is the field upstream actually validates — but
+"verifiable counterpart" was not one of them, and citing a parse table as an
+echo is the same class of error as reading an instrument's own reflection.
+
+**7b — the caps read is not evidence that a kwarg will be honoured.** All
+nine keys are present on every launch, always explicitly `true`/`false` (this
+build draws no absent-vs-false distinction), and byte-identical across
+`--jinja`, `--no-jinja`, and the default. Capability publication is
+independent of the flag that decides whether template kwargs reach the model
+at all, so `supports_reasoning_effort: true` can be true on a server that
+will ignore the value. The fields stay `Option<bool>` regardless: five of the
+nine default `true` upstream, so a serde default would invert them on any
+build that omits one.
+
+**7c — the validation asymmetry runs opposite to the observability one.**
+`reasoning_budget_tokens: -2` is rejected with a clean HTTP 400 naming the
+range. `reasoning_effort` is never rejected: `"banana"` renders into the
+prompt verbatim, and a non-string silently degrades to the template's own
+default. Upstream governs the budget and does not govern effort at all —
+which is the sharpest argument that effort is the one gglib must govern.
+
+Confirmed live, not merely read: `"none"` renders `Reasoning: medium` on
+gpt-oss (finding 4's retraction), and on a template that ignores effort the
+value vanishes with no warning and no status change.
 
 ## Decision
 
@@ -284,26 +325,32 @@ documents later.
 - gglib carries no template-parsing code for this, so there is nothing to
   keep in sync as upstream's Jinja dialect grows.
 - "Stop thinking" rests on a mechanism that is sampler-enforced and
-  observable rather than a template variable most templates ignore
-  (finding 4).
+  range-validated rather than a template variable most templates ignore
+  (findings 4 and 7).
 
 **Stated plainly, because they are permanent:**
 
-- **The effort control is permanently unobservable at the sampling
-  boundary.** It becomes a template kwarg, consumed at render time; it is not
-  a sampler parameter, and no slot-params field echoes it
-  (`server-schema.cpp` defines none). ADR 0004's readback can verify that
-  `top_k` arrived; it can never verify that an effort level did anything.
-  This is not a gap an instrument will close — the provenance record is the
-  only account of the decision, and prompt-level effects are measurable only
-  by outcome evaluation, the instrument [ADR
+- **Both controls are permanently unobservable at the sampling boundary**
+  (finding 7). Effort becomes a template kwarg consumed at render time, and
+  no slot-params field echoes it. The budget is parsed into
+  `params.sampling`, but `task_params::to_json`
+  (`tools/server/server-task.cpp:32-147`) serialises no `reasoning_budget_*`
+  field in either branch, so nothing echoes it either. ADR 0004's readback
+  can verify that `top_k` arrived; it can never verify that either reasoning
+  control did anything. This is not a gap an instrument will close — the
+  provenance record is the only account of the decision, and prompt-level
+  effects are measurable only by outcome evaluation, the instrument [ADR
   0003](0003-defer-sampler-defaults-to-llama-cpp.md)'s closing rule already
-  notes does not exist yet.
-- **`reasoning_budget_tokens` is the universal, verifiable counterpart**, and
-  the pairing is deliberate: budget (client-authoritative, joining
-  `max_tokens`, slot-observable at `server-schema.cpp:383`) beside taste
-  (trust-gated, template-dependent, unobservable). When only one of the two
-  can be trusted to work everywhere, the API's shape should say which.
+  notes does not exist yet. Every readback surface must therefore render both
+  as permanently Blind, never as agreeing.
+- **`reasoning_budget_tokens` is the universal counterpart**, and the pairing
+  is deliberate: budget (client-authoritative, joining `max_tokens`,
+  sampler-enforced and range-validated upstream) beside taste (trust-gated,
+  template-dependent, accepted unvalidated). When only one of the two can be
+  trusted to work everywhere, the API's shape should say which. Note the
+  asymmetry runs the other way for validation than one might expect: the
+  budget is the field upstream governs, and effort is the field it does not
+  govern at all — which is precisely why effort is the one gglib gates.
 - **The caps live on the model row as a tri-state — supported / not
   supported / never observed — and the states are never collapsed.**
   Collapsing "never observed" into "not supported" is exactly how unknown
