@@ -38,6 +38,7 @@ pub mod slot_eviction;
 pub mod slots;
 pub(crate) mod slots_poller;
 pub(crate) mod sse_stream;
+pub mod template_caps_read;
 pub(crate) mod token_calibration;
 
 pub(crate) mod upstream_health;

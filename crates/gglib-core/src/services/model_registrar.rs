@@ -240,6 +240,7 @@ mod tests {
                 inference_defaults: model.inference_defaults.clone(),
                 defaults_origin: model.defaults_origin,
                 server_defaults: model.server_defaults.clone(),
+                template_caps: None,
                 benchmark_summary: None,
             };
             // Mirror the `SQLite` repository: a repeat registration of the

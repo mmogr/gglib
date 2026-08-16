@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -137,6 +137,14 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
         // applies downstream.
         dialect_spec: row
             .try_get::<Option<String>, _>("dialect_spec")
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
+        // Same tolerant parse: a NULL column is "never observed" (ADR 0007's
+        // third state), and unreadable JSON degrades to the same answer
+        // rather than failing the whole row.
+        template_caps: row
+            .try_get::<Option<String>, _>("template_caps")
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),

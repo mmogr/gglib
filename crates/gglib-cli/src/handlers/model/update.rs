@@ -623,6 +623,7 @@ mod tests {
             last_update_check: None,
             tags: Vec::new(),
             server_defaults: None,
+            template_caps: None,
             benchmark_summary: None,
         }
     }

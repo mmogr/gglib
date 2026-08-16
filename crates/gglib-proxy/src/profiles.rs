@@ -231,6 +231,7 @@ mod tests {
         async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
             Ok(self.names.contains(name).then(|| ModelSummary {
                 dialect: None,
+                template_caps: None,
                 id: 1,
                 name: name.to_owned(),
                 tags: Vec::new(),

@@ -166,6 +166,7 @@ mod tests {
             defaults_origin: None,
             server_defaults: None,
             capabilities: gglib_core::domain::capabilities::ModelCapabilities::default(),
+            template_caps: None,
             benchmark_summary: None,
         }
     }

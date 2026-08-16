@@ -139,6 +139,16 @@ pub struct Model {
     /// consumers fall back to the `format:*` tag mapping.
     #[serde(default)]
     pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
+    /// llama-server's template-capability self-report (`chat_template_caps`
+    /// from `GET /props`), recorded once a launch has observed it.
+    ///
+    /// Stored as JSON in the database. `None` means **never observed** — the
+    /// third state of ADR 0007's tri-state, never to be collapsed into "not
+    /// supported". Unlike [`Self::dialect_spec`] this is not derived at
+    /// import time: it is a fact about the binary–model pair, so only a
+    /// launch can learn it.
+    #[serde(default)]
+    pub template_caps: Option<crate::domain::TemplateCaps>,
     /// Denormalised benchmark summary joined from `model_benchmark_summaries`.
     ///
     /// `None` when no benchmark has been run for this model yet, or when the

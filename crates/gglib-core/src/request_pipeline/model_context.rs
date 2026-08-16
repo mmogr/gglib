@@ -1,7 +1,9 @@
 //! The resolved per-model context every request pipeline is built from.
 
 use super::truncation::CHARS_PER_TOKEN_APPROX;
-use crate::domain::{DefaultsOrigin, DialectSpec, InferenceConfig, ModelCapabilities};
+use crate::domain::{
+    DefaultsOrigin, DialectSpec, InferenceConfig, ModelCapabilities, TemplateCaps,
+};
 use crate::normalize::registry::dialect_for_tags;
 use crate::ports::ModelSummary;
 
@@ -48,6 +50,14 @@ pub struct ModelContext {
     /// Maximum context the model supports, in tokens — the history-truncation
     /// budget for every surface that cannot measure a live serving context.
     pub context_length: Option<u64>,
+    /// llama-server's template-capability self-report, when a launch has
+    /// recorded one (ADR 0007).
+    ///
+    /// `None` — on a passthrough context *or* a resolved row nobody has
+    /// launched yet — means "never observed", which per decision 3 licenses
+    /// nothing: unknown never gates. Nothing consumes this yet; the effort
+    /// gate arrives in a later PR of the arc.
+    pub template_caps: Option<TemplateCaps>,
     /// Whether this context came from an actual catalog row.
     ///
     /// `false` for [`passthrough`](Self::passthrough) — the fallback for
@@ -108,6 +118,7 @@ impl From<&ModelSummary> for ModelContext {
             inference_defaults: summary.inference_defaults.clone(),
             defaults_origin: summary.defaults_origin,
             context_length: summary.context_length,
+            template_caps: summary.template_caps.clone(),
             catalog_resolved: true,
         }
     }
@@ -137,8 +148,18 @@ mod tests {
         });
         summary.defaults_origin = Some(DefaultsOrigin::AutoDetected);
         summary.context_length = Some(32_768);
+        summary.template_caps = Some(TemplateCaps {
+            supports_reasoning_effort: Some(true),
+            ..TemplateCaps::default()
+        });
 
         let ctx = ModelContext::from(&summary);
+        assert_eq!(
+            ctx.template_caps
+                .as_ref()
+                .and_then(|c| c.supports_reasoning_effort),
+            Some(true)
+        );
         assert_eq!(ctx.capabilities, ModelCapabilities::REQUIRES_STRICT_TURNS);
         assert_eq!(ctx.tags, vec!["format:qwen".to_string()]);
         assert_eq!(

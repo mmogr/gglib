@@ -327,6 +327,7 @@ pub(super) fn model_context_for(model: &Model) -> ModelContext {
         inference_defaults: model.inference_defaults.clone(),
         defaults_origin: model.defaults_origin,
         context_length: model.context_length,
+        template_caps: model.template_caps.clone(),
         catalog_resolved: true,
     }
 }
@@ -1183,6 +1184,7 @@ mod tests {
             defaults_origin: None,
             server_defaults: None,
             capabilities: gglib_core::domain::capabilities::ModelCapabilities::default(),
+            template_caps: None,
             benchmark_summary: None,
         }
     }

@@ -107,9 +107,10 @@ use std::time::Duration;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use gglib_core::domain::{ModelSamplingDefault, ModelSamplingDefaults};
+use gglib_core::domain::{ModelSamplingDefault, ModelSamplingDefaults, TemplateCaps};
 
 use crate::sampling_audit::SlotParams;
+use crate::template_caps_read::PropsReading;
 
 /// Timeout for one `/props` read. Matches [`crate::slots`]'s budget: it is the
 /// same server, and a read that takes longer than this has already told us
@@ -171,6 +172,10 @@ pub const UPSTREAM_DEFAULTS: [(&str, f64); 7] = [
 struct PropsBody {
     #[serde(default)]
     default_generation_settings: Option<DefaultGenerationSettings>,
+    /// The loaded template's capability self-report (ADR 0007). Independent
+    /// of the sampler table above — see [`crate::template_caps_read`].
+    #[serde(default)]
+    chat_template_caps: Option<TemplateCaps>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -182,7 +187,8 @@ struct DefaultGenerationSettings {
     params: Option<SlotParams>,
 }
 
-/// What one `/props` read yielded.
+/// What one `/props` read yielded for the default sampler table — one half of
+/// a [`PropsReading`], beside the template-caps half it used to swallow.
 ///
 /// Mirrors [`crate::slots::SlotsPollResult`]'s shape deliberately: a failure
 /// is a variant, not an `Err`, because every caller's response to "could not
@@ -197,37 +203,30 @@ pub enum PropsResult {
 }
 
 /// Parse a `GET /props` body. Pure, so it can be tested against fixtures.
-fn parse_props(status: reqwest::StatusCode, body: &str) -> PropsResult {
+fn parse_props(status: reqwest::StatusCode, body: &str) -> PropsReading {
     if !status.is_success() {
-        return PropsResult::Unavailable(format!("unexpected HTTP status {status}"));
+        return PropsReading::unreadable(format!("unexpected HTTP status {status}"));
     }
     match serde_json::from_str::<PropsBody>(body) {
-        Ok(p) => p
-            .default_generation_settings
-            .and_then(|d| d.params)
-            .map_or_else(
-                || {
-                    PropsResult::Unavailable(
-                        "no default_generation_settings.params in /props".to_string(),
-                    )
-                },
-                PropsResult::Available,
-            ),
-        Err(e) => PropsResult::Unavailable(format!("failed to parse /props response: {e}")),
+        Ok(p) => PropsReading::of(
+            p.default_generation_settings.and_then(|d| d.params),
+            p.chat_template_caps,
+        ),
+        Err(e) => PropsReading::unreadable(format!("failed to parse /props response: {e}")),
     }
 }
 
-/// Fetch and parse `GET {base_url}/props`.
-pub async fn fetch_props(client: &Client, base_url: &str) -> PropsResult {
+/// Fetch and parse `GET {base_url}/props`, yielding both of its halves.
+pub async fn fetch_props(client: &Client, base_url: &str) -> PropsReading {
     let url = format!("{base_url}/props");
     let response = match client.get(&url).timeout(PROPS_REQUEST_TIMEOUT).send().await {
         Ok(r) => r,
-        Err(e) => return PropsResult::Unavailable(e.to_string()),
+        Err(e) => return PropsReading::unreadable(e.to_string()),
     };
     let status = response.status();
     match response.text().await {
         Ok(body) => parse_props(status, &body),
-        Err(e) => PropsResult::Unavailable(format!("failed to read /props response body: {e}")),
+        Err(e) => PropsReading::unreadable(format!("failed to read /props response body: {e}")),
     }
 }
 

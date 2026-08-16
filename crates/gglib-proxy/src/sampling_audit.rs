@@ -528,6 +528,14 @@ pub struct SamplingAuditStore {
     recent: Mutex<VecDeque<Divergence>>,
     /// The most recent `/props` baseline reading, one per model launch.
     baseline: Mutex<crate::props::BaselineState>,
+    /// The running model's template-capability self-report (ADR 0007), read
+    /// from the same `/props` body as the baseline and held with the same
+    /// once-per-launch discipline.
+    ///
+    /// Storage only, deliberately: not part of [`Self::snapshot`], because
+    /// nothing consumes the observation yet — the dashboards and the effort
+    /// gate arrive in later PRs of the reasoning-controls arc.
+    template_caps: Mutex<gglib_core::domain::TemplateCapsState>,
     /// The running model's name and what its GGUF publishes, set once per
     /// launch by the poller. `None` until the first poll names a model; the
     /// inner `Option` is `None` for a model with no metadata read.
@@ -619,6 +627,25 @@ impl SamplingAuditStore {
     /// honest thing to show in its place than a stale `Read`.
     pub fn set_baseline(&self, state: crate::props::BaselineState) {
         *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = state;
+    }
+
+    /// Store the template-caps reading for the currently running model.
+    ///
+    /// Overwrites, for [`Self::set_baseline`]'s reason: a model swap must not
+    /// leave the previous template's self-report on display, and `Unreadable`
+    /// is a more honest thing to hold than a stale `Read`.
+    pub fn set_template_caps(&self, state: gglib_core::domain::TemplateCapsState) {
+        *self.template_caps.lock().unwrap_or_else(|e| e.into_inner()) = state;
+    }
+
+    /// The stored template-caps reading. `NotYetRead` until the poller's
+    /// first `/props` read completes for the running model.
+    #[must_use]
+    pub fn template_caps(&self) -> gglib_core::domain::TemplateCapsState {
+        self.template_caps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Record what the running model's GGUF publishes.
@@ -1483,5 +1510,47 @@ mod tests {
     fn the_ladder_width_matches_the_pipeline() {
         let d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
         assert_eq!(d.layer_names.len(), LADDER_RUNGS);
+    }
+
+    // ── Template-caps storage (ADR 0007) ──────────────────────────────────
+
+    use gglib_core::domain::{TemplateCaps, TemplateCapsState};
+
+    /// The store holds the caps tri-state beside the baseline, with the same
+    /// overwrite-on-set discipline: the latest reading wins, whatever it is.
+    #[test]
+    fn template_caps_default_to_not_yet_read_and_hold_the_latest_reading() {
+        let store = SamplingAuditStore::new();
+        assert_eq!(store.template_caps(), TemplateCapsState::NotYetRead);
+
+        let caps = TemplateCaps {
+            supports_reasoning_effort: Some(true),
+            ..TemplateCaps::default()
+        };
+        store.set_template_caps(TemplateCapsState::Read { caps: caps.clone() });
+        assert_eq!(store.template_caps().caps(), Some(&caps));
+
+        // A model swap whose read fails must replace the stale report with
+        // an honest failure, not leave the previous template's caps standing.
+        store.set_template_caps(TemplateCapsState::Unreadable {
+            reason: "connection refused".into(),
+        });
+        assert_eq!(store.template_caps().caps(), None);
+    }
+
+    /// Storage only, this PR: the observation must not leak into the
+    /// dashboard snapshot until the surface PR deliberately adds it.
+    #[test]
+    fn the_snapshot_does_not_carry_template_caps_yet() {
+        let store = SamplingAuditStore::new();
+        store.set_template_caps(TemplateCapsState::Read {
+            caps: TemplateCaps::default(),
+        });
+
+        let json = serde_json::to_value(store.snapshot()).expect("snapshot serializes");
+        assert!(
+            json.get("template_caps").is_none(),
+            "template caps surfaced in the snapshot before their PR: {json}"
+        );
     }
 }
