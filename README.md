@@ -277,6 +277,11 @@ directory. `gglib config fast-downloads status` says what is there;
   cannot catch, why an observation organ has to be able to fail, and the A/B
   measurement behind the table above — including the positive control that
   failed on its first attempt and what that cost to notice
+- [ADR 0007 — Ask the server for template capabilities](docs/adr/0007-ask-the-server-for-template-capabilities.md)
+  — reasoning-effort support is a fact about the template–renderer pair, so
+  GGLib reads llama-server's own `chat_template_caps` self-report instead of
+  building a second detector, and names the posture that observation takes: a
+  runtime self-report used as a policy input, where unknown never gates
 - [Tool-call repair](docs/tool-call-repair.md) — validating tool arguments
   against the advertised schema, and re-issuing with `tool_choice: "required"`
   when they do not conform

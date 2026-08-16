@@ -1,7 +1,8 @@
 # ADR 0001 — Compensation, Policy, Observation: classifying gglib against llama.cpp
 
 - **Status:** Accepted
-- **Date:** 2026-08-08
+- **Date:** 2026-08-08 (amended 2026-08-17 — see the note under "Capability
+  presence is not permission to defer")
 - **Supersedes:** nothing
 - **Superseded by:** nothing
 
@@ -128,6 +129,19 @@ counters — and recorded as its own ADR.
 Consequently, **this ADR's implementation gates nothing.** The probe is taken,
 recorded, and surfaced; no Tier A behaviour changes. Deferral decisions are
 separate, evidence-backed, and reversible.
+
+> **Amended 2026-08-17.** "This ADR's implementation gates nothing" stands,
+> and Tier C remains never-gating. But
+> [ADR 0007](0007-ask-the-server-for-template-capabilities.md) introduces an
+> observation that *is* a gate: llama-server's `chat_template_caps`
+> self-report, read from `GET /props` and used to suppress a resolved
+> `reasoning_effort` that the observed template never reads. That observation
+> fits no tier here — not Tier C (Tier C never gates), not a `RuntimeFlags`
+> capability (it describes the binary–model pair, not the build), not Tier A
+> (there is nothing to delete). ADR 0007 names the posture — a **runtime
+> self-report used as a policy input** — and carries its rules: snapshotted
+> once per launch, provenance whenever it changes an outcome, and unknown
+> never gates.
 
 ### Arbitration is static, resolved once per run
 
