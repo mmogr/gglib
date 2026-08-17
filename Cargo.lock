@@ -1539,9 +1539,9 @@ dependencies = [
 
 [[package]]
 name = "error-code"
-version = "3.3.2"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
+checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
 
 [[package]]
 name = "etcetera"
@@ -2017,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "dotenvy",
  "gglib-app-services",
@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2089,7 +2089,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2124,7 +2124,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2142,14 +2142,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2262,7 +2262,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2277,7 +2277,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2294,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2309,7 +2309,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2360,7 +2360,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2392,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "axum",
  "futures-util",
@@ -2405,7 +2405,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "serde",
  "tauri",
@@ -9244,9 +9244,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_utils"
-version = "4.0.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "629d80ece222cad20fe0e8741be493c4ab166acf3b85341bdc2cdbcfd8f3c2d6"
+checksum = "6b84ebb462416c27cdb97f2e7f5f0ccc844da1fe2ecc7121e1b690b41318bf42"
 dependencies = [
  "proc-macro2",
  "quote",
