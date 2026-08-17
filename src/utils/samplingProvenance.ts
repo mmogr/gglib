@@ -90,6 +90,8 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
       return `${floor} (coupled to temperature layer)`;
     case 'unset':
       return 'unset by design';
+    case 'suppressedByTemplate':
+      return 'suppressed (this template does not read it)';
     default:
       return UNKNOWN;
   }

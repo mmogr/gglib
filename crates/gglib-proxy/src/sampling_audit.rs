@@ -901,6 +901,9 @@ fn describe_source(source: ParamSource, names: &[&'static str]) -> String {
         ParamSource::Floor => "floor".to_string(),
         ParamSource::FloorCoupled => "floor (coupled)".to_string(),
         ParamSource::Unset => "unset".to_string(),
+        // Unreachable from `compare` — it renders the seven readback fields,
+        // never a reasoning control (finding 7a). Labelled, not `unreachable!`.
+        ParamSource::SuppressedByTemplate => "suppressed (template)".to_string(),
     }
 }
 

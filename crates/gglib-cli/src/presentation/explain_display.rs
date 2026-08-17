@@ -302,6 +302,13 @@ fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
             format!("{} floor (coupled to temperature layer)", floor_name(ctx))
         }
         ParamSource::Unset => "unset by design".to_owned(),
+        // Unreachable here — `explain` resolves stored configuration, and
+        // nothing suppresses a value until a request is shaped. Spelled out
+        // rather than folded into "unset": the two differ in whether a rung
+        // named something, which is the whole content of the suppression.
+        ParamSource::SuppressedByTemplate => {
+            "suppressed (this model's template does not read it)".to_owned()
+        }
     }
 }
 
