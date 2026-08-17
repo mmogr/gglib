@@ -15,6 +15,7 @@ import { decodeDownloadEvent } from '../../decoders/downloadEvent';
 import { appLogger } from '../../platform';
 import { createSSEStream, type SSEMessage } from '../../../utils/sse';
 import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
+import { getEventCategory } from './category';
 
 /**
  * Unified SSE endpoint path.
@@ -182,18 +183,6 @@ export class SSEConnectionManager<T = unknown> {
 // ============================================================================
 // Shared SSE connection (single fetch per app)
 // ============================================================================
-
-/**
- * Map an outer event `type` string to an `AppEventType` category.
- */
-function getEventCategory(outerType: string): AppEventType | null {
-  if (outerType === 'download') return 'download';
-  if (outerType.startsWith('server_') || outerType === 'server_snapshot') return 'server';
-  if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
-  if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
-  if (outerType.startsWith('proxy_')) return 'proxy';
-  return null;
-}
 
 /**
  * Validate a raw parsed event and optionally decode inner payloads

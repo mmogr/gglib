@@ -147,6 +147,9 @@ let model_ops = ModelOps::new(ModelDeps {
     core: core.clone(),
     runtime: runtime.clone(),
     gguf_parser,
+    // Library changes are broadcast so other clients see them. A one-shot
+    // process with nobody listening passes `NoopEmitter::new()`.
+    emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
 });
 
 // Use ops asynchronously in handlers

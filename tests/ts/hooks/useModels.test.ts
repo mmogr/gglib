@@ -12,6 +12,10 @@ const transport = vi.hoisted(() => ({
   addModel: vi.fn(),
   removeModel: vi.fn(),
   updateModel: vi.fn(),
+  // `useModels` subscribes to library events so another client's edits reach
+  // this list; these tests drive the hook's own mutations, so the handler is
+  // never fired and only the unsubscribe matters.
+  subscribe: vi.fn(() => () => {}),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({

@@ -11,10 +11,33 @@ pub(crate) mod retag;
 pub(crate) mod update;
 pub(crate) mod verification;
 
+use std::sync::Arc;
+
 use anyhow::Result;
+use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::model_commands::ModelCommand;
+
+/// `ModelOps` for a one-shot CLI command.
+///
+/// Three handlers built this identically, each with a comment pointing at the
+/// last one, so the reasons live here once:
+///
+/// - `NoopModelRuntime` rather than `ctx.runner`: a one-shot command has no
+///   shared `ProcessManager` to consult, and a runner scoped to this single
+///   invocation could only ever answer "nothing is running".
+/// - `NoopEmitter`: library events exist to tell *other* clients what changed.
+///   A CLI process that is about to exit has nobody to tell, and no broadcast
+///   channel to tell them on.
+pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
+    ModelOps::new(ModelDeps {
+        core: ctx.app.clone(),
+        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
+        gguf_parser: ctx.gguf_parser.clone(),
+        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+    })
+}
 
 /// Dispatch a `model` subcommand to its handler.
 pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {

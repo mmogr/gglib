@@ -3,6 +3,7 @@ import { GgufModel, InferenceConfig, ServerConfig } from '../types';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
+import { useModelLibraryEvents } from './useModelLibraryEvents';
 
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -27,6 +28,10 @@ export function useModels() {
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  // Mutations below refetch at their own call site, which keeps this tab
+  // consistent with its own edits. This covers everyone else's.
+  useModelLibraryEvents(loadModels);
 
   // Sync selected model with native menu state (Tauri only)
   const selectModel = useCallback((id: number | null) => {
