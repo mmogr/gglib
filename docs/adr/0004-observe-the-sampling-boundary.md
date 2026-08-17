@@ -5,7 +5,9 @@
   launch paths pass sampler flags, and named launch flags as the only thing
   that masks `/props`; see the amendment there and finding 7. Addendum
   2026-08-09 — why there are no request-level task overlays, moved out of
-  #744's PR body so the prohibition outlives it)
+  #744's PR body so the prohibition outlives it. Amended 2026-08-17 — the two
+  reasoning controls are permanently outside this instrument's reach; see the
+  note under decision 3)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -294,6 +296,42 @@ nobody knows, never "the feature is absent".
 Pinned in three places so it cannot erode: the type, the serialization
 (`a_blind_sampling_audit_serializes_differently_from_a_clean_one`), and the UI
 (`ProxySamplingPanel`'s first two tests).
+
+> **Amended 2026-08-17 — two modelled fields are permanently outside this
+> instrument's reach.**
+>
+> `reasoning_effort` and `reasoning_budget_tokens` are resolved by the same
+> ladder every field above is, and **neither is echoed anywhere this ADR's two
+> instruments read**. Measured on the pinned build, and recorded here because
+> the omission is easy to mistake for an oversight:
+>
+> - `reasoning_effort` becomes a chat-template kwarg consumed at render time.
+>   No sampler ever holds it, so no `params` echo can carry it.
+> - `reasoning_budget_tokens` *is* parsed into `params.sampling`, and
+>   `task_params::to_json` (`tools/server/server-task.cpp:32-147`) serialises
+>   no `reasoning_budget_*` field in either of its branches. 49 `/slots`
+>   `params` objects captured mid-generation under `LLAMA_SERVER_SLOTS_DEBUG=1`
+>   carried neither field, and neither appears in
+>   `/props.default_generation_settings.params` either. `server-schema.cpp:383`
+>   names the key, but that is the request-*parse* table, not an echo.
+>
+> This is [ADR 0007](0007-ask-the-server-for-template-capabilities.md)
+> finding 7a, which corrects that ADR's own earlier claim that the budget was
+> observable.
+>
+> So decision 3's rule applies to them permanently rather than contingently:
+> they are `Blind`, and no future `SlotParams` field can change that — a column
+> that can only ever read `None`, compared against a resolved intent, is finding
+> 1's inert instrument in a third guise. The omission is enforced rather than
+> merely documented (`no_reasoning_field_may_join_the_readback`), and what
+> stands in for the comparison is `gglib_proxy::audit_records`: gglib's own
+> record of what it resolved and from which rung, carried with the reason
+> nothing corroborates it, on every surface that shows it. Their `FieldSources`
+> entry is not a convenience for these two fields; it is the entire account.
+>
+> The native tray menu is deliberately excluded from those surfaces: it is a
+> daemon-lifecycle menu with no request to attach a per-request record to. The
+> reasoning is in `components/ProxySamplingPanel`'s module docs.
 
 **4. Only a demonstrated comparison clears blindness.** A server that becomes
 reachable again but is never caught mid-turn has proved nothing. Recovery is

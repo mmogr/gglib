@@ -363,6 +363,15 @@ pub struct DashboardSnapshot {
     /// [`AuditState::Blind`](crate::sampling_audit::AuditState::Blind)
     /// differently from `Comparing { divergences: 0 }`: a silent instrument
     /// and a healthy one produce the same number and mean opposite things.
+    ///
+    /// It also carries the two records that are *not* comparisons, because
+    /// nothing on the wire echoes their subject: the reasoning controls
+    /// ([`ReasoningReadback`](crate::audit_records::ReasoningReadback), with the
+    /// running template's tri-state answer on `reasoning_effort`) and the client
+    /// field names the trust gate dropped. They ride here rather than beside
+    /// this field because the same store owns both the `/props` reading and the
+    /// resolved record — a peer field would need a second handle to it, and two
+    /// handles to one store are two things to keep in step.
     pub sampling_audit: SamplingAuditSnapshot,
 }
 

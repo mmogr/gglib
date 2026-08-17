@@ -16,6 +16,8 @@ use std::collections::BTreeMap;
 use gglib_proxy::slots::SlotSnapshot;
 use serde::Deserialize;
 
+use super::wire_sampling::SamplingAudit;
+
 #[derive(Debug, Deserialize)]
 pub(super) struct DashboardSnapshot {
     pub(super) active_connections: Vec<ActiveConnectionSnapshot>,
@@ -46,6 +48,15 @@ pub(super) struct DashboardSnapshot {
     /// reads them. `default` on a proxy older than this field.
     #[serde(default)]
     pub(super) per_model_defects: BTreeMap<String, ModelDefectCounts>,
+    /// The Tier C sampling readback. `None` on a proxy older than this field.
+    ///
+    /// Only the parts this dashboard renders are mirrored — the reasoning
+    /// controls and the discarded client field names. The divergence list and
+    /// the `/props` baseline have a surface already (the GUI panel), and
+    /// mirroring them here would be an obligation to keep two renderers in
+    /// step for no reader.
+    #[serde(default)]
+    pub(super) sampling_audit: Option<SamplingAudit>,
 }
 
 /// Mirror of `gglib_core::domain::defects::ModelDefectCounts`.

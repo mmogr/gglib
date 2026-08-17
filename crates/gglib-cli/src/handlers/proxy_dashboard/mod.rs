@@ -43,7 +43,10 @@ const BAR_WIDTH: usize = 20;
 const DEFAULT_TERM_WIDTH: u16 = 80;
 
 mod render;
+/// The one section that is not a readback — see the module docs there.
+mod render_reasoning;
 mod wire;
+mod wire_sampling;
 
 use render::{render_frame, visual_row_count};
 use wire::DashboardSnapshot;
