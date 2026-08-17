@@ -1,7 +1,22 @@
 import { useCallback } from 'react';
-import { useAllServerStates } from '../services/serverRegistry';
+import { useAllServerStates, type ServerStatus } from '../services/serverRegistry';
 import { safeStopServer } from '../services/server/safeActions';
-import { ServerInfo } from '../types';
+
+/**
+ * A running server as the UI draws it.
+ *
+ * Built here from the event registry rather than fetched, and deliberately
+ * not `ServerInfo`: `status` has no counterpart on the wire at all — it is
+ * registry state — and `modelName` falls back to a synthesized label when the
+ * registry has not learned one. The two shapes answer different questions,
+ * so they are two types.
+ */
+export interface ServerViewModel {
+  modelId: number;
+  modelName: string;
+  port: number;
+  status: ServerStatus;
+}
 
 /**
  * Hook providing running server list from the event-driven registry.
@@ -15,7 +30,7 @@ import { ServerInfo } from '../types';
 export function useServers() {
   const serverStates = useAllServerStates();
 
-  const servers: ServerInfo[] = serverStates.map((s) => {
+  const servers: ServerViewModel[] = serverStates.map((s) => {
     const modelId = Number(s.modelId);
     // Never render a stringified missing id ("Model undefined") — fall back
     // through the most specific identity we actually have.

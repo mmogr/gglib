@@ -1,7 +1,8 @@
 import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
-import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
+import { GgufModel, ModelDetail, HfModelSummary } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import { useSettings } from '../../hooks/useSettings';
 import { useToastContext } from '../../contexts/ToastContext';
@@ -41,9 +42,9 @@ interface ModelInspectorPanelProps {
   model: GgufModel | null;
   selectedHfModel?: HfModelSummary | null;
   onStartServer: () => void;
-  onServerStarted?: (serverInfo: ServerInfo) => void;
+  onServerStarted?: (serverInfo: ServerViewModel) => void;
   onStopServer: (modelId: number) => Promise<void>;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   onRemoveModel: (id: number, force: boolean) => void;
   onUpdateModel: (id: number, updates: {
     name?: string;

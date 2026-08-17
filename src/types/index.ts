@@ -452,11 +452,23 @@ export interface ServeConfig {
   reasoningBudgetTokens?: number;
 }
 
+/**
+ * A running server as `GET /api/servers` reports it.
+ *
+ * Mirrors `gglib_app_services::types::ServerInfo`, which carries no
+ * `rename_all` — these keys really are snake_case, unlike the camelCase
+ * `AppEvent` frames describing the same servers. Not what the UI renders
+ * from: that is `ServerViewModel`, built off the event registry, and it has
+ * a `status` this shape has no answer for.
+ */
 export interface ServerInfo {
-  modelId: number;
-  modelName: string;
+  model_id: number;
+  model_name: string;
+  /** `null` when the runtime never learned the process id. */
+  pid: number | null;
   port: number;
-  status: string;
+  /** Unix **seconds**, not milliseconds. */
+  started_at: number;
 }
 
 export interface ModelsDirectoryInfo {

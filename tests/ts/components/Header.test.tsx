@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import Header from '../../../src/components/Header';
-import { ServerInfo } from '../../../src/types';
+import type { ServerViewModel } from '../../../src/hooks/useServers';
 import { MOCK_PROXY_PORT } from '../fixtures/ports';
 
 // Mock the RunsPopover component since it has its own complex state
@@ -17,14 +17,14 @@ describe('Header', () => {
   const mockOnSelectModel = vi.fn();
   const mockOnRefreshServers = vi.fn();
 
-  const mockServers: ServerInfo[] = [
+  const mockServers: ServerViewModel[] = [
     { modelId: 1, modelName: 'Test Model 1', port: MOCK_PROXY_PORT, status: 'running' },
     { modelId: 2, modelName: 'Test Model 2', port: MOCK_PROXY_PORT + 1, status: 'running' },
   ];
 
   const defaultProps = {
     onOpenSettings: mockOnOpenSettings,
-    servers: [] as ServerInfo[],
+    servers: [] as ServerViewModel[],
     onStopServer: mockOnStopServer,
     onSelectModel: mockOnSelectModel,
     onRefreshServers: mockOnRefreshServers,

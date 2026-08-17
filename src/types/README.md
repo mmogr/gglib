@@ -45,7 +45,7 @@ TypeScript type definitions shared across the gglib GUI.
 | Type | Description |
 |------|-------------|
 | `GgufModel` | Model metadata (name, path, params, quantization, tags) |
-| `ServerInfo` | Running server state (model, port, status) |
+| `ServerInfo` | A running server as `GET /api/servers` reports it — snake_case, no status |
 | `ServeConfig` | Server launch configuration |
 
 ### Configuration Types
@@ -78,7 +78,7 @@ These TypeScript types mirror the Rust types in `gglib-core`:
 TypeScript                    Rust
 ──────────────────────────────────────────
 GgufModel          ←→        Model
-ServerInfo         ←→        RunningServer
+ServerInfo         ←→        gglib_app_services::types::ServerInfo
 AppSettings        ←→        Settings
 DownloadProgress   ←→        DownloadProgress
 ```
