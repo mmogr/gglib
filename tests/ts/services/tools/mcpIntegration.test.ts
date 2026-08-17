@@ -192,22 +192,18 @@ describe('registerMcpTools', () => {
 
   // ── Renderer assignment ────────────────────────────────────────────────────
 
-  it('assigns mcpGenericRenderer to tools without an output_schema', () => {
-    registerMcpTools(srv('srv1'), [makeTool('get_weather')]);
+  /**
+   * Every MCP tool, with no second case to distinguish. The schema-driven
+   * renderer that used to be the alternative was chosen off `output_schema`,
+   * a field the daemon cannot send: `McpTool` has no such field, and the
+   * client that reads upstream servers never deserializes `outputSchema` in
+   * the first place.
+   */
+  it('assigns mcpGenericRenderer to every tool it registers', () => {
+    registerMcpTools(srv('srv1'), [makeTool('get_weather'), makeTool('search_results')]);
     const registry = getToolRegistry();
     expect(registry.getRenderer('mcp_srv1_get_weather')).toBe(mcpGenericRenderer);
-  });
-
-  it('assigns a schema renderer (not mcpGenericRenderer) to tools with an output_schema', () => {
-    const toolWithSchema: McpTool = {
-      ...makeTool('search_results'),
-      output_schema: { type: 'object', properties: { items: { type: 'array' } } },
-    };
-    registerMcpTools(srv('srv1'), [toolWithSchema]);
-    const registry = getToolRegistry();
-    const renderer = registry.getRenderer('mcp_srv1_search_results');
-    expect(renderer).toBeDefined();
-    expect(renderer).not.toBe(mcpGenericRenderer);
+    expect(registry.getRenderer('mcp_srv1_search_results')).toBe(mcpGenericRenderer);
   });
 });
 

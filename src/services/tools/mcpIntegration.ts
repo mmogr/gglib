@@ -13,7 +13,7 @@ import { isServerRunning } from '../../utils/mcp';
 import { getToolRegistry, ToolSource } from './registry';
 import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
 import { sanitizeToolName, detectCollisions } from './nameUtils';
-import { mcpGenericRenderer, createMcpSchemaRenderer } from './renderers';
+import { mcpGenericRenderer } from './renderers';
 import { appLogger } from '../platform';
 
 /**
@@ -137,11 +137,7 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
         },
       };
 
-      const renderer = tool.output_schema
-        ? createMcpSchemaRenderer(tool.output_schema)
-        : mcpGenericRenderer;
-
-      registry.registerWithNameMapping(tool.name, String(serverId), sanitizedName, namespacedDef, executor, source, renderer);
+      registry.registerWithNameMapping(tool.name, String(serverId), sanitizedName, namespacedDef, executor, source, mcpGenericRenderer);
       count++;
     } catch (err) {
       // Tool might already exist from another source — log and continue.

@@ -14,8 +14,6 @@ React components and rendering logic for displaying tool execution results in th
 | `FallbackRenderer.tsx` | Default JSON viewer with syntax highlighting; used when no specific renderer matches |
 | `TimeRenderer.tsx` | Human-readable date/time formatting for `get_current_time` tool results |
 | `McpGenericRenderer.tsx` | Generic MCP renderer; auto-detects Markdown, table arrays, and structured objects |
-| `McpSchemaRenderer.tsx` | Schema-driven renderer; dynamically builds UI from JSON Schema definitions |
-| `SchemaBasedView.tsx` | Reusable view component shared by schema and fallback renderers |
 
 ## Dispatch Flow
 
