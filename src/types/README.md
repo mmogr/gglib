@@ -70,7 +70,27 @@ TypeScript type definitions shared across the gglib GUI.
 | `ServerEvent` | Server lifecycle events (running, stopped, crashed) |
 | `DownloadProgress` | Download progress updates |
 
+## Generated bindings (`generated/`)
+
+`generated/` is written by ts-rs from the Rust wire types and committed, so the
+frontend build never needs cargo. Never edit a file in it: `make bindings`
+rewrites the directory, and CI runs `make bindings-check`, which regenerates
+and fails on any difference.
+
+Two things ts-rs cannot infer, and `scripts/check_ts_bindings.sh` enforces:
+`i64`/`u64` become `bigint` unless a field says otherwise — a type `JSON.parse`
+cannot produce — and `skip_serializing_if` does not imply optional, so a field
+serde omits still emits as `field: T | null` unless it carries `#[ts(optional)]`.
+
+The directory is exempt from the README and file-size checks and from eslint.
+Generated code has no author to address a finding to, and a 400-line binding is
+however long its Rust type is.
+
 ## Type Alignment
+
+The types below are still hand-written. They are being replaced by `generated/`
+imports; what remains here afterwards is view-models, which have no Rust
+counterpart by design.
 
 These TypeScript types mirror the Rust types in `gglib-core`:
 

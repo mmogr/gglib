@@ -107,6 +107,14 @@ jobs:
       - name: Check the TypeScript file-size ratchet
         run: ./scripts/check_file_complexity.sh
 
+      # Here rather than beside `make bindings-check`, which cannot substitute
+      # for it: a field missing `ts(optional)` or a numeric override
+      # regenerates *consistently*, so the diff stays clean and that step goes
+      # green with `bigint` sitting in the tree. This reads the annotations and
+      # the emitted output directly, and needs no cargo.
+      - name: Check ts-rs binding annotations
+        run: ./scripts/check_ts_bindings.sh
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest
@@ -209,6 +217,20 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc --verbose
+
+      # The frontend's wire types are generated from these Rust types, and the
+      # generated output is committed so the GUI build needs no cargo. That
+      # only stays honest if something regenerates and compares — otherwise a
+      # changed Rust field ships against a stale TypeScript mirror, which is
+      # the whole class of drift the generation exists to end.
+      #
+      # Here rather than in `enforcement`: the cargo cache is warm in this job,
+      # and this step needs a build. It checks staleness only — the annotations
+      # themselves are checked by `check_ts_bindings.sh` in `enforcement`,
+      # because a missing annotation regenerates consistently and leaves this
+      # diff clean.
+      - name: Check generated TypeScript bindings are current
+        run: make bindings-check
 
       - name: Upload test results
         uses: actions/upload-artifact@v7

@@ -130,26 +130,32 @@ impl From<gglib_core::ports::ToolSupportDetection> for ToolSupportResponse {
 
 /// Frontend-friendly model structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct GuiModel {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub file_path: String,
     pub param_count_b: f64,
     pub architecture: Option<String>,
     pub quantization: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_length: Option<u64>,
     // ── MoE topology (omitted for dense models) ───────────────────────────────
     // The list view renders *active* parameters from these, the same way the
     // inspector does off [`ModelDetailDto`]; without them it silently shows the
     // total instead.
     /// Total number of experts (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_count: Option<u32>,
     /// Experts activated per token (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_used_count: Option<u32>,
     /// Shared experts that are always active (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     pub added_at: String,
@@ -158,15 +164,19 @@ pub struct GuiModel {
     pub tags: Vec<String>,
     #[serde(default)]
     pub is_serving: bool,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     /// Whether [`Self::inference_defaults`] was set by the user or
     /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
     /// Per-model server defaults (port, URL overrides, etc.).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_defaults: Option<gglib_core::domain::ServerConfig>,
     /// Capability flags stored for this model.
@@ -174,11 +184,17 @@ pub struct GuiModel {
     /// Serialized as a `u32` bit-field.  The frontend receives this value
     /// and may display individual flags; the `PATCH /api/models/{id}/capabilities`
     /// endpoint lets the user override them.
+    ///
+    /// A `bitflags` newtype over `u32`, so it crosses the wire as a bare
+    /// number and cannot derive `TS` itself — TypeScript reads it through the
+    /// `CAPABILITY_FLAGS` bitmask.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default)]
     pub capabilities: gglib_core::ModelCapabilities,
     /// Denormalised benchmark summary (speed badges).
     ///
     /// `None` if the model has never been benchmarked.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub benchmark_summary: Option<gglib_core::domain::benchmark::ModelBenchmarkSummary>,
 }

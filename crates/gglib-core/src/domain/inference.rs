@@ -81,6 +81,7 @@ use crate::domain::sampling_provenance::{FieldSources, ParamSource};
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceConfig {
     /// Sampling temperature (0.0 - 2.0).
@@ -436,6 +437,7 @@ pub struct InferenceConfig {
 /// [`AutoDetected`](Self::AutoDetected) below global settings while a real
 /// [`User`](Self::User) choice keeps outranking them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum DefaultsOrigin {
     /// Set explicitly by the user — a CLI flag, a model-update request, or a

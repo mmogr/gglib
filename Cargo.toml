@@ -60,6 +60,16 @@ futures-core = { version = "0.3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3"
+
+# TypeScript binding generation, behind each deriving crate's `ts-bindings`
+# feature. Every one of those crates sets `#![deny(unused_crate_dependencies)]`,
+# so they take it as `{ workspace = true, optional = true }`: an optional
+# dependency stays out of the build graph entirely until the feature turns it
+# on, which is what keeps `-D warnings` clean in the default build.
+#
+# `chrono-impl` because a few wire types carry `DateTime<Utc>` directly; ts-rs
+# maps those to `string`, which is what RFC 3339 arrives as.
+ts-rs = { version = "12", features = ["chrono-impl"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 

@@ -66,6 +66,11 @@ const componentRestrictedSyntax = [
 ];
 
 export default [
+  // ts-rs output. A lint finding here has no author to address it: the file is
+  // rewritten from Rust on every run, so the only way to satisfy a rule would
+  // be to bend the wire type to a TypeScript style preference. A block with
+  // only `ignores` is flat config's global exclusion.
+  { ignores: ['src/types/generated/**'] },
   js.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
