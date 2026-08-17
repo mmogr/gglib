@@ -697,6 +697,8 @@ pub struct UpdateSettingsRequest {
     // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
+    // Proxy tool-call repair; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_call_repair: Option<Option<bool>>,
     // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(

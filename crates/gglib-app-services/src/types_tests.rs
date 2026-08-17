@@ -50,6 +50,58 @@ mod update_model_request_tests {
     }
 }
 
+mod update_settings_request_tests {
+    //! `null` must clear a setting, for every field without exception.
+    //!
+    //! The struct's own doc comment promises "every field is
+    //! `Option<Option<T>>` with `serde_with::rust::double_option`".
+    //! `tool_call_repair` was declared bare, so serde collapsed its explicit
+    //! `null` into the same `None` an omitted key produces: the GUI offered a
+    //! clear-to-default the backend silently declined to perform. It is the
+    //! same field whose unreachability motivated
+    //! `scripts/check_settings_surfaces.sh` in the first place.
+
+    use super::super::UpdateSettingsRequest;
+
+    /// Three JSON states, three distinct meanings. Collapse any two and a
+    /// setting becomes unclearable.
+    #[test]
+    fn tool_call_repair_distinguishes_all_three_states() {
+        let omitted: UpdateSettingsRequest = serde_json::from_str("{}").expect("omitted");
+        assert_eq!(
+            omitted.tool_call_repair, None,
+            "omitted key must mean leave unchanged"
+        );
+
+        let cleared: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"toolCallRepair": null}"#).expect("null");
+        assert_eq!(
+            cleared.tool_call_repair,
+            Some(None),
+            "explicit null must mean clear to default, not leave unchanged"
+        );
+
+        let set: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"toolCallRepair": false}"#).expect("false");
+        assert_eq!(
+            set.tool_call_repair,
+            Some(Some(false)),
+            "an explicit value must survive as itself"
+        );
+    }
+
+    /// The clear must still be a clear after the hand-off to the domain
+    /// update — the layer that decides what actually reaches storage.
+    #[test]
+    fn a_cleared_tool_call_repair_reaches_the_domain_update() {
+        let request: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"toolCallRepair": null}"#).expect("null");
+        let update: gglib_core::SettingsUpdate = request.into();
+
+        assert_eq!(update.tool_call_repair, Some(None));
+    }
+}
+
 mod mcp_server_info_shape_tests {
     //! What `POST /api/mcp/servers/{id}/start` and `/stop` actually answer.
     //!

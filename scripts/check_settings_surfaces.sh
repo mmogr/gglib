@@ -287,3 +287,85 @@ MSG
 fi
 
 echo -e "${GREEN}✅ every Settings field is reachable${NC} (${checked} checked, ${cli_reachable} on the CLI, ${gui_reachable} on the GUI)"
+
+# ── Second guard: `null` must clear, for every field ─────────────────────────
+#
+# Reachability is not enough. `UpdateSettingsRequest` promises in its own doc
+# comment that every field is `Option<Option<T>>` with
+# `serde_with::rust::double_option`, which is what makes an explicit `null`
+# ("clear it") distinguishable from an omitted key ("leave it alone").
+#
+# `tool_call_repair` was declared bare. Serde collapsed its `null` into the
+# same `None` an omitted key produces, so the GUI offered a clear-to-default
+# the backend silently declined to perform — the same field, twice, for two
+# different reasons. Nothing typechecks this: the struct compiles, the DTO
+# round trips, and the setting is simply unclearable.
+
+UPDATE_REQ_RS="crates/gglib-app-services/src/types.rs"
+
+if [ ! -f "$UPDATE_REQ_RS" ]; then
+  echo -e "${RED}❌ ${UPDATE_REQ_RS} does not exist${NC}"
+  echo
+  echo "The double-option guard below reads that file. A missing path would"
+  echo "make it enumerate nothing and pass — checked here instead."
+  exit 1
+fi
+
+echo
+echo "=== Checking every UpdateSettingsRequest field can be cleared ==="
+echo
+
+# Fields whose declaration is not preceded by a `double_option` attribute.
+# `seen` is set by the attribute block and cleared by the field it applies to,
+# so a bare field reaches its own line with `seen` still unset.
+bare_fields=$(
+  awk '
+    /^pub struct UpdateSettingsRequest \{/ { inside = 1; next }
+    inside && /^\}/                        { exit }
+    inside && /double_option/              { seen = 1 }
+    inside && /^    pub [a-z_]+:/ {
+      line = $0
+      sub(/^    pub /, "", line)
+      sub(/:.*/, "", line)
+      if (!seen) print line
+      seen = 0
+    }
+  ' "$UPDATE_REQ_RS"
+)
+
+# A parser that finds no fields reports what a clean run reports.
+total_update_fields=$(
+  awk '
+    /^pub struct UpdateSettingsRequest \{/ { inside = 1; next }
+    inside && /^\}/                        { exit }
+    inside && /^    pub [a-z_]+:/          { n++ }
+    END { print n + 0 }
+  ' "$UPDATE_REQ_RS"
+)
+
+if [ "$total_update_fields" -eq 0 ]; then
+  echo -e "${RED}❌ no UpdateSettingsRequest fields found in ${UPDATE_REQ_RS}${NC}"
+  echo
+  echo "The struct was renamed or reshaped, so this guard is checking nothing."
+  exit 1
+fi
+
+if [ -n "$bare_fields" ]; then
+  echo -e "${RED}❌ setting(s) an explicit null cannot clear${NC}"
+  echo
+  for field in $bare_fields; do
+    echo "  - ${field}"
+  done
+  cat <<'MSG'
+
+Each of these is `Option<Option<T>>` without
+`#[serde(default, with = "serde_with::rust::double_option")]`, so serde reads
+an explicit `null` as "leave unchanged" — identical to omitting the key. The
+setting can be written but never cleared, and the GUI's reset control lies.
+
+Add the attribute to the field in `crates/gglib-app-services/src/types.rs`.
+MSG
+  exit 1
+fi
+
+echo -e "${GREEN}✅ every UpdateSettingsRequest field honours an explicit null${NC} (${total_update_fields} checked)"
