@@ -35,7 +35,7 @@ Transport
 | `chat.ts` | `ConversationSummary`, `ChatMessage`, `SaveMessageParams`, `ChatTransport` |
 | `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse`, `ServersTransport` |
 | `downloads.ts` | Download queue types and `DownloadsTransport` |
-| `events.ts` | `ServerEvent`, `DownloadEvent`, `ServerStateInfo`, `EventsTransport` |
+| `events.ts` | `ServerWireEvent`, `DownloadEvent`, `ServerSnapshotEntry`, `EventsTransport` |
 
 ## Branded ID Types
 

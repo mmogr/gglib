@@ -42,7 +42,7 @@ export function initServerEvents(): void {
   // Subscribe FIRST so no event is missed during the hydration fetch below.
   unsubscribe = getTransport().subscribe('server', (payload) => {
     eventVersion++;
-    const normalized = normalizeServerEventFromAppEvent(payload as unknown);
+    const normalized = normalizeServerEventFromAppEvent(payload);
     if (normalized) {
       ingestServerEvent(normalized);
     }
