@@ -55,6 +55,14 @@ TypeScript type definitions shared across the gglib GUI.
 | `AppSettings` | Application preferences and defaults |
 | `ModelsDirectoryInfo` | Models directory path and metadata |
 
+### Reasoning Types (`reasoning.ts`, re-exported from `index.ts`)
+
+| Type | Description |
+|------|-------------|
+| `TemplateSupport` | `'yes' \| 'no' \| 'unknown'` — whether a model's chat template reads a kwarg. Three states on purpose: capabilities are read from a *running* server, so `unknown` is the common answer and must never render as a `no` |
+| `ProvenanceParamKey` | Every key the explain endpoint attributes a source to — `SamplingParamKey` plus `reasoningEffort`, which has no numeric bounds and so cannot join the bounds table |
+| `SuppressedEffort` | A resolved effort level a template would ignore, with the rung that asked for it |
+
 ### Event Types
 
 | Type | Description |

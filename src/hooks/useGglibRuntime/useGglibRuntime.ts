@@ -8,7 +8,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { agentOverridesToWire } from '../../services/agentOverrides';
+import { agentOverridesToWire, reasoningOverridesToWire } from '../../services/agentOverrides';
 import { appLogger } from '../../services/platform';
 import {
   useExternalStoreRuntime,
@@ -167,6 +167,9 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           // Per-chat limits from the Tools popover, read fresh per send.
           ...agentOverridesToWire(),
         },
+        // Same store, different half of the body: these two are request
+        // sampling, not agent-loop configuration.
+        reasoning: reasoningOverridesToWire(),
         supportsToolCalls,
         onSystemWarning,
       });

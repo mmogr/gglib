@@ -11,6 +11,7 @@
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
 //! | 5 | Pin `cache_prompt` | [`super::sampling`] | top-level keys |
 //! | 5b | Suppress an unreadable `reasoning_effort` | [`super::effort_gate`] | resolved effort, template caps |
+//! | — | Log the sampling decision | [`super::sampling_log`] | the decision |
 //! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
 //!
 //! # The order is load-bearing
@@ -80,7 +81,8 @@ use super::effort_gate::SuppressedEffort;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
 use super::{
-    ModelContext, SamplingLayers, constrain, effort_gate, messages, sampling, tools, truncation,
+    ModelContext, SamplingLayers, constrain, effort_gate, messages, sampling, sampling_log, tools,
+    truncation,
 };
 
 /// What the pipeline did, for the caller that has to report or verify it.
@@ -151,6 +153,10 @@ pub fn apply(
     // the one gglib itself resolved, and until stage 4 has run there is no
     // such value to catch. See the ordering rationale in the module docs.
     let effort_suppressed = effort_gate::suppress_unsupported_effort(body, ctx, &mut sampling);
+
+    // Rendered here, not inside stage 4, so the one line that describes a
+    // request's sampling describes what was *sent*. See `sampling_log`.
+    sampling_log::log_resolution(&sampling);
 
     // Stage 6 runs unconditionally, because there is only one kind of trip
     // through this pipeline.

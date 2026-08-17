@@ -17,6 +17,7 @@ use gglib_core::domain::{InferenceConfig, InferenceProfile, builtin_templates};
 
 use crate::bootstrap::CliContext;
 use crate::config_commands::ProfileCommand;
+use crate::sampling_params::clear_param;
 
 /// Dispatch a `config profile` subcommand.
 pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) -> Result<()> {
@@ -41,6 +42,8 @@ pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) ->
             dynatemp_exponent,
             top_n_sigma,
             frequency_penalty,
+            reasoning_effort,
+            reasoning_budget_tokens,
             unset,
             list_in_models,
             no_list_in_models,
@@ -67,10 +70,8 @@ pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) ->
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.
                     seed: None,
-                    // No profile flags for the reasoning controls yet — the
-                    // ladder learns the fields first, the surfaces follow.
-                    reasoning_effort: None,
-                    reasoning_budget_tokens: None,
+                    reasoning_effort,
+                    reasoning_budget_tokens,
                 },
                 unset,
                 list_in_models: match (list_in_models, no_list_in_models) {
@@ -180,6 +181,21 @@ async fn show(ctx: &CliContext, name: &str) -> Result<()> {
     print_opt("  dry-base         ", profile.config.dry_base);
     print_opt("  dry-allowed-len  ", profile.config.dry_allowed_length);
     print_opt("  dry-penalty-last ", profile.config.dry_penalty_last_n);
+    print_opt(
+        "  reasoning-effort ",
+        profile
+            .config
+            .reasoning_effort
+            .map(|level| format!("{level} (applies only where the model's template reads it)")),
+    );
+    print_opt(
+        "  reasoning-budget ",
+        profile.config.reasoning_budget_tokens.map(|n| match n {
+            -1 => "-1 (defers to the launch default)".to_owned(),
+            0 => "0 (thinking off)".to_owned(),
+            n => format!("{n} tokens"),
+        }),
+    );
     println!();
     println!("Select it per request as `<model>:{}`.", profile.name);
     Ok(())
@@ -328,35 +344,12 @@ fn merge_set(target: &mut InferenceConfig, edits: &InferenceConfig) {
     if edits.frequency_penalty.is_some() {
         target.frequency_penalty = edits.frequency_penalty;
     }
-}
-
-/// Clear one parameter by its CLI flag name.
-fn clear_param(config: &mut InferenceConfig, param: &str) -> Result<()> {
-    // Accept either spelling so `--unset top-k` and `--unset top_k` both work.
-    match param.replace('_', "-").as_str() {
-        "temperature" => config.temperature = None,
-        "top-p" => config.top_p = None,
-        "top-k" => config.top_k = None,
-        "max-tokens" => config.max_tokens = None,
-        "repeat-penalty" => config.repeat_penalty = None,
-        "presence-penalty" => config.presence_penalty = None,
-        "min-p" => config.min_p = None,
-        "frequency-penalty" => config.frequency_penalty = None,
-        "dry-multiplier" => config.dry_multiplier = None,
-        "dry-base" => config.dry_base = None,
-        "dry-allowed-length" => config.dry_allowed_length = None,
-        "dry-penalty-last-n" => config.dry_penalty_last_n = None,
-        "dynatemp-range" => config.dynatemp_range = None,
-        "dynatemp-exponent" => config.dynatemp_exponent = None,
-        "top-n-sigma" => config.top_n_sigma = None,
-        other => bail!(
-            "unknown parameter '{other}'; expected one of: temperature, top-p, \
-             top-k, max-tokens, repeat-penalty, presence-penalty, min-p, \
-             frequency-penalty, dynatemp-range, dynatemp-exponent, top-n-sigma, \
-             dry-multiplier, dry-base, dry-allowed-length, dry-penalty-last-n"
-        ),
+    if edits.reasoning_effort.is_some() {
+        target.reasoning_effort = edits.reasoning_effort;
     }
-    Ok(())
+    if edits.reasoning_budget_tokens.is_some() {
+        target.reasoning_budget_tokens = edits.reasoning_budget_tokens;
+    }
 }
 
 /// One-line summary of the parameters a profile sets.
@@ -407,6 +400,12 @@ fn summarize(config: &InferenceConfig) -> String {
     if let Some(v) = config.dry_penalty_last_n {
         parts.push(format!("dry-penalty-last-n={v}"));
     }
+    if let Some(v) = config.reasoning_effort {
+        parts.push(format!("reasoning-effort={v}"));
+    }
+    if let Some(v) = config.reasoning_budget_tokens {
+        parts.push(format!("reasoning-budget-tokens={v}"));
+    }
     parts.join("  ")
 }
 
@@ -433,80 +432,5 @@ fn print_opt<T: std::fmt::Display>(label: &str, value: Option<T>) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config() -> InferenceConfig {
-        InferenceConfig {
-            temperature: Some(0.2),
-            top_k: Some(40),
-            ..Default::default()
-        }
-    }
-
-    /// A `set` invocation must only touch the parameters it names — that is
-    /// what makes editing one field of an existing profile safe.
-    #[test]
-    fn merge_set_only_touches_named_parameters() {
-        let mut target = config();
-        merge_set(
-            &mut target,
-            &InferenceConfig {
-                temperature: Some(0.9),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(target.temperature, Some(0.9), "named parameter is updated");
-        assert_eq!(target.top_k, Some(40), "unnamed parameter is preserved");
-    }
-
-    #[test]
-    fn clear_param_accepts_both_spellings() {
-        let mut hyphen = config();
-        clear_param(&mut hyphen, "top-k").expect("hyphenated form");
-        assert_eq!(hyphen.top_k, None);
-
-        let mut underscore = config();
-        clear_param(&mut underscore, "top_k").expect("underscored form");
-        assert_eq!(underscore.top_k, None);
-    }
-
-    #[test]
-    fn clear_param_rejects_an_unknown_name() {
-        let err = clear_param(&mut config(), "nonsense").expect_err("should reject");
-        assert!(err.to_string().contains("nonsense"), "got: {err}");
-        assert!(err.to_string().contains("temperature"), "lists valid names");
-    }
-
-    #[test]
-    fn summarize_lists_only_what_is_set() {
-        let summary = summarize(&config());
-        assert!(summary.contains("temperature=0.2"), "got: {summary}");
-        assert!(summary.contains("top-k=40"), "got: {summary}");
-        assert!(
-            !summary.contains("min-p"),
-            "unset params omitted: {summary}"
-        );
-        assert!(summarize(&InferenceConfig::default()).is_empty());
-    }
-
-    #[test]
-    fn not_found_message_lists_what_exists() {
-        let profiles = vec![InferenceProfile {
-            name: "coding".to_owned(),
-            description: None,
-            config: InferenceConfig::default(),
-            list_in_models: false,
-        }];
-        let message = not_found_message("codeing", &profiles);
-        assert!(message.contains("codeing"), "names the miss: {message}");
-        assert!(
-            message.contains("coding"),
-            "names the alternative: {message}"
-        );
-
-        let empty = not_found_message("coding", &[]);
-        assert!(empty.contains("install-templates"), "got: {empty}");
-    }
-}
+#[path = "profiles_tests.rs"]
+mod profiles_tests;

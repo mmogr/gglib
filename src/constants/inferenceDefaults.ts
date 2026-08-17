@@ -158,4 +158,22 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
    * non-negative, which is why `min` is -1 rather than 0.
    */
   dryPenaltyLastN: { default: null, min: -1, max: 8192, step: 1 },
+
+  /**
+   * Rust: unset at the floor, and deliberately unfloorable — `-1` already means
+   * "defer to the launch default", which emitting no key does for free.
+   * Validation accepts `-1` or greater (exactly upstream's range: llama-server
+   * answers `-2` with an HTTP 400 naming it), which is why `min` is -1.
+   *
+   * `max` is a UI guard rail with no Rust counterpart — the backend's ceiling
+   * is `i32::MAX`. 32768 is the top rung of the CLI's own reasoning ladder, so
+   * the field offers the range the rest of gglib recommends rather than a range
+   * no context window can hold.
+   *
+   * Unlike every other entry here this one is not a *sampling* parameter, and
+   * it is here for a narrow reason: it is a number with a real backend-checked
+   * range, so `settingsBounds.test.ts` can hold the transcription honest. Its
+   * twin, `reasoningEffort`, is an enum and stays out of this table entirely.
+   */
+  reasoningBudgetTokens: { default: null, min: -1, max: 32768, step: 1 },
 };

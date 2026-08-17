@@ -57,6 +57,14 @@ preserves the multi-message UI layout from the previous client-side loop.
 |---|---|---|
 | `maxToolIterations` | `AgentConfig::max_iterations` | persisted setting, or 25 |
 | `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
+| Tools popover → Agent limits | `AgentConfig` fields, via `agentOverridesToWire()` | backend defaults |
+| Tools popover → Reasoning | **top-level** `reasoning_effort` / `reasoning_budget_tokens`, via `reasoningOverridesToWire()` | resolved from the profile / model / global / floor layers |
+
+The last row is the one that is easy to get wrong. Both reasoning controls sit
+at the top level of `AgentChatRequest`, not inside `config` — they are per-turn
+shape rather than agent-loop tuning, and `AgentRequestConfig` declares neither,
+so a level routed through `config` would be dropped by serde without a word.
+That is why the store has two wire mappers rather than one.
 
 Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
 etc.) are controlled by the backend's `AgentConfig::default()` and are not

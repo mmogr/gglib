@@ -14,9 +14,9 @@ use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
+use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::presentation::style;
-use crate::shared_args::ConversationSettingsBuilder;
 
 use self::persistence::Conversation;
 

@@ -27,7 +27,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::InferenceConfig;
+use crate::domain::{InferenceConfig, ReasoningEffort};
 
 /// Maximum length of a profile name.
 ///
@@ -140,14 +140,25 @@ impl InferenceProfile {
 ///
 /// These are *templates*, not behaviour: nothing reads them at request time and
 /// installing them simply seeds the user's own profile list. Each sets only the
-/// two parameters that actually characterise its use case, leaving everything
-/// else to fall through to the model's own defaults.
+/// parameters that actually characterise its use case, leaving everything else
+/// to fall through to the model's own defaults.
+///
+/// Two families, kept in separate functions because they are separate
+/// arguments: [`sampling_templates`] picks a distribution, and
+/// [`reasoning_templates`] picks how hard the model is asked to think.
+#[must_use]
+pub fn builtin_templates() -> Vec<InferenceProfile> {
+    let mut templates = sampling_templates();
+    templates.extend(reasoning_templates());
+    templates
+}
+
+/// The distribution-shaping templates: temperature and `top_p` only.
 ///
 /// `chat` is the only one listed in `/v1/models` out of the box — it is the
 /// conversational-client case that motivates the feature, and one visible
 /// variant keeps the model picker useful without swamping it.
-#[must_use]
-pub fn builtin_templates() -> Vec<InferenceProfile> {
+fn sampling_templates() -> Vec<InferenceProfile> {
     vec![
         InferenceProfile {
             name: "coding".to_owned(),
@@ -182,122 +193,90 @@ pub fn builtin_templates() -> Vec<InferenceProfile> {
     ]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// One template per rung of the [`ReasoningEffort`] ladder.
+///
+/// # Why each rung sets *both* controls
+///
+/// [`reasoning_effort`] is a string a chat template may read at render time —
+/// and may equally ignore, in perfect silence (ADR 0007 finding 3). A profile
+/// that carried only the effort level would therefore do *nothing at all* on
+/// such a model, while reading in `gglib config profile show` as though it
+/// had. Pairing it with [`reasoning_budget_tokens`] — which llama.cpp itself
+/// enforces, whatever the template does — means the rung degrades to a
+/// narrower promise rather than to no promise: on a template that reads the
+/// variable the user gets both, and on one that does not they still get a
+/// thinking cap they chose.
+///
+/// # The budget ladder, and why these numbers
+///
+/// | profile | effort | budget | what the budget is for |
+/// |---------|--------|--------|------------------------|
+/// | `minimal` | `minimal` | 256 | a sentence or two of scratch work — an answer, not a deliberation |
+/// | `low` | `low` | 1024 | one short chain; enough to check an assumption |
+/// | `medium` | `medium` | 4096 | the middle rung, and roughly what an untouched `gpt-oss` turn spends |
+/// | `high` | `high` | 16384 | multi-step work where the thinking is the point |
+/// | `xhigh` | `xhigh` | 32768 | long deliberation, still bounded so a loop terminates |
+/// | `max` | `max` | -1 | defer to the launch-time `--reasoning-budget` |
+///
+/// Roughly a quadrupling per rung to 16384 and a doubling after, because the
+/// levels are not linear either: nothing in llama.cpp compares them and a
+/// template is free to treat two of them identically, so the ladder is spaced
+/// widely enough that adjacent rungs are distinguishable in practice rather
+/// than finely enough to imply a precision that does not exist. Nothing is
+/// measured here — these are *starting points a user edits*, and the one
+/// number that is not a guess is `max`'s `-1`, which declines to invent a
+/// ceiling and leaves the operator's own launch default in charge.
+///
+/// # Only three are listed
+///
+/// Six listed variants per model would swamp the very model picker
+/// [`InferenceProfile::list_in_models`] exists to protect, so `low`, `high`
+/// and `max` — the ends and a usable middle — are the visible ones. The other
+/// three stay fully usable by name as `<model>:minimal` and friends.
+///
+/// [`ReasoningEffort`]: crate::domain::ReasoningEffort
+/// [`reasoning_effort`]: InferenceConfig::reasoning_effort
+/// [`reasoning_budget_tokens`]: InferenceConfig::reasoning_budget_tokens
+fn reasoning_templates() -> Vec<InferenceProfile> {
+    /// `(name, effort, budget, listed)` — one row per rung, weakest first.
+    const LADDER: [(&str, ReasoningEffort, i32, bool); 6] = [
+        ("minimal", ReasoningEffort::Minimal, 256, false),
+        ("low", ReasoningEffort::Low, 1024, true),
+        ("medium", ReasoningEffort::Medium, 4096, false),
+        ("high", ReasoningEffort::High, 16384, true),
+        ("xhigh", ReasoningEffort::XHigh, 32768, false),
+        ("max", ReasoningEffort::Max, -1, true),
+    ];
 
-    #[test]
-    fn accepts_lowercase_alphanumeric_and_hyphen() {
-        for name in ["coding", "chat", "creative", "long-form", "gpt4-style", "a"] {
-            assert!(validate_name(name).is_ok(), "should accept {name}");
-        }
-    }
-
-    #[test]
-    fn rejects_empty_name() {
-        assert_eq!(validate_name(""), Err(ProfileNameError::Empty));
-    }
-
-    #[test]
-    fn rejects_name_over_the_length_cap() {
-        let long = "a".repeat(MAX_PROFILE_NAME_LEN + 1);
-        assert_eq!(
-            validate_name(&long),
-            Err(ProfileNameError::TooLong(MAX_PROFILE_NAME_LEN + 1))
-        );
-        assert!(validate_name(&"a".repeat(MAX_PROFILE_NAME_LEN)).is_ok());
-    }
-
-    /// Uppercase, underscores, dots, spaces and colons are all outside the
-    /// conservative set — the colon especially, since it is the delimiter.
-    #[test]
-    fn rejects_characters_outside_the_conservative_set() {
-        for name in ["Coding", "long_form", "v1.2", "long form", "a:b", "café"] {
-            assert!(
-                matches!(
-                    validate_name(name),
-                    Err(ProfileNameError::InvalidCharacters(_))
-                ),
-                "should reject {name}"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_leading_or_trailing_hyphen() {
-        for name in ["-coding", "coding-", "-"] {
-            assert!(
-                matches!(
-                    validate_name(name),
-                    Err(ProfileNameError::HyphenBoundary(_))
-                ),
-                "should reject {name}"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_reserved_profile_names() {
-        for name in RESERVED_PROFILE_NAMES {
-            assert_eq!(
-                validate_name(name),
-                Err(ProfileNameError::Reserved((*name).to_owned()))
-            );
-        }
-    }
-
-    #[test]
-    fn builtin_template_names_are_valid_and_unique() {
-        let templates = builtin_templates();
-        let mut names: Vec<&str> = templates.iter().map(|p| p.name.as_str()).collect();
-        names.sort_unstable();
-        let unique_count = {
-            let mut deduped = names.clone();
-            deduped.dedup();
-            deduped.len()
-        };
-        assert_eq!(names.len(), unique_count, "template names must be unique");
-
-        for profile in &templates {
-            assert!(profile.validate().is_ok(), "invalid name: {}", profile.name);
-        }
-    }
-
-    /// The central invariant: a template must leave the parameters it does not
-    /// care about as `None` so they still resolve from the model's own
-    /// defaults. A template that filled every field would silently override
-    /// per-model tuning such as `reasoning_profile`'s `presence_penalty`.
-    #[test]
-    fn builtin_templates_are_sparse() {
-        for profile in builtin_templates() {
-            let c = &profile.config;
-            assert!(c.temperature.is_some(), "{} sets temperature", profile.name);
-            assert!(c.top_p.is_some(), "{} sets top_p", profile.name);
-            assert!(c.top_k.is_none(), "{} leaves top_k open", profile.name);
-            assert!(
-                c.max_tokens.is_none(),
-                "{} leaves max_tokens open",
-                profile.name
-            );
-            assert!(
-                c.repeat_penalty.is_none(),
-                "{} leaves repeat_penalty open",
-                profile.name
-            );
-            assert!(
-                c.presence_penalty.is_none(),
-                "{} leaves presence_penalty open",
-                profile.name
-            );
-            assert!(c.min_p.is_none(), "{} leaves min_p open", profile.name);
-        }
-    }
-
-    #[test]
-    fn serializes_with_camel_case_keys() {
-        let profile = &builtin_templates()[0];
-        let json = serde_json::to_value(profile).expect("serializes");
-        assert!(json.get("listInModels").is_some());
-        assert!(json.get("list_in_models").is_none());
-    }
+    LADDER
+        .into_iter()
+        .map(|(name, effort, budget, listed)| InferenceProfile {
+            name: name.to_owned(),
+            description: Some(describe_rung(effort, budget)),
+            config: InferenceConfig {
+                reasoning_effort: Some(effort),
+                reasoning_budget_tokens: Some(budget),
+                ..Default::default()
+            },
+            list_in_models: listed,
+        })
+        .collect()
 }
+
+/// The description shown in `/v1/models` and the settings UI for one rung.
+///
+/// Spells out both halves, including the fact that the effort half is only a
+/// request: a user reading the list should not have to know ADR 0007 to learn
+/// that a template may ignore it.
+fn describe_rung(effort: ReasoningEffort, budget: i32) -> String {
+    let cap = if budget < 0 {
+        "no gglib-set cap (defers to the launch default)".to_owned()
+    } else {
+        format!("at most {budget} thinking tokens")
+    };
+    format!("Asks for '{effort}' reasoning effort where the template reads it; {cap}.")
+}
+
+#[cfg(test)]
+#[path = "inference_profile_tests.rs"]
+mod inference_profile_tests;

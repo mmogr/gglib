@@ -8,6 +8,12 @@
 import { FC, useState } from 'react';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
+import { Select } from '../ui/Select';
+import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
+import {
+  REASONING_EFFORT_LEVELS,
+  type ReasoningEffortLevel,
+} from '../../constants/reasoningEffort';
 import {
   MAX_OBSERVATION_STEPS_CEILING,
   MAX_PARALLEL_TOOLS_CEILING,
@@ -28,6 +34,28 @@ interface NumberRowProps {
   onChange: (value: number | undefined) => void;
 }
 
+const clamp = (value: number | undefined, min: number, max: number) =>
+  value === undefined ? undefined : Math.min(Math.max(value, min), max);
+
+/**
+ * A bounded integer field that is bounded on commit, never on keystroke.
+ *
+ * The input is controlled by `value`, so a keystroke this handler answers with
+ * `undefined` re-renders the field empty and destroys what was typed. That
+ * makes any bound applied here a bound on *prefixes*, not on answers: reaching
+ * 30000 in the row floored at 100 means passing through "3" and "30", so a
+ * `parsed >= min` test does not make that row strict, it makes it impossible to
+ * type into. The same test is invisible on the rows floored at 1, whose every
+ * prefix is already in range — which is exactly why it can be introduced
+ * without anyone noticing.
+ *
+ * So: accept any integer while typing and correct it on blur, where the number
+ * is finished and clamping it can only mean the user's own value was out of
+ * range. `parseInt('')` is `NaN`, which is how clearing the field still clears
+ * the override — and it is the reason a plain positivity test was wrong for the
+ * reasoning budget, whose -1 ("defer to the launch default") and 0 ("stop
+ * thinking") are values rather than absences.
+ */
 const NumberRow: FC<NumberRowProps> = ({ id, label, placeholder, min, max, value, onChange }) => (
   <div className="flex items-center justify-between gap-sm">
     <label htmlFor={id} className="text-xs text-text-secondary">
@@ -44,18 +72,15 @@ const NumberRow: FC<NumberRowProps> = ({ id, label, placeholder, min, max, value
       placeholder={placeholder}
       onChange={(e) => {
         const parsed = parseInt(e.target.value, 10);
-        onChange(
-          Number.isFinite(parsed) && parsed > 0
-            ? Math.min(Math.max(parsed, min), max)
-            : undefined,
-        );
+        onChange(Number.isFinite(parsed) ? parsed : undefined);
+      }}
+      onBlur={() => {
+        const bounded = clamp(value, min, max);
+        if (bounded !== value) onChange(bounded);
       }}
     />
   </div>
 );
-
-const clamp = (value: number | undefined, min: number, max: number) =>
-  value === undefined ? undefined : Math.min(Math.max(value, min), max);
 
 /** Stale stored values are clamped on seed so the UI never shows what the wire won't send. */
 function seedOverrides(): StoredAgentOverrides {
@@ -123,6 +148,54 @@ export const AgentLimitsSection: FC = () => {
         value={overrides.maxObservationSteps}
         onChange={(v) => update({ maxObservationSteps: v })}
       />
+      {/*
+        Not an agent limit, and shown here anyway: this is the popover for
+        "settings that apply to the chats I send", and a per-turn reasoning
+        level is one. It reaches the request as a top-level field rather than
+        through `AgentConfig` — see `reasoningOverridesToWire`.
+      */}
+      <div className="flex items-center justify-between gap-sm">
+        <label htmlFor="chat-reasoning-effort" className="text-xs text-text-secondary">
+          Reasoning effort
+        </label>
+        <Select
+          id="chat-reasoning-effort"
+          size="sm"
+          className="w-32"
+          value={overrides.reasoningEffort ?? ''}
+          onChange={(e) =>
+            update({
+              reasoningEffort: (e.target.value || undefined) as ReasoningEffortLevel | undefined,
+            })
+          }
+        >
+          {/* Blank sends no key, leaving the model's own resolved level in place. */}
+          <option value="">model default</option>
+          {REASONING_EFFORT_LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <NumberRow
+        id="chat-reasoning-budget"
+        label="Reasoning budget"
+        placeholder="model default"
+        // Borrowed from the settings surface rather than restated, so the two
+        // places a budget can be typed offer the same range. Note the floor is
+        // below zero — -1 is a legal value ("defer to the launch default"),
+        // unlike every limit above this row.
+        min={INFERENCE_PARAMS.reasoningBudgetTokens.min}
+        max={INFERENCE_PARAMS.reasoningBudgetTokens.max}
+        value={overrides.reasoningBudgetTokens}
+        onChange={(v) => update({ reasoningBudgetTokens: v })}
+      />
+      <p className="m-0 text-2xs text-text-muted">
+        The budget is a hard cap llama.cpp enforces on any model. The effort level is only a
+        request to the chat template — a model whose template does not read it is unaffected, and
+        the model inspector says which models those are.
+      </p>
       <Checkbox
         checked={classificationDisabled}
         onChange={(e) =>

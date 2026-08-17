@@ -126,4 +126,85 @@ pub(crate) struct AgentChatRequest {
     /// to target a specific one.
     #[serde(default)]
     pub model: Option<String>,
+
+    /// How hard to ask the model to think, where its chat template reads the
+    /// variable.
+    ///
+    /// Conditional by construction: a template that does not read
+    /// `reasoning_effort` ignores it in perfect silence, and stage 5b of the
+    /// request pipeline deletes the key outright on a model whose observed caps
+    /// say so (ADR 0007 decision 3). Unlike `/api/chat`, this path *does* run
+    /// the pipeline, so that gate is in force here.
+    ///
+    /// No `none` level exists: omitting the field is what leaves the template's
+    /// own default in place.
+    #[serde(default)]
+    pub reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
+
+    /// Ceiling on each turn's thinking tokens. `-1` defers to the launch-time
+    /// default; `0` stops thinking altogether.
+    ///
+    /// Enforced by llama.cpp's own sampler-side budget rather than by a
+    /// template, so it holds on models where the effort level does nothing —
+    /// which is why the two are separate fields and not one knob.
+    #[serde(default)]
+    pub reasoning_budget_tokens: Option<i32>,
 }
+
+impl AgentChatRequest {
+    /// The request's own sampling layer — the top rung of the hierarchy.
+    ///
+    /// # Why only two fields, on a DTO that accepts no other sampling
+    ///
+    /// This endpoint has never taken a `temperature`, a `top_p`, or anything
+    /// else the sampler reads, and this does not open that door: the returned
+    /// config names these two and leaves every other field `None`, so each one
+    /// still gap-fills from the profile, per-model, global and floor layers
+    /// exactly as before.
+    ///
+    /// The asymmetry is deliberate rather than an oversight to tidy up later.
+    /// The sampler parameters are per-*model* tuning — they belong to the model
+    /// row and the operator's settings, which is where an agent loop should read
+    /// them from, and a caller overriding them per request is asking to
+    /// un-tune the model. The reasoning controls are per-*turn* shape: how long
+    /// this particular question is worth thinking about is a property of the
+    /// question, not of the model, and there is no other layer that can know it.
+    ///
+    /// `None` when the request named neither, which keeps the adapter's
+    /// "resolve entirely from the layers beneath" path — and its cheaper
+    /// `with_sampling(None)` — for the overwhelmingly common case.
+    pub(crate) const fn sampling_layer(&self) -> Option<gglib_core::domain::InferenceConfig> {
+        if self.reasoning_effort.is_none() && self.reasoning_budget_tokens.is_none() {
+            return None;
+        }
+        // Written out in full rather than with `..Default::default()`, so a
+        // field added to `InferenceConfig` fails to compile here and someone
+        // has to decide whether this endpoint should accept it — which is the
+        // question the paragraph above answers, and the one a struct-update
+        // shorthand would answer silently as "no, forever".
+        Some(gglib_core::domain::InferenceConfig {
+            reasoning_effort: self.reasoning_effort,
+            reasoning_budget_tokens: self.reasoning_budget_tokens,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            max_tokens: None,
+            repeat_penalty: None,
+            presence_penalty: None,
+            min_p: None,
+            frequency_penalty: None,
+            dry_multiplier: None,
+            dry_base: None,
+            dry_allowed_length: None,
+            dry_penalty_last_n: None,
+            dynatemp_range: None,
+            dynatemp_exponent: None,
+            top_n_sigma: None,
+            seed: None,
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "dto_tests.rs"]
+mod dto_tests;

@@ -651,45 +651,10 @@ pub fn resolve_sampling(
         resolved.temperature = Some(ceiling);
     }
 
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let names: Vec<&str> = ordered.iter().map(|(name, _)| *name).collect();
-        debug!(
-            temperature = ?resolved.temperature,
-            top_p = ?resolved.top_p,
-            top_k = ?resolved.top_k,
-            max_tokens = ?resolved.max_tokens,
-            presence_penalty = ?resolved.presence_penalty,
-            repeat_penalty = ?resolved.repeat_penalty,
-            min_p = ?resolved.min_p,
-            frequency_penalty = ?resolved.frequency_penalty,
-            dynatemp_range = ?resolved.dynatemp_range,
-            dynatemp_exponent = ?resolved.dynatemp_exponent,
-            top_n_sigma = ?resolved.top_n_sigma,
-            dry_multiplier = ?resolved.dry_multiplier,
-            dry_base = ?resolved.dry_base,
-            dry_allowed_length = ?resolved.dry_allowed_length,
-            dry_penalty_last_n = ?resolved.dry_penalty_last_n,
-            // Logged like the rest, and load-bearing in a way the rest are
-            // not: no readback will ever echo either of these, so this line
-            // and the provenance record are the only evidence that they were
-            // resolved at all. See ADR 0007 finding 7a.
-            reasoning_effort = ?resolved.reasoning_effort,
-            reasoning_budget_tokens = ?resolved.reasoning_budget_tokens,
-            from = %sources.describe(&names),
-            // Which class floor was used. `sources` says a value came from
-            // "floor" but not which one, and the explain surfaces cannot show
-            // this at all — they resolve stored configuration with no request
-            // in hand.
-            floor = if model_is_reasoning { "reasoning" } else { "default" },
-            // Reported separately from `from`, which still names the rung the
-            // temperature *would* have come from. The ceiling does not replace
-            // that rung, it caps what it supplied.
-            agentic_turn,
-            agentic_ceiling = applied_ceiling,
-            "sampling resolved"
-        );
-    }
-
+    // Nothing is logged here. The whole decision is rendered once, by
+    // `super::sampling_log`, after stage 5b — which can still delete a resolved
+    // `reasoning_effort` and would leave this line stating that gglib sent one.
+    // See that module for why a second, correcting line was not good enough.
     let layer_names: [&'static str; LADDER_RUNGS] = ordered.map(|(name, _)| name);
     let decision = |applied| SamplingDecision {
         resolved: resolved.clone(),

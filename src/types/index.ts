@@ -1,4 +1,11 @@
 import type { ModelBenchmarkSummary } from './benchmark';
+import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
+import type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
+
+// The reasoning-control wire shapes live in their own module — see its header
+// for why — and are re-exported here so every caller keeps importing from
+// `../types`.
+export type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
 
 // ============================================================================
 // Inference Configuration
@@ -58,6 +65,31 @@ export interface InferenceConfig {
   /** How far back DRY scans, in tokens; 0 disables. Unset defers to
    *  llama.cpp's default (64). */
   dryPenaltyLastN?: number;
+  /**
+   * How hard to ask the model to think, where its chat template reads the
+   * variable.
+   *
+   * Conditional by nature, and the only field here that is: a template that
+   * does not read `reasoning_effort` ignores it in silence, so the server
+   * deletes the key rather than sending it on a model whose observed caps say
+   * so (ADR 0007 decision 3). `ModelDetail.reasoningEffortSupport` is what a
+   * surface consults before offering the control — see `TemplateSupport` for
+   * why the answer has three states and not two.
+   *
+   * Unset is not a level. Omitting the key leaves the *template's* own default
+   * in place, which is a different act from naming one, and is why no `none`
+   * rung exists.
+   */
+  reasoningEffort?: ReasoningEffortLevel;
+  /**
+   * Ceiling on this turn's thinking tokens.
+   *
+   * `-1` defers to the launch-time default; `0` stops thinking altogether.
+   * Enforced by llama.cpp's own sampler rather than by a template, so unlike
+   * {@link reasoningEffort} it holds on every model and is never
+   * capability-gated. Validated `>= -1` on save.
+   */
+  reasoningBudgetTokens?: number;
   /**
    * RNG seed. Unset means llama.cpp draws a fresh one per request.
    *
@@ -160,7 +192,21 @@ export type SamplingLayerName =
  */
 export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset' | 'suppressedByTemplate';
 
-/** The parameters that carry provenance — the keys of {@link InferenceConfig}. */
+/**
+ * The numeric parameters with a bounded range — the keys of `INFERENCE_PARAMS`
+ * and `PARAM_LABELS`.
+ *
+ * Membership here is a claim that `tests/ts/contracts/settingsBounds.test.ts`
+ * can check: every key needs a `{ default, min, max, step }` entry that the
+ * test reads Rust's `validate_inference_config` and `with_hardcoded_defaults`
+ * to verify. `reasoningBudgetTokens` qualifies — Rust bounds it at `>= -1` and
+ * floors it at unset — and joins for exactly that reason.
+ *
+ * `reasoningEffort` does not, and cannot: it is a string enum with no bounds
+ * and no numeric default, so an entry for it would be a fabricated row in a
+ * table whose entire purpose is to be checkable. It lives in
+ * {@link ProvenanceParamKey} instead.
+ */
 export type SamplingParamKey =
   | 'temperature'
   | 'topP'
@@ -176,7 +222,8 @@ export type SamplingParamKey =
   | 'dryBase'
   | 'dryAllowedLength'
   | 'dryPenaltyLastN'
-  | 'maxTokens';
+  | 'maxTokens'
+  | 'reasoningBudgetTokens';
 
 /**
  * Where one resolved parameter's value came from.
@@ -186,7 +233,7 @@ export type SamplingParamKey =
  */
 export interface ParamProvenance {
   /** The key this entry describes in {@link SamplingExplanation.resolved}. */
-  param: SamplingParamKey;
+  param: ProvenanceParamKey;
   kind: ProvenanceKind;
   layer?: SamplingLayerName;
 }
@@ -227,6 +274,21 @@ export interface SamplingExplanation {
    * model author renders as gglib's reasoning-tag guess.
    */
   defaultsOrigin?: DefaultsOriginName | null;
+  /**
+   * The `reasoningEffort` this model's template would ignore, when the stored
+   * configuration resolves one it does not read.
+   *
+   * The suppression is in {@link sources} too, as a `suppressedByTemplate`
+   * entry — but that entry has overwritten the rung that asked, and `resolved`
+   * carries nothing, so between them a reader learns only that *something* was
+   * dropped. This is the level and the layer.
+   *
+   * Conditional, not historical: the endpoint explains stored configuration, so
+   * nothing has been sent. Word it as what *would* happen on a request.
+   * Absent on a backend that predates the field, which reads as "no suppression
+   * to report".
+   */
+  effortSuppressed?: SuppressedEffort | null;
 }
 
 /**
@@ -342,6 +404,16 @@ export interface ModelDetail extends GgufModel {
   lastUpdateCheck?: string;
   /** Raw GGUF key-value metadata pairs (may be large). */
   metadata: Record<string, string>;
+  /**
+   * Whether this model's chat template reads `reasoning_effort`.
+   *
+   * Only the model *detail* carries it: the observation is taken from
+   * `GET /props` at launch and stored on the row, and the list endpoint does
+   * not publish it. Absent on a backend that predates the field — which reads
+   * as `'unknown'`, the one default that cannot hide the control from a model
+   * that supports it.
+   */
+  reasoningEffortSupport?: TemplateSupport;
 }
 
 
@@ -363,6 +435,17 @@ export interface ServeConfig {
   repeatPenalty?: number;
   presencePenalty?: number;
   minP?: number;
+  /**
+   * Session reasoning controls, forwarded to `inference_params`.
+   *
+   * Listed because the serve modal offers them: this struct is a hand-kept
+   * subset of {@link InferenceConfig}, not a projection of it, so a field the
+   * modal renders and this omits is a control the user can set and the launch
+   * silently discards. (Nine of `InferenceConfig`'s fields are in exactly that
+   * position already — see `tests/ts/contracts/startServerRequest.test.ts`.)
+   */
+  reasoningEffort?: ReasoningEffortLevel;
+  reasoningBudgetTokens?: number;
 }
 
 export interface ServerInfo {

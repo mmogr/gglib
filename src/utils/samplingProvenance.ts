@@ -11,13 +11,22 @@ import type {
   DefaultsOriginName,
   InferenceConfig,
   ParamProvenance,
+  ProvenanceParamKey,
   PublishedDefault,
   SamplingParamKey,
 } from '../types';
 import { UNKNOWN } from './format';
 
-/** Human-readable label per parameter, in the order the server sends them. */
-export const PARAM_LABELS: Record<SamplingParamKey, string> = {
+/**
+ * Human-readable label per parameter, in the order the server sends them.
+ *
+ * Keyed by {@link ProvenanceParamKey} rather than `SamplingParamKey`: the
+ * explain table is driven by what the server attributes a source to, and that
+ * now includes both reasoning controls. Before they were listed here the table
+ * rendered `reasoningEffort` as its own wire key beside every other row's
+ * prose label.
+ */
+export const PARAM_LABELS: Record<ProvenanceParamKey, string> = {
   temperature: 'Temperature',
   topP: 'Top P',
   topK: 'Top K',
@@ -33,6 +42,8 @@ export const PARAM_LABELS: Record<SamplingParamKey, string> = {
   dryAllowedLength: 'DRY Allowed Length',
   dryPenaltyLastN: 'DRY Penalty Last N',
   maxTokens: 'Max Tokens',
+  reasoningEffort: 'Reasoning Effort',
+  reasoningBudgetTokens: 'Reasoning Budget',
 };
 
 /** The facts about the model that change how a source reads. */
@@ -108,10 +119,16 @@ export function formatParamValue(
   value: number | null | undefined,
 ): string {
   if (value == null) return UNKNOWN;
-  // Integer-valued parameters render bare. `dryPenaltyLastN` is the only one
-  // that can legitimately be negative (-1 = whole context), which `toFixed(1)`
-  // would render as a misleading "-1.0".
-  if (param === 'topK' || param === 'dryAllowedLength' || param === 'dryPenaltyLastN') {
+  // Integer-valued parameters render bare. Two of them can legitimately be
+  // negative — `dryPenaltyLastN`'s -1 (whole context) and
+  // `reasoningBudgetTokens`' -1 (defer to the launch default) — which
+  // `toFixed(1)` would render as a misleading "-1.0".
+  if (
+    param === 'topK' ||
+    param === 'dryAllowedLength' ||
+    param === 'dryPenaltyLastN' ||
+    param === 'reasoningBudgetTokens'
+  ) {
     return String(value);
   }
   if (param === 'maxTokens') return value.toLocaleString();
@@ -124,6 +141,23 @@ export function resolvedValue(
   param: SamplingParamKey,
 ): number | undefined {
   return resolved[param];
+}
+
+/**
+ * Render one explain-table row's resolved value.
+ *
+ * Exists because `reasoningEffort` is the one attributed field whose value is
+ * not a number: `formatParamValue` would have fallen through to
+ * `Number.isInteger('high')` and printed the level by accident, which is the
+ * right output for the wrong reason and would have become the wrong output the
+ * moment the numeric branches were touched.
+ */
+export function formatProvenanceValue(
+  param: ProvenanceParamKey,
+  resolved: InferenceConfig,
+): string {
+  if (param === 'reasoningEffort') return resolved.reasoningEffort ?? UNKNOWN;
+  return formatParamValue(param, resolvedValue(resolved, param));
 }
 
 /**
@@ -176,7 +210,7 @@ export function describePublished(entry: PublishedDefault): string {
  */
 export function publishedByParam(
   published: PublishedDefault[] | undefined,
-): Map<SamplingParamKey, PublishedDefault> {
+): Map<ProvenanceParamKey, PublishedDefault> {
   return new Map((published ?? []).map((entry) => [entry.param, entry]));
 }
 

@@ -7,8 +7,9 @@ import { Banner } from '../../ui/Banner';
 import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
+import { JinjaModeField } from './JinjaModeField';
 import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
-import type { GgufModel, AppSettings, InferenceConfig } from '../../../types';
+import type { GgufModel, AppSettings, InferenceConfig, TemplateSupport } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
 
 interface ServeModalProps {
@@ -26,6 +27,12 @@ interface ServeModalProps {
   /** null = use default 0.75 */
   mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
+  /**
+   * Whether this model's template reads `reasoning_effort`, from the model
+   * detail. Absent reads as `unknown` — the launch this modal configures is
+   * often the very launch that will answer the question.
+   */
+  reasoningEffortSupport?: TemplateSupport;
   /** Serve as a pinned proxy (`gglib serve`) instead of a bare model start. */
   pinProxy: boolean;
   // Handlers
@@ -56,6 +63,7 @@ export const ServeModal: FC<ServeModalProps> = ({
   mtpNMaxOverride,
   mtpPMinOverride,
   inferenceParams,
+  reasoningEffortSupport,
   pinProxy,
   onPinProxyChange,
   onContextChange,
@@ -68,9 +76,6 @@ export const ServeModal: FC<ServeModalProps> = ({
   onClose,
   onStart,
 }) => {
-  const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
-  const isAutoJinja = jinjaOverride === null && hasAgentTag;
-
   // MTP: auto-enabled when tag present and no explicit override
   const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
   const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;
@@ -171,25 +176,6 @@ export const ServeModal: FC<ServeModalProps> = ({
           </p>
         </div>
 
-        {hasAgentTag && (
-          <Banner
-            variant="info"
-            title="Agent tag detected"
-            className="mb-md"
-            action={
-              jinjaOverride !== null && (
-                <Button type="button" variant="ghost" size="sm" onClick={onJinjaReset} disabled={isServing}>
-                  Reset to auto-detect
-                </Button>
-              )
-            }
-          >
-            Jinja templates {jinjaOverride === false
-              ? 'would normally be auto-enabled for agent-tagged models, but you have disabled them for this launch.'
-              : 'will be enabled automatically for agent-tagged models to support structured prompts.'}
-          </Banner>
-        )}
-
         <div className="mb-lg">
           <Checkbox
             id="pin-proxy-toggle"
@@ -201,25 +187,13 @@ export const ServeModal: FC<ServeModalProps> = ({
           />
         </div>
 
-        <div className="mb-lg">
-          <div className="flex items-center justify-between gap-sm">
-            <label htmlFor="jinja-toggle" className="block mb-0 font-medium text-text">Jinja Templates</label>
-            <span className="text-sm text-text-muted">
-              {isAutoJinja
-                ? 'Auto (agent tag)'
-                : (jinjaOverride === null
-                  ? 'Disabled'
-                  : (jinjaOverride ? 'Enabled manually' : 'Disabled manually'))}
-            </span>
-          </div>
-          <Checkbox
-            id="jinja-toggle"
-            checked={effectiveJinjaEnabled}
-            onChange={(e) => onJinjaChange(e.target.checked)}
-            disabled={isServing}
-            description="Enable llama.cpp's Jinja templating for instruction/agent models. Leave off for plain chat models."
-          />
-        </div>
+        <JinjaModeField
+          value={jinjaOverride}
+          hasAgentTag={hasAgentTag}
+          disabled={isServing}
+          onChange={onJinjaChange}
+          onReset={onJinjaReset}
+        />
 
         {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
         {hasMtpTag && (
@@ -358,6 +332,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                 onChange={onInferenceParamsChange}
                 disabled={isServing}
                 fallback={{ kind: 'resolved', ownLayer: 'request', resolution }}
+                capabilities={{ reasoningEffort: reasoningEffortSupport ?? 'unknown' }}
               />
             </div>
           )}

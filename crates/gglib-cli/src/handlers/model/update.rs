@@ -8,10 +8,11 @@ use std::io::{self, Write};
 use anyhow::{Result, anyhow};
 use gglib_core::{
     Model,
-    domain::{DefaultsOrigin, InferenceConfig},
+    domain::{DefaultsOrigin, InferenceConfig, ReasoningEffort},
 };
 
 use crate::bootstrap::CliContext;
+use crate::sampling_params::clear_param;
 
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
@@ -40,6 +41,10 @@ pub(crate) struct UpdateArgs {
     pub dynatemp_exponent: Option<f32>,
     pub top_n_sigma: Option<f32>,
     pub frequency_penalty: Option<f32>,
+    pub reasoning_effort: Option<ReasoningEffort>,
+    pub reasoning_budget_tokens: Option<i32>,
+    /// Parameters to clear back to falling through, by flag name.
+    pub unset: Vec<String>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -214,7 +219,10 @@ pub(crate) fn create_updated_model(
             || args.dynatemp_range.is_some()
             || args.dynatemp_exponent.is_some()
             || args.top_n_sigma.is_some()
-            || args.frequency_penalty.is_some();
+            || args.frequency_penalty.is_some()
+            || args.reasoning_effort.is_some()
+            || args.reasoning_budget_tokens.is_some()
+            || !args.unset.is_empty();
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -266,6 +274,19 @@ pub(crate) fn create_updated_model(
             if let Some(frequency_penalty) = args.frequency_penalty {
                 inference_config.frequency_penalty = Some(frequency_penalty);
             }
+            if let Some(reasoning_effort) = args.reasoning_effort {
+                inference_config.reasoning_effort = Some(reasoning_effort);
+            }
+            if let Some(reasoning_budget_tokens) = args.reasoning_budget_tokens {
+                inference_config.reasoning_budget_tokens = Some(reasoning_budget_tokens);
+            }
+
+            // Clears run after sets, so `--top-k 40 --unset top-k` ends
+            // cleared. The order is the one the flags read in: the last thing
+            // said about a parameter is what holds.
+            for param in &args.unset {
+                clear_param(&mut inference_config, param)?;
+            }
 
             // A deliberate flag from the user, so this is a user-set value
             // from here on — even if it happens to land on the same
@@ -273,6 +294,15 @@ pub(crate) fn create_updated_model(
             updated.defaults_origin = Some(DefaultsOrigin::User);
 
             updated.inference_defaults = Some(inference_config);
+
+            // Unsetting the last parameter must land back at *inherit*, not at
+            // an empty row that outranks global settings while saying nothing.
+            // `--unset` one at a time therefore reaches the same state
+            // `--clear-inference-defaults` reaches in one step.
+            if updated.inference_defaults.as_ref() == Some(&InferenceConfig::default()) {
+                updated.inference_defaults = None;
+                updated.defaults_origin = None;
+            }
         }
     }
 
@@ -319,31 +349,10 @@ fn show_inference_defaults_changes(
     old_config: &Option<InferenceConfig>,
     new_config: &Option<InferenceConfig>,
 ) {
-    // Check if there are any changes
-    let has_changes = match (old_config, new_config) {
-        (None, None) => false,
-        (Some(_), None) => true, // Cleared
-        (None, Some(_)) => true, // Added
-        (Some(old), Some(new)) => {
-            old.temperature != new.temperature
-                || old.top_p != new.top_p
-                || old.top_k != new.top_k
-                || old.max_tokens != new.max_tokens
-                || old.repeat_penalty != new.repeat_penalty
-                || old.presence_penalty != new.presence_penalty
-                || old.min_p != new.min_p
-                || old.dry_multiplier != new.dry_multiplier
-                || old.dry_base != new.dry_base
-                || old.dry_allowed_length != new.dry_allowed_length
-                || old.dry_penalty_last_n != new.dry_penalty_last_n
-                || old.dynatemp_range != new.dynatemp_range
-                || old.dynatemp_exponent != new.dynatemp_exponent
-                || old.top_n_sigma != new.top_n_sigma
-                || old.frequency_penalty != new.frequency_penalty
-        }
-    };
-
-    if !has_changes {
+    // Field-by-field equality, not a hand-written disjunction: the previous
+    // one listed fifteen fields by name, so a newly modelled parameter changed
+    // silently until someone remembered to add a sixteenth line.
+    if old_config == new_config {
         return;
     }
 
@@ -399,6 +408,12 @@ fn show_inference_defaults_changes(
             }
             if let Some(fp) = new.frequency_penalty {
                 println!("      Frequency penalty: {}", fp);
+            }
+            if let Some(re) = new.reasoning_effort {
+                println!("      Reasoning effort: {}", re);
+            }
+            if let Some(rb) = new.reasoning_budget_tokens {
+                println!("      Reasoning budget tokens: {}", rb);
             }
         }
         (Some(old), Some(new)) => {
@@ -507,6 +522,20 @@ fn show_inference_defaults_changes(
                     format_option_f32(&new.frequency_penalty)
                 );
             }
+            if old.reasoning_effort != new.reasoning_effort {
+                println!(
+                    "    Reasoning effort: {} → {}",
+                    format_unset(old.reasoning_effort),
+                    format_unset(new.reasoning_effort)
+                );
+            }
+            if old.reasoning_budget_tokens != new.reasoning_budget_tokens {
+                println!(
+                    "    Reasoning budget tokens: {} → {}",
+                    format_unset(old.reasoning_budget_tokens),
+                    format_unset(new.reasoning_budget_tokens)
+                );
+            }
         }
         (None, None) => {}
     }
@@ -561,6 +590,14 @@ fn format_option_u64(opt: &Option<u64>) -> String {
         .unwrap_or_else(|| "--".to_string())
 }
 
+/// A `Copy` option rendered for the preview, `None` as `unset`.
+///
+/// The `format_option_*` family below takes references and predates this;
+/// `ReasoningEffort` is `Copy` and this reads the same on either side.
+fn format_unset<T: std::fmt::Display>(opt: Option<T>) -> String {
+    opt.map_or_else(|| "unset".to_owned(), |v| v.to_string())
+}
+
 fn format_option_f32(opt: &Option<f32>) -> String {
     opt.map(|v| v.to_string())
         .unwrap_or_else(|| "unset".to_string())
@@ -589,125 +626,5 @@ fn show_field_change(field_name: &str, old_value: &str, new_value: &str) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    fn create_test_model() -> Model {
-        let mut metadata = HashMap::new();
-        metadata.insert("general.name".to_string(), "Test Model".to_string());
-        metadata.insert("test.key".to_string(), "test.value".to_string());
-
-        Model {
-            dialect_spec: None,
-            id: 1,
-            name: "Original Name".to_string(),
-            model_key: String::new(),
-            file_path: PathBuf::from("/test/model.gguf"),
-            param_count_b: 7.0,
-            inference_defaults: None,
-            defaults_origin: None,
-            architecture: Some("llama".to_string()),
-            quantization: Some("Q4_0".to_string()),
-            context_length: Some(4096),
-            expert_count: None,
-            expert_used_count: None,
-            expert_shared_count: None,
-            metadata,
-            added_at: chrono::Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            capabilities: gglib_core::ModelCapabilities::default(),
-            last_update_check: None,
-            tags: Vec::new(),
-            server_defaults: None,
-            template_caps: None,
-            benchmark_summary: None,
-        }
-    }
-
-    #[test]
-    fn test_parse_metadata_updates() {
-        let metadata_args = vec![
-            "key1=value1".to_string(),
-            "key2=value2".to_string(),
-            "complex.key=complex value with spaces".to_string(),
-        ];
-
-        let result = parse_metadata_updates(&metadata_args).unwrap();
-
-        assert_eq!(result.len(), 3);
-        assert_eq!(result.get("key1"), Some(&"value1".to_string()));
-        assert_eq!(result.get("key2"), Some(&"value2".to_string()));
-        assert_eq!(
-            result.get("complex.key"),
-            Some(&"complex value with spaces".to_string())
-        );
-    }
-
-    #[test]
-    fn test_parse_metadata_updates_invalid_format() {
-        let metadata_args = vec!["invalid_format".to_string()];
-        let result = parse_metadata_updates(&metadata_args);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_metadata_removals() {
-        let remove_arg = Some("key1,key2, key3 ".to_string());
-        let result = parse_metadata_removals(&remove_arg).unwrap();
-
-        assert_eq!(result.len(), 3);
-        assert_eq!(result, vec!["key1", "key2", "key3"]);
-    }
-
-    #[test]
-    fn test_create_updated_model() {
-        let existing = create_test_model();
-        let args = UpdateArgs {
-            identifier: "1".to_string(),
-            name: Some("Updated Name".to_string()),
-            param_count: Some(13.0),
-            architecture: Some("mistral".to_string()),
-            quantization: None,
-            context_length: Some(8192),
-            metadata: vec!["new.key=new.value".to_string()],
-            remove_metadata: Some("test.key".to_string()),
-            replace_metadata: false,
-            dry_run: false,
-            force: false,
-            temperature: None,
-            top_p: None,
-            top_k: None,
-            max_tokens: None,
-            repeat_penalty: None,
-            presence_penalty: None,
-            min_p: None,
-            dry_multiplier: None,
-            dry_base: None,
-            dry_allowed_length: None,
-            dry_penalty_last_n: None,
-            dynatemp_range: None,
-            dynatemp_exponent: None,
-            top_n_sigma: None,
-            frequency_penalty: None,
-            clear_inference_defaults: false,
-        };
-
-        let metadata_updates = parse_metadata_updates(&args.metadata).unwrap();
-        let metadata_removals = parse_metadata_removals(&args.remove_metadata).unwrap();
-
-        let updated =
-            create_updated_model(&existing, &args, &metadata_updates, &metadata_removals).unwrap();
-
-        assert_eq!(updated.name, "Updated Name");
-        assert_eq!(updated.param_count_b, 13.0);
-        assert_eq!(updated.architecture, Some("mistral".to_string()));
-        assert_eq!(updated.quantization, Some("Q4_0".to_string())); // Unchanged
-        assert_eq!(updated.context_length, Some(8192));
-        assert!(updated.metadata.contains_key("new.key"));
-        assert!(!updated.metadata.contains_key("test.key")); // Removed
-    }
-}
+#[path = "update_tests.rs"]
+mod update_tests;

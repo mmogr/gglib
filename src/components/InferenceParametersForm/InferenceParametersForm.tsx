@@ -1,12 +1,13 @@
 import { FC, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
-import type { InferenceConfig, SamplingParamKey } from '../../types';
+import type { InferenceConfig, SamplingParamKey, TemplateSupport } from '../../types';
 import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
 import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { type InferenceFallback, fallbackCaption, fallbackValue } from './fallbackCaption';
+import { ReasoningEffortField } from './ReasoningEffortField';
 import './InferenceParametersForm.css';
 
 interface InferenceParametersFormProps {
@@ -19,6 +20,22 @@ interface InferenceParametersFormProps {
    * describing somebody else's.
    */
   fallback: InferenceFallback;
+  /**
+   * What this surface knows about the model whose defaults it is editing.
+   *
+   * Optional, and omitting it means *there is no model here* rather than "no
+   * capabilities" — the global settings form is the surface with no model, and
+   * it must still offer every control, because the defaults it edits will meet
+   * models on both sides of every capability. Nothing is hidden when this is
+   * absent; only the captions change.
+   */
+  capabilities?: FormCapabilities;
+}
+
+/** The model facts that decide whether a control here applies at all. */
+export interface FormCapabilities {
+  /** Whether the model's chat template reads `reasoning_effort`. */
+  reasoningEffort: TemplateSupport;
 }
 
 /**
@@ -51,12 +68,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   onChange,
   disabled = false,
   fallback,
+  capabilities,
 }) => {
   const config = useMemo(() => value || {}, [value]);
 
   const updateField = useCallback(<K extends keyof InferenceConfig>(
     field: K,
-    newValue: number | undefined
+    newValue: InferenceConfig[K] | undefined
   ) => {
     const updated = { ...config, [field]: newValue };
     // Remove undefined values from the object
@@ -201,6 +219,33 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         {renderSlider('dryBase')}
         {renderNumberInput('dryAllowedLength')}
         {renderNumberInput('dryPenaltyLastN')}
+      </div>
+
+      {/*
+        Kept apart from the sampling block above, and not merged into it: these
+        two are not sampler settings. The budget is enforced by llama.cpp's own
+        thinking cap and the effort is a variable handed to a chat template that
+        may not read it, so grouping them with `temperature` would imply a
+        uniformity of effect that only one of them has.
+      */}
+      <h5 className="m-0 mt-[1.5rem] mb-[0.5rem] text-sm font-semibold text-text">Reasoning</h5>
+      <p className="m-0 mb-[1rem] text-xs text-text-muted leading-[1.4]">
+        The budget is a hard cap llama.cpp enforces on every model — −1 defers to whatever the
+        launch chose, 0 stops the model thinking altogether. The effort level is only a request to
+        the chat template, which is why the two are separate fields.
+      </p>
+      <div className="flex flex-col gap-[1rem]">
+        <ReasoningEffortField
+          value={config.reasoningEffort}
+          onChange={(level) => updateField('reasoningEffort', level)}
+          disabled={disabled}
+          support={capabilities?.reasoningEffort}
+        />
+        {/*
+          Never capability-gated: nothing about a template can stop the sampler
+          honouring a budget, so this field shows for every model.
+        */}
+        {renderNumberInput('reasoningBudgetTokens')}
       </div>
     </div>
   );

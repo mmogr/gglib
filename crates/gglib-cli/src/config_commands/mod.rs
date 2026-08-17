@@ -169,6 +169,18 @@ pub enum ProfileCommand {
         /// Top-n-sigma logit truncation; -1.0 disables (llama.cpp default -1.0)
         #[arg(long)]
         top_n_sigma: Option<f32>,
+        /// Reasoning effort: minimal, low, medium, high, xhigh, max.
+        ///
+        /// Applies only to models whose chat template declares that it reads
+        /// the variable. There is no `none` — set
+        /// `--reasoning-budget-tokens 0` to stop thinking.
+        #[arg(long, value_parser = crate::reasoning_args::parse_effort)]
+        reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
+        /// Thinking-token ceiling; -1 defers to the launch default, 0 stops
+        /// thinking. Enforced by llama.cpp on every model.
+        // `allow_hyphen_values` so the documented `-1` parses; see `SamplingArgs`.
+        #[arg(long, allow_hyphen_values = true, value_parser = crate::reasoning_args::parse_budget)]
+        reasoning_budget_tokens: Option<i32>,
         /// Clear a parameter so it falls back to the model's own default.
         /// Repeatable, e.g. `--unset top-k --unset min-p`.
         #[arg(long, value_name = "PARAM")]
@@ -185,7 +197,11 @@ pub enum ProfileCommand {
         /// Profile name
         name: String,
     },
-    /// Install the built-in starter profiles (coding, chat, creative)
+    /// Install the built-in starter profiles.
+    ///
+    /// Three shape the distribution (coding, chat, creative) and six are the
+    /// rungs of the reasoning ladder (minimal … max); `low`, `high` and `max`
+    /// are the ones advertised in /v1/models.
     InstallTemplates {
         /// Overwrite profiles that already exist with the same name
         #[arg(long)]

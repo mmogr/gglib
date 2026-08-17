@@ -14,6 +14,7 @@ Application-wide shared constant values: fixed, non-environment-specific values 
 | `prompts.ts` | `DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.'` — default chat system prompt; keeps runtime hooks free of UI-level defaults |
 | `settingsDefaults.ts` | Default value and accepted range for each numeric settings-modal field, mirroring `Settings::with_defaults()` and `validate_settings()` in `crates/gglib-core/src/settings.rs` |
 | `inferenceDefaults.ts` | Floor value and accepted range for each sampling parameter, mirroring `InferenceConfig::with_hardcoded_defaults()` and `validate_inference_config()` |
+| `reasoningEffort.ts` | The six-rung effort ladder, spelled as `ReasoningEffort::as_str` spells it on the wire. No `none` rung exists in gglib: erasing the kwarg yields the *template's* own default, not an absence of thinking |
 
 Adding constants here prevents duplication and ensures consistent defaults across tests, the backend API, and the UI.
 

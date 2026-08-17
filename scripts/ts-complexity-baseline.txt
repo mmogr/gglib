@@ -3,15 +3,15 @@ src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HfModelPreview/HfModelPreview.tsx 346
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
 src/components/McpServersPanel.tsx 449
-src/components/ModelInspectorPanel/components/ServeModal.tsx 367
-src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 352
+src/components/ModelInspectorPanel/components/ServeModal.tsx 342
+src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 326
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 373
 src/components/SettingsModal.tsx 373
 src/components/SetupWizard/SetupWizard.tsx 721
 src/components/VerificationModal.tsx 454
 src/hooks/useDownloadManager.ts 451
-src/hooks/useGglibRuntime/streamAgentChat.ts 390
+src/hooks/useGglibRuntime/streamAgentChat.ts 399
 src/pages/ChatPage.tsx 475
 src/pages/ModelControlCenterPage.tsx 318
 src/services/tools/registry.ts 432
@@ -20,4 +20,4 @@ src/services/transport/events/sse.ts 353
 src/services/transport/types/dashboard.ts 447
 src/styles/tailwind.css 402
 src/types/benchmark.ts 539
-src/types/index.ts 768
+src/types/index.ts 851

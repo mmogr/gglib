@@ -70,7 +70,7 @@ belongs here.
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
 | `createEventStore.ts` | Shared factory behind both registries — subscribe-before-fetch with an `eventVersion` guard |
-| `agentOverrides.ts` | Per-session agent parameter overrides |
+| `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
 
 ## Clients
 

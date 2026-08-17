@@ -21,14 +21,16 @@
 //! rung that supplied it, so a surface can say *which* value was dropped and
 //! *who* asked for it.
 //!
-//! Both records are written here and neither is rendered yet: the provenance
-//! surfaces (`gglib model explain`, the GUI caption) and the proxy's own
-//! report belong to the PRs that add the reasoning controls' surfaces. What
-//! this stage guarantees today is that the fact exists to be read, and that
-//! this module's own `debug!` names the level and the rung in the meantime.
-//! Note the stage-4 line in `sampling` still renders the pre-gate resolution,
-//! because it runs before this stage — it describes what was resolved, not
-//! what was sent.
+//! Both records are read downstream: `gglib model explain` renders the
+//! provenance, and the proxy hands [`SuppressedEffort`] to its sampling audit so
+//! the dashboard can name the level and the rung.
+//!
+//! This module's own `debug!` stays, and is not redundant with the pipeline's
+//! `"sampling resolved"` line. That line is rendered by
+//! [`sampling_log`](super::sampling_log) *after* this stage precisely so it
+//! describes what was sent — which means that on a suppression it reads
+//! `reasoning_effort=None … reasoning_effort=suppressed-by-template`, and the
+//! level and rung this stage threw away appear nowhere in it.
 //!
 //! # Unknown never gates
 //!
@@ -74,7 +76,10 @@ use tracing::debug;
 use super::ModelContext;
 use super::sampling::SamplingDecision;
 use crate::domain::inference::REASONING_EFFORT_KEY;
-use crate::domain::{ParamSource, ReasoningEffort, Support, reasoning_effort_support};
+use crate::domain::{
+    FieldSources, InferenceConfig, ParamSource, ReasoningEffort, Support, TemplateCaps,
+    reasoning_effort_support,
+};
 
 /// A resolved effort level this stage threw away, and where it came from.
 ///
@@ -121,39 +126,91 @@ pub fn suppress_unsupported_effort(
     ctx: &ModelContext,
     decision: &mut SamplingDecision,
 ) -> Option<SuppressedEffort> {
-    let level = decision.resolved.reasoning_effort?;
-
-    // `catalog_resolved` and `is_some` are both stated even though
-    // `reasoning_effort_support` already answers `Unknown` for absent caps:
-    // this is the one predicate in the arc that is allowed to delete a value,
-    // and it should read as the three-part conjunction ADR 0007 decision 3
-    // writes rather than lean on a helper's behaviour at a distance.
-    if !ctx.catalog_resolved || ctx.template_caps.is_none() {
+    // `catalog_resolved` is stated here rather than folded into the shared
+    // predicate below because it is this caller's question, not the rule's: a
+    // passthrough request is one gglib knows nothing about, and the caps field
+    // on such a context is `None` for want of a lookup rather than for want of
+    // an observation. The explain surfaces have no equivalent doubt — they are
+    // holding the catalog row.
+    if !ctx.catalog_resolved {
         return None;
     }
-    if reasoning_effort_support(&ctx.template_caps) != Support::No {
+    // Checked before anything is mutated: a body that is not a JSON object is
+    // left alone everywhere in this pipeline, and a decision recording a
+    // suppression that did not happen to a body is worse than no record.
+    if !body.is_object() {
         return None;
     }
 
-    let obj = body.as_object_mut()?;
-    obj.remove(REASONING_EFFORT_KEY);
+    let suppressed = suppress_stored_effort(
+        &mut decision.resolved,
+        &mut decision.sources,
+        &ctx.template_caps,
+    )?;
 
-    let suppressed = SuppressedEffort {
-        level,
-        source: decision.sources.reasoning_effort,
-    };
-    decision.resolved.reasoning_effort = None;
-    decision.sources.reasoning_effort = ParamSource::SuppressedByTemplate;
+    if let Some(obj) = body.as_object_mut() {
+        obj.remove(REASONING_EFFORT_KEY);
+    }
 
     // `debug!`, not `warn!`: on a model whose template ignores the variable
     // this fires on every request that resolves a level, and the condition is
     // a property of the model, not a fault. It is logged at all because the
     // wire will never show it — see the module docs.
     debug!(
-        level = %level,
+        level = %suppressed.level,
         from = %describe_rung(suppressed.source, &decision.layer_names),
         "reasoning_effort suppressed: this model's template does not read it"
     );
+    Some(suppressed)
+}
+
+/// Stage 5b's rule, applied to a resolution with no request in hand.
+///
+/// The predicate and both record-keeping edits, minus everything that needs a
+/// body: [`suppress_unsupported_effort`] is this plus the key deletion and the
+/// log line. Split out because `gglib model explain` and
+/// `GET /api/models/:id/explain` have to answer the same question about the
+/// same model and must not answer it differently. An explain surface that
+/// re-implemented the condition could only ever *disagree* with the gate it is
+/// describing — the same argument ADR 0007 makes for reading llama-server's
+/// self-report instead of building a detector, one level in.
+///
+/// Note what an explain surface is doing when it calls this: it is reporting a
+/// **conditional** fact. The stored configuration resolves a level, and on any
+/// real request against this model that level would be deleted before sending.
+/// Nothing has been sent, and nothing here pretends otherwise — which is why
+/// the surfaces render it as *would not be sent*, not as *was not sent*.
+///
+/// `catalog_resolved` has no analogue here and is not needed: a caller holding
+/// a model row has, by construction, resolved the catalog. `caps` being `None`
+/// still means "never observed" and still answers [`Support::Unknown`], so an
+/// unlaunched model keeps its level exactly as an unresolved request does.
+///
+/// Returns `None` — leaving both arguments untouched — unless the caps
+/// positively say the template does not read the variable *and* something
+/// resolved a level to suppress.
+#[must_use]
+pub fn suppress_stored_effort(
+    resolved: &mut InferenceConfig,
+    sources: &mut FieldSources,
+    caps: &Option<TemplateCaps>,
+) -> Option<SuppressedEffort> {
+    let level = resolved.reasoning_effort?;
+
+    // `is_some` is stated even though `reasoning_effort_support` already
+    // answers `Unknown` for absent caps: this is the one predicate in the arc
+    // allowed to delete a value, and it should read as the conjunction ADR 0007
+    // decision 3 writes rather than lean on a helper's behaviour at a distance.
+    if caps.is_none() || reasoning_effort_support(caps) != Support::No {
+        return None;
+    }
+
+    let suppressed = SuppressedEffort {
+        level,
+        source: sources.reasoning_effort,
+    };
+    resolved.reasoning_effort = None;
+    sources.reasoning_effort = ParamSource::SuppressedByTemplate;
     Some(suppressed)
 }
 
@@ -174,3 +231,7 @@ fn describe_rung(source: ParamSource, names: &[&'static str]) -> &'static str {
 #[cfg(test)]
 #[path = "effort_gate_tests.rs"]
 mod effort_gate_tests;
+
+#[cfg(test)]
+#[path = "effort_gate_stored_tests.rs"]
+mod effort_gate_stored_tests;

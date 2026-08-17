@@ -31,9 +31,17 @@
  *   3. **No `inferenceParams` key the backend would silently drop.**
  *
  * What is deliberately *not* pinned: that the GUI sends every
- * `InferenceConfig` field. It sends 7 of 16 — `frequency_penalty`,
- * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` have no GUI
- * control — and each is `Option`, so omitting them is well-formed.
+ * `InferenceConfig` field. It sends 9 of 18 — `frequency_penalty`,
+ * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` are omitted — and
+ * each is `Option`, so omitting them is well-formed.
+ *
+ * Nine of those omissions are *not* well-formed as UX, which is worth writing
+ * down rather than leaving as an unexplained subset: the serve modal renders
+ * `InferenceParametersForm`, which offers `frequency_penalty`, the `dynatemp_*`
+ * pair, `top_n_sigma` and all four `dry_*` fields — controls a user can set and
+ * this mapper then drops on the floor. Only `seed` has no control. That gap
+ * predates the reasoning controls and is left as it is here; the two reasoning
+ * fields were added to the mapper precisely so they would not join it.
  *
  * Note the asymmetry, because it sets what this guard is worth: nothing on
  * this path sets `deny_unknown_fields`, so an unknown key is *ignored*, not
@@ -134,6 +142,8 @@ const FULL_CONFIG: ServeConfig = {
   repeatPenalty: 1.1,
   presencePenalty: 0,
   minP: 0.05,
+  reasoningEffort: 'high',
+  reasoningBudgetTokens: 4096,
 };
 
 describe('POST /api/servers/start request body', () => {
@@ -175,6 +185,12 @@ describe('POST /api/servers/start request body', () => {
         repeatPenalty: FULL_CONFIG.repeatPenalty,
         presencePenalty: FULL_CONFIG.presencePenalty,
         minP: FULL_CONFIG.minP,
+        // The serve modal offers both, so both have to arrive. The effort is
+        // conditional on the model's template and the budget is not, but that
+        // distinction belongs to the server — a surface that dropped either
+        // one here would be deciding it silently, on the wire.
+        reasoningEffort: FULL_CONFIG.reasoningEffort,
+        reasoningBudgetTokens: FULL_CONFIG.reasoningBudgetTokens,
       },
     });
   });

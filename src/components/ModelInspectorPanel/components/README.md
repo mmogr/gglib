@@ -15,7 +15,9 @@ Presentational sub-components for the model inspector panel, each scoped to a si
 | `ModelEditForm.tsx` | Editable quantization label, file path, and inline `InferenceParametersForm` |
 | `TagChips.tsx` | Tag pill list with individual remove buttons |
 | `TagAddInput.tsx` | Controlled text input for adding new tags (submit on Enter) |
-| `ServeModal.tsx` | Options form: context override, custom port, Jinja template, MTP settings, inference params |
+| `ServeModal.tsx` | Options form: context override, custom port, Jinja mode, MTP settings, inference params |
+| `JinjaModeField.tsx` | Off / On / Defer as three options, because a launch has three states and a checkbox held two |
+| `ReasoningSupport.tsx` | Whether this model's template reads `reasoning_effort`, and a re-measurement when the answer is stale |
 | `DeleteModal.tsx` | Confirmation dialog for permanent model removal |
 | `InspectorActions.tsx` | Action button row: Serve, Edit, Delete, Benchmark |
 

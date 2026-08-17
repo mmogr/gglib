@@ -21,11 +21,29 @@ On the `resolved` surfaces the caption, placeholder, and slider position all com
 
 `ownLayer` is what lets a caption stay quiet when the value on screen came from the very layer being edited — clearing that field will re-resolve to something the saved explanation cannot yet name.
 
+## The one conditional control
+
+Every sampling parameter here reaches the sampler on every model. `reasoning_effort` does not: it is a variable handed to a chat template, and a template that does not read it ignores it in silence. gglib measures which templates those are (ADR 0007) and the server deletes the key before sending on a model whose observed capabilities say `no`.
+
+So the optional `capabilities` prop carries that answer, and it has **three** states rather than two:
+
+| `capabilities.reasoningEffort` | The effort control |
+|---|---|
+| `'yes'` | offered, captioned "the template reads it" |
+| `'unknown'` | offered, captioned "not yet observed — start the model to check" |
+| `'no'` | **hidden**, replaced by a visible sentence saying gglib will remove the level |
+| prop omitted | offered, captioned with the condition — the global-settings surface, which has no model |
+
+`unknown` is the common answer, not an edge case: capabilities are read from `GET /props` while a model runs, so every model nobody has launched on this installation answers it. Hiding the control there would gate it on nearly the whole library, which is the mistake ADR 0007 decision 3 forbids the server to make. Omitting the prop is therefore safe by construction — nothing is ever hidden by default, only captioned differently.
+
+The **budget** is not gated at all. llama.cpp enforces it sampler-side, so no template can veto it, and the field shows for every model.
+
 ## Key Files
 
 | File | Role |
 |------|------|
-| `InferenceParametersForm.tsx` | Sliders and number inputs for the seven sampling parameters, with inline reset controls |
+| `InferenceParametersForm.tsx` | Sliders and number inputs for the sampling parameters, plus the reasoning group, with inline reset controls |
+| `ReasoningEffortField.tsx` | The effort select and the three answers about whether it applies |
 | `fallbackCaption.ts` | What to say (and what number to show) under an empty field on each surface |
 | `InferenceParametersForm.css` | Slider and range input styling |
 

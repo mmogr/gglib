@@ -30,6 +30,8 @@ export interface StartServerRequest {
     repeatPenalty?: number;
     presencePenalty?: number;
     minP?: number;
+    reasoningEffort?: string;
+    reasoningBudgetTokens?: number;
   };
 }
 
@@ -52,7 +54,13 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     config.maxTokens !== undefined ||
     config.repeatPenalty !== undefined ||
     config.presencePenalty !== undefined ||
-    config.minP !== undefined;
+    config.minP !== undefined ||
+    // Both reasoning controls count towards "any values are set". Without
+    // these two lines a session that named *only* a reasoning level would
+    // build no `inferenceParams` object at all, and the level would be
+    // dropped by the one condition meant to decide whether to send it.
+    config.reasoningEffort !== undefined ||
+    config.reasoningBudgetTokens !== undefined;
 
   const inferenceParams = hasInferenceParams ? {
     temperature: config.temperature,
@@ -62,6 +70,8 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     repeatPenalty: config.repeatPenalty,
     presencePenalty: config.presencePenalty,
     minP: config.minP,
+    reasoningEffort: config.reasoningEffort,
+    reasoningBudgetTokens: config.reasoningBudgetTokens,
   } : undefined;
 
   return {

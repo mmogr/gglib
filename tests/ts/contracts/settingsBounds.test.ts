@@ -244,6 +244,13 @@ const RUST_PARAM: Record<SamplingParamKey, string> = {
   dryBase: 'dry_base',
   dryAllowedLength: 'dry_allowed_length',
   dryPenaltyLastN: 'dry_penalty_last_n',
+  // Not a sampling parameter, but it is the one reasoning control with a
+  // number and a Rust-side range (`budget < -1` is rejected), which is exactly
+  // what this table checks. Its twin `reasoning_effort` is an enum with no
+  // bounds and no numeric floor, so it is absent from `SamplingParamKey` and
+  // therefore cannot be silently forgotten here — the `Record` would not
+  // compile without it.
+  reasoningBudgetTokens: 'reasoning_budget_tokens',
 };
 
 const PARAMS = Object.keys(RUST_PARAM) as SamplingParamKey[];
