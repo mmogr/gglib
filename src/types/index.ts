@@ -153,9 +153,12 @@ export type SamplingLayerName =
  * Mirrors the backend `ProvenanceKindDto`. `floorCoupled` is distinct from
  * `floor`: it means a layer claimed `temperature` and this parameter is tuned
  * against it, so lower layers were deliberately passed over rather than simply
- * having nothing to say.
+ * having nothing to say. `suppressedByTemplate` means a layer named a value and
+ * a request-shaping stage then threw it away, because the model's observed chat
+ * template does not read that field (ADR 0007) — distinct from `unset`, where
+ * nobody named anything at all.
  */
-export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset';
+export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset' | 'suppressedByTemplate';
 
 /** The parameters that carry provenance — the keys of {@link InferenceConfig}. */
 export type SamplingParamKey =

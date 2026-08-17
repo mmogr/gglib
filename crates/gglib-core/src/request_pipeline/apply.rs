@@ -10,6 +10,7 @@
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
 //! | 5 | Pin `cache_prompt` | [`super::sampling`] | top-level keys |
+//! | 5b | Suppress an unreadable `reasoning_effort` | [`super::effort_gate`] | resolved effort, template caps |
 //! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
 //!
 //! # The order is load-bearing
@@ -32,6 +33,21 @@
 //!
 //! **4 before 5.** `cache_prompt` is not an [`InferenceConfig`] field, so
 //! pinning it last means the resolved sampling patch can never overwrite it.
+//!
+//! **5b after 4.** Stage 5b deletes a `reasoning_effort` the model's observed
+//! template never reads, and the value it has to catch is usually not the
+//! client's. It arrives from the **ladder** — a `:high` profile, a per-model
+//! default, a global setting — which does not exist until stage 4 has folded
+//! it. Placed at 2b beside the tool strip, where the capability shape is
+//! otherwise identical, the gate would delete the client's key and stage 4
+//! would then force-insert gglib's own resolved level straight past it (the
+//! patch is *inserted*, not merged), so the case that matters most would
+//! sail through untouched while the tests still passed on a client-sent
+//! level. The stage runs after 4 for the same reason it takes
+//! `&mut SamplingDecision`: it can only suppress a value once something has
+//! resolved one, and it must correct that decision's own record when it does.
+//! `a_ladder_supplied_effort_is_suppressed_not_just_a_client_one` fails if
+//! this ever moves.
 //!
 //! **6 after 3.** The grammar stage 6 *adds* a top-level key, so it runs
 //! after the measurement for the same reason sampling does: the truncation
@@ -60,9 +76,12 @@
 
 use serde_json::Value;
 
+use super::effort_gate::SuppressedEffort;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
-use super::{ModelContext, SamplingLayers, constrain, messages, sampling, tools, truncation};
+use super::{
+    ModelContext, SamplingLayers, constrain, effort_gate, messages, sampling, tools, truncation,
+};
 
 /// What the pipeline did, for the caller that has to report or verify it.
 ///
@@ -77,6 +96,20 @@ pub struct PipelineReport {
     pub truncation: TruncationReport,
     /// Stages 4–5. See [`SamplingDecision`].
     pub sampling: SamplingDecision,
+    /// Stage 5b. `Some` when a resolved `reasoning_effort` was thrown away
+    /// because the model's observed template does not read it.
+    ///
+    /// It lives here rather than on [`SamplingDecision`] because that type is
+    /// *what `resolve_sampling` decided*, and this is what a later stage did
+    /// to it — the same relationship [`truncation`](Self::truncation) has to
+    /// stage 3. The decision is not left lying, though: stage 5b rewrites its
+    /// `resolved` and `sources` in place, so a consumer holding only the
+    /// `SamplingDecision` (the dashboard, the audit) still sees the value gone
+    /// and its provenance reading
+    /// [`SuppressedByTemplate`](crate::domain::ParamSource::SuppressedByTemplate).
+    /// What only this field adds is the level that was dropped and the rung
+    /// that asked for it.
+    pub effort_suppressed: Option<SuppressedEffort>,
 }
 
 /// Apply every request-shaping transform, in order, in place.
@@ -112,7 +145,12 @@ pub fn apply(
         None => TruncationReport::default(),
     };
 
-    let sampling = sampling::resolve_sampling(body, ctx, layers);
+    let mut sampling = sampling::resolve_sampling(body, ctx, layers);
+
+    // Stage 5b. After the fold, never before it: the level worth catching is
+    // the one gglib itself resolved, and until stage 4 has run there is no
+    // such value to catch. See the ordering rationale in the module docs.
+    let effort_suppressed = effort_gate::suppress_unsupported_effort(body, ctx, &mut sampling);
 
     // Stage 6 runs unconditionally, because there is only one kind of trip
     // through this pipeline.
@@ -134,6 +172,7 @@ pub fn apply(
     Ok(PipelineReport {
         truncation,
         sampling,
+        effort_suppressed,
     })
 }
 

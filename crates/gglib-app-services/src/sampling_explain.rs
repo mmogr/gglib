@@ -184,6 +184,13 @@ pub enum ProvenanceKindDto {
     FloorCoupled,
     /// Nothing named it and the floor carries none either.
     Unset,
+    /// A rung named the value and a request-shaping stage suppressed it,
+    /// because the model's observed template does not read the field
+    /// (ADR 0007). Unreachable from this module, which explains stored
+    /// configuration with no request in hand — but the DTO mirrors
+    /// [`ParamSource`] and a mirror missing an arm is how a surface starts
+    /// rendering a suppressed value as if it had been sent.
+    SuppressedByTemplate,
 }
 
 /// The wire form of [`SamplingLayer`].
@@ -256,6 +263,7 @@ fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
         ParamSource::Floor => (ProvenanceKindDto::Floor, None),
         ParamSource::FloorCoupled => (ProvenanceKindDto::FloorCoupled, None),
         ParamSource::Unset => (ProvenanceKindDto::Unset, None),
+        ParamSource::SuppressedByTemplate => (ProvenanceKindDto::SuppressedByTemplate, None),
     };
 
     ParamProvenanceDto {
