@@ -128,7 +128,7 @@ export function useMcpServers(): UseMcpServersResult {
     async (id: McpServerId) => {
       setError(null);
       try {
-        const tools = await getTransport().startMcpServer(id);
+        const { tools } = await getTransport().startMcpServer(id);
         await refresh();
         // Sync MCP tools to the tool registry so they're available for chat
         await syncAllMcpTools();

@@ -10,7 +10,6 @@ import type {
   NewMcpServer,
   UpdateMcpServer,
   McpServerInfo,
-  McpTool,
   McpToolResult,
   ResolutionStatus,
   McpTestResult,
@@ -74,17 +73,18 @@ export async function removeMcpServer(id: McpServerId): Promise<void> {
 }
 
 /**
- * Start an MCP server and return its available tools.
+ * Start an MCP server, answering with its server info — including the tools
+ * the started instance advertises.
  */
-export async function startMcpServer(id: McpServerId): Promise<McpTool[]> {
-  return post<McpTool[]>(`/api/mcp/servers/${id}/start`);
+export async function startMcpServer(id: McpServerId): Promise<McpServerInfo> {
+  return post<McpServerInfo>(`/api/mcp/servers/${id}/start`);
 }
 
 /**
- * Stop an MCP server.
+ * Stop an MCP server, answering with its server info in the stopped state.
  */
-export async function stopMcpServer(id: McpServerId): Promise<void> {
-  await post<void>(`/api/mcp/servers/${id}/stop`);
+export async function stopMcpServer(id: McpServerId): Promise<McpServerInfo> {
+  return post<McpServerInfo>(`/api/mcp/servers/${id}/stop`);
 }
 
 /**

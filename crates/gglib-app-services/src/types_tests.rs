@@ -50,6 +50,47 @@ mod update_model_request_tests {
     }
 }
 
+mod mcp_server_info_shape_tests {
+    //! What `POST /api/mcp/servers/{id}/start` and `/stop` actually answer.
+    //!
+    //! Both handlers return `McpServerInfo`; TypeScript declared the start
+    //! route as `McpTool[]` and the stop route as `void`. The array
+    //! declaration was wrong in a way nothing noticed, because a later
+    //! `syncAllMcpTools()` did the work the returned value was supposed to
+    //! do. This pins the envelope the frontend mirrors: tools arrive *inside*
+    //! the server info, never instead of it.
+
+    use super::super::McpServerInfo;
+
+    #[test]
+    fn the_response_is_an_envelope_not_a_tool_array() {
+        let info: McpServerInfo = serde_json::from_value(serde_json::json!({
+            "server": {
+                "id": 1,
+                "name": "test",
+                "server_type": "stdio",
+                "config": {},
+                "enabled": true,
+                "lifecycle": "lazy",
+                "env": [],
+                "created_at": "2024-01-01T00:00:00Z",
+                "is_valid": true,
+            },
+            "status": "running",
+            "tools": [],
+        }))
+        .expect("deserializes");
+
+        let json = serde_json::to_value(&info).expect("serializes");
+
+        assert!(json.is_object(), "the response is an object, not an array");
+        for key in ["server", "status", "tools"] {
+            assert!(json.get(key).is_some(), "missing {key}");
+        }
+        assert!(json["tools"].is_array(), "tools live inside the envelope");
+    }
+}
+
 mod start_server_request_tests {
     //! JSON-boundary tests for `StartServerRequest.mlock`.
 

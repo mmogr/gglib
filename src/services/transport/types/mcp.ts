@@ -163,11 +163,11 @@ export interface McpTransport {
   /** Remove an MCP server configuration. */
   removeMcpServer(id: McpServerId): Promise<void>;
 
-  /** Start an MCP server and return its available tools. */
-  startMcpServer(id: McpServerId): Promise<McpTool[]>;
+  /** Start an MCP server, answering with its info and advertised tools. */
+  startMcpServer(id: McpServerId): Promise<McpServerInfo>;
 
-  /** Stop an MCP server. */
-  stopMcpServer(id: McpServerId): Promise<void>;
+  /** Stop an MCP server, answering with its info in the stopped state. */
+  stopMcpServer(id: McpServerId): Promise<McpServerInfo>;
 
   /** Call an MCP tool on a specific server. */
   callMcpTool(serverId: McpServerId, toolName: string, args: Record<string, unknown>): Promise<McpToolResult>;
