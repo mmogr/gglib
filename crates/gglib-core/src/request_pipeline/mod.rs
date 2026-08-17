@@ -17,8 +17,8 @@ pub use model_context::ModelContext;
 pub use request_shape::carries_tools;
 pub use resolve::resolve;
 pub use sampling::{
-    DISABLE_AGENTIC_SAMPLING_ENV, FloorClass, LADDER_RUNGS, SamplingDecision, SamplingLayers,
-    resolve_sampling,
+    CLIENT_AUTHORITATIVE_KEYS, DISABLE_AGENTIC_SAMPLING_ENV, FloorClass, LADDER_RUNGS,
+    SamplingDecision, SamplingLayers, resolve_sampling,
 };
 pub use tools::strip_unsupported_tools;
 pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};

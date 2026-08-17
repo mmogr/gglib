@@ -481,6 +481,12 @@ pub(crate) async fn proxy_chat(
         // regeneration return the identical text. Reproducibility is a
         // benchmark's need, not a chat's.
         seed: None,
+        // Same shape as the DRY block above: the WebUI chat request carries no
+        // reasoning controls yet, so the request layer names neither and both
+        // resolve from the layers beneath. The HTTP surface that lets a caller
+        // name them is a separate change.
+        reasoning_effort: None,
+        reasoning_budget_tokens: None,
     }
     .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref(), model_ctx);
 

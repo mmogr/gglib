@@ -335,6 +335,16 @@ pub(crate) fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<D
         });
     }
 
+    // `reasoning_effort` and `reasoning_budget_tokens` are absent from this
+    // function on purpose, and no future `SlotParams` field will fix that.
+    // Neither is echoed anywhere: effort becomes a Jinja kwarg consumed at
+    // render time, and `task_params::to_json` serialises no
+    // `reasoning_budget_*` field in either branch — measured against the
+    // pinned build, 49 slot params captured mid-generation, neither present
+    // (ADR 0007 finding 7a, which corrects that ADR's own earlier claim that
+    // the budget was observable; the request-*parse* table at
+    // `server-schema.cpp:383` is not an echo). Both are permanently Blind, and
+    // their `FieldSources` entries are the only account of the decision.
     let mut check =
         |field: &'static str, sent: Option<f32>, source: ParamSource, obs: Option<f64>| {
             // `Unset` means gglib named no value: llama.cpp's own default
@@ -948,6 +958,8 @@ mod tests {
             dry_allowed_length: source,
             dry_penalty_last_n: source,
             frequency_penalty: source,
+            reasoning_effort: source,
+            reasoning_budget_tokens: source,
         }
     }
 

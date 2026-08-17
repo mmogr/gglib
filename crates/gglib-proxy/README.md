@@ -388,8 +388,31 @@ Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
 written into the forwarded request body (via `body_obj.insert`) so llama-server
 receives fully-specified parameters rather than relying on its own defaults.
-Client-supplied values are always preserved because they form the base of the
-hierarchy.
+
+Client-supplied values form the top of the hierarchy but are **not** always
+preserved. Three rules take a key out of the forwarded body, all of them in
+`erase_unadopted_client_keys`:
+
+- **The trust gate.** With `trust_client_sampling` off (the default) only the
+  client's own *budgets* survive — `CLIENT_AUTHORITATIVE_KEYS` in
+  `request_pipeline::sampling`, currently `max_tokens` and
+  `reasoning_budget_tokens`. Everything else the client sent is dropped from
+  the layer *and* deleted from the forwarded body, so a key no layer below
+  happens to set cannot ride past the gate ungoverned.
+- **The budget alias, always.** llama-server accepts
+  `thinking_budget_tokens` as a second spelling of `reasoning_budget_tokens`.
+  gglib reads it — an unread name is a name the gate cannot govern — and emits
+  the canonical key only, so the alias is removed whatever the trust setting
+  says rather than left next to the force-inserted value.
+- **A refused `reasoning_effort` — the only field a refusal deletes.** (The
+  alias above is removed by a separate, unconditional rule, refused or not.)
+  Values gglib cannot
+  read are otherwise forwarded exactly as sent, because llama-server rejects
+  them too and its HTTP 400 naming the field is a better answer to the client
+  than a silent rewrite (`top_k: "5"` still earns one). `reasoning_effort` is
+  the exception: upstream does not validate it at all, so a refused `"banana"`
+  left in the body is not rejected downstream — it is rendered into the prompt.
+  Every refusal, deleted or not, is reported in `client_fields_rejected`.
 
 ### Inference Profiles
 

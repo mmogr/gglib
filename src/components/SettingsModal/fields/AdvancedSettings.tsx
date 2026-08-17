@@ -126,9 +126,10 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           Off by default: most clients (VS Code Copilot&apos;s LLM Gateway, for one) send fixed
           sampling values with no user-facing control behind them, so this server&apos;s own
           per-model and global defaults apply instead of a request&apos;s temperature, top-p,
-          top-k, presence-penalty, repeat-penalty, or min-p. Max tokens is always honoured. Turn
-          this on only for a client that exposes real sampling controls to its user (e.g.
-          OpenWebUI).
+          top-k, presence-penalty, repeat-penalty, or min-p. The client&apos;s own budgets are
+          always honoured — max tokens and reasoning budget tokens — because they say what the
+          request is, not how it should sample. Turn this on only for a client that exposes real
+          sampling controls to its user (e.g. OpenWebUI).
         </ToggleField>
 
         <ToggleField

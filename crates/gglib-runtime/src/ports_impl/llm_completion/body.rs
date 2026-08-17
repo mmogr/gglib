@@ -152,6 +152,7 @@ pub(super) fn build_chat_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::ReasoningEffort;
 
     /// Every value is exactly representable in both `f32` and `f64`, so the
     /// `f32 → f64` widening `serde_json` performs is lossless and the values
@@ -174,6 +175,8 @@ mod tests {
             top_n_sigma: Some(1.0),
             frequency_penalty: Some(0.25),
             seed: Some(100),
+            reasoning_effort: Some(ReasoningEffort::High),
+            reasoning_budget_tokens: Some(4096),
         }
     }
 

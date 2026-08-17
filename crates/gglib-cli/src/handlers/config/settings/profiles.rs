@@ -67,6 +67,10 @@ pub(crate) async fn handle_profile(ctx: &CliContext, command: ProfileCommand) ->
                     // selects them, so a seed here would pin them all to one
                     // output. There is deliberately no --seed profile flag.
                     seed: None,
+                    // No profile flags for the reasoning controls yet — the
+                    // ladder learns the fields first, the surfaces follow.
+                    reasoning_effort: None,
+                    reasoning_budget_tokens: None,
                 },
                 unset,
                 list_in_models: match (list_in_models, no_list_in_models) {

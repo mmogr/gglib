@@ -88,8 +88,96 @@ fn test_validate_inference_config_valid() {
         top_n_sigma: Some(1.0),
         frequency_penalty: Some(0.4),
         seed: None,
+        // `reasoning_effort` is an enum, so serde refuses an unknown level
+        // before this function sees the config; there is nothing left to range
+        // check. `reasoning_budget_tokens` is a bounded integer and is checked
+        // here like every other one — see the tests below.
+        reasoning_effort: None,
+        reasoning_budget_tokens: Some(0),
     };
     assert!(validate_inference_config(&config).is_ok());
+}
+
+/// The sentinels are both valid, and neither is "no opinion".
+///
+/// `-1` defers to the launch `--reasoning-budget` and `0` stops thinking
+/// immediately — upstream accepts both, so a guard that rejected either would
+/// be gglib inventing a narrower range than the system it forwards to.
+#[test]
+fn test_validate_inference_config_reasoning_budget_sentinels() {
+    for budget in [-1, 0, 1, i32::MAX] {
+        let config = InferenceConfig {
+            reasoning_budget_tokens: Some(budget),
+            ..Default::default()
+        };
+        assert!(
+            validate_inference_config(&config).is_ok(),
+            "{budget} is inside upstream's range and must store"
+        );
+    }
+}
+
+/// Stored configuration is range-checked, not just request parameters.
+///
+/// Below `-1` llama-server answers HTTP 400 naming the range (ADR 0007
+/// finding 7c). `extract_client_sampling` reproduces that verdict for a value
+/// that arrives on a request, but `Settings::inference_defaults`, an inference
+/// profile's `config` and the proxy's `inference_override` all deserialise a
+/// whole `InferenceConfig` straight from JSON and never reach it. Without this
+/// guard a stored `-5000` is force-inserted into every chat body and 400s every
+/// request to every model, with nothing failing at store time and no readback
+/// that can point at the field — both reasoning controls are permanently Blind
+/// (ADR 0007 finding 7a).
+#[test]
+fn test_validate_inference_config_reasoning_budget_below_upstream_range() {
+    for budget in [-2, -5000, i32::MIN] {
+        let config = InferenceConfig {
+            reasoning_budget_tokens: Some(budget),
+            ..Default::default()
+        };
+        let err = validate_inference_config(&config)
+            .expect_err("a value upstream answers 400 for must not store");
+        assert!(
+            err.contains("Reasoning budget") && err.contains(&budget.to_string()),
+            "the error must name the field and the value it refused: {err}"
+        );
+    }
+}
+
+/// The guard is reachable from the settings surface, not just callable.
+///
+/// `validate_settings` is what `gglib config settings set` and the settings
+/// service call; the global rung and every profile rung run through it. A guard
+/// that only the unit test above reaches would leave both ingress paths open.
+#[test]
+fn test_validate_settings_rejects_a_stored_reasoning_budget_below_range() {
+    let bad = InferenceConfig {
+        reasoning_budget_tokens: Some(-2),
+        ..Default::default()
+    };
+
+    let settings = Settings {
+        inference_defaults: Some(bad.clone()),
+        ..Settings::with_defaults()
+    };
+    assert!(
+        validate_settings(&settings).is_err(),
+        "the global rung must not accept a budget upstream rejects"
+    );
+
+    let settings = Settings {
+        inference_profiles: Some(vec![InferenceProfile {
+            name: "coding".to_string(),
+            description: None,
+            config: bad,
+            list_in_models: false,
+        }]),
+        ..Settings::with_defaults()
+    };
+    assert!(
+        validate_settings(&settings).is_err(),
+        "a profile rung must not accept a budget upstream rejects"
+    );
 }
 
 #[test]

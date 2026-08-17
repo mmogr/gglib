@@ -114,10 +114,18 @@ pub struct Settings {
     /// `None`/`Some(false)` → the client's sampling opinions are dropped from
     /// the resolution hierarchy entirely; the request falls straight through
     /// to the profile / per-model / global / floor layers as if the client
-    /// had sent none of them. `max_tokens` is unaffected either way — it is
-    /// a budget, not a taste, and a client that names one still gets it
-    /// honoured; ignoring it would silently truncate that client's own
-    /// turns.
+    /// had sent none of them.
+    ///
+    /// The carve-out is a *category*, not one exception: the client's own
+    /// **budgets** are unaffected either way, because a budget says what the
+    /// request *is* rather than how it should sample. `max_tokens` was the
+    /// only member for a long time — ignoring it would silently truncate that
+    /// client's own turns — and `reasoning_budget_tokens` joined it, capping
+    /// what this turn may spend thinking within a range llama.cpp itself
+    /// enforces. The list is
+    /// [`CLIENT_AUTHORITATIVE_KEYS`](crate::request_pipeline::CLIENT_AUTHORITATIVE_KEYS),
+    /// which carries the rule for what may join it; this doc names members
+    /// rather than owning them.
     ///
     /// Defaults to distrust because most clients that talk to this proxy
     /// send fixed sampling values with no user-facing control behind them —
@@ -547,6 +555,33 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         return Err("Max tokens must be positive".to_string());
     }
 
+    // Validate reasoning_budget_tokens (>= -1, exactly upstream's range —
+    // llama-server answers -2 with an HTTP 400 naming it, ADR 0007 finding 7c;
+    // -1 defers to the launch `--reasoning-budget` and 0 stops thinking).
+    //
+    // This guard is the *stored* half of a boundary the request half already
+    // has. `InferenceConfig::extract_client_sampling` applies the same range to
+    // a value that arrives on a request, but three surfaces deserialise a whole
+    // `InferenceConfig` and never pass through it: `Settings::inference_defaults`,
+    // `inference_profiles[].config`, and the proxy's `inference_override`. A
+    // value stored through any of them is force-inserted into every chat body,
+    // so `-5000` in global defaults means an HTTP 400 on every request to every
+    // model until someone finds the setting — and neither reasoning control is
+    // observable in `/slots` or `/props` (ADR 0007 finding 7a), so no readback
+    // can ever point at it. Rejecting at store time is the only place this is
+    // catchable.
+    //
+    // `reasoning_effort` needs no twin guard: it is an enum, so serde refuses
+    // an unknown level before this function is reached.
+    if let Some(budget) = config.reasoning_budget_tokens
+        && budget < -1
+    {
+        return Err(format!(
+            "Reasoning budget tokens must be -1 or greater \
+             (-1 defers to the launch default, 0 stops thinking), got {budget}"
+        ));
+    }
+
     // Validate repeat_penalty (must be positive)
     if let Some(repeat_penalty) = config.repeat_penalty
         && repeat_penalty <= 0.0
@@ -608,6 +643,17 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         ));
     }
 
+    validate_dry_params(config)
+}
+
+/// The four DRY parameters' ranges, split out of [`validate_inference_config`].
+///
+/// Not a judgement about them — they are checked exactly as before and in the
+/// same order. They are simply the one cohesive group in a function that is
+/// otherwise one field per check, so lifting them is what kept the parent
+/// under `clippy::too_many_lines` when `reasoning_budget_tokens` joined. Every
+/// caller reaches this through the parent; nothing validates DRY alone.
+fn validate_dry_params(config: &InferenceConfig) -> Result<(), String> {
     // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
     if let Some(dm) = config.dry_multiplier
         && !(0.0..=5.0).contains(&dm)
