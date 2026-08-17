@@ -14,11 +14,11 @@ crates/gglib-app-services/src/models_tests.rs 886
 crates/gglib-app-services/src/models.rs 576
 crates/gglib-app-services/src/proxy.rs 455
 crates/gglib-app-services/src/sampling_explain_tests.rs 757
-crates/gglib-app-services/src/sampling_explain.rs 453
+crates/gglib-app-services/src/sampling_explain.rs 463
 crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
-crates/gglib-app-services/src/types.rs 907
+crates/gglib-app-services/src/types.rs 1047
 crates/gglib-axum/src/bootstrap.rs 332
 crates/gglib-axum/src/chat_api.rs 708
 crates/gglib-axum/src/handlers/config/setup.rs 309
@@ -51,9 +51,9 @@ crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 359
 crates/gglib-core/src/domain/inference_tests.rs 1409
-crates/gglib-core/src/domain/inference.rs 1952
+crates/gglib-core/src/domain/inference.rs 1954
 crates/gglib-core/src/domain/kv_estimate.rs 341
-crates/gglib-core/src/domain/mcp/types.rs 523
+crates/gglib-core/src/domain/mcp/types.rs 524
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/model.rs 341
 crates/gglib-core/src/domain/query.rs 430

@@ -27,6 +27,7 @@ use crate::error::GuiError;
 /// - Axum: `GET /api/models/:id/explain`
 /// - GUI frontend: the inspector's Sampling section
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct SamplingExplanationDto {
     /// The fully resolved configuration, after floors.
@@ -95,12 +96,14 @@ pub struct SamplingExplanationDto {
     /// this is a conditional: on any request against this model, that is what
     /// would happen. A surface must word it that way. The unconditional twin
     /// lives on the proxy's sampling audit, where a request really did run.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort_suppressed: Option<SuppressedEffortDto>,
 }
 
 /// A resolved `reasoning_effort` this model's template would not read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct SuppressedEffortDto {
     /// The level the ladder resolved.
@@ -111,6 +114,7 @@ pub struct SuppressedEffortDto {
     /// `None` only for a ladder index this module cannot name, which the five
     /// rungs it resolves cannot produce — and never for a floor, because no
     /// floor names an effort.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<SamplingLayerDto>,
 }
@@ -122,6 +126,7 @@ pub struct SuppressedEffortDto {
 /// from [`SamplingExplanationDto::published`] rather than carried as an empty
 /// verdict.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct PublishedDefaultDto {
     /// The camelCase key this entry describes, e.g. `topP`. Joins to
@@ -140,6 +145,7 @@ pub struct PublishedDefaultDto {
 
 /// The verdict arm of [`PublishedDefaultDto`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum PublishedStateDto {
     /// gglib names nothing, so llama.cpp applies the model author's value.
@@ -173,6 +179,7 @@ pub enum PublishedStateDto {
 
 /// Where one resolved parameter's value came from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct ParamProvenanceDto {
     /// The camelCase key this entry describes in
@@ -182,12 +189,14 @@ pub struct ParamProvenanceDto {
     pub kind: ProvenanceKindDto,
     /// The ladder rung, present only when `kind` is
     /// [`Layer`](ProvenanceKindDto::Layer).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<SamplingLayerDto>,
 }
 
 /// The wire form of [`ParamSource`], with the ladder index resolved to a name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub enum ProvenanceKindDto {
     /// A ladder rung named the value; see [`ParamProvenanceDto::layer`].
@@ -210,6 +219,7 @@ pub enum ProvenanceKindDto {
 
 /// The wire form of [`SamplingLayer`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub enum SamplingLayerDto {
     /// Caller-supplied overrides — request parameters or CLI flags.
