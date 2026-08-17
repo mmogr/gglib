@@ -21,7 +21,10 @@
 import { getTransport } from './transport';
 import type { Unsubscribe } from './transport/types/common';
 import { ingestServerEvent } from './serverRegistry';
-import { normalizeServerEventFromAppEvent } from './serverEvents.normalize';
+import {
+  normalizeServerEventFromAppEvent,
+  normalizeServerSnapshotFromList,
+} from './serverEvents.normalize';
 
 let initialized = false;
 let unsubscribe: Unsubscribe | null = null;
@@ -48,23 +51,18 @@ export function initServerEvents(): void {
     }
   });
 
-  // Hydration: seed the registry with servers already running at load. Routed
-  // through the tolerant normalizer so both camelCase and snake_case payloads
-  // map correctly and malformed entries are dropped rather than becoming
-  // "undefined" registry keys.
+  // Hydration: seed the registry with servers already running at load. This
+  // is a REST list, not an event, so it goes through the normalizer's own
+  // entry point for one rather than being dressed up as a `server_snapshot`
+  // frame — the two shapes differ, and pretending otherwise is what left the
+  // event path quietly accepting snake_case it never receives.
   const versionBeforeFetch = eventVersion;
   getTransport()
     .listServers()
     .then((servers) => {
       // Drop stale hydration if a live event already arrived.
       if (eventVersion !== versionBeforeFetch) return;
-      const normalized = normalizeServerEventFromAppEvent({
-        type: 'server_snapshot',
-        servers,
-      });
-      if (normalized) {
-        ingestServerEvent(normalized);
-      }
+      ingestServerEvent(normalizeServerSnapshotFromList(servers));
     })
     .catch(() => {
       // Non-fatal — live events will populate state as servers start.
