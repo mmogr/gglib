@@ -16,6 +16,7 @@ use crate::domain::KvElemsPerToken;
 use crate::domain::ModelCapabilities;
 use crate::domain::ModelSamplingDefaults;
 use crate::domain::ServerConfig;
+use crate::domain::TemplateCaps;
 
 /// Domain model summary for catalog operations (listing).
 ///
@@ -79,6 +80,12 @@ pub struct ModelSummary {
     /// dialect could not be derived — consumers fall back to mapping
     /// `format:*` tags via `normalize::registry::dialect_for_tags`.
     pub dialect: Option<DialectSpec>,
+    /// llama-server's template-capability self-report, when a launch has
+    /// recorded one (see [`Model::template_caps`](crate::domain::Model)).
+    ///
+    /// `None` is "never observed", never "unsupported" — ADR 0007's
+    /// tri-state, carried whole so no consumer has to reconstruct it.
+    pub template_caps: Option<TemplateCaps>,
 }
 
 /// Launch specification for running a model.
@@ -219,4 +226,64 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// Returns `CatalogError` if the catalog cannot be queried.
     async fn resolve_for_launch(&self, name: &str)
     -> Result<Option<ModelLaunchSpec>, CatalogError>;
+
+    /// Record llama-server's template-capability self-report for model `id`.
+    ///
+    /// Called once per fresh launch, after the just-spawned server's
+    /// `GET /props` has been read (ADR 0007: the caps are a fact about the
+    /// binary–model pair, so only a launch can learn them). Implementations
+    /// persist only when the stored value differs, so repeat launches of an
+    /// unchanged pair write nothing.
+    ///
+    /// Defaulted to a no-op because most implementors of this port are
+    /// read-only views (test doubles, the profiles catalog) with nothing to
+    /// persist into; only the real database-backed catalog overrides it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CatalogError` if the catalog could not be updated.
+    async fn record_template_caps(
+        &self,
+        _id: u32,
+        _caps: TemplateCaps,
+    ) -> Result<(), CatalogError> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A read-only implementor that never overrides `record_template_caps` —
+    /// the shape of every test double this port has across the workspace.
+    #[derive(Debug)]
+    struct ReadOnlyCatalog;
+
+    #[async_trait]
+    impl ModelCatalogPort for ReadOnlyCatalog {
+        async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+            Ok(Vec::new())
+        }
+        async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+            Ok(None)
+        }
+        async fn resolve_for_launch(
+            &self,
+            _name: &str,
+        ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+            Ok(None)
+        }
+    }
+
+    /// The default body is a successful no-op, so read-only implementors need
+    /// not implement persistence they do not have — and a caps observation
+    /// against one is dropped, never an error that could fail a launch.
+    #[tokio::test]
+    async fn record_template_caps_defaults_to_a_successful_no_op() {
+        let result = ReadOnlyCatalog
+            .record_template_caps(1, TemplateCaps::default())
+            .await;
+        assert!(result.is_ok());
+    }
 }

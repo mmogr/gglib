@@ -209,6 +209,7 @@ fn models_response_from_summaries_maps_fields() {
     let summaries = vec![
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id: 1,
             name: "llama-3-8b-q4".into(),
             tags: vec!["chat".into()],
@@ -225,6 +226,7 @@ fn models_response_from_summaries_maps_fields() {
         },
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id: 2,
             name: "mistral-7b-q8".into(),
             tags: vec![],
@@ -255,6 +257,7 @@ fn models_response_serializes_to_openai_format() {
     let resp = ModelsResponse::from_summaries(
         vec![ModelSummary {
             dialect: None,
+            template_caps: None,
             id: 1,
             name: "test-model".into(),
             tags: vec![],
@@ -286,6 +289,7 @@ fn models_response_serializes_to_openai_format() {
 fn summary_with_tags(name: &str, tags: &[&str]) -> ModelSummary {
     ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: name.into(),
         tags: tags.iter().map(|t| (*t).to_string()).collect(),
@@ -349,6 +353,7 @@ fn an_embedding_models_capabilities_survive_serialization() {
 fn model_info_description_includes_arch_and_quant() {
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "test".into(),
         tags: vec![],
@@ -375,6 +380,7 @@ fn model_info_description_includes_arch_and_quant() {
 fn model_info_handles_missing_arch_and_quant() {
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "bare-model".into(),
         tags: vec![],
@@ -402,6 +408,7 @@ fn model_info_handles_missing_arch_and_quant() {
 fn model_info_maps_context_length_to_context_window() {
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "ctx-model".into(),
         tags: vec![],
@@ -426,6 +433,7 @@ fn model_info_maps_context_length_to_context_window() {
 fn model_info_context_window_none_when_unknown() {
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "unknown-ctx-model".into(),
         tags: vec![],
@@ -450,6 +458,7 @@ fn models_response_respects_server_defaults_context_length() {
 
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "server-ctx-model".into(),
         tags: vec![],
@@ -478,6 +487,7 @@ fn models_response_falls_through_when_server_defaults_context_length_none() {
 
     let summary = ModelSummary {
         dialect: None,
+        template_caps: None,
         id: 1,
         name: "fallback-ctx-model".into(),
         tags: vec![],

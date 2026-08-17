@@ -325,8 +325,17 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|spec| serde_json::to_string(spec).ok());
 
+        // Written by `update` only: `insert` takes a `NewModel`, which has no
+        // caps to carry — the observation exists only after a launch (ADR
+        // 0007), and the upsert leaves the stored column alone so a re-import
+        // cannot erase what a launch recorded.
+        let template_caps_json = model
+            .template_caps
+            .as_ref()
+            .and_then(|caps| serde_json::to_string(caps).ok());
+
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ? WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -351,6 +360,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&defaults_origin_str)
             .bind(&server_defaults_json)
             .bind(&dialect_spec_json)
+            .bind(&template_caps_json)
             .bind(model.id)
             .execute(&self.pool)
             .await
@@ -882,6 +892,66 @@ mod tests {
         repo.update(&model).await.unwrap();
         let fetched = repo.get_by_id(model.id).await.unwrap();
         assert_eq!(fetched.dialect_spec, None, "update can clear the spec");
+    }
+
+    // ── template_caps (ADR 0007) ──────────────────────────────────────────
+
+    fn measured_caps() -> gglib_core::domain::TemplateCaps {
+        gglib_core::domain::TemplateCaps {
+            supports_reasoning_effort: Some(true),
+            supports_tools: Some(true),
+            supports_typed_content: Some(false),
+            ..Default::default()
+        }
+    }
+
+    /// The row-mapper round trip: a launch's observation written by `update`
+    /// is what the next read hands back, and a never-observed row reads as
+    /// `None` — the tri-state's third state, straight from a NULL column.
+    #[tokio::test]
+    async fn update_persists_the_template_caps() {
+        let repo = repo().await;
+        let mut model = repo.insert(&make_model("Theta")).await.unwrap();
+        assert_eq!(model.template_caps, None, "a fresh import is unobserved");
+
+        model.template_caps = Some(measured_caps());
+        repo.update(&model).await.unwrap();
+        let fetched = repo.get_by_id(model.id).await.unwrap();
+        assert_eq!(fetched.template_caps, Some(measured_caps()));
+    }
+
+    /// Same tolerance as `dialect_spec`: garbage in the column degrades to
+    /// "never observed" rather than failing every read of the row.
+    #[tokio::test]
+    async fn unreadable_template_caps_reads_as_none() {
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Iota")).await.unwrap();
+
+        sqlx::query("UPDATE models SET template_caps = 'not json' WHERE id = ?")
+            .bind(inserted.id)
+            .execute(&repo.pool)
+            .await
+            .unwrap();
+
+        let fetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(fetched.template_caps, None);
+    }
+
+    /// A re-import must not erase what a launch observed: `insert`'s upsert
+    /// leaves the column alone, the same bargain `inference_defaults` gets.
+    #[tokio::test]
+    async fn upsert_preserves_recorded_template_caps() {
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Kappa")).await.unwrap();
+
+        let mut observed = inserted.clone();
+        observed.template_caps = Some(measured_caps());
+        repo.update(&observed).await.unwrap();
+
+        repo.insert(&make_model("Kappa")).await.unwrap();
+
+        let refetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(refetched.template_caps, Some(measured_caps()));
     }
 
     #[tokio::test]

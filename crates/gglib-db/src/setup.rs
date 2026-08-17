@@ -166,7 +166,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
             capabilities INTEGER DEFAULT 0,
-            dialect_spec TEXT
+            dialect_spec TEXT,
+            template_caps TEXT
         )
         "#,
     )
@@ -193,6 +194,18 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // fall back to their `format:*` tag at context-resolution time, and
     // `gglib model retag` re-derives the spec from persisted metadata.
     let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN dialect_spec TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
+    // Migration: add template_caps to models — llama-server's per-template
+    // capability self-report (`chat_template_caps` from GET /props),
+    // JSON-serialized `gglib_core::domain::TemplateCaps`, recorded after a
+    // launch observes it (ADR 0007). No backfill, necessarily: the caps are
+    // a fact about the binary–model pair that only a launch can learn, and a
+    // NULL here *is* the tri-state's "never observed" — manufacturing a
+    // value would collapse it into an answer nobody measured.
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN template_caps TEXT"#)
         .execute(pool)
         .await;
     // Ignore error if column already exists
@@ -909,5 +922,80 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
+    }
+
+    /// How many times `column` appears in `models` — 1 proves the migration
+    /// landed exactly once, 0 that it never ran.
+    async fn models_column_count(pool: &SqlitePool, column: &str) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('models') WHERE name = ?")
+            .bind(column)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    /// The `template_caps` migration on a database created **before** the
+    /// column existed: the post-hoc ALTER adds it, and rows written under the
+    /// old schema keep reading — their NULL is the tri-state's "never
+    /// observed", not an error.
+    #[tokio::test]
+    async fn template_caps_migration_upgrades_a_pre_caps_database() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        // An old build's models table: the current schema minus
+        // `template_caps`, one row already in it. Stamped at the canonical
+        // schema version so the path backfills stay out of this test's way.
+        sqlx::query(
+            "CREATE TABLE models (
+                id INTEGER PRIMARY KEY, name TEXT NOT NULL, file_path TEXT NOT NULL,
+                param_count_b REAL NOT NULL, architecture TEXT, quantization TEXT,
+                context_length INTEGER, inference_defaults TEXT, defaults_origin TEXT,
+                server_defaults TEXT, expert_count INTEGER, expert_used_count INTEGER,
+                expert_shared_count INTEGER, metadata TEXT, added_at TEXT NOT NULL,
+                hf_repo_id TEXT, hf_commit_sha TEXT, hf_filename TEXT, download_date TEXT,
+                last_update_check TEXT, tags TEXT DEFAULT '[]', model_key TEXT NOT NULL,
+                file_paths_json TEXT, capabilities INTEGER DEFAULT 0, dialect_spec TEXT
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(&format!(
+            "PRAGMA user_version = {CANONICAL_PATH_SCHEMA_VERSION}"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO models (name, file_path, param_count_b, added_at, model_key) \
+             VALUES ('Old', '/m/old.gguf', 7.0, ?, 'k')",
+        )
+        .bind(chrono::Utc::now().to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(models_column_count(&pool, "template_caps").await, 0);
+
+        create_schema(&pool).await.unwrap();
+
+        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
+        let caps: Option<String> =
+            sqlx::query_scalar("SELECT template_caps FROM models WHERE name = 'Old'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(caps, None, "a pre-migration row reads as never observed");
+    }
+
+    /// Running the schema twice over one database must neither fail nor
+    /// duplicate the column — the ignore-if-exists ALTER bargain, exercised.
+    #[tokio::test]
+    async fn template_caps_migration_is_idempotent_on_an_existing_database() {
+        let pool = setup_test_database().await.unwrap();
+        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
+
+        create_schema(&pool).await.unwrap();
+
+        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
     }
 }

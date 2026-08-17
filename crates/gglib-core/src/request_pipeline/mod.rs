@@ -33,6 +33,7 @@ mod tests_support {
     pub(super) fn summary() -> ModelSummary {
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id: 7,
             name: "qwen3".to_string(),
             tags: Vec::new(),

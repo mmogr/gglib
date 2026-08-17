@@ -417,6 +417,9 @@ impl ResidentSet {
     ) -> Result<Admission, ModelRuntimeError> {
         let core = Arc::clone(core);
         let queue = Arc::clone(&self.queue);
+        // Along for one purpose: recording the fresh spawn's template-caps
+        // observation on the model row once it is health-ready (ADR 0007).
+        let catalog = Arc::clone(&self.catalog);
         let launch_request = LaunchRequest {
             spec: request.spec.clone(),
             opts: request.opts.clone(),
@@ -435,7 +438,7 @@ impl ResidentSet {
         let handle = tokio::spawn(async move {
             match tokio::time::timeout(
                 LAUNCH_TIMEOUT,
-                run_launch(core, Arc::clone(&queue), launch_request),
+                run_launch(core, Arc::clone(&queue), catalog, launch_request),
             )
             .await
             {

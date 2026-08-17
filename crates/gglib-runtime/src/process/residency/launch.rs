@@ -13,9 +13,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use gglib_core::domain::classify_cache_ram;
+use gglib_core::domain::{TemplateCapsState, classify_cache_ram};
 use gglib_core::paths::slot_model_prefix;
-use gglib_core::ports::{AdmissionLease, ModelLaunchSpec, ModelRuntimeError, RunningTarget};
+use gglib_core::ports::{
+    AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, RunningTarget,
+};
 use gglib_core::server_config::{CacheRamSetting, ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -58,14 +60,63 @@ pub(super) struct LaunchRequest {
 pub(super) async fn run(
     core: Arc<RwLock<GuiProcessCore>>,
     queue: Arc<AdmissionQueue>,
+    catalog: Arc<dyn ModelCatalogPort>,
     request: LaunchRequest,
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
     match launch(&core, &queue, &request).await {
-        Ok(outcome) => Ok(outcome),
+        Ok(outcome) => {
+            // The one moment ADR 0007's observation can be taken: a fresh
+            // spawn is health-ready, so its /props describes exactly this
+            // binary–model pair. Detached, so a slow read can neither delay
+            // the admission this launch owes nor fail it.
+            tokio::spawn(observe_template_caps(
+                catalog,
+                request.spec.id,
+                outcome.0.base_url.clone(),
+            ));
+            Ok(outcome)
+        }
         Err(e) => {
             queue.launch_failed(request.slot);
             Err(e)
         }
+    }
+}
+
+/// Read the just-launched server's `chat_template_caps` self-report and
+/// persist it on the model's catalog row (ADR 0007, decision 2: snapshotted
+/// once per launch).
+///
+/// Failure is a result, not an error — [`crate::llama::runtime_probe`]'s
+/// discipline: an unreadable `/props` records **nothing**, leaving the row at
+/// "never observed" rather than manufacturing a negative, and no failure here
+/// can affect the launch, which has already returned. The catalog port skips
+/// the write when the stored value already matches, so repeat launches of an
+/// unchanged pair are read-only.
+///
+/// Reuses [`gglib_proxy::props::fetch_props`] rather than a second HTTP
+/// probe: it is the same endpoint the proxy's baseline check reads, with the
+/// same timeout and the same failure-is-a-variant parse.
+async fn observe_template_caps(
+    catalog: Arc<dyn ModelCatalogPort>,
+    model_id: u32,
+    base_url: String,
+) {
+    let client = reqwest::Client::new();
+    let reading = gglib_proxy::props::fetch_props(&client, &base_url).await;
+    match reading.caps {
+        TemplateCapsState::Read { caps } => {
+            if let Err(e) = catalog.record_template_caps(model_id, caps).await {
+                warn!(model_id, error = %e, "could not record template caps on the model row");
+            }
+        }
+        TemplateCapsState::Unreadable { reason } => {
+            // Not a warning: a pre-caps build lands here on every launch, and
+            // "never observed" is a well-defined state every consumer of the
+            // tri-state already handles.
+            info!(model_id, %reason, "template caps not observed for this launch");
+        }
+        TemplateCapsState::NotYetRead => {}
     }
 }
 

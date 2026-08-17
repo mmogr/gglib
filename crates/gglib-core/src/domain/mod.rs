@@ -26,6 +26,7 @@ pub(crate) mod runtime_capabilities;
 pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
+pub(crate) mod template_caps;
 
 // Re-export model types at the domain level for convenience
 pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile};
@@ -51,6 +52,9 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 
 // Re-export runtime (llama-server) capability detection at the domain level
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
+
+// Re-export the template-capability self-report (ADR 0007) at the domain level
+pub use template_caps::{Support, TemplateCaps, TemplateCapsState, reasoning_effort_support};
 
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{

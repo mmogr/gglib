@@ -74,6 +74,7 @@ impl NamedCatalog {
     fn summary(&self, name: &str) -> ModelSummary {
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id: 1,
             name: name.to_owned(),
             tags: Vec::new(),

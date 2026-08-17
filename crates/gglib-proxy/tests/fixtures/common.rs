@@ -186,6 +186,7 @@ impl StaticCatalog {
     fn summary(id: u32, name: &str) -> ModelSummary {
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id,
             name: name.to_string(),
             tags: vec![],
@@ -445,6 +446,7 @@ impl TaggedCatalog {
     fn summary(&self) -> ModelSummary {
         ModelSummary {
             dialect: self.dialect.clone(),
+            template_caps: None,
             id: 1,
             name: self.name.clone(),
             tags: self.tags.clone(),
@@ -504,6 +506,7 @@ impl MultiModelCatalog {
         let (name, tags) = &self.0[index];
         ModelSummary {
             dialect: None,
+            template_caps: None,
             id: u32::try_from(index).unwrap_or(0) + 1,
             name: name.clone(),
             tags: tags.clone(),

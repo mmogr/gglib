@@ -232,7 +232,16 @@ async fn read_baseline(
     // publishes, which gglib knows from the GGUF either way.
     audit.set_model_sampling(model_name, model.copied());
 
-    match fetch_props(client, base_url).await {
+    let reading = fetch_props(client, base_url).await;
+
+    // The caps half rides the same read and the same latch (ADR 0007's
+    // once-per-launch snapshot): stored on every attempt, so a body carrying
+    // caps but no sampler table still lands its half, and a failed read holds
+    // an honest `Unreadable` rather than the previous model's report. Storage
+    // only — nothing consumes it until a later PR of the arc.
+    audit.set_template_caps(reading.caps);
+
+    match reading.params {
         PropsResult::Available(params) => {
             let report = BaselineReport::from_params(&params, model);
             for field in report.drifted() {

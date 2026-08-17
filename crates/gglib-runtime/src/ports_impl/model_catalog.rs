@@ -35,6 +35,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 
     ModelSummary {
         dialect: m.dialect_spec.clone(),
+        template_caps: m.template_caps.clone(),
         id: m.id as u32,
         name: m.name.clone(),
         tags: m.tags.clone(),
@@ -137,153 +138,35 @@ impl ModelCatalogPort for CatalogPortImpl {
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
         Ok(self.lookup(name).await?.map(model_to_launch_spec))
     }
+
+    /// Persist a launch's `chat_template_caps` observation onto the model row.
+    ///
+    /// Read-compare-write, and the write is skipped when the stored value
+    /// already matches: the caps are a fact about the binary–model pair
+    /// (ADR 0007), so every launch of an unchanged pair re-observes the same
+    /// value, and echoing it into the database each time would be churn with
+    /// no information in it.
+    async fn record_template_caps(
+        &self,
+        id: u32,
+        caps: gglib_core::domain::TemplateCaps,
+    ) -> Result<(), CatalogError> {
+        let mut model = self
+            .repo
+            .get_by_id(i64::from(id))
+            .await
+            .map_err(|e| CatalogError::QueryFailed(e.to_string()))?;
+        if model.template_caps.as_ref() == Some(&caps) {
+            return Ok(());
+        }
+        model.template_caps = Some(caps);
+        self.repo
+            .update(&model)
+            .await
+            .map_err(|e| CatalogError::QueryFailed(e.to_string()))
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-    use gglib_core::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel};
-    use gglib_core::ports::RepositoryError;
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-
-    /// Serves one model: id 7, name "qwen3", tagged `format:qwen`.
-    struct OneModelRepo;
-
-    impl OneModelRepo {
-        fn model() -> Model {
-            Model {
-                dialect_spec: None,
-                id: 7,
-                name: "qwen3".to_string(),
-                model_key: String::new(),
-                file_path: PathBuf::from("/models/qwen3.gguf"),
-                param_count_b: 7.0,
-                architecture: None,
-                quantization: None,
-                context_length: None,
-                expert_count: None,
-                expert_used_count: None,
-                expert_shared_count: None,
-                metadata: HashMap::new(),
-                added_at: Utc::now(),
-                hf_repo_id: None,
-                hf_commit_sha: None,
-                hf_filename: None,
-                download_date: None,
-                last_update_check: None,
-                tags: vec!["format:qwen".to_string()],
-                capabilities: ModelCapabilities::default(),
-                inference_defaults: None,
-                defaults_origin: None,
-                server_defaults: None,
-                benchmark_summary: None,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl ModelRepository for OneModelRepo {
-        async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
-            Ok(vec![Self::model()])
-        }
-
-        async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
-            if id == 7 {
-                Ok(Self::model())
-            } else {
-                Err(RepositoryError::NotFound(format!("id={id}")))
-            }
-        }
-
-        async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
-            if name == "qwen3" {
-                Ok(Self::model())
-            } else {
-                Err(RepositoryError::NotFound(format!("name={name}")))
-            }
-        }
-
-        async fn find_by_path(
-            &self,
-            path: &std::path::Path,
-        ) -> Result<Option<Model>, RepositoryError> {
-            Ok(self
-                .list()
-                .await?
-                .into_iter()
-                .find(|m| m.file_path.as_path() == path))
-        }
-
-        async fn insert(&self, _m: &NewModel) -> Result<Model, RepositoryError> {
-            unimplemented!("not exercised by these tests")
-        }
-
-        async fn update(&self, _m: &Model) -> Result<(), RepositoryError> {
-            unimplemented!("not exercised by these tests")
-        }
-
-        async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
-            unimplemented!("not exercised by these tests")
-        }
-    }
-
-    fn port() -> CatalogPortImpl {
-        CatalogPortImpl::new(Arc::new(OneModelRepo))
-    }
-
-    #[tokio::test]
-    async fn resolve_model_finds_by_name() {
-        let found = port().resolve_model("qwen3").await.unwrap().unwrap();
-        assert_eq!(found.tags, vec!["format:qwen".to_string()]);
-    }
-
-    /// The catalog port used to be name-only, so a numeric identifier resolved
-    /// to nothing here while `ModelService` resolved it fine. Both now share
-    /// `ModelRepository::get_by_identifier`; this asserts the port really does
-    /// delegate rather than keeping its own key.
-    #[tokio::test]
-    async fn resolve_model_finds_by_numeric_id() {
-        let found = port().resolve_model("7").await.unwrap().unwrap();
-        assert_eq!(found.name, "qwen3");
-    }
-
-    #[tokio::test]
-    async fn resolve_for_launch_finds_by_numeric_id() {
-        let spec = port().resolve_for_launch("7").await.unwrap().unwrap();
-        assert_eq!(spec.name, "qwen3");
-    }
-
-    #[tokio::test]
-    async fn unknown_model_resolves_to_none() {
-        assert!(port().resolve_model("ghost").await.unwrap().is_none());
-    }
-
-    /// The launch spec derives what the model declares about sampling from the
-    /// metadata already on the catalog row — the same trip
-    /// `kv_elems_per_token` and `kv_memory_is_partial` make. Without it the
-    /// proxy's baseline check has no way to tell a model's own recommendation
-    /// from a pin bump.
-    #[test]
-    fn a_launch_spec_carries_what_the_models_gguf_declares() {
-        let mut m = OneModelRepo::model();
-        m.metadata
-            .insert("general.sampling.temp".to_string(), "0.33".to_string());
-
-        let spec = model_to_launch_spec(m);
-
-        assert_eq!(
-            spec.model_sampling.temperature,
-            gglib_core::domain::ModelSamplingDefault::Declared(0.33)
-        );
-    }
-
-    /// The ordinary model says nothing, and must arrive saying nothing rather
-    /// than arriving as "unknown" — the build's own table shows through.
-    #[test]
-    fn a_model_with_no_sampling_metadata_declares_nothing() {
-        let spec = model_to_launch_spec(OneModelRepo::model());
-        assert_eq!(spec.model_sampling, ModelSamplingDefaults::default());
-    }
-}
+#[path = "model_catalog_tests.rs"]
+mod model_catalog_tests;

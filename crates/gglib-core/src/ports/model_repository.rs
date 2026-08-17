@@ -159,6 +159,7 @@ mod tests {
             inference_defaults: None,
             defaults_origin: None,
             server_defaults: None,
+            template_caps: None,
             benchmark_summary: None,
         }
     }
