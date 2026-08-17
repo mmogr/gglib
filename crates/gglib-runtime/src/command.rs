@@ -6,7 +6,7 @@
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
 use crate::system::is_truthy_flag;
-use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
+use gglib_core::ports::{JinjaMode, ServerConfig, ServerLogSinkPort};
 use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -208,9 +208,21 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("-ngl").arg(layers.to_string());
     }
 
-    // Add jinja if enabled
-    if config.jinja {
-        cmd.arg("--jinja");
+    // Jinja. Both flags are emitted, and the third state emits neither.
+    //
+    // `--no-jinja` is not redundant with saying nothing: llama-server starts
+    // with `use_jinja = true` (`common/common.h:621`) and the server example
+    // never clears it, so a launch that omits the flag runs *with* jinja. Only
+    // an explicit `--no-jinja` turns it off. `JinjaMode::Defer` therefore means
+    // "gglib takes no position", not "off" — see `llama::args::jinja`.
+    match config.jinja {
+        JinjaMode::On => {
+            cmd.arg("--jinja");
+        }
+        JinjaMode::Off => {
+            cmd.arg("--no-jinja");
+        }
+        JinjaMode::Defer => {}
     }
 
     // Embedding mode. Not additive — llama-server reads `--embeddings` as
@@ -370,7 +382,7 @@ mod tests {
             port: None,
             context_size: None,
             gpu_layers: None,
-            jinja: false,
+            jinja: JinjaMode::Defer,
             reasoning_format: None,
             spec_draft_n_max: None,
             spec_draft_p_min: None,
@@ -410,6 +422,58 @@ mod tests {
             .position(|a| a == "--parallel")
             .expect("--parallel is always emitted");
         assert_eq!(args[idx + 1], SERVER_PARALLEL.to_string());
+    }
+
+    /// The bug: an explicit jinja-off used to emit nothing, and llama-server
+    /// starts with `use_jinja = true`, so the user's "off" produced a server
+    /// running with jinja and no sign that anything had been ignored.
+    #[test]
+    fn an_explicit_jinja_off_emits_no_jinja() {
+        let config = ServerConfig {
+            jinja: JinjaMode::Off,
+            ..minimal_config()
+        };
+        let args = args_of(&build_command(
+            Path::new("/fake/llama-server"),
+            &config,
+            5500,
+        ));
+        assert!(args.contains(&"--no-jinja".to_string()), "got {args:?}");
+        assert!(!args.contains(&"--jinja".to_string()), "got {args:?}");
+    }
+
+    #[test]
+    fn an_explicit_jinja_on_emits_jinja() {
+        let config = ServerConfig {
+            jinja: JinjaMode::On,
+            ..minimal_config()
+        };
+        let args = args_of(&build_command(
+            Path::new("/fake/llama-server"),
+            &config,
+            5500,
+        ));
+        assert!(args.contains(&"--jinja".to_string()), "got {args:?}");
+        assert!(!args.contains(&"--no-jinja".to_string()), "got {args:?}");
+    }
+
+    /// Pinned deliberately, not incidentally. `Defer` is what an untagged
+    /// model with no override resolves to, and against this llama.cpp the
+    /// flagless launch runs *with* jinja. Emitting `--no-jinja` here would
+    /// newly strip tool-call templating and template kwargs from every
+    /// non-agent model — a real behaviour change, and this test is what makes
+    /// it visible if anyone tries.
+    #[test]
+    fn a_deferred_jinja_emits_neither_flag() {
+        let config = minimal_config();
+        assert_eq!(config.jinja, JinjaMode::Defer);
+        let args = args_of(&build_command(
+            Path::new("/fake/llama-server"),
+            &config,
+            5500,
+        ));
+        assert!(!args.contains(&"--jinja".to_string()), "got {args:?}");
+        assert!(!args.contains(&"--no-jinja".to_string()), "got {args:?}");
     }
 
     #[test]
@@ -583,7 +647,7 @@ mod tests {
             port: Some(8080),
             context_size: None,
             gpu_layers: None,
-            jinja: false,
+            jinja: JinjaMode::Defer,
             reasoning_format: None,
             spec_draft_n_max: None,
             spec_draft_p_min: None,

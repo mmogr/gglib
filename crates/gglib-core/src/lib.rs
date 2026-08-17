@@ -49,10 +49,10 @@ pub use ports::{
     DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
     EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata, GgufParseError,
     GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
-    HfSearchOptions, HfSearchResult, LlmCompletionPort, McpRepositoryError, McpServerRepository,
-    McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter, NoopEmitter,
-    NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError, Resolution,
-    ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
+    HfSearchOptions, HfSearchResult, JinjaMode, LlmCompletionPort, McpRepositoryError,
+    McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter,
+    NoopEmitter, NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError,
+    Resolution, ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{

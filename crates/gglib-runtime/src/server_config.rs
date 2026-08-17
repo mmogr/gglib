@@ -23,10 +23,27 @@
 //!
 //! | Feature | Explicit override wins over… | Tag-based default |
 //! |---------|------------------------------|-------------------|
-//! | Jinja templates | `opts.jinja = Some(…)` | `"agent"` tag → enabled |
+//! | Jinja templates | `opts.jinja = Some(true)` → `--jinja`, `Some(false)` → `--no-jinja` | `"agent"` tag → `--jinja`; otherwise **no flag**, and llama-server's own default (jinja on) stands |
 //! | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
 //! | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → enabled |
 //! | Embedding mode | *(no override — see below)* | `"embedding"` tag → enabled |
+//!
+//! The jinja row is the one where gglib's silence is not a "no". llama-server
+//! starts with `use_jinja = true` and the server example never clears it, so an
+//! untagged model launches *with* jinja unless something outside gglib says
+//! otherwise. That is why the flag is emitted in both directions: `--jinja`
+//! states a decision gglib already agreed with, and `--no-jinja` is the only
+//! thing gglib can send that takes jinja away. Nothing tag-derived emits
+//! `--no-jinja` — removing tool-call templating and template kwargs from every
+//! non-agent model is not a default anyone asked for, so only an explicit
+//! override reaches it.
+//!
+//! The "outside gglib" caveat is real: llama.cpp registers `LLAMA_ARG_JINJA`
+//! as an env alias for the same option, and gglib does not sanitise the
+//! spawned process's environment. An exported `LLAMA_ARG_JINJA=0` therefore
+//! turns jinja off under the deferred arm. It cannot override the explicit
+//! arm — command-line arguments are applied after the environment — so
+//! `--no-jinja` still means what it says.
 //!
 //! Embedding mode is the one row with no override column. `--embeddings`
 //! restricts llama-server to serving embeddings, so the flag is a statement
@@ -77,7 +94,8 @@ use crate::llama::args::{
 /// resolution that drifted would narrate a launch that never happened.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedCapabilities {
-    /// Whether `--jinja` was emitted, and why.
+    /// Which jinja flag was emitted — `--jinja`, `--no-jinja`, or neither —
+    /// and why.
     pub jinja: JinjaResolution,
     /// The `--reasoning-format` decision, and why.
     pub reasoning: ReasoningFormatResolution,
@@ -147,11 +165,12 @@ pub(crate) fn build_server_config_narrated(
     }
 
     // --- Jinja templates -------------------------------------------------------
+    // Carried through as a mode, unconditionally: the "no flag" outcome is a
+    // decision in its own right here (see the module docs), so there is nothing
+    // to branch on.
     let jinja = resolve_jinja_flag(opts.jinja, tags);
-    if jinja.enabled {
-        debug!(source = ?jinja.source, "enabling --jinja for model");
-        config = config.with_jinja();
-    }
+    debug!(mode = ?jinja.mode, source = ?jinja.source, "resolved jinja mode for model");
+    config = config.with_jinja_mode(jinja.mode);
 
     // --- Reasoning format ------------------------------------------------------
     let reasoning = match opts.reasoning_format.as_deref() {
