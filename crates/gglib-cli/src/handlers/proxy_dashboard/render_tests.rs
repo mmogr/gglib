@@ -77,6 +77,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     let frame = render_frame(
         "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -112,6 +113,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     let frame = render_frame(
         "http://127.0.0.1:8080/v1/proxy/status/stream",
@@ -145,6 +147,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
         agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     let width = 80u16;
     let frame = render_frame(
@@ -203,6 +206,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
         agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     let term_width = 40u16;
     let frame = render_frame(
@@ -243,6 +247,7 @@ fn frame_with_cache(cache: Option<CacheStatus>) -> String {
         agent_usage: CacheUsage::default(),
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -258,6 +263,7 @@ fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
         agent_usage,
         admission: AdmissionSnapshot::default(),
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -273,6 +279,7 @@ fn frame_with_admission(admission: AdmissionSnapshot) -> String {
         agent_usage: CacheUsage::default(),
         admission,
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
     render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
 }
@@ -366,6 +373,7 @@ fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
             ..Default::default()
         },
         per_model_defects: BTreeMap::new(),
+        sampling_audit: None,
     };
 
     let frame = render_frame("http://127.0.0.1:8080", &snapshot, 80);

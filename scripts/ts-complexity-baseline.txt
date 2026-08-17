@@ -6,7 +6,7 @@ src/components/McpServersPanel.tsx 449
 src/components/ModelInspectorPanel/components/ServeModal.tsx 342
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 326
 src/components/ProxyControl.tsx 345
-src/components/ProxySamplingPanel.tsx 373
+src/components/ProxySamplingPanel.tsx 405
 src/components/SettingsModal.tsx 373
 src/components/SetupWizard/SetupWizard.tsx 721
 src/components/VerificationModal.tsx 454
@@ -17,7 +17,7 @@ src/pages/ModelControlCenterPage.tsx 318
 src/services/tools/registry.ts 432
 src/services/transport/api/client.ts 361
 src/services/transport/events/sse.ts 353
-src/services/transport/types/dashboard.ts 447
+src/services/transport/types/dashboard.ts 559
 src/styles/tailwind.css 402
 src/types/benchmark.ts 539
 src/types/index.ts 851

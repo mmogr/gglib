@@ -28,11 +28,33 @@
  * names, so while they were passed a "matches" here was gglib agreeing with
  * itself and every field reported `indeterminate` by design.
  *
+ * # Why the two tray surfaces get none of this
+ *
+ * Recorded here so a reviewer reads a decision rather than an omission.
+ *
+ * **The tray popover (`pages/TrayPanel`).** It does not compose this panel —
+ * verified, not assumed: it renders `components/proxy`'s `ProxyMetricsGrid`,
+ * which is active connections and inference slots, and the sampling panel has
+ * never been part of that grid. The popover answers "is the endpoint up and
+ * what is it doing"; a readback whose whole value is the distinction between
+ * blind and clean needs the room to carry its reasons, and a three-line
+ * summary of it in a popover would be the collapse this panel exists to
+ * prevent. So the reasoning rows land here, where the rest of the audit
+ * already is.
+ *
+ * **The native tray menu (`src-tauri/src/tray/items.rs`).** Deliberately
+ * untouched. It is a daemon-lifecycle menu — start, stop, copy URL — with no
+ * request in hand to attach a per-request control to, its `ITEMS` list is the
+ * single shared model behind both the muda and ksni backends, and a global
+ * reasoning default hidden in a menu that names no model would be strictly
+ * worse than the per-model defaults that already exist.
+ *
  * @module components/ProxySamplingPanel
  */
 
 import type { FC } from 'react';
 import { Banner } from './ui/Banner';
+import { DroppedClientFields, ProxyReasoningRows } from './ProxyReasoningRows';
 import type {
   SamplingAuditSnapshot,
   SamplingBaselineReport,
@@ -366,6 +388,16 @@ export const ProxySamplingPanel: FC<ProxySamplingPanelProps> = ({ audit }) => {
           value={audit.client_fields_rejected.toLocaleString()}
         />
       )}
+      {/* Which fields those totals were made of — see `DroppedClientFields`. */}
+      <DroppedClientFields names={audit.client_field_names} />
+
+      {/*
+        Last, and structurally unlike everything above it: the two controls
+        nothing echoes, so these rows are gglib's record rather than a
+        comparison. `ProxyReasoningRows` carries the rules that keeps that
+        honest.
+      */}
+      <ProxyReasoningRows reasoning={audit.reasoning} />
     </div>
   );
 };

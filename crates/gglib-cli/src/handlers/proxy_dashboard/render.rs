@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::BAR_WIDTH;
+use super::render_reasoning::{render_client_fields_section, render_reasoning_section};
 use super::wire::{
     AdmissionSnapshot, CacheStatus, CacheUsage, DashboardSnapshot, ModelDefectCounts,
 };
@@ -137,6 +138,12 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
 
     out.push('\n');
     out.push_str(&render_defects_section(&snapshot.per_model_defects));
+
+    let audit = snapshot.sampling_audit.as_ref();
+    out.push('\n');
+    out.push_str(&render_reasoning_section(audit, term_width));
+    out.push('\n');
+    out.push_str(&render_client_fields_section(audit));
 
     out.push('\n');
     out.push_str(&format!(

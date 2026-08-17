@@ -6,6 +6,7 @@
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
 mod access;
+pub(crate) mod audit_records;
 // Crate-internal. The six that stay `pub` below are the ones other crates
 // name by path: dashboard, models, props, repair, slot_eviction, slots.
 // `server` goes internal too — the root re-exports `serve`, which is all

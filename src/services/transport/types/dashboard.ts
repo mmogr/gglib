@@ -363,6 +363,118 @@ export interface SamplingAuditSnapshot {
    * predates the field.
    */
   published?: SamplingPublishedOverrides | null;
+  /**
+   * The two reasoning controls: what the running template says about
+   * `reasoning_effort`, what the last request resolved, and why none of it is
+   * an observation.
+   *
+   * Optional only so this mirror still parses a payload from a proxy that
+   * predates the field.
+   */
+  reasoning?: SamplingReasoningReadback | null;
+  /**
+   * Which of the client's own sampling fields were dropped, by name.
+   *
+   * `client_fields_discarded` above is the total; this is what it was made of.
+   * Optional for a proxy that predates the field.
+   */
+  client_field_names?: SamplingClientFieldNames | null;
+}
+
+/**
+ * Mirrors `gglib_proxy::audit_records::EffortSupportState`.
+ *
+ * The tri-state ADR 0007 decision 3 requires held all the way to the pixel:
+ * `not_supported` is a positive observation that a resolved effort will be
+ * suppressed, and `not_yet_observed` is nobody having managed to ask. A UI that
+ * renders them the same way has re-introduced the collapse the type exists to
+ * prevent — so neither may render as a green tick, and `not_yet_observed` may
+ * never render as `not_supported`.
+ *
+ * These are the states *this build* knows; a newer proxy can send a fourth over
+ * the HTTP contract above. So consumers must branch on `supported`
+ * affirmatively and treat anything else as unknown — a catch-all arm here would
+ * cost the narrowing that makes `reason` readable, so that floor lives in the
+ * consumer's `default` branch (`ProxyReasoningRows.tsx`), as it does in the CLI
+ * mirror's `#[serde(other)] Unrecognised`.
+ */
+export type SamplingEffortSupport =
+  | { state: 'supported' }
+  | { state: 'not_supported' }
+  | { state: 'not_yet_observed'; reason: string };
+
+/** Mirrors `gglib_proxy::audit_records::EffortRung`. */
+export interface SamplingEffortRung {
+  /** The level the ladder resolved, e.g. `high`. */
+  level: string;
+  /** The rung that supplied it — `profile`, `model`, `global`, `cli`. */
+  source: string;
+  /**
+   * Whether the effort gate deleted it before sending. Rendering the level
+   * without this marker reports a control that went nowhere as though it had
+   * worked, and no readback exists that could contradict the claim.
+   */
+  suppressed: boolean;
+}
+
+/** Mirrors `gglib_proxy::audit_records::BudgetRung`. */
+export interface SamplingBudgetRung {
+  /** The cap, in tokens. `0` is the documented "stop thinking". */
+  tokens: number;
+  /** The rung that supplied it. */
+  source: string;
+}
+
+/**
+ * Mirrors `gglib_proxy::audit_records::ResolvedReasoning`.
+ *
+ * A record with both halves null is **not** the same as no record: it says a
+ * request was resolved and named neither control, where an absent record says
+ * no request has been resolved at all.
+ */
+export interface SamplingResolvedReasoning {
+  effort?: SamplingEffortRung | null;
+  budget?: SamplingBudgetRung | null;
+}
+
+/**
+ * Mirrors `gglib_proxy::audit_records::ReasoningReadback`.
+ *
+ * Structurally unlike every other field on the audit snapshot: those report a
+ * comparison between what gglib sent and what llama-server echoed, and there is
+ * no echo for these two. `reasoning_effort` becomes a chat-template kwarg
+ * consumed at render time, and `task_params::to_json` serialises no
+ * `reasoning_budget_*` field (ADR 0007 finding 7a). So this is gglib's own
+ * record, and `wire_blind_reason` is the server-supplied sentence that says so.
+ */
+export interface SamplingReasoningReadback {
+  effort_support: SamplingEffortSupport;
+  /** What the most recent resolved request named. `null` until one has been. */
+  latest?: SamplingResolvedReasoning | null;
+  /** Why nothing above is corroborated. Sent by the server, never paraphrased. */
+  wire_blind_reason: string;
+}
+
+/** Mirrors `gglib_proxy::audit_records::ClientFieldTally`. */
+export interface SamplingClientFieldTally {
+  /** The wire key, as gglib names it — never a client-supplied string. */
+  field: string;
+  /** Times the trust gate binned it. Large by default and not a fault. */
+  discarded: number;
+  /** Times it could not be read as sent. */
+  rejected: number;
+}
+
+/** Mirrors `gglib_proxy::audit_records::ClientFieldNames`. */
+export interface SamplingClientFieldNames {
+  /** Tracked names, most-dropped first. */
+  fields: SamplingClientFieldTally[];
+  /**
+   * Drops whose name was not tracked because the bounded table was full. Zero
+   * on every configuration gglib can currently produce, and reported anyway: a
+   * silent bound and a bound nobody hit look identical.
+   */
+  untracked: number;
 }
 
 /**

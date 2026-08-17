@@ -653,20 +653,43 @@ fn template_caps_default_to_not_yet_read_and_hold_the_latest_reading() {
     assert_eq!(store.template_caps().caps(), None);
 }
 
-/// Storage only, this PR: the observation must not leak into the
-/// dashboard snapshot until the surface PR deliberately adds it.
+/// The caps reading now reaches the snapshot, as the tri-state rather than as
+/// a bool. A template that positively does not read the variable and one
+/// nobody has asked about must not arrive at a surface wearing the same label.
 #[test]
-fn the_snapshot_does_not_carry_template_caps_yet() {
+fn the_snapshot_carries_the_caps_answer_as_three_states_not_two() {
     let store = SamplingAuditStore::new();
-    store.set_template_caps(TemplateCapsState::Read {
-        caps: TemplateCaps::default(),
-    });
+    let tag = |store: &SamplingAuditStore| {
+        serde_json::to_value(store.snapshot()).expect("snapshot serializes")["reasoning"]
+            ["effort_support"]["state"]
+            .as_str()
+            .expect("a tag")
+            .to_string()
+    };
 
-    let json = serde_json::to_value(store.snapshot()).expect("snapshot serializes");
-    assert!(
-        json.get("template_caps").is_none(),
-        "template caps surfaced in the snapshot before their PR: {json}"
-    );
+    assert_eq!(tag(&store), "not_yet_observed");
+
+    store.set_template_caps(TemplateCapsState::Read {
+        caps: TemplateCaps {
+            supports_reasoning_effort: Some(false),
+            ..TemplateCaps::default()
+        },
+    });
+    assert_eq!(tag(&store), "not_supported");
+
+    store.set_template_caps(TemplateCapsState::Read {
+        caps: TemplateCaps {
+            supports_reasoning_effort: Some(true),
+            ..TemplateCaps::default()
+        },
+    });
+    assert_eq!(tag(&store), "supported");
+
+    // A read that failed is not a read that answered "no".
+    store.set_template_caps(TemplateCapsState::Unreadable {
+        reason: "connection refused".into(),
+    });
+    assert_eq!(tag(&store), "not_yet_observed");
 }
 
 // ── Suppressed reasoning effort (ADR 0007 stage 5b) ────────────────────────
@@ -789,4 +812,206 @@ fn the_snapshot_carries_the_suppression_for_a_surface_to_render() {
         serde_json::json!("profile"),
         "{json}"
     );
+}
+
+// ── The blindness, made permanent (ADR 0007 finding 7a) ────────────────────
+
+/// **The omission this module is required to keep.**
+///
+/// Neither reasoning control is echoed anywhere llama-server reports: effort is
+/// a chat-template kwarg consumed at render time, and `task_params::to_json`
+/// serialises no `reasoning_budget_*` field in either branch — measured against
+/// the pinned build across 49 mid-generation `/slots` captures, and absent from
+/// `/props.default_generation_settings.params` too.
+///
+/// So a [`SlotParams`] field for either could only ever deserialize to `None`,
+/// and a permanently-`None` observation compared against a resolved intent is
+/// the inert-instrument trap ADR 0002 finding 2 named: a check that cannot
+/// fail, reporting agreement forever.
+///
+/// This test is written to fail if someone "fixes" the gap by adding the field,
+/// which is why it pins the whole key set rather than only the two names.
+#[test]
+fn no_reasoning_field_may_join_the_readback() {
+    let json = serde_json::to_value(SlotParams::default()).expect("SlotParams serializes");
+    let keys: Vec<&str> = json
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    // Alphabetical: `serde_json::Map` is a `BTreeMap` here, and pinning the
+    // order it actually produces keeps the failure message readable.
+    assert_eq!(
+        keys,
+        [
+            "dry_multiplier",
+            "min_p",
+            "presence_penalty",
+            "repeat_penalty",
+            "samplers",
+            "seed",
+            "temperature",
+            "top_k",
+            "top_p",
+        ],
+        "SlotParams changed shape. If a reasoning field was added: llama-server \
+         echoes neither control (ADR 0007 finding 7a), so it can only ever read \
+         None — the record belongs in `audit_records`, not here."
+    );
+}
+
+/// The other half of the same guard, one level down: even handed a slot body
+/// that carries both reasoning keys, the comparison must reach no verdict about
+/// either. [`compare`] covers seven sampler fields plus `seed`, and this fails
+/// the moment an eighth arm is added for a control nothing echoes.
+#[test]
+fn a_resolved_reasoning_control_produces_no_divergence_and_no_verdict() {
+    let resolved = InferenceConfig {
+        reasoning_effort: Some(ReasoningEffort::High),
+        reasoning_budget_tokens: Some(2048),
+        ..InferenceConfig::default()
+    };
+    let d = decision(resolved, all_from(ParamSource::Layer(2)));
+
+    // A hypothetical future build echoing both — the parser ignores them, and
+    // must go on ignoring them, because such an echo would still be the
+    // *request* being read back, not anything a sampler applied.
+    let observed: SlotParams = serde_json::from_str(
+        r#"{"temperature":0.8,"reasoning_effort":"low","reasoning_budget_tokens":1}"#,
+    )
+    .expect("unknown keys are ignored");
+
+    let found = compare(&d, &observed);
+    assert!(
+        found.iter().all(|f| !f.field.contains("reasoning")),
+        "a reasoning control reached the comparison: {found:?}"
+    );
+}
+
+// ── The reasoning record that stands in for the comparison ─────────────────
+
+/// What the ladder resolved is the *only* account there is, so the rung has to
+/// travel with it — "high, because your profile says so" is answerable, and
+/// "high" alone is not.
+#[test]
+fn the_latest_resolved_reasoning_is_recorded_with_both_rungs() {
+    let store = SamplingAuditStore::new();
+    let resolved = InferenceConfig {
+        reasoning_effort: Some(ReasoningEffort::High),
+        reasoning_budget_tokens: Some(4096),
+        ..InferenceConfig::default()
+    };
+    let mut d = decision(resolved, all_from(ParamSource::Unset));
+    d.sources.reasoning_effort = ParamSource::Layer(2);
+    d.sources.reasoning_budget_tokens = ParamSource::Layer(4);
+
+    store.record_intent(&d, None);
+
+    let latest = store
+        .snapshot()
+        .reasoning
+        .latest
+        .expect("a resolved request is recorded");
+    let effort = latest.effort.expect("the level is held");
+    assert_eq!(effort.level, ReasoningEffort::High);
+    assert_eq!(effort.source, "profile");
+    assert!(!effort.suppressed);
+    let budget = latest.budget.expect("the budget is held");
+    assert_eq!(budget.tokens, 4096);
+    assert_eq!(budget.source, "global");
+}
+
+/// A suppressed level must still appear — marked. Rendering the level without
+/// the marker would report a control that went nowhere as though it had worked,
+/// and nothing on the wire can contradict that claim.
+#[test]
+fn a_suppressed_level_is_recorded_with_its_marker_not_omitted() {
+    let store = SamplingAuditStore::new();
+    let mut d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
+    // Stage 5b's own aftermath: the level is gone and the rung overwritten.
+    d.sources.reasoning_effort = ParamSource::SuppressedByTemplate;
+
+    store.record_intent(
+        &d,
+        Some(&SuppressedEffort {
+            level: ReasoningEffort::Max,
+            source: ParamSource::Layer(2),
+        }),
+    );
+
+    let effort = store
+        .snapshot()
+        .reasoning
+        .latest
+        .expect("recorded")
+        .effort
+        .expect("a suppressed level is still the level that was resolved");
+    assert_eq!(effort.level, ReasoningEffort::Max);
+    assert_eq!(effort.source, "profile");
+    assert!(effort.suppressed, "the marker is what makes it honest");
+}
+
+/// A request that named neither control is a *record with nothing in it*, not
+/// an absent record: the first says gglib resolved nothing, the second says
+/// nothing has been resolved. [`AuditState`]'s rule, on a pair of fields with
+/// no wire side to fall back on.
+#[test]
+fn a_request_naming_neither_control_is_a_record_not_a_silence() {
+    let store = SamplingAuditStore::new();
+    assert_eq!(store.snapshot().reasoning.latest, None);
+
+    store.record_intent(
+        &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
+        None,
+    );
+
+    let latest = store.snapshot().reasoning.latest.expect("a record exists");
+    assert_eq!(latest.effort, None);
+    assert_eq!(latest.budget, None);
+}
+
+/// The snapshot carries *why* none of it is corroborated, so every surface says
+/// the same thing rather than three paraphrases of one measurement.
+#[test]
+fn the_snapshot_carries_the_reason_the_reasoning_readback_is_blind() {
+    let json = serde_json::to_value(SamplingAuditStore::new().snapshot()).expect("serializes");
+    let reason = json["reasoning"]["wire_blind_reason"]
+        .as_str()
+        .expect("a reason");
+    assert!(reason.contains("task_params::to_json"), "{reason}");
+    assert!(reason.contains("ADR 0007 finding 7a"), "{reason}");
+}
+
+/// **The count could not answer the question; the names can.** "Is gglib
+/// ignoring my reasoning_effort?" is a question about one field, and a total of
+/// four drops across an unnamed set is not an answer to it.
+#[test]
+fn discarded_client_fields_reach_the_snapshot_by_name() {
+    let store = SamplingAuditStore::new();
+    let mut d = decision(InferenceConfig::default(), all_from(ParamSource::Unset));
+    d.client_fields_discarded = vec!["reasoning_effort".into(), "temperature".into()];
+    d.client_fields_rejected = vec![gglib_core::domain::FieldIssue::Rejected {
+        field: "top_k",
+        value: "banana".into(),
+        expected: "an integer",
+    }];
+
+    store.record_intent(&d, None);
+    store.record_intent(&d, None);
+
+    let snap = store.snapshot();
+    // The total is unchanged — the names are additional, not a replacement.
+    assert_eq!(snap.client_fields_discarded, 4);
+    let named: Vec<_> = snap
+        .client_field_names
+        .fields
+        .iter()
+        .map(|t| (t.field.as_str(), t.discarded, t.rejected))
+        .collect();
+    assert!(named.contains(&("reasoning_effort", 2, 0)), "{named:?}");
+    assert!(named.contains(&("temperature", 2, 0)), "{named:?}");
+    assert!(named.contains(&("top_k", 0, 2)), "{named:?}");
+    assert_eq!(snap.client_field_names.untracked, 0);
 }

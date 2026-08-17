@@ -125,8 +125,36 @@
 //! discipline — unknown means nobody knows, never "the feature is absent" —
 //! generalised from a capability probe to an observation organ.
 //!
+//! # Two fields this instrument can never see, and will not pretend to
+//!
+//! [`compare`] covers **seven** readback fields — the sampler values in
+//! [`SlotParams`] — plus `seed`. Neither reasoning control can ever join them,
+//! and this is a structural fact about llama-server rather than a gap waiting
+//! to be filled:
+//!
+//! - `reasoning_effort` becomes a chat-template kwarg consumed at render time.
+//!   No sampler ever holds it, so no sampler echo can report it.
+//! - `reasoning_budget_tokens` **is** parsed into `params.sampling`, and
+//!   `task_params::to_json` (`tools/server/server-task.cpp:32-147`) serialises
+//!   no `reasoning_budget_*` field in either of its branches. 49 `/slots`
+//!   params captured mid-generation carried neither field, and neither appears
+//!   in `/props.default_generation_settings.params` either.
+//!   `server-schema.cpp:383` names the key, but that is the request-*parse*
+//!   table, not an echo.
+//!
+//! Measured on the pinned build — [ADR 0007] finding 7a, which corrects that
+//! ADR's own earlier claim that the budget was observable. So **adding either
+//! field to [`SlotParams`] would create a column that can only ever be `None`**,
+//! and a permanently-`None` observation read as agreement is the exact failure
+//! the section below is about. `no_reasoning_field_may_join_the_readback` fails
+//! the build if one is added.
+//!
+//! What replaces the comparison is [`crate::audit_records`]: gglib's own record
+//! of what it resolved, carried with the reason nothing corroborates it.
+//!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
@@ -137,6 +165,11 @@ use gglib_core::domain::{
 };
 use gglib_core::request_pipeline::{SamplingDecision, SuppressedEffort};
 use serde::{Deserialize, Serialize};
+
+use crate::audit_records::{
+    BudgetRung, ClientFieldNameTally, ClientFieldNames, EffortRung, EffortSupportState,
+    ReasoningReadback, ResolvedReasoning, WIRE_BLIND_REASON,
+};
 
 /// Tolerance for comparing a float that made a round trip through JSON and
 /// an `f32`/`f64` narrowing on each side.
@@ -559,6 +592,20 @@ pub struct SamplingAuditStore {
     /// The most recent one, with its rung already named. See
     /// [`EffortSuppressions`].
     latest_effort_suppressed: Mutex<Option<SuppressedEffortRecord>>,
+    /// What the most recent request resolved for the two reasoning controls.
+    ///
+    /// The counterpart to [`Self::recent`] for the two fields that have no
+    /// wire side: there is nothing to compare, so the record *is* the
+    /// observation. `None` until a request has been resolved — which is a
+    /// different fact from a request that named neither control, and
+    /// [`ResolvedReasoning`] keeps them apart.
+    latest_reasoning: Mutex<Option<ResolvedReasoning>>,
+    /// Which client field names were dropped, and how often each.
+    ///
+    /// Beside [`Self::client_fields_discarded`] rather than replacing it: the
+    /// count is the total including anything past the tally's bound, and the
+    /// names are what make it actionable. See [`crate::audit_records`].
+    client_field_names: ClientFieldNameTally,
 }
 
 impl SamplingAuditStore {
@@ -605,6 +652,12 @@ impl SamplingAuditStore {
             });
         }
 
+        *self
+            .latest_reasoning
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) =
+            Some(resolved_reasoning(decision, effort_suppressed));
+
         let rejected = decision.client_fields_rejected.len() as u64;
         let discarded = decision.client_fields_discarded.len() as u64;
         if rejected > 0 {
@@ -615,6 +668,12 @@ impl SamplingAuditStore {
             self.client_fields_discarded
                 .fetch_add(discarded, Ordering::Relaxed);
         }
+        // The names behind those two counts. A count cannot answer "why did my
+        // reasoning_effort do nothing?"; the name can.
+        self.client_field_names.record(
+            &decision.client_fields_discarded,
+            &decision.client_fields_rejected,
+        );
 
         // Compare what this request resolved against what the model published.
         // Skipped entirely until a poll has named the running model — a
@@ -780,7 +839,58 @@ impl SamplingAuditStore {
                     .unwrap_or_else(|e| e.into_inner())
                     .clone(),
             },
+            reasoning: ReasoningReadback {
+                effort_support: EffortSupportState::of(&self.template_caps()),
+                latest: self
+                    .latest_reasoning
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+                wire_blind_reason: WIRE_BLIND_REASON,
+            },
+            client_field_names: self.client_field_names.snapshot(),
         }
+    }
+}
+
+/// What one request resolved for the two reasoning controls, with each rung
+/// already named.
+///
+/// Free-standing rather than a method, because it needs
+/// [`SamplingDecision::layer_names`] and the suppression together — and the
+/// suppression is the only place a suppressed level survives at all. Stage 5b
+/// rewrites `sources.reasoning_effort` to
+/// [`SuppressedByTemplate`](ParamSource::SuppressedByTemplate) and clears
+/// `resolved.reasoning_effort`, so a record built from the decision alone would
+/// report that gglib asked for nothing — which is precisely the erasure
+/// [`SuppressedEffort`] exists to prevent.
+fn resolved_reasoning(
+    decision: &SamplingDecision,
+    effort_suppressed: Option<&SuppressedEffort>,
+) -> ResolvedReasoning {
+    let names = &decision.layer_names;
+    let effort = match (effort_suppressed, decision.resolved.reasoning_effort) {
+        (Some(suppressed), _) => Some(EffortRung {
+            level: suppressed.level,
+            source: describe_source(suppressed.source, names),
+            suppressed: true,
+        }),
+        (None, Some(level)) => Some(EffortRung {
+            level,
+            source: describe_source(decision.sources.reasoning_effort, names),
+            suppressed: false,
+        }),
+        (None, None) => None,
+    };
+    ResolvedReasoning {
+        effort,
+        budget: decision
+            .resolved
+            .reasoning_budget_tokens
+            .map(|tokens| BudgetRung {
+                tokens,
+                source: describe_source(decision.sources.reasoning_budget_tokens, names),
+            }),
     }
 }
 
@@ -911,6 +1021,21 @@ pub struct SamplingAuditSnapshot {
     /// The one thing on this snapshot that no wire observation could ever
     /// corroborate — see [`EffortSuppressions`].
     pub effort_suppressed: EffortSuppressions,
+    /// The two reasoning controls: what the template says about them, what the
+    /// last request resolved, and why none of it is an observation.
+    ///
+    /// Structurally different from every other field here. The rest of this
+    /// snapshot reports a comparison between gglib's intent and llama-server's
+    /// echo; there is no echo for these two (see the module docs), so this is
+    /// gglib's own account, carried with
+    /// [`WIRE_BLIND_REASON`](crate::audit_records::WIRE_BLIND_REASON) so no
+    /// surface can render it as a confirmed reading.
+    pub reasoning: ReasoningReadback,
+    /// Which client field names were dropped, and how often each.
+    ///
+    /// [`Self::client_fields_discarded`] is the total; this is what it was made
+    /// of. Bounded — see [`crate::audit_records`].
+    pub client_field_names: ClientFieldNames,
 }
 
 /// What gglib is sending against what this model's GGUF publishes.
