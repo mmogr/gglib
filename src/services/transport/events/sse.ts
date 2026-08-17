@@ -20,8 +20,8 @@ import { getEventCategory } from './category';
 /**
  * Unified SSE endpoint path.
  *
- * All events (server, download, log, verification) are multiplexed
- * through a single SSE connection at this endpoint.
+ * All events (server, download, model, verification, proxy) multiplex through one
+ * connection here. No `log` family: those stream from `/api/servers/{port}/logs/stream`.
  */
 export const SSE_EVENTS_ENDPOINT = '/api/events';
 

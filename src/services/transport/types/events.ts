@@ -131,19 +131,6 @@ export type DownloadEvent =
   | { type: 'queue_run_complete'; summary: QueueRunSummary };
 
 // ============================================================================
-// Log Events
-// ============================================================================
-
-export interface LogEntry {
-  timestamp: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  message: string;
-  source?: string;
-}
-
-export type LogEvent = LogEntry;
-
-// ============================================================================
 // Model Events
 // ============================================================================
 
@@ -221,7 +208,6 @@ export type ProxyEvent =
 export interface AppEventMap {
   'server': ServerEvent;
   'download': { type: 'download'; event: DownloadEvent };
-  'log': LogEvent;
   'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;
