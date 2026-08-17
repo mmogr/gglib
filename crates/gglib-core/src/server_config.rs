@@ -102,9 +102,12 @@ pub struct ServerConfigOptions {
     pub port: Option<u16>,
 
     /// Override Jinja template support.
-    /// - `None` → auto-detect: enabled when the model has the `"agent"` tag.
-    /// - `Some(true)` → force enable regardless of tags.
-    /// - `Some(false)` → force disable regardless of tags.
+    /// - `None` → auto-detect: `--jinja` when the model has the `"agent"` tag,
+    ///   and otherwise **no flag at all**, which leaves llama-server's own
+    ///   default (jinja on) in place rather than disabling it.
+    /// - `Some(true)` → `--jinja` regardless of tags.
+    /// - `Some(false)` → `--no-jinja` regardless of tags. The only route to
+    ///   actually turning jinja off; see [`crate::ports::JinjaMode`].
     pub jinja: Option<bool>,
 
     /// Override the reasoning format passed to llama-server.

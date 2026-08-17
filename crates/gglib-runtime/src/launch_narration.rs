@@ -18,12 +18,13 @@ use gglib_core::domain::{
     format_mib_as_gib, kv_bytes_per_token,
 };
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
-use gglib_core::ports::ModelLaunchSpec;
+use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
 use gglib_core::server_config::ContextSizeSource;
 
 use crate::llama::args::{
-    CacheRamResolution, CacheRamSource, JinjaResolutionSource, KvCacheTypeResolution,
-    KvCacheTypeSource, MtpResolutionSource, ReasoningFormatSource, SlotRestoreResolution,
+    CacheRamResolution, CacheRamSource, JinjaResolution, JinjaResolutionSource,
+    KvCacheTypeResolution, KvCacheTypeSource, MtpResolutionSource, ReasoningFormatSource,
+    SlotRestoreResolution,
 };
 use crate::server_config::ResolvedCapabilities;
 
@@ -240,6 +241,30 @@ fn mtp_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
     ))
 }
 
+/// How one launch's jinja decision reads on the flags line.
+///
+/// Both directions get a line. A user who turned jinja off has no other way to
+/// tell that it took effect — and until `--no-jinja` was actually emitted it
+/// did not, which is exactly the failure a silent narration would hide again.
+/// [`JinjaMode::Defer`] gets nothing, because gglib genuinely did not decide:
+/// llama-server's own default stands, and claiming a flag would misreport the
+/// command line.
+fn jinja_flag(res: JinjaResolution) -> Option<String> {
+    let why = match res.source {
+        JinjaResolutionSource::AgentTag => "agent tag",
+        JinjaResolutionSource::ExplicitTrue | JinjaResolutionSource::ExplicitFalse => "explicit",
+        // Only ever pairs with `Defer`, which yields `None` below — matched
+        // rather than wildcarded so a new source cannot render as the wrong
+        // reason.
+        JinjaResolutionSource::Default => "default",
+    };
+    match res.mode {
+        JinjaMode::On => Some(format!("--jinja ({why})")),
+        JinjaMode::Off => Some(format!("--no-jinja ({why})")),
+        JinjaMode::Defer => None,
+    }
+}
+
 /// The llama-server flags gglib chose on the user's behalf.
 ///
 /// Each flag carries its own provenance inline, so the line reads
@@ -250,15 +275,8 @@ fn flags_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
     let caps = inputs.capabilities;
     let mut parts: Vec<String> = Vec::new();
 
-    if caps.jinja.enabled {
-        let why = match caps.jinja.source {
-            JinjaResolutionSource::AgentTag => "agent tag",
-            JinjaResolutionSource::ExplicitTrue => "explicit",
-            // Not reachable while `enabled` is true, but matched exhaustively
-            // so a new source cannot silently render as the wrong reason.
-            JinjaResolutionSource::ExplicitFalse | JinjaResolutionSource::Default => "default",
-        };
-        parts.push(format!("--jinja ({why})"));
+    if let Some(jinja) = jinja_flag(caps.jinja) {
+        parts.push(jinja);
     }
 
     if let Some(format) = &caps.reasoning.format {
@@ -324,9 +342,7 @@ mod tests {
     use gglib_core::domain::KvElemsPerToken;
     use std::path::PathBuf;
 
-    use crate::llama::args::{
-        JinjaResolution, MtpResolution, ReasoningFormatResolution, SlotRestoreSource,
-    };
+    use crate::llama::args::{MtpResolution, ReasoningFormatResolution, SlotRestoreSource};
 
     fn spec(tags: &[&str]) -> ModelLaunchSpec {
         ModelLaunchSpec {
@@ -348,7 +364,7 @@ mod tests {
     fn caps() -> ResolvedCapabilities {
         ResolvedCapabilities {
             jinja: JinjaResolution {
-                enabled: false,
+                mode: JinjaMode::Defer,
                 source: JinjaResolutionSource::Default,
             },
             reasoning: ReasoningFormatResolution {
@@ -548,7 +564,7 @@ mod tests {
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
         let mut c = caps();
         c.jinja = JinjaResolution {
-            enabled: true,
+            mode: JinjaMode::On,
             source: JinjaResolutionSource::AgentTag,
         };
         c.reasoning = ReasoningFormatResolution {
@@ -560,6 +576,34 @@ mod tests {
             n.decision("flags").unwrap().value,
             "--jinja (agent tag) \u{b7} --reasoning-format deepseek (reasoning tag)"
         );
+    }
+
+    /// Turning jinja off is at least as worth narrating as turning it on: it
+    /// is the case a user chose deliberately, and the case that until now did
+    /// not take effect at all.
+    #[test]
+    fn flags_line_names_an_explicitly_disabled_jinja() {
+        let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));
+        let mut c = caps();
+        c.jinja = JinjaResolution {
+            mode: JinjaMode::Off,
+            source: JinjaResolutionSource::ExplicitFalse,
+        };
+        let n = narrate(&inputs(&s, &c, &r));
+        assert_eq!(n.decision("flags").unwrap().value, "--no-jinja (explicit)");
+    }
+
+    /// Deferring is not a flag, so it is not a line. Claiming one would
+    /// misreport the command line gglib actually built.
+    #[test]
+    fn flags_line_stays_silent_when_jinja_is_deferred() {
+        let (s, c, r) = (
+            spec(&[]),
+            caps(),
+            cache_ram(Some(6144), CacheRamSource::Auto),
+        );
+        assert_eq!(c.jinja.mode, JinjaMode::Defer);
+        assert!(narrate(&inputs(&s, &c, &r)).decision("flags").is_none());
     }
 
     /// The one flag that takes chat completions away has to be visible in the
@@ -628,7 +672,7 @@ mod tests {
         );
         let mut c = caps();
         c.jinja = JinjaResolution {
-            enabled: true,
+            mode: JinjaMode::On,
             source: JinjaResolutionSource::AgentTag,
         };
         c.reasoning = ReasoningFormatResolution {

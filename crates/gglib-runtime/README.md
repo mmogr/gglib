@@ -185,9 +185,20 @@ let config = build_server_config(
 
 | Feature | Explicit override wins over… | Tag-based default |
 |---------|------------------------------|-------------------|
-| Jinja templates | `opts.jinja = Some(true/false)` | `"agent"` tag → enabled |
+| Jinja templates | `opts.jinja = Some(true)` → `--jinja`, `Some(false)` → `--no-jinja` | `"agent"` tag → `--jinja`; otherwise **no flag**, leaving llama-server's own default (jinja on) |
 | Reasoning format | `opts.reasoning_format = Some(…)` | model tags |
 | MTP speculative decoding | `opts.mtp_draft_n_max = Some(0)` (off) or `Some(n)` (on) | `"mtp"` tag → `n=2, p_min=0.75` |
+
+The jinja row is the one where gglib's silence is not a "no". llama-server
+initialises `use_jinja = true` and the server example never clears it, so a
+launch that emits no flag runs *with* jinja. That is why the flag is emitted in
+both directions: `--no-jinja` is the only thing gglib can send that turns jinja
+off, and nothing tag-derived reaches it — taking tool-call templating and
+template kwargs away from every non-agent model is a choice only the user gets
+to make. One caveat: llama.cpp also reads `LLAMA_ARG_JINJA` from the
+environment, which gglib does not sanitise, so an exported `LLAMA_ARG_JINJA=0`
+turns jinja off on a deferred launch. It cannot beat `--no-jinja`, since
+arguments are applied after the environment.
 
 ### Context size resolution
 

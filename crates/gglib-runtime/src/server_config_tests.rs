@@ -5,6 +5,7 @@
 use super::*;
 use crate::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 use gglib_core::domain::InferenceConfig;
+use gglib_core::ports::JinjaMode;
 
 const BASE_PORT: u16 = 9000;
 
@@ -79,7 +80,7 @@ fn cascade_reaches_the_built_config_with_fully_specified_options() {
 
     assert_eq!(config.context_size, Some(32_768));
     assert_eq!(config.port, Some(5501));
-    assert!(config.jinja);
+    assert_eq!(config.jinja, JinjaMode::On);
     assert_eq!(config.reasoning_format.as_deref(), Some("deepseek"));
     assert_eq!(config.spec_draft_n_max, Some(4));
     assert_eq!(config.cache_ram_mb, Some(4096));
@@ -104,7 +105,11 @@ fn cascade_preserves_tag_driven_detection() {
         },
     );
 
-    assert!(config.jinja, "agent tag should auto-enable jinja");
+    assert_eq!(
+        config.jinja,
+        JinjaMode::On,
+        "agent tag should auto-enable jinja"
+    );
     assert!(
         config.reasoning_format.is_some(),
         "reasoning tag should auto-detect a reasoning format"
@@ -117,6 +122,36 @@ fn cascade_preserves_tag_driven_detection() {
         !config.embeddings,
         "a chat model's tags must never reach --embeddings"
     );
+}
+
+/// An explicit jinja-off has to survive the cascade as an *off*, not decay
+/// into the deferral an untagged model produces — those emit opposite command
+/// lines, and only one of them actually disables jinja.
+#[test]
+fn cascade_carries_an_explicit_jinja_off_through_as_off() {
+    let config = build_via_cascade(
+        &["agent".to_string()],
+        ServerConfigOptions {
+            jinja: Some(false),
+            ..Default::default()
+        },
+        GlobalDefaults::default(),
+    );
+    assert_eq!(config.jinja, JinjaMode::Off);
+}
+
+/// Pinned as a deliberate behaviour: gglib takes no position on jinja for a
+/// model with neither the tag nor an override, so llama-server's own default
+/// (jinja on) stands. Flipping this to `Off` would silently strip tool-call
+/// templating and template kwargs from every non-agent model.
+#[test]
+fn cascade_leaves_an_untagged_model_deferring_to_upstream() {
+    let config = build_via_cascade(
+        &["reasoning".to_string()],
+        ServerConfigOptions::default(),
+        GlobalDefaults::default(),
+    );
+    assert_eq!(config.jinja, JinjaMode::Defer);
 }
 
 /// The embedding tag is the only route to `--embeddings`; there is no

@@ -61,7 +61,7 @@ pub use model_runtime::{
     Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
     ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
 };
-pub use process_runner::{ProcessHandle, ServerConfig};
+pub use process_runner::{JinjaMode, ProcessHandle, ServerConfig};
 pub use retry_observer::RetryObserver;
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
