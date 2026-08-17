@@ -68,6 +68,7 @@ const RECENT_REQUEST_LIMIT: usize = 20;
 /// measurements live under [`Self::usage`] rather than being mixed in, so a
 /// consumer can tell "how the cache is set up" from "what it actually did".
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CacheStatus {
     /// Whether disk KV slot persistence is enabled on this proxy instance
     /// (`--cache` + `--slot-dir`).
@@ -79,10 +80,22 @@ pub struct CacheStatus {
     pub disk_suppressed_for_model: bool,
     /// Resolved `--cache-ram` budget in MiB. `None` when no flag was emitted
     /// and llama-server's own default applies.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub ram_budget_mb: Option<u64>,
     /// Stable machine-readable label for the budget's health, for styling.
     /// One of `healthy`, `low`, `disabled_insufficient_ram`,
     /// `disabled_by_user`, `llama_default`.
+    ///
+    /// A `&'static str`, which ts-rs would render as a bare `string` — losing
+    /// the exhaustiveness the consumer's `switch` is written against. The
+    /// override restates the closed set above; it is produced by exactly one
+    /// exhaustive `match` in [`Self::build`], so a new arm there is the one
+    /// place that must also touch this line.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(type = "\"healthy\" | \"low\" | \"disabled_insufficient_ram\" \
+                   | \"disabled_by_user\" | \"llama_default\"")
+    )]
     pub ram_state: &'static str,
     /// Whether any of the below warrants surfacing to the user. `false` when
     /// everything is either healthy or deliberately configured.
@@ -280,6 +293,7 @@ const BROADCAST_CAPACITY: usize = 8;
 /// This is both the `GET /v1/proxy/status` response body and the event type
 /// pushed over `GET /v1/proxy/status/stream`.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct DashboardSnapshot {
     /// Every currently in-flight model request — direct `/v1/chat/completions`
     /// completions and `/v1/embeddings`.
@@ -300,9 +314,11 @@ pub struct DashboardSnapshot {
     pub recent_requests: Vec<ContextSnapshot>,
     /// Total requests handled since the proxy started, including any
     /// evicted from `recent_requests`'s ring buffer.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_requests: u64,
     /// Total requests whose client-visible output carried dialect residue
     /// (the drift alarm), eviction-safe like `total_requests`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub dialect_residue_total: u64,
     /// Turns whose tool call failed schema validation and was re-issued with
     /// `tool_choice: "required"`, counted whether or not the re-issue worked.
@@ -310,9 +326,11 @@ pub struct DashboardSnapshot {
     /// A sustained non-zero rate says this model's `auto` path is
     /// unconstrained upstream — the per-model signal ADR 0002 could otherwise
     /// only read from a `--verbose` llama-server log.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub tool_repairs_attempted: u64,
     /// Of those, the ones that produced a conformant call. The ratio is the
     /// number worth watching.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub tool_repairs_succeeded: u64,
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.

@@ -49,14 +49,20 @@ pub enum HttpError {
 }
 
 /// JSON error response body.
+///
+/// The one shape every route can return, so it is exported alongside the
+/// success bodies rather than left for clients to guess at.
 #[derive(Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 struct ErrorBody {
     error: String,
     status: u16,
     /// Stable error type discriminant for client-side handling
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
     error_type: Option<String>,
     /// Optional additional metadata for specific error types
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<serde_json::Value>,
 }

@@ -9,6 +9,7 @@ use super::task::TaskCategory;
 /// Where a tune candidate's sampling settings came from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum CandidateSource {
     /// One point in the user-specified [`super::config::SweepSpec`] grid.
     UserGrid,
@@ -65,6 +66,7 @@ mod tests {
 
 /// Result of evaluating one task against one candidate's sampling settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct TuneTaskResult {
     /// ID of the [`super::task::TuneTask`] this result corresponds to.
     pub task_id: String,
@@ -91,6 +93,7 @@ pub struct TuneTaskResult {
     /// produced", which is what decides whether a repeat was even possible.
     pub iterations: usize,
     /// Wall-clock time spent on this task, in milliseconds.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub latency_ms: u64,
     /// Completion tokens generated across the task's agent run, summed from
     /// the upstream's per-response usage reports.
@@ -100,6 +103,7 @@ pub struct TuneTaskResult {
     /// matters most. `None` only when the upstream reported no usage at all,
     /// which stays distinct from a measured zero.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub completion_tokens: Option<u64>,
     /// Wall-clock milliseconds from the start of the task to the first tool
     /// call the model actually issued — how long it took to take its first
@@ -111,6 +115,7 @@ pub struct TuneTaskResult {
     /// `None` when the task never called a tool, which is the correct outcome
     /// for an `Irrelevance` task.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub time_to_first_tool_call_ms: Option<u64>,
     /// Optional human-readable detail (e.g. which expected call was missed),
     /// surfaced in the leaderboard drill-down.
@@ -154,6 +159,7 @@ impl TuneTaskResult {
 /// Result of evaluating one candidate's sampling settings against the full
 /// (or pre-screen) task suite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct TuneCandidateResult {
     /// The candidate's resolved sampling settings.
     pub config: InferenceConfig,

@@ -90,14 +90,18 @@ const SLOTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(900);
 /// module-level documentation for why `Option<T>` + `#[serde(default)]` is
 /// used throughout instead of a raw [`serde_json::Value`].
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SlotSnapshot {
     /// Slot index within the running llama-server (`"id"` in the response).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     /// ID of the task currently occupying this slot. Absent/`-1` means idle,
     /// depending on llama.cpp version; kept as-is (no normalization).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default)]
     pub id_task: Option<i64>,
     /// Context size configured for this slot, in tokens.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     pub n_ctx: Option<u64>,
     /// Whether this slot is actively processing a request right now.
@@ -116,15 +120,18 @@ pub struct SlotSnapshot {
     /// this slot's KV cache. Superseded by `n_prompt_tokens`/`next_token` in
     /// current upstream versions, where it is simply absent — kept only as
     /// a best-effort fallback, see [`Self::tokens_in_use`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_past: Option<u64>,
     /// Alternate legacy field name seen in some intermediate llama.cpp
     /// builds; same role as `n_past`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     cache_tokens: Option<u64>,
     /// Current-schema field: total token count of the prompt currently
     /// loaded into this slot (the "prompt half" of context usage, as
     /// opposed to `next_token.n_decoded`'s generated-token count).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens: Option<u64>,
     /// Current-schema field: how many of `n_prompt_tokens` have actually
@@ -134,6 +141,7 @@ pub struct SlotSnapshot {
     /// tracks real progress during an in-flight prefill rather than the
     /// eventual total; must be combined with `n_prompt_tokens_cache` to
     /// recover the true total prompt usage, see [`Self::tokens_in_use`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens_processed: Option<u64>,
     /// Current-schema field: number of prompt tokens reused from KV cache
@@ -144,6 +152,7 @@ pub struct SlotSnapshot {
     /// as the total tokens in context — only meaningful alongside
     /// `n_prompt_tokens_processed` (the `prompt_n` analogue); adding it to
     /// the grand-total `n_prompt_tokens` fallback would double-count.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_prompt_tokens_cache: Option<u64>,
     /// Current-schema nested object carrying generation progress. We only
@@ -160,8 +169,10 @@ pub struct SlotSnapshot {
 
 /// The subset of the current schema's `next_token` object we care about.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 struct NextTokenInfo {
     /// Number of tokens decoded (generated) so far for the active task.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default, deserialize_with = "tolerant_u64")]
     n_decoded: Option<u64>,
 }
@@ -180,6 +191,7 @@ struct NextTokenInfo {
 /// `tolerant_u64` then silently downgrades to `None` instead of erroring).
 /// Trying `Many` first avoids this false-positive match.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(untagged)]
 enum NextTokenField {
     Many(Vec<NextTokenInfo>),

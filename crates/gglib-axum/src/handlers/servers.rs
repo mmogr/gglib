@@ -35,8 +35,10 @@ pub(crate) async fn tool_support(
 /// Request body for starting a server via collection route.
 /// Maps frontend's `id` field to backend's `model_id`.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StartServerBody {
     /// Model ID - frontend sends as `id`
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(alias = "id")]
     pub model_id: Option<i64>,
     #[serde(flatten)]
@@ -56,7 +58,9 @@ pub(crate) async fn start_body(
 
 /// Request body for stopping a server via collection route.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StopServerBody {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
 }
 

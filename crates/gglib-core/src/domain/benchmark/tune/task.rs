@@ -25,6 +25,7 @@ use crate::domain::agent::{AgentMessage, ToolDefinition};
 /// (plus [`LongContext`](Self::LongContext), which is gglib-specific).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum TaskCategory {
     /// Exactly one tool call is expected.
     SingleCall,

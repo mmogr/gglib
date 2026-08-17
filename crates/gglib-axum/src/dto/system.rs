@@ -8,12 +8,15 @@ use serde::{Deserialize, Serialize};
 /// This DTO ensures stable JSON field names (camelCase) for frontend consumption.
 /// Uses the memory field most useful for model fit calculations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SystemMemoryInfoDto {
     /// Total system RAM in bytes.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_ram_bytes: u64,
     /// GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon).
     /// None if no GPU detected or memory couldn't be determined.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_memory_bytes: Option<u64>,
     /// Whether the system has Apple Silicon with unified memory.

@@ -51,6 +51,7 @@ pub enum ShardProgress {
 /// Health status of an individual shard after verification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum ShardHealth {
     /// File is healthy - hash matches expected OID.
     Healthy,
@@ -82,8 +83,10 @@ pub struct VerificationProgress {
 
 /// Complete verification report for a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct VerificationReport {
     /// Model ID that was verified.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Overall health status.
     pub overall_health: OverallHealth,
@@ -95,6 +98,7 @@ pub struct VerificationReport {
 
 /// Overall health status for a model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum OverallHealth {
     /// All shards are healthy.
@@ -107,6 +111,7 @@ pub enum OverallHealth {
 
 /// Health report for a single shard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ShardHealthReport {
     /// Shard index.
     pub index: usize,
@@ -118,8 +123,10 @@ pub struct ShardHealthReport {
 
 /// Result of checking for model updates.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct UpdateCheckResult {
     /// Model ID that was checked.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Whether an update is available.
     pub update_available: bool,
@@ -129,6 +136,7 @@ pub struct UpdateCheckResult {
 
 /// Details about available updates.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct UpdateDetails {
     /// Number of shards that have changed.
     pub changed_shards: usize,
@@ -138,6 +146,7 @@ pub struct UpdateDetails {
 
 /// Update information for a single shard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ShardUpdate {
     /// Shard index.
     pub index: usize,

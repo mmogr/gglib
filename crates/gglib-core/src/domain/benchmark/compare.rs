@@ -30,12 +30,16 @@ pub struct CompareConfig {
 /// object. Missing values are stored as `NULL` in the database and surfaced as
 /// `None` in the API; they never cause a panic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelCompareResult {
     /// Database ID of this result row (set after persistence).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub id: Option<i64>,
     /// Foreign key → `models.id`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Foreign key → `benchmark_runs.id` (nullable; SET NULL on run delete).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub run_id: Option<i64>,
     /// Prompt text sent to this model.
     pub prompt_text: String,
@@ -46,8 +50,10 @@ pub struct ModelCompareResult {
     /// `true` if the response was cut short (`finish_reason == "length"`).
     pub was_truncated: bool,
     /// Number of prompt tokens reported by the model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub prompt_tokens: Option<i64>,
     /// Number of completion tokens reported by the model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub completion_tokens: Option<i64>,
     /// Time spent processing the prompt (milliseconds).
     pub prompt_ms: Option<f64>,

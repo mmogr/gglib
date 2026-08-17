@@ -2121,6 +2121,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
 ]
 
 [[package]]
@@ -2357,6 +2358,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "ts-rs",
  "uuid",
 ]
 

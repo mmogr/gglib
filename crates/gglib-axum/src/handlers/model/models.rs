@@ -31,6 +31,7 @@ use gglib_core::domain::{ModelListQuery, ModelSortBy, SortOrder};
 /// GET /api/models?quantizations=Q4_K_M,Q8_0&min_params=7&max_params=70
 /// ```
 #[derive(Debug, Default, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelListQueryParams {
     /// Sort field. One of `added_at` | `name` | `param_count` | `latest_tg_tps`.
     pub sort: Option<ModelSortBy>,
@@ -145,6 +146,7 @@ pub(crate) async fn add_tag(
 
 /// Request body for adding a tag via POST to /api/models/{id}/tags
 #[derive(serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct AddTagRequest {
     pub tag: String,
 }
@@ -177,6 +179,7 @@ pub(crate) async fn filter_options(
 
 /// Request body for `POST /api/models/{id}/retag`.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct RetagBody {
     #[serde(default)]
     pub full: bool,
@@ -233,6 +236,7 @@ pub(crate) async fn detail(
 
 /// Query parameters for `GET /api/models/{id}/explain`.
 #[derive(Debug, Default, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ExplainQueryParams {
     /// Name of a configured inference profile to apply on top of the model's
     /// own defaults. An unknown name is a 400 listing the configured ones,

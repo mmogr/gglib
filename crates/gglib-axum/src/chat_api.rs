@@ -26,8 +26,10 @@ use gglib_core::domain::chat::{Conversation, Message, MessageRole, NewMessage};
 
 /// Request body for creating a new conversation.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct CreateConversationRequest {
     pub title: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub model_id: Option<i64>,
     pub system_prompt: Option<String>,
 }
@@ -39,30 +41,40 @@ pub(crate) struct CreateConversationRequest {
 /// key (leave unchanged) — without it, `PUT /api/conversations/:id` with
 /// `{"system_prompt": null}` silently no-ops instead of clearing the prompt.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct UpdateConversationRequest {
     pub title: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub system_prompt: Option<Option<String>>,
 }
 
 /// Request body for saving a new message.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct SaveMessageRequest {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub conversation_id: i64,
     pub role: String,
     pub content: String,
+    /// Opaque to gglib — stored and handed back verbatim. `unknown` rather
+    /// than a modelled shape because that is exactly what the server promises.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
     pub metadata: Option<serde_json::Value>,
 }
 
 /// Request body for updating a message.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct UpdateMessageRequest {
     pub content: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
     pub metadata: Option<serde_json::Value>,
 }
 
 /// Request body for chat completion proxy.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChatProxyRequest {
     /// The port of the llama-server to forward to.
@@ -110,49 +122,64 @@ pub(crate) struct ChatProxyRequest {
     /// dislikes comes back as an honest HTTP 400 naming the range.
     pub reasoning_budget_tokens: Option<i32>,
     /// Optional tools for function calling.
+    ///
+    /// Forwarded to llama-server untouched, so gglib models no shape here and
+    /// TypeScript says so: `unknown[]`, not a guessed `Tool` interface.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown[] | null"))]
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
     /// Optional tool choice strategy.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
     #[serde(default)]
     pub tool_choice: Option<serde_json::Value>,
 }
 
 /// A chat message in the request/response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ChatMessage {
     pub role: String,
     /// Content is optional when tool_calls are present (OpenAI API spec)
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     /// Tool call ID (for tool role messages returning results).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
     /// Tool calls made by the assistant.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown[]", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<serde_json::Value>>,
 }
 
 /// Response from llama-server chat completion (non-streaming).
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ChatCompletionResponse {
     pub id: String,
     pub object: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub created: u64,
     pub model: String,
     pub choices: Vec<ChatChoice>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ChatUsage>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ChatChoice {
     pub index: u32,
     pub message: ChatMessage,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ChatUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,

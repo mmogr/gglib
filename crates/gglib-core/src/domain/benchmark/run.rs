@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Whether a benchmark run measured inference quality/speed or raw throughput.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum BenchmarkRunType {
     /// Prompt-comparison run: N models answer the same prompt.
     Compare,
@@ -22,6 +23,7 @@ pub enum BenchmarkRunType {
 /// Lifecycle state of a benchmark run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum BenchmarkRunStatus {
     /// Run is currently in progress.
     Running,
@@ -33,14 +35,17 @@ pub enum BenchmarkRunStatus {
 
 /// Lightweight record grouping one or more model results under a single run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct BenchmarkRun {
     /// Database ID of the run.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     /// Whether this is a compare, perf, or tune run.
     pub run_type: BenchmarkRunType,
     /// Current lifecycle state.
     pub status: BenchmarkRunStatus,
     /// Ordered list of model IDs that were (or will be) benchmarked.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Array<number>"))]
     pub model_ids: Vec<i64>,
     /// Prompt text used for compare runs (absent for perf/tune runs).
     pub prompt_text: Option<String>,

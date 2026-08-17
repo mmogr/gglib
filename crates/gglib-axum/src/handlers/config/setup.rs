@@ -96,6 +96,7 @@ pub(crate) async fn disable_fast_downloads(
 /// Whether disabling actually removed anything, so the GUI can say
 /// "disabled" rather than claiming a change that did not happen.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DisableFastDownloadsResponse {
     pub removed: bool,

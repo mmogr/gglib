@@ -84,9 +84,11 @@ pub fn parse_ctx_size_flag(raw: Option<&str>) -> Result<Option<CtxSizeArg>> {
 /// `None`.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ServerConfigOptions {
     /// Override the context window size forwarded to llama-server.
     /// `None` lets llama-server use its built-in default.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_size: Option<u64>,
 
     /// Per-model server defaults context length (from `Model.server_defaults.context_length`).
@@ -95,6 +97,7 @@ pub struct ServerConfigOptions {
 
     /// Global app setting for default context size (from `Settings.default_context_size`).
     /// Third tier in fallback chain.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub global_default_ctx: Option<u64>,
 
     /// Bind llama-server to a specific port instead of letting the allocator
@@ -140,6 +143,7 @@ pub struct ServerConfigOptions {
     /// RAM budget in MiB for llama-server's own host-RAM prompt cache
     /// (`--cache-ram`). `None` leaves llama-server's built-in default. `Some(0)`
     /// disables the cache. Direct pass-through, no tag-based auto-detection.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub cache_ram_mb: Option<u64>,
 
     /// Minimum chunk size in tokens for KV-shift cache reuse past the first

@@ -59,7 +59,14 @@ echo "Checking invoke() calls in frontend..."
 
 # Find all invoke( calls in TypeScript/TSX files
 # Pattern: invoke('command_name') or invoke("command_name")
-INVOKE_CALLS=$(grep -rn "invoke\s*(" src/ --include="*.ts" --include="*.tsx" 2>/dev/null || true)
+# `types/generated/` is excluded: it holds ts-rs output, which is type
+# declarations and TSDoc and contains no call of any kind. What it does contain
+# is Rust doc prose carried through verbatim — `ToolCall.arguments` is
+# documented as "the tool to invoke", which this pattern reads as a dynamic
+# command string. A generated file cannot violate an IPC policy it cannot
+# express.
+INVOKE_CALLS=$(grep -rn "invoke\s*(" src/ --include="*.ts" --include="*.tsx" 2>/dev/null \
+    | grep -v "^src/types/generated/" || true)
 
 # Track if we found any violations
 FOUND_ALLOWED=false
