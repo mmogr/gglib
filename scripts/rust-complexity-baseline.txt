@@ -49,7 +49,8 @@ crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 359
 crates/gglib-core/src/domain/inference_profile.rs 303
-crates/gglib-core/src/domain/inference.rs 2553
+crates/gglib-core/src/domain/inference_tests.rs 1004
+crates/gglib-core/src/domain/inference.rs 1544
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 523
 crates/gglib-core/src/domain/model_sampling.rs 674
@@ -58,7 +59,6 @@ crates/gglib-core/src/domain/query.rs 429
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 414
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
-crates/gglib-core/src/domain/sampling_provenance.rs 377
 crates/gglib-core/src/download/completion.rs 650
 crates/gglib-core/src/download/events.rs 467
 crates/gglib-core/src/download/queue.rs 548
@@ -68,9 +68,9 @@ crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 651
 crates/gglib-core/src/ports/model_runtime.rs 817
 crates/gglib-core/src/ports/process_runner.rs 307
-crates/gglib-core/src/request_pipeline/apply.rs 343
 crates/gglib-core/src/request_pipeline/constrain.rs 509
-crates/gglib-core/src/request_pipeline/sampling.rs 1747
+crates/gglib-core/src/request_pipeline/sampling_tests.rs 1186
+crates/gglib-core/src/request_pipeline/sampling.rs 565
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/truncation.rs 350
 crates/gglib-core/src/request_pipeline/validate.rs 790
@@ -79,7 +79,8 @@ crates/gglib-core/src/services/model_import.rs 687
 crates/gglib-core/src/services/model_registrar.rs 335
 crates/gglib-core/src/services/model_service.rs 1507
 crates/gglib-core/src/services/model_verification.rs 797
-crates/gglib-core/src/settings.rs 1012
+crates/gglib-core/src/settings_tests.rs 364
+crates/gglib-core/src/settings.rs 652
 crates/gglib-core/src/sse/decoder.rs 334
 crates/gglib-core/src/sse/encoder.rs 460
 crates/gglib-core/src/sse/parser.rs 781
@@ -122,7 +123,8 @@ crates/gglib-mcp/src/service.rs 878
 crates/gglib-proxy/src/cache_lifecycle.rs 589
 crates/gglib-proxy/src/canonicalization.rs 829
 crates/gglib-proxy/src/connections.rs 739
-crates/gglib-proxy/src/dashboard.rs 1111
+crates/gglib-proxy/src/dashboard_tests.rs 561
+crates/gglib-proxy/src/dashboard.rs 553
 crates/gglib-proxy/src/forward.rs 2159
 crates/gglib-proxy/src/loop_guard.rs 520
 crates/gglib-proxy/src/mcp/handlers.rs 564
@@ -130,7 +132,8 @@ crates/gglib-proxy/src/metrics.rs 592
 crates/gglib-proxy/src/models_tests.rs 853
 crates/gglib-proxy/src/models.rs 600
 crates/gglib-proxy/src/profiles.rs 498
-crates/gglib-proxy/src/props.rs 995
+crates/gglib-proxy/src/props_baseline_tests.rs 404
+crates/gglib-proxy/src/props.rs 570
 crates/gglib-proxy/src/repair.rs 667
 crates/gglib-proxy/src/sampling_audit.rs 1487
 crates/gglib-proxy/src/server.rs 1322
@@ -163,7 +166,6 @@ crates/gglib-runtime/src/process/manager.rs 441
 crates/gglib-runtime/src/process/residency/launch.rs 394
 crates/gglib-runtime/src/process/residency/mod.rs 520
 crates/gglib-runtime/src/proxy/supervisor.rs 726
-crates/gglib-runtime/src/server_config.rs 493
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 486
 crates/gglib-sse/src/lib.rs 332
