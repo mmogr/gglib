@@ -40,6 +40,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::reasoning_effort::ReasoningEffort;
 use crate::domain::sampling_provenance::{FieldSources, ParamSource};
 
 /// Inference parameters for LLM sampling.
@@ -266,6 +267,156 @@ pub struct InferenceConfig {
     ///
     /// [readback]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/sampling_audit.rs
     pub seed: Option<u32>,
+
+    /// How hard the model is *asked* to think — a **prompt-shaping template
+    /// control**, not a sampler.
+    ///
+    /// Every other field in this struct configures llama.cpp's sampler chain.
+    /// This one does not touch it. It is parsed off the top-level `OpenAI`
+    /// body, stored as a Jinja kwarg and handed to the chat template, which
+    /// may render it into the prompt, may branch on it, or — on most models —
+    /// may never read the variable at all. It changes what the model is shown,
+    /// not how its logits are cut.
+    ///
+    /// # The wire, measured
+    ///
+    /// Against the pinned build ([ADR 0007] finding 7c):
+    ///
+    /// | sent | llama-server | why it matters here |
+    /// |---|---|---|
+    /// | `"high"` | 200, kwarg set | the ordinary case |
+    /// | `"banana"` | 200, **rendered into the prompt verbatim** | nothing upstream validates this field |
+    /// | `42` | 200, kwarg dropped, template default applies | a wrong type degrades silently |
+    /// | `""` | 200, ignored | already means "no opinion" |
+    /// | `"none"` | 200, kwarg **erased** | on `gpt-oss` the template's own `medium` fallback then fires |
+    ///
+    /// # An enum makes gglib stricter than upstream, deliberately
+    ///
+    /// [`extract_client_sampling`]'s doctrine is to "accept what upstream
+    /// accepts and reject what upstream rejects, so gglib never becomes the
+    /// stricter of the two". A closed [`ReasoningEffort`] plainly violates it:
+    /// llama-server takes `"banana"` and gglib will not.
+    ///
+    /// The doctrine's premise is that upstream is the authority on what a
+    /// field means, so disagreeing with it can only cost a value that would
+    /// have worked. That premise is false for exactly this field. ADR 0007
+    /// finding 7c measured the asymmetry: upstream **governs the budget** —
+    /// `reasoning_budget_tokens: -2` is a clean HTTP 400 naming the range —
+    /// and **does not govern effort at all**. There is no allowlist, no type
+    /// check, and no check that the loaded template reads the variable. Where
+    /// upstream has no opinion, gglib's governance is not the *stricter* of
+    /// two; it is the only one there is.
+    ///
+    /// And the failure mode is not a rejected-but-valid value. `"banana"` does
+    /// not fail, it renders: the user's own prompt gains a line reading
+    /// `Reasoning: banana`, and the model answers as if a person had typed it.
+    /// Passing that through is not accepting what upstream accepts, it is
+    /// forwarding a typo into a prompt. A rejected field costs the client its
+    /// `reasoning_effort` and is reported by name
+    /// ([`FieldIssue::Rejected`]); a forwarded typo costs the answer and is
+    /// reported nowhere.
+    ///
+    /// That trade only exists if the rejection also *removes the key*, and it
+    /// is this field that forces the point. Every other reader here rejects
+    /// only what upstream would have rejected too, so a forwarded reject came
+    /// back as an HTTP 400 and the damage was visible; and floored fields are
+    /// overwritten by the resolved patch anyway. This field is neither — no
+    /// layer or floor ever names it (`no_floor_names_a_reasoning_control`) and
+    /// upstream validates nothing — so a rejection that stopped at the layer
+    /// would be a report with no effect, and `"banana"` would reach the
+    /// prompt with gglib's own `client_fields_rejected` recording that it had
+    /// been stopped. See the body cleanup in `request_pipeline::sampling`, and
+    /// `a_rejected_effort_level_never_reaches_the_wire` for the pin.
+    ///
+    /// The narrower rule the doctrine actually encodes still holds and is
+    /// obeyed by this field's twin: see
+    /// [`reasoning_budget_tokens`](Self::reasoning_budget_tokens), which
+    /// accepts upstream's full `-1..=i32::MAX` and rejects precisely what
+    /// upstream 400s on.
+    ///
+    /// # Permanently Blind
+    ///
+    /// Neither this nor the budget appears in `/slots` or `/props`;
+    /// `task_params::to_json` exports no reasoning field in either branch. [ADR
+    /// 0004]'s readback can confirm a `top_k` arrived and can never confirm
+    /// this did. The provenance record is the whole account — which is why the
+    /// field is modelled here rather than left to ride the body ungoverned
+    /// (ADR 0007 finding 6, the #779 shape under a new name).
+    ///
+    /// # No floor names one
+    ///
+    /// See [`with_hardcoded_defaults`]. Several templates default themselves
+    /// (`gpt-oss` to `medium`); a floor here would override each template's own
+    /// choice with a value nobody made.
+    ///
+    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
+    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
+    /// [`extract_client_sampling`]: Self::extract_client_sampling
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    pub reasoning_effort: Option<ReasoningEffort>,
+
+    /// How many tokens of thinking the model is allowed before it is cut off —
+    /// a **budget**, not a sampler and not a taste.
+    ///
+    /// It says what this request *is* (a turn that may spend at most `n`
+    /// tokens reasoning), the same category `max_tokens` occupies, and it is
+    /// enforced by llama.cpp itself (`common/reasoning-budget.{h,cpp}`) rather
+    /// than by a template that may or may not read a variable. That is what
+    /// puts it on the client-authoritative side of the trust gate while its
+    /// twin [`reasoning_effort`](Self::reasoning_effort) is gated — see
+    /// [`crate::request_pipeline::sampling`], which states the split where the
+    /// carve-out is coded.
+    ///
+    /// # The wire, measured — and the range is upstream's, not gglib's
+    ///
+    /// Range-validated on the pinned build: `-1 <= v <= 2147483647`, and `-2`
+    /// comes back as a clean HTTP 400 naming the range ([ADR 0007]
+    /// finding 7c). So the full `-1..=i32::MAX` is accepted here and only
+    /// values below `-1` are rejected — gglib matches upstream's own 400
+    /// exactly and adds nothing. This is the doctrine at
+    /// [`extract_client_sampling`] applied straight, and it is the reason the
+    /// departure argued on `reasoning_effort` is a departure about *that*
+    /// field rather than about reasoning controls in general.
+    ///
+    /// - `-1` — defer to the launch-time `--reasoning-budget` default.
+    /// - `0` — valid, and the honest spelling of "stop thinking immediately".
+    ///   It is what gglib offers instead of `reasoning_effort: "none"`, which
+    ///   yields *medium* thinking on `gpt-oss` (ADR 0007 decision 4).
+    ///
+    /// A value gglib refuses (below `-1`) is dropped from the layer and
+    /// **left in the forwarded body**, unlike its twin: upstream's own 400
+    /// names this field and its range, which is a better answer to the client
+    /// than a silent substitution and keeps gglib no stricter than upstream.
+    /// See [`FieldIssue::Rejected`].
+    ///
+    /// # The alias
+    ///
+    /// Upstream also accepts `thinking_budget_tokens`
+    /// ([`THINKING_BUDGET_TOKENS_KEY`]) as a second spelling of this
+    /// parameter. gglib reads it — a name it did not read was a name the trust
+    /// gate could not govern — and emits the canonical one only, erasing the
+    /// alias from every forwarded body so the two spellings cannot disagree
+    /// about the resolved value. With both sent, the canonical key wins. See
+    /// [`read_reasoning_budget_tokens`].
+    ///
+    /// # Permanently Blind, like its twin
+    ///
+    /// It is parsed into `params.sampling`, but `task_params::to_json`
+    /// serialises no `reasoning_budget_*` field, so nothing echoes it in
+    /// `/slots` or `/props` either. ADR 0007's finding 7a is a correction to
+    /// that ADR's own earlier claim; do not re-derive an echo from the request
+    /// *parse* table.
+    ///
+    /// # No floor names one
+    ///
+    /// See [`with_hardcoded_defaults`]. A fleet-wide thinking budget is a
+    /// tuning decision with measurement behind it, and `-1` — the "defer"
+    /// sentinel — is exactly what omitting the key already means.
+    ///
+    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
+    /// [`extract_client_sampling`]: Self::extract_client_sampling
+    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    pub reasoning_budget_tokens: Option<i32>,
 }
 
 /// Whether a model's stored `inference_defaults` were set by the user or
@@ -425,10 +576,27 @@ fn camel_to_snake(s: &str) -> String {
 /// can log or count it. A value gglib declines to use is a fact about a
 /// client worth surfacing — before this existed, the entire client sampling
 /// layer could vanish over one key with nothing recording that it had.
+///
+/// # An issue is a report, not by itself an instruction to the body
+///
+/// Recording that gglib could not use a value says nothing about whether the
+/// client's own spelling should still be forwarded, and the answer is *usually
+/// yes*: llama-server rejects what these readers reject, so a forwarded bad
+/// value earns the client an honest HTTP 400 from the system that owns the
+/// field. One field escapes that rule — [`REASONING_EFFORT_KEY`], which
+/// upstream does not validate at all — and it is the only one
+/// `request_pipeline::sampling` erases on the strength of an issue. See
+/// [`Rejected`](Self::Rejected) and that module's `erase_unadopted_client_keys`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FieldIssue {
     /// Recognised, but not in the form this field takes. A documented
     /// equivalent was substituted and the value is in use.
+    ///
+    /// The client's own spelling stays in the forwarded body. Where the
+    /// substitute is a value (`top_k: 5.0` → `5`) the resolved patch overwrites
+    /// it; where it is "no opinion" (`max_tokens: -1`, `seed: -1`) the ladder
+    /// emits nothing and the client's sentinel rides through to llama-server,
+    /// which reads it as the same absence this type does.
     Normalised {
         /// Wire key, as the client spelled it.
         field: &'static str,
@@ -439,6 +607,20 @@ pub enum FieldIssue {
     },
     /// Not readable as this field's type. **This field alone** is dropped;
     /// every other field the client sent is unaffected.
+    ///
+    /// Dropped from the client's sampling layer always. Whether the client's
+    /// own text is also removed from the forwarded body is one field's
+    /// exception, not the rule:
+    ///
+    /// - [`REASONING_EFFORT_KEY`] is **deleted**. Upstream validates it not at
+    ///   all, so a refused-but-forwarded `"banana"` is not answered with a 400
+    ///   — it is rendered into the user's prompt (ADR 0007 finding 7c). gglib's
+    ///   refusal has to bite here because no other system's will.
+    /// - Every other field, including [`REASONING_BUDGET_TOKENS_KEY`], is
+    ///   **forwarded as sent**. These readers reject what llama-server rejects,
+    ///   so the client gets upstream's own 400 naming the field and its range —
+    ///   a better answer than a silent substitution, and it keeps gglib exactly
+    ///   as strict as upstream rather than stricter.
     Rejected {
         /// Wire key, as the client spelled it.
         field: &'static str,
@@ -447,6 +629,24 @@ pub enum FieldIssue {
         /// What the field accepts.
         expected: &'static str,
     },
+}
+
+impl FieldIssue {
+    /// The wire key this issue is about, exactly as it appears in the request
+    /// body.
+    ///
+    /// Every reader passes the literal key it read, including the one field
+    /// with two accepted spellings: a budget sent as
+    /// [`THINKING_BUDGET_TOKENS_KEY`] is reported under that name, not under
+    /// the canonical one the client never used. So this is directly usable as
+    /// a `serde_json::Map` key by the body cleanup in
+    /// `request_pipeline::sampling`.
+    #[must_use]
+    pub const fn field(&self) -> &'static str {
+        match self {
+            Self::Normalised { field, .. } | Self::Rejected { field, .. } => field,
+        }
+    }
 }
 
 impl fmt::Display for FieldIssue {
@@ -647,6 +847,152 @@ fn read_seed(
     )
 }
 
+/// Wire key for [`InferenceConfig::reasoning_effort`].
+///
+/// Named rather than spelled twice because the body cleanup in
+/// `request_pipeline::sampling` deletes this exact key when the reader refuses
+/// a level, and a typo there would be a silent no-op — nothing else in the
+/// system would notice a `reasoning_effort` that was never removed.
+pub(crate) const REASONING_EFFORT_KEY: &str = "reasoning_effort";
+
+/// Wire key for [`InferenceConfig::reasoning_budget_tokens`], and the only
+/// spelling gglib ever *emits*.
+pub(crate) const REASONING_BUDGET_TOKENS_KEY: &str = "reasoning_budget_tokens";
+
+/// Upstream's accepted alias for [`REASONING_BUDGET_TOKENS_KEY`].
+///
+/// llama-server reads either name into the same parameter, so a client may
+/// legitimately send this one and mean the budget. gglib therefore *reads* it
+/// (see [`read_reasoning_budget_tokens`]) and never emits it: the resolved
+/// value is force-inserted under the canonical key alone, and this key is
+/// erased from every forwarded body by `request_pipeline::sampling` whatever
+/// the trust setting says.
+///
+/// Both halves are load-bearing. Not reading it left an untrusted client's
+/// `thinking_budget_tokens: 100000` riding the body past a gate that governs
+/// the canonical spelling — the #779 shape, ungoverned and unrecorded. Not
+/// erasing it would leave two keys upstream reads as one, with gglib's own
+/// resolved value in only the first: llama-server's own parse order, not
+/// gglib's ladder, would decide the budget.
+pub(crate) const THINKING_BUDGET_TOKENS_KEY: &str = "thinking_budget_tokens";
+
+/// Read the `reasoning_effort` field.
+///
+/// The one reader in this module that is stricter than llama-server, and the
+/// only one that has to be: upstream validates this field not at all, so an
+/// unrecognised level is not caught anywhere downstream — it is *rendered into
+/// the prompt*. See [`InferenceConfig::reasoning_effort`] for the argument.
+///
+/// - a level, in any case → that level
+/// - `""` → [`Normalised`](FieldIssue::Normalised) to no opinion; llama-server
+///   ignores an empty string, so it already means "unset", and reporting it
+///   keeps a client that sends `""` on every request visible.
+/// - `"none"` → [`Rejected`](FieldIssue::Rejected) with a pointer at the field
+///   that actually stops thinking. Not silently mapped to anything: it is the
+///   one wrong value a client is *likely* to send on purpose, and mapping it
+///   would guess at an intent (`0` budget? the template default?) that only
+///   the client knows.
+/// - anything else, including a non-string → `Rejected`.
+fn read_reasoning_effort(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<ReasoningEffort> {
+    const FIELD: &str = REASONING_EFFORT_KEY;
+
+    let v = obj.get(FIELD)?;
+    if v.is_null() {
+        return None;
+    }
+    let Some(s) = v.as_str() else {
+        issues.push(FieldIssue::Rejected {
+            field: FIELD,
+            value: brief(v),
+            // Deliberately not "a string": a non-string does not fail
+            // upstream, it degrades to the template's own default, so naming
+            // only the type would leave a client thinking any string works.
+            expected: "one of: minimal, low, medium, high, xhigh, max",
+        });
+        return None;
+    };
+    if s.is_empty() {
+        issues.push(FieldIssue::Normalised {
+            field: FIELD,
+            from: "\"\"".to_string(),
+            to: "no reasoning-effort preference",
+        });
+        return None;
+    }
+    if let Some(level) = ReasoningEffort::from_wire(s) {
+        return Some(level);
+    }
+    issues.push(FieldIssue::Rejected {
+        field: FIELD,
+        value: brief(v),
+        expected: if s.eq_ignore_ascii_case("none") {
+            // ADR 0007 finding 4: `\"none\"` erases the kwarg, and on gpt-oss
+            // the template's own fallback then yields *medium* thinking.
+            "one of: minimal, low, medium, high, xhigh, max \
+             (\"none\" is not off — use reasoning_budget_tokens: 0)"
+        } else {
+            "one of: minimal, low, medium, high, xhigh, max"
+        },
+    });
+    None
+}
+
+/// Read the `reasoning_budget_tokens` field, under either name upstream
+/// accepts for it.
+///
+/// Exactly upstream's range and nothing narrower: `-1 <= v <= i32::MAX`, with
+/// `-1` meaning "defer to the launch `--reasoning-budget`" and `0` meaning
+/// "stop thinking immediately". llama-server answers `-2` with an HTTP 400
+/// naming that range, so rejecting below `-1` here reproduces upstream's own
+/// verdict rather than adding a gglib opinion — the difference from
+/// [`read_reasoning_effort`], which has no upstream verdict to reproduce.
+///
+/// # The alias is read, and the canonical key wins
+///
+/// llama-server accepts [`THINKING_BUDGET_TOKENS_KEY`] as a second spelling of
+/// the same parameter ([ADR 0007] finding 7c). A reader that knew only the
+/// canonical name left the alias ungoverned: it entered no layer, appeared in
+/// no discard record, was overwritten by no force-insert, and so an untrusted
+/// client's `thinking_budget_tokens` outranked the operator's resolved budget
+/// silently — the #779 shape this arc exists to close.
+///
+/// Whichever name arrives, the value becomes
+/// [`InferenceConfig::reasoning_budget_tokens`] and is governed like any other
+/// client-authoritative budget. With both present the canonical key wins,
+/// because that is the name gglib itself emits and the one every other surface
+/// (provenance, the audit, `gglib model explain`) reports. An explicit `null`
+/// counts as absent under either name, as it does for every other reader here.
+///
+/// Issues are reported against the key the client actually sent, so a refusal
+/// names the text that was in the request rather than a name the client never
+/// used.
+///
+/// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
+fn read_reasoning_budget_tokens(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    issues: &mut Vec<FieldIssue>,
+) -> Option<i32> {
+    let field = [REASONING_BUDGET_TOKENS_KEY, THINKING_BUDGET_TOKENS_KEY]
+        .into_iter()
+        .find(|key| obj.get(*key).is_some_and(|v| !v.is_null()))?;
+
+    // `read_i32` has already reported anything unreadable as the key the
+    // client sent, so only the range check is left.
+    let n = read_i32(obj, field, issues)?;
+    if n < -1 {
+        issues.push(FieldIssue::Rejected {
+            field,
+            value: n.to_string(),
+            expected: "an integer >= -1 (-1 defers to the launch default, 0 stops thinking)",
+        });
+        return None;
+    }
+    Some(n)
+}
+
 /// The integer read behind [`read_max_tokens`], without issue reporting —
 /// its caller reports in terms of `max_tokens`' own accepted range.
 fn read_i32_raw(v: &serde_json::Value) -> Option<i32> {
@@ -746,6 +1092,16 @@ impl InferenceConfig {
         }
         if self.dry_penalty_last_n.is_none() {
             self.dry_penalty_last_n = other.dry_penalty_last_n;
+        }
+        // Still `const`: `ReasoningEffort` is a fieldless `Copy` enum and the
+        // budget is an `i32`, so both moves are plain copies. A non-`Copy`
+        // field here (a `String` level, say) would have forced the keyword off
+        // this function and quietly turned every merge into a clone.
+        if self.reasoning_effort.is_none() {
+            self.reasoning_effort = other.reasoning_effort;
+        }
+        if self.reasoning_budget_tokens.is_none() {
+            self.reasoning_budget_tokens = other.reasoning_budget_tokens;
         }
     }
 
@@ -888,6 +1244,8 @@ impl InferenceConfig {
         let dry_allowed_length = first(&|c| c.dry_allowed_length.is_some());
         let dry_penalty_last_n = first(&|c| c.dry_penalty_last_n.is_some());
         let seed = first(&|c| c.seed.is_some());
+        let reasoning_effort = first(&|c| c.reasoning_effort.is_some());
+        let reasoning_budget_tokens = first(&|c| c.reasoning_budget_tokens.is_some());
 
         result.top_p = top_p.and_then(|i| layers[i].and_then(|c| c.top_p));
         result.top_k = top_k.and_then(|i| layers[i].and_then(|c| c.top_k));
@@ -911,6 +1269,18 @@ impl InferenceConfig {
         // distribution is, so pairing it with a temperature would be
         // meaningless. See the field docs for why no floor names it either.
         result.seed = seed.and_then(|i| layers[i].and_then(|c| c.seed));
+        // Uncoupled, and never coupled — for a stronger reason than the seed's.
+        // The coupled trio travels with `temperature` because all four shape
+        // one probability distribution. Neither reasoning control touches the
+        // sampler chain's distribution at all: effort is a template kwarg
+        // consumed at render time, and the budget is a token count. Joining
+        // them to the trio would mean a profile naming only an effort level
+        // stripped a model's tuned `presence_penalty` — a recipe nobody wrote,
+        // built out of a field that cannot interact with it.
+        result.reasoning_effort =
+            reasoning_effort.and_then(|i| layers[i].and_then(|c| c.reasoning_effort));
+        result.reasoning_budget_tokens =
+            reasoning_budget_tokens.and_then(|i| layers[i].and_then(|c| c.reasoning_budget_tokens));
 
         let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
@@ -968,6 +1338,12 @@ impl InferenceConfig {
                 false,
             ),
             max_tokens: source(max_tokens, floor.max_tokens.is_some(), false),
+            reasoning_effort: source(reasoning_effort, floor.reasoning_effort.is_some(), false),
+            reasoning_budget_tokens: source(
+                reasoning_budget_tokens,
+                floor.reasoning_budget_tokens.is_some(),
+                false,
+            ),
         };
 
         (result, sources)
@@ -1114,6 +1490,18 @@ impl InferenceConfig {
             dry_penalty_last_n: None,
             // No fallback by design — see above.
             max_tokens: None,
+            // Neither reasoning control is floored, and neither ever should
+            // be. A floored `reasoning_effort` would override each template's
+            // *own* internal default with a value nobody chose — `gpt-oss`
+            // sets itself to `medium` when no kwarg arrives, and other
+            // templates have other defaults or none. That is the #739 shape
+            // (a floor silently displacing the value the thing beneath already
+            // had) applied to a control that is not even observable
+            // afterwards. A floored budget is the same mistake with a number:
+            // `-1` already means "defer to the launch default", which is what
+            // emitting no key does for free.
+            reasoning_effort: None,
+            reasoning_budget_tokens: None,
         }
     }
 
@@ -1267,6 +1655,13 @@ impl InferenceConfig {
             dynatemp_exponent: None,
             top_n_sigma: None,
             frequency_penalty: None,
+            // Deliberately unset for the same legacy-row reason as the block
+            // above — and independently, because this recipe is keyed off the
+            // `reasoning` *tag*, which says a model thinks, not how hard it
+            // should be asked to. Nothing observes whether the level landed,
+            // so a guess written here would be an unfalsifiable one.
+            reasoning_effort: None,
+            reasoning_budget_tokens: None,
         }
     }
 
@@ -1484,6 +1879,17 @@ impl InferenceConfig {
     /// value that would have worked. Before this change it was: llama.cpp
     /// takes `max_tokens: -1` and gglib threw away the entire layer over it.
     ///
+    /// # One field departs from it, and says so
+    ///
+    /// [`reasoning_effort`](Self::reasoning_effort) is read against a closed
+    /// enum, which llama-server is not: it validates that field not at all and
+    /// renders `"banana"` into the prompt. The departure is argued on the
+    /// field itself rather than here, because the argument is about that
+    /// field's measured wire behaviour and not about coercion in general —
+    /// its twin [`reasoning_budget_tokens`](Self::reasoning_budget_tokens)
+    /// follows the principle exactly, reproducing upstream's own 400 boundary
+    /// and nothing narrower.
+    ///
     /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
     /// [`Normalised`]: FieldIssue::Normalised
     /// [`Rejected`]: FieldIssue::Rejected
@@ -1511,6 +1917,8 @@ impl InferenceConfig {
             seed: read_seed(obj, &mut issues),
             dry_allowed_length: read_i32(obj, "dry_allowed_length", &mut issues),
             dry_penalty_last_n: read_i32(obj, "dry_penalty_last_n", &mut issues),
+            reasoning_effort: read_reasoning_effort(obj, &mut issues),
+            reasoning_budget_tokens: read_reasoning_budget_tokens(obj, &mut issues),
         };
 
         (cfg, issues)

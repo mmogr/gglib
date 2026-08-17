@@ -349,10 +349,10 @@ export const ProxySamplingPanel: FC<ProxySamplingPanelProps> = ({ audit }) => {
       <PublishedRows published={audit.published} />
 
       {/*
-        Discarded client fields are not a fault — `trust_client_sampling` is
-        off by default, so gglib drops every client-supplied sampling value on
-        purpose. Shown because "gglib is ignoring my temperature" should be
-        answerable from here rather than from the source.
+        Discarded client fields are not a fault — `trust_client_sampling` is off by
+        default, so gglib drops every client-supplied sampling *taste* on purpose;
+        budgets (`CLIENT_AUTHORITATIVE_KEYS`) survive and are not counted here. Shown
+        because "gglib is ignoring my temperature" is answerable here, not in source.
       */}
       {audit.client_fields_discarded > 0 && (
         <Row

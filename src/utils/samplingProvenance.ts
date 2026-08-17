@@ -179,16 +179,38 @@ export function publishedByParam(
 }
 
 /**
+ * The client's own fields that survive an untrusted request.
+ *
+ * A hand-kept mirror of `CLIENT_AUTHORITATIVE_KEYS` in
+ * `crates/gglib-core/src/request_pipeline/sampling.rs` — TypeScript cannot
+ * read a Rust constant, and this list is what the inspector tells the operator
+ * the trust gate lets through. It said `max_tokens` alone for a gate that had
+ * already gone client-authoritative on `reasoning_budget_tokens`, so the
+ * inspector described a boundary that no longer existed. Named and pinned by
+ * `caveats name every client-authoritative key` rather than inlined in the
+ * sentence, so the next addition is a one-line edit in an obvious place.
+ *
+ * The rule for what belongs here is Rust-side: budgets, not tastes — a key
+ * that says what the request *is* rather than how it should sample.
+ */
+export const CLIENT_AUTHORITATIVE_KEYS = ['max_tokens', 'reasoning_budget_tokens'] as const;
+
+/**
  * The two rungs the table cannot show, because neither is stored on the model.
  *
  * Without these the view looks complete while omitting the layers that
  * actually outrank everything in it.
+ *
+ * The untrusted note is built from {@link CLIENT_AUTHORITATIVE_KEYS} for the
+ * same reason the CLI's is built from the Rust constant: a sentence that
+ * spells the carve-out out is a second copy of it, and the two drifted the
+ * first time the carve-out grew.
  */
 export function caveats(trustClientSampling: boolean): [string, string] {
   return [
     'Operator flags (gglib proxy --temperature, ...) outrank every layer above.',
     trustClientSampling
-      ? 'Client-supplied sampling is trusted and outranks all but those flags.'
-      : 'Client-supplied sampling is ignored, except max_tokens.',
+      ? 'Client sampling is trusted and outranks all but those flags.'
+      : `Client sampling is ignored, except ${CLIENT_AUTHORITATIVE_KEYS.join(', ')}.`,
   ];
 }

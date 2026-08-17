@@ -10,6 +10,7 @@ use gglib_core::domain::{
     DefaultsOrigin, FieldSources, InferenceConfig, ModelSamplingDefaults, ParamSource,
     SamplingLayer, SamplingOverride,
 };
+use gglib_core::request_pipeline::CLIENT_AUTHORITATIVE_KEYS;
 
 use super::tables::print_separator;
 
@@ -124,6 +125,26 @@ pub(crate) fn print_explanation(
     println!();
 }
 
+/// Provenance rows this table knowingly does not render.
+///
+/// [`FieldSources::iter`] is the single display order every provenance surface
+/// reads, and [`explanation_lines`] pairs it with a value column using `zip`,
+/// which **truncates**. So a field that gains provenance and no value row
+/// disappears from `gglib model explain` with no compile error, no failing
+/// count, and no visible symptom — the same shape as the [`NAME_WIDTH`]
+/// mis-sizing above, which also rendered wrongly for months without
+/// misaligning enough to be noticed.
+///
+/// The two reasoning controls sit here deliberately. They joined the sampling
+/// ladder ahead of any surface that can set them, and rendering
+/// `reasoning_budget_tokens` needs a name column four characters wider than
+/// this table has — a layout change that belongs with the flags, not with the
+/// ladder. Listing them makes the gap a to-do a reader can see;
+/// `every_provenance_row_is_rendered_or_explicitly_deferred` fails if a third
+/// field goes quiet, and fails again when these two gain their rows and this
+/// list is not emptied.
+const DEFERRED_ROWS: [&str; 2] = ["reasoning_effort", "reasoning_budget_tokens"];
+
 /// The body of the table, one string per parameter.
 ///
 /// Split from the printing so it can be asserted on directly — this is the
@@ -159,6 +180,14 @@ pub(crate) fn explanation_lines(
     // to the sampler. Deriving it any other way would let this table and the
     // request disagree.
     let patch = resolved.to_openai_json_patch();
+
+    // The `zip` below truncates, so this is the only thing standing between an
+    // unrendered row and silence. See `DEFERRED_ROWS`.
+    debug_assert_eq!(
+        sources.iter().count(),
+        values.len() + DEFERRED_ROWS.len(),
+        "a FieldSources row has no value column and is not in DEFERRED_ROWS"
+    );
 
     sources
         .iter()
@@ -291,14 +320,29 @@ const fn floor_name(ctx: ExplainContext<'_>) -> &'static str {
 /// flags and the client's request parameters are real rungs that outrank
 /// everything above, but neither is stored anywhere to read — saying so is
 /// cheaper than letting someone conclude the table is the whole story.
+///
+/// The untrusted note names [`CLIENT_AUTHORITATIVE_KEYS`] rather than
+/// spelling the carve-out out, because the two drifted the moment the list
+/// stopped being one key long: the sentence said "except max_tokens" for a
+/// gate that had also gone client-authoritative on `reasoning_budget_tokens`,
+/// and nothing failed. Deriving it means the description of the trust
+/// boundary cannot be wrong about the boundary again.
+///
+/// That cost the phrase its "-supplied": both keys spelled out run the line
+/// past [`SEP_WIDTH`], and a caveat wider than the rule it sits under reads
+/// like the table overflowed. `caveats_fit_within_the_table_width` now holds
+/// that, so a third key has to be fitted rather than silently overrun.
 fn caveats(ctx: ExplainContext<'_>) -> Vec<String> {
     let mut notes = vec![
         "Operator flags (gglib proxy --temperature, ...) outrank every layer above.".to_owned(),
     ];
     notes.push(if ctx.trust_client_sampling {
-        "Client-supplied sampling is trusted and outranks all but those flags.".to_owned()
+        "Client sampling is trusted and outranks all but those flags.".to_owned()
     } else {
-        "Client-supplied sampling is ignored, except max_tokens.".to_owned()
+        format!(
+            "Client sampling is ignored, except {}.",
+            CLIENT_AUTHORITATIVE_KEYS.join(", ")
+        )
     });
     notes
 }
@@ -384,6 +428,35 @@ mod tests {
             dry_penalty_last_n: ParamSource::Unset,
             frequency_penalty: ParamSource::Unset,
             max_tokens: ParamSource::Unset,
+            reasoning_effort: ParamSource::Unset,
+            reasoning_budget_tokens: ParamSource::Unset,
+        }
+    }
+
+    /// The gap in [`DEFERRED_ROWS`] is a listed one, not a leak.
+    ///
+    /// `explanation_lines` pairs provenance with values by `zip`, which
+    /// truncates silently — a field added to `FieldSources` and not to the
+    /// value column vanishes from this table with no compile error and no
+    /// failing count. This asserts that every row `FieldSources` carries is
+    /// either rendered or explicitly deferred, so the *next* omission fails
+    /// here instead of shipping.
+    #[test]
+    fn every_provenance_row_is_rendered_or_explicitly_deferred() {
+        let lines = explanation_lines(
+            &InferenceConfig::with_hardcoded_defaults(),
+            &auto_detected_sources(),
+            ctx(),
+        );
+
+        for (field, _) in auto_detected_sources().iter() {
+            let rendered = lines.iter().any(|line| line.starts_with(field));
+            let deferred = DEFERRED_ROWS.contains(&field);
+            assert!(
+                rendered != deferred,
+                "{field}: rendered={rendered} deferred={deferred} — a field must be \
+                 one or the other, never both and never neither"
+            );
         }
     }
 
@@ -731,5 +804,45 @@ mod tests {
             ..ctx()
         };
         assert!(caveats(trusted).iter().any(|n| n.contains("is trusted")));
+    }
+
+    /// The caveat that describes the trust boundary names all of it.
+    ///
+    /// This is the only place an operator is told what an untrusted client
+    /// still gets, and for one release it was wrong: `reasoning_budget_tokens`
+    /// joined `CLIENT_AUTHORITATIVE_KEYS` while the sentence went on saying
+    /// "except max_tokens", because nothing connected the two. A prose
+    /// description of a boundary is as much a part of the boundary as the
+    /// `contains` call that enforces it.
+    #[test]
+    fn caveats_name_every_client_authoritative_key() {
+        let notes = caveats(ctx());
+        for key in CLIENT_AUTHORITATIVE_KEYS {
+            assert!(
+                notes.iter().any(|n| n.contains(key)),
+                "{key} survives an untrusted request but no caveat says so: {notes:?}"
+            );
+        }
+    }
+
+    /// A caveat wider than the rule above it reads like an overflow.
+    ///
+    /// `notes_fit_within_the_table_width` covers the hanging notes under the
+    /// rows and never covered these, which is how a derived caveat could have
+    /// grown past the separator the moment a second key joined the carve-out.
+    /// `print_explanation` indents by two, so that is the budget.
+    #[test]
+    fn caveats_fit_within_the_table_width() {
+        let trusted = ExplainContext {
+            trust_client_sampling: true,
+            ..ctx()
+        };
+        for note in caveats(ctx()).iter().chain(caveats(trusted).iter()) {
+            assert!(
+                note.chars().count() + 2 <= SEP_WIDTH,
+                "{} chars: {note}",
+                note.chars().count()
+            );
+        }
     }
 }

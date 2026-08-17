@@ -5,6 +5,7 @@ import '@testing-library/jest-dom';
 
 import { SamplingProvenanceSection } from '../../../src/components/ModelInspectorPanel/components/SamplingProvenanceSection';
 import {
+  CLIENT_AUTHORITATIVE_KEYS,
   caveats,
   describePublished,
   describeSource,
@@ -100,12 +101,12 @@ describe('SamplingProvenanceSection', () => {
     render(<SamplingProvenanceSection modelId={1} profiles={[]} />);
 
     expect(await screen.findByText(/Operator flags/)).toBeInTheDocument();
-    expect(screen.getByText(/Client-supplied sampling is ignored/)).toBeInTheDocument();
+    expect(screen.getByText(/Client sampling is ignored/)).toBeInTheDocument();
 
     explainModelSampling.mockResolvedValue(explanation({ trustClientSampling: true }));
     render(<SamplingProvenanceSection modelId={2} profiles={[]} />);
 
-    expect(await screen.findByText(/Client-supplied sampling is trusted/)).toBeInTheDocument();
+    expect(await screen.findByText(/Client sampling is trusted/)).toBeInTheDocument();
   });
 
   it('offers no profile selector when none are configured', async () => {
@@ -199,6 +200,18 @@ describe('caveats', () => {
   it('reports the client-sampling posture from settings', () => {
     expect(caveats(false)[1]).toMatch(/ignored, except max_tokens/);
     expect(caveats(true)[1]).toMatch(/trusted/);
+  });
+
+  /// The caveat that describes the trust boundary has to name all of it.
+  ///
+  /// This sentence is the only place the inspector tells an operator what an
+  /// untrusted client still gets, and it went stale the moment the carve-out
+  /// grew past `max_tokens` — `reasoning_budget_tokens` became
+  /// client-authoritative on the Rust side while this string did not move.
+  it('names every client-authoritative key', () => {
+    for (const key of CLIENT_AUTHORITATIVE_KEYS) {
+      expect(caveats(false)[1]).toContain(key);
+    }
   });
 });
 

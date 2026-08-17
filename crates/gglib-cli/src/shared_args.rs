@@ -136,6 +136,12 @@ impl SamplingArgs {
             // every request return the same text. A seed is set per request by
             // the benchmark harness, which is the only caller that wants one.
             seed: None,
+            // No reasoning flags yet: modelling the two controls on the ladder
+            // and putting a CLI surface on them are separate changes, and this
+            // one is the first. An absent opinion, so every layer beneath still
+            // resolves normally.
+            reasoning_effort: None,
+            reasoning_budget_tokens: None,
         }
     }
 

@@ -421,6 +421,16 @@ fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
                                             dry_base: None,
                                             dry_allowed_length: None,
                                             dry_penalty_last_n: None,
+                                            // Not dimensions, and not
+                                            // sweepable ones either: neither
+                                            // reasoning control is observable
+                                            // at the sampling boundary, and a
+                                            // sweep axis nothing can read back
+                                            // is an axis whose winner cannot
+                                            // be verified to have been applied
+                                            // (ADR 0007 finding 7a).
+                                            reasoning_effort: None,
+                                            reasoning_budget_tokens: None,
                                         });
                                     }
                                 }
@@ -504,6 +514,8 @@ fn family_presets(model: &Model) -> Vec<(String, InferenceConfig)> {
                 dynatemp_exponent: None,
                 top_n_sigma: None,
                 frequency_penalty: None,
+                reasoning_effort: None,
+                reasoning_budget_tokens: None,
             },
         ));
     }

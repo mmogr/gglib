@@ -3,7 +3,7 @@
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
-use crate::domain::ParamSource;
+use crate::domain::{ParamSource, ReasoningEffort};
 use serde_json::json;
 
 fn temp(value: f32) -> InferenceConfig {
@@ -693,6 +693,13 @@ fn no_modelled_key_is_listed_as_unmodelled() {
         dry_allowed_length: Some(2),
         dry_penalty_last_n: Some(64),
         seed: Some(100),
+        // Both reasoning controls are modelled as of this PR, so neither may
+        // join the strip list — and neither was on it to begin with, which
+        // was the defect: an unmodelled key is invisible to the trust gate,
+        // so `reasoning_effort` rode an untrusted body through ungoverned
+        // (ADR 0007 finding 6, the #779 passthrough under a new name).
+        reasoning_effort: Some(ReasoningEffort::High),
+        reasoning_budget_tokens: Some(4096),
     };
     for key in every_field.to_openai_json_patch().keys() {
         assert!(
@@ -1183,4 +1190,566 @@ fn a_non_object_body_is_left_alone() {
         &SamplingLayers::default(),
     );
     assert_eq!(body, json!([1, 2, 3]));
+}
+
+// ── The reasoning controls, split across the trust gate (ADR 0007) ──────
+
+/// Effort is taste, and taste is what the gate is for.
+///
+/// Sharper here than for any other gated field: llama-server validates
+/// `reasoning_effort` not at all, so an untrusted client's level would reach
+/// the *prompt* unexamined by anyone — `"banana"` renders verbatim. And
+/// nothing echoes it back, so the discard record below is the only place the
+/// decision is ever visible. All three halves of the drop are asserted: out of
+/// the layer, out of the body, into the record.
+#[test]
+fn an_untrusted_clients_reasoning_effort_is_dropped_named_and_erased() {
+    let mut body = json!({"reasoning_effort": "max"});
+    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    assert!(
+        !body.as_object().unwrap().contains_key("reasoning_effort"),
+        "the level rode the body past the gate: {body}"
+    );
+    assert_eq!(decision.resolved.reasoning_effort, None);
+    assert!(
+        decision
+            .client_fields_discarded
+            .iter()
+            .any(|k| k == "reasoning_effort"),
+        "an unrecorded drop on a field nothing echoes is an invisible one: {:?}",
+        decision.client_fields_discarded
+    );
+}
+
+/// A level gglib refused must not reach llama-server, on **either** side of
+/// the trust gate.
+///
+/// The gate is not the mechanism here and cannot be: it discards values that
+/// were *read*, and a refused one never becomes a layer value to discard. Left
+/// to the gate alone, `"banana"` was reported in `client_fields_rejected` and
+/// forwarded in the same breath — and since nothing upstream validates this
+/// field and no floor ever re-emits it, "forwarded" means rendered into the
+/// user's prompt as `Reasoning: banana` (ADR 0007 finding 7c). Trusting a
+/// client is not trusting a typo, so both settings are asserted.
+///
+/// `"none"` is in the table because it is the wrong value a client is most
+/// likely to send *deliberately*, and it is the one that survives most
+/// quietly: llama-server erases the kwarg and `gpt-oss`'s own
+/// `{%- set reasoning_effort = "medium" %}` fallback fires, so forwarding it
+/// buys medium thinking from a client that asked for none — the exact outcome
+/// ADR 0007 decision 4 exists to prevent.
+#[test]
+fn a_rejected_effort_level_never_reaches_the_wire() {
+    // (sent, why it is refused)
+    //
+    // `""` is deliberately absent: it is `Normalised`, not `Rejected`, and
+    // upstream *ignores* an empty string (200, no kwarg) — so there is nothing
+    // to protect the prompt from and no reason for gglib to rewrite the
+    // request. `an_empty_effort_level_is_left_for_upstream_to_ignore` pins it.
+    let cases = [
+        (json!("banana"), "not a level, and upstream renders it"),
+        (json!("none"), "not off — it means medium on gpt-oss"),
+        (json!(42), "a non-string degrades to the template default"),
+    ];
+
+    for (sent, why) in cases {
+        for trusted in [false, true] {
+            let mut body = json!({ "reasoning_effort": sent });
+            let decision = resolve_sampling(
+                &mut body,
+                &model_ctx(None),
+                &SamplingLayers {
+                    trust_client_sampling: trusted,
+                    ..SamplingLayers::default()
+                },
+            );
+
+            assert_deferred(&body, "reasoning_effort");
+            assert_eq!(
+                decision.resolved.reasoning_effort, None,
+                "{sent} ({why}), trusted={trusted}"
+            );
+            assert!(
+                decision
+                    .client_fields_rejected
+                    .iter()
+                    .any(|issue| issue.field() == "reasoning_effort"),
+                "a value gglib refused must be named, not just erased: {:?}",
+                decision.client_fields_rejected
+            );
+        }
+    }
+}
+
+/// The twin goes the other way, and that is the whole of the asymmetry.
+///
+/// `-2` is the one reasoning value upstream *does* govern: forwarding it earns
+/// a clean HTTP 400 naming the range (ADR 0007 finding 7c). So gglib leaves it
+/// exactly where the client put it. Deleting it would buy nothing the effort
+/// deletion buys — there is no prompt to protect — and would cost the client a
+/// precise answer from the system that owns the field, replacing it with a
+/// turn that silently ran on some other budget. gglib stays exactly as strict
+/// as upstream here and no stricter.
+///
+/// The refusal is still *recorded*, because gglib's own ladder resolved this
+/// request as if the field were absent and that decision has to be visible.
+#[test]
+fn a_rejected_reasoning_budget_is_left_for_upstream_to_reject() {
+    for trusted in [false, true] {
+        let mut body = json!({"reasoning_budget_tokens": -2});
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                trust_client_sampling: trusted,
+                ..SamplingLayers::default()
+            },
+        );
+
+        assert_eq!(
+            body["reasoning_budget_tokens"],
+            json!(-2),
+            "trusted={trusted}: upstream's own 400 is the better answer, so the \
+             client's value must still reach it: {body}"
+        );
+        assert_eq!(decision.resolved.reasoning_budget_tokens, None);
+        assert!(
+            decision
+                .client_fields_rejected
+                .iter()
+                .any(|issue| issue.field() == "reasoning_budget_tokens"),
+            "trusted={trusted}: {:?}",
+            decision.client_fields_rejected
+        );
+    }
+}
+
+/// This PR changes what happens to `reasoning_effort` and to nothing else.
+///
+/// The body cleanup is deliberately field-specific rather than "delete every
+/// key the reader complained about". A blanket rule would have swallowed every
+/// client type error in the system — `top_k: "5"` would stop earning its
+/// upstream 400 and start silently resolving to whatever the ladder said,
+/// which contradicts the coercion doctrine on `extract_client_sampling`
+/// ("gglib never becomes the stricter of the two") and would have been a
+/// cross-field change of wire behaviour smuggled in under a reasoning PR.
+///
+/// Each row is a value gglib refused or substituted, and each must reach
+/// llama-server exactly as the client spelled it — unless the ladder itself
+/// resolves that field, in which case the force-insert overwrites it and
+/// always did.
+#[test]
+fn a_refused_value_on_any_other_field_is_still_forwarded_unchanged() {
+    // (key, what the client sent, why the reader complained)
+    let cases = [
+        (
+            "top_k",
+            json!("5"),
+            "Rejected: a numeric string is a 400 upstream",
+        ),
+        (
+            "max_tokens",
+            json!(-1),
+            "Normalised: the sentinel means the same absence upstream",
+        ),
+        (
+            "seed",
+            json!(-1),
+            "Normalised: llama.cpp's own spelling of a random seed",
+        ),
+    ];
+
+    for (key, sent, why) in cases {
+        for trusted in [false, true] {
+            let mut body = json!({ key: sent });
+            let decision = resolve_sampling(
+                &mut body,
+                &model_ctx(None),
+                &SamplingLayers {
+                    trust_client_sampling: trusted,
+                    ..SamplingLayers::default()
+                },
+            );
+
+            assert_eq!(
+                body[key], sent,
+                "{key} ({why}), trusted={trusted}: this PR must not change what \
+                 reaches the wire for any field but reasoning_effort: {body}"
+            );
+            assert!(
+                decision
+                    .client_fields_rejected
+                    .iter()
+                    .any(|issue| issue.field() == key),
+                "{key}: the read still has to be reported: {:?}",
+                decision.client_fields_rejected
+            );
+        }
+    }
+}
+
+/// `""` is the effort value gglib refuses and still forwards, because upstream
+/// already agrees with the refusal.
+///
+/// Measured: llama-server ignores an empty string (200, no kwarg set), so it
+/// cannot reach the prompt and needs no deletion. The deletion above exists
+/// for values upstream *renders*, not for every value gglib declines to read —
+/// keeping the two apart is what stops "protect the prompt" growing into
+/// "rewrite the client's request".
+#[test]
+fn an_empty_effort_level_is_left_for_upstream_to_ignore() {
+    let mut body = json!({"reasoning_effort": ""});
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(None),
+        &SamplingLayers {
+            trust_client_sampling: true,
+            ..SamplingLayers::default()
+        },
+    );
+
+    assert_eq!(body["reasoning_effort"], json!(""));
+    assert_eq!(decision.resolved.reasoning_effort, None);
+    assert!(
+        decision
+            .client_fields_rejected
+            .iter()
+            .any(|issue| issue.field() == "reasoning_effort"),
+        "{:?}",
+        decision.client_fields_rejected
+    );
+}
+
+/// Refusing a field removes the client's value; it does not remove the
+/// *field*. Whatever the rest of the ladder resolves is sent in its place.
+///
+/// This pins the ordering the cleanup depends on — erase before the fold, so
+/// the resolved patch has the last word. Reverse them and a gated
+/// `temperature` would silently defer to llama.cpp's own default instead of
+/// gglib's floor, which is a different bug wearing this one's clothes.
+#[test]
+fn a_refused_field_falls_back_to_the_ladder_rather_than_vanishing() {
+    let mut body = json!({"temperature": "0.7"});
+    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    assert_param(&body, "temperature", 0.7); // the floor's, not the client's
+    assert!(
+        decision
+            .client_fields_rejected
+            .iter()
+            .any(|issue| issue.field() == "temperature"),
+        "{:?}",
+        decision.client_fields_rejected
+    );
+}
+
+// ── The budget alias upstream accepts and gglib never emits ─────────────
+
+/// The alias is governed, not ignored.
+///
+/// llama-server reads `thinking_budget_tokens` as `reasoning_budget_tokens`.
+/// A gglib that knew only the canonical name gave an untrusted client a
+/// second, unguarded door: the alias entered no layer, appeared in no discard
+/// record, was overwritten by no force-insert, and neither control is
+/// observable afterwards (ADR 0007 finding 7a) — so an operator's resolved
+/// budget could be replaced by a client's, with nothing anywhere recording it.
+/// That is the #779 shape this arc exists to close.
+///
+/// Read like the canonical key, and erased from the body because gglib emits
+/// the canonical key alone.
+#[test]
+fn an_alias_budget_is_read_and_the_alias_key_never_reaches_the_wire() {
+    for trusted in [false, true] {
+        let mut body = json!({"thinking_budget_tokens": 100_000});
+        let decision = resolve_sampling(
+            &mut body,
+            &model_ctx(None),
+            &SamplingLayers {
+                trust_client_sampling: trusted,
+                ..SamplingLayers::default()
+            },
+        );
+
+        assert_deferred(&body, "thinking_budget_tokens");
+        assert_eq!(
+            body["reasoning_budget_tokens"],
+            json!(100_000),
+            "trusted={trusted}: the budget is client-authoritative under either \
+             spelling, and leaves under the canonical one: {body}"
+        );
+        assert_eq!(decision.resolved.reasoning_budget_tokens, Some(100_000));
+    }
+}
+
+/// Two spellings of one parameter must not both leave.
+///
+/// The canonical key wins — it is the name gglib emits and the name every
+/// other surface reports — and the alias goes, so llama-server is never left
+/// choosing between gglib's resolved value and a leftover the client sent.
+#[test]
+fn the_canonical_budget_key_outranks_the_alias_and_both_are_governed() {
+    let mut body = json!({
+        "reasoning_budget_tokens": 256,
+        "thinking_budget_tokens": 100_000,
+    });
+    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    assert_deferred(&body, "thinking_budget_tokens");
+    assert_eq!(body["reasoning_budget_tokens"], json!(256));
+    assert_eq!(decision.resolved.reasoning_budget_tokens, Some(256));
+}
+
+/// An operator's budget still loses to a client's, under either spelling —
+/// because the budget is client-authoritative by design.
+///
+/// Worth pinning explicitly: reading the alias closed a hole, and the hole was
+/// that the alias bypassed the *ladder*, not that a client may name a budget.
+/// A client that sends the alias now outranks the global rung exactly as one
+/// sending the canonical key does, and is recorded doing it.
+#[test]
+fn an_alias_budget_rides_the_client_rung_like_the_canonical_key() {
+    let global = InferenceConfig {
+        reasoning_budget_tokens: Some(4096),
+        ..InferenceConfig::default()
+    };
+    let mut body = json!({"thinking_budget_tokens": 32});
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(None),
+        &SamplingLayers {
+            global: Some(global),
+            ..SamplingLayers::default()
+        },
+    );
+
+    assert_eq!(decision.resolved.reasoning_budget_tokens, Some(32));
+    let client_rung = decision
+        .layer_names
+        .iter()
+        .position(|name| *name == "client")
+        .expect("the ladder has a client rung");
+    assert_eq!(
+        decision.sources.reasoning_budget_tokens,
+        ParamSource::Layer(client_rung),
+        "an aliased budget is the client's own value and must say so"
+    );
+}
+
+/// The one sharp edge of erasing the alias unconditionally, pinned so it is a
+/// decision rather than a surprise.
+///
+/// A refused *canonical* budget is left for upstream to 400 on. A refused
+/// *alias* cannot be: gglib erases that key from every body, so the client
+/// gets a turn on the launch `--reasoning-budget` default instead of the
+/// upstream error it would have got had gglib never looked. The trade is
+/// deliberate — one canonical spelling on the wire is worth more than an
+/// error message for a client using the second name for an out-of-range value
+/// — and the refusal is still named in `client_fields_rejected`, under the key
+/// the client actually sent.
+#[test]
+fn a_rejected_alias_budget_is_erased_and_named_rather_than_forwarded() {
+    let mut body = json!({"thinking_budget_tokens": -2});
+    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    assert_deferred(&body, "thinking_budget_tokens");
+    assert_deferred(&body, "reasoning_budget_tokens");
+    assert_eq!(decision.resolved.reasoning_budget_tokens, None);
+    assert!(
+        decision
+            .client_fields_rejected
+            .iter()
+            .any(|issue| issue.field() == "thinking_budget_tokens"),
+        "the refusal must name the key the client sent: {:?}",
+        decision.client_fields_rejected
+    );
+}
+
+/// The budget is a budget. It survives the gate for the reason `max_tokens`
+/// does — it says what this turn *is*, not how to sample it — with a second
+/// leg `max_tokens` does not have: upstream range-validates it, so a client's
+/// value is already bounded by a system other than this one.
+#[test]
+fn an_untrusted_clients_reasoning_budget_survives() {
+    let mut body = json!({"reasoning_budget_tokens": 512, "temperature": 0.9});
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(Some(temp(0.4))),
+        &SamplingLayers::default(),
+    );
+
+    assert_param(&body, "temperature", 0.4); // taste: gated, as always
+    assert_eq!(body["reasoning_budget_tokens"], json!(512));
+    assert_eq!(decision.resolved.reasoning_budget_tokens, Some(512));
+    assert!(
+        !decision
+            .client_fields_discarded
+            .iter()
+            .any(|k| k == "reasoning_budget_tokens"),
+        "a kept field must not appear in the discard record: {:?}",
+        decision.client_fields_discarded
+    );
+}
+
+/// `0` is the value the whole "`none` is not a level" decision rests on, and
+/// it is the one a naive gate is most likely to lose — it is falsy on the wire
+/// and an absence looks the same. It must cross the gate intact.
+#[test]
+fn an_untrusted_clients_zero_reasoning_budget_survives() {
+    let mut body = json!({"reasoning_budget_tokens": 0});
+    resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    assert_eq!(body["reasoning_budget_tokens"], json!(0));
+}
+
+/// Trusted means trusted: the operator vouched for this client, so its effort
+/// level is the top non-CLI rung like any other sampling preference.
+#[test]
+fn a_trusted_clients_reasoning_effort_survives() {
+    let mut body = json!({"reasoning_effort": "minimal"});
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(None),
+        &SamplingLayers {
+            trust_client_sampling: true,
+            ..SamplingLayers::default()
+        },
+    );
+
+    assert_eq!(body["reasoning_effort"], json!("minimal"));
+    assert_eq!(
+        decision.resolved.reasoning_effort,
+        Some(ReasoningEffort::Minimal)
+    );
+    assert!(decision.client_fields_discarded.is_empty());
+}
+
+/// Both controls ride the full six-rung ladder, one rung at a time.
+///
+/// The pipeline builds its own ladder rather than going through
+/// `resolve_with_profile`, so a field can be modelled, resolve correctly in
+/// the domain tests, and still be missing a rung here. Each row supplies the
+/// value at exactly one rung and asserts it wins with every rung above it
+/// empty — which is also the only way to check that the *client* rung
+/// participates at all, since it is read out of the body rather than passed in.
+#[test]
+fn each_rung_can_supply_a_reasoning_control() {
+    let with = |effort, budget| InferenceConfig {
+        reasoning_effort: Some(effort),
+        reasoning_budget_tokens: Some(budget),
+        ..InferenceConfig::default()
+    };
+
+    let rungs: [(&str, ReasoningEffort, i32); 6] = [
+        ("cli", ReasoningEffort::Minimal, 11),
+        ("client", ReasoningEffort::Low, 22),
+        ("profile", ReasoningEffort::Medium, 33),
+        ("model", ReasoningEffort::High, 44),
+        ("global", ReasoningEffort::XHigh, 55),
+        ("model (auto-detected)", ReasoningEffort::Max, 66),
+    ];
+
+    for (rung, effort, budget) in rungs {
+        let mut body = if rung == "client" {
+            json!({"reasoning_effort": effort.as_str(), "reasoning_budget_tokens": budget})
+        } else {
+            json!({})
+        };
+        let layer = with(effort, budget);
+        let ctx = match rung {
+            "model" => model_ctx(Some(layer.clone())),
+            "model (auto-detected)" => auto_detected_ctx(layer.clone(), false),
+            _ => model_ctx(None),
+        };
+        let layers = SamplingLayers {
+            cli_override: (rung == "cli").then(|| layer.clone()),
+            profile: (rung == "profile").then(|| layer.clone()),
+            global: (rung == "global").then(|| layer.clone()),
+            // The client rung is only reachable when the gate lets it in, and
+            // this table is about the ladder, not the gate — that split has
+            // its own tests directly above.
+            trust_client_sampling: true,
+            agentic_adjustments: false,
+        };
+
+        let decision = resolve_sampling(&mut body, &ctx, &layers);
+        assert_eq!(
+            decision.resolved.reasoning_effort,
+            Some(effort),
+            "effort from {rung}"
+        );
+        assert_eq!(
+            decision.resolved.reasoning_budget_tokens,
+            Some(budget),
+            "budget from {rung}"
+        );
+        assert_eq!(body["reasoning_effort"], json!(effort.as_str()), "{rung}");
+        assert_eq!(body["reasoning_budget_tokens"], json!(budget), "{rung}");
+
+        let rung_index = decision
+            .layer_names
+            .iter()
+            .position(|name| *name == rung)
+            .unwrap_or_else(|| panic!("{rung} is not a rung of {:?}", decision.layer_names));
+        assert_eq!(
+            decision.sources.reasoning_effort,
+            ParamSource::Layer(rung_index),
+            "provenance for {rung}"
+        );
+        assert_eq!(
+            decision.sources.reasoning_budget_tokens,
+            ParamSource::Layer(rung_index),
+            "provenance for {rung}"
+        );
+    }
+}
+
+/// Nothing names either control, and no floor does either — so no key reaches
+/// llama-server and each template's own default stands. Provenance says
+/// `Unset`, which is precisely what deferral is.
+#[test]
+fn an_unclaimed_reasoning_control_is_deferred_rather_than_floored() {
+    let mut body = json!({});
+    let decision = resolve_sampling(
+        &mut body,
+        &ModelContext::passthrough(),
+        &SamplingLayers::default(),
+    );
+
+    assert_deferred(&body, "reasoning_effort");
+    assert_deferred(&body, "reasoning_budget_tokens");
+    assert_eq!(decision.sources.reasoning_effort, ParamSource::Unset);
+    assert_eq!(decision.sources.reasoning_budget_tokens, ParamSource::Unset);
+}
+
+/// The two halves of the carve-out are stated twice — once as the discard
+/// filter, once as the struct that is actually kept — and a field in one and
+/// not the other is either a silent drop or an unreported survival.
+#[test]
+fn every_client_authoritative_key_survives_an_untrusted_request() {
+    let mut body = json!({
+        "max_tokens": 128,
+        "reasoning_budget_tokens": 256,
+        "temperature": 0.9,
+    });
+    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+
+    for key in CLIENT_AUTHORITATIVE_KEYS {
+        assert!(
+            body.as_object().unwrap().contains_key(*key),
+            "{key} is listed client-authoritative but left the body: {body}"
+        );
+        assert!(
+            !decision.client_fields_discarded.iter().any(|k| k == key),
+            "{key} is listed client-authoritative but was recorded as discarded"
+        );
+    }
+    assert!(
+        decision
+            .client_fields_discarded
+            .iter()
+            .any(|k| k == "temperature"),
+        "the gate must still be running: {:?}",
+        decision.client_fields_discarded
+    );
 }

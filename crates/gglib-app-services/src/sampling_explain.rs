@@ -237,6 +237,8 @@ fn wire_key(field: &'static str) -> &'static str {
         "dry_allowed_length" => "dryAllowedLength",
         "dry_penalty_last_n" => "dryPenaltyLastN",
         "max_tokens" => "maxTokens",
+        "reasoning_effort" => "reasoningEffort",
+        "reasoning_budget_tokens" => "reasoningBudgetTokens",
         other => other,
     }
 }
@@ -384,7 +386,7 @@ mod tests {
 
     use chrono::Utc;
     use gglib_core::ModelCapabilities;
-    use gglib_core::domain::DefaultsOrigin;
+    use gglib_core::domain::{DefaultsOrigin, ReasoningEffort};
     use serde_json::json;
 
     use super::*;
@@ -528,6 +530,8 @@ mod tests {
             top_n_sigma: Some(1.0),
             frequency_penalty: Some(0.4),
             seed: Some(100),
+            reasoning_effort: Some(ReasoningEffort::High),
+            reasoning_budget_tokens: Some(4096),
         };
         let keys = serde_json::to_value(&populated).unwrap();
         let keys = keys.as_object().expect("config serializes as an object");
@@ -620,6 +624,8 @@ mod tests {
                 "dryAllowedLength",
                 "dryPenaltyLastN",
                 "maxTokens",
+                "reasoningEffort",
+                "reasoningBudgetTokens",
             ]
         );
     }

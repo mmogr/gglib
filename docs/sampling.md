@@ -16,7 +16,8 @@ Request override  →  Inference profile  →  Per-model defaults  →  Global s
 
 The "Request override" level is gated by `trust_client_sampling` (see
 [Client sampling authority](#client-sampling-authority)) — untrusted by
-default, it drops out of the hierarchy entirely except for `max_tokens`.
+default, it drops out of the hierarchy entirely except for the client's own
+budgets, `max_tokens` and `reasoning_budget_tokens`.
 
 "Per-model defaults" isn't always one rung: it sits *above* global settings when a person set
 it, and *below* global settings when gglib auto-detected it — see [Reasoning model
@@ -323,9 +324,43 @@ By default, an external client's own sampling parameters (`temperature`, `top_p`
 `top_k`, `presence_penalty`, `frequency_penalty`, `repeat_penalty`, `min_p`, and
 the DRY and entropy-adaptive fields) are **not honoured** — they are read off the
 incoming request and then dropped, so the request resolves exactly as if the client
-had sent none of them. `max_tokens` is the one exception: it is a budget, not a
-taste, and ignoring it would silently truncate the client's own turns, so it is
-always forwarded regardless of this setting.
+had sent none of them.
+
+The exception is a category rather than a field: the client's own **budgets** are
+always forwarded regardless of this setting, because a budget says what the request
+*is* rather than how it should sample. Two fields qualify today —
+`max_tokens`, where ignoring it would silently truncate the client's own turns,
+and `reasoning_budget_tokens`, which caps what this turn may spend thinking and is
+enforced by llama.cpp's own sampler within a range llama.cpp itself validates
+(`-1` defers to the launch `--reasoning-budget`, `0` stops thinking immediately).
+The list lives in one place, `CLIENT_AUTHORITATIVE_KEYS` in
+`request_pipeline::sampling`, and `gglib model explain` prints it.
+
+Its twin `reasoning_effort` is *not* a budget and is gated like any other taste:
+its level vocabulary is per-template folklore and llama.cpp validates it not at
+all — `"banana"` renders into the prompt verbatim — which makes it precisely the
+field an untrusted client must not reach the model with. See
+[ADR 0007](adr/0007-ask-the-server-for-template-capabilities.md).
+
+A client value gglib **could not read** is dropped from the layer whether or not
+the client is trusted — trusting a client is not trusting a typo — and that
+field alone is affected. The client's own spelling is still forwarded, because
+llama.cpp rejects what gglib rejects and its HTTP 400 naming the field tells the
+client more than a silent substitution would.
+
+`reasoning_effort` is the only field whose *refusal* deletes the client's key,
+and the reason is measured rather than
+stylistic: llama.cpp does not validate it, so a refused value left in the
+body is not answered with a 400 — it is rendered into the prompt. There gglib's
+refusal has to be the only refusal there is, so the key is deleted. A refused
+`reasoning_budget_tokens` is *not* deleted: llama.cpp answers that one itself
+(`-2` → HTTP 400 naming the range), and gglib stays no stricter than upstream.
+
+gglib also reads llama.cpp's alias `thinking_budget_tokens` as the budget and
+always removes it from the forwarded body, emitting the canonical name alone —
+a name gglib did not read would be a name the trust gate could not govern, and
+two spellings of one parameter in one body would leave llama.cpp, not the
+ladder, deciding which wins.
 
 Sampler keys gglib does not model at all (`mirostat` and its parameters,
 `typical_p`, `xtc_probability`/`xtc_threshold`, `dry_sequence_breakers`,

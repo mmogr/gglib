@@ -141,7 +141,26 @@ function acceptedRange(source: string, field: string): Range {
 }
 
 const VALIDATE_SETTINGS = fnBody(SETTINGS_RS, 'validate_settings');
-const VALIDATE_INFERENCE = fnBody(SETTINGS_RS, 'validate_inference_config');
+
+/**
+ * Every guard `validate_inference_config` applies, across the functions it is
+ * split over.
+ *
+ * It was one function until `reasoning_budget_tokens` joined and pushed it past
+ * `clippy::too_many_lines`, at which point the four DRY guards moved into
+ * `validate_dry_params` — and this test went red naming each of them, which is
+ * precisely the behaviour its header promises ("restructuring the Rust turns
+ * this red instead of silently retiring the guarantee"). Listing the halves is
+ * the right answer to that, not widening the search to the whole file: a guard
+ * that vanishes entirely must still throw here, and it does, because
+ * `acceptedRange` fails on a field it cannot find in this text.
+ *
+ * A future split has to be added to this list. That is the point.
+ */
+const VALIDATE_INFERENCE = [
+  fnBody(SETTINGS_RS, 'validate_inference_config'),
+  fnBody(SETTINGS_RS, 'validate_dry_params'),
+].join('\n');
 
 // ── The settings modal's numeric fields ─────────────────────────────────────
 

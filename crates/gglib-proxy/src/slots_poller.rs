@@ -580,6 +580,8 @@ mod tests {
                 dry_allowed_length: ParamSource::Unset,
                 dry_penalty_last_n: ParamSource::Unset,
                 frequency_penalty: ParamSource::Unset,
+                reasoning_effort: ParamSource::Unset,
+                reasoning_budget_tokens: ParamSource::Unset,
             },
             layer_names: ["cli", "client", "profile", "model", "global", "auto"],
             floor: FloorClass::Default,

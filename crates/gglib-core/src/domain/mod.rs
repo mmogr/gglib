@@ -20,6 +20,7 @@ mod model;
 pub(crate) mod model_naming;
 pub(crate) mod model_sampling;
 pub(crate) mod query;
+pub(crate) mod reasoning_effort;
 pub mod recommendation;
 pub(crate) mod residency;
 pub(crate) mod runtime_capabilities;
@@ -46,6 +47,7 @@ pub use benchmark::{
 pub use capability_tags::is_reasoning;
 pub use inference::{DefaultsOrigin, FieldIssue, InferenceConfig, ModelSamplingContext};
 pub use inference_profile::{InferenceProfile, builtin_templates};
+pub use reasoning_effort::ReasoningEffort;
 
 // Re-export sampling provenance types at the domain level for convenience
 pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};

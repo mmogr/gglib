@@ -22,6 +22,9 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
+use crate::domain::inference::{
+    REASONING_BUDGET_TOKENS_KEY, REASONING_EFFORT_KEY, THINKING_BUDGET_TOKENS_KEY,
+};
 use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, ParamSource};
 
 /// The sampling layers that sit *below* the client's own request parameters.
@@ -56,10 +59,12 @@ pub struct SamplingLayers {
     pub global: Option<InferenceConfig>,
     /// Whether the client's own sampling parameters are honoured at all.
     /// From `Settings.trust_client_sampling`. `false` (the default) drops
-    /// everything the client sent except `max_tokens` — see the field doc on
-    /// `Settings` for why. This is read from the same settings snapshot as
-    /// [`Self::global`], which is why it lives here rather than as a
-    /// separate parameter threaded through every caller.
+    /// everything the client sent except [`CLIENT_AUTHORITATIVE_KEYS`] — the
+    /// client's own *budgets*, currently `max_tokens` and
+    /// `reasoning_budget_tokens` — see the field doc on `Settings` for why,
+    /// and that constant for what makes a key a budget. This is read from the
+    /// same settings snapshot as [`Self::global`], which is why it lives here
+    /// rather than as a separate parameter threaded through every caller.
     pub trust_client_sampling: bool,
     /// Whether a request carrying tools gets the agentic-turn temperature
     /// ceiling — see [`InferenceConfig::agentic_temperature_ceiling`].
@@ -173,35 +178,6 @@ fn agentic_sampling_disabled_via_env() -> bool {
     crate::debug_switches::enabled(DISABLE_AGENTIC_SAMPLING_ENV)
 }
 
-/// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
-///
-/// # Force-insert, not `or_insert`
-///
-/// The client's own parameters are extracted from `body` first, folded
-/// through [`InferenceConfig::resolve_layers_with_sources`] alongside cli / profile /
-/// model / global, and the fully-resolved result is then written back over
-/// the top. Client parameters still win — they win by being the
-/// highest-priority *layer* in the fold, not by surviving an `or_insert`.
-/// Rewriting this as `or_insert` looks equivalent and silently breaks the
-/// hierarchy: every layer below the client would stop applying to any key
-/// the client happened to send.
-///
-/// # Client trust
-///
-/// `layers.trust_client_sampling` gates which of the client's own fields
-/// enter that layer at all. When `false` (the default — see
-/// `Settings::trust_client_sampling`), only `max_tokens` survives; the rest
-/// of `body`'s sampling keys are read but discarded before the fold, so a
-/// client with a hardcoded `temperature` can no longer outrank this
-/// server's own configuration, and every field it left unset still
-/// gap-fills from below exactly as if it had never sent that key.
-///
-/// The gate covers modelled fields; sampler keys the ladder has no field
-/// for ([`UNMODELLED_SAMPLER_KEYS`]) are stripped from the untrusted body
-/// itself, because a key with no layer has nothing to be discarded from and
-/// would otherwise ride the body to llama-server ungoverned.
-///
-/// A body that is not a JSON object is left alone.
 /// Read the client's own sampling parameters and apply the trust gate.
 ///
 /// Returns the layer to fold, what could not be read, and what the gate
@@ -226,9 +202,6 @@ fn read_client_layer(
         );
     }
 
-    // `max_tokens` stays client-authoritative regardless of trust: it is a
-    // budget, not a taste, and dropping it would silently truncate the
-    // client's own turns. See `Settings::trust_client_sampling`.
     if trust_client_sampling {
         return (client_params, issues, Vec::new());
     }
@@ -242,21 +215,81 @@ fn read_client_layer(
         .to_openai_json_patch()
         .into_iter()
         .map(|(k, _)| k)
-        .filter(|k| k != "max_tokens")
+        .filter(|k| !CLIENT_AUTHORITATIVE_KEYS.contains(&k.as_str()))
         .collect();
     if !discarded.is_empty() {
         debug!(
             discarded = %discarded.join(", "),
-            "client sampling: untrusted, dropping all but max_tokens"
+            kept = %CLIENT_AUTHORITATIVE_KEYS.join(", "),
+            "client sampling: untrusted, dropping all but the client's own budgets"
         );
     }
 
+    // The carve-out, and it is exactly `CLIENT_AUTHORITATIVE_KEYS` — kept in
+    // sync by `every_client_authoritative_key_survives_an_untrusted_request`,
+    // because the list above governs the *discard record* and this struct
+    // governs what is actually kept, and a field in one and not the other is
+    // either a silent drop or an unreported survival.
     let gated = InferenceConfig {
         max_tokens: client_params.max_tokens,
+        reasoning_budget_tokens: client_params.reasoning_budget_tokens,
         ..InferenceConfig::default()
     };
     (gated, issues, discarded)
 }
+
+/// The client's own fields that survive an untrusted request.
+///
+/// # Budgets, not tastes — and the reasoning pair splits along that line
+///
+/// `max_tokens` has always been here: it is a budget on the client's own turn,
+/// and dropping it would silently truncate answers the client sized
+/// deliberately. `UNMODELLED_SAMPLER_KEYS`' own scope note draws the rule —
+/// "Budgets (`max_tokens`), stops, constraint machinery and observation ...
+/// stay client-authoritative — they say what the request *is*, not how it
+/// should sample."
+///
+/// `reasoning_budget_tokens` is that category by name, so it joins. It caps
+/// how many tokens this turn may spend thinking, it is enforced by llama.cpp's
+/// own sampler-side budget rather than by a template, and — the load-bearing
+/// half — **upstream governs it**: `-2` comes back as an HTTP 400 naming the
+/// range ([ADR 0007] finding 7c). A client sending it is asking for a shape of
+/// turn, within bounds a second system already enforces.
+///
+/// `reasoning_effort` does **not** join, and the asymmetry runs the opposite
+/// way to what its name suggests. It is taste: it steers what the model is
+/// shown, its level vocabulary is per-template folklore, and upstream
+/// validates it *not at all* — `"banana"` is accepted and rendered into the
+/// prompt verbatim. So it is precisely the field where an untrusted client's
+/// value would reach the model unexamined by anyone, which is what the trust
+/// gate exists to stop. When untrusted it is dropped from the client layer,
+/// removed from the body by the cleanup in [`resolve_sampling`], and named in
+/// `client_fields_discarded`.
+///
+/// The gate only reaches a level gglib could *read*, so it is half the story:
+/// an unreadable one (`"banana"`, `"none"`) never becomes a layer value to
+/// discard. That half is the same cleanup's `issues` arm, and it applies on
+/// both sides of the gate — trusting a client is not trusting a typo.
+///
+/// Neither control is observable afterwards (ADR 0007 finding 7a), so the
+/// discard record is the only place the decision is ever visible.
+///
+/// # Public because the operator-facing surfaces describe it
+///
+/// `gglib model explain` and the GUI's sampling inspector both print a caveat
+/// naming what survives an untrusted request, because the client rung is a
+/// real rung neither table can show. That sentence read "except `max_tokens`"
+/// for as long as this list was one key long, and nothing would have failed
+/// had it stayed that way after `reasoning_budget_tokens` joined — a
+/// user-facing description of the trust boundary, silently false. Exporting
+/// the list lets `caveats_name_every_client_authoritative_key` in
+/// `gglib-cli`'s `explain_display` assert the sentence against it, so the
+/// next key added here fails a test instead of shipping a wrong caveat. The
+/// TypeScript half cannot read a Rust constant; it carries its own copy,
+/// named and pinned, with a pointer back here.
+///
+/// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
+pub const CLIENT_AUTHORITATIVE_KEYS: &[&str] = &["max_tokens", REASONING_BUDGET_TOKENS_KEY];
 
 /// Sampler-taste keys llama-server reads that [`InferenceConfig`] does not
 /// model, stripped from an untrusted body by
@@ -324,6 +357,82 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
     stripped
 }
 
+/// Remove from the body the client keys gglib must not forward: what the trust
+/// gate binned, the budget alias gglib never emits, and one refused field.
+///
+/// The single place body keys leave this stage, so "what does gglib delete
+/// from a request" has one answer in one function.
+///
+/// # `discarded` — what the trust gate binned
+///
+/// The resolved patch is only ever *inserted*, and since ADR 0003 six modelled
+/// fields resolve to nothing by design, so a gated key the ladder then stays
+/// silent on rides the body to llama-server exactly like an unmodelled one.
+/// Found live, not by review: an untrusted client's `frequency_penalty: 0.9`
+/// reached `/slots` intact, because no layer names that field and nothing
+/// overwrote it. Before the deferral this could not happen — the floor emitted
+/// every modelled key — which is why the gate never needed this until then.
+///
+/// Empty when the client is trusted.
+///
+/// # The budget alias — always, whatever the trust setting
+///
+/// llama-server reads [`THINKING_BUDGET_TOKENS_KEY`] as a second spelling of
+/// `reasoning_budget_tokens` (ADR 0007 finding 7c). gglib reads it too, so its
+/// value is already *in* the resolved ladder — but gglib emits the canonical
+/// key only, and a surviving alias is a second answer to the same question
+/// sitting next to the force-inserted first. Which one wins would then be
+/// llama-server's parse order rather than gglib's ladder. Removing it is not a
+/// trust decision, it is a consequence of gglib having one canonical spelling.
+///
+/// # `issues` — one field, and the asymmetry is upstream's
+///
+/// A refused value never becomes `Some`, so it never enters the resolved patch
+/// and never entered `discarded` either: the rejection stops at the layer, and
+/// the client's own text rides on. For nearly every field that is exactly
+/// right — these readers reject what llama-server rejects, so the forwarded
+/// value earns a clean HTTP 400 from the system that owns the field, which
+/// tells the client more than a silent substitution would and keeps gglib no
+/// stricter than upstream (the doctrine on
+/// [`InferenceConfig::extract_client_sampling`]).
+///
+/// ADR 0007 finding 7c measured where that stops holding. Upstream **governs
+/// the budget** — `reasoning_budget_tokens: -2` comes back a 400 naming the
+/// range — and **does not govern effort at all**. So the two reasoning
+/// controls split:
+///
+/// - [`REASONING_EFFORT_KEY`], refused → **deleted**. There is no downstream
+///   400 to inherit: `"banana"` is accepted upstream and rendered into the
+///   user's prompt verbatim. Left in the body, gglib's refusal would be a
+///   record in `client_fields_rejected` of a value the model then read. This
+///   is the one field where gglib's "no" has to be the only "no" there is.
+/// - [`REASONING_BUDGET_TOKENS_KEY`], refused → **left in place**, like every
+///   other field. The client gets upstream's honest 400. And if the ladder
+///   resolves a budget of its own, the force-insert overwrites the client's
+///   text before it is ever sent, so the refusal costs nothing.
+///
+/// A [`FieldIssue::Normalised`] deletes nothing under either rule: the
+/// substitute is either force-inserted over the client's spelling or is an
+/// absence that llama.cpp reads from the client's own sentinel anyway
+/// (`max_tokens: -1`).
+///
+/// A body that is not a JSON object is left alone, as everywhere else here.
+fn erase_unadopted_client_keys(body: &mut Value, discarded: &[String], issues: &[FieldIssue]) {
+    let Some(obj) = body.as_object_mut() else {
+        return;
+    };
+    for key in discarded.iter().map(String::as_str) {
+        obj.remove(key);
+    }
+    obj.remove(THINKING_BUDGET_TOKENS_KEY);
+    let effort_refused = issues.iter().any(|issue| {
+        matches!(issue, FieldIssue::Rejected { field, .. } if *field == REASONING_EFFORT_KEY)
+    });
+    if effort_refused {
+        obj.remove(REASONING_EFFORT_KEY);
+    }
+}
+
 /// Which rung the model's stored defaults occupy, and the name that rung
 /// carries — both decided by [`DefaultsOrigin`] in one place, so resolution
 /// and its labelling cannot disagree.
@@ -363,6 +472,67 @@ const fn model_rung(
     }
 }
 
+/// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
+///
+/// This doc block used to sit above `read_client_layer`, where a split left
+/// it fused to that function's own first line — so the entry point of the
+/// whole stage was undocumented while a private helper carried a description
+/// of something else. Restored here; `read_client_layer` keeps its own.
+///
+/// # Force-insert, not `or_insert`
+///
+/// The client's own parameters are extracted from `body` first, folded
+/// through [`InferenceConfig::resolve_layers_with_sources`] alongside cli / profile /
+/// model / global, and the fully-resolved result is then written back over
+/// the top. Client parameters still win — they win by being the
+/// highest-priority *layer* in the fold, not by surviving an `or_insert`.
+/// Rewriting this as `or_insert` looks equivalent and silently breaks the
+/// hierarchy: every layer below the client would stop applying to any key
+/// the client happened to send.
+///
+/// # Client trust
+///
+/// `layers.trust_client_sampling` gates which of the client's own fields
+/// enter that layer at all. When `false` (the default — see
+/// `Settings::trust_client_sampling`), only [`CLIENT_AUTHORITATIVE_KEYS`]
+/// survive; the rest of `body`'s sampling keys are read but discarded before
+/// the fold, so a client with a hardcoded `temperature` can no longer outrank
+/// this server's own configuration, and every field it left unset still
+/// gap-fills from below exactly as if it had never sent that key.
+///
+/// That carve-out is a *category*, not a list of exceptions, and the two
+/// reasoning controls land on opposite sides of it: the budget is a budget and
+/// survives, the effort level is taste and does not. The reasoning is on
+/// [`CLIENT_AUTHORITATIVE_KEYS`].
+///
+/// The gate covers modelled fields; sampler keys the ladder has no field
+/// for (`UNMODELLED_SAMPLER_KEYS`) are stripped from the untrusted body
+/// itself, because a key with no layer has nothing to be discarded from and
+/// would otherwise ride the body to llama-server ungoverned.
+///
+/// # What leaves the body
+///
+/// `erase_unadopted_client_keys` is the one place keys are deleted, and it
+/// deletes three things — only the first of which is about trust:
+///
+/// - **What the gate binned** — empty when the client is trusted.
+/// - **`thinking_budget_tokens`** — always. It is upstream's alias for the
+///   budget, gglib reads it and then emits the canonical key alone, and two
+///   spellings of one parameter in one body is a disagreement waiting to be
+///   resolved by somebody else's parse order.
+/// - **A refused `reasoning_effort`** — on *both* sides of the gate, and it
+///   is the only field an `issues` entry removes. Every other refused value
+///   is forwarded exactly as before this PR, because upstream 400s on it and
+///   that 400 is a better answer to the client than gglib quietly rewriting
+///   the request. `reasoning_effort` is the exception because upstream
+///   validates it not at all: a refused `"banana"` left in the body is not
+///   rejected downstream, it is rendered into the prompt.
+///
+/// So a client's `top_k: "5"` still reaches llama-server and still earns its
+/// HTTP 400, unchanged by the reasoning work. The helper carries the full
+/// argument and ADR 0007's finding behind it.
+///
+/// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(
     body: &mut Value,
     ctx: &ModelContext,
@@ -380,20 +550,12 @@ pub fn resolve_sampling(
         layers.trust_client_sampling,
     ));
 
-    // The gate's own drops leave the body too. Force-insert only overwrites
-    // keys the resolution actually emits, and since ADR 0003 six modelled
-    // fields resolve to nothing by design — so a gated key the ladder then
-    // stays silent on would ride the body to llama-server exactly like an
-    // unmodelled one. Found live, not by review: an untrusted client's
-    // frequency_penalty: 0.9 reached /slots intact, because no layer names
-    // that field and nothing overwrote it. Before the deferral this could
-    // not happen — the floor emitted every modelled key — which is why the
-    // gate never needed this until now.
-    if let Some(obj) = body.as_object_mut() {
-        for key in &discarded {
-            obj.remove(key.as_str());
-        }
-    }
+    // Runs before the fold, so any key the ladder does resolve is re-inserted
+    // below with gglib's own value. Narrow on purpose: the gate's drops, the
+    // budget alias gglib never emits, and a refused `reasoning_effort` — every
+    // other unreadable value is left for llama-server to answer, as it always
+    // was.
+    erase_unadopted_client_keys(body, &discarded, &issues);
 
     // The `reasoning` tag selects the floor beneath every layer here — a
     // model that degrades into repetitive loops under greedy decoding still
@@ -507,6 +669,12 @@ pub fn resolve_sampling(
             dry_base = ?resolved.dry_base,
             dry_allowed_length = ?resolved.dry_allowed_length,
             dry_penalty_last_n = ?resolved.dry_penalty_last_n,
+            // Logged like the rest, and load-bearing in a way the rest are
+            // not: no readback will ever echo either of these, so this line
+            // and the provenance record are the only evidence that they were
+            // resolved at all. See ADR 0007 finding 7a.
+            reasoning_effort = ?resolved.reasoning_effort,
+            reasoning_budget_tokens = ?resolved.reasoning_budget_tokens,
             from = %sources.describe(&names),
             // Which class floor was used. `sources` says a value came from
             // "floor" but not which one, and the explain surfaces cannot show

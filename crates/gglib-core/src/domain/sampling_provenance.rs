@@ -206,6 +206,19 @@ pub struct FieldSources {
     pub dry_penalty_last_n: ParamSource,
     /// Where the resolved `max_tokens` came from.
     pub max_tokens: ParamSource,
+    /// Where the resolved `reasoning_effort` came from.
+    ///
+    /// The only account there is. Neither reasoning control is observable at
+    /// the sampling boundary — no `/slots` or `/props` field echoes either one
+    /// ([ADR 0007] finding 7a) — so where a readback can eventually confirm
+    /// that `top_k` arrived, nothing will ever confirm this did. Provenance is
+    /// not a convenience for these two fields; it is the record.
+    ///
+    /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
+    pub reasoning_effort: ParamSource,
+    /// Where the resolved `reasoning_budget_tokens` came from. Equally
+    /// unobservable — see [`reasoning_effort`](Self::reasoning_effort).
+    pub reasoning_budget_tokens: ParamSource,
 }
 
 impl FieldSources {
@@ -232,6 +245,12 @@ impl FieldSources {
             ("dry_allowed_length", self.dry_allowed_length),
             ("dry_penalty_last_n", self.dry_penalty_last_n),
             ("max_tokens", self.max_tokens),
+            // Last, and adjacent to each other rather than to the samplers:
+            // neither is one. `max_tokens` above them is the nearest relative
+            // — a budget — and `reasoning_budget_tokens` sits directly beneath
+            // it for that reason.
+            ("reasoning_effort", self.reasoning_effort),
+            ("reasoning_budget_tokens", self.reasoning_budget_tokens),
         ]
         .into_iter()
     }
