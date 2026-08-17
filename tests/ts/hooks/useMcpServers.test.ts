@@ -327,7 +327,13 @@ describe('useMcpServers', () => {
 
   describe('stopServer', () => {
     it('stops server and syncs tools', async () => {
-      vi.mocked(stopMcpServer).mockResolvedValue(undefined);
+      // `/stop` answers with the server info too. The hook ignores it, but a
+      // mock that resolves `undefined` against a `Promise<McpServerInfo>`
+      // declaration is the same shape of fiction this commit removed.
+      vi.mocked(stopMcpServer).mockResolvedValue({
+        ...mockServerInfo,
+        status: 'stopped',
+      });
 
       const { result } = renderHook(() => useMcpServers());
 

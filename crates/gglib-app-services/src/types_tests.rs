@@ -56,10 +56,14 @@ mod update_settings_request_tests {
     //! The struct's own doc comment promises "every field is
     //! `Option<Option<T>>` with `serde_with::rust::double_option`".
     //! `tool_call_repair` was declared bare, so serde collapsed its explicit
-    //! `null` into the same `None` an omitted key produces: the GUI offered a
-    //! clear-to-default the backend silently declined to perform. It is the
-    //! same field whose unreachability motivated
-    //! `scripts/check_settings_surfaces.sh` in the first place.
+    //! `null` into the same `None` an omitted key produces: the setting could
+    //! be written but never cleared. It is the same field whose
+    //! unreachability motivated `scripts/check_settings_surfaces.sh` in the
+    //! first place.
+    //!
+    //! The break is at the HTTP surface. Today's settings modal reads the
+    //! tri-state down to a `bool` and only ever sends `true`/`false`, so it
+    //! never asks for a clear — any client that does gets a silent no-op.
 
     use super::super::UpdateSettingsRequest;
 
