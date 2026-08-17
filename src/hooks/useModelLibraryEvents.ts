@@ -9,13 +9,17 @@ import type { ModelEvent } from '../services/transport/types/events';
  *
  * A tab that makes its own edit already refetches at the call site, which is
  * why the library looked correct while this was missing. What it could not
- * see was everything else: a `gglib model add` in a terminal, a second
- * window, a download the daemon registered. Those arrive as `model_added` /
+ * see was a second window or browser tab editing the same daemon: add,
+ * remove, rename, retag, capability and upgrade all arrive as `model_added` /
  * `model_updated` / `model_removed` on `/api/events`.
  *
- * Events are batched within a window because bulk operations arrive as a
- * burst — importing a directory emits one event per model, and each is a
- * reason to refetch once, not N times.
+ * Scope is one daemon process. A `gglib model add` in a terminal does not
+ * reach here — it is a separate process, and the broadcaster is in-process.
+ * Downloads are covered separately, by the download event stream.
+ *
+ * Events are batched within a window because one user action can produce
+ * several: a retag of many models, or a burst of edits from another window.
+ * Each burst is a reason to refetch once, not once per event.
  */
 export function useModelLibraryEvents(
   onChange: () => void,

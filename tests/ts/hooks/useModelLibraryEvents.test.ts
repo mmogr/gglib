@@ -2,7 +2,7 @@
  * The subscription that lets one client see another client's edits.
  *
  * Before this existed the library refreshed only when the tab in front of you
- * made the change, so a `gglib model add` in a terminal — or a second window —
+ * made the change, so a second window or browser tab editing the same daemon
  * left the list confidently stale.
  */
 

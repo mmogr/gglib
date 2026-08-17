@@ -163,10 +163,11 @@ export interface ModelEventSummary {
 }
 
 /**
- * Library membership changes, broadcast to every connected client.
+ * Library changes, broadcast to every client attached to the daemon.
  *
- * These let a second window — or a model added from the CLI — reach a list
- * that would otherwise only refresh when its own tab made the edit.
+ * These let a second window or browser tab reach a list that would otherwise
+ * refresh only when its own tab made the edit. A `gglib model add` in a
+ * terminal is a separate process and does not reach here.
  */
 export type ModelEvent =
   | { type: 'model_added'; model: ModelEventSummary }

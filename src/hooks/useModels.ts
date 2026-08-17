@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GgufModel, InferenceConfig, ServerConfig } from '../types';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
-import { useModelLibraryEvents } from './useModelLibraryEvents';
 
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -11,27 +10,35 @@ export function useModels() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Which fetch is the newest. Reloads used to come only from awaited,
+  // sequential mutation handlers; they now also arrive from library events,
+  // so two can be in flight at once. Without this, a slow first response
+  // landing after a fast second one would overwrite fresh state with stale —
+  // and since no further event is coming, the list would stay wrong.
+  const requestGeneration = useRef(0);
+
   const loadModels = useCallback(async () => {
+    const generation = ++requestGeneration.current;
     try {
       setLoading(true);
       setError(null);
       const modelList = await getTransport().listModels();
+      if (generation !== requestGeneration.current) return;
       setModels(modelList);
     } catch (err) {
+      if (generation !== requestGeneration.current) return;
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to load models: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     loadModels();
   }, [loadModels]);
-
-  // Mutations below refetch at their own call site, which keeps this tab
-  // consistent with its own edits. This covers everyone else's.
-  useModelLibraryEvents(loadModels);
 
   // Sync selected model with native menu state (Tauri only)
   const selectModel = useCallback((id: number | null) => {

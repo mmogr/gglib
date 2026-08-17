@@ -34,10 +34,14 @@ impl AppEventEmitter for RecordingEmitter {
         self.events.lock().expect("emitter lock").push(event);
     }
 
+    /// Deliberately unimplemented rather than snapshotting.
+    ///
+    /// A snapshot would give the clone its own `Mutex`, so anything emitted
+    /// through it would vanish from the assertions — a recorder that quietly
+    /// stops recording. Nothing calls this today; if something starts, it
+    /// should fail loudly rather than let a test pass by losing evidence.
     fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        Box::new(Self {
-            events: std::sync::Mutex::new(self.events()),
-        })
+        unimplemented!("RecordingEmitter cannot be cloned without splitting its record")
     }
 }
 
@@ -386,12 +390,12 @@ async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> 
     .expect("add should succeed")
 }
 
-/// Library membership changes must reach every client, not just the one
+/// Library changes must reach every client of this daemon, not just the one
 /// that made them.
 ///
-/// The GUI refetches its own list after its own edit, which makes a single
-/// tab look correct and hides the real gap: a model added from the CLI, a
-/// second window, or the daemon is invisible until someone hits refresh.
+/// A GUI refetches its own list after its own edit, which makes a single tab
+/// look correct and hides the real gap: a second window or browser tab
+/// against the same daemon stays on the old row until someone hits refresh.
 /// `AppEvent` has carried these three variants — and `event_name()` has
 /// mapped them — since before anything emitted one.
 #[tokio::test]
@@ -494,6 +498,122 @@ async fn a_blocked_remove_broadcasts_nothing() {
         "a refused remove must not announce a removal: {:?}",
         emitter.events()
     );
+}
+
+/// Every path that writes to a model row must announce it — not just the
+/// three CRUD entry points.
+///
+/// `set_capabilities` calls the same `models().update()` as `update`, and
+/// tags are both a `GuiModel` field and the library's filter source, so a
+/// client that missed one of these renders stale chips and a filter set that
+/// cannot reach the model that just changed.
+mod every_mutation_announces {
+    use super::*;
+
+    /// The events a single mutation produced, on a freshly seeded model.
+    async fn events_from<F, Fut>(mutate: F) -> Vec<AppEvent>
+    where
+        F: FnOnce(Arc<ModelOps>, i64) -> Fut,
+        Fut: std::future::Future<Output = ()>,
+    {
+        let core = test_core().await;
+        let dir = tempdir().unwrap();
+        let emitter = Arc::new(RecordingEmitter::default());
+        let ops = Arc::new(make_ops_with_emitter(
+            core,
+            Arc::clone(&emitter) as Arc<dyn AppEventEmitter>,
+        ));
+        let id = seed_model(&ops, &dir).await;
+
+        // Drop the ModelAdded from seeding; the mutation under test is next.
+        let seeded = emitter.events().len();
+        mutate(Arc::clone(&ops), id).await;
+
+        emitter.events().split_off(seeded)
+    }
+
+    fn assert_announced_update(events: &[AppEvent], id: i64, what: &str) {
+        match events {
+            [AppEvent::ModelUpdated { model }] => assert_eq!(model.id, id),
+            other => panic!("{what} must announce exactly one ModelUpdated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn adding_a_tag_announces_the_model() {
+        let events = events_from(|ops, id| async move {
+            ops.add_tag(id, "reasoning".to_owned()).await.unwrap();
+        })
+        .await;
+        assert_announced_update(&events, 1, "add_tag");
+    }
+
+    #[tokio::test]
+    async fn removing_a_tag_announces_the_model() {
+        let events = events_from(|ops, id| async move {
+            ops.add_tag(id, "reasoning".to_owned()).await.unwrap();
+            ops.remove_tag(id, "reasoning".to_owned()).await.unwrap();
+        })
+        .await;
+        // Two mutations, two announcements — assert on the last.
+        assert_announced_update(&events[1..], 1, "remove_tag");
+    }
+
+    #[tokio::test]
+    async fn setting_capabilities_announces_the_model() {
+        let events = events_from(|ops, id| async move {
+            ops.set_capabilities(
+                id,
+                SetCapabilitiesRequest {
+                    supports_tool_calls: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        })
+        .await;
+        assert_announced_update(&events, 1, "set_capabilities");
+    }
+
+    /// A retag that *does* move something must announce it.
+    ///
+    /// `full = true` drops every tag in the capability namespace before
+    /// re-deriving, and `NoopGgufParser` derives none — so a `vision` tag put
+    /// on the model beforehand is removed, which is a real diff without
+    /// needing a parser that fabricates metadata.
+    #[tokio::test]
+    async fn a_retag_that_changes_something_announces_it() {
+        let events = events_from(|ops, id| async move {
+            ops.add_tag(id, "vision".to_owned()).await.unwrap();
+            ops.retag(id, true).await.unwrap();
+        })
+        .await;
+
+        // add_tag announces, then the retag announces the removal.
+        assert_eq!(
+            events.len(),
+            2,
+            "expected an announcement from the tag and from the retag: {events:?}"
+        );
+        assert_announced_update(&events[1..], 1, "a retag that removed a tag");
+    }
+
+    /// The other half of the contract: a pass that changed nothing must not
+    /// tell every client to refetch.
+    #[tokio::test]
+    async fn a_retag_that_changes_nothing_stays_silent() {
+        let events = events_from(|ops, id| async move {
+            ops.retag(id, false).await.unwrap();
+            ops.retag(id, false).await.unwrap();
+        })
+        .await;
+
+        assert!(
+            events.is_empty(),
+            "a no-op retag must announce nothing at all: {events:?}"
+        );
+    }
 }
 
 /// Regression test for the `ModelOps`/`ServerOps` registry split: `remove`

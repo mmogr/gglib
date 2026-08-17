@@ -26,11 +26,15 @@ pub struct ModelDeps {
     /// actually has running rather than a second, independent registry.
     pub runtime: Arc<dyn ModelRuntimePort>,
     pub gguf_parser: Arc<dyn GgufParserPort>,
-    /// Broadcasts library membership changes to every connected client.
+    /// Broadcasts library changes to every client attached to this daemon.
     ///
-    /// Without it a mutation is only visible to the caller that made it: the
-    /// GUI refetches its own list after its own edit, and a model added from
-    /// the CLI or a second window never appears until someone hits refresh.
+    /// Without it a mutation is only visible to the caller that made it: a
+    /// GUI refetches its own list after its own edit, so a second window or
+    /// browser tab keeps rendering the old row until someone hits refresh.
+    ///
+    /// The reach is one daemon process. A `gglib model add` in a terminal is
+    /// a *separate* process holding a `NoopEmitter`, and does not route
+    /// through here at all — see `one_shot_model_ops` in `gglib-cli`.
     pub emitter: Arc<dyn AppEventEmitter>,
 }
 
@@ -42,6 +46,30 @@ pub struct ModelOps {
 impl ModelOps {
     pub fn new(deps: ModelDeps) -> Self {
         Self { deps }
+    }
+
+    /// Broadcast that a stored model changed.
+    ///
+    /// The paths that mutate through the repository rather than through a
+    /// `Model` they hold — tags, retag — have nothing to announce from
+    /// afterwards, so this reads the row back. Announcing the stored row
+    /// rather than the caller's copy is deliberate: that is what every other
+    /// client will fetch.
+    ///
+    /// A failure here cannot fail the mutation that already succeeded. It
+    /// costs one client a stale row until its next refresh, which is strictly
+    /// better than reporting a write that did happen as an error.
+    async fn announce_updated(&self, id: i64) {
+        match crate::helpers::resolve_model(self.deps.core.models(), id).await {
+            Ok(model) => self
+                .deps
+                .emitter
+                .emit(AppEvent::model_updated((&model).into())),
+            Err(e) => tracing::warn!(
+                model_id = id,
+                "could not read a changed model back to announce it: {e}"
+            ),
+        }
     }
 
     /// Check if a model is currently being served.
@@ -226,13 +254,17 @@ impl ModelOps {
         // Answer with the row as stored, not as sent. `update` canonicalises
         // `file_path` on write, so echoing the in-memory copy would hand back
         // the caller's spelling and disagree with the very next GET.
-        let stored = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let stored = crate::helpers::resolve_model(self.deps.core.models(), id).await;
 
-        self.deps
-            .emitter
-            .emit(AppEvent::model_updated((&stored).into()));
+        // The write already succeeded, so every other client is stale whether
+        // or not the row reads back. Announce the stored row when there is
+        // one, and the local copy when the re-read failed — silence here would
+        // leave them stale permanently, since nothing else will fire.
+        self.deps.emitter.emit(AppEvent::model_updated(
+            stored.as_ref().unwrap_or(&model).into(),
+        ));
 
-        Ok(GuiModel::from_domain(stored))
+        Ok(GuiModel::from_domain(stored?))
     }
 
     /// Remove a model from the database.
@@ -290,7 +322,12 @@ impl ModelOps {
             .models()
             .add_tag(model_id, tag)
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to add tag: {e}")))
+            .map_err(|e| GuiError::Internal(format!("Failed to add tag: {e}")))?;
+
+        // Tags are on `GuiModel` and drive the library filters, so a client
+        // that missed this shows both the wrong chips and the wrong filter set.
+        self.announce_updated(model_id).await;
+        Ok(())
     }
 
     /// Remove a tag from a model.
@@ -300,7 +337,10 @@ impl ModelOps {
             .models()
             .remove_tag(model_id, &tag)
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to remove tag: {e}")))
+            .map_err(|e| GuiError::Internal(format!("Failed to remove tag: {e}")))?;
+
+        self.announce_updated(model_id).await;
+        Ok(())
     }
 
     /// Get all tags for a specific model.
@@ -364,6 +404,13 @@ impl ModelOps {
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to update model capabilities: {e}")))?;
 
+        // The same `models().update()` `Self::update` calls, so the same
+        // announcement — capabilities are a field of `GuiModel`, and the
+        // inspector renders them.
+        self.deps
+            .emitter
+            .emit(AppEvent::model_updated((&model).into()));
+
         Ok(GuiModel::from_domain(model))
     }
 
@@ -385,12 +432,19 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Retag failed: {e}")))?;
 
         Ok(match diff {
-            Some(diff) => RetagResponse {
-                changed: diff.is_changed(),
-                added: diff.added,
-                removed: diff.removed,
-                spec_changed: diff.spec_changed,
-            },
+            Some(diff) => {
+                // Only when the pass actually moved something — a no-op retag
+                // would otherwise tell every client to refetch for nothing.
+                if diff.is_changed() {
+                    self.announce_updated(id).await;
+                }
+                RetagResponse {
+                    changed: diff.is_changed(),
+                    added: diff.added,
+                    removed: diff.removed,
+                    spec_changed: diff.spec_changed,
+                }
+            }
             None => RetagResponse {
                 changed: false,
                 added: Vec::new(),
@@ -479,6 +533,7 @@ impl ModelOps {
         // pointed at the deleted path. Spawning means the download and the row
         // rewrite always finish as a pair; only the reply is lost.
         let core = self.deps.core.clone();
+        let emitter = Arc::clone(&self.deps.emitter);
         let request = gglib_download::cli_exec::CliUpdateRequest {
             model_path: model.file_path.clone(),
             repo_id: repo,
@@ -499,6 +554,11 @@ impl ModelOps {
                 .update(&model)
                 .await
                 .map_err(|e| GuiError::Internal(format!("Failed to update model row: {e}")))?;
+
+            // The widest staleness window in the file: this lands minutes
+            // after the request that started it, having rewritten `file_path`
+            // and `hf_commit_sha`, and by then a second client is likely open.
+            emitter.emit(AppEvent::model_updated((&model).into()));
 
             Ok(UpgradeOutcome {
                 updated: true,
