@@ -1,5 +1,4 @@
-import { FC, useCallback, useEffect, useState } from 'react';
-import { retagModel } from '../../services/transport/api/models/local';
+import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, ServerInfo, HfModelSummary } from '../../types';
@@ -14,6 +13,7 @@ import {
   useServeModal,
   useDeleteModal,
   useServerActions,
+  useRetagModel,
   useInspectorModals,
 } from './hooks';
 import {
@@ -21,6 +21,7 @@ import {
   ModelEditForm,
   InspectorTags,
   InspectorCapabilities,
+  ReasoningSupport,
   ServeModal,
   DeleteModal,
   InspectorHeader,
@@ -106,55 +107,12 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const hasAgentTag = detail.tags.some(tag => tag.toLowerCase() === 'agent');
   const hasMtpTag = detail.tags.some(tag => tag.toLowerCase() === 'mtp');
 
-  // Server actions hook
-  const [retagging, setRetagging] = useState(false);
-  const handleRetag = useCallback(
-    async (full: boolean) => {
-      if (model?.id == null) return;
-
-      // Rebuild drops detected tags the GGUF no longer yields, hand-added ones
-      // included — and those tags decide launch flags and response parsing.
-      if (full) {
-        const confirmed = await confirm({
-          title: 'Rebuild detected tags?',
-          description:
-            'Re-derives the capability tags and dialect spec from the GGUF. Detected tags it no ' +
-            'longer finds are dropped, including any you added by hand — a manual "reasoning" tag ' +
-            'forcing a reasoning format would be lost. Tags outside that set are untouched.',
-          confirmLabel: 'Rebuild',
-          variant: 'danger',
-        });
-        if (!confirmed) return;
-      }
-
-      setRetagging(true);
-      try {
-        const diff = await retagModel(model.id, full);
-        if (!diff.changed) {
-          showToast('Tags already up to date', 'success');
-        } else {
-          const parts = [
-            diff.added.length > 0 ? `added ${diff.added.length}` : null,
-            diff.removed.length > 0 ? `removed ${diff.removed.length}` : null,
-            diff.specChanged ? 'dialect spec re-derived' : null,
-          ].filter(Boolean);
-          // Counts, not full lists: the chips reload right below, and a
-          // removal is the half worth pausing on, so it gets longer on screen.
-          showToast(
-            `Retagged: ${parts.join(', ')}`,
-            'success',
-            diff.removed.length > 0 ? 8000 : undefined,
-          );
-        }
-        await detail.reload();
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : String(err), 'error');
-      } finally {
-        setRetagging(false);
-      }
-    },
-    [model?.id, detail, showToast, confirm],
-  );
+  const { retagging, handleRetag } = useRetagModel({
+    modelId: model?.id,
+    reload: detail.reload,
+    showToast,
+    confirm,
+  });
 
   const serverActions = useServerActions({
     model,
@@ -261,6 +219,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               editedFilePath={editMode.editedFilePath}
               editedInferenceDefaults={editMode.editedInferenceDefaults}
               editedServerDefaults={editMode.editedServerDefaults}
+              reasoningEffortSupport={detail.modelDetail?.reasoningEffortSupport}
               onQuantizationChange={editMode.setEditedQuantization}
               onFilePathChange={editMode.setEditedFilePath}
               onInferenceDefaultsChange={editMode.setEditedInferenceDefaults}
@@ -285,12 +244,26 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           />
 
           {!editMode.isEditMode && model?.id != null && (
-            <InspectorCapabilities
-              modelId={model.id}
-              capabilities={detail.modelDetail?.capabilities}
-              onChanged={() => void detail.reload()}
-              onError={(message: string) => showToast(message, 'error')}
-            />
+            <>
+              <InspectorCapabilities
+                modelId={model.id}
+                capabilities={detail.modelDetail?.capabilities}
+                onChanged={() => void detail.reload()}
+                onError={(message: string) => showToast(message, 'error')}
+              />
+              {/*
+                Kept out of `InspectorCapabilities` deliberately: those four are
+                gglib's own editable flags, and this one is an observation of
+                somebody else's template that no operator may overwrite.
+              */}
+              <ReasoningSupport
+                support={detail.modelDetail?.reasoningEffortSupport}
+                isRunning={serverActions.isRunning}
+                onRecheck={() => void detail.reload()}
+                onStart={serveModal.openServeModal}
+                isRechecking={detail.isLoading}
+              />
+            </>
           )}
         </div>
       </div>
@@ -320,6 +293,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           mtpNMaxOverride={serveModal.mtpNMaxOverride}
           mtpPMinOverride={serveModal.mtpPMinOverride}
           inferenceParams={serveModal.inferenceParams}
+          reasoningEffortSupport={detail.modelDetail?.reasoningEffortSupport}
           pinProxy={serveModal.pinProxy}
           onPinProxyChange={serveModal.setPinProxy}
           onContextChange={serveModal.setCustomContext}

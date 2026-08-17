@@ -1,4 +1,5 @@
-//! Flag parity between `gglib serve` and `gglib proxy`.
+//! Flag parity between `gglib serve` and `gglib proxy`, and between the
+//! per-run sampling flags and their per-model twins.
 //!
 //! `serve` is the pinned mode of the same proxy stack (epic #630), so a cache
 //! or sampling knob available on one and not the other is a bug by
@@ -12,25 +13,14 @@
 //! really guarded here is that both commands keep flattening them — a
 //! regression would take the form of a field moving back inline, or a
 //! `#[command(flatten)]` being dropped.
-
-use clap::{CommandFactory, Parser};
+//!
+use clap::Parser;
 use gglib_cli::{Cli, Commands};
 
-/// Every long flag on a subcommand, as clap resolved it.
-fn long_flags(subcommand: &str) -> Vec<String> {
-    let cli = Cli::command();
-    let cmd = cli
-        .get_subcommands()
-        .find(|c| c.get_name() == subcommand)
-        .unwrap_or_else(|| panic!("no `{subcommand}` subcommand"));
+#[path = "support/flag_surface.rs"]
+mod flag_surface;
 
-    let mut flags: Vec<String> = cmd
-        .get_arguments()
-        .filter_map(|a| a.get_long().map(str::to_owned))
-        .collect();
-    flags.sort();
-    flags
-}
+use flag_surface::{assert_both_expose, long_flags, owned, sampling_flags};
 
 /// The flags `CacheArgs` contributes.
 ///
@@ -43,47 +33,11 @@ const CACHE_FLAGS: &[&str] = &["cache", "cache-disk-gb", "slot-dir"];
 /// The flags `AccessArgs` contributes.
 const ACCESS_FLAGS: &[&str] = &["allowed-host", "api-key"];
 
-/// The flags `SamplingArgs` contributes.
-///
-/// All fifteen. This listed seven, and since every assertion below is a
-/// `contains`, the guard passed while covering under half the surface it
-/// claims to guard — the eight DRY/dynatemp/frequency/top-n-sigma flags could
-/// have vanished from either command without a word.
-const SAMPLING_FLAGS: &[&str] = &[
-    "dry-allowed-length",
-    "dry-base",
-    "dry-multiplier",
-    "dry-penalty-last-n",
-    "dynatemp-exponent",
-    "dynatemp-range",
-    "frequency-penalty",
-    "max-tokens",
-    "min-p",
-    "presence-penalty",
-    "repeat-penalty",
-    "temperature",
-    "top-k",
-    "top-n-sigma",
-    "top-p",
-];
-
 // ─── Parity ───────────────────────────────────────────────────────────────
 
 #[test]
 fn serve_and_proxy_expose_the_same_cache_flags() {
-    let serve = long_flags("serve");
-    let proxy = long_flags("proxy");
-
-    for flag in CACHE_FLAGS {
-        assert!(
-            serve.contains(&(*flag).to_owned()),
-            "`serve` is missing --{flag}; it has {serve:?}"
-        );
-        assert!(
-            proxy.contains(&(*flag).to_owned()),
-            "`proxy` is missing --{flag}; it has {proxy:?}"
-        );
-    }
+    assert_both_expose(&owned(CACHE_FLAGS), "cache");
 }
 
 /// An access control available on only one of the two commands would be a
@@ -91,36 +45,7 @@ fn serve_and_proxy_expose_the_same_cache_flags() {
 /// model, and it is reachable over exactly the same network.
 #[test]
 fn serve_and_proxy_expose_the_same_access_flags() {
-    let serve = long_flags("serve");
-    let proxy = long_flags("proxy");
-
-    for flag in ACCESS_FLAGS {
-        assert!(
-            serve.contains(&(*flag).to_owned()),
-            "`serve` is missing --{flag}; it has {serve:?}"
-        );
-        assert!(
-            proxy.contains(&(*flag).to_owned()),
-            "`proxy` is missing --{flag}; it has {proxy:?}"
-        );
-    }
-}
-
-#[test]
-fn serve_and_proxy_expose_the_same_sampling_flags() {
-    let serve = long_flags("serve");
-    let proxy = long_flags("proxy");
-
-    for flag in SAMPLING_FLAGS {
-        assert!(
-            serve.contains(&(*flag).to_owned()),
-            "`serve` is missing --{flag}; it has {serve:?}"
-        );
-        assert!(
-            proxy.contains(&(*flag).to_owned()),
-            "`proxy` is missing --{flag}; it has {proxy:?}"
-        );
-    }
+    assert_both_expose(&owned(ACCESS_FLAGS), "access");
 }
 
 /// `--host` isn't part of a flattened shared-args group — `Serve` and
@@ -130,17 +55,7 @@ fn serve_and_proxy_expose_the_same_sampling_flags() {
 /// pinned endpoint to another machine on a trusted network at all.
 #[test]
 fn serve_and_proxy_both_expose_host() {
-    let serve = long_flags("serve");
-    let proxy = long_flags("proxy");
-
-    assert!(
-        serve.contains(&"host".to_owned()),
-        "`serve` is missing --host; it has {serve:?}"
-    );
-    assert!(
-        proxy.contains(&"host".to_owned()),
-        "`proxy` is missing --host; it has {proxy:?}"
-    );
+    assert_both_expose(&owned(&["host"]), "bind address");
 }
 
 /// Guards the rename risk in flattening `SamplingArgs` onto `proxy`: the
@@ -151,9 +66,9 @@ fn serve_and_proxy_both_expose_host() {
 fn flattening_did_not_rename_any_proxy_flag() {
     let proxy = long_flags("proxy");
 
-    for flag in SAMPLING_FLAGS.iter().chain(CACHE_FLAGS) {
+    for flag in sampling_flags().iter().chain(&owned(CACHE_FLAGS)) {
         assert!(
-            proxy.contains(&(*flag).to_owned()),
+            proxy.contains(flag),
             "--{flag} disappeared from `proxy`; it has {proxy:?}"
         );
     }

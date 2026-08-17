@@ -10,9 +10,8 @@ import {
   caveats,
   describePublished,
   describeSource,
-  formatParamValue,
+  formatProvenanceValue,
   publishedByParam,
-  resolvedValue,
 } from '../../../utils/samplingProvenance';
 
 interface SamplingProvenanceSectionProps {
@@ -113,7 +112,7 @@ export const SamplingProvenanceSection: FC<SamplingProvenanceSectionProps> = ({
           return (
             <InfoRow key={entry.param} label={PARAM_LABELS[entry.param] ?? entry.param}>
               <span className="font-mono tabular-nums">
-                {formatParamValue(entry.param, resolvedValue(explanation.resolved, entry.param))}
+                {formatProvenanceValue(entry.param, explanation.resolved)}
               </span>
               <span className="text-text-muted"> {describeSource(entry, ctx)}</span>
               {/*

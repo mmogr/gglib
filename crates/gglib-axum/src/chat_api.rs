@@ -89,6 +89,26 @@ pub(crate) struct ChatProxyRequest {
     pub presence_penalty: Option<f32>,
     /// Optional min_p sampling threshold (inference parameter - will be resolved via hierarchy).
     pub min_p: Option<f32>,
+    /// How hard to ask the model to think, where its chat template reads the
+    /// variable (inference parameter - will be resolved via hierarchy).
+    ///
+    /// Conditional by nature: a template that does not read `reasoning_effort`
+    /// ignores it in silence, and gglib deletes the key rather than sending it
+    /// on a model whose observed caps say so (ADR 0007 decision 3). A client
+    /// that wants a promise the template cannot break wants
+    /// [`Self::reasoning_budget_tokens`], which llama.cpp enforces sampler-side.
+    ///
+    /// No `none` level is offered here or anywhere else in gglib: erasing the
+    /// kwarg yields the template's own default, which is a different act from
+    /// naming a level, and is what omitting this field already does.
+    pub reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
+    /// Ceiling on this turn's thinking tokens (inference parameter - will be
+    /// resolved via hierarchy).
+    ///
+    /// `-1` defers to the launch-time default; `0` stops thinking altogether.
+    /// Upstream range-validates it, so a value gglib forwards and llama-server
+    /// dislikes comes back as an honest HTTP 400 naming the range.
+    pub reasoning_budget_tokens: Option<i32>,
     /// Optional tools for function calling.
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
@@ -481,12 +501,29 @@ pub(crate) async fn proxy_chat(
         // regeneration return the identical text. Reproducibility is a
         // benchmark's need, not a chat's.
         seed: None,
-        // Same shape as the DRY block above: the WebUI chat request carries no
-        // reasoning controls yet, so the request layer names neither and both
-        // resolve from the layers beneath. The HTTP surface that lets a caller
-        // name them is a separate change.
-        reasoning_effort: None,
-        reasoning_budget_tokens: None,
+        // Both halves of the reasoning pair, taken from the request. The
+        // trust split that governs them in the proxy does not apply here:
+        // `/api/chat` is gglib's own local UI endpoint and resolves the
+        // hierarchy by hand rather than through
+        // `request_pipeline::resolve_sampling`, so every field above — from
+        // `temperature` down — is already accepted from the caller unexamined.
+        // Adding a gate for these two alone would describe a boundary this
+        // endpoint does not have.
+        //
+        // The suppression gate does **not** run here, and that is worth stating
+        // rather than assuming. This handler posts straight to
+        // `127.0.0.1:{port}/v1/chat/completions` — llama-server itself, not the
+        // embedded proxy — so no stage of `request_pipeline::apply` executes on
+        // this path, stage 5b included. A level named here reaches a template
+        // that may ignore it in silence.
+        //
+        // That is why `ModelDetailDto` now carries the template's
+        // `reasoning_effort` support: the gating this path cannot do server-side
+        // is done by the client that decides whether to offer the control at
+        // all. Moving this endpoint onto the pipeline is the real fix and is
+        // a change of its own — every other stage is missing here too.
+        reasoning_effort: request.reasoning_effort,
+        reasoning_budget_tokens: request.reasoning_budget_tokens,
     }
     .resolve_with_defaults(model_defaults.as_ref(), global_defaults.as_ref(), model_ctx);
 
@@ -503,6 +540,12 @@ pub(crate) async fn proxy_chat(
         resolved_dry_base = resolved.dry_base,
         resolved_dry_allowed_length = resolved.dry_allowed_length,
         resolved_dry_penalty_last_n = resolved.dry_penalty_last_n,
+        // Logged for a reason the others do not have: neither reasoning control
+        // is echoed by `/slots` or `/props` (ADR 0007 finding 7a), so on this
+        // path — which has no provenance record and no readback — this line is
+        // the only evidence either was resolved.
+        resolved_reasoning_effort = ?resolved.reasoning_effort,
+        resolved_reasoning_budget_tokens = resolved.reasoning_budget_tokens,
         "Resolved inference parameters via hierarchy"
     );
 
@@ -661,107 +704,5 @@ pub(crate) async fn proxy_chat(
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use gglib_core::domain::ModelCapabilities;
-
-    #[test]
-    fn test_tools_stripped_when_not_supported() {
-        let tools = Some(vec![
-            serde_json::json!({"type": "function", "function": {"name": "get_weather"}}),
-        ]);
-        let tool_choice = Some(serde_json::json!("auto"));
-        let mut body = serde_json::json!({});
-        apply_tools_to_body(&mut body, &tools, &tool_choice, ModelCapabilities::empty());
-
-        assert!(body.get("tools").is_none(), "tools should be stripped");
-        assert!(
-            body.get("tool_choice").is_none(),
-            "tool_choice should be stripped"
-        );
-    }
-
-    #[test]
-    fn test_tools_forwarded_when_supported() {
-        let tool = serde_json::json!({"type": "function", "function": {"name": "get_weather"}});
-        let tools = Some(vec![tool.clone()]);
-        let tool_choice = Some(serde_json::json!("auto"));
-        let mut body = serde_json::json!({});
-        apply_tools_to_body(
-            &mut body,
-            &tools,
-            &tool_choice,
-            ModelCapabilities::SUPPORTS_TOOL_CALLS,
-        );
-
-        let tools_in_body = body.get("tools").expect("tools should be present");
-        assert_eq!(
-            tools_in_body,
-            &serde_json::json!([tool]),
-            "tools should match"
-        );
-
-        let tc_in_body = body
-            .get("tool_choice")
-            .expect("tool_choice should be present");
-        assert_eq!(
-            tc_in_body,
-            &serde_json::json!("auto"),
-            "tool_choice should match"
-        );
-    }
-
-    #[test]
-    fn test_no_op_when_no_tools_sent() {
-        // tools: None, tool_choice: None — body should stay empty regardless of capability
-        let mut body_no_cap = serde_json::json!({});
-        apply_tools_to_body(&mut body_no_cap, &None, &None, ModelCapabilities::empty());
-
-        let mut body_with_cap = serde_json::json!({});
-        apply_tools_to_body(
-            &mut body_with_cap,
-            &None,
-            &None,
-            ModelCapabilities::SUPPORTS_TOOL_CALLS,
-        );
-
-        assert!(body_no_cap.get("tools").is_none());
-        assert!(body_no_cap.get("tool_choice").is_none());
-        assert!(body_with_cap.get("tools").is_none());
-        assert!(body_with_cap.get("tool_choice").is_none());
-    }
-
-    /// JSON-boundary tests for `UpdateConversationRequest.system_prompt`,
-    /// mirroring the coverage added for `UpdateModelRequest.server_defaults`
-    /// and `UpdateSettingsRequest`. Deserializes raw JSON to prove
-    /// `serde_with::rust::double_option` distinguishes an omitted key from
-    /// an explicit `null` — without it, `PUT /api/conversations/:id` with
-    /// `{"system_prompt": null}` (the frontend's "clear system prompt"
-    /// request) silently no-ops instead of clearing the prompt.
-    #[test]
-    fn update_conversation_request_omitted_system_prompt_is_none() {
-        let req: UpdateConversationRequest = serde_json::from_str("{}").unwrap();
-        assert_eq!(req.system_prompt, None, "omitted key must be None");
-    }
-
-    #[test]
-    fn update_conversation_request_explicit_null_is_some_none() {
-        let req: UpdateConversationRequest =
-            serde_json::from_str(r#"{"system_prompt": null}"#).unwrap();
-        assert_eq!(
-            req.system_prompt,
-            Some(None),
-            "explicit null must clear the system prompt (Some(None))"
-        );
-    }
-
-    #[test]
-    fn update_conversation_request_populated_value_is_some_some() {
-        let req: UpdateConversationRequest =
-            serde_json::from_str(r#"{"system_prompt": "You are a pirate."}"#).unwrap();
-        assert_eq!(
-            req.system_prompt,
-            Some(Some("You are a pirate.".to_string()))
-        );
-    }
-}
+#[path = "chat_api_tests.rs"]
+mod chat_api_tests;

@@ -79,6 +79,13 @@ export interface StreamAgentChatOptions {
   /** Optional partial `AgentConfig` overrides; omitted fields use backend defaults. */
   config?: PartialAgentConfig;
   /**
+   * The two reasoning controls, which `AgentChatRequest` takes at the **top
+   * level** of the body rather than inside `config` — they are per-turn shape,
+   * not agent-loop tuning. Spread verbatim, so an omitted field resolves from
+   * the profile, per-model, global and floor layers as it always did.
+   */
+  reasoning?: { reasoning_effort?: string; reasoning_budget_tokens?: number };
+  /**
    * When `false`, no tools are exposed to the model.
    * Forwarded to the backend as an empty `tool_filter`.
    * `null` / `undefined` → permissive (all tools available).
@@ -118,6 +125,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     timingTracker,
     setCurrentStreamingAssistantMessageId,
     config,
+    reasoning,
     supportsToolCalls,
     onSystemWarning,
   } = options;
@@ -175,6 +183,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         messages: wireMessages,
         config: agentConfig,
         tool_filter: toolFilter,
+        ...reasoning,
       }),
       signal: abortSignal,
     });

@@ -43,6 +43,8 @@ The full set of configurable parameters:
 | `dry_base` | `--dry-base` | > 1.0 | *(none)* | llama.cpp default 1.75 |
 | `dry_allowed_length` | `--dry-allowed-length` | int ≥ 0 | *(none)* | llama.cpp default 2 |
 | `dry_penalty_last_n` | `--dry-penalty-last-n` | -1 or ≥ 0 | *(none)* | llama.cpp default 64; 0 disables |
+| `reasoning_effort` | `--reasoning-effort` | `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | *(none, deliberately)* | **A template control, not a sampler** — see below |
+| `reasoning_budget_tokens` | `--reasoning-budget-tokens` | -1 – 2147483647 | *(none, deliberately)* | **A budget**, like `max_tokens`; -1 defers to the launch default, 0 stops thinking |
 
 **These are the *build's* defaults, and a model can move five of them.** Since
 llama.cpp PR #17120 a GGUF can carry `general.sampling.*` keys, which llama.cpp
@@ -92,6 +94,131 @@ gglib also no longer passes *any* sampler flags on the llama-server command
 line. They were inert for request behaviour (the request body wins) and
 actively harmful to observation, because a launch flag overwrites the `/props`
 table the baseline check reads.
+
+## The two reasoning controls
+
+The last two rows of the table are not samplers, and they are not the same kind
+of thing as each other. Both ride the hierarchy exactly like every other
+parameter — CLI flag, per-model default, profile, global setting — but what
+happens at the far end differs, and the difference is the whole reason there
+are two.
+
+**`reasoning_effort` is a template control.** It is a string handed to the chat
+template at render time. A template that branches on it produces a different
+prompt; a template that never reads the variable ignores it in perfect silence
+— HTTP 200, prompt byte-identical, no warning
+([ADR 0007](adr/0007-ask-the-server-for-template-capabilities.md) finding 3,
+measured against the pinned build). llama.cpp validates nothing here: there is
+no allowlist, and `reasoning_effort: "banana"` renders as a line in the user's
+own prompt reading `Reasoning: banana`. gglib is therefore the only party
+checking, and it accepts the six levels above and nothing else.
+
+**`reasoning_budget_tokens` is a budget.** It says what this request *is* — a
+turn that may spend at most *n* tokens thinking — which is the category
+`max_tokens` occupies, and llama.cpp itself enforces it whatever the template
+does. Its range is upstream's, quoted rather than invented: `-1` to
+`i32::MAX`, with anything below `-1` coming back as an HTTP 400 naming that
+range, so gglib rejects exactly what upstream rejects and nothing more.
+
+That difference is also the trust split. A client's `reasoning_budget_tokens`
+is honoured even when `trust_client_sampling` is off — it joins `max_tokens` as
+a bound the caller sets on its own turn — while a client's `reasoning_effort`
+is gated like every other sampling opinion.
+
+### Three support states, and what each one does
+
+gglib asks the running llama-server what its loaded template declares, and
+stores the answer per model (`Model.template_caps`):
+
+| State | Meaning | What happens to a resolved `reasoning_effort` |
+|-------|---------|-----------------------------------------------|
+| **Yes** | the template declares it reads the variable | sent |
+| **No** | the template declares it does not | **suppressed** before the request goes out, and recorded as `suppressedByTemplate` in the provenance with the level and the rung that supplied it |
+| **Unknown** | nobody has asked yet, the read failed, the model is a passthrough, or the caps object did not carry the field | sent — a report that never arrived is never read as a negative one |
+
+Suppression is *recorded* rather than performed quietly because it is
+otherwise unrecoverable: neither reasoning control is echoed in `/slots` or
+`/props` (finding 7a), so no readback will ever notice that a level went
+nowhere. The record is the resolved parameter's provenance
+(`SuppressedByTemplate`) plus the dropped level and the rung that supplied it.
+
+Three surfaces read it, and they answer two different questions:
+
+- **`gglib model explain`** and **`GET /api/models/:id/explain`** ask *would a
+  request against this model send the level it resolves?* They apply the same
+  predicate the pipeline does — `request_pipeline::suppress_stored_effort`, the
+  function the live gate itself calls — so an explanation cannot describe a gate
+  that differs from the one that runs. The CLI prints the row as
+  `reasoning_effort — ← suppressed by this model's template` with the level and
+  the rung on a note beneath; the DTO carries them on `effortSuppressed`. Both
+  are conditional: nothing has been sent.
+- **The proxy's sampling audit** answers *did it happen?* Every request that
+  suppressed a level increments `effort_suppressed.requests` and replaces
+  `effort_suppressed.latest`, which carry the level and the rung by name. This
+  is the unconditional twin, and the audit is its home by elimination — it is
+  an observation about gglib's own behaviour that no wire reading can
+  corroborate.
+
+Both leave the level out of `resolved` and the rung out of the provenance
+table, because that is what would be (or was) sent. `GET /api/models/:id/detail`
+carries the input to the decision rather than its output:
+`reasoningEffortSupport` is the tri-state `yes` / `no` / `unknown`, never a
+bool, so a client can grey a control out on a positive `no` without greying it
+out on every model nobody has launched.
+
+The GUI is the client that does exactly that. Its effort control is *hidden*
+only on a measured `no`, and replaced there by a sentence saying gglib will
+remove the level — a control that vanished silently would read as a feature
+gglib does not have. On `unknown` the control is offered with a caption saying
+the template has not been observed and that the level will be sent as given;
+the model inspector carries the same fact as a line of its own, with a
+re-measurement beside it (re-read while the model runs, "start the model to
+check" while it does not) and deliberately **no** manual override — the answer
+comes from the renderer executing the template, and a stored opinion that
+outranked it would be the defect this whole mechanism exists to remove. The
+global settings surface has no model in scope, so it hides nothing and names
+the condition in the caption instead.
+
+`reasoning_budget_tokens` is never suppressed. It does not go through the
+template at all, so template support is not a question that applies to it —
+which is why the starter profiles below set both halves.
+
+### There is no `none`, and the absence is the decision
+
+llama-server accepts `reasoning_effort: "none"` and treats it specially: it
+**erases** the kwarg rather than passing it on. On `gpt-oss` the template's own
+`{%- set reasoning_effort = "medium" %}` fallback then fills the hole, so
+`"none"` yields **medium** thinking — confirmed live against the pinned binary,
+not inferred (ADR 0007 finding 4). Offering it as a level would ship a control
+whose most obvious value does the opposite of what it reads as.
+
+So gglib refuses it, and the refusal points somewhere useful:
+
+```console
+$ gglib proxy --reasoning-effort none
+error: invalid value 'none' for '--reasoning-effort <REASONING_EFFORT>':
+  'none' is not a level — upstream erases the setting and the template's own
+  default fires instead (medium, on gpt-oss). To stop thinking, pass
+  `--reasoning-budget-tokens 0`. Levels: minimal, low, medium, high, xhigh, max
+```
+
+**"Stop thinking" is `--reasoning-budget-tokens 0`** — sampler-enforced,
+range-validated upstream, and true on every model rather than on the ones whose
+template happens to cooperate.
+
+### Neither is observable afterwards
+
+`task_params::to_json` exports no reasoning field in either branch, so nothing
+echoes either value in `/slots` or `/props`. [ADR
+0004](adr/0004-observe-the-sampling-boundary.md)'s readback can confirm a
+`top_k` arrived and can never confirm these did. That is why both are modelled
+on the ladder — where provenance records which rung supplied them — instead of
+being left to ride the request body ungoverned, and why the CLI refuses a bad
+value at parse time: the error message is the only place the truth gets told.
+
+The stored side is visible, at least: `gglib config profile show <name>` prints
+both, and `gglib model update --unset reasoning-effort` takes a stored one back
+out. What no surface can tell you is what the model did with it.
 
 ## The order llama.cpp applies them in
 
@@ -228,10 +355,21 @@ gglib model explain <id>
 
 # Override individual params
 gglib model update <id> --presence-penalty 0.8 --max-tokens 32768
+gglib model update <id> --reasoning-effort high --reasoning-budget-tokens 16384
+
+# Put one param back to unset, leaving the rest of the row alone
+gglib model update <id> --unset reasoning-effort
 
 # Clear all inference defaults (revert to global/hardcoded chain)
 gglib model update <id> --clear-inference-defaults
 ```
+
+`--unset` takes any parameter this command can set, named as its flag (either
+`top-k` or `top_k`). It is the per-parameter counterpart of
+`--clear-inference-defaults`: without it, dialling a single stored default back
+to *unset* is inexpressible, because every other flag carries a value and an
+omitted flag means "not mentioned". Unsetting the last remaining parameter
+returns the model to inheriting, exactly as `--clear-inference-defaults` would.
 
 All the same flags are available on `gglib serve`, `gglib chat`, and `gglib q` as
 per-invocation overrides that sit at the top of the hierarchy.
@@ -305,11 +443,14 @@ temperature, and a `reasoning` model's auto-written recipe losing to global
 settings.
 
 ```
-temperature      0.2     ← profile 'coding'
-top_k            20      ← global settings
-presence_penalty 1.0     ← reasoning floor (coupled to temperature layer)
-top_p            —       ← unset by design (llama.cpp's own default applies)
-max_tokens       —       ← unset by design
+temperature             0.2     ← profile 'coding'
+top_k                   20      ← global settings
+presence_penalty        1.0     ← reasoning floor (coupled to temperature layer)
+top_p                   —       ← unset by design (llama.cpp's own default applies)
+max_tokens              —       ← unset by design
+reasoning_effort        —       ← suppressed by this model's template
+      ! 'high' from profile 'coding'; not sent
+reasoning_budget_tokens 16384   ← profile 'coding'
 ```
 
 A `—` is not a gap. Since ADR 0003 it is the normal answer for six of the seven
@@ -317,6 +458,16 @@ samplers on a model that is not `reasoning`-tagged: gglib names no value and
 llama.cpp supplies its own. The row is still worth printing, because "gglib
 chose 0.95" and "llama.cpp chose 0.95" are different facts and only one of them
 changes when the pinned build moves.
+
+The `reasoning_effort` row above shows the third reason a `—` appears, and the
+only one that is worth acting on: a rung *did* name a value and this model's
+template does not read it. The row says so, and the note says whose setting is
+inert — the level and the rung are both destroyed by the gate, so they would
+otherwise be unrecoverable from the table. On a model whose template does read
+the variable, or one nobody has launched, the row reads like any other.
+`reasoning_budget_tokens` beside it is untouched: it is enforced by llama.cpp's
+sampler rather than by the template, so it survives on exactly the model where
+the level does not.
 
 ## Client sampling authority
 
@@ -410,7 +561,7 @@ same model name, so per-model defaults alone cannot tell them apart.
 suffixing the model:
 
 ```bash
-# Install the starter profiles (coding, chat, creative), then edit to taste
+# Install the starter profiles, then edit to taste
 gglib config profile install-templates
 gglib config profile list
 
@@ -419,6 +570,43 @@ gglib config profile set coding --temperature 0.15 --top-p 0.9
 gglib config profile set coding --unset top-p        # back to the model default
 gglib config profile show coding
 ```
+
+### The starter profiles
+
+`install-templates` seeds nine, in two families that set disjoint parameters:
+
+| Family | Profiles | What each sets | Listed in `/v1/models` |
+|--------|----------|----------------|------------------------|
+| Sampling | `coding`, `chat`, `creative` | `temperature` + `top_p` | `chat` |
+| Reasoning | `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | `reasoning_effort` + `reasoning_budget_tokens` | `low`, `high`, `max` |
+
+Each reasoning rung sets **both** controls, and that pairing is the point. A
+profile carrying only the effort level would do nothing at all on a model whose
+template ignores the variable, while reading in `gglib config profile show` as
+though it had. With a budget attached the rung degrades to a narrower promise
+rather than to no promise: where the template cooperates the user gets both,
+and where it does not they still get the thinking cap they chose.
+
+| Profile | `reasoning_effort` | `reasoning_budget_tokens` |
+|---------|--------------------|---------------------------|
+| `minimal` | `minimal` | 256 |
+| `low` | `low` | 1024 |
+| `medium` | `medium` | 4096 |
+| `high` | `high` | 16384 |
+| `xhigh` | `xhigh` | 32768 |
+| `max` | `max` | -1 (defer to the launch default) |
+
+Roughly a quadrupling per rung and then a doubling, because the levels are not
+linear either — nothing in llama.cpp compares them and a template may treat two
+of them identically, so the ladder is spaced widely enough that adjacent rungs
+differ in practice rather than finely enough to imply a precision that does not
+exist. These are *starting points to edit*, not measurements. The one number
+that is not a guess is `max`'s `-1`, which declines to invent a ceiling and
+leaves the operator's launch-time `--reasoning-budget` in charge.
+
+Only three of the six are listed: six visible variants per model would swamp
+the very picker `--list-in-models` exists to protect. The other three stay
+fully usable by name, as `qwen3.6:minimal` and friends.
 
 A client then selects it as part of the model name:
 
@@ -463,7 +651,12 @@ gglib config profile set chat --list-in-models
 Listing is opt-in per profile because the full cross product of models and
 profiles would swamp a client's model picker. Unlisted profiles remain fully
 usable by name. Profiles can also be managed from the GUI under
-**Settings → Inference Profiles**.
+**Settings → Inference Profiles** — with one gap worth knowing about: the GUI's
+"Install starter templates" seeds the three sampling profiles only. Its profile
+editor rebuilds a profile's config from its own field list on every save and
+drops anything not on that list, so seeding the six reasoning rungs there would
+install profiles the first edit silently empties. `gglib config profile
+install-templates` installs all nine.
 
 ## Server launch defaults
 

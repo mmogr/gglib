@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { ExternalLink, Undo2, X } from 'lucide-react';
-import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
+import type { GgufModel, InferenceConfig, ServerConfig, TemplateSupport } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
@@ -17,6 +17,13 @@ interface ModelEditFormProps {
   editedFilePath: string;
   editedInferenceDefaults: InferenceConfig | undefined;
   editedServerDefaults: ServerConfig | null | undefined;
+  /**
+   * Whether this model's template reads `reasoning_effort`, from the model
+   * detail. Absent while the detail is still loading, and on a backend that
+   * predates the field — both of which are honestly `unknown`, so the form
+   * offers the control and says it has not been observed.
+   */
+  reasoningEffortSupport?: TemplateSupport;
   onQuantizationChange: (quant: string) => void;
   onFilePathChange: (path: string) => void;
   onInferenceDefaultsChange: (config: InferenceConfig) => void;
@@ -34,6 +41,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   editedFilePath,
   editedInferenceDefaults,
   editedServerDefaults,
+  reasoningEffortSupport,
   onQuantizationChange,
   onFilePathChange,
   onInferenceDefaultsChange,
@@ -128,6 +136,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
       value={editedInferenceDefaults}
       onChange={onInferenceDefaultsChange}
       fallback={{ kind: 'resolved', ownLayer: 'modelUserSet', resolution }}
+      capabilities={{ reasoningEffort: reasoningEffortSupport ?? 'unknown' }}
     />
     </>
   );

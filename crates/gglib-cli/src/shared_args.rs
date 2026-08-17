@@ -69,6 +69,34 @@ pub struct SamplingArgs {
     /// -1.0 = disabled (llama.cpp default -1.0)
     #[arg(long = "top-n-sigma")]
     pub top_n_sigma: Option<f32>,
+    /// How hard to ask the model to think: minimal, low, medium, high, xhigh, max.
+    ///
+    /// Applies only to models whose chat template declares that it reads the
+    /// variable; on any other model the level is dropped before the request is
+    /// sent and `gglib model explain` reports it as suppressed. Pair it with
+    /// `--reasoning-budget-tokens`, which llama.cpp enforces regardless.
+    ///
+    /// There is no `none`: upstream treats it as "erase the setting", which
+    /// lets the template's own default fire (medium, on gpt-oss). Pass
+    /// `--reasoning-budget-tokens 0` to stop thinking.
+    #[arg(long = "reasoning-effort", value_parser = crate::reasoning_args::parse_effort)]
+    pub reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
+    /// Ceiling on thinking tokens before the model is cut off.
+    ///
+    /// A budget, not a taste: enforced by llama.cpp itself on every model, so
+    /// unlike `--reasoning-effort` it applies whatever the chat template does.
+    /// `-1` defers to the launch-time `--reasoning-budget`; `0` stops thinking.
+    // `allow_hyphen_values` because `-1` is a documented value here, and
+    // without it clap reads the leading `-` as the start of another flag and
+    // reports `unexpected argument '-1'`. The parser still rejects anything
+    // that is not an integer >= -1, so a mistyped flag name landing here comes
+    // back as a range error rather than being swallowed as a value.
+    #[arg(
+        long = "reasoning-budget-tokens",
+        allow_hyphen_values = true,
+        value_parser = crate::reasoning_args::parse_budget
+    )]
+    pub reasoning_budget_tokens: Option<i32>,
 }
 
 /// Context-size and memory-lock flags common to all inference commands.
@@ -136,12 +164,8 @@ impl SamplingArgs {
             // every request return the same text. A seed is set per request by
             // the benchmark harness, which is the only caller that wants one.
             seed: None,
-            // No reasoning flags yet: modelling the two controls on the ladder
-            // and putting a CLI surface on them are separate changes, and this
-            // one is the first. An absent opinion, so every layer beneath still
-            // resolves normally.
-            reasoning_effort: None,
-            reasoning_budget_tokens: None,
+            reasoning_effort: self.reasoning_effort,
+            reasoning_budget_tokens: self.reasoning_budget_tokens,
         }
     }
 
@@ -256,63 +280,4 @@ pub struct ServeOptions {
     /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
     #[arg(short, long, default_value = "8080")]
     pub port: u16,
-}
-
-/// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
-/// from CLI argument groups.
-///
-/// A single conversion point used by both `chat` and `q` handlers (DRY).
-pub(crate) struct ConversationSettingsBuilder {
-    settings: gglib_core::domain::chat::ConversationSettings,
-}
-
-impl ConversationSettingsBuilder {
-    /// Start building settings from sampling and context args.
-    pub(crate) fn new(sampling: &SamplingArgs, context: &ContextArgs) -> Self {
-        Self {
-            settings: gglib_core::domain::chat::ConversationSettings {
-                temperature: sampling.temperature,
-                top_p: sampling.top_p,
-                top_k: sampling.top_k,
-                max_tokens: sampling.max_tokens,
-                repeat_penalty: sampling.repeat_penalty,
-                ctx_size: context.ctx_size.clone(),
-                mlock: if context.mlock { Some(true) } else { None },
-                ..Default::default()
-            },
-        }
-    }
-
-    /// Set the model name used for this session.
-    pub(crate) fn model_name(mut self, name: impl Into<String>) -> Self {
-        self.settings.model_name = Some(name.into());
-        self
-    }
-
-    /// Set tool-related configuration.
-    pub(crate) fn tools(mut self, tools: Vec<String>, no_tools: bool) -> Self {
-        self.settings.tools = tools;
-        if no_tools {
-            self.settings.no_tools = Some(true);
-        }
-        self
-    }
-
-    /// Set agent loop parameters.
-    pub(crate) fn agent_params(
-        mut self,
-        max_iterations: Option<usize>,
-        tool_timeout_ms: Option<u64>,
-        max_parallel: Option<usize>,
-    ) -> Self {
-        self.settings.max_iterations = max_iterations;
-        self.settings.tool_timeout_ms = tool_timeout_ms;
-        self.settings.max_parallel = max_parallel;
-        self
-    }
-
-    /// Consume the builder and return the finished settings.
-    pub(crate) fn build(self) -> gglib_core::domain::chat::ConversationSettings {
-        self.settings
-    }
 }

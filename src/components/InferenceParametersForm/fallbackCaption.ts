@@ -66,6 +66,12 @@ const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
   dryBase: 'llama.cpp default: 1.75',
   dryAllowedLength: 'llama.cpp default: 2',
   dryPenaltyLastN: 'llama.cpp default: 64',
+  // Not "llama.cpp default: N" like the rows above: there is no fixed number
+  // to name. Unset means gglib emits no key, and what applies is whatever
+  // `--reasoning-budget` the model was launched with — which is exactly what
+  // the legal value -1 means, so leaving the field blank and typing -1 into it
+  // do the same thing by different routes.
+  reasoningBudgetTokens: 'Unset — the launch-time budget applies',
 };
 
 /**

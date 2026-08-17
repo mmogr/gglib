@@ -58,6 +58,11 @@ use crate::LlmCompletionAdapter;
 /// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
 ///   consumer, so a user waiting on a contended model is told why. `None` when
 ///   there is no stream to notify.
+/// * `sampling` — the caller's own top-rung sampling layer, or `None` to
+///   resolve entirely from the profile, per-model, global and floor layers.
+///   `POST /api/agent/chat` passes the request's reasoning controls and nothing
+///   else; see `AgentChatRequest::sampling_layer` for why that pair and not the
+///   sampler parameters.
 #[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop(
     base_url: String,
@@ -68,6 +73,7 @@ pub fn compose_agent_loop(
     tool_filter: Option<HashSet<String>>,
     usage_sink: Option<Arc<dyn UsageSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
+    sampling: Option<InferenceConfig>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -77,7 +83,7 @@ pub fn compose_agent_loop(
         mcp,
         tool_filter,
         None,
-        None,
+        sampling,
         usage_sink,
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.

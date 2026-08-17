@@ -140,6 +140,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         repeatPenalty: inferenceParams?.repeatPenalty,
         presencePenalty: inferenceParams?.presencePenalty,
         minP: inferenceParams?.minP,
+        reasoningEffort: inferenceParams?.reasoningEffort,
+        reasoningBudgetTokens: inferenceParams?.reasoningBudgetTokens,
       };
 
       if (pinProxy) {

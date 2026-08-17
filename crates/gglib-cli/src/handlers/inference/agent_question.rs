@@ -172,7 +172,7 @@ pub(crate) async fn execute(
     let mut persistence = None;
     if completed && let Some(ref history) = history {
         let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
-        let settings = crate::shared_args::ConversationSettingsBuilder::new(
+        let settings = crate::conversation_settings::ConversationSettingsBuilder::new(
             &SamplingArgs::default(),
             &crate::shared_args::ContextArgs::default(),
         )

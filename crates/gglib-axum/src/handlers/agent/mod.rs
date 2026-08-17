@@ -81,6 +81,10 @@ pub(crate) async fn chat(
 
     validate_port(&state, req.port).await?;
 
+    // Read before `tool_filter` consumes the request piecemeal, and before the
+    // loop is composed: the two reasoning controls are the only sampling this
+    // endpoint accepts, and they occupy the ladder's top rung.
+    let sampling = req.sampling_layer();
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
     let model_context =
         request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
@@ -103,6 +107,7 @@ pub(crate) async fn chat(
         // reuse to the shared agent-path store behind `agent_usage`.
         Some(state.proxy.agent_metrics()),
         Some(retry_observer),
+        sampling,
     );
 
     let messages = req.messages;

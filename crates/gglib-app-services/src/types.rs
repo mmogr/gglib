@@ -281,6 +281,38 @@ pub struct ModelDetailDto {
     /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
+    /// Whether this model's chat template reads `reasoning_effort`, as
+    /// llama-server reported it the last time the model was served.
+    ///
+    /// # Three states, and the third is the common one
+    ///
+    /// Carried as [`Support`] rather than a `bool` or an `Option<bool>`,
+    /// because a client has to be able to tell *not supported* from *nobody has
+    /// looked*. Most rows are the latter: the caps are read from `GET /props`
+    /// while the model is running, so every model that has never been launched
+    /// on this installation answers `unknown` and keeps answering it until it
+    /// is.
+    ///
+    /// A `bool` would collapse `unknown` into `false`, and a client would then
+    /// grey out the reasoning control on every unlaunched model — the
+    /// unknown-gates mistake ADR 0007 decision 3 forbids the server to make,
+    /// reproduced one layer out. The server's own suppression acts only on
+    /// [`Support::No`]; a surface should offer the control on `yes` and
+    /// `unknown` alike, and explain itself on `no`.
+    ///
+    /// # Why the one field and not the whole caps object
+    ///
+    /// `TemplateCaps` carries nine bools. Eight describe things gglib already
+    /// models in [`Self::capabilities`] from its own catalog — tools, system
+    /// role, parallel calls — and publishing a second, differently-sourced
+    /// answer to the same question invites a client to read whichever it finds
+    /// first. The ninth has no other home, and this is it. A surface that
+    /// genuinely needs the raw self-report should get its own endpoint rather
+    /// than a `serde` alias on this one.
+    ///
+    /// [`Support`]: gglib_core::domain::Support
+    #[serde(default)]
+    pub reasoning_effort_support: gglib_core::domain::Support,
     // ── Timestamps ────────────────────────────────────────────────────────────
     /// When the model was first added to the database (`"%Y-%m-%d %H:%M:%S"`).
     pub added_at: String,
@@ -330,6 +362,13 @@ impl ModelDetailDto {
             capabilities: model.capabilities,
             inference_defaults: model.inference_defaults,
             defaults_origin: model.defaults_origin,
+            // The one derivation in this conversion, and it is the tri-state's
+            // own: `reasoning_effort_support` answers `Unknown` both for a
+            // model with no stored caps and for caps that omitted the field.
+            // Neither is a "no", and neither may be rendered as one.
+            reasoning_effort_support: gglib_core::domain::reasoning_effort_support(
+                &model.template_caps,
+            ),
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
             is_serving,
             port,
@@ -842,70 +881,5 @@ pub struct McpToolCallResponse {
 pub use gglib_runtime::ServerLogEntry;
 
 #[cfg(test)]
-mod update_model_request_tests {
-    //! JSON-boundary tests for `UpdateModelRequest.server_defaults`.
-    //!
-    //! These deserialize raw JSON strings (rather than constructing the
-    //! struct directly in Rust) to prove the `serde_with::rust::double_option`
-    //! wiring actually distinguishes "field omitted" from "field explicitly
-    //! null" at the layer where it matters — every other test for this
-    //! feature bypassed serde entirely and would not have caught the
-    //! original bug (double `Option` collapsing `null` into "omitted").
-
-    use super::UpdateModelRequest;
-    use gglib_core::domain::ServerConfig;
-
-    #[test]
-    fn server_defaults_omitted_key_is_none() {
-        let req: UpdateModelRequest = serde_json::from_str("{}").unwrap();
-        assert_eq!(
-            req.server_defaults, None,
-            "omitted key must resolve to None (no-op / don't touch)"
-        );
-    }
-
-    #[test]
-    fn server_defaults_explicit_null_is_some_none() {
-        let req: UpdateModelRequest = serde_json::from_str(r#"{"serverDefaults": null}"#).unwrap();
-        assert_eq!(
-            req.server_defaults,
-            Some(None),
-            "explicit null must resolve to Some(None) (clear the override)"
-        );
-    }
-
-    #[test]
-    fn server_defaults_populated_object_is_some_some() {
-        let req: UpdateModelRequest =
-            serde_json::from_str(r#"{"serverDefaults": {"contextLength": 8192}}"#).unwrap();
-        assert_eq!(
-            req.server_defaults,
-            Some(Some(ServerConfig {
-                context_length: Some(8192)
-            })),
-            "populated object must resolve to Some(Some(config))"
-        );
-    }
-}
-
-#[cfg(test)]
-mod start_server_request_tests {
-    //! JSON-boundary tests for `StartServerRequest.mlock`.
-
-    use super::StartServerRequest;
-
-    #[test]
-    fn mlock_deserializes_from_json() {
-        let req: StartServerRequest = serde_json::from_str(r#"{"mlock": true}"#).unwrap();
-        assert!(req.mlock, "explicit true must deserialize");
-    }
-
-    #[test]
-    fn mlock_defaults_to_false_when_omitted() {
-        let req: StartServerRequest = serde_json::from_str(r#"{}"#).unwrap();
-        assert!(
-            !req.mlock,
-            "omitted key must default to false via #[serde(default)]"
-        );
-    }
-}
+#[path = "types_tests.rs"]
+mod types_tests;

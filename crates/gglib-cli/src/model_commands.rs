@@ -3,81 +3,9 @@
 //! This module defines the model CRUD, verification, download, and
 //! HuggingFace discovery commands that live under `gglib model <sub>`.
 
-use clap::{Subcommand, ValueEnum};
-use gglib_core::domain::{ModelSortBy, SortOrder};
+use clap::Subcommand;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CLI-friendly sort types (ValueEnum)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Sort field for `gglib model list`.
-///
-/// Each variant maps to the corresponding [`ModelSortBy`] domain value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
-pub enum CliModelSortBy {
-    /// Sort by date added (most recent first by default).
-    #[default]
-    Added,
-    /// Sort alphabetically by model name.
-    Name,
-    /// Sort by parameter count in billions.
-    Params,
-    /// Sort by latest token-generation throughput (t/s) from benchmarks.
-    /// Models without benchmark data sort last.
-    Speed,
-}
-
-impl CliModelSortBy {
-    /// The snake_case name expected by the HTTP query parameter `sort=`.
-    pub fn api_value(self) -> &'static str {
-        match self {
-            CliModelSortBy::Added => "added_at",
-            CliModelSortBy::Name => "name",
-            CliModelSortBy::Params => "param_count",
-            CliModelSortBy::Speed => "latest_tg_tps",
-        }
-    }
-}
-
-impl From<CliModelSortBy> for ModelSortBy {
-    fn from(v: CliModelSortBy) -> Self {
-        match v {
-            CliModelSortBy::Added => ModelSortBy::AddedAt,
-            CliModelSortBy::Name => ModelSortBy::Name,
-            CliModelSortBy::Params => ModelSortBy::ParamCount,
-            CliModelSortBy::Speed => ModelSortBy::LatestTgTps,
-        }
-    }
-}
-
-/// Sort direction for `gglib model list`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
-pub enum CliSortOrder {
-    /// Largest / most-recent first.
-    #[default]
-    Desc,
-    /// Smallest / oldest first.
-    Asc,
-}
-
-impl CliSortOrder {
-    /// The value expected by the HTTP query parameter `order=`.
-    pub fn api_value(self) -> &'static str {
-        match self {
-            CliSortOrder::Asc => "asc",
-            CliSortOrder::Desc => "desc",
-        }
-    }
-}
-
-impl From<CliSortOrder> for SortOrder {
-    fn from(v: CliSortOrder) -> Self {
-        match v {
-            CliSortOrder::Asc => SortOrder::Asc,
-            CliSortOrder::Desc => SortOrder::Desc,
-        }
-    }
-}
+pub(crate) use crate::model_sort::{CliModelSortBy, CliSortOrder};
 
 /// Model management commands.
 ///
@@ -223,6 +151,32 @@ pub enum ModelCommand {
         /// Set top-n-sigma logit truncation; -1.0 disables (llama.cpp default -1.0)
         #[arg(long = "top-n-sigma")]
         top_n_sigma: Option<f32>,
+        /// Set the default reasoning effort: minimal, low, medium, high, xhigh, max.
+        ///
+        /// Applies only to models whose chat template declares that it reads
+        /// the variable; elsewhere the level is dropped before the request is
+        /// sent. There is no `none` — pass `--reasoning-budget-tokens 0` to
+        /// stop thinking.
+        #[arg(long = "reasoning-effort", value_parser = crate::reasoning_args::parse_effort)]
+        reasoning_effort: Option<gglib_core::domain::ReasoningEffort>,
+        /// Set the default thinking-token ceiling; -1 defers to the launch
+        /// default, 0 stops thinking. Enforced by llama.cpp on every model.
+        // `allow_hyphen_values` so the documented `-1` parses; see `SamplingArgs`.
+        #[arg(
+            long = "reasoning-budget-tokens",
+            allow_hyphen_values = true,
+            value_parser = crate::reasoning_args::parse_budget
+        )]
+        reasoning_budget_tokens: Option<i32>,
+        /// Clear one inference parameter so it falls through to the layers
+        /// below again. Repeatable, e.g. `--unset top-k --unset min-p`.
+        ///
+        /// Takes any parameter this command can set, named as its flag
+        /// (`top-k` or `top_k`). `--clear-inference-defaults` is the
+        /// all-or-nothing version; without this flag, dialling one parameter
+        /// back to unset was inexpressible.
+        #[arg(long, value_name = "PARAM", action = clap::ArgAction::Append)]
+        unset: Vec<String>,
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,

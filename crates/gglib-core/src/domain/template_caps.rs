@@ -126,7 +126,13 @@ impl TemplateCapsState {
 /// The `ModelContext::catalog_resolved` discipline, applied to a self-report:
 /// an observation that failed to arrive must not masquerade as one that
 /// arrived negative (ADR 0007 decision 3 — unknown never gates).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// `Deserialize` as well as `Serialize`, unlike the rest of this module: this
+/// one crosses the HTTP boundary in both directions, because `ModelDetailDto`
+/// carries it and the CLI reads that DTO back out of `--json`.
+///
+/// [`Default`] is [`Self::Unknown`], which is the only safe default there is —
+/// a client omitting the field must never be read as a positive "no".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Support {
     /// The observed template positively reads the variable.
@@ -134,6 +140,7 @@ pub enum Support {
     /// The observed template positively does not read it.
     No,
     /// Never observed, or the observation did not carry this field.
+    #[default]
     Unknown,
 }
 
