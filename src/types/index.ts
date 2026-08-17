@@ -380,12 +380,12 @@ export interface GgufModel {
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
   /**
-   * Whether `inferenceDefaults` was set by the user or auto-detected at
-   * import time from the model's `reasoning` tag. Auto-detected values rank
-   * below the global inference defaults in the resolution hierarchy — see
-   * the `InferenceConfig` doc comment above.
+   * Where `inferenceDefaults` came from — see {@link DefaultsOriginName}.
+   *
+   * Everything but `user` ranks below the global inference defaults in the
+   * resolution hierarchy; see the `InferenceConfig` doc comment above.
    */
-  defaultsOrigin?: 'user' | 'auto_detected' | null;
+  defaultsOrigin?: DefaultsOriginName | null;
   // Per-model server defaults (overrides global settings for launch params)
   serverDefaults?: ServerConfig;
   // Benchmark summary (cached from benchmark_summaries table)
