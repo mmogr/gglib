@@ -61,18 +61,12 @@ export type SetCapabilitiesRequest = Partial<SetCapabilitiesBody>;
 export type { RetagResponse } from './generated/RetagResponse';
 
 /** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
-export interface UpgradeCheck {
-  hasUpdate: boolean;
-  currentSha?: string | null;
-  latestSha: string;
-}
+/** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
+export type { UpgradeCheck } from './generated/UpgradeCheck';
 
 /** Outcome of `POST /api/models/{id}/upgrade`. */
-export interface UpgradeOutcome {
-  updated: boolean;
-  latestSha: string;
-  filePath?: string | null;
-}
+/** Outcome of `POST /api/models/{id}/upgrade`. */
+export type { UpgradeOutcome } from './generated/UpgradeOutcome';
 
 /**
  * A named sampling profile, selectable per request as `<model>:<profile>`.
@@ -408,16 +402,17 @@ export interface UpdateSettingsRequest {
 /**
  * System memory information for model fit calculations.
  */
-export interface SystemMemoryInfo {
-  /** Total system RAM in bytes */
-  totalRamBytes: number;
-  /** GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon) */
-  gpuMemoryBytes?: number | null;
-  /** Whether the system has Apple Silicon with unified memory */
-  isAppleSilicon: boolean;
-  /** Whether the system has an NVIDIA GPU */
-  hasNvidiaGpu: boolean;
-}
+/**
+ * What the host has to run a model on — `GET /api/system/memory`.
+ *
+ * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
+ * it is the one field carrying `skip_serializing_if`, so a machine with no
+ * readable GPU memory omits the key rather than sending `null`. The mirror
+ * admitted both, so a reader had two absent-shapes to handle and only one
+ * could ever arrive.
+ */
+import type { SystemMemoryInfoDto as SystemMemoryInfo } from './generated/SystemMemoryInfoDto';
+export type { SystemMemoryInfo };
 
 /**
  * Fit status for a model quantization based on available memory.
