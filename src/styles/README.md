@@ -167,7 +167,7 @@ Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are
 │       Platform Adapter Interface               │
 │        (src/services/platform)                 │
 │                                                │
-│  • Platform detection (isTauri, isWeb)         │
+│  • Platform detection (isDesktop)              │
 │  • File dialogs                                │
 │  • Native menus                                │
 │  • External URL opening                        │

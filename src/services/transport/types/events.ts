@@ -10,21 +10,6 @@ import type { Unsubscribe, EventHandler } from './common';
 // ============================================================================
 
 /**
- * One running server in a `server_snapshot` frame.
- *
- * Mirrors `gglib_core::events::ServerSnapshotEntry` (camelCase). `startedAt`
- * is Unix **seconds**, unlike the millisecond `timestamp` on
- * `server_health_changed` — the normalizer converts.
- */
-export interface ServerSnapshotEntry {
-  modelId: number;
-  modelName: string;
-  port: number;
-  startedAt: number;
-  healthy: boolean;
-}
-
-/**
  * The server frames `/api/events` actually carries.
  *
  * These are `AppEvent`'s server variants as serde writes them — snake_case
@@ -66,37 +51,6 @@ export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
  */
 import type { DownloadSummary } from '../../../types/generated/DownloadSummary';
 export type { DownloadSummary };
-
-/**
- * Stable artifact identity for completion tracking.
- * Represents "what the user thinks they downloaded" from an artifact perspective.
- */
-export type CompletionKey =
-  | {
-      kind: 'hf_file';
-      repo_id: string;
-      revision: string;
-      filename_canon: string;
-      quantization?: string;
-    }
-  | {
-      kind: 'url_file';
-      url: string;
-      filename: string;
-    }
-  | {
-      kind: 'local_file';
-      path: string;
-    };
-
-/**
- * Breakdown of attempts by result kind.
- */
-export interface AttemptCounts {
-  downloaded: number;
-  failed: number;
-  cancelled: number;
-}
 
 /**
  * Result kind for a completion attempt.

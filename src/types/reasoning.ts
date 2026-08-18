@@ -61,4 +61,3 @@ export type ProvenanceParamKey = SamplingParamKey | 'reasoningEffort';
  * nothing has been sent. A surface must word it as what *would* happen on a
  * request against this model.
  */
-export type { SuppressedEffortDto as SuppressedEffort } from './generated/SuppressedEffortDto';

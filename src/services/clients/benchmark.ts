@@ -18,13 +18,9 @@ import type {
   BenchmarkEvent,
   BenchmarkRun,
   CompareConfig,
-  GetBenchmarkRunResponse,
   ListBenchmarkRunsResponse,
   ModelAgenticHistoryResponse,
-  ModelBenchmarkHistoryResponse,
-  ModelTuneHistoryResponse,
   PerfConfig,
-  TuneCandidateResult,
   TuneConfig,
 } from '../../types/benchmark';
 
@@ -42,42 +38,6 @@ export async function listBenchmarkRuns(
     `/api/benchmark/runs?limit=${limit}&offset=${offset}`,
   );
   return response.runs;
-}
-
-/**
- * GET /api/benchmark/runs/:id
- * Fetch a single benchmark run by ID.
- */
-export async function getBenchmarkRun(id: number): Promise<BenchmarkRun> {
-  const response = await get<GetBenchmarkRunResponse>(`/api/benchmark/runs/${id}`);
-  return response.run;
-}
-
-/**
- * GET /api/models/:id/benchmark
- * Fetch historical benchmark data for a model.
- */
-export async function getModelBenchmarkHistory(
-  modelId: number,
-  limit = 20,
-): Promise<ModelBenchmarkHistoryResponse> {
-  return get<ModelBenchmarkHistoryResponse>(
-    `/api/models/${modelId}/benchmark?limit=${limit}`,
-  );
-}
-
-/**
- * GET /api/models/:id/tune-history
- * Fetch past tune candidate results for a model.
- */
-export async function getModelTuneHistory(
-  modelId: number,
-  limit = 20,
-): Promise<TuneCandidateResult[]> {
-  const response = await get<ModelTuneHistoryResponse>(
-    `/api/models/${modelId}/tune-history?limit=${limit}`,
-  );
-  return response.results;
 }
 
 /**

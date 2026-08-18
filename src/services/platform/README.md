@@ -18,7 +18,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 ┌──────────────────────────────────────────────────────┐
 │              platform/  (Shell Integration)          │
 │                                                      │
-│   detect.ts ─────── isDesktop() / isWeb()           │
+│   detect.ts ─────── isDesktop()                     │
 │        │                                            │
 │        ├── Tauri ──► native invoke()                │
 │        └── Web  ──► browser API or no-op            │
@@ -32,7 +32,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 
 | File | Role |
 |------|------|
-| `detect.ts` | `isDesktop()` / `isWeb()` — platform detection |
+| `detect.ts` | `isDesktop()` — platform detection |
 | `openUrl.ts` | Opens URLs in system browser (Tauri: native; Web: `window.open`) |
 | `fileDialogs.ts` | Native GGUF file picker (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
