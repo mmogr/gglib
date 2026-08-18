@@ -21,12 +21,17 @@ there:
   existing `services/platform/detect.ts` passes on the strength of the row for
   the other file. Attributing rows to tables would need each table's base
   directory declared, which no README does today.
-* READMEs with no file-naming rows at all, which are counted and reported
-  rather than silently passed over.
+* The *contents* of a README with no file-naming rows. Those directories are
+  not compared — but which ones they are is now recorded in
+  `scripts/readme-table-skip-baseline.txt`, and a new one fails. Reporting the
+  count was not enough: the number could only go up, and nothing compared it,
+  so deleting a table moved a README out of the checked set and printed a
+  larger skip count above a green tick.
 
 Usage:
     ./scripts/check_readme_tables.py            # report and fail on drift
     ./scripts/check_readme_tables.py --verbose  # also list what checked out
+    ./scripts/check_readme_tables.py --update   # re-record the skip baseline
 
 Exit codes:
     0  every table agrees with its directory
@@ -139,8 +144,37 @@ def present_names(dirpath: str, subdirs: list[str], files: list[str]) -> set[str
     return names
 
 
+BASELINE = os.path.join(os.path.dirname(__file__), "readme-table-skip-baseline.txt")
+
+HEADER = """\
+# READMEs that carry no file-naming rows, and so are not compared against
+# their directory. Regenerate with `./scripts/check_readme_tables.py --update`.
+#
+# A new entry appearing here without being recorded is a failure: deleting a
+# table, or dropping the extensions from its first cells, would otherwise move
+# a README out of the checked set and print a larger skip count above a green
+# tick. Recording one is a reviewable line in a diff, which is the same
+# bargain `scripts/rust-complexity-baseline.txt` strikes.
+#
+# Three are exemptions by design — `src/types`, `src/commands` and
+# `src/styles` tabulate type names, command names and migration phases rather
+# than files. The rest are stubs from `generate_submodule_readmes.sh`, which
+# emits TypeScript READMEs with no table at all; each is a directory nothing
+# compares, and shortening this list is the way to fix that.
+"""
+
+
+def read_baseline() -> set[str] | None:
+    """The exemptions recorded as deliberate. `None` when the file is absent."""
+    if not os.path.exists(BASELINE):
+        return None
+    with open(BASELINE, encoding="utf-8") as handle:
+        return {line.strip() for line in handle if line.strip() and not line.startswith("#")}
+
+
 def main() -> int:
     verbose = "--verbose" in sys.argv
+    update = "--update" in sys.argv
     problems: list[tuple[str, list[str], list[str]]] = []
     skipped: list[str] = []
     checked = 0
@@ -172,6 +206,16 @@ def main() -> int:
             elif verbose:
                 print(f"  ok  {readme} ({len(rows)} rows)")
 
+    skipped.sort()
+
+    if update:
+        with open(BASELINE, "w", encoding="utf-8") as handle:
+            handle.write(HEADER)
+            for readme in skipped:
+                handle.write(f"{readme}\n")
+        print(f"✅ baseline updated: {len(skipped)} README(s) carry no file-naming rows")
+        return 0
+
     print(f"Checking README tables against their directories ({checked} with tables)...")
     print(f"  ({len(skipped)} README(s) carry no file-naming rows and are not compared)")
     print("================================================")
@@ -179,9 +223,38 @@ def main() -> int:
         for readme in skipped:
             print(f"  skip {readme} (no file rows)")
 
-    if not problems:
+    # Liveness: a walk that compared nothing prints exactly what a clean run
+    # prints, which is the shape `check_file_complexity.sh` guards against for
+    # the same reason.
+    if checked == 0:
+        print("❌ no README with file-naming rows was found — nothing was compared.")
+        return 1
+
+    baseline = read_baseline()
+    if baseline is None:
+        print(f"❌ missing baseline: {BASELINE} (run with --update to create it)")
+        return 1
+
+    # The skip list is a ratchet, not a free pass. Deleting a table — or
+    # dropping the extensions from its first cells — used to move a README
+    # from the checked set to the skipped set and print a *larger* number
+    # above a green tick. The count was reported but never compared, so
+    # coverage could only shrink, and `generate_submodule_readmes.sh` emits
+    # table-less TypeScript stubs, so it shrank without anyone choosing it.
+    new_skips = sorted(set(skipped) - baseline)
+    recovered = sorted(baseline - set(skipped))
+
+    for readme in recovered:
+        print(f"  ✓ {readme} now carries a table (run --update to drop it from the baseline)")
+
+    if not problems and not new_skips:
         print("✅ every table names what is there, and nothing that is not")
         return 0
+
+    for readme in new_skips:
+        print(f"\n❌ {readme}")
+        print("     carries no file-naming rows, so its directory was not compared.")
+        print("     Add a table, or run --update to record the exemption deliberately.")
 
     for readme, phantom, unlisted in problems:
         print(f"\n❌ {readme}")
@@ -190,8 +263,11 @@ def main() -> int:
         for name in unlisted:
             print(f"     does not name `{name}`, which does")
 
-    print("\n❌ README tables disagree with their directories.")
-    print("   Update the table, or remove the row for a file that is gone.")
+    if problems:
+        print("\n❌ README tables disagree with their directories.")
+        print("   Update the table, or remove the row for a file that is gone.")
+    else:
+        print("\n❌ README table coverage shrank.")
     return 1
 
 

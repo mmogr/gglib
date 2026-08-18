@@ -40,7 +40,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   const [isStopping, setIsStopping] = useState(false);
 
   // Server state from the registry — undefined means not running. Polling
-  // resumes automatically when status returns to 'running' via server:started.
+  // resumes automatically when status returns to 'running' via `server_started`.
   const serverState = useServerState(modelId);
   const isRunning = serverState?.status === 'running';
 

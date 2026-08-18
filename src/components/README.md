@@ -56,9 +56,7 @@ When a model is served, the view transitions to a Chat layout with tab switching
   - "Your Models" tab: List of imported models with search/filter
   - "Add Models" tab: Add local files or download from HuggingFace
 - **`ModelInspectorPanel/`**: Detailed model view with serve/stop controls
-- **`ModelList.tsx`**: Compact list view of models
 - **`AddModel.tsx`**: Add model from local file
-- **`DownloadModel.tsx`**: Download models from HuggingFace
 - **`HuggingFaceBrowser/`**: Browse and search GGUF models on HuggingFace Hub
 
 ### Chat Interface
@@ -72,16 +70,16 @@ When a model is served, the view transitions to a Chat layout with tab switching
 
 ### Console View
 When a model is served, users can switch between Chat and Console views:
-- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes when a new `server:started` event is received.
+- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes on the next `server_started` frame.
 
 ### Server Management
-- **`ServerStatus.tsx`**: Display server health and status
+- **`ServerHealthIndicator.tsx`**: Server health at a glance
 - **`ServerList/`**: List of running server instances
 - **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
 - **`LlamaInstallModal.tsx`**: llama.cpp installation wizard
 
 ### Support Components
-- **`DownloadProgressDisplay/`**: Download progress indicators
+- **`GlobalDownloadStatus/`**: Download progress indicator and queue popover
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
 
 <!-- module-docs:end -->

@@ -12,6 +12,12 @@ What's left here:
   `npm run test:run` (see `.github/workflows/ci.yml`'s `test-frontend` job).
   Its own fixtures are in [`ts/fixtures/`](ts/fixtures).
 
-Rust fixtures are not here and do not need to be: the one crate that has any
-keeps them in `crates/gglib-proxy/tests/fixtures/`, where the
-`CARGO_MANIFEST_DIR`-relative path resolves inside the crate.
+Rust fixtures are not here and do not need to be. The one crate that has any
+keeps them in `crates/gglib-proxy/tests/fixtures/`, and they are Rust source
+rather than data: `mod.rs` re-exports `common` and `sse`, and each of the
+fourteen `crates/gglib-proxy/tests/*.rs` integration binaries pulls them in
+with a plain `mod fixtures;`. rustc resolves that against the directory of the
+test file that declares it, at compile time — nothing reads a path at runtime,
+and `CARGO_MANIFEST_DIR` is not involved. That is also why the directory has
+to sit beside those test files specifically, not merely somewhere inside the
+crate.
