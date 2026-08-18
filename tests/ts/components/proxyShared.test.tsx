@@ -21,17 +21,10 @@ import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
 } from '../../../src/services/transport/types/dashboard';
+import { activeConnection, slotSnapshot } from '../fixtures/dashboard';
 
-function connection(overrides: Partial<ActiveConnectionSnapshot> = {}): ActiveConnectionSnapshot {
-  return {
-    id: 'c1',
-    model_name: 'qwen3-coder',
-    started_at_secs: 0,
-    is_streaming: true,
-    phase: 'generating',
-    ...overrides,
-  };
-}
+const connection = (overrides: Partial<ActiveConnectionSnapshot> = {}): ActiveConnectionSnapshot =>
+  activeConnection({ id: 'c1', model_name: 'qwen3-coder', is_streaming: true, ...overrides });
 
 function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
   return {
@@ -191,8 +184,8 @@ describe('InferenceSlotsSection', () => {
         snapshot={snapshot({
           slots_available: true,
           slots: [
-            { id: 0, is_processing: true, n_ctx: 4096 },
-            { id: 1, is_processing: false, n_ctx: 4096 },
+            slotSnapshot({ id: 0, is_processing: true, n_ctx: 4096 }),
+            slotSnapshot({ id: 1, is_processing: false, n_ctx: 4096 }),
           ],
         })}
       />,
