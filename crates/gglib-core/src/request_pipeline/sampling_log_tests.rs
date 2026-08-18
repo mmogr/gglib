@@ -61,9 +61,11 @@ impl<S: tracing::Subscriber> Layer<S> for CaptureLayer {
 ///
 /// Measured in a standalone reproduction of this exact shape — 32 threads,
 /// distinct callsites, 51,200 rounds — the sink was still shared on return
-/// 912 times, 1.8%. Every one of those would have been a panic here, which is
-/// what made this module fail about once in six full-workspace runs while
-/// passing hundreds of times in isolation.
+/// 1,288 times, 2.5%. Every one of those would have been a panic here, which
+/// is what made this module fail about once in six full-workspace runs while
+/// passing hundreds of times in isolation. The same run measured the
+/// replacement: reading through the shared handle lost an event 0 times, and
+/// returned the full set on all 1,288 of the rounds that would have panicked.
 ///
 /// Nothing needed exclusive ownership: `f` has finished and the layer records
 /// synchronously on this thread, so the events are all in by now and a clone
