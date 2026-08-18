@@ -247,14 +247,15 @@ describe('InferenceParametersForm', () => {
 
     // The form holds a *sparse* config, and clearing a field deletes its key.
     // Typing this state as the wire's `InferenceConfig` — where all eighteen
-    // keys are present — would make `delete` a type error, and the natural
-    // workaround is to assign `null` instead. That would be wrong here for a
-    // reason that has nothing to do with the wire, where `null` and absent
-    // are the same: `updateField`'s callers, `hasInferenceParams`, and the
-    // reset button all read "is this key present" as "did the user set
-    // this". Reasoning effort is where it shows: the blank option means the
-    // chat template keeps its own default, and a key carrying `null` claims
-    // the user chose something.
+    // keys are present — would make `delete` a type error.
+    //
+    // That is the whole of it, and the reason `SparseInferenceConfig` exists.
+    // Nothing downstream tells a present `null` from an absent key: the reset
+    // button tests `!== undefined && !== null`, `hasInferenceOverrides` tests
+    // `!= null`, and the serve mapper tests `!= null` — deliberately, because
+    // Rust cannot tell them apart either. So this pins the one behaviour that
+    // would change: clearing must reach `onChange` as an object without the
+    // key, not as one carrying `null`.
     it('un-sets reasoning effort by dropping the key, not by nulling it', async () => {
       const onChange = renderForm(FLOOR, { reasoningEffort: 'high' });
 

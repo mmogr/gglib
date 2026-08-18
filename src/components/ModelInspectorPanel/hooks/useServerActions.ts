@@ -126,9 +126,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
       const serveConfig: ServeConfig = {
         // The sampling half, spread rather than named field by field. The
-        // modal renders the whole `InferenceParametersForm`, which offers all
-        // eighteen parameters; naming nine of them dropped the other nine on
-        // the surface that had just offered them.
+        // modal renders the whole `InferenceParametersForm`, which offers
+        // seventeen of the eighteen — every one but `seed`, which has no
+        // control. Naming nine of them dropped eight the surface had just
+        // offered, and `seed` along with them.
         //
         // First, so the launch fields below win. `ServeConfig` extends
         // `SparseInferenceConfig`, which shares no key with them, so this is

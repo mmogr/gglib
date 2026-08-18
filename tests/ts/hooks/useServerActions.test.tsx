@@ -130,12 +130,13 @@ describe('useServerActions handleSave — serverDefaults null-clearing', () => {
 describe('useServerActions handleStartServer — the sampling half of a serve', () => {
   /**
    * The serve modal renders the whole `InferenceParametersForm`, which offers
-   * all eighteen sampling parameters. `handleStartServer` used to copy nine of
-   * them into the `ServeConfig` by name, so the other nine — the four DRY
-   * knobs, both dynatemp knobs, `frequencyPenalty`, `topNSigma` and `seed` —
-   * were dropped between the form and the request, on a surface that had just
-   * offered them. `toStartServerRequest` had the same nine-name list, so the
-   * value was discarded twice over.
+   * seventeen of the eighteen sampling parameters — all but `seed`, which has
+   * no control. `handleStartServer` used to copy nine of them into the
+   * `ServeConfig` by name, so the other nine went missing: the eight the form
+   * offers (the four DRY knobs, both dynatemp knobs, `frequencyPenalty` and
+   * `topNSigma`) were dropped between the form and the request, and `seed`
+   * had no way through at all. `toStartServerRequest` kept the same nine-name
+   * list, so each value was discarded twice over.
    */
   it('carries every parameter the form offers, not the nine it used to name', async () => {
     serveModel.mockReset();

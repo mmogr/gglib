@@ -100,7 +100,7 @@ What is still written by hand falls into three groups, and each is deliberate:
 | Kind | Examples | Why |
 |------|----------|-----|
 | View-models | `ServerViewModel`, the chat types | No Rust counterpart. Assembled in the GUI from several responses. |
-| Request bodies needing sparseness | `UpdateSettingsRequest`, `SparseInferenceConfig`, `ServeConfig` | ts-rs renders an `Option<T>` as a required `T \| null`. A body whose absent keys mean "leave unchanged" needs optional ones, so these wrap or narrow the generated shape rather than replacing it. |
+| Request bodies needing sparseness | `UpdateSettingsRequest`, `SparseInferenceConfig`, `ServeConfig` | ts-rs renders an `Option<T>` as a required `T \| null`, and these three need optional keys — but for two different reasons. `UpdateSettingsRequest` is the only one with a wire meaning: its fields carry `double_option`, so an absent key really does mean "leave unchanged". The other two need optional keys for a client reason — a form clears a control with `delete`, which does not compile against a required key. Inside `InferenceConfig` an absent key and a `null` are the same value to serde. |
 | Narrowings the generator cannot make | `ParamProvenance.param`, `McpServer.server_type`, `SecondarySlotState` | Rust types the field as `String` or `&'static str`. The union is the more accurate claim, so it is intersected back on. Each is a Rust-side `#[ts(type = …)]` away from being generated too. |
 
 Anything else hand-written under `types/` mirroring a wire shape is drift, not

@@ -8,11 +8,11 @@
 // variable — a fact gglib can measure but not assume (ADR 0007).
 //
 // Kept out of `./index` rather than added to it: these describe one mechanism
-// and are read together, and `index.ts` is a 700-line hub already over the
-// file-size budget. Re-exported from there so callers keep importing from
-// `../types`. This file and `./index` have a type-only mutual import, which
-// TypeScript permits and erases at compile time — the same arrangement
-// `./benchmark` documents.
+// and are read together, and `index.ts` is a hub that is over the file-size
+// budget even after this migration halved it. Re-exported from there so
+// callers keep importing from `../types`. This file and `./index` have a
+// type-only mutual import, which TypeScript permits and erases at compile
+// time — the same arrangement `./benchmark` documents.
 //
 // @module types/reasoning
 

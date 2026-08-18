@@ -27,7 +27,10 @@ vi.mock('../../../src/components/InferenceParametersForm', () => ({
   InferenceParametersForm: () => null,
 }));
 
-vi.mock('../../../src/hooks/useSamplingExplanation', () => ({
+// The hook lives under the panel, not in `src/hooks`. A mock aimed at a
+// module that does not exist registers nothing and fails silently, and the
+// component then runs the real hook — which reaches the transport.
+vi.mock('../../../src/components/ModelInspectorPanel/hooks/useSamplingExplanation', () => ({
   useSamplingExplanation: () => ({ explanation: null, isLoading: false, hasError: false }),
 }));
 

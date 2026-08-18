@@ -30,18 +30,19 @@
  *
  *   3. **No `inferenceParams` key the backend would silently drop.**
  *
- * What is deliberately *not* pinned: that the GUI sends every
- * `InferenceConfig` field. It sends 9 of 18 — `frequency_penalty`,
- * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` are omitted — and
- * each is `Option`, so omitting them is well-formed.
+ *   4. **Every `InferenceConfig` field the wire accepts, forwarded.**
  *
- * Nine of those omissions are *not* well-formed as UX, which is worth writing
- * down rather than leaving as an unexplained subset: the serve modal renders
- * `InferenceParametersForm`, which offers `frequency_penalty`, the `dynatemp_*`
- * pair, `top_n_sigma` and all four `dry_*` fields — controls a user can set and
- * this mapper then drops on the floor. Only `seed` has no control. That gap
- * predates the reasoning controls and is left as it is here; the two reasoning
- * fields were added to the mapper precisely so they would not join it.
+ * That fourth one used to be the opposite. This header recorded, accurately,
+ * that the mapper sent 9 of 18 — `frequency_penalty`, `dynatemp_*`,
+ * `top_n_sigma`, the four `dry_*` and `seed` omitted — and that eight of those
+ * nine were controls the serve modal renders and this mapper then dropped on
+ * the floor, `seed` alone having no control. Each field is `Option`, so the
+ * omission was well-formed on the wire and only wrong as UX, which is why
+ * nothing failed.
+ *
+ * Both hand-kept lists are gone — the mapper's and the one in
+ * `handleStartServer` that fed it — so the gap is closed and pinned rather
+ * than described.
  *
  * Note the asymmetry, because it sets what this guard is worth: nothing on
  * this path sets `deny_unknown_fields`, so an unknown key is *ignored*, not
