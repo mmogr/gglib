@@ -133,16 +133,14 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
         specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
         specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
-        // Inference parameters for this session
-        temperature: inferenceParams?.temperature ?? undefined,
-        topP: inferenceParams?.topP ?? undefined,
-        topK: inferenceParams?.topK ?? undefined,
-        maxTokens: inferenceParams?.maxTokens ?? undefined,
-        repeatPenalty: inferenceParams?.repeatPenalty ?? undefined,
-        presencePenalty: inferenceParams?.presencePenalty ?? undefined,
-        minP: inferenceParams?.minP ?? undefined,
-        reasoningEffort: inferenceParams?.reasoningEffort ?? undefined,
-        reasoningBudgetTokens: inferenceParams?.reasoningBudgetTokens ?? undefined,
+        // Inference parameters for this session.
+        //
+        // Spread, not a field list. The modal renders the whole
+        // `InferenceParametersForm`, which offers all eighteen; naming nine of
+        // them dropped the other nine on the surface that had just offered
+        // them. `ServeConfig` extends `SparseInferenceConfig`, so the spread
+        // is exactly the sampling half and cannot collide with a launch field.
+        ...inferenceParams,
       };
 
       if (pinProxy) {

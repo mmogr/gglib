@@ -18,6 +18,12 @@ import { useServerActions, ServerActionsConfig } from '../../../src/components/M
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { guiModel } from '../fixtures/model';
 
+const serveModel = vi.fn();
+
+vi.mock('../../../src/services/transport', () => ({
+  getTransport: () => ({ serveModel }),
+}));
+
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>{children}</ToastProvider>
 );
@@ -118,5 +124,45 @@ describe('useServerActions handleSave — serverDefaults null-clearing', () => {
     expect(onUpdateModel).toHaveBeenCalledTimes(1);
     const [, updates] = onUpdateModel.mock.calls[0];
     expect(updates.serverDefaults).toEqual({ contextLength: 32768 });
+  });
+});
+
+describe('useServerActions handleStartServer — the sampling half of a serve', () => {
+  /**
+   * The serve modal renders the whole `InferenceParametersForm`, which offers
+   * all eighteen sampling parameters. `handleStartServer` used to copy nine of
+   * them into the `ServeConfig` by name, so the other nine — the four DRY
+   * knobs, both dynatemp knobs, `frequencyPenalty`, `topNSigma` and `seed` —
+   * were dropped between the form and the request, on a surface that had just
+   * offered them. `toStartServerRequest` had the same nine-name list, so the
+   * value was discarded twice over.
+   */
+  it('carries every parameter the form offers, not the nine it used to name', async () => {
+    serveModel.mockReset();
+    serveModel.mockResolvedValue(undefined);
+
+    const offered = {
+      temperature: 0.7,
+      dryMultiplier: 0.8,
+      dryBase: 1.75,
+      dryAllowedLength: 2,
+      dryPenaltyLastN: 64,
+      frequencyPenalty: 0.1,
+      dynatempRange: 0.5,
+      dynatempExponent: 1,
+      topNSigma: 3,
+    };
+
+    const { result } = renderHook(
+      () => useServerActions(makeConfig({ inferenceParams: offered })),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleStartServer();
+    });
+
+    expect(serveModel).toHaveBeenCalledTimes(1);
+    expect(serveModel.mock.calls[0][0]).toMatchObject(offered);
   });
 });
