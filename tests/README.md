@@ -8,8 +8,10 @@ workspace member so `cargo test` actually compiles and runs them (see
 
 What's left here:
 
-- `fixtures/` — shared test fixtures loaded by in-crate Rust tests via a
-  relative path from `CARGO_MANIFEST_DIR`. Keep this directory at the repo
-  root; moving it breaks those tests.
 - `ts/` — the TypeScript/Vitest test suite for the web UI, run via
   `npm run test:run` (see `.github/workflows/ci.yml`'s `test-frontend` job).
+  Its own fixtures are in [`ts/fixtures/`](ts/fixtures).
+
+Rust fixtures are not here and do not need to be: the one crate that has any
+keeps them in `crates/gglib-proxy/tests/fixtures/`, where the
+`CARGO_MANIFEST_DIR`-relative path resolves inside the crate.

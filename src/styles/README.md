@@ -377,14 +377,38 @@ import styles from './Component.module.css';
 - **Code review checklist**: PR reviewers verify compliance with contracts
 - **Self-check before commit**: Does this follow Tailwind-first? Are CSS variables used? Is platform code isolated?
 
-### Automated Enforcement (Phase 5)
+### Automated Enforcement
 
-- [x] ESLint rule: No direct `@tauri-apps/*` imports in `src/components` or `src/pages` (eslint.config.js platform-boundary block)
-- [x] ESLint rule: No raw `<button>` or native checkbox inputs outside `src/components/ui` and `src/components/primitives` (justified exceptions opt out per line)
-- [ ] ESLint rule: No raw hex colors in TSX files (use CSS variables)
-- [ ] Stylelint rule: No undefined CSS variables
-- [ ] Pre-commit hook: Run `complexity_hotspots.sh` to flag >200 LOC files
-- [ ] CI check: Verify `buttons.css` and `forms.css` deleted after Phase 2
+What `eslint.config.js` actually enforces, all as errors:
+
+- [x] No direct `@tauri-apps/*` imports in `src/components` or `src/pages`
+      (the platform-boundary block)
+- [x] No raw `<button>` or native checkbox inputs outside
+      `src/components/ui` and `src/components/primitives` — justified
+      exceptions opt out per line with a reason
+- [x] No `.btn` class names, scoped to `className` attributes so a
+      `data-testid` containing "btn" does not trip it
+- [x] **No emoji or dingbat glyphs** in JSX text or string literals. They
+      render as full-colour, double-width system glyphs beside lucide's thin
+      monochrome strokes, and cannot inherit `currentColor`. Use
+      `<Icon icon={...} />`. The ranges deliberately exclude U+2190–U+21FF
+      (← ↑ → ↓ ↵), which are legitimate in diff summaries and keyboard hints
+
+Not enforced, and deliberately so:
+
+- **Colour-role allocation** — red only for destructive, one primary per
+  screen, green as dot-not-fill — is a contract *this document* carries, and
+  `eslint.config.js` says so where the rule would otherwise go.
+  `no-restricted-syntax` carries one severity per file, and the rules above
+  are errors; a warn-level colour regex cannot coexist with them, and this
+  repo has a recorded history of className-regex false positives. **So this
+  section is the only place the colour contract exists. It cannot be deleted
+  without deleting the contract.**
+
+Still open, and unclaimed by anything:
+
+- [ ] No raw hex colours in TSX files (use CSS variables)
+- [ ] Stylelint: no undefined CSS variables
 
 ---
 
