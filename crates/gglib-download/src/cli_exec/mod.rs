@@ -4,7 +4,7 @@ mod exec;
 mod types;
 mod utils;
 
-pub use api::{browse_models, create_hf_api, list_quantizations, search_models};
+pub use api::{create_hf_api, list_quantizations};
 pub use exec::{check_update, update_model};
 pub use types::*;
 

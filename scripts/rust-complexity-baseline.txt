@@ -95,7 +95,6 @@ crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1065
 crates/gglib-db/src/setup.rs 1001
 crates/gglib-download/src/cli_emitter.rs 530
-crates/gglib-download/src/cli_exec/api.rs 369
 crates/gglib-download/src/cli_exec/exec/progress.rs 330
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 379
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1625
