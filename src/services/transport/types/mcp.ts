@@ -13,35 +13,23 @@ export type McpServerType = 'stdio' | 'sse';
 /**
  * MCP server status.
  */
-export type McpServerStatus = 'stopped' | 'starting' | 'running' | { error: string };
+import type { McpServerStatusDto as McpServerStatus } from '../../../types/generated/McpServerStatusDto';
+export type { McpServerStatus };
 
 /**
  * Environment variable entry for MCP server.
  */
-export interface McpEnvEntry {
-  key: string;
-  value: string;
-}
+import type { McpEnvEntryDto as McpEnvEntry } from '../../../types/generated/McpEnvEntryDto';
+export type { McpEnvEntry };
 
 /**
  * MCP server configuration.
  */
-export interface McpServerConfig {
-  /** Command/basename to resolve (e.g., "npx" or "/usr/local/bin/python3") */
-  command?: string;
-  /** Cached absolute path (auto-resolved from command) */
-  resolved_path_cache?: string;
-  /** Command-line arguments */
-  args?: string[];
-  /** Working directory (must be absolute if specified) */
-  working_dir?: string;
-  /** Additional PATH entries for child process */
-  path_extra?: string;
-  /** URL for SSE connection (required for sse servers) */
-  url?: string;
-}
+import type { McpServerConfigDto as McpServerConfig } from '../../../types/generated/McpServerConfigDto';
+export type { McpServerConfig };
 
-export type McpLifecycle = 'eager' | 'lazy' | 'manual';
+import type { McpLifecycle } from '../../../types/generated/McpLifecycle';
+export type { McpLifecycle };
 
 /**
  * MCP server entity.

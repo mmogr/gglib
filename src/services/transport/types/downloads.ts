@@ -8,7 +8,8 @@ import type { DownloadId, HfModelId } from './ids';
 /**
  * Download status.
  */
-export type DownloadStatus = 'queued' | 'downloading' | 'finalizing' | 'registering' | 'completed' | 'failed' | 'cancelled';
+import type { DownloadStatus } from '../../../types/generated/DownloadStatus';
+export type { DownloadStatus };
 
 /**
  * Shard information for multi-file downloads.
@@ -57,12 +58,8 @@ export interface QueueDownloadParams {
  * Response from queueing a download.
  * Canonical shape returned by all transports.
  */
-export interface QueueDownloadResponse {
-  /** Position in the queue (0 = downloading now). */
-  position: number;
-  /** Number of shards queued (1 for single file, N for sharded models). */
-  shard_count: number;
-}
+import type { QueueDownloadResponse } from '../../../types/generated/QueueDownloadResponse';
+export type { QueueDownloadResponse };
 
 /**
  * Typed payload for download completion events.

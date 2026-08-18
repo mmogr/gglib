@@ -30,7 +30,11 @@ import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
  * own suppression acts only on `no` (ADR 0007 decision 3), so a surface offers
  * the control on `yes` and `unknown` alike and explains itself on `no`.
  */
-export type TemplateSupport = 'yes' | 'no' | 'unknown';
+// Aliased rather than renamed, to keep this commit free of consumer edits.
+// `ProxyReasoningRows.tsx` declares a *component* named `TemplateSupport`;
+// the two never meet, but a rename to `Support` at the call sites would be
+// the tidier end state.
+export type { Support as TemplateSupport } from './generated/Support';
 
 /**
  * Every key the backend attributes a source to — `wire_key` in

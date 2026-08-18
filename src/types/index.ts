@@ -121,12 +121,7 @@ export interface SetCapabilitiesRequest {
 }
 
 /** What a retag pass changed (`POST /api/models/{id}/retag`). */
-export interface RetagResponse {
-  changed: boolean;
-  added: string[];
-  removed: string[];
-  specChanged: boolean;
-}
+export type { RetagResponse } from './generated/RetagResponse';
 
 /** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
 export interface UpgradeCheck {
@@ -172,12 +167,10 @@ export interface InferenceProfile {
  * (`gglib-app-services/src/sampling_explain.rs`), which is the wire form of
  * `gglib_core::domain::SamplingLayer`.
  */
-export type SamplingLayerName =
-  | 'request'
-  | 'profile'
-  | 'modelUserSet'
-  | 'global'
-  | 'modelAutoDetected';
+// Imported as well as re-exported: a bare `export … from` does not bind the
+// name in this module, and declarations below refer to it.
+import type { SamplingLayerDto as SamplingLayerName } from './generated/SamplingLayerDto';
+export type { SamplingLayerName };
 
 /**
  * What class of source supplied a resolved value.
@@ -303,7 +296,8 @@ export interface SamplingExplanation {
  * Snake_case: this mirrors `gglib_core::domain::DefaultsOrigin` itself, which
  * is the one spelling every endpoint reporting the column now uses.
  */
-export type DefaultsOriginName = 'user' | 'auto_detected' | 'published' | 'measured';
+import type { DefaultsOrigin as DefaultsOriginName } from './generated/DefaultsOrigin';
+export type { DefaultsOriginName };
 
 /**
  * What gglib does with one field's published recommendation.
@@ -461,15 +455,7 @@ export interface ServeConfig {
  * from: that is `ServerViewModel`, built off the event registry, and it has
  * a `status` this shape has no answer for.
  */
-export interface ServerInfo {
-  model_id: number;
-  model_name: string;
-  /** `null` when the runtime never learned the process id. */
-  pid: number | null;
-  port: number;
-  /** Unix **seconds**, not milliseconds. */
-  started_at: number;
-}
+export type { ServerInfo } from './generated/ServerInfo';
 
 export interface ModelsDirectoryInfo {
   path: string;
@@ -639,11 +625,8 @@ export type FitStatus = 'fits' | 'tight' | 'wont_fit' | 'unknown';
  * Maps to gglib-core::ports::server_health::ServerHealthStatus.
  * Uses 'status' as discriminant to match Rust serde(tag = "status").
  */
-export type ServerHealthStatus = 
-  | { status: 'healthy' }
-  | { status: 'degraded'; reason: string }
-  | { status: 'unreachable'; lastError: string }
-  | { status: 'processdied' };
+import type { ServerHealthStatus } from './generated/ServerHealthStatus';
+export type { ServerHealthStatus };
 
 /**
  * Semantic tone for a health state. Callers map this to a token colour
@@ -655,11 +638,8 @@ export type HealthTone = 'healthy' | 'degraded' | 'failed' | 'unknown';
  * Structured detail for a model runtime failure.
  * Maps to gglib-core::ports::model_runtime::RuntimeErrorEnvelope.
  */
-export interface RuntimeErrorInfo {
-  message: string;
-  type: string;
-  retryable: boolean;
-}
+import type { RuntimeErrorEnvelope as RuntimeErrorInfo } from './generated/RuntimeErrorEnvelope';
+export type { RuntimeErrorInfo };
 
 /**
  * Get display info for a health status (tone, label, title).
@@ -747,7 +727,8 @@ export interface HfModelSummary {
 /**
  * Sort field options for HuggingFace model search.
  */
-export type HfSortField = 'downloads' | 'likes' | 'modified' | 'created' | 'id';
+import type { HfSortField } from './generated/HfSortField';
+export type { HfSortField };
 
 /**
  * Request for searching HuggingFace models.
@@ -804,12 +785,7 @@ export interface HfQuantization {
 /**
  * Response containing available quantizations for a model.
  */
-export interface HfQuantizationsResponse {
-  /** Model ID */
-  model_id: string;
-  /** Available quantizations */
-  quantizations: HfQuantization[];
-}
+export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
 
 /**
  * Response for tool/function calling support detection.
@@ -857,11 +833,11 @@ export interface ModelFilterOptions {
  * Sort field for `GET /api/models`.
  * Matches the backend `ModelSortBy` domain enum (snake_case).
  */
-export type ModelSortBy = 'added_at' | 'name' | 'param_count' | 'latest_tg_tps';
+export type { ModelSortBy } from './generated/ModelSortBy';
 
 /**
  * Sort direction for model list queries.
  */
-export type SortOrder = 'asc' | 'desc';
+export type { SortOrder } from './generated/SortOrder';
 
 
