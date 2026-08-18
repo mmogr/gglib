@@ -182,6 +182,26 @@ unsafe_code = "deny"
 # `#[unsafe(...)]` spelling for both, and that same deny rejects it outright.
 unreachable_pub = "deny"
 
+[workspace.lints.rustdoc]
+# Nothing here is published. Almost every package says `publish = false`, and
+# the ones that do not take sibling crates from `[workspace.dependencies]`
+# below, where they are bare `path` entries carrying no version — which
+# `cargo publish` refuses outright. So no docs.rs build exists, and the only
+# doc builds that do are `docs.yml` and `release.yml`, both of which pass
+# `--document-private-items`.
+# Under that flag these links resolve; the lint fires anyway, to warn that they
+# would break without it.
+#
+# So it warns about a build this workspace never runs, and silencing it is not
+# free: it buys back the module-to-module navigation that is most of what makes
+# these docs worth reading, since the majority of this codebase is deliberately
+# private. The alternative was to delete links that work.
+#
+# The coupling is real and worth stating: **if either workflow ever drops
+# `--document-private-items`, those links go dead and nothing will say so.**
+# Change this to "warn" in the same commit that drops the flag.
+private_intra_doc_links = "allow"
+
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }

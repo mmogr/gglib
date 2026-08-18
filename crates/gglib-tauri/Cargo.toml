@@ -19,6 +19,11 @@ tracing = { workspace = true }
 # Note: version should match src-tauri/Cargo.toml
 tauri = "2.8"
 
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
+
 [lints.rust]
 unsafe_code = "deny"
 # Declared per-crate rather than via `[lints] workspace = true`: Cargo will
