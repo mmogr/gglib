@@ -5,7 +5,6 @@
 
 import type { Unsubscribe, EventHandler } from './common';
 import type { DownloadId } from './ids';
-import type { RuntimeErrorInfo, ServerHealthStatus } from '../../../types';
 
 // ============================================================================
 // Server Events
@@ -35,25 +34,19 @@ export interface ServerSnapshotEntry {
  * registry's `ServerEvent`, which is keyed by string and speaks in
  * running/stopping/stopped/crashed. Two shapes, because there really are two.
  */
-export type ServerWireEvent =
-  | { type: 'server_started'; modelId: number; modelName: string; port: number }
-  | { type: 'server_stopped'; modelId: number; modelName: string }
-  // `modelId` is null when the runtime could not attribute the failure, and is
-  // always present — the Rust field carries no `skip_serializing_if`.
-  | { type: 'server_error'; modelId: number | null; modelName: string; error: RuntimeErrorInfo }
-  | { type: 'server_snapshot'; servers: ServerSnapshotEntry[] }
-  | {
-      type: 'server_health_changed';
-      serverId: number;
-      modelId: number;
-      // Nested, not flat: `ServerHealthStatus` is internally tagged on `status`
-      // and the field is also named `status`, so the wire reads
-      // `"status": { "status": "healthy" }`.
-      status: ServerHealthStatus;
-      detail?: string;
-      /** Unix milliseconds. */
-      timestamp: number;
-    };
+import type { AppEvent } from '../../../types/generated/AppEvent';
+
+/**
+ * The `server_*` slice of `AppEvent`.
+ *
+ * An `Extract` rather than a re-declaration, so the arms cannot drift. Note
+ * what that buys and what it does not: a new `server_*` arm added in Rust
+ * joins this type with no TypeScript error anywhere, and
+ * `normalizeServerEventFromAppEvent` will drop it in its `default:`. The
+ * compiler cannot flag that, because widening a union it consumes is not a
+ * type error. A new arm needs a normalizer case written by hand.
+ */
+export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
 
 // ============================================================================
 // Download Events
@@ -169,13 +162,7 @@ export type DownloadEvent =
  *
  * Mirrors `gglib_core::events::ModelSummary` (camelCase).
  */
-export interface ModelEventSummary {
-  id: number;
-  name: string;
-  filePath: string;
-  architecture?: string;
-  quantization?: string;
-}
+export type { ModelSummary as ModelEventSummary } from '../../../types/generated/ModelSummary';
 
 /**
  * Library changes, broadcast to every client attached to the daemon.
@@ -184,57 +171,50 @@ export interface ModelEventSummary {
  * refresh only when its own tab made the edit. A `gglib model add` in a
  * terminal is a separate process and does not reach here.
  */
-export type ModelEvent =
-  | { type: 'model_added'; model: ModelEventSummary }
-  | { type: 'model_updated'; model: ModelEventSummary }
-  | { type: 'model_removed'; modelId: number };
+export type ModelEvent = Extract<AppEvent, { type: `model_${string}` }>;
 
 // ============================================================================
 // Verification Events
 // ============================================================================
 
-export type OverallHealth = 'healthy' | 'unhealthy' | 'unverifiable';
+export type { OverallHealth } from '../../../types/generated/OverallHealth';
 
-export interface VerificationProgressEvent {
-  type: 'verification_progress';
-  modelId: number;
-  modelName: string;
-  shardName: string;
-  bytesProcessed: number;
-  totalBytes: number;
-}
-
-export interface VerificationCompleteEvent {
-  type: 'verification_complete';
-  modelId: number;
-  modelName: string;
-  overallHealth: OverallHealth;
-}
-
-export type VerificationEvent = VerificationProgressEvent | VerificationCompleteEvent;
+export type VerificationEvent = Extract<AppEvent, { type: `verification_${string}` }>;
 
 // ============================================================================
 // Proxy Events
 // ============================================================================
 
-export type ProxyEvent =
-  | { type: 'proxy_started'; port: number }
-  | { type: 'proxy_stopped' }
-  | { type: 'proxy_crashed' };
+export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
 
 // ============================================================================
 // App Event Map
 // ============================================================================
 
 /**
- * Map of all event types to their payload types.
- * Used for type-safe event subscriptions.
+ * Each subscribable category, and the slice of `AppEvent` it delivers.
  *
- * Note: Download events arrive wrapped as { type: "download", event: DownloadEvent }
- * to preserve all details including shard progress.
+ * Every value is a named slice and never a bare `AppEvent`. That is the point
+ * of the map: a handler registered for `'proxy'` should not have to narrow
+ * against `server_started`, and typing any entry as the whole union would let
+ * a `server` handler compile while reading a `download` payload.
+ *
+ * `getEventCategory` is what actually routes a message here, and it is
+ * ordinary runtime code — so these five slices are a claim about the router,
+ * not a guarantee from it. The five together are exhaustive over `AppEvent`'s
+ * fourteen arms today, which `tests/ts/services/eventCategory.test.ts` is the
+ * place to keep true.
+ *
+ * Download events arrive wrapped as `{ type: "download", event: DownloadEvent }`
+ * to preserve shard-level detail, which is why that entry is the whole arm
+ * rather than the inner event.
  */
 export interface AppEventMap {
   'server': ServerWireEvent;
+  // Still the hand-written wrapper. Adopting the generated arm pulls in the
+  // generated `DownloadEvent`, whose `DownloadSummary.status` carries all
+  // seven statuses the queue actually reports — the mirror knows five — and
+  // that is a behaviour change with its own commit.
   'download': { type: 'download'; event: DownloadEvent };
   'model': ModelEvent;
   'verification': VerificationEvent;

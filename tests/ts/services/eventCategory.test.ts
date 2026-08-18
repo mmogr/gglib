@@ -8,11 +8,47 @@
  * threw every one away.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, it, expect } from 'vitest';
 
 import { getEventCategory } from '../../../src/services/transport/events/category';
 
+/**
+ * Every `type` tag the generated `AppEvent` can carry.
+ *
+ * Read out of the binding rather than listed here, so a variant added in Rust
+ * arrives in this test on the next `make bindings` instead of whenever
+ * somebody remembers. That is the failure this file exists for: the model
+ * events were declared in Rust, mapped by `event_name()`, and silently
+ * discarded by the frontend for their whole existence.
+ */
+const WIRE_TAGS: string[] = (() => {
+  const binding = readFileSync(
+    resolve(import.meta.dirname, '../../../src/types/generated/AppEvent.ts'),
+    'utf8',
+  );
+  const tags = [...binding.matchAll(/"type": "([a-z_]+)"/g)].map((m) => m[1]);
+  if (tags.length === 0) throw new Error('found no tags in the AppEvent binding');
+  return [...new Set(tags)];
+})();
+
 describe('getEventCategory', () => {
+  /**
+   * The map's five categories against the union's arms. `AppEventMap` claims
+   * to cover `AppEvent`, but `getEventCategory` is ordinary runtime code and
+   * the compiler cannot check that claim — a new `server_*` arm widens the
+   * `Extract` slice with no type error while the router returns `null` for it
+   * and `validateEvent` drops the frame in silence.
+   */
+  it('claims every tag the wire union can carry', () => {
+    const unrouted = WIRE_TAGS.filter((tag) => getEventCategory(tag) === null);
+
+    expect(unrouted).toEqual([]);
+    expect(WIRE_TAGS.length).toBeGreaterThan(10); // extractor sanity check
+  });
+
   it('routes the three model lifecycle tags to the model category', () => {
     expect(getEventCategory('model_added')).toBe('model');
     expect(getEventCategory('model_updated')).toBe('model');
