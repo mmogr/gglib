@@ -52,7 +52,12 @@ fail=0
 # optionality rule below cannot apply — what is omitted is decided by the impl.
 # Each has been read against its impl and annotated to match; a new one has
 # not been, which is what `check_manual_serde` is for.
-REVIEWED_MANUAL_SERDE="ModelCapabilities AssistantContent"
+#
+# `ModelCapabilities` was listed here and never belonged: it hand-writes serde
+# but derives no `TS` at all, so `check_manual_serde` skips it on the derive
+# test and the entry never had any effect. It read as coverage that did not
+# exist. Anything added here must actually derive `TS`.
+REVIEWED_MANUAL_SERDE="AssistantContent"
 
 # ── Half 1: nothing in the generated output may be a bigint ──────────────────
 #
@@ -62,7 +67,15 @@ REVIEWED_MANUAL_SERDE="ModelCapabilities AssistantContent"
 check_generated() {
   local dir="${1:-src/types/generated}"
 
-  [ -d "$dir" ] || return 0
+  # Liveness. A scan of nothing reported exactly what a clean scan reports,
+  # and `make bindings` opens with `rm -rf` on this directory — so an
+  # interrupted run left the tree with 178 deletions and a green checker.
+  if [ ! -d "$dir" ]; then
+    echo "${RED}❌${NC} $dir does not exist — nothing was checked."
+    echo "   Run \`make bindings\`, or \`git checkout -- $dir\` if a"
+    echo "   regeneration was interrupted after it emptied the directory."
+    return 1
+  fi
 
   local hits
   hits=$(grep -rn '\bbigint\b' "$dir" 2>/dev/null || true)
@@ -88,6 +101,18 @@ check_generated() {
 # for the real attribute. Comment lines are dropped for the same reason.
 scan_rust() {
   awk -v manual=" ${REVIEWED_MANUAL_SERDE:-} " '
+    # A derive that no declaration ever claimed is a scanner bug, not a silent
+    # pass: it means the declaration rule below did not recognise the shape,
+    # so the type went unscanned. Reported rather than carried, because a
+    # carried flag lands on the next declaration — which is a false positive
+    # on a type that never derived anything.
+    function flush_pending() {
+      if (pending) {
+        printf "%s:%d: a ts_rs::TS derive was never claimed by a declaration\n", pending_file, pending_line
+      }
+      pending = 0
+    }
+
     # Blank string literals and strip line comments before anything reads the
     # line, so neither can impersonate an attribute.
     #
@@ -104,20 +129,35 @@ scan_rust() {
       sub(/\/\/.*$/, "", line)
     }
 
-    # A TS derive marks the *next* declaration, not the current line.
-    line ~ /cfg_attr\(feature = "", derive\(ts_rs::TS\)/ { pending = 1 }
+    # State is per file. A derive left unclaimed at the end of one file must
+    # not be picked up by the first declaration of the next.
+    FNR == 1 { flush_pending(); inside = 0; attr = ""; has_double = 0 }
 
-    # Entering a declaration. Only the ones the derive marked are our business
-    # — and not the ones that hand-write their serde, where what is omitted is
-    # decided by an impl this scanner cannot read. Those are checked by
+    # A TS derive marks the *next* declaration, not the current line.
+    line ~ /cfg_attr\(feature = "", derive\(ts_rs::TS\)/ {
+      flush_pending()
+      pending = 1
+      pending_file = FILENAME
+      pending_line = FNR
+    }
+
+    # Entering a declaration. `pub` is optional here for the same reason it is
+    # on the field rule below: `ErrorBody`, `NextTokenInfo` and `NextTokenField`
+    # derive `TS` without it. Requiring it skipped those types entirely — and
+    # left `pending` set, so the flag was consumed by the next `pub`
+    # declaration instead, which is a type the derive never marked.
+    #
+    # Only the declarations the derive marked are our business — and not the
+    # ones that hand-write their serde, where what is omitted is decided by an
+    # impl this scanner cannot read. Those are checked by
     # `check_manual_serde` instead, which requires a human to have read the
     # impl and annotated the type to match it.
-    line ~ /^pub(\([a-z:]+\))?[[:space:]]+(struct|enum)[[:space:]]/ {
+    line ~ /^(pub(\([a-z:]+\))?[[:space:]]+)?(struct|enum)[[:space:]]/ {
       inside = pending
       pending = 0
       attr = ""
       decl = line
-      sub(/^pub(\([a-z:]+\))?[[:space:]]+(struct|enum)[[:space:]]+/, "", decl)
+      sub(/^(pub(\([a-z:]+\))?[[:space:]]+)?(struct|enum)[[:space:]]+/, "", decl)
       sub(/[^A-Za-z0-9_].*$/, "", decl)
       if (index(manual, " " decl " ") > 0) inside = 0
       next
@@ -162,6 +202,8 @@ scan_rust() {
         if (raw ~ /with[[:space:]]*=[[:space:]]*"[^"]*double_option"/) has_double = 1
       }
     }
+
+    END { flush_pending() }
   ' "$@"
 }
 
@@ -169,7 +211,14 @@ check_sources() {
   local files
   files=$(grep -rl 'derive(ts_rs::TS)' crates/ --include='*.rs' 2>/dev/null || true)
 
-  [ -n "$files" ] || return 0
+  # Liveness, as above: if nothing derives `TS` the derive was renamed or this
+  # grep is broken, and either way "no problems found" is not the answer.
+  if [ -z "$files" ]; then
+    echo "${RED}❌${NC} no file under crates/ derives ts_rs::TS — nothing was scanned."
+    echo "   Either the derive was renamed or this scan is broken; both are"
+    echo "   failures, not clean runs."
+    return 1
+  fi
 
   local problems
   # shellcheck disable=SC2086
@@ -291,13 +340,36 @@ pub struct Subject {
     #[serde(skip_serializing_if = "Option::is_none")]
     bad_private_field: Option<u32>,
 }
+
+// A private *declaration*. Every fixture above is a `pub struct`, so the shape
+// that requiring `pub` on the declaration line made invisible was never
+// covered — `ErrorBody`, `NextTokenInfo` and `NextTokenField` are all this.
+#[derive(Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+struct BadPrivateDecl {
+    // BAD: skipped, not optional, inside a declaration the scanner used to
+    // skip outright.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bad_private_decl: Option<u32>,
+}
+
+// The other half of the same bug. A declaration the scanner did not recognise
+// never consumed `pending`, so the derive above used to land here instead —
+// on a type that derives nothing — and this field was reported as a finding
+// against it. It must stay silent.
+#[derive(Serialize)]
+pub struct LeakVictim {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_not_a_ts_type: Option<u32>,
+}
 FIXTURE
 
   local got expected_bad missing=0
   got=$(scan_rust "$tmp/subject.rs" || true)
 
   expected_bad="bad_missing_optional bad_http2_port bad_crate_visible bad_optional_but_sent \
-                bad_double_option_unmarked bad_doc_mentions_double_option bad_private_field"
+                bad_double_option_unmarked bad_doc_mentions_double_option bad_private_field \
+                bad_private_decl"
 
   for field in $expected_bad; do
     if ! echo "$got" | grep -q "\b$field\b"; then
@@ -308,7 +380,8 @@ FIXTURE
 
   for field in good_optional good_nullable good_reordered good_combined \
                good_double_option good_double_option_primitive good_optional_false \
-               ignored_untagged bad_doc_mentions_skip bad_string_literal; do
+               ignored_untagged bad_doc_mentions_skip bad_string_literal \
+               good_not_a_ts_type; do
     if echo "$got" | grep -q "\b$field\b"; then
       echo "${RED}❌${NC} self-test: $field was reported and should not be"
       echo "     (reported: $(echo "$got" | grep "\b$field\b"))"
@@ -317,17 +390,17 @@ FIXTURE
   done
 
   # Exact count, so a scanner that reports everything cannot pass by covering
-  # the four it owes.
+  # the ones it owes.
   local count
   count=$(echo "$got" | grep -c . || true)
-  if [ "$count" -ne 7 ]; then
-    echo "${RED}❌${NC} self-test: expected exactly 7 findings, got $count"
+  if [ "$count" -ne 8 ]; then
+    echo "${RED}❌${NC} self-test: expected exactly 8 findings, got $count"
     echo "$got" | sed 's/^/     /'
     missing=1
   fi
 
   if [ "$missing" -eq 0 ]; then
-    echo "${GREEN}✅${NC} self-test: the scanner catches all seven known-bad shapes and no others"
+    echo "${GREEN}✅${NC} self-test: the scanner catches all eight known-bad shapes and no others"
   fi
   return "$missing"
 }
@@ -347,14 +420,22 @@ fi
 check_completeness() {
   local dir="${1:-src/types/generated}"
 
-  [ -d "$dir" ] || return 0
+  # Liveness. Without this the total-absence case — the very shape this half
+  # exists to catch, "a type derives TS but no file was written" — is the one
+  # case it reports as clean.
+  if [ ! -d "$dir" ]; then
+    echo "${RED}❌${NC} $dir does not exist — no binding was found for any type."
+    return 1
+  fi
 
   local missing=""
+  local seen=0
   local name
   # Read the declaration that follows each derive, which is the name ts-rs
   # writes the file under.
   while IFS= read -r name; do
     [ -n "$name" ] || continue
+    seen=$((seen + 1))
     [ -f "$dir/$name.ts" ] || missing="$missing $name"
   done < <(
     grep -rA 4 'derive(ts_rs::TS)' crates/ --include='*.rs' 2>/dev/null |
@@ -362,6 +443,11 @@ check_completeness() {
       awk '{ print $2 }' |
       sort -u
   )
+
+  if [ "$seen" -eq 0 ]; then
+    echo "${RED}❌${NC} no TS-deriving declaration was found — nothing was checked."
+    return 1
+  fi
 
   if [ -n "$missing" ]; then
     echo "${RED}❌${NC} types derive TS but produced no binding:"
@@ -390,11 +476,27 @@ check_manual_serde() {
   local unreviewed=""
   local name
 
+  local decl
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     # Does it also derive TS? If not, its impl is nobody's business here.
-    grep -rB 6 "^pub \(struct\|enum\) $name\( \|{\|$\)" crates/ --include='*.rs' 2>/dev/null |
-      grep -qF 'derive(ts_rs::TS)' || continue
+    #
+    # The probe must recognise every shape a declaration takes, or "not found"
+    # reads as "no TS derive" and the type is exempted silently. An earlier
+    # form anchored on `^pub ` with one literal space, which excluded
+    # `pub(crate)` (about forty axum DTOs), generics, and anything indented —
+    # 49 of the 180 TS-deriving types in all. Same group as `scan_rust` uses.
+    decl=$(grep -rn -B 12 -E "^[[:space:]]*(pub(\([a-z:]+\))?[[:space:]]+)?(struct|enum)[[:space:]]+$name\b" \
+      crates/ --include='*.rs' 2>/dev/null || true)
+
+    if [ -z "$decl" ]; then
+      # Not "no TS derive" — the declaration was not found at all, which is
+      # the failure mode that used to read as an exemption.
+      unreviewed="$unreviewed $name(declaration-not-found)"
+      continue
+    fi
+
+    echo "$decl" | grep -qF 'derive(ts_rs::TS)' || continue
     case " $REVIEWED_MANUAL_SERDE " in
       *" $name "*) continue ;;
     esac
