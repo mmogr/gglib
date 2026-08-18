@@ -123,7 +123,7 @@ impl<'a> ExecutableSearcher<'a> {
         let mut attempts = Vec::new();
         let candidates = Self::platform_default_dirs();
 
-        for dir in candidates {
+        for &dir in candidates {
             let mut candidate = PathBuf::from(dir);
             candidate.push(command);
 
@@ -310,10 +310,15 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     /// Get platform-specific default directories to search.
-    fn platform_default_dirs() -> Vec<&'static str> {
+    ///
+    /// A borrowed slice rather than a `Vec`: the lists are compile-time
+    /// constants, so returning them by reference costs no allocation and keeps
+    /// this a `const fn` on every platform — including Windows, where the list
+    /// is empty and clippy would otherwise ask for one.
+    const fn platform_default_dirs() -> &'static [&'static str] {
         #[cfg(target_os = "macos")]
         {
-            vec![
+            &[
                 "/opt/homebrew/bin", // Apple Silicon Homebrew
                 "/usr/local/bin",    // Intel Homebrew / manual installs
                 "/usr/bin",
@@ -323,18 +328,18 @@ impl<'a> ExecutableSearcher<'a> {
 
         #[cfg(target_os = "linux")]
         {
-            vec!["/usr/local/bin", "/usr/bin", "/bin"]
+            &["/usr/local/bin", "/usr/bin", "/bin"]
         }
 
         #[cfg(target_os = "windows")]
         {
             // Windows uses PATHEXT and system PATH, less reliance on hardcoded paths
-            vec![]
+            &[]
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
-            vec!["/usr/local/bin", "/usr/bin", "/bin"]
+            &["/usr/local/bin", "/usr/bin", "/bin"]
         }
     }
 
