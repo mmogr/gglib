@@ -200,6 +200,23 @@ doc: ## Generate and open documentation
 	@echo "Generating documentation..."
 	$(CARGO) doc --open
 
+# `export` rather than a command-prefix assignment, for the reason spelled out
+# above the `bindings` target: `$(CARGO)` expands to `. $$HOME/.cargo/env &&
+# …cargo`, so `RUSTDOCFLAGS=x $(CARGO) doc` prefixes the `.` builtin rather
+# than cargo. That it works at all is an accident of POSIX — assignments before
+# a *special* builtin persist into the shell — and it is not a rule worth
+# resting a gate on. Written the way the rest of this file already writes it.
+doc-check: export RUSTDOCFLAGS := -D warnings
+
+doc-check: ## Build rustdoc with warnings denied, exactly as CI does
+	@echo "Checking rustdoc..."
+	@# The same invocation as ci.yml, docs.yml and release.yml. Every flag
+	@# matters: `--document-private-items` is what makes these docs worth
+	@# reading (most of this codebase is private), and it is also what the
+	@# workspace's `private_intra_doc_links = "allow"` is predicated on.
+	@# `--exclude gglib-app` because that crate needs the Web UI built first.
+	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
+
 ##@ Frontend and architecture checks
 
 lint-web: ## Run eslint over src/ (no warnings allowed)
@@ -244,6 +261,10 @@ enforce: ## Run the architecture enforcement checks
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
 	@# required nullable rather than an optional. Neither fails to compile.
 	@./scripts/check_ts_bindings.sh
+	@# The script has had a --check mode since it was written and nothing ever
+	@# ran it, so a new module simply never reached the tables unless someone
+	@# remembered to regenerate them.
+	@./scripts/generate_module_tables.sh --check
 
 ##@ Bindings
 
@@ -480,7 +501,7 @@ dev: fmt lint test ## Format, lint and test
 # and architecture scripts. It used to be `fmt lint check test` — all Cargo —
 # which meant a clean local run could still fail CI on eslint, on a type error
 # in a test file, or on any of the five shell checks.
-pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce ## Run everything CI requires
+pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow
