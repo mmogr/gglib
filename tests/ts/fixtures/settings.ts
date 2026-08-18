@@ -1,10 +1,12 @@
 /**
  * Global settings, as `GET /api/settings` actually sends them.
  *
- * All 23 fields are always present. `gglib-core`'s `Settings` uses no
- * `skip_serializing_if`, so "nothing configured" crosses the wire as `null`
- * and never as an absent key — a fixture naming five keys was describing a
- * response no endpoint produces.
+ * All 23 fields are always present. The endpoint answers with
+ * `gglib_app_services::types::AppSettings` — not `gglib_core::Settings`,
+ * which is persisted and never serialized to a client — and no field of it
+ * uses `skip_serializing_if`, so "nothing configured" crosses the wire as
+ * `null` and never as an absent key. A fixture naming five keys was
+ * describing a response no endpoint produces.
  *
  * The `null` baseline here is the fresh-install state, which is what the
  * hooks resolving their own fallbacks need to be tested against.

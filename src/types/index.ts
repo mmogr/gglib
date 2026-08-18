@@ -43,16 +43,17 @@ export const CAPABILITY_FLAGS = {
 
 export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
 
-/** `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged. */
 /**
  * `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged.
  *
- * `Partial` over the generated shape, deliberately. ts-rs renders each field
- * as a required `boolean | null` because it does not read `#[serde(default)]`,
- * but the handler genuinely accepts omission — that is what "left unchanged"
- * means, and the one call site builds a single-key literal from a computed
- * flag name. A Rust-side `#[ts(optional)]` on the `serde(default)` fields
- * would let this drop the wrapper.
+ * `Partial` over the generated shape, deliberately. ts-rs renders an
+ * `Option<T>` as a required `T | null` unless the field carries
+ * `#[ts(optional)]`, but serde lets a missing `Option<T>` deserialize to
+ * `None` on its own — no attribute involved — so the handler genuinely
+ * accepts omission, and omission is what "left unchanged" means. The one call
+ * site builds a single-key literal from a computed flag name, which the
+ * generated shape rejects. Adding `#[ts(optional)]` to the four fields would
+ * let this drop the wrapper.
  */
 import type { SetCapabilitiesRequest as SetCapabilitiesBody } from './generated/SetCapabilitiesRequest';
 export type SetCapabilitiesRequest = Partial<SetCapabilitiesBody>;
@@ -61,20 +62,25 @@ export type SetCapabilitiesRequest = Partial<SetCapabilitiesBody>;
 export type { RetagResponse } from './generated/RetagResponse';
 
 /** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
-/** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
 export type { UpgradeCheck } from './generated/UpgradeCheck';
 
-/** Outcome of `POST /api/models/{id}/upgrade`. */
 /** Outcome of `POST /api/models/{id}/upgrade`. */
 export type { UpgradeOutcome } from './generated/UpgradeOutcome';
 
 /**
  * A named sampling profile, selectable per request as `<model>:<profile>`.
  *
- * Profiles are global: one `coding` profile applies to every model. They are
- * deliberately *sparse* — only the fields set here override, and everything
- * left undefined falls through to the model's own defaults, which is what
- * makes one profile safe to apply across differing model architectures.
+ * Profiles are global: one `coding` profile applies to every model, which
+ * works because a profile only displaces the parameters it names — the rest
+ * fall through to the model's own defaults, and that is what makes one
+ * profile safe across differing architectures.
+ *
+ * "Only the ones it names" is a fact about the *stored* profile, not about
+ * this type: a saved profile round-trips through `InferenceConfig`, so it
+ * carries all eighteen keys with `null` where nothing was set, and `null` is
+ * how the resolver hears "say nothing about this one".
+ * {@link SparseInferenceProfile} below is the shape that genuinely has fewer
+ * keys — a starter template, or one mid-edit.
  */
 import type { InferenceProfile } from './generated/InferenceProfile';
 export type { InferenceProfile };
@@ -103,19 +109,6 @@ export type SparseInferenceProfile = Omit<InferenceProfile, 'config'> & {
 // name in this module, and declarations below refer to it.
 import type { SamplingLayerDto as SamplingLayerName } from './generated/SamplingLayerDto';
 export type { SamplingLayerName };
-
-/**
- * What class of source supplied a resolved value.
- *
- * Mirrors the backend `ProvenanceKindDto`. `floorCoupled` is distinct from
- * `floor`: it means a layer claimed `temperature` and this parameter is tuned
- * against it, so lower layers were deliberately passed over rather than simply
- * having nothing to say. `suppressedByTemplate` means a layer named a value and
- * a request-shaping stage then threw it away, because the model's observed chat
- * template does not read that field (ADR 0007) — distinct from `unset`, where
- * nobody named anything at all.
- */
-export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset' | 'suppressedByTemplate';
 
 /**
  * The numeric parameters with a bounded range — the keys of `INFERENCE_PARAMS`
@@ -162,12 +155,15 @@ export type ParamProvenance = ParamProvenanceDto & {
    * The key this entry describes in {@link SamplingExplanation.resolved}.
    *
    * Narrowed from the generated `string` by intersection — `string & Union`
-   * collapses to the union — because `wire_key` emits one entry per
-   * `InferenceConfig` field and nothing else, and three call sites index
-   * `PARAM_LABELS`, `publishedByParam` and `formatProvenanceValue` with it.
-   * Rust types the field as a plain `String`, so this is the one place the
-   * mirror was better than the generated shape; narrowing it properly is a
-   * Rust-side change.
+   * collapses to the union — because three call sites index `PARAM_LABELS`,
+   * `publishedByParam` and `formatProvenanceValue` with it, and Rust types the
+   * field as a plain `String`. This is the one place the mirror was better
+   * than the generated shape; narrowing it properly is a Rust-side change.
+   *
+   * The union is `ProvenanceParamKey`, which is *seventeen* members and not
+   * `InferenceConfig`'s eighteen. `FieldSources::iter` — what `wire_key`
+   * renders — names seventeen fields and has none for `seed`, so `seed` never
+   * appears in `sources` and the explain table has no row for it.
    */
   param: ProvenanceParamKey;
 };
@@ -210,20 +206,6 @@ import type { DefaultsOrigin as DefaultsOriginName } from './generated/DefaultsO
 export type { DefaultsOriginName };
 
 /**
- * What gglib does with one field's published recommendation.
- *
- * Mirrors the backend `PublishedStateDto`. There is no `notPublished` arm: a
- * field with no author recommendation is simply absent from the list.
- *
- * - `deferred` — gglib names nothing, so llama.cpp applies the model's number.
- * - `restated` — gglib sends the same number the model published.
- * - `overridden` — gglib sends a different number. The only one that warns.
- * - `unreadable` — the published value could not be parsed, so gglib cannot say
- *   what it displaced. Renders as unknown, never as an override.
- */
-export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadable';
-
-/**
  * One field's published value and what gglib does with it — the `published`
  * entries of `GET /api/models/:id/explain`.
  *
@@ -235,7 +217,13 @@ export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadabl
  */
 import type { PublishedDefaultDto } from './generated/PublishedDefaultDto';
 export type PublishedDefault = PublishedDefaultDto & {
-  /** Joins to {@link ParamProvenance.param}. Narrowed as it is there. */
+  /**
+   * Joins to {@link ParamProvenance.param}, but narrowed one member tighter:
+   * `SamplingParamKey` and not `ProvenanceParamKey`, because a published
+   * default is a number read out of a GGUF key and `reasoningEffort` has
+   * none. In practice the set is smaller still — only the fields
+   * `general.sampling.*` covers are ever published.
+   */
   param: SamplingParamKey;
 };
 
@@ -336,11 +324,13 @@ export type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
  * Global settings — `GET`/`PUT /api/settings`.
  *
  * All 23 fields are required keys carrying `T | null`, not optional keys.
- * Nothing in `gglib-core`'s `Settings` uses `skip_serializing_if`, so the
- * response always names every field; "nothing configured" is a `null`, never
- * an absent key. The mirror's `?:` described a shape the endpoint does not
- * send, and every read site is already `settings?.x`-style, so adopting the
- * true one changes no call site.
+ * `GET /api/settings` answers with `gglib_app_services::types::AppSettings`
+ * — not `gglib_core::Settings`, which is the persisted shape and never
+ * crosses the wire — and no field of it uses `skip_serializing_if`, so the
+ * response always names every one. "Nothing configured" is a `null`, never an
+ * absent key. The mirror's `?:` described a shape the endpoint does not send,
+ * and every read site is already `settings?.x`-style, so adopting the true one
+ * changes no call site.
  *
  * The *request* shape is different and stays hand-written: `PUT` treats an
  * absent key as "leave unchanged" and an explicit `null` as "clear", which is
@@ -399,9 +389,6 @@ export interface UpdateSettingsRequest {
 // System Memory Types (for "Will it fit?" indicators)
 // ============================================================================
 
-/**
- * System memory information for model fit calculations.
- */
 /**
  * What the host has to run a model on — `GET /api/system/memory`.
  *
@@ -505,12 +492,10 @@ export type {
 
 /**
  * Summary of a HuggingFace model from the search API.
- */
-/**
- * Summary of a HuggingFace model from the search API.
  *
- * Five fields the mirror made optional are required nullables: the search
- * handler builds every one of them, and `None` crosses as `null`.
+ * Four fields the mirror made optional are required nullables — `author`,
+ * `last_modified`, `parameters_b` and `description`. The search handler builds
+ * every one of them, and `None` crosses as `null`.
  */
 export type { HfModelSummary } from './generated/HfModelSummary';
 
@@ -520,9 +505,6 @@ export type { HfModelSummary } from './generated/HfModelSummary';
 import type { HfSortField } from './generated/HfSortField';
 export type { HfSortField };
 
-/**
- * Request for searching HuggingFace models.
- */
 /**
  * Request for searching HuggingFace models.
  *
@@ -535,14 +517,8 @@ export type { HfSearchRequest } from './generated/HfSearchRequest';
 /**
  * Response from HuggingFace model search.
  */
-/**
- * Response from HuggingFace model search.
- */
 export type { HfSearchResponse } from './generated/HfSearchResponse';
 
-/**
- * Information about a specific quantization variant.
- */
 /**
  * Information about a specific quantization variant.
  */
@@ -553,11 +529,6 @@ export type { HfQuantization } from './generated/HfQuantization';
  */
 export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
 
-/**
- * Response for tool/function calling support detection.
- *
- * Used for both HuggingFace model metadata and local running server queries.
- */
 /**
  * Response for tool/function calling support detection.
  *
@@ -574,10 +545,6 @@ export type { ToolSupportResponse } from './generated/ToolSupportResponse';
  */
 export type { RangeValues } from './generated/RangeValues';
 
-/**
- * Filter options for the model library UI.
- * Contains aggregate data about available models for building dynamic filter controls.
- */
 /**
  * Filter options for the model library UI.
  *

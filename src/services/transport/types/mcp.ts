@@ -33,9 +33,6 @@ export type { McpLifecycle };
 
 /**
  * MCP server entity.
- */
-/**
- * MCP server entity.
  *
  * `server_type` is narrowed back by intersection: Rust stores it as a plain
  * `String`, but the two values it can hold are the two transports the config
@@ -91,17 +88,11 @@ export interface McpTool {
 }
 
 /**
- * MCP server with runtime info.
- */
-/**
  * MCP server with runtime info — what every server route answers with.
  */
 import type { McpServerInfo as McpServerInfoDto } from '../../../types/generated/McpServerInfo';
 export type McpServerInfo = Omit<McpServerInfoDto, 'server'> & { server: McpServer };
 
-/**
- * Result of calling an MCP tool.
- */
 /**
  * Result of calling an MCP tool.
  *

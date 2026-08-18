@@ -22,7 +22,10 @@ const BASE: GgufModel = {
   quantization: null,
   contextLength: null,
   hfRepoId: null,
-  addedAt: '2024-01-01T00:00:00Z',
+  // `GuiModel::from_model` formats as `%Y-%m-%d %H:%M:%S` — no `T`, no
+  // zone. Nothing in `src/` parses it, but a fixture claiming to be what
+  // the wire sends should be.
+  addedAt: '2024-01-01 00:00:00',
   tags: [],
   isServing: false,
   capabilities: 0,

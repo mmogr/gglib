@@ -88,20 +88,24 @@ however long its Rust type is.
 
 ## Type Alignment
 
-The types below are still hand-written. They are being replaced by `generated/`
-imports; what remains here afterwards is view-models, which have no Rust
-counterpart by design.
+The REST surface no longer keeps a hand-written mirror. `GgufModel`,
+`ModelDetail`, `AppSettings`, `InferenceConfig`, `InferenceProfile`,
+`SamplingExplanation`, `ServerInfo` and the HuggingFace, MCP and capability
+types are all aliases over `generated/`, so the alignment table that used to
+live here is now the import list itself — and it cannot drift, because the
+export gate regenerates it from Rust.
 
-These TypeScript types mirror the Rust types in `gglib-core`:
+What is still written by hand falls into three groups, and each is deliberate:
 
-```text
-TypeScript                    Rust
-──────────────────────────────────────────
-GgufModel          ←→        Model
-ServerInfo         ←→        gglib_app_services::types::ServerInfo
-AppSettings        ←→        Settings
-DownloadProgress   ←→        DownloadProgress
-```
+| Kind | Examples | Why |
+|------|----------|-----|
+| View-models | `ServerViewModel`, the chat types | No Rust counterpart. Assembled in the GUI from several responses. |
+| Request bodies needing sparseness | `UpdateSettingsRequest`, `SparseInferenceConfig`, `ServeConfig` | ts-rs renders an `Option<T>` as a required `T \| null`. A body whose absent keys mean "leave unchanged" needs optional ones, so these wrap or narrow the generated shape rather than replacing it. |
+| Narrowings the generator cannot make | `ParamProvenance.param`, `McpServer.server_type`, `SecondarySlotState` | Rust types the field as `String` or `&'static str`. The union is the more accurate claim, so it is intersected back on. Each is a Rust-side `#[ts(type = …)]` away from being generated too. |
+
+Anything else hand-written under `types/` mirroring a wire shape is drift, not
+design. The events, SSE and proxy-dashboard surfaces are the remaining ones and
+have not been migrated yet.
 
 The `services/transport/` layer handles JSON serialization between these.
 

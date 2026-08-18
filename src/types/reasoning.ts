@@ -36,9 +36,15 @@ import type { SamplingParamKey } from './index';
 export type { Support as TemplateSupport } from './generated/Support';
 
 /**
- * Every key the backend attributes a source to — `wire_key` in
- * `gglib-app-services/src/sampling_explain.rs` emits one entry per
- * `InferenceConfig` field, reasoning included.
+ * Every key the backend attributes a source to — the seventeen `wire_key`
+ * (`gglib-app-services/src/sampling_explain.rs`) renders out of
+ * `FieldSources::iter`, reasoning included.
+ *
+ * Seventeen and not `InferenceConfig`'s eighteen: `FieldSources` has no field
+ * for `seed`, so no `sources` entry ever names it and the explain table has
+ * no row for it. That is why this union is built up from `SamplingParamKey`
+ * rather than derived from `keyof InferenceConfig`, which would admit a key
+ * the endpoint cannot produce.
  *
  * A superset of `SamplingParamKey` rather than the same union, because the
  * explain table has to name a field the bounds table cannot describe: a

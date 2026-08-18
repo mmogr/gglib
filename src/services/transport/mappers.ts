@@ -62,16 +62,22 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
 /**
  * The sampling half of a serve config, or nothing if the user set none of it.
  *
- * Two rules, both of which the hand-written version got wrong on some field:
+ * It iterates {@link INFERENCE_CONFIG_KEYS} rather than naming fields, so a
+ * parameter cannot be offered by a form and dropped here. Nine were, twice
+ * over — this function and its caller each kept their own list of the same
+ * nine names.
  *
- * `!= null`, not `!== undefined` — a modal seeded from a model's stored
- * `inferenceDefaults` receives all eighteen fields as explicit nulls, because
- * that is what "nothing configured" looks like on the wire. Reading those as
- * chosen values sends an object of nulls where the omission is what lets the
- * backend resolve through its own layers.
- *
- * And it iterates {@link INFERENCE_CONFIG_KEYS} rather than naming fields, so
- * a parameter cannot be offered by a form and dropped here. Nine were.
+ * `!= null` rather than `!== undefined` because `ServeConfig` extends
+ * {@link SparseInferenceConfig}, where a field can be `null` as well as
+ * absent, and the two say the same thing. `InferenceConfig`'s fields are bare
+ * `Option<T>` on the Rust side, so serde reads an omitted key and an explicit
+ * `null` alike as `None` — there is no per-field three-state here, and the
+ * distinction the mapper draws should match the one the wire draws, which is
+ * none. Treating a null as a chosen value would build an object saying
+ * nothing where the omission says it more plainly. Neither reaches the
+ * backend differently: `launch_options.rs` does
+ * `inference_params.unwrap_or_default()`, so `None` and an all-null object
+ * are the same value there.
  */
 function inferenceParamsFrom(config: ServeConfig): SparseInferenceConfig | undefined {
   const set = INFERENCE_CONFIG_KEYS.filter((key) => config[key] != null);

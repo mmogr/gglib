@@ -244,13 +244,13 @@ describe('POST /api/servers/start request body', () => {
     expect(toStartServerRequest({ id: 1 }).mlock).toBe(false);
   });
 
-  // `ServeConfig` is now `Partial` over the generated `InferenceConfig`, so a
-  // field can be `null` as well as absent — and a serve modal seeded from a
-  // model's stored `inferenceDefaults` gets all eighteen as nulls, because
-  // that is what the wire sends. `!== undefined` reads every one of those as
-  // "the user set something", which would build an `inferenceParams` object
-  // of nothing but nulls and send it in place of the omission that lets the
-  // backend fall through to its own layers.
+  // `ServeConfig` extends `SparseInferenceConfig`, so a field can be `null` as
+  // well as absent. Rust reads the two identically — `InferenceConfig`'s
+  // fields are bare `Option<T>`, which serde fills with `None` either way —
+  // so the mapper must too. `!== undefined` read a null as a chosen value and
+  // built an object of nothing but nulls, which is a different spelling of
+  // the same request rather than a different request; the point is that the
+  // client should not invent a distinction the wire does not have.
   it('treats an explicit null as unset, not as a value the user chose', () => {
     const cleared = toStartServerRequest({
       id: 1,

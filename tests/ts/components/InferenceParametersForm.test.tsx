@@ -245,13 +245,16 @@ describe('InferenceParametersForm', () => {
       expect(onChange).toHaveBeenCalledWith({});
     });
 
-    // The form holds a *sparse* config, and clearing a field deletes its key
-    // rather than setting it to null. Typing this state as the wire's
-    // `InferenceConfig` — where all eighteen keys are present — would make
-    // `delete` a type error and invite a null in its place, which the backend
-    // reads as "clear to the floor" rather than "send nothing". Reasoning
-    // effort is where that distinction is visible: the blank option means the
-    // chat template keeps its own default.
+    // The form holds a *sparse* config, and clearing a field deletes its key.
+    // Typing this state as the wire's `InferenceConfig` — where all eighteen
+    // keys are present — would make `delete` a type error, and the natural
+    // workaround is to assign `null` instead. That would be wrong here for a
+    // reason that has nothing to do with the wire, where `null` and absent
+    // are the same: `updateField`'s callers, `hasInferenceParams`, and the
+    // reset button all read "is this key present" as "did the user set
+    // this". Reasoning effort is where it shows: the blank option means the
+    // chat template keeps its own default, and a key carrying `null` claims
+    // the user chose something.
     it('un-sets reasoning effort by dropping the key, not by nulling it', async () => {
       const onChange = renderForm(FLOOR, { reasoningEffort: 'high' });
 
