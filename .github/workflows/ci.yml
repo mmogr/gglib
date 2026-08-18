@@ -298,6 +298,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Two orphan barrels sat in `src/` because nothing looks for files that
+      # nothing imports: `tsc` is happy to compile an island, and eslint only
+      # ever sees one file at a time. Scoped to files, dependencies and
+      # unlisted imports — the export-level classes are noisier and are not
+      # gated yet, deliberately. `npm run deadcode` is the same command.
+      - name: Check for dead files and undeclared dependencies
+        run: npm run deadcode
+
       - name: Run TypeScript tests
         run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
