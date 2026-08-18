@@ -572,26 +572,21 @@ export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 /**
  * A range of numeric values with min and max.
  */
-export interface RangeValues {
-  min: number;
-  max: number;
-}
+export type { RangeValues } from './generated/RangeValues';
 
 /**
  * Filter options for the model library UI.
  * Contains aggregate data about available models for building dynamic filter controls.
  */
-export interface ModelFilterOptions {
-  /** All distinct quantization types present in the library */
-  quantizations: string[];
-  /** Minimum and maximum parameter counts (in billions) */
-  param_range: RangeValues | null;
-  /** Minimum and maximum context lengths */
-  context_range: RangeValues | null;
-  /** Token-generation speed range (t/s) derived from benchmark data.
-   *  Only present when at least one model has been benchmarked. */
-  speed_range?: RangeValues | null;
-}
+/**
+ * Filter options for the model library UI.
+ *
+ * All three ranges are required nullables. The mirror made `speed_range`
+ * optional, which read as "a backend that has not benchmarked anything omits
+ * the key" — it does not; it sends `null`, exactly as the other two do when
+ * the library is empty.
+ */
+export type { ModelFilterOptions } from './generated/ModelFilterOptions';
 
 /**
  * Sort field for `GET /api/models`.

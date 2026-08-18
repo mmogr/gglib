@@ -41,6 +41,7 @@ pub fn is_system_tag(tag: &str) -> bool {
 /// Contains aggregate data about available models for building
 /// dynamic filter controls.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelFilterOptions {
     /// All distinct quantization types present in the library.
     pub quantizations: Vec<String>,
@@ -55,6 +56,7 @@ pub struct ModelFilterOptions {
 
 /// A range of numeric values with min and max.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RangeValues {
     pub min: f64,
     pub max: f64,
