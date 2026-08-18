@@ -80,9 +80,10 @@ export interface ModelPerfResult {
  * A model's cached benchmark headline — the `benchmarkSummary` on a library
  * row and a model detail.
  *
- * The five `*_tps` and `latest_backend` fields are required nullables, not
- * optional keys: the row is built from a database query that names every
- * column, and a model benchmarked only one way sends `null` for the other.
+ * Five fields are required nullables rather than optional keys — the four
+ * `*_tps` figures and `latest_backend`. The row is built from a query that
+ * names every column, so a model benchmarked only one way sends `null` for
+ * the other rather than omitting the key.
  */
 import type { ModelBenchmarkSummary } from './generated/ModelBenchmarkSummary';
 export type { ModelBenchmarkSummary };
