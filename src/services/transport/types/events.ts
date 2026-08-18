@@ -52,20 +52,20 @@ export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
 // Download Events
 // ============================================================================
 
-export interface DownloadSummary {
-  id: DownloadId;
-  display_name: string;
-  status: 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
-  position: number;
-  error?: string | null;
-  group_id?: string | null;
-  shard_info?: {
-    shard_index: number;
-    total_shards: number;
-    filename: string;
-    file_size?: number | null;
-  } | null;
-}
+/**
+ * One row of the download queue.
+ *
+ * `status` carries all seven states the queue reports. The mirror knew five,
+ * so `finalizing` and `registering` fell through `normalizeQueueItem`'s
+ * `?? 'failed'` and rendered as failures.
+ *
+ * `error`, `group_id` and `shard_info` are optional and *not* nullable: each
+ * carries `skip_serializing_if`, so the key is absent rather than `null`. The
+ * mirror admitted both, which is why the normalizer reached for them through
+ * `as any` casts.
+ */
+import type { DownloadSummary } from '../../../types/generated/DownloadSummary';
+export type { DownloadSummary };
 
 /**
  * Stable artifact identity for completion tracking.
@@ -101,19 +101,22 @@ export interface AttemptCounts {
 /**
  * Result kind for a completion attempt.
  */
-export type CompletionKind = 'downloaded' | 'failed' | 'cancelled' | 'already_present';
+export type { CompletionKind } from '../../../types/generated/CompletionKind';
 
 /**
  * Details for a single completed artifact in a queue run.
  */
-export interface CompletionDetail {
-  key: CompletionKey;
-  display_name: string;
-  last_result: CompletionKind;
-  last_completed_at_ms: number;
-  download_ids: DownloadId[];
-  attempt_counts: AttemptCounts;
-}
+/**
+ * Details for a single completed artifact in a queue run.
+ *
+ * `download_ids` carries the structured wire id — `{ model_id, quantization }`
+ * — not the `"model_id:quantization"` string that `./ids` calls a
+ * `DownloadId`. Two different things share that name, so the generated one is
+ * imported under its own alias rather than shadowing the string form, which
+ * the rest of the transport still uses.
+ */
+import type { CompletionDetail } from '../../../types/generated/CompletionDetail';
+export type { CompletionDetail };
 
 /**
  * Summary of an entire queue run from start to drain.

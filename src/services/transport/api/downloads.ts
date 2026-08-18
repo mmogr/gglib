@@ -4,6 +4,7 @@
  */
 
 import { get, post, del } from './client';
+import { bucketQueue } from '../downloadQueue';
 import type { DownloadId } from '../types/ids';
 import type {
   DownloadQueueStatus,
@@ -30,18 +31,11 @@ interface QueueSnapshotResponse {
 export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
   const snapshot = await get<QueueSnapshotResponse>('/api/models/downloads/queue');
   
-  // Split items by status (same logic as SSE event handler)
-  const items = snapshot.items || [];
-  const current = items.find((item) => item.status === 'downloading') ?? null;
-  const pending = items.filter((item) => item.status === 'queued');
-  const failed = items.filter((item) => item.status === 'failed');
-  
-  return {
-    current,
-    pending,
-    failed,
-    max_size: snapshot.max_size,
-  };
+  // Bucketed by the same function the SSE `queue_snapshot` path uses. The
+  // comment here used to claim that and it was not true: the SSE side ran
+  // every row through a status map first, so the two produced different
+  // queues from the same data depending on which answered last.
+  return bucketQueue(snapshot.items || [], snapshot.max_size);
 }
 
 /**

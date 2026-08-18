@@ -4,12 +4,13 @@ import type { DownloadQueueStatus, DownloadQueueItem, DownloadCompletionInfo, Qu
 import type { DownloadEvent, DownloadSummary, QueueRunSummary } from '../services/transport/types/events';
 import { isDesktop } from '../services/platform';
 import { getTransport } from '../services/transport';
+import { bucketQueue, queueIsBusy } from '../services/transport/downloadQueue';
 
 /**
  * Returns true if a queue snapshot indicates active work (busy state).
  */
 function snapshotIsBusy(items: DownloadSummary[]): boolean {
-  return items.some(i => i.status === 'queued' || i.status === 'downloading');
+  return queueIsBusy(items);
 }
 
 export type DownloadProgressStatus = 'started' | 'progress' | 'finalizing' | 'registering' | 'notice' | 'completed' | 'error';
@@ -79,33 +80,29 @@ interface UseDownloadManagerOptions {
   onCompleted?: (info: DownloadCompletionInfo) => void;
 }
 
+/**
+ * A wire row as the queue UI holds it.
+ *
+ * The two shapes now differ only in name — `DownloadQueueItem.status` is the
+ * same seven-member `DownloadStatus` the wire sends — so this no longer
+ * translates anything. It used to map through a `Record` of four states with
+ * a `?? 'failed'` fallback, which turned `finalizing` and `registering` into
+ * failures and `cancelled` into one too.
+ */
 function normalizeQueueItem(item: DownloadSummary): DownloadQueueItem {
-  const statusMap: Record<string, 'downloading' | 'queued' | 'completed' | 'failed'> = {
-    downloading: 'downloading',
-    queued: 'queued',
-    completed: 'completed',
-    failed: 'failed',
-    cancelled: 'failed',
-  };
-
   return {
     id: item.id,
-    display_name: (item as any).display_name ?? item.id,
-    status: statusMap[item.status] ?? 'failed',
-    position: (item as any).position ?? 0,
-    error: (item as any).error,
-    group_id: (item as any).group_id,
-    shard_info: (item as any).shard_info,
+    display_name: item.display_name,
+    status: item.status,
+    position: item.position,
+    error: item.error,
+    group_id: item.group_id,
+    shard_info: item.shard_info,
   };
 }
 
 function snapshotToQueueStatus(items: DownloadSummary[], maxSize: number): DownloadQueueStatus {
-  const normalized = items.map(normalizeQueueItem);
-  const current = normalized.find((item) => item.status === 'downloading') ?? null;
-  const pending = normalized.filter((item) => item.status === 'queued');
-  const failed = normalized.filter((item) => item.status === 'failed');
-
-  return { current, pending, failed, max_size: maxSize };
+  return bucketQueue(items.map(normalizeQueueItem), maxSize);
 }
 
 function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
