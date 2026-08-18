@@ -9,8 +9,8 @@
 //
 // Kept out of `./index` rather than added to it: these describe one mechanism
 // and are read together, and `index.ts` is a hub that is over the file-size
-// budget even after this migration halved it. Re-exported from there so
-// callers keep importing from `../types`. This file and `./index` have a
+// budget even after this migration cut it by a third. Re-exported from there
+// so callers keep importing from `../types`. This file and `./index` have a
 // type-only mutual import, which TypeScript permits and erases at compile
 // time — the same arrangement `./benchmark` documents.
 //

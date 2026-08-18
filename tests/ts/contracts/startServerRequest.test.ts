@@ -10,7 +10,7 @@
  * against a literal it constructed two lines earlier, so it could not have
  * caught drift on the Rust side at all.
  *
- * Three things are pinned here, all of which that test missed:
+ * Four things are pinned here, all of which that test missed:
  *
  *   1. **Every field, not the convenient ones.** `toStartServerRequest`
  *      returns eight keys; the old assertions named five. Vitest's `toEqual`

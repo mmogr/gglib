@@ -23,10 +23,13 @@ const HANDLERS = rust('crates/gglib-axum/src/handlers/mcp.rs');
  * no body.
  *
  * Anchored through `fnSource`, which resolves the name once in the file or
- * throws — this directory's rule, and not a decoration: six of the seven
- * handlers here are named `list`, `add`, `update`, `start`, `stop` and
+ * throws — this directory's rule, and not a decoration: six of the nine
+ * handlers in `mcp.rs` are named `list`, `add`, `update`, `start`, `stop` and
  * `remove`, and a first-match `indexOf` over names that common is how a
  * contract test comes to describe the wrong function and report success.
+ * Those six are the ones checked here; `test_connection`, `call_tool` and
+ * `resolve_path` answer with their own shapes and are pinned, where they are
+ * pinned at all, by the types the client declares for them.
  *
  * The return clause is taken after the signature's `) -> `, never as the first
  * `Json<…>` in the text: `add` and `update` accept a `Json<Request>`
