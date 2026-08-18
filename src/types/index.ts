@@ -1,6 +1,6 @@
 import type { ModelBenchmarkSummary } from './benchmark';
 import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
-import type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
+import type { ProvenanceParamKey, SuppressedEffort } from './reasoning';
 
 // The reasoning-control wire shapes live in their own module — see its header
 // for why — and are re-exported here so every caller keeps importing from
@@ -319,32 +319,18 @@ export interface GgufModel {
 }
 
 /**
- * Full detail for a single model — superset of GgufModel.
- * Returned by `GET /api/models/:id/detail` and mirrors the backend `ModelDetailDto`.
- * Adds HuggingFace provenance, download timestamps, and raw GGUF metadata.
+ * Full detail for a single model — `GET /api/models/:id/detail`.
+ *
+ * Named `ModelDetail` at the call sites and `ModelDetailDto` in Rust; the
+ * alias keeps the GUI's spelling without inventing a second shape.
+ *
+ * It is *not* an extension of `GuiModel`, though the hand-written mirror said
+ * so twice: `ModelDetailDto` carries neither `serverDefaults` nor
+ * `benchmarkSummary`, so the inheritance advertised two fields the endpoint
+ * has never sent. Nothing read them.
  */
-export interface ModelDetail extends GgufModel {
-  /** Original filename on HuggingFace (e.g. "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"). */
-  hfFilename?: string;
-  /** Git commit SHA of the HF repo snapshot at download time. */
-  hfCommitSha?: string;
-  /** ISO-8601 timestamp of when the model was first downloaded. */
-  downloadDate?: string;
-  /** ISO-8601 timestamp of the last update-check for this model. */
-  lastUpdateCheck?: string;
-  /** Raw GGUF key-value metadata pairs (may be large). */
-  metadata: Record<string, string>;
-  /**
-   * Whether this model's chat template reads `reasoning_effort`.
-   *
-   * Only the model *detail* carries it: the observation is taken from
-   * `GET /props` at launch and stored on the row, and the list endpoint does
-   * not publish it. Absent on a backend that predates the field — which reads
-   * as `'unknown'`, the one default that cannot hide the control from a model
-   * that supports it.
-   */
-  reasoningEffortSupport?: TemplateSupport;
-}
+import type { ModelDetailDto } from './generated/ModelDetailDto';
+export type ModelDetail = ModelDetailDto;
 
 
 export interface ServeConfig {
