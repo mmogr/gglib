@@ -13,13 +13,18 @@ export type { DownloadStatus };
 
 /**
  * Shard information for multi-file downloads.
+ *
+ * The hand-written mirror declared four of the six fields and outlived the
+ * pair that fixed sharded progress: `preceding_bytes` and `group_total_bytes`
+ * carry the exact byte offsets of a shard within the model, and without them
+ * the only aggregate a client can compute is `file_size * total_shards` —
+ * wrong whenever the last shard is smaller, which is almost always, and
+ * discontinuous at every boundary. It also typed `file_size` as
+ * `number | null`, a value the wire cannot send: the Rust field carries
+ * `skip_serializing_if`, so the key is omitted rather than nulled.
  */
-export interface ShardInfo {
-  shard_index: number;
-  total_shards: number;
-  filename: string;
-  file_size?: number | null;
-}
+import type { ShardInfo } from '../../../types/generated/ShardInfo';
+export type { ShardInfo };
 
 /**
  * Download queue item.
