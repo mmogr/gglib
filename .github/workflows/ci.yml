@@ -121,6 +121,13 @@ jobs:
       - name: Check module tables are current
         run: ./scripts/generate_module_tables.sh --check
 
+      # Its Rust counterpart above is generated, so it cannot drift. The
+      # TypeScript tables are hand-written, and `check_readmes.sh` only asks
+      # whether a README exists and carries its markers — never whether what
+      # it says is true, which is how files get added without reaching one.
+      - name: Check README tables match their directories
+        run: ./scripts/check_readme_tables.py
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest

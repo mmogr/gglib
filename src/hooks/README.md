@@ -52,6 +52,7 @@ Custom React hooks for gglib GUI functionality.
 |------|-------------|
 | [`useDownloadManager.ts`](useDownloadManager.ts) | Download queue operations and progress |
 | [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Side effects on download completion |
+| [`useDownloadSystemStatus.ts`](useDownloadSystemStatus.ts) | Whether the desktop download backend has finished initialising, or failed |
 
 ### System Hooks
 
@@ -62,6 +63,8 @@ Custom React hooks for gglib GUI functionality.
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | MCP tool support caching |
+| [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy |
+| [`useProxyDashboard.ts`](useProxyDashboard.ts) | Subscribes to a running proxy's live dashboard stream, on the proxy's own host, port and credential |
 
 ### Utility Hooks
 
@@ -70,12 +73,16 @@ Custom React hooks for gglib GUI functionality.
 | [`useDebounce.ts`](useDebounce.ts) | Debounced value updates |
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
 | [`useModelFilterOptions.ts`](useModelFilterOptions.ts) | Model filtering and sorting |
+| [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |
+| [`usePanelResize.ts`](usePanelResize.ts) | Draggable split with min/max bounds, optionally persisted to `localStorage` |
+| [`useToastTimer.ts`](useToastTimer.ts) | Toast auto-dismiss countdown with pause and resume |
 
 ### Runtime Hook
 
 | Hook | Description |
 |------|-------------|
 | [`useGglibRuntime/`](useGglibRuntime/) | Consolidated runtime state (models, servers, downloads) |
+| [`useChatPersistence/`](useChatPersistence/) | Hydrating chat messages from the database and writing them back, for `ExternalStoreRuntime` |
 
 ## Usage
 
