@@ -39,7 +39,7 @@ crates/gglib-cli/src/model_commands.rs 403
 crates/gglib-cli/src/presentation/explain_display_tests.rs 709
 crates/gglib-cli/src/presentation/explain_display.rs 474
 crates/gglib-cli/src/presentation/inspect_display.rs 405
-crates/gglib-core/src/domain/admission.rs 309
+crates/gglib-core/src/domain/admission.rs 321
 crates/gglib-core/src/domain/agent/config.rs 635
 crates/gglib-core/src/domain/agent/events.rs 354
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 401

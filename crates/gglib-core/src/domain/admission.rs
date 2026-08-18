@@ -70,6 +70,18 @@ pub struct SecondarySlotStatus {
     /// Stable machine-readable label, for styling. One of `resident`,
     /// `available`, `too_large`, `no_headroom`, `unknown_footprint`,
     /// `unknown_budget`.
+    ///
+    /// A `&'static str`, which ts-rs would render as a bare `string` — losing
+    /// the exhaustiveness the GUI's icon table and tone function are written
+    /// against. The override restates the closed set above, the same way
+    /// `gglib_proxy::dashboard::CacheSnapshot::ram_state` does; it is produced
+    /// by one exhaustive `match`, so a new arm there is the one other place
+    /// that must touch this line.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(type = "\"resident\" | \"available\" | \"too_large\" \
+                   | \"no_headroom\" | \"unknown_footprint\" | \"unknown_budget\"")
+    )]
     pub state: &'static str,
     /// Ready-to-render explanation. Phrased for display rather than parsing —
     /// consumers branch on [`Self::state`].

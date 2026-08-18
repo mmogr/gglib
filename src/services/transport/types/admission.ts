@@ -26,59 +26,24 @@
  * footprint that could not be estimated, or a machine whose free VRAM gglib
  * cannot read (everything but NVIDIA and Apple Silicon).
  */
-export type SecondarySlotState =
-  | 'resident'
-  | 'available'
-  | 'too_large'
-  | 'no_headroom'
-  | 'unknown_footprint'
-  | 'unknown_budget';
+import type { SecondarySlotStatus } from '../../../types/generated/SecondarySlotStatus';
 
-/** Mirrors `gglib_core::domain::SecondarySlotStatus`. */
-export interface SecondarySlotStatus {
-  /** Machine-readable label, for styling. Branch on this, not on `detail`. */
-  state: SecondarySlotState;
-  /** Ready-to-render explanation. */
-  detail: string;
-}
+export type SecondarySlotState = SecondarySlotStatus['state'];
 
-/** Mirrors `gglib_core::domain::ResidentSlotSnapshot` — one model in VRAM. */
-export interface ResidentSlotSnapshot {
-  /** Slot index; `0` is the primary. */
-  slot: number;
-  model_name: string;
-  model_id: number;
-  port: number;
-  /**
-   * Requests currently holding a lease on this slot. A slot serving anything
-   * at all is never evicted — a swap must not preempt a live generation.
-   */
-  inflight: number;
-  /** Whether this is the slot chat traffic and the `/slots` poller follow. */
-  is_primary: boolean;
-  resident_for_secs: number;
-}
+export type { SecondarySlotStatus };
 
-/** Mirrors `gglib_core::domain::QueuedModelSnapshot` — requests waiting for one model. */
-export interface QueuedModelSnapshot {
-  model_name: string;
-  waiting: number;
-  /** Age of the oldest waiter, in milliseconds. */
-  oldest_wait_ms: number;
-}
+/** One model in VRAM. */
+export type { ResidentSlotSnapshot } from '../../../types/generated/ResidentSlotSnapshot';
+
+/** Requests waiting for one model. */
+export type { QueuedModelSnapshot } from '../../../types/generated/QueuedModelSnapshot';
 
 /**
- * Mirrors `gglib_core::domain::AdmissionSnapshot` — who holds VRAM, who is
- * queued behind them, and why the second slot is or is not in use.
+ * Who holds VRAM, who is queued behind them, and why the second slot is or is
+ * not in use.
  *
  * A non-empty `queued` means traffic is being batched behind a model swap,
  * which is the queue working rather than a fault. Comparing `total_queued`
  * against `total_swaps` shows how much that batching saved.
  */
-export interface AdmissionSnapshot {
-  slots: ResidentSlotSnapshot[];
-  queued: QueuedModelSnapshot[];
-  total_queued: number;
-  total_swaps: number;
-  secondary_slot: SecondarySlotStatus;
-}
+export type { AdmissionSnapshot } from '../../../types/generated/AdmissionSnapshot';
