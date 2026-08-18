@@ -19,14 +19,18 @@ import {
 import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 
-const FIELD_ID = 'inference-param-reasoningEffort';
-const CAPTION_ID = `${FIELD_ID}-description`;
+const DEFAULT_FIELD_ID = 'inference-param-reasoningEffort';
 
 export interface ReasoningEffortFieldProps {
   /** The level currently set on this layer, or undefined when unset. */
   value: ReasoningEffortLevel | undefined;
   onChange: (level: ReasoningEffortLevel | undefined) => void;
   disabled: boolean;
+  /**
+   * DOM id for the control, so a second surface can render this without
+   * colliding with the global form's. Defaults to the global form's id.
+   */
+  id?: string;
   /**
    * What this surface knows about the model's template.
    *
@@ -88,7 +92,10 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
   onChange,
   disabled,
   support,
+  id = DEFAULT_FIELD_ID,
 }) => {
+  const captionId = `${id}-description`;
+
   // The one state that hides the control. `unknown` deliberately does not:
   // the server's own suppression acts only on a measured `no` (ADR 0007
   // decision 3), so hiding on `unknown` would gate the control on every model
@@ -97,16 +104,16 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
 
   return (
     <div className="flex flex-col gap-[0.4rem]">
-      <label htmlFor={FIELD_ID} className="text-sm font-medium text-text">
+      <label htmlFor={id} className="text-sm font-medium text-text">
         Reasoning Effort
       </label>
       <Select
-        id={FIELD_ID}
+        id={id}
         size="sm"
         className="max-w-[220px]"
         disabled={disabled}
         value={value ?? ''}
-        aria-describedby={CAPTION_ID}
+        aria-describedby={captionId}
         onChange={(e) => onChange((e.target.value || undefined) as ReasoningEffortLevel | undefined)}
       >
         {/*
@@ -123,7 +130,7 @@ export const ReasoningEffortField: FC<ReasoningEffortFieldProps> = ({
           </option>
         ))}
       </Select>
-      <span id={CAPTION_ID} className="text-xs text-text-muted italic">
+      <span id={captionId} className="text-xs text-text-muted italic">
         {caption(support)}
       </span>
     </div>

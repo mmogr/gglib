@@ -120,6 +120,53 @@ describe('InferenceProfiles', () => {
 
     expect(await screen.findByText(/invalid inference profile/i)).toBeInTheDocument();
   });
+
+  /**
+   * The edit path had no coverage at all, which is how the editor came to
+   * drop seven of `InferenceConfig`'s eighteen fields on save: it rebuilt the
+   * config from an eleven-name list, so anything set out of band — by
+   * `gglib config profile set`, which accepts all seventeen the CLI exposes —
+   * was gone the first time somebody opened the form and pressed Save.
+   */
+  it('keeps parameters its own form did not used to offer', async () => {
+    const user = userEvent.setup();
+    getSettings.mockResolvedValue(
+      settings([
+        coding({
+          config: resolvedConfig({
+            temperature: 0.2,
+            topNSigma: 3,
+            frequencyPenalty: 0.1,
+            dynatempRange: 0.5,
+            reasoningBudgetTokens: 8192,
+            reasoningEffort: 'high',
+          }),
+        }),
+      ]),
+    );
+
+    render(<InferenceProfiles />);
+    await screen.findByText('coding');
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+
+    // Change only the description, the way somebody tidying a profile would.
+    const description = await screen.findByLabelText(/description/i);
+    await user.clear(description);
+    await user.type(description, 'tidied');
+    await user.click(screen.getByRole('button', { name: /save profile/i }));
+
+    const saved = updateSettings.mock.calls[0][0].inferenceProfiles[0];
+    expect(saved.config).toMatchObject({
+      temperature: 0.2,
+      topNSigma: 3,
+      frequencyPenalty: 0.1,
+      dynatempRange: 0.5,
+      reasoningBudgetTokens: 8192,
+      reasoningEffort: 'high',
+    });
+    // And `seed` still does not appear, which is the one deliberate omission.
+    expect(saved.config).not.toHaveProperty('seed');
+  });
 });
 
 describe('profileNameError', () => {
