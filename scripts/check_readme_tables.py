@@ -5,11 +5,24 @@
 markers. Nothing asked whether what it says is true, so a table could name a
 file that had been deleted, or omit one that had been added, and stay green.
 
-A row counts as describing a file only when its link target is a *relative
-path*: `| [`useModels.ts`](useModels.ts) |` does, `| [`model`](#models) |`
-does not. That distinction matters — `src/commands/README.md` tabulates CLI
-command names against anchors in the same document, and every one of them
-would otherwise read as a file that does not exist.
+A first-cell code span names a file when it carries a code extension or a
+trailing slash. That is what keeps the two tables which are *not* file
+listings out of it: `src/commands/README.md` tabulates CLI command names and
+`src/types/README.md` tabulates type names, and neither carries an extension.
+
+What this does NOT check, so that nobody reads more into a pass than is
+there:
+
+* Only the *first* cell of a row. A second cell listing the symbols a module
+  exports can name one that has been deleted and this will not notice.
+* Rows are pooled per README, not per table. A README often carries tables for
+  its subdirectories as well as itself, and nothing in a bare `| `detect.ts` |`
+  says which one it belongs to — so adding `services/detect.ts` alongside the
+  existing `services/platform/detect.ts` passes on the strength of the row for
+  the other file. Attributing rows to tables would need each table's base
+  directory declared, which no README does today.
+* READMEs with no file-naming rows at all, which are counted and reported
+  rather than silently passed over.
 
 Usage:
     ./scripts/check_readme_tables.py            # report and fail on drift
@@ -86,7 +99,19 @@ def documented_names(readme: str) -> tuple[set[str], str]:
     return rows, text
 
 
-def is_documented(name: str, rows: set[str], text: str) -> bool:
+def prose_of(text: str) -> str:
+    """The README with its table rows removed.
+
+    The prose escape below has to read this rather than the whole document.
+    Against the full text, a row in *another* table — `src/services/README.md`
+    lists `clients/` and `platform/` contents in tables of their own — counted
+    as documentation for a same-named file in this directory, so a genuinely
+    undocumented file could pass on the strength of an unrelated row.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("|"))
+
+
+def is_documented(name: str, rows: set[str], prose: str) -> bool:
     """A table row is the usual way; a code span in the prose also counts.
 
     `src/pages/README.md` is why the second half exists: it names
@@ -97,7 +122,7 @@ def is_documented(name: str, rows: set[str], text: str) -> bool:
     """
     if name in rows:
         return True
-    return f"`{name}`" in text or f"`{name.rstrip('/')}`" in text
+    return f"`{name}`" in prose or f"`{name.rstrip('/')}`" in prose
 
 
 def present_names(dirpath: str, subdirs: list[str], files: list[str]) -> set[str]:
@@ -117,6 +142,7 @@ def present_names(dirpath: str, subdirs: list[str], files: list[str]) -> set[str
 def main() -> int:
     verbose = "--verbose" in sys.argv
     problems: list[tuple[str, list[str], list[str]]] = []
+    skipped: list[str] = []
     checked = 0
 
     for root in ROOTS:
@@ -128,21 +154,30 @@ def main() -> int:
             readme = os.path.join(dirpath, "README.md")
             rows, text = documented_names(readme)
             if not rows:
-                continue  # a README with no file table is not this check's business
+                # No file-naming rows, so there is no table to compare. Counted
+                # rather than passed over in silence: a reader of a green run
+                # should be able to see how much of the tree it did not reach.
+                skipped.append(readme)
+                continue
 
             checked += 1
             present = present_names(dirpath, subdirs, files)
+            prose = prose_of(text)
 
             phantom = sorted(n for n in rows if not exists_under(dirpath, n))
-            unlisted = sorted(n for n in present if not is_documented(n, rows, text))
+            unlisted = sorted(n for n in present if not is_documented(n, rows, prose))
 
             if phantom or unlisted:
                 problems.append((readme, phantom, unlisted))
             elif verbose:
-                print(f"  ok  {readme} ({len(named)} rows)")
+                print(f"  ok  {readme} ({len(rows)} rows)")
 
     print(f"Checking README tables against their directories ({checked} with tables)...")
+    print(f"  ({len(skipped)} README(s) carry no file-naming rows and are not compared)")
     print("================================================")
+    if verbose:
+        for readme in skipped:
+            print(f"  skip {readme} (no file rows)")
 
     if not problems:
         print("✅ every table names what is there, and nothing that is not")

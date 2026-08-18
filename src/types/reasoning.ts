@@ -52,12 +52,3 @@ export type { Support as TemplateSupport } from './generated/Support';
  * quantity, and `INFERENCE_PARAMS` has no honest `{ min, max, step }` for it.
  */
 export type ProvenanceParamKey = SamplingParamKey | 'reasoningEffort';
-
-/**
- * A resolved `reasoningEffort` a model's template would not read — the
- * `effortSuppressed` field of `GET /api/models/:id/explain`.
- *
- * Conditional, not historical: the endpoint explains stored configuration, so
- * nothing has been sent. A surface must word it as what *would* happen on a
- * request against this model.
- */

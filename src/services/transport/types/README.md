@@ -35,7 +35,7 @@ Transport
 | `chat.ts` | `ConversationSummary`, `ChatMessage`, `SaveMessageParams`, `ChatTransport` |
 | `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse`, `ServersTransport` |
 | `downloads.ts` | Download queue types and `DownloadsTransport` |
-| `events.ts` | `ServerWireEvent`, `DownloadEvent`, `ServerSnapshotEntry`, `EventsTransport` |
+| `events.ts` | `ServerWireEvent`, `DownloadEvent`, `EventsTransport` |
 | `settings.ts` | Application settings shapes and `SettingsTransport` |
 | `tags.ts` | Tag shapes and `TagsTransport` |
 | `mcp.ts` | MCP server and tool shapes, and `McpTransport` |
