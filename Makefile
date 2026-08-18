@@ -2,8 +2,9 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test check fmt lint doc dev pre-commit release \
+        test check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web test-web boundaries enforce \
+        bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
         check-deps check-deps-bootstrap check-deps-verify check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
