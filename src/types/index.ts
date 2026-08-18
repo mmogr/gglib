@@ -21,86 +21,19 @@ export type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './re
  * 3. Global settings (stored in AppSettings.inferenceDefaults)
  * 4. Hardcoded fallback (e.g., temperature = 0.7)
  */
-export interface InferenceConfig {
-  /** Sampling temperature (0.0 - 2.0). Controls randomness. */
-  temperature?: number;
-  /** Nucleus sampling threshold (0.0 - 1.0). Cumulative probability cutoff. */
-  topP?: number;
-  /** Top-K sampling limit. Considers only K most likely tokens. */
-  topK?: number;
-  /** Maximum tokens to generate in response. */
-  maxTokens?: number;
-  /** Repetition penalty (> 0.0, typically 1.0 - 1.3). */
-  repeatPenalty?: number;
-  /** Presence penalty (0.0 - 2.0). Discourages token repetition across the output.
-   *  0.0 = disabled. 1.5 = recommended for reasoning/thinking models. */
-  presencePenalty?: number;
-  /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
-   *  0.0 = disabled (recommended by Qwen3.6). */
-  minP?: number;
-  /** Frequency penalty (−2.0 - 2.0), presencePenalty's twin: penalises tokens
-   *  in proportion to how often they already appeared. 0.0 = disabled; unset
-   *  defers to llama.cpp's default (0.0). */
-  frequencyPenalty?: number;
-  /** Dynamic-temperature half-range: entropy-scales the effective temperature
-   *  within [temp − range, temp + range]. 0.0 = disabled; unset defers to
-   *  llama.cpp's default (0.0). */
-  dynatempRange?: number;
-  /** Dynamic-temperature exponent; inert unless dynatempRange is set. Unset
-   *  defers to llama.cpp's default (1.0). */
-  dynatempExponent?: number;
-  /** Top-n-sigma: keep tokens within n·σ of the max pre-softmax logit, so the
-   *  candidate set does not widen with temperature. −1.0 = disabled; unset
-   *  defers to llama.cpp's default (−1.0). */
-  topNSigma?: number;
-  /** DRY repetition penalty strength. 0.0 = disabled; catches multi-token
-   *  loops that the flat `repeatPenalty` cannot see. */
-  dryMultiplier?: number;
-  /** DRY penalty base — the exponent applied per token of matched sequence.
-   *  Unset defers to llama.cpp's default (1.75). */
-  dryBase?: number;
-  /** Tokens of repeat DRY tolerates before penalising. Unset defers to
-   *  llama.cpp's default (2). */
-  dryAllowedLength?: number;
-  /** How far back DRY scans, in tokens; 0 disables. Unset defers to
-   *  llama.cpp's default (64). */
-  dryPenaltyLastN?: number;
-  /**
-   * How hard to ask the model to think, where its chat template reads the
-   * variable.
-   *
-   * Conditional by nature, and the only field here that is: a template that
-   * does not read `reasoning_effort` ignores it in silence, so the server
-   * deletes the key rather than sending it on a model whose observed caps say
-   * so (ADR 0007 decision 3). `ModelDetail.reasoningEffortSupport` is what a
-   * surface consults before offering the control — see `TemplateSupport` for
-   * why the answer has three states and not two.
-   *
-   * Unset is not a level. Omitting the key leaves the *template's* own default
-   * in place, which is a different act from naming one, and is why no `none`
-   * rung exists.
-   */
-  reasoningEffort?: ReasoningEffortLevel;
-  /**
-   * Ceiling on this turn's thinking tokens.
-   *
-   * `-1` defers to the launch-time default; `0` stops thinking altogether.
-   * Enforced by llama.cpp's own sampler rather than by a template, so unlike
-   * {@link reasoningEffort} it holds on every model and is never
-   * capability-gated. Validated `>= -1` on save.
-   */
-  reasoningBudgetTokens?: number;
-  /**
-   * RNG seed. Unset means llama.cpp draws a fresh one per request.
-   *
-   * Request-scoped, like `maxTokens` and unlike everything else here: it is
-   * not a sampling policy, and a seed stored per model would pin every
-   * response that model produces to the same text. No settings, profile or
-   * per-model surface offers it — the benchmark harness is the only caller
-   * that sets one.
-   */
-  seed?: number;
-}
+import type { InferenceConfig } from './generated/InferenceConfig';
+export type { InferenceConfig };
+
+/**
+ * A partially-specified {@link InferenceConfig} — what an edit form holds
+ * mid-edit, and what a starter profile stores.
+ *
+ * The wire always sends all eighteen fields, `null` for the ones nothing has
+ * set, which is why the generated type has no optional keys. A form is a
+ * different thing: it needs to express "this field is not in play" by the
+ * key being absent, and to `delete` a key when the user clears a control.
+ */
+export type SparseInferenceConfig = Partial<InferenceConfig>;
 
 /** Capability bitflags, mirroring `gglib_core::domain::ModelCapabilities` (a bare u32 on the wire). */
 export const CAPABILITY_FLAGS = {
@@ -145,16 +78,17 @@ export interface UpgradeOutcome {
  * left undefined falls through to the model's own defaults, which is what
  * makes one profile safe to apply across differing model architectures.
  */
-export interface InferenceProfile {
-  /** Slug: lowercase letters, digits and '-', 1-32 chars. */
-  name: string;
-  /** Human-readable summary, shown in the model picker. */
-  description?: string | null;
-  /** The sampling overrides. Sparse — see above. */
-  config: InferenceConfig;
-  /** Advertise `<model>:<name>` in /v1/models so clients can select it. */
-  listInModels: boolean;
-}
+import type { InferenceProfile } from './generated/InferenceProfile';
+export type { InferenceProfile };
+
+/**
+ * A profile whose config is only partly specified — a starter template, or one
+ * being edited. The wire form carries all eighteen sampling fields; a template
+ * that names two is not a lesser wire value, it is a different thing.
+ */
+export type SparseInferenceProfile = Omit<InferenceProfile, 'config'> & {
+  config: SparseInferenceConfig;
+};
 
 // ============================================================================
 // Sampling provenance
@@ -343,10 +277,8 @@ export interface PublishedDefault {
  * Per-model server defaults.
  * Overrides global settings for specific llama-server launch parameters.
  */
-export interface ServerConfig {
-  /** Context window size (e.g., 4096, 8192, 32768). */
-  contextLength?: number;
-}
+import type { ServerConfig } from './generated/ServerConfig';
+export type { ServerConfig };
 
 // ============================================================================
 // Model Types
@@ -559,13 +491,13 @@ export interface UpdateSettingsRequest {
   /** Default model ID for quick commands (e.g., `gglib question`) */
   defaultModelId?: number | null | undefined;
   /** Global inference parameter defaults */
-  inferenceDefaults?: InferenceConfig | null | undefined;
+  inferenceDefaults?: SparseInferenceConfig | null | undefined;
   /**
    * Replaces the whole profile list. `null` clears it; omitting the key
    * leaves it untouched, so an unrelated settings update cannot drop
    * profiles it never knew about.
    */
-  inferenceProfiles?: InferenceProfile[] | null | undefined;
+  inferenceProfiles?: SparseInferenceProfile[] | null | undefined;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null | undefined;
   /** See `AppSettings.proxyApiKey`. */

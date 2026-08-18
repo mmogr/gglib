@@ -5,7 +5,8 @@ import '@testing-library/jest-dom';
 
 import { InferenceProfiles } from '../../../src/components/SettingsModal/InferenceProfiles';
 import { profileNameError } from '../../../src/components/SettingsModal/InferenceProfileEditor';
-import type { AppSettings, InferenceProfile } from '../../../src/types';
+import type { AppSettings, InferenceProfile, SparseInferenceProfile } from '../../../src/types';
+import { resolvedConfig } from '../fixtures/inference';
 
 const getSettings = vi.fn();
 const updateSettings = vi.fn();
@@ -19,7 +20,7 @@ function coding(overrides: Partial<InferenceProfile> = {}): InferenceProfile {
   return {
     name: 'coding',
     description: 'Low-variance sampling',
-    config: { temperature: 0.2, topP: 0.9 },
+    config: resolvedConfig({ temperature: 0.2, topP: 0.9 }),
     listInModels: false,
     ...overrides,
   };
@@ -33,8 +34,12 @@ beforeEach(() => {
   getSettings.mockReset();
   updateSettings.mockReset();
   getSettings.mockResolvedValue(settings([coding()]));
-  updateSettings.mockImplementation((req: { inferenceProfiles: InferenceProfile[] }) =>
-    Promise.resolve(settings(req.inferenceProfiles)),
+  // The backend stores a resolved profile, so the echo fills the config out
+  // the way a real save does rather than handing the sparse request back.
+  updateSettings.mockImplementation((req: { inferenceProfiles: SparseInferenceProfile[] }) =>
+    Promise.resolve(
+      settings(req.inferenceProfiles.map((p) => ({ ...p, config: resolvedConfig(p.config) }))),
+    ),
   );
 });
 
@@ -96,7 +101,7 @@ describe('InferenceProfiles', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalled());
     const sent = updateSettings.mock.calls[0][0].inferenceProfiles;
-    expect(sent.map((p: InferenceProfile) => p.name)).toEqual(['chat']);
+    expect(sent.map((p: SparseInferenceProfile) => p.name)).toEqual(['chat']);
   });
 
   /**

@@ -1,6 +1,6 @@
 import { FC, useCallback, useMemo } from 'react';
 import { X } from 'lucide-react';
-import type { InferenceConfig, SamplingParamKey, TemplateSupport } from '../../types';
+import type { SparseInferenceConfig, SamplingParamKey, TemplateSupport } from '../../types';
 import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
 import { PARAM_LABELS, formatParamValue } from '../../utils/samplingProvenance';
 import { Input } from '../ui/Input';
@@ -11,8 +11,8 @@ import { ReasoningEffortField } from './ReasoningEffortField';
 import './InferenceParametersForm.css';
 
 interface InferenceParametersFormProps {
-  value: InferenceConfig | undefined | null;
-  onChange: (newValue: InferenceConfig) => void;
+  value: SparseInferenceConfig | undefined | null;
+  onChange: (newValue: SparseInferenceConfig) => void;
   disabled?: boolean;
   /**
    * What an empty field on this surface falls through to. Required: a surface
@@ -72,9 +72,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 }) => {
   const config = useMemo(() => value || {}, [value]);
 
-  const updateField = useCallback(<K extends keyof InferenceConfig>(
+  const updateField = useCallback(<K extends keyof SparseInferenceConfig>(
     field: K,
-    newValue: InferenceConfig[K] | undefined
+    newValue: SparseInferenceConfig[K] | undefined
   ) => {
     const updated = { ...config, [field]: newValue };
     // Remove undefined values from the object
@@ -236,7 +236,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
       </p>
       <div className="flex flex-col gap-[1rem]">
         <ReasoningEffortField
-          value={config.reasoningEffort}
+          value={config.reasoningEffort ?? undefined}
           onChange={(level) => updateField('reasoningEffort', level)}
           disabled={disabled}
           support={capabilities?.reasoningEffort}

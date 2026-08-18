@@ -9,14 +9,14 @@
 
 import { FC, useState } from "react";
 import { Checkbox } from '../ui/Checkbox';
-import type { InferenceConfig, InferenceProfile } from "../../types";
+import type { SparseInferenceConfig, SparseInferenceProfile } from "../../types";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Stack, Label } from "../primitives";
 
 /** One editable sampling parameter. */
 interface ParamSpec {
-  key: keyof InferenceConfig;
+  key: keyof SparseInferenceConfig;
   label: string;
   hint: string;
   step: string;
@@ -64,10 +64,10 @@ export function profileNameError(name: string, taken: string[]): string | null {
 
 interface InferenceProfileEditorProps {
   /** The profile being edited, or undefined when creating a new one. */
-  initial?: InferenceProfile;
+  initial?: SparseInferenceProfile;
   /** Names already in use, excluding the one being edited. */
   takenNames: string[];
-  onSave: (profile: InferenceProfile) => void;
+  onSave: (profile: SparseInferenceProfile) => void;
   onCancel: () => void;
 }
 
@@ -99,7 +99,7 @@ export const InferenceProfileEditor: FC<InferenceProfileEditorProps> = ({
 
     // Blank fields are omitted entirely, which is what makes the profile
     // sparse — a `0` would be a real override, an absent key falls through.
-    const config: InferenceConfig = {};
+    const config: SparseInferenceConfig = {};
     for (const { key } of PARAMS) {
       const raw = values[key]?.trim();
       if (!raw) continue;

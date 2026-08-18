@@ -5,7 +5,8 @@ import '@testing-library/jest-dom';
 
 import { InferenceParametersForm } from '../../../src/components/InferenceParametersForm';
 import type { InferenceFallback } from '../../../src/components/InferenceParametersForm/fallbackCaption';
-import type { InferenceConfig, SamplingExplanation } from '../../../src/types';
+import type { SparseInferenceConfig, SamplingExplanation } from '../../../src/types';
+import { resolvedConfig } from '../fixtures/inference';
 
 /**
  * Every parameter, with the values a user should see on the settings surface.
@@ -33,7 +34,7 @@ const FLOOR: InferenceFallback = { kind: 'floor' };
 /** An explanation in which every parameter came from the global settings. */
 function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExplanation {
   return {
-    resolved: {
+    resolved: resolvedConfig({
       temperature: 1.2,
       topP: 0.8,
       topK: 60,
@@ -41,7 +42,7 @@ function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExpla
       repeatPenalty: 1.15,
       presencePenalty: 0.5,
       minP: 0.05,
-    },
+    }),
     sources: [
       { param: 'temperature', kind: 'layer', layer: 'global' },
       { param: 'topP', kind: 'layer', layer: 'global' },
@@ -69,7 +70,7 @@ function resolved(
   };
 }
 
-function renderForm(fallback: InferenceFallback, value?: InferenceConfig) {
+function renderForm(fallback: InferenceFallback, value?: SparseInferenceConfig) {
   const onChange = vi.fn();
   render(<InferenceParametersForm value={value} onChange={onChange} fallback={fallback} />);
   return onChange;
@@ -244,6 +245,23 @@ describe('InferenceParametersForm', () => {
       await userEvent.click(screen.getByRole('button', { name: /Reset Top K to default/ }));
 
       expect(onChange).toHaveBeenCalledWith({});
+    });
+
+    // The form holds a *sparse* config, and clearing a field deletes its key
+    // rather than setting it to null. Typing this state as the wire's
+    // `InferenceConfig` — where all eighteen keys are present — would make
+    // `delete` a type error and invite a null in its place, which the backend
+    // reads as "clear to the floor" rather than "send nothing". Reasoning
+    // effort is where that distinction is visible: the blank option means the
+    // chat template keeps its own default.
+    it('un-sets reasoning effort by dropping the key, not by nulling it', async () => {
+      const onChange = renderForm(FLOOR, { reasoningEffort: 'high' });
+
+      await userEvent.selectOptions(screen.getByLabelText('Reasoning Effort'), '');
+
+      expect(onChange).toHaveBeenCalledWith({});
+      const sent = onChange.mock.calls.at(-1)?.[0];
+      expect(Object.hasOwn(sent, 'reasoningEffort')).toBe(false);
     });
   });
 });

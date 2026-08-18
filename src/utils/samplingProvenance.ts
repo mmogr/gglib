@@ -139,7 +139,7 @@ export function formatParamValue(
 export function resolvedValue(
   resolved: InferenceConfig,
   param: SamplingParamKey,
-): number | undefined {
+): number | null | undefined {
   return resolved[param];
 }
 

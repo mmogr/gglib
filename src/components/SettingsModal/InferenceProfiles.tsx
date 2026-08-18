@@ -12,14 +12,14 @@
 
 import { FC, useCallback, useEffect, useState } from "react";
 import { getSettings, updateSettings } from "../../services/transport/api/settings";
-import type { InferenceConfig, InferenceProfile } from "../../types";
+import type { SparseInferenceConfig, SparseInferenceProfile } from "../../types";
 import { Button } from "../ui/Button";
 import { Banner } from '../ui/Banner';
 import { Stack, EmptyState } from "../primitives";
 import { InferenceProfileEditor } from "./InferenceProfileEditor";
 
 /** Human-readable summary of the parameters a profile actually sets. */
-function summarize(config: InferenceConfig): string {
+function summarize(config: SparseInferenceConfig): string {
   const labels: Record<string, string> = {
     temperature: "temperature",
     topP: "top-p",
@@ -35,10 +35,10 @@ function summarize(config: InferenceConfig): string {
   };
   const parts = Object.entries(labels)
     .filter(([key]) => {
-      const value = config[key as keyof InferenceConfig];
+      const value = config[key as keyof SparseInferenceConfig];
       return value !== undefined && value !== null;
     })
-    .map(([key, label]) => `${label}=${config[key as keyof InferenceConfig]}`);
+    .map(([key, label]) => `${label}=${config[key as keyof SparseInferenceConfig]}`);
   return parts.length ? parts.join("  ") : "no parameters set";
 }
 
@@ -50,7 +50,7 @@ function summarize(config: InferenceConfig): string {
  * override per-model tuning. Drift is guarded by a contract test that reads
  * the Rust source.
  */
-export const STARTER_PROFILES: InferenceProfile[] = [
+export const STARTER_PROFILES: SparseInferenceProfile[] = [
   {
     name: 'coding',
     description: 'Low-variance sampling for code generation and tool use.',
@@ -72,7 +72,7 @@ export const STARTER_PROFILES: InferenceProfile[] = [
 ];
 
 export const InferenceProfiles: FC = () => {
-  const [profiles, setProfiles] = useState<InferenceProfile[]>([]);
+  const [profiles, setProfiles] = useState<SparseInferenceProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export const InferenceProfiles: FC = () => {
    * rejection is surfaced verbatim and local state is left untouched rather
    * than optimistically showing something that was not saved.
    */
-  const persist = useCallback(async (next: InferenceProfile[]) => {
+  const persist = useCallback(async (next: SparseInferenceProfile[]) => {
     setSaving(true);
     setError(null);
     try {
@@ -116,7 +116,7 @@ export const InferenceProfiles: FC = () => {
   }, []);
 
   const handleSave = useCallback(
-    (profile: InferenceProfile) => {
+    (profile: SparseInferenceProfile) => {
       const index = profiles.findIndex((p) => p.name === editing);
       const next =
         index >= 0

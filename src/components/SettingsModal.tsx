@@ -4,7 +4,7 @@ import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
 import { useModels } from "../hooks/useModels";
-import { UpdateSettingsRequest, InferenceConfig } from "../types";
+import { UpdateSettingsRequest, SparseInferenceConfig } from "../types";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
@@ -64,7 +64,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const agentGuards = useAgentGuardSettings(settings);
   const [downloadPathInput, setDownloadPathInput] = useState('');
   const [defaultModelInput, setDefaultModelInput] = useState("");
-  const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
+  const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<SparseInferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");

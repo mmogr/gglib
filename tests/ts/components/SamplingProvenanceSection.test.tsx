@@ -17,6 +17,7 @@ import type {
   ParamProvenance,
   SamplingExplanation,
 } from '../../../src/types';
+import { resolvedConfig } from '../fixtures/inference';
 
 const explainModelSampling = vi.fn();
 
@@ -40,14 +41,14 @@ function sources(overrides: Partial<Record<string, ParamProvenance>> = {}): Para
 
 function explanation(overrides: Partial<SamplingExplanation> = {}): SamplingExplanation {
   return {
-    resolved: {
+    resolved: resolvedConfig({
       temperature: 0.2,
       topP: 0.95,
       topK: 40,
       presencePenalty: 0,
       repeatPenalty: 1,
       minP: 0.05,
-    },
+    }),
     sources: sources(),
     profile: 'coding',
     isReasoning: false,
@@ -57,7 +58,7 @@ function explanation(overrides: Partial<SamplingExplanation> = {}): SamplingExpl
 }
 
 function profile(name: string): InferenceProfile {
-  return { name, description: null, config: {}, listInModels: false };
+  return { name, description: null, config: resolvedConfig(), listInModels: false };
 }
 
 beforeEach(() => {
