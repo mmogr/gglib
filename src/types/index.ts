@@ -457,15 +457,14 @@ export interface ServeConfig {
  */
 export type { ServerInfo } from './generated/ServerInfo';
 
-export interface ModelsDirectoryInfo {
-  path: string;
-  // Matches gglib_app_services::settings::format_source() exactly:
-  // ModelsDirSource::{Explicit,EnvVar,Default} -> "explicit"/"environment"/"default".
-  source: 'explicit' | 'environment' | 'default';
-  defaultPath: string;
-  exists: boolean;
-  writable: boolean;
-}
+/**
+ * `source` widens to `string` here, from the hand-written
+ * `'explicit' | 'environment' | 'default'`. Its Rust field is a plain `String`
+ * produced by `format_source()`, so the narrow union was a claim the wire does
+ * not make. Its only consumer indexes a `Record<string, string>`, so the
+ * widening costs nothing; narrowing it properly is a Rust-side change.
+ */
+export type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 
 export interface AppSettings {
   defaultDownloadPath?: string | null;

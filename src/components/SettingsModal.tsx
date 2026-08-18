@@ -201,8 +201,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   );
 
   const handleReset = useCallback(() => {
-    if (info?.defaultPath) {
-      setPathInput(info.defaultPath);
+    if (info?.default_path) {
+      setPathInput(info.default_path);
     }
     if (settings) {
       setContextSizeInput(settings.defaultContextSize?.toString() ?? "");
