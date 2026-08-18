@@ -118,20 +118,16 @@ export type { CompletionDetail };
 /**
  * Summary of an entire queue run from start to drain.
  * Emitted when the queue transitions from busy → idle.
+ *
+ * The last hand-written type in this file, and the only drift class it could
+ * still hide was field *addition*: `useDownloadManager` assigns the generated
+ * `DownloadEvent.summary` into state typed by this, so a removal or a type
+ * change already failed to compile, while a new Rust field simply stayed
+ * unreadable. Nothing gated it either — `check_ts_bindings.sh` and
+ * `make bindings-check` only ever look at Rust and `src/types/generated`.
  */
-export interface QueueRunSummary {
-  run_id: string;
-  started_at_ms: number;
-  completed_at_ms: number;
-  total_attempts_downloaded: number;
-  total_attempts_failed: number;
-  total_attempts_cancelled: number;
-  unique_models_downloaded: number;
-  unique_models_failed: number;
-  unique_models_cancelled: number;
-  truncated: boolean;
-  items: CompletionDetail[];
-}
+import type { QueueRunSummary } from '../../../types/generated/QueueRunSummary';
+export type { QueueRunSummary };
 
 export type { DownloadEvent } from '../../../types/generated/DownloadEvent';
 
