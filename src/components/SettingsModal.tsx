@@ -57,7 +57,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const {
     values: desktopValues,
     setValue: setDesktopSetting,
-    reset: resetDesktop,
     updates: desktopUpdates,
   } = useDesktopSettings(settings);
   const network = useNetworkSettings(settings);
@@ -200,26 +199,22 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     ]
   );
 
+  // Scoped to the one field this sits beside.
+  //
+  // It used to reset thirteen other settings as well — the title prompt, fit
+  // indicators, client-sampling trust, proxy loop detection, the download
+  // path, bind host and LAN sharing, the three desktop toggles and the three
+  // agent guards — from a link in the Models Directory field's action slot,
+  // and `handleSubmit` then sent all of them. It had never run: the gate read
+  // `info?.defaultPath`, a key the wire has never carried, so the button did
+  // not render. Correcting that spelling is what would have made a
+  // thirteen-setting revert reachable from a control labelled for one field,
+  // four of them behind a collapsed disclosure the user never opened.
   const handleReset = useCallback(() => {
     if (info?.default_path) {
       setPathInput(info.default_path);
     }
-    if (settings) {
-      setContextSizeInput(settings.defaultContextSize?.toString() ?? "");
-      setProxyPortInput(settings.proxyPort?.toString() ?? "");
-      setServerPortInput(settings.llamaBasePort?.toString() ?? "");
-      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() ?? "");
-      setProxyApiKeyInput(settings.proxyApiKey ?? "");
-      setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
-      setShowFitIndicators(true); // Default is enabled
-      setTrustClientSampling(false); // Default is disabled
-      setProxyLoopDetection(true); // Default is enabled
-      resetDesktop();
-      setDownloadPathInput('');
-      network.reset();
-      agentGuards.reset();
-    }
-  }, [info, settings, resetDesktop, network, agentGuards]);
+  }, [info]);
 
   const handleRefresh = useCallback(() => {
     refreshDir();
