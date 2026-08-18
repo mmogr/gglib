@@ -133,6 +133,7 @@ defaultsOrigin?: DefaultsOrigin,
  * than a `serde` alias on this one.
  *
  * [`Support`]: gglib_core::domain::Support
+ * [`Support::No`]: gglib_core::domain::Support::No
  */
 reasoningEffortSupport: Support, 
 /**
