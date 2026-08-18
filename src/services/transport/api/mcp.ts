@@ -124,7 +124,11 @@ export async function callMcpTool(
     const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      data: undefined,
+      // `null` for the same reason `error` is on the success path: the handler
+      // builds both fields on both paths, so a real failure carries
+      // `"data": null`. `undefined` serialises to an absent key — a third
+      // shape neither side describes.
+      data: null,
       error: message,
     };
   }

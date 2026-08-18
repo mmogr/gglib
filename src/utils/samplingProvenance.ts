@@ -135,11 +135,17 @@ export function formatParamValue(
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }
 
-/** Read the value for one provenance entry out of the resolved config. */
+/**
+ * Read the value for one provenance entry out of the resolved config.
+ *
+ * `number | null` and not `| undefined`: `resolved` is the wire's
+ * `InferenceConfig`, where all eighteen keys are present and an unset
+ * parameter arrives as `null`. There is no absent case to represent.
+ */
 export function resolvedValue(
   resolved: InferenceConfig,
   param: SamplingParamKey,
-): number | null | undefined {
+): number | null {
   return resolved[param];
 }
 
@@ -168,7 +174,14 @@ export function formatProvenanceValue(
  * like a defect. `ProxySamplingPanel.formatValue` and the CLI's
  * `fmt_published` do the same thing to the same values.
  */
-function trimFloat(value: number): string {
+function trimFloat(value: number | null | undefined): string {
+  // Tolerates a missing number rather than throwing. The types say it cannot
+  // happen — `PublishedDefaultDto`'s arms carry `published` where they claim
+  // to — but this renders inside the inspector panel, and a `TypeError` here
+  // unmounts the whole panel rather than spoiling one row. It reads `—`,
+  // never `0`: a fabricated zero would render as a number the model author
+  // published, which is the one thing this function must not invent.
+  if (value == null) return UNKNOWN;
   return Number(value.toPrecision(6)).toString();
 }
 
@@ -183,12 +196,17 @@ function trimFloat(value: number): string {
  * the same fact the same way.
  */
 export function describePublished(entry: PublishedDefault): string {
-  // No `?? 0` on the numbers and no `default:` arm: `PublishedDefaultDto` is a
-  // discriminated union, so `published` is present on the three arms that read
-  // it and absent from `unreadable`, and the four cases are exhaustive. The
-  // hand-written mirror was a flat object that made both fields optional on
-  // every state, which is why the guards existed — they were standing in for a
-  // shape the wire does not have.
+  // The four `?? 0` guards are gone and are not coming back:
+  // `PublishedDefaultDto` is a discriminated union, so `published` is present
+  // on the three arms that read it and absent from `unreadable`. The
+  // hand-written mirror was a flat object that made both numbers optional on
+  // every state, and `?? 0` was standing in for a shape the wire does not
+  // have — at the cost of printing a `0` the model author never published.
+  //
+  // The `default:` arm does stay, on the argument `publishedByParam` makes
+  // below: the declaration is a claim about the endpoint, not a guarantee
+  // about the bytes, and without it an unrecognised `state` returns
+  // `undefined` from a function typed `string`.
   switch (entry.state) {
     case 'overridden':
       return `${entry.key} = ${trimFloat(entry.published)}; gglib is sending ${trimFloat(
@@ -203,6 +221,8 @@ export function describePublished(entry: PublishedDefault): string {
       return `${entry.key} = ${trimFloat(entry.published)}; gglib sends the same value`;
     case 'unreadable':
       return `${entry.key} is set to a value gglib cannot read`;
+    default:
+      return UNKNOWN;
   }
 }
 
