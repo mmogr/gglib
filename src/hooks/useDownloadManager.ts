@@ -8,6 +8,9 @@ import { bucketQueue, queueIsBusy } from '../services/transport/downloadQueue';
 
 /**
  * Returns true if a queue snapshot indicates active work (busy state).
+ *
+ * One caller, and it *clears* a stale banner when busy — widening this makes
+ * the banner go sooner, never later.
  */
 function snapshotIsBusy(items: DownloadSummary[]): boolean {
   return queueIsBusy(items);
@@ -83,11 +86,10 @@ interface UseDownloadManagerOptions {
 /**
  * A wire row as the queue UI holds it.
  *
- * The two shapes now differ only in name — `DownloadQueueItem.status` is the
- * same seven-member `DownloadStatus` the wire sends — so this no longer
- * translates anything. It used to map through a `Record` of four states with
- * a `?? 'failed'` fallback, which turned `finalizing` and `registering` into
- * failures and `cancelled` into one too.
+ * No longer translates anything: `DownloadQueueItem.status` is the same
+ * seven-member `DownloadStatus` the wire sends. The `Record` of four it used
+ * to map through narrowed a type to less than the one it assigned into —
+ * moot on the two statuses a snapshot carries, where it was the identity.
  */
 function normalizeQueueItem(item: DownloadSummary): DownloadQueueItem {
   return {

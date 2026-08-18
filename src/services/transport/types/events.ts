@@ -4,7 +4,6 @@
  */
 
 import type { Unsubscribe, EventHandler } from './common';
-import type { DownloadId } from './ids';
 
 // ============================================================================
 // Server Events
@@ -105,9 +104,6 @@ export type { CompletionKind } from '../../../types/generated/CompletionKind';
 
 /**
  * Details for a single completed artifact in a queue run.
- */
-/**
- * Details for a single completed artifact in a queue run.
  *
  * `download_ids` carries the structured wire id — `{ model_id, quantization }`
  * — not the `"model_id:quantization"` string that `./ids` calls a
@@ -136,23 +132,7 @@ export interface QueueRunSummary {
   items: CompletionDetail[];
 }
 
-export type DownloadEvent =
-  | { type: 'queue_snapshot'; items: DownloadSummary[]; max_size: number }
-  | { type: 'download_started'; id: DownloadId; shard_index?: number; total_shards?: number }
-  // speed_bps / eta_seconds are omitted while the manager's rate estimator is
-  // still warming up. Absent means unknown, never zero — render a placeholder.
-  | { type: 'download_progress'; id: DownloadId; downloaded: number; total: number; speed_bps?: number; eta_seconds?: number; percentage: number }
-  | { type: 'shard_progress'; id: DownloadId; shard_index: number; total_shards: number; shard_filename: string; shard_downloaded: number; shard_total: number; aggregate_downloaded: number; aggregate_total: number; speed_bps?: number; eta_seconds?: number; percentage: number }
-  | { type: 'download_completed'; id: DownloadId; message?: string | null }
-  | { type: 'download_failed'; id: DownloadId; error: string }
-  | { type: 'download_cancelled'; id: DownloadId }
-  | { type: 'download_status_changed'; id: DownloadId; status: import('./downloads').DownloadStatus }
-  // Transient, non-persisted note about work happening for this download
-  // that produces no byte progress (e.g. first-run Python env setup for the
-  // fast downloader). Unlike download_status_changed, message is free-form
-  // text rather than a fixed status.
-  | { type: 'download_notice'; id: DownloadId; message: string }
-  | { type: 'queue_run_complete'; summary: QueueRunSummary };
+export type { DownloadEvent } from '../../../types/generated/DownloadEvent';
 
 // ============================================================================
 // Model Events
@@ -214,11 +194,7 @@ export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
  */
 export interface AppEventMap {
   'server': ServerWireEvent;
-  // Still the hand-written wrapper. Adopting the generated arm pulls in the
-  // generated `DownloadEvent`, whose `DownloadSummary.status` carries all
-  // seven statuses the queue actually reports — the mirror knows five — and
-  // that is a behaviour change with its own commit.
-  'download': { type: 'download'; event: DownloadEvent };
+  'download': Extract<AppEvent, { type: 'download' }>;
   'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;

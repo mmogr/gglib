@@ -1,16 +1,18 @@
 /**
  * How a flat queue snapshot becomes `{current, pending, failed}`.
  *
- * The wire reports seven statuses. Two of them — `finalizing` and
- * `registering` — are the tail of a download: the bytes are on disk and the
- * queue is checksumming and writing the row. Both sides of the GUI used to
- * treat them as *nothing*: they matched neither `current` nor `pending`, so
- * the download card unmounted for the duration and came back when the next
- * event arrived, which is the phase whose "Finalizing" and "Registering"
- * labels were written to be shown.
+ * Two paths produce that shape — the SSE `queue_snapshot` frame and
+ * `GET /api/models/downloads/queue` — and they used to hold separate copies of
+ * the rules. The copies agreed, so this is not a regression test for a bug; it
+ * pins the rules now that there is one implementation to pin.
  *
- * That it stayed on screen at all was a race — a `download_status_changed`
- * event re-setting the active id before React committed the unmount.
+ * **Most of the statuses below cannot reach these functions.** A snapshot
+ * carries `downloading` on the single active row and `queued` on the rest —
+ * `gglib-download` hard-codes both — and failures live in a `recent_failures`
+ * list the wire type does not carry. The `finalizing`, `registering`,
+ * `completed`, `failed` and `cancelled` cases are here because
+ * `DownloadStatus` admits them and the predicates answer for them: they say
+ * what the code would do, not what the server does.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,8 +26,15 @@ function item(status: DownloadStatus, id: string = status): DownloadQueueItem {
 }
 
 describe('isInFlight', () => {
-  it.each(['downloading', 'finalizing', 'registering'] as const)(
-    'counts %s as work in progress',
+  it('counts the status a snapshot actually carries', () => {
+    expect(isInFlight(item('downloading'))).toBe(true);
+  });
+
+  // Unreachable today. Named so that if the queue ever reports its tail
+  // phases, the answer is already decided and visible rather than falling out
+  // of whichever predicate happens not to match.
+  it.each(['finalizing', 'registering'] as const)(
+    'would count %s as work in progress, not as nothing',
     (status) => {
       expect(isInFlight(item(status))).toBe(true);
     },
@@ -40,45 +49,36 @@ describe('isInFlight', () => {
 });
 
 describe('bucketQueue', () => {
-  it('keeps a finalizing row as the current download', () => {
-    const { current } = bucketQueue([item('finalizing')]);
-
-    expect(current?.status).toBe('finalizing');
-  });
-
-  it('keeps a registering row as the current download', () => {
-    const { current } = bucketQueue([item('registering')]);
-
-    expect(current?.status).toBe('registering');
-  });
-
-  it('sorts the ordinary statuses into their buckets', () => {
-    const { current, pending, failed } = bucketQueue([
+  it('sorts the two statuses a snapshot carries', () => {
+    const { current, pending } = bucketQueue([
       item('queued', 'a'),
       item('downloading', 'b'),
       item('queued', 'c'),
-      item('failed', 'd'),
-      item('completed', 'e'),
     ]);
 
     expect(current?.id).toBe('b');
     expect(pending.map((i) => i.id)).toEqual(['a', 'c']);
-    expect(failed.map((i) => i.id)).toEqual(['d']);
-  });
-
-  /**
-   * `cancelled` is its own status on the wire and is not folded into `failed`.
-   * The SSE path used to map it across, which put a row the user cancelled on
-   * a list of things that went wrong — a list nothing renders, so the fold
-   * bought nothing and lost the distinction.
-   */
-  it('does not report a cancelled download as failed', () => {
-    const { failed } = bucketQueue([item('cancelled')]);
-
-    expect(failed).toEqual([]);
   });
 
   it('reports no current download when nothing is in flight', () => {
-    expect(bucketQueue([item('queued'), item('completed')]).current).toBeNull();
+    expect(bucketQueue([item('queued')]).current).toBeNull();
+  });
+
+  /**
+   * `failed` is always empty: the queue keeps failures in `recent_failures`,
+   * which the snapshot does not carry, and nothing renders the bucket. This
+   * pins that a row which did somehow arrive `failed` is not mistaken for
+   * pending or current.
+   */
+  it('keeps a failed row out of the buckets that drive the UI', () => {
+    const { current, pending, failed } = bucketQueue([item('failed')]);
+
+    expect(current).toBeNull();
+    expect(pending).toEqual([]);
+    expect(failed).toHaveLength(1);
+  });
+
+  it('does not report a cancelled download as failed', () => {
+    expect(bucketQueue([item('cancelled')]).failed).toEqual([]);
   });
 });
