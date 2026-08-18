@@ -228,7 +228,7 @@ class AppLogger implements ILogger {
  * 
  * @example
  * ```ts
- * import { appLogger } from 'services/platform/logging';
+ * import { appLogger } from '../services/platform';
  * 
  * appLogger.info('transport.api', 'API request completed', { 
  *   method: 'GET',
