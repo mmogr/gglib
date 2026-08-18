@@ -8,21 +8,11 @@ import type {
   SamplingEffortSupport,
   SamplingReasoningReadback,
 } from '../../../src/services/transport/types/dashboard';
+import { reasoningReadback } from '../fixtures/dashboard';
 
-const BLIND =
-  'llama-server echoes neither reasoning control: reasoning_effort is a chat-template kwarg ' +
-  'consumed at render time, and task_params::to_json serialises no reasoning_budget_* field.';
-
-function reasoning(
+const reasoning = (
   overrides: Partial<SamplingReasoningReadback> = {},
-): SamplingReasoningReadback {
-  return {
-    effort_support: { state: 'not_yet_observed', reason: 'no /props read has completed yet.' },
-    latest: null,
-    wire_blind_reason: BLIND,
-    ...overrides,
-  };
-}
+): SamplingReasoningReadback => reasoningReadback(overrides);
 
 describe('ProxyReasoningRows', () => {
   // The collapse ADR 0007 decision 3 forbids, at the last layer that can make
@@ -32,7 +22,12 @@ describe('ProxyReasoningRows', () => {
     render(<ProxyReasoningRows reasoning={reasoning()} />);
 
     expect(screen.getByText(/support for reasoning_effort is unknown/i)).toBeInTheDocument();
-    expect(screen.getByText(/no \/props read has completed yet/)).toBeInTheDocument();
+    // The reason string the proxy actually sends — `EffortSupportState::of`
+    // in `audit_records.rs`. The old assertion matched a shortened version
+    // that came from the fixture rather than from the wire.
+    expect(
+      screen.getByText(/no \/props read has completed for the running model yet/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/never reads reasoning_effort/i)).not.toBeInTheDocument();
   });
 

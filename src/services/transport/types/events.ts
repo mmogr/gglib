@@ -54,9 +54,10 @@ export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
 /**
  * One row of the download queue.
  *
- * `status` carries all seven states the queue reports. The mirror knew five,
- * so `finalizing` and `registering` fell through `normalizeQueueItem`'s
- * `?? 'failed'` and rendered as failures.
+ * `status` is the full seven-member `DownloadStatus`, where the mirror named
+ * five. A snapshot row only ever carries `downloading` or `queued` —
+ * `gglib-download` hard-codes both — so the two the mirror omitted never
+ * arrived, and nothing was misrendered. The type is simply the type.
  *
  * `error`, `group_id` and `shard_info` are optional and *not* nullable: each
  * carries `skip_serializing_if`, so the key is absent rather than `null`. The

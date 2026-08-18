@@ -32,9 +32,9 @@ export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
   const snapshot = await get<QueueSnapshotResponse>('/api/models/downloads/queue');
   
   // Bucketed by the same function the SSE `queue_snapshot` path uses. The
-  // comment here used to claim that and it was not true: the SSE side ran
-  // every row through a status map first, so the two produced different
-  // queues from the same data depending on which answered last.
+  // comment here claimed that before it was true — this path read the raw
+  // status while the SSE side normalised first. The two agreed on every frame
+  // the server sends, so nothing was broken; they were two copies of one rule.
   return bucketQueue(snapshot.items || [], snapshot.max_size);
 }
 

@@ -16,6 +16,7 @@ import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
   SamplingAuditSnapshot,
+  SamplingReasoningReadback,
   SlotSnapshot,
 } from '../../../src/services/transport/types/dashboard';
 
@@ -58,6 +59,36 @@ export function activeConnection(
   return { ...CONNECTION, ...overrides };
 }
 
+const READBACK: SamplingReasoningReadback = {
+  effort_support: {
+    state: 'not_yet_observed',
+    reason: 'no /props read has completed for the running model yet',
+  },
+  latest: null,
+  // The whole of `WIRE_BLIND_REASON`, not a stand-in: `ProxyReasoningRows`
+  // renders it as the body of a warning banner, so a shortened copy lets a
+  // test assert on text the user never sees.
+  wire_blind_reason:
+    'llama-server echoes neither reasoning control: reasoning_effort is a chat-template kwarg ' +
+    'consumed at render time, and task_params::to_json serialises no reasoning_budget_* field ' +
+    "(ADR 0007 finding 7a). These are gglib's own record of what it sent — no readback can " +
+    'confirm them.',
+};
+
+/**
+ * A readback from a proxy that has not seen a request yet.
+ *
+ * `wire_blind_reason` is the whole of `WIRE_BLIND_REASON` from
+ * `audit_records.rs`, not a shortened stand-in: `ProxyReasoningRows` renders
+ * it as the body of a warning banner, so a truncated copy lets a test assert
+ * on text the user never sees.
+ */
+export function reasoningReadback(
+  overrides: Partial<SamplingReasoningReadback> = {},
+): SamplingReasoningReadback {
+  return { ...READBACK, ...overrides };
+}
+
 const AUDIT: SamplingAuditSnapshot = {
   state: { state: 'not_yet_observed' },
   skipped_ambiguous: 0,
@@ -67,22 +98,7 @@ const AUDIT: SamplingAuditSnapshot = {
   baseline: { state: 'not_yet_read' },
   published: { intents: 0, fields: [] },
   effort_suppressed: { requests: 0, latest: null },
-  reasoning: {
-    effort_support: {
-      state: 'not_yet_observed',
-      reason: 'no /props read has completed for the running model yet',
-    },
-    latest: null,
-    // Carried on every readback, never empty: `WIRE_BLIND_REASON` in
-    // `audit_records.rs` is a fixed constant, and `ProxyReasoningRows`
-    // renders it as the body of a warning banner. An empty string here
-    // would let a test asserting on that banner pass against nothing.
-    wire_blind_reason:
-      'llama-server echoes neither reasoning control: reasoning_effort is a chat-template ' +
-      'kwarg consumed at render time, and task_params::to_json serialises no ' +
-      'reasoning_budget_* field (ADR 0007 finding 7a). These are gglib’s own record of ' +
-      'what it sent — no readback can confirm them.',
-  },
+  reasoning: READBACK,
   client_field_names: { fields: [], untracked: 0 },
 };
 
@@ -97,7 +113,11 @@ const SNAPSHOT: DashboardSnapshot = {
   active_connections: [],
   slots_available: false,
   slots: [],
-  slots_status: 'Slot metrics unavailable.',
+  // The poller's own default. `dashboard.rs` can emit only `null`
+  // (slots available), the `--no-slots` line, or the poller's reason — the
+  // 'Slot metrics unavailable.' string is the GUI's `??` fallback in
+  // `ProxyMetricsGrid`, never something the proxy sends.
+  slots_status: 'no /slots poll has completed yet',
   recent_requests: [],
   total_requests: 0,
   dialect_residue_total: 0,

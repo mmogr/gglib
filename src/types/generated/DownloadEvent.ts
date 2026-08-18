@@ -26,8 +26,8 @@ import type { QueueRunSummary } from "./QueueRunSummary";
  * download that has just started has no meaningful rate yet. Renderers must
  * show a placeholder for the absent case rather than substituting `0`, and
  * must never compute a rate of their own from successive `downloaded` values;
- * the manager's `RateEstimator` is the only source. The mirrored TypeScript
- * declaration lives in `src/services/transport/types/events.ts`.
+ * the manager's `RateEstimator` is the only source. TypeScript reads this
+ * type through its generated binding; there is no mirror to keep in step.
  */
 export type DownloadEvent = { "type": "queue_snapshot", 
 /**

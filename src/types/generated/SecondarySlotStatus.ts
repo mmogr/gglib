@@ -12,7 +12,7 @@ export type SecondarySlotStatus = {
  * A `&'static str`, which ts-rs would render as a bare `string` — losing
  * the exhaustiveness the GUI's icon table and tone function are written
  * against. The override restates the closed set above, the same way
- * `gglib_proxy::dashboard::CacheSnapshot::ram_state` does.
+ * `gglib_proxy::dashboard::CacheStatus::ram_state` does.
  *
  * Three places set it, and all three must stay inside that set:
  * [`Self::default`] and [`Self::resident`] each write one literal, and
