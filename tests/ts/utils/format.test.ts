@@ -168,9 +168,15 @@ describe('formatParamCount', () => {
 
   // The MoE row landed with no coverage at all, which left the whole reason
   // the expert fields were added to `GuiModel` resting on manual inspection.
-  it('reports active parameters for a mixture-of-experts model', () => {
-    expect(formatParamCount(30, 8, 128)).toBe('30.0B (Active: 1.9B)');
-    expect(formatParamCount(0.6, 4, 64)).toBe('600M (Active: 38M)');
+  //
+  // What it reports is the topology, not an active-parameter count. The first
+  // form scaled the total by the routed fraction, which read as a measurement
+  // and was ~40% low on every real MoE model: the first case here is
+  // Qwen3-30B-A3B, which it rendered as `30.0B (Active: 1.9B)` against a true
+  // ~3.3B. See `formatParamCount` for why three integers cannot do better.
+  it('names the expert topology for a mixture-of-experts model', () => {
+    expect(formatParamCount(30, 8, 128)).toBe('30.0B · 8/128 experts');
+    expect(formatParamCount(0.6, 4, 64)).toBe('600M · 4/64 experts');
   });
 
   // The three expert fields carry `skip_serializing_if`, so a dense model
