@@ -74,9 +74,13 @@ pub struct SecondarySlotStatus {
     /// A `&'static str`, which ts-rs would render as a bare `string` — losing
     /// the exhaustiveness the GUI's icon table and tone function are written
     /// against. The override restates the closed set above, the same way
-    /// `gglib_proxy::dashboard::CacheSnapshot::ram_state` does; it is produced
-    /// by one exhaustive `match`, so a new arm there is the one other place
-    /// that must touch this line.
+    /// `gglib_proxy::dashboard::CacheSnapshot::ram_state` does.
+    ///
+    /// Three places set it, and all three must stay inside that set:
+    /// [`Self::default`] and [`Self::resident`] each write one literal, and
+    /// [`Self::from_decision`] takes `SecondarySlotDecision::label` for every
+    /// refusal. `label` also answers `"grant"`, which never reaches here —
+    /// `from_decision` maps a grant to `"available"` before consulting it.
     #[cfg_attr(
         feature = "ts-bindings",
         ts(type = "\"resident\" | \"available\" | \"too_large\" \

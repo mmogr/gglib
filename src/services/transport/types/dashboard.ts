@@ -58,6 +58,8 @@ export type { ContextSnapshot } from '../../../types/generated/ContextSnapshot';
 
 export type { CacheUsage } from '../../../types/generated/CacheUsage';
 
+import type { CacheStatus } from '../../../types/generated/CacheStatus';
+
 /**
  * KV cache health.
  *
@@ -66,8 +68,19 @@ export type { CacheUsage } from '../../../types/generated/CacheUsage';
  * dashboard's switch is written against those five values and would lose
  * exhaustiveness without it.
  */
-export type { CacheStatus } from '../../../types/generated/CacheStatus';
+export type { CacheStatus };
+
 export type { KvCacheType } from '../../../types/generated/KvCacheType';
+
+/**
+ * The five values `ram_state` can hold.
+ *
+ * Kept as a name because the generator inlines the union into the field and
+ * there is no binding to import — the same reason `SecondarySlotState` exists
+ * next door. A consumer writing a `Record` or a `switch` over these needs
+ * something to name.
+ */
+export type CacheRamState = CacheStatus['ram_state'];
 
 // ============================================================================
 // Launch

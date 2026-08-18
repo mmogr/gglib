@@ -1,8 +1,10 @@
 /**
  * Proxy dashboard pieces, as the `/v1/proxy/status/stream` frame sends them.
  *
- * Nothing in `gglib-proxy` uses `skip_serializing_if`, so every field of every
- * snapshot is present on every frame and "not applicable" is a `null`. The
+ * Nothing on the dashboard contract uses `skip_serializing_if` — `gglib-proxy`
+ * uses it elsewhere, on `models.rs` and the MCP types, but on nothing the
+ * snapshot reaches — so every field of every snapshot is present on every
+ * frame and "not applicable" is a `null`. The
  * hand-written mirror these replace had thirty-two fields marked optional
  * that the proxy has never omitted, and the fixtures written against it were
  * naming three or four keys out of eleven.
@@ -12,6 +14,7 @@
  */
 import type {
   ActiveConnectionSnapshot,
+  DashboardSnapshot,
   SamplingAuditSnapshot,
   SlotSnapshot,
 } from '../../../src/services/transport/types/dashboard';
@@ -65,9 +68,20 @@ const AUDIT: SamplingAuditSnapshot = {
   published: { intents: 0, fields: [] },
   effort_suppressed: { requests: 0, latest: null },
   reasoning: {
-    effort_support: { state: 'not_yet_observed', reason: 'never launched' },
+    effort_support: {
+      state: 'not_yet_observed',
+      reason: 'no /props read has completed for the running model yet',
+    },
     latest: null,
-    wire_blind_reason: '',
+    // Carried on every readback, never empty: `WIRE_BLIND_REASON` in
+    // `audit_records.rs` is a fixed constant, and `ProxyReasoningRows`
+    // renders it as the body of a warning banner. An empty string here
+    // would let a test asserting on that banner pass against nothing.
+    wire_blind_reason:
+      'llama-server echoes neither reasoning control: reasoning_effort is a chat-template ' +
+      'kwarg consumed at render time, and task_params::to_json serialises no ' +
+      'reasoning_budget_* field (ADR 0007 finding 7a). These are gglib’s own record of ' +
+      'what it sent — no readback can confirm them.',
   },
   client_field_names: { fields: [], untracked: 0 },
 };
@@ -77,4 +91,60 @@ export function samplingAudit(
   overrides: Partial<SamplingAuditSnapshot> = {},
 ): SamplingAuditSnapshot {
   return { ...AUDIT, ...overrides };
+}
+
+const SNAPSHOT: DashboardSnapshot = {
+  active_connections: [],
+  slots_available: false,
+  slots: [],
+  slots_status: 'Slot metrics unavailable.',
+  recent_requests: [],
+  total_requests: 0,
+  dialect_residue_total: 0,
+  tool_repairs_attempted: 0,
+  tool_repairs_succeeded: 0,
+  upstream_health: {
+    consecutive_strikes: 0,
+    total_empty_responses: 0,
+    total_upstream_errors: 0,
+    total_first_byte_timeouts: 0,
+    total_client_aborts: 0,
+    total_recycles: 0,
+    total_recycle_failures: 0,
+  },
+  per_model_defects: {},
+  cache: null,
+  agent_usage: {
+    reporting_requests: 0,
+    unreported_requests: 0,
+    prompt_tokens: 0,
+    cached_tokens: 0,
+    last_prompt_tokens: null,
+    last_cached_tokens: null,
+  },
+  launch: null,
+  admission: {
+    slots: [],
+    queued: [],
+    total_queued: 0,
+    total_swaps: 0,
+    secondary_slot: { state: 'available', detail: 'No second model has been requested yet.' },
+  },
+  sampling_audit: AUDIT,
+};
+
+/**
+ * A whole frame from an idle proxy, with `overrides` applied.
+ *
+ * All sixteen fields, because that is what the proxy sends. The tests this
+ * serves used to build one by naming five and casting — which typechecks,
+ * leaves eleven fields `undefined` at runtime, and means a component reading
+ * any of them is tested against a frame that cannot arrive.
+ *
+ * `slots_available: false` pairs with the "unavailable" `slots_status` on
+ * purpose: `dashboard.rs` derives both from one `match`, so `true` alongside
+ * that message is a combination the proxy cannot produce.
+ */
+export function dashboardSnapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
+  return { ...SNAPSHOT, ...overrides };
 }

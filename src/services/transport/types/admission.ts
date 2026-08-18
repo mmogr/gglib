@@ -1,19 +1,14 @@
 /**
  * Admission-control transport types.
  *
- * Mirrors `gglib_core::domain::admission` (Rust,
- * `crates/gglib-core/src/domain/admission.rs`) bit-for-bit — field names and
- * casing match the wire format exactly.
+ * Aliases over the bindings generated from
+ * `crates/gglib-core/src/domain/admission.rs`. It was a hand-written mirror
+ * until the generator covered these types.
  *
- * Split out of `dashboard.ts` rather than sitting alongside the rest of the
- * snapshot: these describe the runtime's VRAM residency and request queue,
- * which is a different subject from llama.cpp's inference slots and prompt
- * cache, and keeping them apart stops either file growing past the point where
- * it can be read in one sitting.
- *
- * The same local-mirror caveat applies as in `dashboard.ts`: this is a real
- * HTTP client of the JSON contract, not a shared type, and it tolerates
- * additive server-side changes by ignoring unknown fields.
+ * Kept apart from `dashboard.ts` rather than folded into it: these describe
+ * the runtime's VRAM residency and request queue, which is a different
+ * subject from llama.cpp's inference slots and prompt cache, and the snapshot
+ * re-exports them so a component reading one need not know the difference.
  */
 
 /**
