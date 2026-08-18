@@ -20,6 +20,7 @@ Single-responsibility field groups for the General Settings form, plus the `Sett
 | `DesktopSettings.tsx` | Always-on proxy group: autostart, close-to-tray, start-at-login |
 | `AdvancedSettings.tsx` | Collapsible section: tool-iteration cap, title prompt, inference defaults |
 | `SetupWizardRow.tsx` | Re-run the first-run setup wizard |
+| `SecuritySettings.tsx` | API-key field for the proxy, over the shared `SettingField` |
 
 `GeneralSettings.tsx` (one level up) composes these in order; it holds no field-specific markup itself.
 

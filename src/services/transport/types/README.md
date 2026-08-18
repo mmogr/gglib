@@ -36,6 +36,14 @@ Transport
 | `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse`, `ServersTransport` |
 | `downloads.ts` | Download queue types and `DownloadsTransport` |
 | `events.ts` | `ServerWireEvent`, `DownloadEvent`, `ServerSnapshotEntry`, `EventsTransport` |
+| `settings.ts` | Application settings shapes and `SettingsTransport` |
+| `tags.ts` | Tag shapes and `TagsTransport` |
+| `mcp.ts` | MCP server and tool shapes, and `McpTransport` |
+| `builtin.ts` | Built-in tool shapes |
+| `verification.ts` | Model verification shapes and `VerificationTransport` |
+| `proxy.ts` | Proxy status and configuration shapes |
+| `dashboard.ts` | The proxy dashboard snapshot graph |
+| `admission.ts` | Slot admission and residency shapes |
 
 ## Branded ID Types
 

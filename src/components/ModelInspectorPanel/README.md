@@ -37,6 +37,7 @@ when there is nothing running to read.
 
 | Directory | Contents |
 |-----------|----------|
+| `ModelInspectorPanel.tsx` | The panel itself: composes the sections below and owns the selected model |
 | `components/` | `ModelMetadataGrid`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
 | `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions`, `useRetagModel` |
 

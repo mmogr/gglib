@@ -15,6 +15,7 @@ Two-tab left sidebar combining the local model library ("Your Models") with mode
 | `ModelsListContent.tsx` | Filtered model list; selection highlight; running-server badge overlay |
 | `AddDownloadContent.tsx` | Sub-tabs for HuggingFace browser and local file add |
 | `ModelListSkeleton.tsx` | Shimmer skeleton for loading state |
+| `RecommendedModel.tsx` | The hardware-sized suggestion `gglib up` makes on a first run, surfaced where models are chosen |
 
 An `hasActiveFilters` badge on the filter button gives users a persistent indicator that filtering is active even when the popover is closed.
 

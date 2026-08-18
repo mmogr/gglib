@@ -16,6 +16,7 @@ endpoint produces, and passing.
 | `model.ts` | `GuiModel` | The eight fields the old mirror made optional are required; only the three MoE fields, which really do carry `skip_serializing_if`, are omitted. |
 | `explain.ts` | `SamplingExplanation` | `published` is an empty array rather than an absent key, and `defaultsOrigin` and `profile` are required nullables. `effortSuppressed` stays optional — it is the one field that genuinely skips. |
 | `mcp.ts` | `McpServerInfo` | The nested `{server, status, tools}` every server route answers with, not the bare row two mocks were returning. |
+| `ports.ts` | Test port constants | Centralised so a port is never hardcoded into a test, and CI can move them in one place. |
 | `dashboard.ts` | `SlotSnapshot`, `ActiveConnectionSnapshot`, `SamplingAuditSnapshot`, `DashboardSnapshot` | Every field of every frame, since nothing on the dashboard contract skips. The whole-snapshot builder replaces two tests that named five of sixteen fields behind a cast. Values are the ones the proxy can actually emit — `slots_status` is the poller's own default, not the GUI's fallback string. |
 
 ## Rules
