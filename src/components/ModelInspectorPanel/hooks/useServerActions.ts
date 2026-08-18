@@ -125,6 +125,17 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       }
 
       const serveConfig: ServeConfig = {
+        // The sampling half, spread rather than named field by field. The
+        // modal renders the whole `InferenceParametersForm`, which offers all
+        // eighteen parameters; naming nine of them dropped the other nine on
+        // the surface that had just offered them.
+        //
+        // First, so the launch fields below win. `ServeConfig` extends
+        // `SparseInferenceConfig`, which shares no key with them, so this is
+        // belt-and-braces rather than a live conflict — but the launch half is
+        // computed from explicit modal state and should not be overridable by
+        // whatever happens to be in the form's object.
+        ...inferenceParams,
         id: model.id,
         contextLength: contextLength,
         port,
@@ -133,14 +144,6 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
         specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
         specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
-        // Inference parameters for this session.
-        //
-        // Spread, not a field list. The modal renders the whole
-        // `InferenceParametersForm`, which offers all eighteen; naming nine of
-        // them dropped the other nine on the surface that had just offered
-        // them. `ServeConfig` extends `SparseInferenceConfig`, so the spread
-        // is exactly the sampling half and cannot collide with a launch field.
-        ...inferenceParams,
       };
 
       if (pinProxy) {
