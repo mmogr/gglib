@@ -17,7 +17,7 @@ ModelInspectorPanel
     ├── InferenceParametersForm ← per-model inference defaults
     ├── InspectorCapabilities  ← gglib's own editable shaping flags
     ├── ReasoningSupport       ← whether the template reads reasoning_effort
-    ├── InspectorActions       ← serve / edit / delete / benchmark
+    ├── InspectorFooter        ← serve / edit / delete / benchmark
     ├── ServeModal             ← context, port, jinja mode, MTP options
     └── DeleteModal            ← confirmation dialog
 ```
@@ -37,7 +37,7 @@ when there is nothing running to read.
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | `ModelMetadataGrid`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorActions` |
+| `components/` | `ModelMetadataGrid`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
 | `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions`, `useRetagModel` |
 
 <!-- module-docs:end -->

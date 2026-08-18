@@ -13,6 +13,6 @@ Renderable list of running llama-server instances with per-server expand/collaps
 |------|------|
 | `ServerList.tsx` | Maps servers to collapsible cards; one-at-a-time expansion; tab selection per server |
 
-Only one server card can be expanded at a time (`expandedServerId` state). The embedded `SidebarTabs` lets users navigate directly to a server's chat or console view.
+Only one server card can be expanded at a time (`expandedServerId` state). The embedded `ui/Tabs` lets users navigate directly to a server's chat or console view.
 
 <!-- module-docs:end -->
