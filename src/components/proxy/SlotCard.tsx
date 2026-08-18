@@ -3,7 +3,8 @@ import { ContextUsageDonut } from '../ContextUsageDonut';
 import { Readout, Sparkline } from '../primitives';
 import { useMetricHistory } from '../../hooks/useMetricHistory';
 import { formatPerSecond } from '../../utils/formatPerSecond';
-import { tokensInUse, type SlotSnapshot } from '../../services/transport/types/dashboard';
+import { tokensInUse } from '../../services/transport/slotTokens';
+import type { SlotSnapshot } from '../../services/transport/types/dashboard';
 
 interface SlotCardProps {
   slot: SlotSnapshot;
