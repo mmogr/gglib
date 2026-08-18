@@ -32,25 +32,57 @@ CODE_SUFFIXES = (".ts", ".tsx", ".css")
 # Directories whose contents are not hand-documented.
 SKIP_DIRS = {"node_modules", "generated", "__snapshots__"}
 
-# `| [`name`](target) |` — the target decides whether this is a file reference.
-ROW = re.compile(r"^\|\s*\[`([^`]+)`\]\(([^)]+)\)")
+# The first cell's code span, whether or not it is wrapped in a link. Both
+# spellings are in use: `| [`useModels.ts`](useModels.ts) |` under src/hooks,
+# and a bare `| `Stack.tsx` |` under src/components/primitives.
+ROW = re.compile(r"^\|\s*(?:\[`([^`]+)`\]\([^)]*\)|`([^`]+)`)\s*\|")
 
 
-def is_path_target(target: str) -> bool:
-    """A relative path, as opposed to an anchor or an external URL."""
-    if target.startswith("#") or target.startswith("/"):
-        return False
-    return "://" not in target
+def names_a_file(span: str) -> bool:
+    """Whether a first-cell code span refers to a file or directory.
+
+    The extension is what decides, and it is what keeps the two tables that
+    are *not* file listings out of this check: `src/commands/README.md`
+    tabulates CLI command names (`model`, `chat`, `q`) against anchors in the
+    same document, and `src/types/README.md` tabulates TypeScript type names.
+    Neither carries an extension, so neither is mistaken for a missing file.
+    """
+    return span.endswith(CODE_SUFFIXES) or span.endswith("/")
+
+
+def exists_under(dirpath: str, name: str) -> bool:
+    """Whether a row's name resolves anywhere in the README's subtree.
+
+    Not just as a direct child: several tables list files relative to a
+    subdirectory rather than to themselves. `src/services/README.md` has a
+    "Clients" table of `benchmark.ts`, `proxyDashboard.ts` and eight more,
+    every one of which lives in `clients/` — checking only the immediate
+    directory called all ten missing.
+
+    The looser test still catches what this is for: a row naming a file that
+    was deleted or renamed, which then resolves nowhere.
+    """
+    if os.path.exists(os.path.join(dirpath, name)):
+        return True
+    target = name.rstrip("/")
+    for _, subdirs, files in os.walk(dirpath):
+        subdirs[:] = [d for d in subdirs if d not in SKIP_DIRS]
+        if target in files or target in subdirs:
+            return True
+    return False
 
 
 def documented_names(readme: str) -> tuple[set[str], str]:
-    """Row targets, and the whole text — a file can be documented in prose."""
+    """File-naming rows, and the whole text — prose documents a file too."""
     rows = set()
     text = open(readme, encoding="utf-8", errors="replace").read()
     for line in text.splitlines():
         match = ROW.match(line)
-        if match and is_path_target(match.group(2)):
-            rows.add(match.group(2))
+        if not match:
+            continue
+        span = match.group(1) or match.group(2)
+        if names_a_file(span):
+            rows.add(span)
     return rows, text
 
 
@@ -69,7 +101,15 @@ def is_documented(name: str, rows: set[str], text: str) -> bool:
 
 
 def present_names(dirpath: str, subdirs: list[str], files: list[str]) -> set[str]:
-    names = {f for f in files if f.endswith(CODE_SUFFIXES)}
+    """Everything in the directory a README is expected to account for.
+
+    `index.ts` is excluded. A barrel's contents follow from the directory it
+    sits in, so the row it would get says "barrel export" and nothing else —
+    thirty-odd of those across the component READMEs would be noise, and a
+    check that demands noise trains people to satisfy it rather than read it.
+    A barrel that does something surprising can still be described in prose.
+    """
+    names = {f for f in files if f.endswith(CODE_SUFFIXES) and f != "index.ts"}
     names |= {d + "/" for d in subdirs}
     return names
 
@@ -93,7 +133,7 @@ def main() -> int:
             checked += 1
             present = present_names(dirpath, subdirs, files)
 
-            phantom = sorted(n for n in rows if not os.path.exists(os.path.join(dirpath, n)))
+            phantom = sorted(n for n in rows if not exists_under(dirpath, n))
             unlisted = sorted(n for n in present if not is_documented(n, rows, text))
 
             if phantom or unlisted:
