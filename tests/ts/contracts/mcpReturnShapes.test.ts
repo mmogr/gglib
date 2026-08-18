@@ -14,42 +14,72 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { rust, withoutComments } from './rustSource';
+import { fnSource, rust } from './rustSource';
 
-const HANDLERS = withoutComments(rust('crates/gglib-axum/src/handlers/mcp.rs'));
+const HANDLERS = rust('crates/gglib-axum/src/handlers/mcp.rs');
 
 /**
- * Whatever a handler is declared to return — the text between `) -> ` and the
- * opening brace.
+ * The `T` in a handler's `Result<Json<T>, HttpError>`, or `''` when it returns
+ * no body.
  *
- * Deliberately not the first `Json<…>` in the signature: several of these take
- * a `Json<Request>` extractor as an argument, so a naive match reads the body
- * they accept rather than the body they send.
+ * Anchored through `fnSource`, which resolves the name once in the file or
+ * throws — this directory's rule, and not a decoration: six of the seven
+ * handlers here are named `list`, `add`, `update`, `start`, `stop` and
+ * `remove`, and a first-match `indexOf` over names that common is how a
+ * contract test comes to describe the wrong function and report success.
+ *
+ * The return clause is taken after the signature's `) -> `, never as the first
+ * `Json<…>` in the text: `add` and `update` accept a `Json<Request>`
+ * extractor, so a leading match reads the body they *receive*.
  */
-function returnType(fn: string): string {
-  const start = HANDLERS.indexOf(`async fn ${fn}(`);
-  if (start < 0) throw new Error(`no handler named ${fn}`);
-  const arrow = HANDLERS.indexOf(') -> ', start);
-  const brace = HANDLERS.indexOf(' {', arrow);
-  return HANDLERS.slice(arrow + ') -> '.length, brace).trim();
+function jsonPayload(handler: string): string {
+  const signature = fnSource(HANDLERS, handler).split(' {')[0];
+  const arrow = signature.lastIndexOf(') -> ');
+  if (arrow === -1) throw new Error(`fn ${handler} declares no return type`);
+
+  const clause = signature.slice(arrow);
+  const open = clause.indexOf('Json<');
+  if (open === -1) return '';
+
+  // Balanced, because `list` answers with `Json<Vec<McpServerInfo>>` and a
+  // non-greedy `[^>]+` would report `Vec<McpServerInfo` — a string that
+  // matches nothing anyone would write, so the assertion fails for the wrong
+  // reason and the next reader "fixes" it by loosening it.
+  let depth = 0;
+  for (let i = open + 'Json'.length; i < clause.length; i += 1) {
+    if (clause[i] === '<') depth += 1;
+    else if (clause[i] === '>') {
+      depth -= 1;
+      if (depth === 0) return clause.slice(open + 'Json<'.length, i);
+    }
+  }
+  throw new Error(`fn ${handler} has an unbalanced return type: ${clause}`);
 }
 
 describe('MCP route return shapes', () => {
-  it.each(['list', 'add', 'update', 'start', 'stop'])(
+  // Not `toContain`: the two the client got wrong were wrong by naming the
+  // *inner* type, so an assertion that merely looks for `McpServerInfo`
+  // somewhere in `Result<Json<McpServerDto>, …>` would have to see the whole
+  // clause change to notice. Equality on the payload is what bites.
+  it.each(['add', 'update', 'start', 'stop'])(
     '%s answers with the nested McpServerInfo',
     (handler) => {
-      expect(returnType(handler)).toContain('McpServerInfo');
+      expect(jsonPayload(handler)).toBe('McpServerInfo');
     },
   );
 
-  // The two the client got wrong. Named separately so a regression reads as
-  // "add and update again" rather than as a count.
-  it.each(['add', 'update'])('%s does not answer with a bare server row', (handler) => {
-    expect(returnType(handler)).not.toBe('McpServerDto');
+  it('lists them as an array of the same nested shape', () => {
+    expect(jsonPayload('list')).toBe('Vec<McpServerInfo>');
   });
 
-  it('reads the file it claims to — sanity check on the extractor', () => {
-    expect(HANDLERS).toContain('pub(crate) async fn add(');
-    expect(returnType('remove')).not.toContain('McpServerInfo');
+  it('reads the return clause, not the request body the route accepts', () => {
+    // `add` and `update` both take `Json<…Request>` as an argument. If the
+    // extractor ever regresses to a leading match, these are what it reports.
+    expect(jsonPayload('add')).not.toBe('CreateMcpServerRequest');
+    expect(jsonPayload('update')).not.toBe('UpdateMcpServerRequest');
+  });
+
+  it('distinguishes a route that sends no body at all', () => {
+    expect(jsonPayload('remove')).toBe('');
   });
 });

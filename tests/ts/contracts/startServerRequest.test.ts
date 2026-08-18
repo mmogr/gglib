@@ -59,7 +59,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { declaration, rust, scannable, structBody, withoutComments } from './rustSource';
 
 import type { ServeConfig } from '../../../src/types';
-import { INFERENCE_CONFIG_KEYS } from '../../../src/constants/inferenceDefaults';
 import { toStartServerRequest } from '../../../src/services/transport/mappers';
 import { MOCK_PROXY_PORT } from '../fixtures/ports';
 
@@ -278,16 +277,25 @@ describe('POST /api/servers/start request body', () => {
   // `ServeConfig` was a hand-kept subset of `InferenceConfig`, and the mapper
   // was a second hand-kept list on top of it. Both named nine of eighteen, so
   // the other nine could be typed into a form, accepted by the endpoint, and
-  // discarded in between with nothing to say so. The mapper now iterates
-  // `INFERENCE_CONFIG_KEYS`, which the compiler pins to the generated type.
-  it('forwards every InferenceConfig field, not the nine it used to know', () => {
+  // discarded in between with nothing to say so.
+  //
+  // Asserted against the *Rust struct*, not against `INFERENCE_CONFIG_KEYS`.
+  // The mapper iterates that list, so comparing its output to it is a
+  // tautology — both sides move together and the test passes on any subset.
+  // What the wire accepts is the independent fact, and it is the one worth
+  // pinning. (The list's own completeness is a compile-time assertion,
+  // `InferenceConfigKeysAreComplete`, which is a stronger guard than a test.)
+  it('forwards every InferenceConfig field the wire accepts', () => {
+    const accepted = camelCaseWireFields(INFERENCE_RS, 'InferenceConfig');
+    expect(accepted).toContain('dryBase'); // extractor sanity check
+
     const everything = Object.fromEntries(
-      INFERENCE_CONFIG_KEYS.map((key) => [key, key === 'reasoningEffort' ? 'high' : 1]),
+      accepted.map((key) => [key, key === 'reasoningEffort' ? 'high' : 1]),
     ) as unknown as ServeConfig;
 
     const sent = toStartServerRequest({ ...everything, id: 1 }).inferenceParams ?? {};
 
-    expect(Object.keys(sent).sort()).toEqual([...INFERENCE_CONFIG_KEYS].sort());
+    expect(Object.keys(sent).sort()).toEqual([...accepted].sort());
   });
 
   // The nine named, so a regression reads as a list rather than a count.
