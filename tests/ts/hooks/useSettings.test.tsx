@@ -8,6 +8,7 @@ import { ReactNode } from 'react';
 import { useSettings } from '../../../src/hooks/useSettings';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import { AppSettings } from '../../../src/types';
+import { appSettings } from '../fixtures/settings';
 import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../fixtures/ports';
 
 const transport = vi.hoisted(() => ({
@@ -24,13 +25,13 @@ const { getSettings, updateSettings } = transport;
 // Alias for test compatibility
 const fetchSettings = getSettings;
 
-const mockSettings: AppSettings = {
+const mockSettings: AppSettings = appSettings({
   defaultDownloadPath: '/models',
   defaultContextSize: 4096,
   proxyPort: MOCK_PROXY_PORT,
   llamaBasePort: MOCK_BASE_PORT,
   maxDownloadQueueSize: 10,
-};
+});
 
 // Wrapper to provide SettingsProvider for hook tests
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -166,13 +167,7 @@ describe('useSettings', () => {
   });
 
   it('handles null values in settings', async () => {
-    const nullSettings: AppSettings = {
-      defaultDownloadPath: null,
-      defaultContextSize: null,
-      proxyPort: null,
-      llamaBasePort: null,
-      maxDownloadQueueSize: null,
-    };
+    const nullSettings: AppSettings = appSettings();
     vi.mocked(fetchSettings).mockResolvedValue(nullSettings);
 
     const { result } = renderHook(() => useSettings(), { wrapper });

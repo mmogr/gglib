@@ -366,85 +366,22 @@ export type { ServerInfo } from './generated/ServerInfo';
  */
 export type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 
-export interface AppSettings {
-  defaultDownloadPath?: string | null;
-  defaultContextSize?: number | null;
-  proxyPort?: number | null;
-  llamaBasePort?: number | null;
-  maxDownloadQueueSize?: number | null;
-  titleGenerationPrompt?: string | null;
-  showMemoryFitIndicators?: boolean | null;
-  /** Maximum iterations for tool calling agentic loop (default: 25) */
-  maxToolIterations?: number | null;
-  /** Default model ID for quick commands (e.g., `gglib question`) */
-  defaultModelId?: number | null;
-  /** Global inference parameter defaults */
-  inferenceDefaults?: InferenceConfig | null;
-  /** Named sampling profiles, selectable per request as `<model>:<profile>` */
-  inferenceProfiles?: InferenceProfile[] | null;
-  /** Whether the setup wizard has been completed */
-  setupCompleted?: boolean | null;
-  /**
-   * Bearer token the proxy requires on `/v1/*` and `/mcp`; `/health` stays
-   * open. Unset leaves the endpoint unauthenticated, which is the default for
-   * a loopback bind. The proxy sets this itself the first time it binds a
-   * non-loopback host, so the GUI dashboard reads it from here to authenticate
-   * against the proxy it started.
-   */
-  proxyApiKey?: string | null;
-  /**
-   * Whether a client's own sampling parameters (temperature, topP, topK,
-   * presencePenalty, repeatPenalty, minP) are honoured by the proxy at all.
-   * `false`/unset (the default) drops them from the resolution hierarchy —
-   * only `maxTokens` still comes from the request. Most clients that talk to
-   * this proxy send fixed sampling values with no user-facing control behind
-   * them (VS Code Copilot's LLM Gateway, for one), so trusting them by
-   * default would let that boilerplate silently outrank this server's own
-   * per-model and global defaults.
-   */
-  trustClientSampling?: boolean | null;
-  /**
-   * Whether the proxy's turn-level loop/stagnation guard runs on
-   * /v1/chat/completions. Unset/`true` (the default) means active: a
-   * conversation whose replayed history repeats the same tool-call batch or
-   * assistant response beyond the threshold is rejected with a clean 400
-   * before any model work. `false` disables the guard — the escape hatch for
-   * a client that legitimately repeats identical requests.
-   */
-  proxyLoopDetection?: boolean | null;
-  /**
-   * Whether the desktop app starts the proxy as soon as it launches. Desktop
-   * app only — `gglib proxy` and `gglib serve` stay explicit foreground
-   * commands.
-   */
-  proxyAutostart?: boolean | null;
-  /** Whether closing the desktop window hides to the tray instead of quitting. */
-  closeToTray?: boolean | null;
-  /** Whether the desktop app registers itself to launch on login. */
-  startAtLogin?: boolean | null;
-  /**
-   * Maximum consecutive no-progress agent steps before the loop stops.
-   * Shared by the built-in agent loop and the proxy's turn-level guard.
-   */
-  maxStagnationSteps?: number | null;
-  /** Literal IP the daemon binds. Unset = the compiled-in 127.0.0.1. */
-  bindHost?: string | null;
-  /** Whether the daemon binds beyond loopback. Unset/false = localhost-only. */
-  shareLan?: boolean | null;
-  /**
-   * Whether a structured-output turn gets its temperature capped when no
-   * human chose one. Unset/true = active; anything set by a person stands.
-   */
-  agenticSampling?: boolean | null;
-  /**
-   * Whether a tool call that fails schema validation is re-issued with
-   * `tool_choice: "required"`. Unset/`true` (the default) means active.
-   * `false` forwards the malformed call as the model produced it — which is
-   * what you want when you are measuring a model's own behaviour rather than
-   * using it.
-   */
-  toolCallRepair?: boolean | null;
-}
+/**
+ * Global settings — `GET`/`PUT /api/settings`.
+ *
+ * All 23 fields are required keys carrying `T | null`, not optional keys.
+ * Nothing in `gglib-core`'s `Settings` uses `skip_serializing_if`, so the
+ * response always names every field; "nothing configured" is a `null`, never
+ * an absent key. The mirror's `?:` described a shape the endpoint does not
+ * send, and every read site is already `settings?.x`-style, so adopting the
+ * true one changes no call site.
+ *
+ * The *request* shape is different and stays hand-written: `PUT` treats an
+ * absent key as "leave unchanged" and an explicit `null` as "clear", which is
+ * the `double_option` three-state — see {@link UpdateSettingsRequest}.
+ */
+import type { AppSettings } from './generated/AppSettings';
+export type { AppSettings };
 
 export interface UpdateSettingsRequest {
   defaultDownloadPath?: string | null | undefined;

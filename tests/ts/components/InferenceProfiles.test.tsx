@@ -7,6 +7,7 @@ import { InferenceProfiles } from '../../../src/components/SettingsModal/Inferen
 import { profileNameError } from '../../../src/components/SettingsModal/InferenceProfileEditor';
 import type { AppSettings, InferenceProfile, SparseInferenceProfile } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
+import { appSettings } from '../fixtures/settings';
 
 const getSettings = vi.fn();
 const updateSettings = vi.fn();
@@ -27,7 +28,7 @@ function coding(overrides: Partial<InferenceProfile> = {}): InferenceProfile {
 }
 
 function settings(profiles: InferenceProfile[]): AppSettings {
-  return { inferenceProfiles: profiles };
+  return appSettings({ inferenceProfiles: profiles });
 }
 
 beforeEach(() => {
