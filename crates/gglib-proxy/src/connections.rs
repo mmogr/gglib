@@ -31,7 +31,7 @@
 //! ## It also carries the admission lease
 //!
 //! [`ConnectionGuard::holding`] attaches the
-//! [`AdmissionLease`](gglib_core::ports::AdmissionLease) the runtime issued
+//! [`AdmissionLease`] the runtime issued
 //! when it admitted this request. The two want identical lifetimes — both must
 //! survive until the response is finished, including across the streaming
 //! path's spawned task — and this guard already travels everywhere that
@@ -46,7 +46,7 @@
 //! ## And the sampling intent
 //!
 //! [`ConnectionGuard::record_sampling`] attaches the
-//! [`SamplingDecision`](gglib_core::request_pipeline::SamplingDecision) the
+//! [`SamplingDecision`] the
 //! request pipeline resolved for this request, for the same reason and by the
 //! same argument as the lease: identical lifetime, guard already travels it.
 //!
@@ -64,8 +64,8 @@
 //! parameters differed would force the audit to abstain (see
 //! [`crate::sampling_audit::compare_poll`]) while nothing was actually
 //! ambiguous. Model-change invalidation falls out for free too:
-//! [`Self::in_flight_sampling`] filters by model name, so a swap needs no
-//! explicit clearing step.
+//! [`ActiveConnectionsRegistry::in_flight_sampling`] filters by model name, so
+//! a swap needs no explicit clearing step.
 //!
 //! ## Concurrency design
 //!

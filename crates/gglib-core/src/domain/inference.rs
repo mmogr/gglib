@@ -1381,7 +1381,7 @@ impl InferenceConfig {
     /// The six are **deferred**, not disabled. Nothing is emitted for them, so
     /// llama.cpp applies its own default — which on this build is the same
     /// number that used to be written here. Provenance reports them as
-    /// [`ParamSource::Unset`](crate::domain::ParamSource::Unset), which is
+    /// [`ParamSource::Unset`], which is
     /// precisely what deferral is: gglib names no value.
     ///
     /// # `temperature: 0.7` stays, and upstream's is 0.8

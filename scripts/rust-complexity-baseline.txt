@@ -136,7 +136,7 @@ crates/gglib-proxy/src/models.rs 600
 crates/gglib-proxy/src/profiles.rs 499
 crates/gglib-proxy/src/props_baseline_tests.rs 404
 crates/gglib-proxy/src/props.rs 574
-crates/gglib-proxy/src/repair.rs 667
+crates/gglib-proxy/src/repair.rs 666
 crates/gglib-proxy/src/sampling_audit_tests.rs 1017
 crates/gglib-proxy/src/sampling_audit.rs 1162
 crates/gglib-proxy/src/server.rs 1322

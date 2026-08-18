@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 /// against the pinned binary, not inferred. Offering it as a level would ship
 /// a control whose most obvious value does the opposite of what it reads as.
 /// "Stop thinking" is
-/// [`reasoning_budget_tokens: 0`](InferenceConfig::reasoning_budget_tokens),
+/// [`reasoning_budget_tokens: 0`](super::InferenceConfig#structfield.reasoning_budget_tokens),
 /// which is sampler-enforced and range-validated upstream. See ADR 0007
 /// finding 4 and decision 4.
 ///

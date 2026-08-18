@@ -14,7 +14,7 @@
 //! ensures both entry points apply the same defaults and wiring order.
 //!
 //! Every entry point hands in a [`ModelContext`] resolved by
-//! [`gglib_core::request_pipeline::resolve`] rather than a bare tag list, so
+//! [`gglib_core::request_pipeline::resolve()`] rather than a bare tag list, so
 //! the agent path carries the same per-model facts the proxy does — and now
 //! acts on all of them: capabilities drive request-side message coalescing,
 //! inference defaults are a layer of the sampling hierarchy, and `format:*`
@@ -45,7 +45,7 @@ use crate::LlmCompletionAdapter;
 /// * `http_client` — shared `reqwest::Client` (connection-pooled).
 /// * `model` — optional model-name override forwarded to llama-server.
 /// * `model_context` — resolved per-model facts from
-///   [`gglib_core::request_pipeline::resolve`], driving both request shaping
+///   [`gglib_core::request_pipeline::resolve()`], driving both request shaping
 ///   and response-parser selection. Pass [`ModelContext::passthrough`] when the
 ///   model is unknown: every transform becomes a no-op and the identity parser
 ///   is selected.

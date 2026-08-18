@@ -19,8 +19,10 @@ stands in for.
 | 1. Hardware | [`gglib_app_services::SetupOps::get_status`] — the same status the GUI wizard renders |
 | 2. llama.cpp | [`gglib_runtime::llama::ensure_llama_initialized`], as `gglib serve` uses |
 | 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor |
-| 4. Proxy | [`gglib_runtime::proxy::start_proxy_standalone`], unpinned — identical to `gglib proxy` |
+| 4. Proxy | [`DaemonHandle::start_proxy`], unpinned — identical to `gglib proxy` |
 | 5. Warm-up | one HTTP request to the endpoint it just started |
+
+[`DaemonHandle::start_proxy`]: crate::daemon_client::DaemonHandle::start_proxy
 
 ## Why the warm-up is an HTTP request
 
@@ -30,10 +32,10 @@ rather than evidence. Going over HTTP — rather than reaching into the runtime 
 exercises the router, admission control, model resolution and the forward
 pipeline, so the endpoint is demonstrated to work rather than assumed to.
 
-It runs as a spawned task because `start_proxy_standalone` blocks until
-shutdown, and it never fails the command: a slow first load leaves a perfectly
-usable proxy, and tearing that down would be worse than the cold start it was
-avoiding.
+The daemon owns the proxy, so `up` can await the warm request inline rather
+than racing a foreground server. It never fails the command: a slow first load
+leaves a perfectly usable proxy, and tearing that down would be worse than the
+cold start it was avoiding.
 
 ## Not responsible for
 

@@ -62,7 +62,7 @@ const REPL_HELP: &str = "\
 ///
 /// Takes the agent loop as `Arc<dyn AgentLoopPort>` so the REPL can cheaply
 /// clone the reference for each spawned per-turn task without requiring
-/// [`AgentLoop`] to implement [`Clone`].
+/// `AgentLoop` to implement [`Clone`].
 ///
 /// When `prior_messages` is non-empty, the REPL begins with those messages
 /// already in the history (no system prompt is prepended — it is already

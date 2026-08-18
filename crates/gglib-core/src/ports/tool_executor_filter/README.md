@@ -23,6 +23,8 @@ permitted tools) and `execute` (so an adversarially-prompted model that
 synthesises a call for a tool it was never told about cannot bypass the
 filter).
 
+[`ToolExecutorPort`]: crate::ports::ToolExecutorPort
+
 <!-- module-docs:end -->
 
 <details>

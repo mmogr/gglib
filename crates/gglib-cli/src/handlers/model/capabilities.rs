@@ -6,6 +6,7 @@
 //! by this CLI, the Axum WebUI, and the Tauri app.
 //!
 //! [`ModelCapabilities`]: gglib_core::ModelCapabilities
+//! [`ModelOps::set_capabilities`]: gglib_app_services::ModelOps::set_capabilities
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::SetCapabilitiesRequest;
@@ -19,6 +20,8 @@ use crate::bootstrap::CliContext;
 /// Without `--set` or `--unset` flags the command is read-only and prints the
 /// current capability state.  With flags it applies the requested overrides
 /// via [`ModelOps::set_capabilities`] and prints the updated state.
+///
+/// [`ModelOps::set_capabilities`]: gglib_app_services::ModelOps::set_capabilities
 pub(crate) async fn execute(
     ctx: &CliContext,
     identifier: &str,

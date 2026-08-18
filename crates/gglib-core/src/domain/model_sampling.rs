@@ -18,7 +18,7 @@
 //! not *"what does this build default to"*. Since [ADR 0003] gglib passes no
 //! sampler flags at all, model metadata always wins where it is present.
 //!
-//! [`gglib_proxy::props`]'s baseline check compares `/props` against a table
+//! `gglib_proxy::props`'s baseline check compares `/props` against a table
 //! measured for the pinned build. Without this module it reports a model's own
 //! recommendation as *drift* — "this build's default has moved, ADR 0003's
 //! deferral is re-opened" — which is a false alarm on the one instrument whose

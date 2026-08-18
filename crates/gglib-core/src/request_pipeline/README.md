@@ -23,14 +23,14 @@ does either.
   (capabilities, `format:*` tags, inference defaults, context length) that the
   request and response stages are built from, plus the inert
   [`ModelContext::passthrough`] fallback.
-- [`resolve`] — [`resolve()`], the single catalog round-trip that produces one.
+- [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one.
 - [`request_shape`] — [`carries_tools()`], the one thing the stages need to know
   about the *request* rather than the model: whether it is asking for a tool
   call. Read by two stages for different purposes, so it lives in neither.
 
 **Shaping — what happens to the request**
 
-- [`apply`] — [`apply()`], the whole ordered pipeline as one call, and the one
+- [`mod@apply`] — [`apply()`], the whole ordered pipeline as one call, and the one
   place the stage order and its rationale are written down. **Read this first.**
 - [`messages`] — [`shape_messages()`], stages 1–2: reasoning strip and
   capability coalescing. Everything that rewrites the `messages` array.

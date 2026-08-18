@@ -127,7 +127,8 @@ pub struct AgentConfig {
     /// cap in `tool_execution` (limiting simultaneous in-flight calls) *and* as
     /// an upper bound on the batch size the model may request in a single turn.
     /// If the model emits more tool calls than this limit, the loop terminates
-    /// with [`AgentError::ParallelToolLimitExceeded`] rather than silently
+    /// with [`AgentError::ParallelToolLimitExceeded`](crate::ports::AgentError::ParallelToolLimitExceeded)
+    /// rather than silently
     /// serialising them.  Setting this to `1` means the model may only request
     /// **one** tool call per turn; two calls in a single response will abort the
     /// loop, not run them sequentially.

@@ -67,7 +67,7 @@ pub trait HfClientPort: Send + Sync {
     ///
     /// It returns `Ok(None)`, which is semantically exact for a client that
     /// cannot fetch one. The caller
-    /// ([`crate::services::model_import`]) treats every negative answer the
+    /// ([`crate::services::fetch_published_sampling`]) treats every negative answer the
     /// same way — carry on and fall back to the tag guess — so a client that
     /// does not implement this degrades to gglib's pre-existing behaviour
     /// rather than failing an import.

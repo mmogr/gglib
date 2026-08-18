@@ -89,7 +89,7 @@ impl ToolIndex {
     /// Build a `ToolIndex` from an iterator of `(qualified_id, tool)` pairs.
     ///
     /// The caller is responsible for constructing `qualified_id` in the format
-    /// `"<server_name>__<tool_name>"`.  See [`build_tool_index`] in
+    /// `"<server_name>__<tool_name>"`.  See `build_tool_index` in
     /// `gglib-proxy` for the canonical construction path.
     ///
     /// Duplicate IDs are silently overwritten by the last occurrence (mirrors

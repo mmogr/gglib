@@ -16,12 +16,15 @@ proxy server lifecycle. The actual HTTP server implementation lives in
 
 # One entry point, two modes
 
-`start_proxy_standalone` backs both CLI commands. `StandaloneProxyParams::pinned`
-is the only difference between them:
+`ProxySupervisor::start` backs both CLI commands, and it takes no position on
+either: `ProxyConfig` has no pinning field. Pinning is a *residency* concern,
+applied through `ProcessManager::set_pin`, and it reaches the daemon's shared
+runtime as the `pinned` field of `POST /api/proxy/start`. The two commands
+differ only in whether they send one:
 
 | | `gglib proxy` | `gglib serve <model>` |
 |---|---|---|
-| `pinned` | `None` — auto-swap on request | `Some(PinnedModel)` — refuse others |
+| `pinned` | `None` — auto-swap on request | `Some(PinnedSpec)` — refuse others |
 | `/v1/models` | the whole catalog | the pinned model only |
 
 Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP gateway

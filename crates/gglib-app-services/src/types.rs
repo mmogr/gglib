@@ -380,6 +380,7 @@ pub struct ModelDetailDto {
     /// than a `serde` alias on this one.
     ///
     /// [`Support`]: gglib_core::domain::Support
+    /// [`Support::No`]: gglib_core::domain::Support::No
     #[serde(default)]
     pub reasoning_effort_support: gglib_core::domain::Support,
     // ── Timestamps ────────────────────────────────────────────────────────────

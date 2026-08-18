@@ -18,9 +18,9 @@ use super::parser::{SseParseResult, parse_sse_frame};
 ///
 /// # Usage
 ///
-/// ```ignore
+/// ```text
 /// let mut decoder = SseStreamDecoder::default();
-/// while let Some(chunk) = byte_stream.next().await { … }
+/// while let Some(chunk) = byte_stream.next().await {
 ///     let (events, stop) = decoder.feed_bytes(&chunk);
 ///     for event in events { … }
 ///     if stop { break; }
@@ -121,7 +121,7 @@ impl SseStreamDecoder {
     /// Emit a fallback `Done` event if the byte stream ended without one.
     ///
     /// Call this once after the upstream byte stream is fully exhausted.
-    /// Returns `None` if a `Done` was already yielded by [`feed_bytes`].
+    /// Returns `None` if a `Done` was already yielded by [`Self::feed_bytes`].
     #[must_use]
     pub fn finish(self) -> Option<LlmStreamEvent> {
         if self.done_sent {

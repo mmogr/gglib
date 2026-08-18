@@ -22,6 +22,8 @@
 //! All timing fields are extracted via [`super::mapper`] functions that return
 //! `Option<f64>`.  If the llama-server build omits the `timings` object, all
 //! timing fields in the saved result are `None` — no panic, no hard error.
+//!
+//! [`ModelRuntimePort`]: gglib_core::ports::ModelRuntimePort
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;

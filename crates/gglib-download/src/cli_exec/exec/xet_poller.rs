@@ -1,7 +1,7 @@
 //! File-stat fallback for hf-xet downloads.
 //!
 //! `huggingface_hub` does not drive `tqdm` when the underlying transfer is
-//! handled by the `hf_xet` Rust client, so [`JsonProgressBar`] (in the Python
+//! handled by the `hf_xet` Rust client, so `JsonProgressBar` (in the Python
 //! helper) never receives `update()` calls. Without intervention the Rust
 //! bridge would only ever see the initial `progress {0,0}` event followed
 //! eventually by `complete` — leaving the user staring at a frozen

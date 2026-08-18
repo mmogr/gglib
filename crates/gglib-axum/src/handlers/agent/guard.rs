@@ -18,7 +18,7 @@ use gglib_core::domain::agent::AgentEvent;
 /// When this struct is dropped — either because the SSE stream reaches its
 /// natural end **or** because the HTTP client disconnected and Axum dropped
 /// the response — [`JoinHandle::abort`] is called immediately, cancelling the
-/// background [`gglib_agent::AgentLoop`] task at its next `await` point.
+/// background `AgentLoop` task at its next `await` point.
 ///
 /// This prevents the loop from running to completion (burning tokens and CPU)
 /// after the consumer has gone away.

@@ -30,7 +30,7 @@
 //! no business appearing in this struct. Notably absent is the GPU layer
 //! split: gglib never emits `-ngl`, so how many layers get offloaded is
 //! llama.cpp's decision and is not gglib's to report. See
-//! [`Self::backend`] for what *is* known.
+//! the `backend` [`LaunchDecision`] for what *is* known.
 
 use serde::{Deserialize, Serialize};
 

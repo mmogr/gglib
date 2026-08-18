@@ -174,10 +174,12 @@ pub enum PrebuiltAvailability {
     },
 }
 
-/// Map a detected [`GpuInfo`] to the appropriate Windows x64 pre-built variant.
+/// Map a detected [`GpuInfo`](gglib_core::utils::system::GpuInfo) to the
+/// appropriate Windows x64 pre-built variant.
 ///
 /// Extracted as a standalone function so it can be unit-tested with
-/// arbitrary [`GpuInfo`] values without triggering real hardware probes.
+/// arbitrary [`GpuInfo`](gglib_core::utils::system::GpuInfo) values without
+/// triggering real hardware probes.
 #[cfg(feature = "prebuilt")]
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> PrebuiltAvailability {

@@ -5,7 +5,8 @@
 CLI download utility layer.
 
 This module provides utilities used by CLI commands that are intentionally
-separated from the queue-based [`DownloadManagerPort`] path.
+separated from the queue-based
+[`DownloadManagerPort`](gglib_core::ports::DownloadManagerPort) path.
 
 # What lives here
 
@@ -23,7 +24,8 @@ separated from the queue-based [`DownloadManagerPort`] path.
 # What moved out
 
 Interactive downloads (the `model download` command) now route through
-[`DownloadManagerPort::queue_smart`], giving the CLI the same queue,
+[`DownloadManagerPort::queue_smart`](gglib_core::ports::DownloadManagerPort::queue_smart),
+giving the CLI the same queue,
 progress events, and model registration path as the GUI.
 
 # Console output

@@ -44,7 +44,7 @@
 //! nested *types*, so `options: {"follow_symlinks": "null"}` passed a
 //! validator that should have rejected it and the measured conformance rate
 //! came out flattering. Pinned by
-//! [`a_nested_wrong_type_is_caught`](tests::a_nested_wrong_type_is_caught) so
+//! `tests::a_nested_wrong_type_is_caught` so
 //! the same gap cannot reappear where it would cost a real repair.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
