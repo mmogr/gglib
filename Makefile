@@ -284,29 +284,39 @@ BINDINGS_LOG := target/bindings-export.log
 # `/bin/sh` is dash on ubuntu, so in CI the variable never arrived, ts-rs fell
 # back to its default `./bindings`, and the `git diff` below then inspected an
 # untouched tree and passed on every input.
-bindings bindings-check: export TS_RS_EXPORT_DIR := $(CURDIR)/$(BINDINGS_DIR)
+bindings bindings-check: export TS_RS_EXPORT_DIR := $(CURDIR)/$(BINDINGS_DIR).new
 
 # Regenerate the TypeScript the frontend imports, from the Rust that defines it.
 #
-# The directory is emptied first so a lost export directory cannot look like
-# success: every file returns as a deletion, `bindings-check` fails loudly, and
-# the count below has nothing to count.
+# Generated into a sibling and swapped in only once both guards below pass, so
+# no failure path leaves the tree without its bindings. It used to `rm -rf` the
+# real directory first, before anything that could fail — a compile error
+# anywhere in the workspace, or a Ctrl-C, left 178 committed files deleted with
+# no message saying so, and `check_ts_bindings.sh` reported a clean run over
+# the hole.
+#
+# The swap keeps the property that motivated emptying it: a type that stops
+# deriving `TS` still returns as a deletion, because the whole directory is
+# replaced rather than written over.
 bindings: ## Regenerate src/types/generated from the Rust wire types
 	@mkdir -p target
-	@rm -rf $(BINDINGS_DIR)
+	@rm -rf $(BINDINGS_DIR).new
 	@$(CARGO) test --workspace --features ts-bindings export_bindings_ \
-		> $(BINDINGS_LOG) 2>&1 || { cat $(BINDINGS_LOG); exit 1; }
+		> $(BINDINGS_LOG) 2>&1 || { rm -rf $(BINDINGS_DIR).new; cat $(BINDINGS_LOG); exit 1; }
 	@ran=$$(grep -cE 'export_bindings_[a-z0-9_]+ \.\.\. ok' $(BINDINGS_LOG) || true); \
 	 if [ "$$ran" -lt 1 ]; then \
+		rm -rf $(BINDINGS_DIR).new; \
 		echo "✗ no export tests ran — the ts-bindings feature did not take."; \
 		cat $(BINDINGS_LOG); \
 		exit 1; \
 	 fi; \
-	 if [ ! -d "$(BINDINGS_DIR)" ]; then \
-		echo "✗ $$ran export tests ran but $(BINDINGS_DIR) does not exist —"; \
+	 if [ ! -d "$(BINDINGS_DIR).new" ]; then \
+		echo "✗ $$ran export tests ran but $(BINDINGS_DIR).new does not exist —"; \
 		echo "  TS_RS_EXPORT_DIR did not reach cargo. Check the shell it runs under."; \
 		exit 1; \
 	 fi; \
+	 rm -rf $(BINDINGS_DIR); \
+	 mv $(BINDINGS_DIR).new $(BINDINGS_DIR); \
 	 echo "✓ bindings regenerated ($$ran types)"
 
 # Regenerates first, then compares against HEAD — so this asks "do the
@@ -498,11 +508,20 @@ dev: fmt lint test ## Format, lint and test
 # Pre-commit checks.
 #
 # These are exactly the jobs ci-success requires, in the same order: fmt,
-# clippy, cargo test, the eslint/tsc gate, the frontend suite, and the boundary
-# and architecture scripts. It used to be `fmt lint check test` — all Cargo —
-# which meant a clean local run could still fail CI on eslint, on a type error
-# in a test file, or on any of the five shell checks.
-pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce doc-check ## Run everything CI requires
+# clippy, cargo test, the eslint/tsc gate, the frontend suite, the boundary
+# and architecture scripts, the binding staleness gate and rustdoc. It used to
+# be `fmt lint check test` — all Cargo — which meant a clean local run could
+# still fail CI on eslint, on a type error in a test file, or on any of the
+# five shell checks.
+#
+# `bindings-check` earns its place for the same reason `doc-check` did: the
+# `test` job runs it, so a stale binding fails CI, and `enforce`'s
+# `check_ts_bindings.sh` cannot stand in — that reads annotations, and a
+# missing annotation regenerates consistently and leaves this diff clean.
+# Without it, adding a Rust wire field and forgetting `make bindings` passed
+# a target whose help text reads "everything CI requires" and then cost a
+# full Rust CI leg to discover.
+pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow
