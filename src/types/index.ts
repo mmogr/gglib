@@ -44,12 +44,18 @@ export const CAPABILITY_FLAGS = {
 export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
 
 /** `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged. */
-export interface SetCapabilitiesRequest {
-  supportsSystemRole?: boolean;
-  requiresStrictTurns?: boolean;
-  supportsToolCalls?: boolean;
-  supportsReasoning?: boolean;
-}
+/**
+ * `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged.
+ *
+ * `Partial` over the generated shape, deliberately. ts-rs renders each field
+ * as a required `boolean | null` because it does not read `#[serde(default)]`,
+ * but the handler genuinely accepts omission — that is what "left unchanged"
+ * means, and the one call site builds a single-key literal from a computed
+ * flag name. A Rust-side `#[ts(optional)]` on the `serde(default)` fields
+ * would let this drop the wrapper.
+ */
+import type { SetCapabilitiesRequest as SetCapabilitiesBody } from './generated/SetCapabilitiesRequest';
+export type SetCapabilitiesRequest = Partial<SetCapabilitiesBody>;
 
 /** What a retag pass changed (`POST /api/models/{id}/retag`). */
 export type { RetagResponse } from './generated/RetagResponse';
@@ -505,26 +511,13 @@ export type {
 /**
  * Summary of a HuggingFace model from the search API.
  */
-export interface HfModelSummary {
-  /** Model ID (e.g., "TheBloke/Llama-2-7B-GGUF") */
-  id: string;
-  /** Human-readable model name (derived from id) */
-  name: string;
-  /** Author/organization (e.g., "TheBloke") */
-  author?: string | null;
-  /** Total download count */
-  downloads: number;
-  /** Like count */
-  likes: number;
-  /** Last modified timestamp */
-  last_modified?: string | null;
-  /** Total parameter count in billions (from safetensors.total) */
-  parameters_b?: number | null;
-  /** Model description/README excerpt */
-  description?: string | null;
-  /** Model tags */
-  tags: string[];
-}
+/**
+ * Summary of a HuggingFace model from the search API.
+ *
+ * Five fields the mirror made optional are required nullables: the search
+ * handler builds every one of them, and `None` crosses as `null`.
+ */
+export type { HfModelSummary } from './generated/HfModelSummary';
 
 /**
  * Sort field options for HuggingFace model search.
@@ -535,54 +528,30 @@ export type { HfSortField };
 /**
  * Request for searching HuggingFace models.
  */
-export interface HfSearchRequest {
-  /** Search query (model name) */
-  query?: string | null;
-  /** Minimum parameters in billions */
-  min_params_b?: number | null;
-  /** Maximum parameters in billions */
-  max_params_b?: number | null;
-  /** Page number (0-indexed) */
-  page: number;
-  /** Results per page (default 30) */
-  limit: number;
-  /** Sort field (default: downloads) */
-  sort_by?: HfSortField;
-  /** Sort direction: true = ascending, false = descending (default: false/descending) */
-  sort_ascending?: boolean;
-}
+/**
+ * Request for searching HuggingFace models.
+ *
+ * Every field is required here, which the one construction site already
+ * satisfies — it names all seven. `sort_by` and `sort_ascending` had defaults
+ * in the mirror that the caller never relied on.
+ */
+export type { HfSearchRequest } from './generated/HfSearchRequest';
 
 /**
  * Response from HuggingFace model search.
  */
-export interface HfSearchResponse {
-  /** Models matching the search criteria */
-  models: HfModelSummary[];
-  /** Whether more results are available */
-  has_more: boolean;
-  /** Current page number (0-indexed) */
-  page: number;
-  /** Total count of matching models (if available) */
-  total_count?: number | null;
-}
+/**
+ * Response from HuggingFace model search.
+ */
+export type { HfSearchResponse } from './generated/HfSearchResponse';
 
 /**
  * Information about a specific quantization variant.
  */
-export interface HfQuantization {
-  /** Quantization name (e.g., "Q4_K_M", "Q8_0") */
-  name: string;
-  /** File path within the repository */
-  file_path: string;
-  /** File size in bytes */
-  size_bytes: number;
-  /** File size in MB (for display) */
-  size_mb: number;
-  /** Whether this is a sharded model (multiple files) */
-  is_sharded: boolean;
-  /** Number of shards if sharded */
-  shard_count?: number | null;
-}
+/**
+ * Information about a specific quantization variant.
+ */
+export type { HfQuantization } from './generated/HfQuantization';
 
 /**
  * Response containing available quantizations for a model.
@@ -594,14 +563,12 @@ export type { HfQuantizationsResponse } from './generated/HfQuantizationsRespons
  *
  * Used for both HuggingFace model metadata and local running server queries.
  */
-export interface ToolSupportResponse {
-  /** Whether the model supports tool/function calling */
-  supports_tool_calls: boolean;
-  /** Confidence level of the detection (0.0 to 1.0) */
-  confidence: number;
-  /** Detected tool calling format (e.g., "hermes", "llama3", "mistral") */
-  detected_format?: string | null;
-}
+/**
+ * Response for tool/function calling support detection.
+ *
+ * Used for both HuggingFace model metadata and local running server queries.
+ */
+export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 
 // ============================================================================
 // Model Filter Options Types
