@@ -1,4 +1,3 @@
-import type { ModelBenchmarkSummary } from './benchmark';
 import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
 import type { ProvenanceParamKey, SuppressedEffort } from './reasoning';
 
@@ -284,39 +283,22 @@ export type { ServerConfig };
 // Model Types
 // ============================================================================
 
-export interface GgufModel {
-  /** Capability bitfield — see CAPABILITY_FLAGS. Absent/0 = unknown, pass-through. */
-  capabilities?: number;
-  id?: number;
-  name: string;
-  filePath: string;
-  paramCountB: number;
-  architecture?: string;
-  quantization?: string;
-  contextLength?: number;
-  expertCount?: number;
-  expertUsedCount?: number;
-  expertSharedCount?: number;
-  addedAt: string;
-  hfRepoId?: string;
-  tags?: string[];
-  // Server status
-  isServing?: boolean;
-  port?: number;
-  // Inference defaults
-  inferenceDefaults?: InferenceConfig;
-  /**
-   * Where `inferenceDefaults` came from — see {@link DefaultsOriginName}.
-   *
-   * Everything but `user` ranks below the global inference defaults in the
-   * resolution hierarchy; see the `InferenceConfig` doc comment above.
-   */
-  defaultsOrigin?: DefaultsOriginName | null;
-  // Per-model server defaults (overrides global settings for launch params)
-  serverDefaults?: ServerConfig;
-  // Benchmark summary (cached from benchmark_summaries table)
-  benchmarkSummary?: ModelBenchmarkSummary;
-}
+/**
+ * A model as the library list sends it — `GET /api/models`.
+ *
+ * Named `GgufModel` at the call sites and `GuiModel` in Rust. Eight fields
+ * the mirror made optional are required on the wire: `id`, `capabilities`,
+ * `tags` and `isServing` are always sent, and `architecture`,
+ * `quantization`, `contextLength` and `hfRepoId` are always-present
+ * nullables rather than absent keys. Every read site already tests
+ * truthiness or `!= null`, so the narrowing is free at the call sites and
+ * only fixtures had to grow.
+ *
+ * The three MoE fields stay optional: they carry `skip_serializing_if`, so a
+ * dense model genuinely omits them.
+ */
+import type { GuiModel } from './generated/GuiModel';
+export type GgufModel = GuiModel;
 
 /**
  * Full detail for a single model — `GET /api/models/:id/detail`.

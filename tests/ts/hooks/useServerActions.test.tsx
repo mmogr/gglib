@@ -16,20 +16,13 @@ import { renderHook, act } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { useServerActions, ServerActionsConfig } from '../../../src/components/ModelInspectorPanel/hooks/useServerActions';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
-import type { GgufModel } from '../../../src/types';
+import { guiModel } from '../fixtures/model';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>{children}</ToastProvider>
 );
 
-const baseModel: GgufModel = {
-  id: 1,
-  name: 'Test Model',
-  filePath: '/models/test.gguf',
-  paramCountB: 7.0,
-  addedAt: '2024-01-01T00:00:00Z',
-  serverDefaults: { contextLength: 8192 },
-};
+const baseModel = guiModel({ serverDefaults: { contextLength: 8192 } });
 
 /** Build a minimal ServerActionsConfig with sensible no-op defaults. */
 function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfig {

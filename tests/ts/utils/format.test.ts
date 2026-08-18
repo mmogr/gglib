@@ -165,6 +165,28 @@ describe('formatParamCount', () => {
     expect(formatParamCount(0.001)).toBe('1M');
     expect(formatParamCount(0.01)).toBe('10M');
   });
+
+  // The MoE row landed with no coverage at all, which left the whole reason
+  // the expert fields were added to `GuiModel` resting on manual inspection.
+  it('reports active parameters for a mixture-of-experts model', () => {
+    expect(formatParamCount(30, 8, 128)).toBe('30.0B (Active: 1.9B)');
+    expect(formatParamCount(0.6, 4, 64)).toBe('600M (Active: 38M)');
+  });
+
+  // The three expert fields carry `skip_serializing_if`, so a dense model
+  // omits them and the guard sees `undefined`. It is a truthiness test, so a
+  // backend sending explicit nulls, or a single-expert model, must read the
+  // same way — the alternative is every dense row claiming to be MoE.
+  it.each([
+    ['nothing', undefined, undefined],
+    ['nulls', null, null],
+    ['a single expert', 1, 1],
+    ['no experts used', 0, 128],
+  ])('shows a plain count when the model reports %s', (_label, used, total) => {
+    expect(
+      formatParamCount(7, used as number | undefined, total as number | undefined),
+    ).toBe('7.0B');
+  });
 });
 
 describe('getHuggingFaceUrl', () => {
