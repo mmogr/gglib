@@ -1,4 +1,3 @@
-import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
 import type { ProvenanceParamKey, SuppressedEffort } from './reasoning';
 
 // The reasoning-control wire shapes live in their own module — see its header
@@ -315,7 +314,21 @@ import type { ModelDetailDto } from './generated/ModelDetailDto';
 export type ModelDetail = ModelDetailDto;
 
 
-export interface ServeConfig {
+/**
+ * One serve session's launch options — the body of `POST /api/servers/start`.
+ *
+ * Launch-only fields are declared here; the sampling half is
+ * {@link SparseInferenceConfig}, so every field the wire's `InferenceConfig`
+ * carries is available and none has to be hand-transcribed.
+ *
+ * It used to be a hand-kept *subset*, and the subset had drifted: nine
+ * `InferenceConfig` fields — `frequencyPenalty`, the two dynatemp knobs,
+ * `topNSigma`, the four DRY knobs and `seed` — were absent, so a control the
+ * modal rendered was a control the launch silently discarded. Extending the
+ * generated shape is what stops that recurring: a field added in Rust arrives
+ * here without an edit.
+ */
+export interface ServeConfig extends SparseInferenceConfig {
   id: number;
   contextLength?: number;
   mlock?: boolean;
@@ -325,25 +338,6 @@ export interface ServeConfig {
   specDraftNMax?: number;
   /** Minimum acceptance probability for MTP draft tokens (default 0.75). */
   specDraftPMin?: number;
-  // Inference parameters for this serve session
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  maxTokens?: number;
-  repeatPenalty?: number;
-  presencePenalty?: number;
-  minP?: number;
-  /**
-   * Session reasoning controls, forwarded to `inference_params`.
-   *
-   * Listed because the serve modal offers them: this struct is a hand-kept
-   * subset of {@link InferenceConfig}, not a projection of it, so a field the
-   * modal renders and this omits is a control the user can set and the launch
-   * silently discards. (Nine of `InferenceConfig`'s fields are in exactly that
-   * position already — see `tests/ts/contracts/startServerRequest.test.ts`.)
-   */
-  reasoningEffort?: ReasoningEffortLevel;
-  reasoningBudgetTokens?: number;
 }
 
 /**

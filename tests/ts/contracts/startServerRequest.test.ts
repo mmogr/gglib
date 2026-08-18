@@ -59,6 +59,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { declaration, rust, scannable, structBody, withoutComments } from './rustSource';
 
 import type { ServeConfig } from '../../../src/types';
+import { INFERENCE_CONFIG_KEYS } from '../../../src/constants/inferenceDefaults';
 import { toStartServerRequest } from '../../../src/services/transport/mappers';
 import { MOCK_PROXY_PORT } from '../fixtures/ports';
 
@@ -242,5 +243,67 @@ describe('POST /api/servers/start request body', () => {
     // `mlock` is the one non-Option field on the Rust side, so an absent
     // value is a deserialisation error rather than a default.
     expect(toStartServerRequest({ id: 1 }).mlock).toBe(false);
+  });
+
+  // `ServeConfig` is now `Partial` over the generated `InferenceConfig`, so a
+  // field can be `null` as well as absent — and a serve modal seeded from a
+  // model's stored `inferenceDefaults` gets all eighteen as nulls, because
+  // that is what the wire sends. `!== undefined` reads every one of those as
+  // "the user set something", which would build an `inferenceParams` object
+  // of nothing but nulls and send it in place of the omission that lets the
+  // backend fall through to its own layers.
+  it('treats an explicit null as unset, not as a value the user chose', () => {
+    const cleared = toStartServerRequest({
+      id: 1,
+      temperature: null,
+      topP: null,
+      topK: null,
+      maxTokens: null,
+      repeatPenalty: null,
+      presencePenalty: null,
+      minP: null,
+      reasoningEffort: null,
+      reasoningBudgetTokens: null,
+    });
+
+    expect(cleared.inferenceParams).toBeUndefined();
+  });
+
+  it('still builds the object when one real value sits among the nulls', () => {
+    const one = toStartServerRequest({ id: 1, temperature: null, topK: 40 });
+
+    expect(one.inferenceParams?.topK).toBe(40);
+  });
+
+  // `ServeConfig` was a hand-kept subset of `InferenceConfig`, and the mapper
+  // was a second hand-kept list on top of it. Both named nine of eighteen, so
+  // the other nine could be typed into a form, accepted by the endpoint, and
+  // discarded in between with nothing to say so. The mapper now iterates
+  // `INFERENCE_CONFIG_KEYS`, which the compiler pins to the generated type.
+  it('forwards every InferenceConfig field, not the nine it used to know', () => {
+    const everything = Object.fromEntries(
+      INFERENCE_CONFIG_KEYS.map((key) => [key, key === 'reasoningEffort' ? 'high' : 1]),
+    ) as unknown as ServeConfig;
+
+    const sent = toStartServerRequest({ ...everything, id: 1 }).inferenceParams ?? {};
+
+    expect(Object.keys(sent).sort()).toEqual([...INFERENCE_CONFIG_KEYS].sort());
+  });
+
+  // The nine named, so a regression reads as a list rather than a count.
+  it.each([
+    'frequencyPenalty',
+    'dynatempRange',
+    'dynatempExponent',
+    'topNSigma',
+    'dryMultiplier',
+    'dryBase',
+    'dryAllowedLength',
+    'dryPenaltyLastN',
+    'seed',
+  ])('no longer drops %s on the way to the launch', (field) => {
+    const sent = toStartServerRequest({ id: 1, [field]: 1 }).inferenceParams;
+
+    expect(sent).toEqual({ [field]: 1 });
   });
 });
