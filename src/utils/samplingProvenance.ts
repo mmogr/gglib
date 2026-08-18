@@ -183,30 +183,37 @@ function trimFloat(value: number): string {
  * the same fact the same way.
  */
 export function describePublished(entry: PublishedDefault): string {
+  // No `?? 0` on the numbers and no `default:` arm: `PublishedDefaultDto` is a
+  // discriminated union, so `published` is present on the three arms that read
+  // it and absent from `unreadable`, and the four cases are exhaustive. The
+  // hand-written mirror was a flat object that made both fields optional on
+  // every state, which is why the guards existed — they were standing in for a
+  // shape the wire does not have.
   switch (entry.state) {
     case 'overridden':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib is sending ${trimFloat(
-        entry.sending ?? 0,
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib is sending ${trimFloat(
+        entry.sending,
       )}`;
     // Named even though it is benign: the row above reads as unset, and an
     // unset row with no note is indistinguishable from a gap. The missing
     // number is the model author's, not nobody's.
     case 'deferred':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib defers to it`;
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib defers to it`;
     case 'restated':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib sends the same value`;
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib sends the same value`;
     case 'unreadable':
       return `${entry.key} is set to a value gglib cannot read`;
-    default:
-      return UNKNOWN;
   }
 }
 
 /**
  * Index published entries by parameter, for rendering beside their rows.
  *
- * Tolerates the field being absent: a backend that predates it sends nothing,
- * and that must read as "this model published nothing" rather than as an error.
+ * Still tolerates the field being absent, though `SamplingExplanation` now
+ * types it as an unconditional array. The value reaches this function through
+ * an unchecked cast over parsed JSON, so the declaration is a claim about the
+ * endpoint rather than a guarantee about the bytes — and "this model published
+ * nothing" is the right reading of a missing list either way.
  */
 export function publishedByParam(
   published: PublishedDefault[] | undefined,

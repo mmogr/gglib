@@ -16,8 +16,7 @@
 //
 // @module types/reasoning
 
-import type { SamplingLayerName, SamplingParamKey } from './index';
-import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
+import type { SamplingParamKey } from './index';
 
 /**
  * Whether a model's chat template reads a given kwarg, as llama-server
@@ -56,9 +55,4 @@ export type ProvenanceParamKey = SamplingParamKey | 'reasoningEffort';
  * nothing has been sent. A surface must word it as what *would* happen on a
  * request against this model.
  */
-export interface SuppressedEffort {
-  /** The level the ladder resolved, before the template gate dropped it. */
-  level: ReasoningEffortLevel;
-  /** The rung that supplied it. Absent only for a rung the server cannot name. */
-  layer?: SamplingLayerName;
-}
+export type { SuppressedEffortDto as SuppressedEffort } from './generated/SuppressedEffortDto';

@@ -1,4 +1,4 @@
-import type { ProvenanceParamKey, SuppressedEffort } from './reasoning';
+import type { ProvenanceParamKey } from './reasoning';
 
 // The reasoning-control wire shapes live in their own module — see its header
 // for why — and are re-exported here so every caller keeps importing from
@@ -156,12 +156,21 @@ export type SamplingParamKey =
  * Mirrors the backend `ParamProvenanceDto`. `layer` is present only when
  * `kind` is `'layer'`.
  */
-export interface ParamProvenance {
-  /** The key this entry describes in {@link SamplingExplanation.resolved}. */
+import type { ParamProvenanceDto } from './generated/ParamProvenanceDto';
+export type ParamProvenance = ParamProvenanceDto & {
+  /**
+   * The key this entry describes in {@link SamplingExplanation.resolved}.
+   *
+   * Narrowed from the generated `string` by intersection — `string & Union`
+   * collapses to the union — because `wire_key` emits one entry per
+   * `InferenceConfig` field and nothing else, and three call sites index
+   * `PARAM_LABELS`, `publishedByParam` and `formatProvenanceValue` with it.
+   * Rust types the field as a plain `String`, so this is the one place the
+   * mirror was better than the generated shape; narrowing it properly is a
+   * Rust-side change.
+   */
   param: ProvenanceParamKey;
-  kind: ProvenanceKind;
-  layer?: SamplingLayerName;
-}
+};
 
 /**
  * A model's resolved sampling parameters and where each value came from —
@@ -171,50 +180,19 @@ export interface ParamProvenance {
  * rather than beside each provenance entry, so `sources[i].param` is a key
  * into `resolved`.
  */
-export interface SamplingExplanation {
-  /** The fully resolved configuration, after floors. */
-  resolved: InferenceConfig;
+import type { SamplingExplanationDto } from './generated/SamplingExplanationDto';
+export type SamplingExplanation = Omit<SamplingExplanationDto, 'sources' | 'published'> & {
   /** Per-parameter provenance, already in display order. */
   sources: ParamProvenance[];
-  /** The profile applied, if one was named. */
-  profile?: string | null;
-  /** Whether the model carries the `reasoning` tag, which selects the floor. */
-  isReasoning: boolean;
-  /** Whether client-supplied sampling is trusted — a rung the table cannot show. */
-  trustClientSampling: boolean;
   /**
    * What the model's own GGUF publishes, for the fields it publishes at all.
    *
-   * Empty on almost every model, and absent entirely from a backend that
-   * predates the field — so treat `undefined` as "nothing published", never as
-   * an error.
+   * Always sent — an empty array on almost every model. The mirror made it
+   * optional to tolerate a backend predating the field; that backend is gone
+   * and the key is unconditional.
    */
-  published?: PublishedDefault[];
-  /**
-   * Where the model's stored defaults came from.
-   *
-   * `published` and `auto_detected` share a ladder rung — both are unreviewed,
-   * so both rank below global settings — which means `ParamProvenance.layer`
-   * alone cannot name its own source. Without this, a recipe fetched from the
-   * model author renders as gglib's reasoning-tag guess.
-   */
-  defaultsOrigin?: DefaultsOriginName | null;
-  /**
-   * The `reasoningEffort` this model's template would ignore, when the stored
-   * configuration resolves one it does not read.
-   *
-   * The suppression is in {@link sources} too, as a `suppressedByTemplate`
-   * entry — but that entry has overwritten the rung that asked, and `resolved`
-   * carries nothing, so between them a reader learns only that *something* was
-   * dropped. This is the level and the layer.
-   *
-   * Conditional, not historical: the endpoint explains stored configuration, so
-   * nothing has been sent. Word it as what *would* happen on a request.
-   * Absent on a backend that predates the field, which reads as "no suppression
-   * to report".
-   */
-  effortSuppressed?: SuppressedEffort | null;
-}
+  published: PublishedDefault[];
+};
 
 /**
  * Where a model's stored `inferenceDefaults` came from.
@@ -255,17 +233,11 @@ export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadabl
  * *the build's default applies* on one that did not. Those render identically
  * without this.
  */
-export interface PublishedDefault {
-  /** Joins to {@link ParamProvenance.param}. */
+import type { PublishedDefaultDto } from './generated/PublishedDefaultDto';
+export type PublishedDefault = PublishedDefaultDto & {
+  /** Joins to {@link ParamProvenance.param}. Narrowed as it is there. */
   param: SamplingParamKey;
-  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
-  key: string;
-  state: PublishedState;
-  /** What the model author published. Absent only when `state` is `unreadable`. */
-  published?: number;
-  /** What gglib sends instead. Present only when `state` is `overridden`. */
-  sending?: number;
-}
+};
 
 // ============================================================================
 // Server Configuration

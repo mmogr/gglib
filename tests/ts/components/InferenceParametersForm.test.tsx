@@ -7,6 +7,7 @@ import { InferenceParametersForm } from '../../../src/components/InferenceParame
 import type { InferenceFallback } from '../../../src/components/InferenceParametersForm/fallbackCaption';
 import type { SparseInferenceConfig, SamplingExplanation } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
+import { samplingExplanation } from '../fixtures/explain';
 
 /**
  * Every parameter, with the values a user should see on the settings surface.
@@ -33,7 +34,7 @@ const FLOOR: InferenceFallback = { kind: 'floor' };
 
 /** An explanation in which every parameter came from the global settings. */
 function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExplanation {
-  return {
+  return samplingExplanation({
     resolved: resolvedConfig({
       temperature: 1.2,
       topP: 0.8,
@@ -52,11 +53,8 @@ function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExpla
       { param: 'minP', kind: 'layer', layer: 'global' },
       { param: 'maxTokens', kind: 'layer', layer: 'global' },
     ],
-    profile: null,
-    isReasoning: false,
-    trustClientSampling: false,
     ...overrides,
-  };
+  });
 }
 
 function resolved(

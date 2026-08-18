@@ -18,6 +18,7 @@ import type {
   SamplingExplanation,
 } from '../../../src/types';
 import { resolvedConfig } from '../fixtures/inference';
+import { samplingExplanation } from '../fixtures/explain';
 
 const explainModelSampling = vi.fn();
 
@@ -40,7 +41,7 @@ function sources(overrides: Partial<Record<string, ParamProvenance>> = {}): Para
 }
 
 function explanation(overrides: Partial<SamplingExplanation> = {}): SamplingExplanation {
-  return {
+  return samplingExplanation({
     resolved: resolvedConfig({
       temperature: 0.2,
       topP: 0.95,
@@ -51,10 +52,8 @@ function explanation(overrides: Partial<SamplingExplanation> = {}): SamplingExpl
     }),
     sources: sources(),
     profile: 'coding',
-    isReasoning: false,
-    trustClientSampling: false,
     ...overrides,
-  };
+  });
 }
 
 function profile(name: string): InferenceProfile {
