@@ -332,58 +332,43 @@ export type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
  * and every read site is already `settings?.x`-style, so adopting the true one
  * changes no call site.
  *
- * The *request* shape is different and stays hand-written: `PUT` treats an
+ * The *request* shape is a different type for a real reason: `PUT` treats an
  * absent key as "leave unchanged" and an explicit `null` as "clear", which is
  * the `double_option` three-state — see {@link UpdateSettingsRequest}.
  */
 import type { AppSettings } from './generated/AppSettings';
 export type { AppSettings };
 
-export interface UpdateSettingsRequest {
-  defaultDownloadPath?: string | null | undefined;
-  defaultContextSize?: number | null | undefined;
-  proxyPort?: number | null | undefined;
-  llamaBasePort?: number | null | undefined;
-  maxDownloadQueueSize?: number | null | undefined;
-  titleGenerationPrompt?: string | null | undefined;
-  showMemoryFitIndicators?: boolean | null | undefined;
-  /** Maximum iterations for tool calling agentic loop (default: 25) */
-  maxToolIterations?: number | null | undefined;
-  /** Default model ID for quick commands (e.g., `gglib question`) */
-  defaultModelId?: number | null | undefined;
-  /** Global inference parameter defaults */
-  inferenceDefaults?: SparseInferenceConfig | null | undefined;
+/**
+ * `PUT /api/settings` body — the three-state update.
+ *
+ * Absent key = leave unchanged; explicit `null` = clear to default; a value =
+ * set it. Every field carries `#[serde(default, with = "…double_option")]` on
+ * the Rust side, and ts-rs renders that as `field?: T | null`, which is
+ * exactly the shape — so unlike the other request bodies here, this one needs
+ * no wrapper to be accurate.
+ *
+ * Two fields are narrowed, and only two. A settings update carries a
+ * *partially specified* config — the settings form sends the parameters the
+ * user touched — where the generated body asks for the complete eighteen-key
+ * `InferenceConfig` a response would carry. `Omit` is safe here because
+ * `UpdateSettingsRequest` is a plain object type; the intersection form is
+ * only required where the target is a union of arms.
+ */
+import type { UpdateSettingsRequest as UpdateSettingsBody } from './generated/UpdateSettingsRequest';
+export type UpdateSettingsRequest = Omit<
+  UpdateSettingsBody,
+  'inferenceDefaults' | 'inferenceProfiles'
+> & {
+  /** Global inference parameter defaults, as far as the form specified them. */
+  inferenceDefaults?: SparseInferenceConfig | null;
   /**
    * Replaces the whole profile list. `null` clears it; omitting the key
    * leaves it untouched, so an unrelated settings update cannot drop
    * profiles it never knew about.
    */
-  inferenceProfiles?: SparseInferenceProfile[] | null | undefined;
-  /** Whether the setup wizard has been completed */
-  setupCompleted?: boolean | null | undefined;
-  /** See `AppSettings.proxyApiKey`. */
-  proxyApiKey?: string | null | undefined;
-  /** See `AppSettings.trustClientSampling`. */
-  trustClientSampling?: boolean | null | undefined;
-  /** See `AppSettings.proxyLoopDetection`. */
-  proxyLoopDetection?: boolean | null | undefined;
-  /** See `AppSettings.proxyAutostart`. */
-  proxyAutostart?: boolean | null | undefined;
-  /** See `AppSettings.closeToTray`. */
-  closeToTray?: boolean | null | undefined;
-  /** See `AppSettings.startAtLogin`. */
-  startAtLogin?: boolean | null | undefined;
-  /** See `AppSettings.maxStagnationSteps`. */
-  maxStagnationSteps?: number | null | undefined;
-  /** See `AppSettings.bindHost`. */
-  bindHost?: string | null | undefined;
-  /** See `AppSettings.shareLan`. */
-  shareLan?: boolean | null | undefined;
-  /** See `AppSettings.agenticSampling`. */
-  agenticSampling?: boolean | null | undefined;
-  /** See `AppSettings.toolCallRepair`. */
-  toolCallRepair?: boolean | null | undefined;
-}
+  inferenceProfiles?: SparseInferenceProfile[] | null;
+};
 
 // ============================================================================
 // System Memory Types (for "Will it fit?" indicators)
