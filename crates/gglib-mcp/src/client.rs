@@ -2,7 +2,6 @@
 //!
 //! Implements the MCP protocol over stdio (JSON-RPC 2.0).
 //! Reference: <https://spec.modelcontextprotocol.io/>
-#![allow(dead_code)] // Some protocol fields/methods not yet used by callers
 
 use gglib_core::utils::process::cmd;
 use gglib_core::{McpTool, McpToolResult};
@@ -83,28 +82,46 @@ pub(crate) struct InitializeResult {
 }
 
 /// Server information from initialize.
+///
+/// Both fields are parsed and neither is read. They are kept because this
+/// struct states the shape of the `serverInfo` object in the MCP handshake,
+/// and a client that cannot name the server it connected to is a gap worth
+/// leaving visible rather than deleting. The allows are per-field so that a
+/// *new* unread field here still gets reported.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ServerInfo {
+    #[allow(dead_code)]
     pub name: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub version: Option<String>,
 }
 
 /// Server capabilities.
+///
+/// Only `tools` is consulted (by `list_tools`). The other two are the rest of
+/// the capability set the spec defines; same reasoning as [`ServerInfo`].
 #[derive(Debug, Clone, Deserialize, Default)]
 pub(crate) struct ServerCapabilities {
     #[serde(default)]
     pub tools: Option<ToolsCapability>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub resources: Option<Value>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub prompts: Option<Value>,
 }
 
 /// Tools capability.
+///
+/// `list_changed` advertises that the server will send `tools/list_changed`
+/// notifications. Nothing here subscribes to those yet, so it is parsed and
+/// ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ToolsCapability {
     #[serde(default)]
+    #[allow(dead_code)]
     pub list_changed: Option<bool>,
 }
 
@@ -432,16 +449,6 @@ impl McpClient {
         }
 
         Ok(())
-    }
-
-    /// Check if the client is connected.
-    pub(crate) const fn is_connected(&self) -> bool {
-        self.stdin.is_some() && self.process.is_some()
-    }
-
-    /// Get server info (available after initialize).
-    pub(crate) const fn server_info(&self) -> Option<&ServerInfo> {
-        self.server_info.as_ref()
     }
 
     /// Disconnect from the MCP server.
